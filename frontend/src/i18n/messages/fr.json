@@ -8005,6 +8005,7 @@
       "health": "État",
       "directory": "Annuaire",
       "sessions": "Sessions",
+      "creationSessions": "Sessions de création",
       "security": "Sécurité",
       "emulation": "Émulation",
       "tenants": "Espaces",
@@ -8243,6 +8244,13 @@
       "guest": "invité",
       "registered": "inscrit",
       "paid": "payant"
+    },
+    "creationSessions": {
+      "title": "Sessions de création", "subtitle": "Canevas enregistrés dans tous les espaces de travail, avec les invitations avant et après création de compte.", "count": "{count} sessions",
+      "consentNotice": "Les adresses invitées sont des informations utiles sur les prospects, mais une invitation ne vaut pas consentement aux e-mails promotionnels.", "empty": "Aucune session de création enregistrée.",
+      "session": "Session", "workspace": "Espace de travail", "canvas": "Canevas", "invitations": "Invitations", "lastActivity": "Dernière activité", "noCreator": "Aucun e-mail de créateur",
+      "tenant": "Locataire {id}", "objectsMembers": "{objects} objets · {members} membres", "revision": "Révision {revision}", "created": "Créée {date}",
+      "pending": "en attente", "accepted": "acceptée", "revoked": "révoquée", "expired": "expirée"
     },
     "usage": {
       "aiAnalyze": "Analyse IA",
@@ -11827,6 +11835,7 @@
     "duplicate": "Dupliquer", "align": "Aligner", "frame": "Encadrer", "lock": "Verrouiller", "unlock": "Déverrouiller", "hide": "Masquer", "showHidden": "Afficher les éléments masqués", "hideHidden": "Masquer les éléments cachés", "focus": "Centrer", "edge": "Connexion", "conversation": "Conversation", "tutorial": "Tutoriel",
     "live": "En direct", "offlineRetry": "Hors ligne · les modifications seront réessayées", "reconnecting": "Reconnexion…", "connecting": "Connexion…", "largeSession": "Grande Session · {count} Objets",
     "dashboardTitle": "Sessions Create", "dashboardSubtitle": "Revenez à un Canevas et reprenez exactement où vous étiez.", "searchSessions": "Rechercher Sessions, Objets, Projets ou personnes…", "active": "Actives", "archived": "Archivées", "continueCreating": "Continuer à créer", "sharedWithMe": "Partagées avec moi", "recentlyCompleted": "Récemment terminées",
-    "object": {"workflow":"Flux de travail","project":"Projet","website":"Site web","dashboard":"Tableau de bord","chat":"Chat","agent":"Agent","staff":"Membre d’équipe","evaluation":"Évaluation","dataset":"Jeu de données","table":"Tableau","spreadsheet":"Feuille de calcul","chart":"Graphique","report":"Rapport","kpi":"KPI","prototype":"WYSIWYG","code":"Code","browser":"Aperçu navigateur","llm":"LLM","voice":"Voix","document":"Document","slides":"Diapositives","knowledge":"Connaissances","file":"Fichier","url":"URL","note":"Note","drawing":"Dessin","frame":"Cadre","comment":"Commentaire","timer":"Minuteur","roadmap":"Feuille de route","prd":"PRD","release":"Version","task":"Tâche","mockup":"Maquette","mockupSet":"Ensemble de maquettes","featureSummary":"Résumé des fonctionnalités","team":"Équipe","role":"Rôle","mcp":"Outil connecté","evermind":"Evermind","projectComparison":"Comparaison de projets","standup":"Point d’équipe","repository":"Dépôt","selection":"Sélection de l’éditeur","diagnostics":"Diagnostics","terminal":"Sortie du terminal","service":"Service local"}
+    "createTypeTitle": "Que voulez-vous créer ?", "createTypeSubtitle": "Commencez par un type Builder familier. Il s’ouvre comme Objet dans un nouveau Canevas où ajouter Flux, données, personnes et Brain.", "existingCreations": "Vos créations existantes", "existingCreationsSubtitle": "Ouvrez un Site, une App, un Evermind, un LLM, une Voix, une Vidéo, un Flux ou une session Brain dans son Canevas.", "loadingCreations": "Chargement des créations…", "noCreations": "Aucune création ne correspond à cette recherche.", "brainSession": "Session Brain", "workflowRuns": "Flux · {count} exécutions", "exportCanvas": "Exporter",
+    "object": {"workflow":"Flux de travail","project":"Projet","website":"Site web","dashboard":"Tableau de bord","chat":"Chat","agent":"Agent","staff":"Membre d’équipe","evaluation":"Évaluation","dataset":"Jeu de données","table":"Tableau","spreadsheet":"Feuille de calcul","chart":"Graphique","report":"Rapport","kpi":"KPI","prototype":"WYSIWYG","code":"Code","browser":"Aperçu navigateur","llm":"LLM","voice":"Voix","video":"Vidéo","document":"Document","slides":"Diapositives","knowledge":"Connaissances","file":"Fichier","url":"URL","note":"Note","drawing":"Dessin","frame":"Cadre","comment":"Commentaire","timer":"Minuteur","roadmap":"Feuille de route","prd":"PRD","release":"Version","task":"Tâche","mockup":"Maquette","mockupSet":"Ensemble de maquettes","featureSummary":"Résumé des fonctionnalités","team":"Équipe","role":"Rôle","mcp":"Outil connecté","evermind":"Evermind","projectComparison":"Comparaison de projets","standup":"Point d’équipe","repository":"Dépôt","selection":"Sélection de l’éditeur","diagnostics":"Diagnostics","terminal":"Sortie du terminal","service":"Service local"}
   }
 }

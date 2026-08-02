@@ -13,6 +13,7 @@ import {
   creationSessionComments,
   creationSessionClaims,
   brainChats,
+  brainChatMessages,
   creationSessionEvents,
   creationSessionInvites,
   creationSessionMembers,
@@ -24,6 +25,7 @@ import {
   creationSessions,
   ceremonySessions,
   ideAgents,
+  ideProjects,
   agents,
   tasks,
   workflows,
@@ -36,17 +38,29 @@ import {
 } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { HonoEnv } from '../../env';
+import { resolveAppBaseUrl } from '../../env';
 import { resolveChatAccess } from '../brain/chatAccess';
 import { getLimits, type PlanLimits } from '../../domain/tenant/PlanLimits';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { TenantBillingStatus, TenantPlan } from '../../domain/shared/types';
 import { notify } from '../notifications/notify';
-import { isCreationConnectionKind, isCreationObjectKind } from '@builderforce/creation-canvas-contract';
+import { isCreationConnectionKind, isCreationObjectKind, type CreationObjectKind } from '@builderforce/creation-canvas-contract';
 import { broadcastRoom, creationSessionRoomName } from '../../infrastructure/relay/broadcastRoom';
+import { sendTransactionalEmail } from '../email/sendEmail';
+import { sendCreationSessionInviteEmail } from '../../infrastructure/email/EmailService';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 type SessionRole = 'viewer' | 'commenter' | 'editor' | 'runner' | 'owner';
 const ROLE_RANK: Record<SessionRole, number> = { viewer: 0, commenter: 1, editor: 2, runner: 3, owner: 4 };
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export function creationKindForModality(modality: string): CreationObjectKind {
+  const kinds: Record<string, CreationObjectKind> = {
+    designer: 'website', mobile: 'prototype', webmobile: 'prototype', video: 'video',
+    evermind: 'evermind', llm: 'evermind', finetune: 'llm', voice: 'voice',
+  };
+  return kinds[modality] ?? 'prototype';
+}
 
 type GraphObjectInput = {
   id: string;
@@ -1578,7 +1592,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if ((!body.userId && !email) || !role) return c.json({ error: 'A userId or email and role are required' }, 400);
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return c.json({ error: 'A valid email is required' }, 400);
     const tenantId = c.get('tenantId') as number;
-    const [target] = await db.select({ id: users.id }).from(users)
+    const [target] = await db.select({ id: users.id, email: users.email }).from(users)
       .innerJoin(tenantMembers, and(
         eq(tenantMembers.userId, users.id),
         eq(tenantMembers.tenantId, tenantId),
@@ -1609,12 +1623,37 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       if (!workspaceInvite) await db.insert(tenantInvitations).values({
         tenantId, email, role: 'developer', status: 'pending', invitedByUserId: c.get('userId') as string,
       });
+      const acceptPath = `/create/invitations/${rawToken}`;
+      const [inviter] = await db.select({ name: users.displayName, email: users.email }).from(users)
+        .where(eq(users.id, c.get('userId') as string)).limit(1);
+      let emailSent = false;
+      if (c.env.RESEND_API_KEY) {
+        try {
+          await sendTransactionalEmail(c.env, db, email, ({ locale }) => sendCreationSessionInviteEmail(c.env, email, {
+            sessionTitle: access.session.title,
+            inviterName: inviter?.name || inviter?.email || 'A teammate',
+            sessionUrl: `${resolveAppBaseUrl(c.env)}${acceptPath}`,
+            role,
+            expiresAt: expiresAt.toISOString(),
+            locale,
+          }));
+          emailSent = true;
+        } catch (error) {
+          reportCaughtError(error, {
+            source: 'application/creation/creationSessionRouteService.ts',
+            operation: 'sendCreationSessionInvite',
+            level: 'warning',
+            context: { logMessage: '[creation-session] invite email failed (invitation remains saved)', details: error },
+          });
+        }
+      }
       return c.json({
         invitationId: invitation.id,
         email,
         role,
         expiresAt: expiresAt.toISOString(),
-        acceptPath: `/create/invitations/${rawToken}`,
+        acceptPath,
+        emailSent,
       }, 201);
     }
     const [existingMember] = await db.select({ userId: creationSessionMembers.userId }).from(creationSessionMembers).where(and(eq(creationSessionMembers.sessionId, access.session.id), eq(creationSessionMembers.userId, target.id))).limit(1);
@@ -1627,11 +1666,49 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     }
     await db.insert(creationSessionMembers).values({ sessionId: access.session.id, userId: target.id, role, invitedBy: c.get('userId') as string })
       .onConflictDoUpdate({ target: [creationSessionMembers.sessionId, creationSessionMembers.userId], set: { role } });
+    // Keep a durable invitation record even when the person already has an
+    // account. acceptedAt distinguishes this immediate membership grant from a
+    // pending cold-email invite while preserving the campaign/audit evidence.
+    const auditToken = `${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, '');
+    await db.insert(creationSessionInvites).values({
+      sessionId: access.session.id,
+      tenantId,
+      email: target.email.trim().toLowerCase(),
+      role,
+      tokenHash: await sha256Hex(auditToken),
+      expiresAt: new Date(Date.now() + 7 * 24 * 3_600_000),
+      acceptedBy: target.id,
+      acceptedAt: new Date(),
+      createdBy: c.get('userId') as string,
+    });
     await notifyAttention(c, access.session.id, {
       kind: existingMember ? 'creation.session.role_changed' : 'creation.session.invitation', title: existingMember ? `Your role changed in ${access.session.title}` : `You were invited to ${access.session.title}`,
       body: `Access role: ${role}`, directUserIds: [target.id],
     });
-    return c.json({ userId: target.id, role }, 201);
+    const [inviter] = await db.select({ name: users.displayName, email: users.email }).from(users)
+      .where(eq(users.id, c.get('userId') as string)).limit(1);
+    let emailSent = false;
+    if (c.env.RESEND_API_KEY) {
+      try {
+        await sendTransactionalEmail(c.env, db, target.email, ({ locale }) => sendCreationSessionInviteEmail(c.env, target.email, {
+          sessionTitle: access.session.title,
+          inviterName: inviter?.name || inviter?.email || 'A teammate',
+          sessionUrl: `${resolveAppBaseUrl(c.env)}/create/${access.session.id}`,
+          role,
+          expiresAt: new Date(Date.now() + 7 * 24 * 3_600_000).toISOString(),
+          locale,
+        }));
+        emailSent = true;
+      } catch (error) {
+        reportCaughtError(error, {
+          source: 'application/creation/creationSessionRouteService.ts',
+          operation: 'sendCreationSessionInvite',
+          level: 'warning',
+          context: { logMessage: '[creation-session] member invite email failed (membership remains saved)', details: error },
+        });
+      }
+    }
+    return c.json({ userId: target.id, role, emailSent }, 201);
   });
 
   router.post('/:id/presence', async (c) => {
@@ -1715,8 +1792,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
 
     const resources = [
       ...taskRows.map((row) => ({ kind: 'task', resourceType: 'task', resourceId: String(row.id), title: row.title, subtitle: row.description, status: row.status })),
-      ...definitionRows.map((row) => ({ kind: 'workflow', resourceType: 'workflow', resourceId: row.id, title: row.name, subtitle: row.description, status: 'Definition' })),
-      ...workflowRows.map((row) => ({ kind: 'workflow', resourceType: 'workflow', resourceId: row.id, title: row.description || `${row.workflowType} workflow`, subtitle: null, status: row.status })),
+      ...definitionRows.map((row) => ({ kind: 'workflow', resourceType: 'workflow', resourceId: row.id, title: row.name, subtitle: row.description, status: 'Definition', workflowExecutable: true, resourceSubtype: 'definition' })),
+      ...workflowRows.map((row) => ({ kind: 'workflow', resourceType: 'workflow', resourceId: row.id, title: row.description || `${row.workflowType} workflow`, subtitle: null, status: row.status, workflowExecutable: false, resourceSubtype: 'run' })),
       ...agentRows.map((row) => ({ kind: 'agent', resourceType: 'agent', resourceId: row.id, title: row.name, subtitle: row.title, status: row.status })),
     ];
     const generated = [
@@ -1731,7 +1808,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const userId = c.get('userId') as string;
     const projectId = Number(c.req.param('projectId'));
     if (!Number.isInteger(projectId) || projectId <= 0) return c.json({ error: 'Invalid project id' }, 400);
-    const [project] = await db.select({ id: projects.id, name: projects.name }).from(projects).where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId))).limit(1);
+    const projectSegment = segmentId == null ? isNull(projects.segmentId) : eq(projects.segmentId, segmentId);
+    const [project] = await db.select({ id: projects.id, name: projects.name }).from(projects).where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId), projectSegment)).limit(1);
     if (!project) return c.json({ error: 'Project not found' }, 404);
     const [existing] = await db.select({ id: creationSessions.id, objectId: creationSessionObjects.id })
       .from(creationSessionProjectLinks)
@@ -1758,6 +1836,88 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     return c.json({ sessionId, objectId, created: true }, 201);
   });
 
+  router.post('/ide-projects/:ideProjectId/open', async (c) => {
+    const { tenantId, segmentId } = scope(c);
+    const userId = c.get('userId') as string;
+    const ideProjectId = Number(c.req.param('ideProjectId'));
+    if (!Number.isInteger(ideProjectId) || ideProjectId <= 0) return c.json({ error: 'Invalid build id' }, 400);
+    const projectSegment = segmentId == null ? isNull(ideProjects.segmentId) : eq(ideProjects.segmentId, segmentId);
+    const [build] = await db.select({
+      id: ideProjects.id,
+      name: ideProjects.name,
+      modality: ideProjects.modality,
+      status: ideProjects.status,
+      storageProjectId: ideProjects.storageProjectId,
+      containerProjectId: ideProjects.containerProjectId,
+      workflowDefinitionId: ideProjects.workflowDefinitionId,
+    }).from(ideProjects).where(and(
+      eq(ideProjects.id, ideProjectId), eq(ideProjects.tenantId, tenantId), projectSegment,
+    )).limit(1);
+    if (!build) return c.json({ error: 'Build not found' }, 404);
+
+    const kind = creationKindForModality(build.modality);
+    const [existing] = await db.select({ sessionId: creationSessions.id, objectId: creationSessionObjects.id })
+      .from(creationSessionObjects)
+      .innerJoin(creationSessions, eq(creationSessions.id, creationSessionObjects.sessionId))
+      .innerJoin(creationSessionMembers, and(eq(creationSessionMembers.sessionId, creationSessions.id), eq(creationSessionMembers.userId, userId)))
+      .where(and(
+        eq(creationSessions.tenantId, tenantId), eq(creationSessions.status, 'active'),
+        eq(creationSessionObjects.kind, kind), eq(creationSessionObjects.resourceType, 'project'),
+        eq(creationSessionObjects.resourceId, String(build.storageProjectId)),
+      )).orderBy(desc(creationSessions.lastActivityAt)).limit(1);
+    if (existing) return c.json({ ...existing, created: false });
+
+    const sessionId = crypto.randomUUID();
+    const objectId = crypto.randomUUID();
+    const workflowObjectId = build.workflowDefinitionId ? crypto.randomUUID() : null;
+    const objectContent = {
+      kind, title: build.name, status: build.status, modality: build.modality,
+      resourceId: kind === 'evermind' ? `evermind:${build.storageProjectId}` : `project:${build.storageProjectId}`,
+      ideProjectId: build.id,
+    };
+    const graphObjects: GraphObjectInput[] = [{
+      id: objectId, kind, resourceType: 'project', resourceId: String(build.storageProjectId),
+      canvasData: { x: 160, y: 120, w: 520, h: 340 }, content: objectContent,
+    }];
+    const graphConnections: GraphConnectionInput[] = [];
+    if (workflowObjectId && build.workflowDefinitionId) {
+      graphObjects.push({
+        id: workflowObjectId, kind: 'workflow', resourceType: 'workflow', resourceId: build.workflowDefinitionId,
+        canvasData: { x: 760, y: 170, w: 440, h: 280 },
+        content: { kind: 'workflow', title: `${build.name} workflow`, status: 'Live resource', workflowExecutable: true, resourceSubtype: 'definition' },
+      });
+      graphConnections.push({ id: crypto.randomUUID(), sourceObjectId: workflowObjectId, targetObjectId: objectId, kind: 'control', label: 'builds' });
+    }
+    const statements: unknown[] = [
+      db.insert(creationSessions).values({
+        id: sessionId, tenantId, segmentId, title: build.name, createdBy: userId, updatedBy: userId,
+        canvasRevision: 1, preview: buildPreview(graphObjects),
+      }),
+      db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId }),
+      db.insert(creationSessionObjects).values(graphObjects.map((object) => ({
+        id: object.id, sessionId, kind: object.kind, resourceType: object.resourceType, resourceId: object.resourceId,
+        canvasData: object.canvasData ?? {}, content: object.content, searchText: creationObjectSearchText(object.content),
+        createdBy: userId, updatedBy: userId,
+      }))),
+      db.insert(creationSessionEvents).values({
+        sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: 'session.created_from_build',
+        objectId, payload: { ideProjectId: build.id, modality: build.modality, storageProjectId: build.storageProjectId },
+      }),
+      db.insert(creationSessionSnapshots).values({
+        sessionId, revision: 1, graph: { objects: graphObjects, connections: graphConnections },
+        viewport: { x: 0, y: 0, zoom: 1 }, createdBy: userId,
+      }),
+      db.insert(creationSessionProjectLinks).values({ sessionId, projectId: build.storageProjectId, addedBy: userId }).onConflictDoNothing(),
+    ];
+    if (graphConnections.length) statements.push(db.insert(creationSessionConnections).values(graphConnections.map((edge) => ({
+      id: edge.id, sessionId, sourceObjectId: edge.sourceObjectId, targetObjectId: edge.targetObjectId,
+      kind: edge.kind ?? 'reference', label: edge.label ?? null, createdBy: userId,
+    }))));
+    if (build.containerProjectId) statements.push(db.insert(creationSessionProjectLinks).values({ sessionId, projectId: build.containerProjectId, addedBy: userId }).onConflictDoNothing());
+    await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
+    return c.json({ sessionId, objectId, created: true }, 201);
+  });
+
   router.post('/resources/:resourceType/:resourceId/open', async (c) => {
     const { tenantId, segmentId } = scope(c);
     const userId = c.get('userId') as string;
@@ -1766,6 +1926,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     let title: string;
     let kind: 'chat' | 'workflow';
     let projectId: number | null = null;
+    let initialTimeline: Array<{ id: number; role: string; content: string; createdAt: Date }> = [];
     if (resourceType === 'chat') {
       const chatId = Number(resourceId);
       if (!Number.isInteger(chatId) || chatId <= 0) return c.json({ error: 'Invalid chat id' }, 400);
@@ -1777,6 +1938,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       title = String(chat.title || 'Brain session');
       projectId = chat.projectId == null ? null : Number(chat.projectId);
       kind = 'chat';
+      initialTimeline = await db.select({ id: brainChatMessages.id, role: brainChatMessages.role, content: brainChatMessages.content, createdAt: brainChatMessages.createdAt })
+        .from(brainChatMessages).where(eq(brainChatMessages.chatId, chatId)).orderBy(asc(brainChatMessages.seq), asc(brainChatMessages.id)).limit(500);
     } else if (resourceType === 'workflow') {
       if (!UUID_RE.test(resourceId)) return c.json({ error: 'Invalid workflow id' }, 400);
       const [definition] = await db.select({ id: workflowDefinitions.id, name: workflowDefinitions.name, projectId: workflowDefinitions.projectId })
@@ -1809,7 +1972,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       db.insert(creationSessionObjects).values({
         id: objectId, sessionId, kind, resourceType, resourceId,
         canvasData: { x: 160, y: 120, w: kind === 'workflow' ? 460 : 320, h: 280 },
-        content: { kind, title, status: 'Live resource' }, searchText: `${title} Live resource`, createdBy: userId, updatedBy: userId,
+        content: { kind, title, status: 'Live resource', ...(kind === 'workflow' ? { workflowExecutable: true, resourceSubtype: 'definition' } : {}) }, searchText: `${title} Live resource`, createdBy: userId, updatedBy: userId,
       }),
       db.insert(creationSessionEvents).values({
         sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: `session.created_from_${resourceType}`,
@@ -1817,11 +1980,20 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       }),
       db.insert(creationSessionSnapshots).values({
         sessionId, revision: 1,
-        graph: { objects: [{ id: objectId, kind, resourceType, resourceId, canvasData: { x: 160, y: 120, w: kind === 'workflow' ? 460 : 320, h: 280 }, content: { kind, title, status: 'Live resource' } }], connections: [] },
+        graph: { objects: [{ id: objectId, kind, resourceType, resourceId, canvasData: { x: 160, y: 120, w: kind === 'workflow' ? 460 : 320, h: 280 }, content: { kind, title, status: 'Live resource', ...(kind === 'workflow' ? { workflowExecutable: true, resourceSubtype: 'definition' } : {}) } }], connections: [] },
         viewport: { x: 0, y: 0, zoom: 1 }, createdBy: userId,
       }),
     ];
     if (projectId) statements.push(db.insert(creationSessionProjectLinks).values({ sessionId, projectId, addedBy: userId }).onConflictDoNothing());
+    if (initialTimeline.length) statements.push(db.insert(creationSessionTimeline).values(initialTimeline.map((message) => ({
+      sessionId,
+      clientMessageId: `legacy-chat:${resourceId}:${message.id}`,
+      messageRole: ['user', 'assistant', 'system'].includes(message.role) ? message.role : 'system',
+      body: message.content,
+      metadata: { importedFrom: 'brain-chat', chatId: Number(resourceId), messageId: message.id },
+      createdBy: message.role === 'user' ? userId : null,
+      createdAt: message.createdAt,
+    }))));
     await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
     return c.json({ sessionId, objectId, created: true }, 201);
   });

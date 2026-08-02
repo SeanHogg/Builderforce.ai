@@ -8,8 +8,6 @@ import { findActiveGroup, navGroupsForAccountType, type NavGroup } from '@/lib/n
 import { useAvailableForHire, useIsFreelancer } from '@/lib/rbac';
 import SidebarLegalMenu from './legal/SidebarLegalMenu';
 import UsageMeter from './UsageMeter';
-import { useEffect, useState } from 'react';
-import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
 
 /**
  * The authenticated workspace navigation — a slim list of PRIMARY DESTINATIONS
@@ -58,9 +56,6 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
   const pathname = usePathname() || '';
   const t = useTranslations('nav');
   const { user } = useAuth();
-  const [createSessions, setCreateSessions] = useState<Array<CreationSessionSummary & { matchingObjectId?: string | null }>>([]);
-  const [sessionSearch, setSessionSearch] = useState('');
-  const [sessionFilter, setSessionFilter] = useState('all');
 
   const isFreelancer = useIsFreelancer();
   const availableForHire = useAvailableForHire();
@@ -69,23 +64,6 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
     ?? allGroups.find((g) => g.match.some((m) => pathname === m || pathname.startsWith(`${m}/`)))?.id;
   const groups = allGroups.filter((g) => !g.superadminOnly || user?.isSuperadmin);
 
-  useEffect(() => {
-    if (!user) return;
-    let active = true;
-    const timer = window.setTimeout(() => {
-      const load = !collapsed && sessionSearch.trim().length >= 2 ? creationSessionsApi.search({ q: sessionSearch.trim(), limit: 30 }) : creationSessionsApi.list();
-      void load.then(({ sessions }) => { if (active) setCreateSessions(sessions.slice(0, 12)); }).catch(() => undefined);
-    }, sessionSearch ? 220 : 0);
-    return () => { active = false; window.clearTimeout(timer); };
-  }, [collapsed, pathname, sessionSearch, user]);
-  const visibleCreateSessions = createSessions.filter((session) => {
-    if (sessionFilter === 'mine') return session.role === 'owner';
-    if (sessionFilter === 'shared') return (session.collaboratorCount ?? 1) > 1 && session.role !== 'owner';
-    if (sessionFilter === 'project') return !!session.projectIds?.length;
-    if (sessionFilter !== 'all') return session.preview?.kinds?.includes(sessionFilter);
-    return true;
-  });
-  const unreadSessions = createSessions.filter((session) => session.unread).length;
 
   return (
     <>
@@ -121,15 +99,7 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
 
         <div className="nav-main">
           <div className="nav-section">
-            {groups.map((g) => <div key={g.id}>
-              <GroupLink group={g} active={activeGroupId === g.id} onNavigate={onMobileClose} t={t} badge={g.id === 'create' ? unreadSessions : 0} />
-              {g.id === 'create' && !collapsed && <div style={{ margin: '3px 5px 8px 34px', display: 'grid', gap: 3 }}>
-                <Link href="/create/new" onClick={onMobileClose} style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', textDecoration: 'none', padding: '5px 6px' }}>+ New session</Link>
-                <input aria-label="Search creation sessions" value={sessionSearch} onChange={(event) => setSessionSearch(event.target.value)} placeholder="Search sessions…" style={{ width: '100%', padding: '6px 7px', border: '1px solid var(--border-subtle)', borderRadius: 6, background: 'var(--bg-input)', color: 'var(--text-primary)', font: 'inherit', fontSize: 11 }} />
-                <select aria-label="Filter creation sessions" value={sessionFilter} onChange={(event) => setSessionFilter(event.target.value)} style={{ width: '100%', padding: '5px 6px', border: '1px solid var(--border-subtle)', borderRadius: 6, background: 'var(--bg-input)', color: 'var(--text-secondary)', font: 'inherit', fontSize: 10 }}><option value="all">All sessions</option><option value="mine">Mine</option><option value="shared">Shared</option><option value="project">Project-backed</option><option value="workflow">Workflow</option><option value="website">Website</option><option value="dataset">Data</option><option value="llm">LLM</option><option value="voice">Voice</option></select>
-                {visibleCreateSessions.slice(0, 7).map((session) => <Link key={session.id} href={`/create/${session.id}${session.matchingObjectId ? `?focus=${session.matchingObjectId}` : ''}`} onClick={onMobileClose} title={session.title} style={{ padding: '4px 6px', borderRadius: 5, color: pathname.includes(session.id) ? 'var(--accent)' : 'var(--text-secondary)', background: pathname.includes(session.id) ? 'var(--surface-subtle)' : 'transparent', textDecoration: 'none', fontSize: 11, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{session.pinned ? '★ ' : ''}{session.title}{session.unread ? ' ·' : ''}</Link>)}
-              </div>}
-            </div>)}
+            {groups.map((g) => <GroupLink key={g.id} group={g} active={activeGroupId === g.id} onNavigate={onMobileClose} t={t} />)}
           </div>
         </div>
 

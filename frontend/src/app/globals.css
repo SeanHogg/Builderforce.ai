@@ -352,6 +352,13 @@ body {
   overflow-x: hidden;
 }
 
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
 html[data-theme='light'] body {
   background:
     radial-gradient(1200px circle at 12% -10%, rgba(59, 130, 246, 0.05), transparent 58%),

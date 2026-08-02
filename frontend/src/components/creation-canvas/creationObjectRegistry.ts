@@ -56,6 +56,7 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'standup', label: 'Stand-up', icon: '◎', group: 'People', createData: () => ({ kind: 'standup', title: 'Impromptu stand-up', status: 'Gathering', participants: [], summary: 'Add staff members and agents from this canvas. Brain will facilitate current work, blockers, and follow-ups.' }) },
   { kind: 'agent', label: 'Agent', icon: '✦', group: 'Agents', createData: () => ({ kind: 'agent', title: 'New agent', status: 'Draft', model: 'gpt-4o', subtitle: 'Configure or link a live workforce agent.' }) },
   { kind: 'voice', label: 'Voice', icon: '◖', group: 'Agents', createData: () => ({ kind: 'voice', title: 'Voice note' }) },
+  { kind: 'video', label: 'Video', icon: '▶', group: 'Build', createData: () => ({ kind: 'video', title: 'Video studio', status: 'Draft' }) },
   { kind: 'document', label: 'Document', icon: '▤', group: 'Knowledge', createData: () => ({ kind: 'document', title: 'Untitled document', status: 'Draft' }) },
   { kind: 'slides', label: 'Slides', icon: '▣', group: 'Knowledge', createData: () => ({ kind: 'slides', title: 'Executive presentation', status: 'Draft' }) },
   { kind: 'knowledge', label: 'Knowledge', icon: '◇', group: 'Knowledge', createData: () => ({ kind: 'knowledge', title: 'Knowledge item' }) },
@@ -70,13 +71,13 @@ const BASE_CREATION_OBJECT_REGISTRY = [
 ] as const satisfies readonly BaseCreationObjectDefinition[];
 
 const CAPABILITIES: Partial<Record<CreationObjectKind, string>> = {
-  evermind: 'evermind', mcp: 'integrations', agent: 'agents', llm: 'models', voice: 'voice',
+  evermind: 'evermind', mcp: 'integrations', agent: 'agents', llm: 'models', voice: 'voice', video: 'video',
 };
 const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   workflow: ['edit', 'run'], website: ['edit', 'preview', 'publish'], prototype: ['edit', 'preview'],
   dataset: ['import', 'profile', 'visualize'], chart: ['refresh', 'drill'], dashboard: ['refresh', 'drill'],
   project: ['expand', 'compare'], task: ['assign', 'deliver'], agent: ['inspect', 'configure', 'assign'],
-  evermind: ['teach', 'train', 'evaluate', 'publish'], voice: ['record', 'play'], mcp: ['authenticate', 'execute'],
+  evermind: ['teach', 'train', 'evaluate', 'publish'], voice: ['record', 'play'], video: ['generate', 'preview'], mcp: ['authenticate', 'execute'],
 };
 /**
  * Explicit, content-safe fields Brain may receive from a Canvas Object.
@@ -86,7 +87,7 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
  */
 const CONTEXT_FIELDS = [
   'kind', 'title', 'subtitle', 'status', 'resourceId', 'model', 'role', 'focus',
-  'fetchedAt', 'projectLens', 'columns', 'rowCount', 'chartLabels', 'chartValues',
+  'fetchedAt', 'projectLens', 'columns', 'rowCount', 'sampleRows', 'chartLabels', 'chartValues',
   'projects', 'sources', 'items', 'summary', 'participants', 'evermindVersion',
   'contributions', 'inferenceEnabled', 'teacherModel', 'viewport',
 ] as const;

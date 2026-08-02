@@ -60,6 +60,7 @@ class ResendEmailProvider implements EmailProvider {
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       console.error(`[email:resend] error: ${body}`);
+      throw new Error(`Resend rejected email delivery with status ${res.status}`);
     }
   }
 }
@@ -512,6 +513,50 @@ export async function sendChatInviteEmail(
       InviterName: opts.inviterName,
       ChatTitle: opts.chatTitle,
       ChatUrl: opts.chatUrl,
+      Email: to,
+    },
+  });
+}
+
+/**
+ * TRANSACTIONAL — a person explicitly invited this address to a shared Creation
+ * Session. This is sent whether or not the recipient has an account; the URL is
+ * the one-time acceptance route for a cold invite and the Session route for an
+ * existing member.
+ */
+export async function sendCreationSessionInviteEmail(
+  env: EmailEnv,
+  to: string,
+  opts: {
+    sessionTitle: string;
+    inviterName: string;
+    sessionUrl: string;
+    role: string;
+    expiresAt: string;
+    locale?: EmailLocale;
+  },
+): Promise<void> {
+  const locale = opts.locale ?? DEFAULT_EMAIL_LOCALE;
+  const copy = emailCopy(locale);
+
+  const body = greeting(copy, false)
+    + p(copy.creationSessionInvite.body)
+    + p(copy.creationSessionInvite.pitch)
+    + cta('{{SessionUrl}}', copy.creationSessionInvite.cta)
+    + p(copy.creationSessionInvite.note, MUTED);
+
+  await deliver(env, {
+    to,
+    subject: render(copy.creationSessionInvite.subject, { InviterName: opts.inviterName }),
+    body,
+    locale,
+    copy,
+    vars: {
+      InviterName: opts.inviterName,
+      SessionTitle: opts.sessionTitle,
+      SessionUrl: opts.sessionUrl,
+      Role: opts.role,
+      ExpiresAt: opts.expiresAt,
       Email: to,
     },
   });

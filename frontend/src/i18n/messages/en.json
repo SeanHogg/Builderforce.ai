@@ -8005,6 +8005,7 @@
       "health": "Health",
       "directory": "Directory",
       "sessions": "Sessions",
+      "creationSessions": "Creation Sessions",
       "security": "Security",
       "emulation": "Emulation",
       "tenants": "Workspaces",
@@ -8243,6 +8244,13 @@
       "guest": "guest",
       "registered": "registered",
       "paid": "paid"
+    },
+    "creationSessions": {
+      "title": "Creation Sessions", "subtitle": "Saved Canvases across every workspace, with account and pre-account invitation records.", "count": "{count} sessions",
+      "consentNotice": "Invited addresses are useful prospect evidence, but an invitation is not consent to receive promotional email.", "empty": "No saved Creation Sessions found.",
+      "session": "Session", "workspace": "Workspace", "canvas": "Canvas", "invitations": "Invitations", "lastActivity": "Last activity", "noCreator": "No creator email",
+      "tenant": "Tenant {id}", "objectsMembers": "{objects} objects · {members} members", "revision": "Revision {revision}", "created": "Created {date}",
+      "pending": "pending", "accepted": "accepted", "revoked": "revoked", "expired": "expired"
     },
     "usage": {
       "aiAnalyze": "AI Analyze",
@@ -11827,6 +11835,7 @@
     "duplicate": "Duplicate", "align": "Align", "frame": "Frame", "lock": "Lock", "unlock": "Unlock", "hide": "Hide", "showHidden": "Show hidden", "hideHidden": "Hide hidden", "focus": "Focus", "edge": "Connection", "conversation": "Conversation", "tutorial": "Tutorial",
     "live": "Live", "offlineRetry": "Offline · edits will retry", "reconnecting": "Reconnecting…", "connecting": "Connecting…", "largeSession": "Large Session · {count} Objects",
     "dashboardTitle": "Create Sessions", "dashboardSubtitle": "Return to a Canvas and continue exactly where you left off.", "searchSessions": "Search Sessions, Objects, Projects, people…", "active": "Active", "archived": "Archived", "continueCreating": "Continue creating", "sharedWithMe": "Shared with me", "recentlyCompleted": "Recently completed",
-    "object": {"workflow":"Workflow","project":"Project","website":"Website","dashboard":"Dashboard","chat":"Chat","agent":"Agent","staff":"Staff member","evaluation":"Evaluation","dataset":"Dataset","table":"Table","spreadsheet":"Spreadsheet","chart":"Chart","report":"Report","kpi":"KPI","prototype":"WYSIWYG","code":"Code","browser":"Browser preview","llm":"LLM","voice":"Voice","document":"Document","slides":"Slides","knowledge":"Knowledge","file":"File","url":"URL","note":"Note","drawing":"Drawing","frame":"Frame","comment":"Comment","timer":"Timer","roadmap":"Roadmap","prd":"PRD","release":"Release","task":"Task","mockup":"Mockup","mockupSet":"Mockup set","featureSummary":"Feature summary","team":"Team","role":"Role","mcp":"Connected tool","evermind":"Evermind","projectComparison":"Project comparison","standup":"Stand-up","repository":"Repository","selection":"Editor selection","diagnostics":"Diagnostics","terminal":"Terminal output","service":"Local service"}
+    "createTypeTitle": "What do you want to create?", "createTypeSubtitle": "Start with a familiar Builder type. It opens as an Object in a new Canvas, where you can add Workflows, data, people, and Brain.", "existingCreations": "Your existing creations", "existingCreationsSubtitle": "Open an existing Website, App, Evermind, LLM, Voice, Video, Workflow, or Brain session inside its Canvas.", "loadingCreations": "Loading creations…", "noCreations": "No existing creations match this search.", "brainSession": "Brain session", "workflowRuns": "Workflow · {count} runs", "exportCanvas": "Export",
+    "object": {"workflow":"Workflow","project":"Project","website":"Website","dashboard":"Dashboard","chat":"Chat","agent":"Agent","staff":"Staff member","evaluation":"Evaluation","dataset":"Dataset","table":"Table","spreadsheet":"Spreadsheet","chart":"Chart","report":"Report","kpi":"KPI","prototype":"WYSIWYG","code":"Code","browser":"Browser preview","llm":"LLM","voice":"Voice","video":"Video","document":"Document","slides":"Slides","knowledge":"Knowledge","file":"File","url":"URL","note":"Note","drawing":"Drawing","frame":"Frame","comment":"Comment","timer":"Timer","roadmap":"Roadmap","prd":"PRD","release":"Release","task":"Task","mockup":"Mockup","mockupSet":"Mockup set","featureSummary":"Feature summary","team":"Team","role":"Role","mcp":"Connected tool","evermind":"Evermind","projectComparison":"Project comparison","standup":"Stand-up","repository":"Repository","selection":"Editor selection","diagnostics":"Diagnostics","terminal":"Terminal output","service":"Local service"}
   }
 }

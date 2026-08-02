@@ -6,6 +6,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  *
  * GET  /api/admin/users                — all platform users + tenant counts
  * GET  /api/admin/guest-sessions       — anonymous Brain/tool adoption sessions
+ * GET  /api/admin/creation-sessions    — saved Canvases with invitation evidence
  * GET  /api/admin/tenants              — all tenants + member/agentHost counts
  * GET  /api/admin/health               — system health (DB ping, model pool, counts)
  * GET  /api/admin/errors               — recent API error log (last 200 entries)
@@ -1255,6 +1256,51 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       LIMIT 500
     `);
 
+    return c.json({ sessions: rows.rows });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/creation-sessions
+  // Cross-tenant operational view of durable Canvases. Invitations are nested
+  // with their Session so support/growth can trace the invited address through
+  // pending, accepted, expired, and revoked states without treating an invite as
+  // newsletter consent.
+  // -------------------------------------------------------------------------
+  router.get('/creation-sessions', async (c) => {
+    const db = buildDatabase(c.env);
+    const rows = await db.execute(sql`
+      SELECT
+        cs.id,
+        cs.tenant_id AS "tenantId",
+        t.name AS "tenantName",
+        cs.segment_id AS "segmentId",
+        cs.title,
+        cs.status,
+        cs.canvas_revision AS "revision",
+        cs.created_at AS "createdAt",
+        cs.last_activity_at AS "lastActivityAt",
+        creator.email AS "creatorEmail",
+        (SELECT COUNT(*)::int FROM creation_session_objects cso WHERE cso.session_id = cs.id) AS "objectCount",
+        (SELECT COUNT(*)::int FROM creation_session_members csm WHERE csm.session_id = cs.id) AS "memberCount",
+        COALESCE((
+          SELECT JSONB_AGG(JSONB_BUILD_OBJECT(
+            'id', csi.id,
+            'email', csi.email,
+            'role', csi.role,
+            'createdAt', csi.created_at,
+            'expiresAt', csi.expires_at,
+            'acceptedAt', csi.accepted_at,
+            'revokedAt', csi.revoked_at
+          ) ORDER BY csi.created_at DESC)
+          FROM creation_session_invites csi
+          WHERE csi.session_id = cs.id
+        ), '[]'::jsonb) AS invitations
+      FROM creation_sessions cs
+      JOIN tenants t ON t.id = cs.tenant_id
+      LEFT JOIN users creator ON creator.id = cs.created_by
+      ORDER BY cs.last_activity_at DESC
+      LIMIT 500
+    `);
     return c.json({ sessions: rows.rows });
   });
 

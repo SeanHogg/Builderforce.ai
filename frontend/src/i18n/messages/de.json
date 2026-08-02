@@ -8005,6 +8005,7 @@
       "health": "Zustand",
       "directory": "Verzeichnis",
       "sessions": "Sitzungen",
+      "creationSessions": "Creation Sessions",
       "security": "Sicherheit",
       "emulation": "Emulation",
       "tenants": "Arbeitsbereiche",
@@ -8243,6 +8244,13 @@
       "guest": "Gast",
       "registered": "registriert",
       "paid": "bezahlt"
+    },
+    "creationSessions": {
+      "title": "Erstellungssitzungen", "subtitle": "Gespeicherte Canvases aus allen Arbeitsbereichen mit Einladungen vor und nach der Kontoerstellung.", "count": "{count} Sitzungen",
+      "consentNotice": "Eingeladene Adressen sind nützliche Interessentendaten, eine Einladung ist jedoch keine Einwilligung für Werbe-E-Mails.", "empty": "Keine gespeicherten Erstellungssitzungen gefunden.",
+      "session": "Sitzung", "workspace": "Arbeitsbereich", "canvas": "Canvas", "invitations": "Einladungen", "lastActivity": "Letzte Aktivität", "noCreator": "Keine Ersteller-E-Mail",
+      "tenant": "Mandant {id}", "objectsMembers": "{objects} Objekte · {members} Mitglieder", "revision": "Revision {revision}", "created": "Erstellt {date}",
+      "pending": "ausstehend", "accepted": "angenommen", "revoked": "widerrufen", "expired": "abgelaufen"
     },
     "usage": {
       "aiAnalyze": "KI-Analyse",
@@ -11827,6 +11835,7 @@
     "duplicate": "Duplizieren", "align": "Ausrichten", "frame": "Rahmen", "lock": "Sperren", "unlock": "Entsperren", "hide": "Ausblenden", "showHidden": "Ausgeblendete zeigen", "hideHidden": "Ausgeblendete verbergen", "focus": "Fokussieren", "edge": "Verbindung", "conversation": "Unterhaltung", "tutorial": "Tutorial",
     "live": "Live", "offlineRetry": "Offline · Änderungen werden erneut versucht", "reconnecting": "Verbindung wird wiederhergestellt…", "connecting": "Verbindung wird hergestellt…", "largeSession": "Große Session · {count} Objekte",
     "dashboardTitle": "Create Sessions", "dashboardSubtitle": "Kehre zu einem Canvas zurück und mache genau dort weiter.", "searchSessions": "Sessions, Objekte, Projekte oder Personen suchen…", "active": "Aktiv", "archived": "Archiviert", "continueCreating": "Weiter erstellen", "sharedWithMe": "Mit mir geteilt", "recentlyCompleted": "Kürzlich abgeschlossen",
-    "object": {"workflow":"Workflow","project":"Projekt","website":"Website","dashboard":"Dashboard","chat":"Chat","agent":"Agent","staff":"Teammitglied","evaluation":"Bewertung","dataset":"Datensatz","table":"Tabelle","spreadsheet":"Tabellenblatt","chart":"Diagramm","report":"Bericht","kpi":"KPI","prototype":"WYSIWYG","code":"Code","browser":"Browser-Vorschau","llm":"LLM","voice":"Sprache","document":"Dokument","slides":"Folien","knowledge":"Wissen","file":"Datei","url":"URL","note":"Notiz","drawing":"Zeichnung","frame":"Rahmen","comment":"Kommentar","timer":"Timer","roadmap":"Roadmap","prd":"PRD","release":"Release","task":"Aufgabe","mockup":"Mockup","mockupSet":"Mockup-Satz","featureSummary":"Funktionsübersicht","team":"Team","role":"Rolle","mcp":"Verbundenes Werkzeug","evermind":"Evermind","projectComparison":"Projektvergleich","standup":"Stand-up","repository":"Repository","selection":"Editor-Auswahl","diagnostics":"Diagnosen","terminal":"Terminalausgabe","service":"Lokaler Dienst"}
+    "createTypeTitle": "Was möchtest du erstellen?", "createTypeSubtitle": "Starte mit einem vertrauten Builder-Typ. Er öffnet sich als Objekt in einem neuen Canvas, wo du Workflows, Daten, Personen und Brain hinzufügen kannst.", "existingCreations": "Deine bestehenden Kreationen", "existingCreationsSubtitle": "Öffne eine Website, App, Evermind, ein LLM, Voice, Video, einen Workflow oder eine Brain-Session in ihrem Canvas.", "loadingCreations": "Kreationen werden geladen…", "noCreations": "Keine bestehende Kreation passt zur Suche.", "brainSession": "Brain-Session", "workflowRuns": "Workflow · {count} Läufe", "exportCanvas": "Exportieren",
+    "object": {"workflow":"Workflow","project":"Projekt","website":"Website","dashboard":"Dashboard","chat":"Chat","agent":"Agent","staff":"Teammitglied","evaluation":"Bewertung","dataset":"Datensatz","table":"Tabelle","spreadsheet":"Tabellenblatt","chart":"Diagramm","report":"Bericht","kpi":"KPI","prototype":"WYSIWYG","code":"Code","browser":"Browser-Vorschau","llm":"LLM","voice":"Sprache","video":"Video","document":"Dokument","slides":"Folien","knowledge":"Wissen","file":"Datei","url":"URL","note":"Notiz","drawing":"Zeichnung","frame":"Rahmen","comment":"Kommentar","timer":"Timer","roadmap":"Roadmap","prd":"PRD","release":"Release","task":"Aufgabe","mockup":"Mockup","mockupSet":"Mockup-Satz","featureSummary":"Funktionsübersicht","team":"Team","role":"Rolle","mcp":"Verbundenes Werkzeug","evermind":"Evermind","projectComparison":"Projektvergleich","standup":"Stand-up","repository":"Repository","selection":"Editor-Auswahl","diagnostics":"Diagnosen","terminal":"Terminalausgabe","service":"Lokaler Dienst"}
   }
 }

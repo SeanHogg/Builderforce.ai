@@ -22,7 +22,7 @@ import '@xyflow/react/dist/style.css';
 import { CreationNode, type CreationFlowNode } from './CreationNode';
 import type { CreationNodeData, CreationObjectKind } from './types';
 import styles from './CreationCanvas.module.css';
-import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, tasksApi, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
+import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, tasksApi, workflowDefinitions, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import { creationGraphFromSnapshot, creationStorageKey, readLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
 import { runCreationCanvasAi } from '@/lib/creationCanvasAi';
 import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
@@ -38,6 +38,10 @@ import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
 import { CREATION_CONNECTION_KINDS, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
+import { downloadJson, downloadText, toCsv } from '@/lib/download';
+import { exportCsv, exportDocx, exportPptx } from '@/lib/exportApi';
+import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
+import { parseCSV } from '@/lib/importHelpers';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 type ProposedCanvasChange =
@@ -52,6 +56,30 @@ type BrowserSpeechRecognition = { lang: string; interimResults: boolean; onresul
 
 function newNode(kind: CreationObjectKind, position: { x: number; y: number }): CreationFlowNode {
   return { id: crypto.randomUUID(), type: 'creation', position, data: createDefaultCreationData(kind) };
+}
+
+function safeDownloadName(value: string): string {
+  return value.trim().replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'creation';
+}
+
+function artifactMarkdown(data: CreationNodeData): string {
+  const authored = [data.markdown, data.aiResponse, data.content, data.subtitle].find((value) => typeof value === 'string' && value.trim());
+  return typeof authored === 'string' ? authored : `# ${data.title}\n\n${data.status ? `Status: ${data.status}\n` : ''}`;
+}
+
+function artifactCsv(data: CreationNodeData): string | null {
+  const rawRows = Array.isArray(data.rows) ? data.rows : [];
+  const rawColumns = Array.isArray(data.columns) ? data.columns : [];
+  const columns = rawColumns.map((column) => typeof column === 'string' ? column : String((column as { name?: unknown; key?: unknown })?.name ?? (column as { key?: unknown })?.key ?? 'Column'));
+  if (!columns.length && rawRows[0] && typeof rawRows[0] === 'object' && !Array.isArray(rawRows[0])) columns.push(...Object.keys(rawRows[0] as Record<string, unknown>));
+  if (!columns.length) return null;
+  const rows = rawRows.map((row) => Array.isArray(row)
+    ? row.map((value) => value == null || ['string', 'number'].includes(typeof value) ? value as string | number | null : JSON.stringify(value))
+    : columns.map((column) => {
+      const value = row && typeof row === 'object' ? (row as Record<string, unknown>)[column] : '';
+      return value == null || ['string', 'number'].includes(typeof value) ? value as string | number | null : JSON.stringify(value);
+    }));
+  return toCsv(columns, rows);
 }
 
 const SEED = {
@@ -152,6 +180,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [realtimeState, setRealtimeState] = useState<'local' | 'connecting' | 'online' | 'reconnecting' | 'offline'>(persistence === 'local' ? 'local' : 'connecting');
   const [members, setMembers] = useState<CreationSessionDetail['members']>([]);
   const [allMembers, setAllMembers] = useState<CreationSessionDetail['members']>([]);
+  const [pendingInvitations, setPendingInvitations] = useState<CreationSessionInvitation[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<CreationSnapshotSummary[]>([]);
@@ -205,6 +234,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!templateOpen || persistence !== 'server') return;
     void creationSessionsApi.templates.list().then((result) => setServerTemplates(result.templates)).catch(() => setServerTemplates([]));
   }, [persistence, templateOpen]);
+
+  useEffect(() => {
+    if (!shareOpen || persistence !== 'server' || sessionRole !== 'owner') return;
+    void creationSessionsApi.invitations.list(sessionId)
+      .then((result) => setPendingInvitations(result.invitations.filter((invitation) => !invitation.acceptedAt && !invitation.revokedAt)))
+      .catch((error) => setNotice(error instanceof Error ? error.message : 'Invitations could not be loaded'));
+  }, [persistence, sessionId, sessionRole, shareOpen]);
 
   useEffect(() => {
     try {
@@ -500,13 +536,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const text = await file.text();
       const delimiter = file.name.toLowerCase().endsWith('.tsv') ? '\t' : ',';
       const allLines = text.split(/\r?\n/).filter((line) => line.trim());
-      if (allLines.length - 1 > datasetRowLimit) throw new Error(`This plan supports up to ${datasetRowLimit.toLocaleString()} dataset rows per Canvas import.`);
-      const lines = allLines.slice(0, datasetRowLimit + 1);
-      const split = (line: string) => line.split(delimiter).map((value) => value.trim().replace(/^"|"$/g, ''));
-      const columns = split(lines[0] ?? '').filter(Boolean).slice(0, 24);
+      const parsed = delimiter === ',' ? parseCSV(text) : {
+        headers: (allLines[0] ?? '').split('\t').map((value) => value.trim()),
+        rows: allLines.slice(1).map((line) => Object.fromEntries((allLines[0] ?? '').split('\t').map((column, index) => [column.trim(), line.split('\t')[index]?.trim() ?? '']))),
+      };
+      if (parsed.rows.length > datasetRowLimit) throw new Error(`This plan supports up to ${datasetRowLimit.toLocaleString()} dataset rows per Canvas import.`);
+      const columns = parsed.headers.filter(Boolean).slice(0, 24);
       if (!columns.length) throw new Error('No columns found');
-      const rows = lines.slice(1).map((line) => Object.fromEntries(columns.map((column, index) => [column, split(line)[index] ?? ''])));
-      setNodes((current) => current.map((node) => node.id === selectedId ? { ...node, data: { ...node.data, title: file.name, columns, rows, rowCount: Math.max(rows.length, lines.length - 1), status: 'Imported', subtitle: `${rows.length} preview rows loaded` } } : node));
+      const rows = parsed.rows.map((row) => Object.fromEntries(columns.map((column) => [column, row[column] ?? ''])));
+      setNodes((current) => current.map((node) => node.id === selectedId ? { ...node, data: { ...node.data, title: file.name, columns, rows, sampleRows: rows.slice(0, 25), rowCount: rows.length, status: 'Imported', subtitle: `${rows.length} preview rows loaded` } } : node));
       setNotice(`${file.name} imported`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : 'Dataset import failed');
@@ -835,7 +873,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           ...expanded.resources.slice(0, 24).map((item, index): CreationFlowNode => ({
             id: crypto.randomUUID(), type: 'creation',
             position: { x: project.position.x + 390 + (index % 3) * 300, y: project.position.y - 180 + Math.floor(index / 3) * 190 },
-            data: { kind: item.kind as CreationObjectKind, title: item.title, status: item.status, subtitle: item.subtitle ?? undefined, resourceId: `${item.resourceType}:${item.resourceId}` },
+            data: { kind: item.kind as CreationObjectKind, title: item.title, status: item.status, subtitle: item.subtitle ?? undefined, resourceId: `${item.resourceType}:${item.resourceId}`, workflowExecutable: item.workflowExecutable, resourceSubtype: item.resourceSubtype },
           })),
           ...expanded.generated.map((item, index): CreationFlowNode => ({
             id: crypto.randomUUID(), type: 'creation', position: { x: project.position.x + 390 + index * 370, y: project.position.y - 430 },
@@ -932,8 +970,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ...(agentRef ? { assignedAgentRef: agentRef } : {}),
       }).then(async (created) => {
         const canvasTaskId = addTaskNode(`task:${created.id}`, agentRef ? 'Assigned' : 'Ready');
+        trackActivity('creation_artifact_delivered', { sessionId, metadata: { clientSurface: 'web', objectKinds: [selectedNode.data.kind], projectId } });
         if (agentRef) {
-          const execution = await runtimeApi.submitExecution({ taskId: created.id, sessionId });
+          trackActivity('creation_agent_assigned', { sessionId, metadata: { clientSurface: 'web', projectId } });
+          let execution;
+          try {
+            execution = await runtimeApi.submitExecution({ taskId: created.id, sessionId });
+          } catch (error) {
+            setNodes((current) => current.map((node) => node.id === canvasTaskId ? { ...node, data: { ...node.data, status: 'Agent start failed' } } : node));
+            setNotice(`Delivery task ${created.id} was created, but the agent could not start: ${error instanceof Error ? error.message : 'runtime unavailable'}`);
+            return;
+          }
           if (isAwaitingApprovalExecution(execution)) {
             setNodes((current) => current.map((node) => node.id === canvasTaskId ? { ...node, data: { ...node.data, status: 'Awaiting approval' } } : node));
             setNotice('Delivery task created; agent run is awaiting approval');
@@ -952,8 +999,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           }
         } else {
           setNotice('Mockup delivered to the project as a task');
-          trackActivity('creation_artifact_delivered', { sessionId, metadata: { clientSurface: 'web', objectKinds: [selectedNode.data.kind], projectId } });
-          if (agentRef) trackActivity('creation_agent_assigned', { sessionId, metadata: { clientSurface: 'web', projectId } });
         }
       }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not create delivery task'));
       return;
@@ -1209,15 +1254,60 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   const runWorkflow = useCallback(() => {
     if (!canRun) { setNotice('Runner or owner access is required'); return; }
-    const targetId = selectedNode?.data.kind === 'workflow' ? selectedNode.id : nodes.find((node) => node.data.kind === 'workflow')?.id;
-    if (!targetId) { setNotice('Add a workflow to run it'); return; }
+    const target = selectedNode?.data.kind === 'workflow' ? selectedNode : nodes.find((node) => node.data.kind === 'workflow');
+    if (!target) { setNotice('Add a workflow to run it'); return; }
+    const targetId = target.id;
     setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Running' } } : node));
-    setNotice('Workflow running…');
+    const definitionId = target.data.resourceId?.startsWith('workflow:') ? target.data.resourceId.slice('workflow:'.length) : '';
+    if (persistence === 'server' && target.data.workflowExecutable === false) {
+      setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: target.data.status } } : node));
+      setNotice('This object is a workflow run record. Add or open its Workflow definition to start a new run.');
+      return;
+    }
+    if (persistence === 'server' && definitionId) {
+      setNotice('Starting canonical workflow…');
+      void workflowDefinitions.get(definitionId).then((definition) => {
+        if (!definition.runTargetRuntime) throw new Error('Choose a run target in the Workflow inspector before running it');
+        return workflowDefinitions.run(definitionId, {
+          runtime: definition.runTargetRuntime,
+          agentHostId: definition.runTargetAgentHostId,
+          cloudAgentRef: definition.runTargetCloudAgentRef,
+        });
+      }).then((run) => {
+        setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Running', workflowRunId: run.workflowId, workflowTaskCount: run.taskCount } } : node));
+        setNotice(`Workflow started · ${run.taskCount} task${run.taskCount === 1 ? '' : 's'}`);
+        const pollRun = (remaining: number) => {
+          if (remaining <= 0) return;
+          window.setTimeout(() => {
+            void workflowDefinitions.runs(definitionId).then((runs) => {
+              const currentRun = runs.find((candidate) => candidate.id === run.workflowId);
+              if (!currentRun) { pollRun(remaining - 1); return; }
+              const normalized = currentRun.status.toLowerCase();
+              const terminal = ['completed', 'complete', 'failed', 'cancelled', 'canceled'].includes(normalized);
+              const label = normalized === 'completed' || normalized === 'complete' ? 'Complete' : normalized === 'failed' ? 'Run failed' : normalized === 'cancelled' || normalized === 'canceled' ? 'Cancelled' : currentRun.status;
+              setNodes((nodesNow) => nodesNow.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: label, workflowRunStatus: currentRun.status, workflowCompletedAt: currentRun.completedAt } } : node));
+              if (terminal) setNotice(`Workflow ${label.toLowerCase()}`);
+              else pollRun(remaining - 1);
+            }).catch(() => pollRun(remaining - 1));
+          }, 2_000);
+        };
+        pollRun(30);
+      }).catch((error) => {
+        setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Run failed' } } : node));
+        setNotice(error instanceof Error ? error.message : 'Workflow could not be started');
+      });
+      return;
+    }
+    setNotice(persistence === 'local' ? 'Draft workflow running locally…' : 'Link a saved Workflow definition before running it');
+    if (persistence !== 'local') {
+      setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Draft' } } : node));
+      return;
+    }
     window.setTimeout(() => {
       setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Complete' } } : node));
       setNotice('Workflow completed');
     }, 1400);
-  }, [canRun, nodes, selectedNode, setNodes]);
+  }, [canRun, nodes, persistence, selectedNode, setNodes]);
 
   const saveAgent = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'agent') return;
@@ -1257,6 +1347,24 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }).then((result) => setHistory(result.snapshots)).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not save checkpoint'));
   }, [canEdit, persistence, sessionId]);
 
+  const exportSession = useCallback(() => {
+    const filename = `${safeDownloadName(title)}.builderforce-canvas.json`;
+    setNotice('Preparing Canvas export…');
+    if (persistence === 'local') {
+      downloadJson({
+        format: 'builderforce.creation-session.v1', exportedAt: new Date().toISOString(),
+        session: { id: sessionId, title, persistence: 'local' }, nodes, edges, timeline,
+        viewport: flowRef.current?.getViewport() ?? viewportRef.current,
+      }, filename);
+      setNotice('Canvas export downloaded');
+      return;
+    }
+    void creationSessionsApi.export(sessionId).then((payload) => {
+      downloadJson(payload, filename);
+      setNotice('Canvas export downloaded');
+    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Canvas export failed'));
+  }, [edges, nodes, persistence, sessionId, timeline, title]);
+
   const minimapColor = useCallback((node: CreationFlowNode) => {
     const colors: Partial<Record<CreationObjectKind, string>> = { workflow: '#7357ed', website: '#3978f6', dashboard: '#08b59d', agent: '#8a5cf5', staff: '#f09a3e', evaluation: '#6941d7', evermind: '#df4fa5', projectComparison: '#0d8f82' };
     return colors[node.data.kind] ?? '#9aa8bd';
@@ -1285,6 +1393,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             <select aria-label="Connection kind" value={connectionKind} onChange={(event) => setConnectionKind(event.target.value as CreationConnectionKind)}>{CREATION_CONNECTION_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select>
           </label>
           <button className={styles.secondaryButton} onClick={openHistory}>{t('history')}</button>
+          <button className={styles.secondaryButton} onClick={exportSession}>{t('exportCanvas')}</button>
           <button className={styles.secondaryButton} onClick={() => setConversationOpen((value) => !value)}>{t('conversation')}</button>
           <button className={`${styles.secondaryButton} ${drawingMode ? styles.canvasToolActive : ''}`} aria-pressed={drawingMode} onClick={() => setDrawingMode((value) => !value)}>{t('draw')}</button>
           <button className={styles.secondaryButton} onClick={() => setTemplateOpen((value) => !value)}>{t('templates')}</button>
@@ -1299,12 +1408,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             <strong>{persistence === 'local' ? 'Save to invite people' : 'Invite collaborators'}</strong>
             <p>{persistence === 'local' ? 'Your work is safe on this device. Create a free account when you want live collaboration or delivery.' : 'Anyone invited can build with you and ask Brain questions.'}</p>
             {persistence === 'local' ? <button onClick={() => { window.location.href = `/login?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>Save this session</button> : <>
-              <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="name@company.com" /><select aria-label="Invitation role" value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">Viewer</option><option value="commenter">Commenter</option><option value="editor">Editor</option><option value="runner">Runner</option><option value="owner">Owner</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await navigator.clipboard.writeText(`${window.location.origin}${result.acceptPath}`).catch(() => undefined); setNotice('Expiring invitation link copied'); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice('Collaborator invited'); } setInviteEmail(''); }).catch((error) => setNotice(error instanceof Error ? error.message : 'Invite failed')); }}>Invite</button></div>
+              <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="name@company.com" /><select aria-label="Invitation role" value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">Viewer</option><option value="commenter">Commenter</option><option value="editor">Editor</option><option value="runner">Runner</option><option value="owner">Owner</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await copyTextToClipboard(`${window.location.origin}${result.acceptPath}`); setPendingInvitations((current) => [...current.filter((item) => item.id !== result.invitationId), { id: result.invitationId, email: result.email, role: result.role as CreationSessionSummary['role'], expiresAt: result.expiresAt, acceptedAt: null, revokedAt: null, createdAt: new Date().toISOString() }]); setNotice(result.emailSent ? 'Invitation emailed and backup link copied' : 'Invitation saved; backup link copied (email delivery is not configured)'); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice(result.emailSent ? 'Collaborator invited by email' : 'Collaborator invited in Builderforce'); } setInviteEmail(''); }).catch((error) => setNotice(error instanceof Error ? error.message : 'Invite failed')); }}>Invite</button></div>
               {sessionRole === 'owner' && <div aria-label="Session members">{allMembers.map((member) => <div key={member.userId} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
                 <span>{member.displayName || 'Collaborator'}{member.userId === currentUserId ? ' (you)' : ''}</span>
                 <select aria-label={`Role for ${member.displayName || member.userId}`} value={member.role} onChange={(event) => { const role = event.target.value as CreationSessionSummary['role']; void creationSessionsApi.members.update(sessionId, member.userId, role).then(() => setAllMembers((current) => current.map((item) => item.userId === member.userId ? { ...item, role } : item))).catch((error) => setNotice(error instanceof Error ? error.message : 'Role update failed')); }}><option value="viewer">Viewer</option><option value="commenter">Commenter</option><option value="editor">Editor</option><option value="runner">Runner</option><option value="owner">Owner</option></select>
                 <button type="button" disabled={member.userId === currentUserId} aria-label={`Remove ${member.displayName || 'member'}`} onClick={() => { void creationSessionsApi.members.remove(sessionId, member.userId).then(() => setAllMembers((current) => current.filter((item) => item.userId !== member.userId))).catch((error) => setNotice(error instanceof Error ? error.message : 'Member removal failed')); }}>×</button>
-              </div>)}</div>}
+              </div>)}{!!pendingInvitations.length && <div aria-label="Pending invitations" style={{ marginTop: 10 }}><strong>Pending invitations</strong>{pendingInvitations.map((invitation) => <div key={invitation.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                <span>{invitation.email}</span><small>{invitation.role}</small><button type="button" aria-label={`Revoke invitation for ${invitation.email}`} onClick={() => { void creationSessionsApi.invitations.revoke(sessionId, invitation.id).then(() => { setPendingInvitations((current) => current.filter((item) => item.id !== invitation.id)); setNotice('Invitation revoked'); }).catch((error) => setNotice(error instanceof Error ? error.message : 'Invitation could not be revoked')); }}>×</button>
+              </div>)}</div>}</div>}
             </>}
             <small>Access: {persistence === 'local' ? 'Private on this device' : inviteRole}</small>
           </div>}
@@ -1396,6 +1507,36 @@ function Inspector({ node, sessionId, persistence, role, editable, members, onCh
   const kind = node.data.kind;
   const [tab, setTab] = useState<'details' | 'activity'>('details');
   const [accessStatus, setAccessStatus] = useState('');
+  const [actionStatus, setActionStatus] = useState('');
+  const markdown = artifactMarkdown(node.data);
+  const csv = artifactCsv(node.data);
+  const runArtifactAction = async (action: 'copy' | 'markdown' | 'csv' | 'docx' | 'pptx' | 'json') => {
+    setActionStatus('Preparing…');
+    try {
+      const base = safeDownloadName(node.data.title);
+      if (action === 'copy') {
+        setActionStatus(await copyTextToClipboard(markdown) ? 'Copied to clipboard' : 'Clipboard access was unavailable');
+        return;
+      }
+      if (action === 'markdown') downloadText(markdown, `${base}.md`, 'text/markdown');
+      if (action === 'csv') {
+        if (!csv) throw new Error('This object does not contain tabular rows yet');
+        exportCsv(csv, `${base}.csv`);
+      }
+      if (action === 'docx') {
+        if (persistence === 'local') downloadText(markdown, `${base}.md`, 'text/markdown');
+        else await exportDocx(markdown, node.data.title);
+      }
+      if (action === 'pptx') {
+        if (persistence === 'local') downloadText(markdown, `${base}.md`, 'text/markdown');
+        else await exportPptx(markdown, node.data.title);
+      }
+      if (action === 'json') downloadJson({ kind, title: node.data.title, data: node.data }, `${base}.json`);
+      setActionStatus(action === 'docx' && persistence === 'local' || action === 'pptx' && persistence === 'local' ? 'Markdown downloaded; save the Session for Office export' : 'Download ready');
+    } catch (error) {
+      setActionStatus(error instanceof Error ? error.message : 'Export failed');
+    }
+  };
   return <aside className={styles.inspector}>
     <header><div><span>{kind === 'agent' ? '✦' : kind === 'website' ? '◎' : kind === 'workflow' ? '⌘' : '◇'}</span><strong>{node.data.title}</strong><small>Live {kind}</small></div><button onClick={onClose} aria-label="Close inspector">×</button></header>
     <div className={styles.inspectorTabs}><button className={tab === 'details' ? styles.activeTab : ''} onClick={() => setTab('details')}>Details</button><button className={tab === 'activity' ? styles.activeTab : ''} onClick={() => setTab('activity')}>Activity</button></div>
@@ -1426,6 +1567,18 @@ function Inspector({ node, sessionId, persistence, role, editable, members, onCh
       {kind === 'drawing' && <><label>Stroke color<input type="color" value={typeof node.data.stroke === 'string' ? node.data.stroke : '#5b5ce2'} onChange={(event) => onChange({ stroke: event.target.value })} /></label><label>Stroke width<input type="range" min="1" max="12" value={typeof node.data.strokeWidth === 'number' ? node.data.strokeWidth : 3} onChange={(event) => onChange({ strokeWidth: Number(event.target.value) })} /></label><p className={styles.inspectorHint}>Resize, annotate, connect, or use this sketch as visual context for Brain.</p></>}
       {!['agent', 'staff', 'website', 'prototype', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'mockup', 'evermind', 'standup', 'frame', 'drawing'].includes(kind) && <p className={styles.inspectorHint}>This object is live in the session. Connect it to other objects or ask Brain to transform or evaluate it.</p>}
       </fieldset> : <ActivityInspector sessionId={sessionId} objectId={node.id} persistence={persistence} role={role} members={members} />}
+      {tab === 'details' && <section aria-label="Copy and download" style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
+        <strong style={{ fontSize: 12 }}>Copy &amp; download</strong>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {(kind === 'chat' || kind === 'code' || kind === 'note' || kind === 'report' || kind === 'document' || kind === 'slides' || kind === 'prd') && <button type="button" onClick={() => void runArtifactAction('copy')}>Copy</button>}
+          {(kind === 'chat' || kind === 'code' || kind === 'note' || kind === 'report' || kind === 'prd') && <button type="button" onClick={() => void runArtifactAction('markdown')}>Download Markdown</button>}
+          {(kind === 'dataset' || kind === 'spreadsheet' || kind === 'table') && <button type="button" onClick={() => void runArtifactAction('csv')}>Download CSV</button>}
+          {kind === 'document' && <button type="button" onClick={() => void runArtifactAction('docx')}>Download Word</button>}
+          {kind === 'slides' && <button type="button" onClick={() => void runArtifactAction('pptx')}>Download PowerPoint</button>}
+          {(kind === 'dashboard' || kind === 'chart' || kind === 'evaluation' || kind === 'featureSummary' || kind === 'projectComparison') && <button type="button" onClick={() => void runArtifactAction('json')}>Download data</button>}
+        </div>
+        {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
+      </section>}
     </div>
     <footer><span>Resource · {role}</span><code>{node.data.resourceId || `session:${node.id}`}</code><button className={styles.fullButton} disabled={!editable} onClick={() => onChange({ status: 'Saved' })}>Save changes</button></footer>
   </aside>;

@@ -16,6 +16,7 @@ import {
   sendAdminPasswordResetEmail,
   sendWorkspaceInviteEmail,
   sendChatInviteEmail,
+  sendCreationSessionInviteEmail,
   sendReportEmail,
   sendLlmHealthAlertEmail,
 } from './EmailService';
@@ -109,6 +110,19 @@ describe('locale reaches every template', () => {
     expect(subject).toContain('Ada');
     expect(html).toContain('Roadmap');
     expect(html).toContain(EMAIL_MESSAGES[locale].chatInvite.cta);
+  });
+
+  it.each(EMAIL_LOCALES)('Creation Session invite renders in %s', async (locale) => {
+    const fetchMock = stubFetch();
+    await sendCreationSessionInviteEmail(ENV, 'a@example.com', {
+      sessionTitle: 'Launch board', inviterName: 'Ada', sessionUrl: 'https://x/create/invite',
+      role: 'editor', expiresAt: '2026-08-08T00:00:00.000Z', locale,
+    });
+    const { subject, html } = sentBody(fetchMock);
+    expect(subject).toContain('Ada');
+    expect(html).toContain('Launch board');
+    expect(html).toContain('https://x/create/invite');
+    expect(html).toContain(EMAIL_MESSAGES[locale].creationSessionInvite.cta);
   });
 
   it.each(EMAIL_LOCALES)('report digest renders its chrome and column headers in %s', async (locale) => {

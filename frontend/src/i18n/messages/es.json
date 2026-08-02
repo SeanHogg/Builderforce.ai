@@ -8005,6 +8005,7 @@
       "health": "Estado",
       "directory": "Directorio",
       "sessions": "Sesiones",
+      "creationSessions": "Sesiones de creación",
       "security": "Seguridad",
       "emulation": "Emulación",
       "tenants": "Espacios",
@@ -8243,6 +8244,13 @@
       "guest": "invitado",
       "registered": "registrado",
       "paid": "de pago"
+    },
+    "creationSessions": {
+      "title": "Sesiones de creación", "subtitle": "Lienzos guardados de todos los espacios de trabajo, con invitaciones previas y posteriores a la creación de la cuenta.", "count": "{count} sesiones",
+      "consentNotice": "Las direcciones invitadas son evidencia útil de clientes potenciales, pero una invitación no constituye consentimiento para correo promocional.", "empty": "No se encontraron sesiones de creación guardadas.",
+      "session": "Sesión", "workspace": "Espacio de trabajo", "canvas": "Lienzo", "invitations": "Invitaciones", "lastActivity": "Última actividad", "noCreator": "Sin correo del creador",
+      "tenant": "Inquilino {id}", "objectsMembers": "{objects} objetos · {members} miembros", "revision": "Revisión {revision}", "created": "Creada {date}",
+      "pending": "pendiente", "accepted": "aceptada", "revoked": "revocada", "expired": "caducada"
     },
     "usage": {
       "aiAnalyze": "Analizar con IA",
@@ -11827,6 +11835,7 @@
     "duplicate": "Duplicar", "align": "Alinear", "frame": "Enmarcar", "lock": "Bloquear", "unlock": "Desbloquear", "hide": "Ocultar", "showHidden": "Mostrar ocultos", "hideHidden": "Ocultar elementos ocultos", "focus": "Enfocar", "edge": "Conexión", "conversation": "Conversación", "tutorial": "Tutorial",
     "live": "En directo", "offlineRetry": "Sin conexión · se reintentarán los cambios", "reconnecting": "Reconectando…", "connecting": "Conectando…", "largeSession": "Sesión grande · {count} Objetos",
     "dashboardTitle": "Sesiones de Create", "dashboardSubtitle": "Vuelve a un Lienzo y continúa justo donde lo dejaste.", "searchSessions": "Buscar Sesiones, Objetos, Proyectos o personas…", "active": "Activas", "archived": "Archivadas", "continueCreating": "Seguir creando", "sharedWithMe": "Compartidas conmigo", "recentlyCompleted": "Completadas recientemente",
-    "object": {"workflow":"Flujo de trabajo","project":"Proyecto","website":"Sitio web","dashboard":"Panel","chat":"Chat","agent":"Agente","staff":"Miembro del equipo","evaluation":"Evaluación","dataset":"Conjunto de datos","table":"Tabla","spreadsheet":"Hoja de cálculo","chart":"Gráfico","report":"Informe","kpi":"KPI","prototype":"WYSIWYG","code":"Código","browser":"Vista del navegador","llm":"LLM","voice":"Voz","document":"Documento","slides":"Diapositivas","knowledge":"Conocimiento","file":"Archivo","url":"URL","note":"Nota","drawing":"Dibujo","frame":"Marco","comment":"Comentario","timer":"Temporizador","roadmap":"Hoja de ruta","prd":"PRD","release":"Lanzamiento","task":"Tarea","mockup":"Maqueta","mockupSet":"Conjunto de maquetas","featureSummary":"Resumen de funciones","team":"Equipo","role":"Rol","mcp":"Herramienta conectada","evermind":"Evermind","projectComparison":"Comparación de proyectos","standup":"Reunión diaria","repository":"Repositorio","selection":"Selección del editor","diagnostics":"Diagnósticos","terminal":"Salida del terminal","service":"Servicio local"}
+    "createTypeTitle": "¿Qué quieres crear?", "createTypeSubtitle": "Empieza con un tipo conocido de Builder. Se abre como un Objeto en un nuevo Lienzo, donde puedes añadir Flujos, datos, personas y Brain.", "existingCreations": "Tus creaciones existentes", "existingCreationsSubtitle": "Abre un Sitio, App, Evermind, LLM, Voz, Vídeo, Flujo o sesión de Brain dentro de su Lienzo.", "loadingCreations": "Cargando creaciones…", "noCreations": "Ninguna creación coincide con esta búsqueda.", "brainSession": "Sesión de Brain", "workflowRuns": "Flujo · {count} ejecuciones", "exportCanvas": "Exportar",
+    "object": {"workflow":"Flujo de trabajo","project":"Proyecto","website":"Sitio web","dashboard":"Panel","chat":"Chat","agent":"Agente","staff":"Miembro del equipo","evaluation":"Evaluación","dataset":"Conjunto de datos","table":"Tabla","spreadsheet":"Hoja de cálculo","chart":"Gráfico","report":"Informe","kpi":"KPI","prototype":"WYSIWYG","code":"Código","browser":"Vista del navegador","llm":"LLM","voice":"Voz","video":"Vídeo","document":"Documento","slides":"Diapositivas","knowledge":"Conocimiento","file":"Archivo","url":"URL","note":"Nota","drawing":"Dibujo","frame":"Marco","comment":"Comentario","timer":"Temporizador","roadmap":"Hoja de ruta","prd":"PRD","release":"Lanzamiento","task":"Tarea","mockup":"Maqueta","mockupSet":"Conjunto de maquetas","featureSummary":"Resumen de funciones","team":"Equipo","role":"Rol","mcp":"Herramienta conectada","evermind":"Evermind","projectComparison":"Comparación de proyectos","standup":"Reunión diaria","repository":"Repositorio","selection":"Selección del editor","diagnostics":"Diagnósticos","terminal":"Salida del terminal","service":"Servicio local"}
   }
 }

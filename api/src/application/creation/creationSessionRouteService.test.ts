@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { creationObjectSearchText, creationSessionSearchStatus, validCreationGraph } from './creationSessionRouteService';
+import { creationKindForModality, creationObjectSearchText, creationSessionSearchStatus, validCreationGraph } from './creationSessionRouteService';
+
+describe('creationKindForModality', () => {
+  it('loads every legacy IDE build into its matching Canvas object', () => {
+    expect(creationKindForModality('designer')).toBe('website');
+    expect(creationKindForModality('mobile')).toBe('prototype');
+    expect(creationKindForModality('webmobile')).toBe('prototype');
+    expect(creationKindForModality('video')).toBe('video');
+    expect(creationKindForModality('evermind')).toBe('evermind');
+    expect(creationKindForModality('llm')).toBe('evermind');
+    expect(creationKindForModality('finetune')).toBe('llm');
+    expect(creationKindForModality('voice')).toBe('voice');
+  });
+});
 
 describe('creationObjectSearchText', () => {
   it('indexes only the explicit display fields', () => {

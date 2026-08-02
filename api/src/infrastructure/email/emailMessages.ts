@@ -102,6 +102,13 @@ export interface EmailCopy {
     cta: string;
     note: string;
   };
+  creationSessionInvite: {
+    subject: string;
+    body: string;
+    pitch: string;
+    cta: string;
+    note: string;
+  };
   llmHealth: {
     /** `{{Count}}` is substituted by render(). */
     intro: string;
@@ -282,6 +289,15 @@ const en: EmailCopy = {
     note: 'Sign in with this email address ({{Email}}) to join. If you were not expecting this, you '
       + 'can ignore this email.',
   },
+  creationSessionInvite: {
+    subject: '{{InviterName}} invited you to a Canvas on Builderforce',
+    body: '<strong>{{InviterName}}</strong> invited you to collaborate on the Canvas '
+      + '<strong>{{SessionTitle}}</strong> as a <strong>{{Role}}</strong>.',
+    pitch: 'Open the shared Canvas to build with the team and its AI agents in one live session.',
+    cta: 'Open the Canvas',
+    note: 'Use this email address ({{Email}}) to join. The invitation expires on {{ExpiresAt}}. '
+      + 'If you were not expecting this, you can ignore this email.',
+  },
   llmHealth: {
     intro: 'The daily LLM vendor health probe detected status changes for {{Count}} vendors.',
     runAt: 'Run at {{Timestamp}}',
@@ -434,6 +450,14 @@ const zh: EmailCopy = {
     pitch: '打开 Builderforce 即可加入讨论、分享想法，并与团队及其 AI 智能体协同工作。',
     cta: '打开对话',
     note: '使用此邮箱地址（{{Email}}）登录即可加入。如果这不在您的预期之内，可以忽略这封邮件。',
+  },
+  creationSessionInvite: {
+    subject: '{{InviterName}} 邀请您加入 Builderforce 画布',
+    body: '<strong>{{InviterName}}</strong> 邀请您以 <strong>{{Role}}</strong> 身份协作画布'
+      + '<strong>{{SessionTitle}}</strong>。',
+    pitch: '打开共享画布，与团队及其 AI 智能体在同一个实时会话中共同创建。',
+    cta: '打开画布',
+    note: '请使用此邮箱地址（{{Email}}）加入。邀请将于 {{ExpiresAt}} 到期。如果这不在您的预期之内，可以忽略这封邮件。',
   },
   llmHealth: {
     intro: '每日 LLM 供应商健康探测检测到 {{Count}} 家供应商的状态发生变化。',
@@ -597,6 +621,15 @@ const es: EmailCopy = {
     cta: 'Abrir el chat',
     note: 'Inicia sesión con esta dirección de correo ({{Email}}) para unirte. Si no esperabas '
       + 'esto, puedes ignorar este correo.',
+  },
+  creationSessionInvite: {
+    subject: '{{InviterName}} te ha invitado a un Canvas en Builderforce',
+    body: '<strong>{{InviterName}}</strong> te ha invitado a colaborar en el Canvas '
+      + '<strong>{{SessionTitle}}</strong> como <strong>{{Role}}</strong>.',
+    pitch: 'Abre el Canvas compartido para crear con el equipo y sus agentes de IA en una sesión en vivo.',
+    cta: 'Abrir el Canvas',
+    note: 'Usa esta dirección de correo ({{Email}}) para unirte. La invitación vence el {{ExpiresAt}}. '
+      + 'Si no esperabas esto, puedes ignorar este correo.',
   },
   llmHealth: {
     intro: 'La sonda diaria de estado de proveedores LLM ha detectado cambios en {{Count}} proveedores.',
@@ -762,6 +795,15 @@ const fr: EmailCopy = {
     cta: 'Ouvrir la conversation',
     note: 'Connectez-vous avec cette adresse e-mail ({{Email}}) pour participer. Si vous ne vous y '
       + 'attendiez pas, vous pouvez ignorer cet e-mail.',
+  },
+  creationSessionInvite: {
+    subject: '{{InviterName}} vous a invité à un Canvas sur Builderforce',
+    body: '<strong>{{InviterName}}</strong> vous a invité à collaborer sur le Canvas '
+      + '<strong>{{SessionTitle}}</strong> avec le rôle <strong>{{Role}}</strong>.',
+    pitch: 'Ouvrez le Canvas partagé pour créer avec l’équipe et ses agents IA dans une session en direct.',
+    cta: 'Ouvrir le Canvas',
+    note: 'Utilisez cette adresse e-mail ({{Email}}) pour participer. L’invitation expire le {{ExpiresAt}}. '
+      + 'Si vous ne vous y attendiez pas, vous pouvez ignorer cet e-mail.',
   },
   llmHealth: {
     intro: 'La sonde quotidienne de santé des fournisseurs LLM a détecté des changements de statut '
@@ -930,6 +972,15 @@ const de: EmailCopy = {
     cta: 'Chat öffnen',
     note: 'Melden Sie sich mit dieser E-Mail-Adresse ({{Email}}) an, um teilzunehmen. Wenn Sie das '
       + 'nicht erwartet haben, können Sie diese E-Mail ignorieren.',
+  },
+  creationSessionInvite: {
+    subject: '{{InviterName}} hat Sie zu einem Canvas auf Builderforce eingeladen',
+    body: '<strong>{{InviterName}}</strong> hat Sie eingeladen, am Canvas '
+      + '<strong>{{SessionTitle}}</strong> als <strong>{{Role}}</strong> mitzuarbeiten.',
+    pitch: 'Öffnen Sie das gemeinsame Canvas, um mit dem Team und seinen KI-Agenten live zu erstellen.',
+    cta: 'Canvas öffnen',
+    note: 'Verwenden Sie diese E-Mail-Adresse ({{Email}}), um beizutreten. Die Einladung läuft am {{ExpiresAt}} ab. '
+      + 'Wenn Sie das nicht erwartet haben, können Sie diese E-Mail ignorieren.',
   },
   llmHealth: {
     intro: 'Die tägliche LLM-Anbieter-Statusprüfung hat Statusänderungen bei {{Count}} Anbietern '

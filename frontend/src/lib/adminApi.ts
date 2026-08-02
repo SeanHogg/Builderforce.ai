@@ -109,6 +109,32 @@ export interface AdminGuestSession {
   isPaid: boolean;
 }
 
+export interface AdminCreationSessionInvitation {
+  id: string;
+  email: string;
+  role: string;
+  createdAt: string;
+  expiresAt: string;
+  acceptedAt: string | null;
+  revokedAt: string | null;
+}
+
+export interface AdminCreationSession {
+  id: string;
+  tenantId: number;
+  tenantName: string;
+  segmentId: string | null;
+  title: string;
+  status: string;
+  revision: number | string;
+  creatorEmail: string | null;
+  objectCount: number;
+  memberCount: number;
+  createdAt: string;
+  lastActivityAt: string;
+  invitations: AdminCreationSessionInvitation[];
+}
+
 // Sales-cycle demo accounts (migration 0360).
 export interface AdminDemoFunnelRow {
   persona: string | null;
@@ -779,6 +805,11 @@ export const adminApi = {
 
   async guestSessions(): Promise<AdminGuestSession[]> {
     const res = await adminRequest<{ sessions: AdminGuestSession[] }>('/api/admin/guest-sessions');
+    return res.sessions;
+  },
+
+  async creationSessions(): Promise<AdminCreationSession[]> {
+    const res = await adminRequest<{ sessions: AdminCreationSession[] }>('/api/admin/creation-sessions');
     return res.sessions;
   },
 

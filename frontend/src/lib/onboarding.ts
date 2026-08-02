@@ -18,6 +18,13 @@ import { apiRequest } from './apiClient';
 import { useAuth } from './AuthContext';
 import { AUTH_API_URL, checkUnauthorizedAndRedirect, createTenant, getMe, getMyTenants, type OnboardingProgress } from './auth';
 import { createProject, fetchProjects } from './api';
+import { creationSessionsApi } from './builderforceApi';
+
+export function starterWorkspaceName(user?: { name?: string | null; email?: string | null } | null): string {
+  const identity = (user?.name?.trim() || user?.email?.split('@')[0]?.trim() || '').slice(0, 60);
+  if (!identity) return 'My workspace';
+  return /workspace$/i.test(identity) ? identity : `${identity}'s Workspace`;
+}
 
 export interface ActiveTermsDoc {
   documentType: 'terms';
@@ -151,7 +158,8 @@ export function useOnboardingState(): OnboardingState {
   const [needsRole, setNeedsRole] = useState<boolean | null>(null);
   const [accountType, setAccountType] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(!!webToken);
-  // Auto-provisioning the zero-setup "Default" workspace + project for a brand-new
+  // Auto-provisioning a human-named workspace, starter project, and first
+  // Creation Session for a brand-new
   // builder. Kept in `loading` so the gate holds the skeleton (never flashes the
   // tenant picker) while it runs. The ref makes it fire at most once per mount.
   const [provisioning, setProvisioning] = useState(false);
@@ -190,7 +198,8 @@ export function useOnboardingState(): OnboardingState {
   // Zero-setup onboarding: a brand-new builder should land straight in a usable
   // workspace instead of hand-typing a workspace name and a project name. Once
   // terms + role are cleared and no workspace is selected yet, provision a
-  // "Default" workspace + "Default" project (both renameable later) and select it.
+  // workspace + "My first project" (both renameable later), then create the
+  // first durable Session shown on the default Dashboard Create tab.
   // Guardrails:
   //   • builders only — a hired ('freelancer') account has no workspace.
   //   • ZERO existing workspaces only — a returning / multi-workspace user still
@@ -208,11 +217,10 @@ export function useOnboardingState(): OnboardingState {
       try {
         const tenants = await getMyTenants(webToken);
         if (tenants.length > 0) return; // existing users keep the normal picker flow
-        const identity = (user?.name?.trim() || user?.email?.split('@')[0] || 'My').slice(0, 60);
-        const workspaceName = /workspace$/i.test(identity) ? identity : `${identity}'s Workspace`;
+        const workspaceName = starterWorkspaceName(user);
         const tenant = await createTenant(webToken, workspaceName);
         await selectTenant(tenant); // mints the tenant JWT (persisted synchronously)
-        // Give the new workspace a Default project so the app is immediately usable
+        // Give the new workspace a starter project so the app is immediately usable
         // (createProject also seeds its board + Evermind). Guarded so a returning
         // path that somehow already has projects never gets a duplicate.
         const projects = await fetchProjects().catch(() => []);
@@ -224,15 +232,24 @@ export function useOnboardingState(): OnboardingState {
           let created = false;
           for (let attempt = 0; attempt < 3 && !created; attempt++) {
             try {
-              await createProject({ name: 'Default' });
+              await createProject({ name: 'My first project' });
               created = true;
             } catch {
               if (attempt === 2) {
                 // Don't swallow silently — leave a diagnosable signal rather than a mystery empty workspace.
-                console.warn('[onboarding] default project provisioning failed after retries');
+                console.warn('[onboarding] starter project provisioning failed after retries');
               }
             }
           }
+        }
+        // A Session, not the Project, is the creator's return point. This is
+        // intentionally best-effort just like starter-Project provisioning: a
+        // temporary API failure must never prevent the user reaching Dashboard,
+        // where the prompt can still create a local-first Session.
+        try {
+          await creationSessionsApi.create({ title: 'My first creation' });
+        } catch {
+          console.warn('[onboarding] first Creation Session provisioning failed; Dashboard local-first creation remains available');
         }
       } catch {
         /* fall through to the manual /tenants picker (pending-tenant phase) */
@@ -246,7 +263,7 @@ export function useOnboardingState(): OnboardingState {
     await selectAccountType(accountType);
     // Keep the local copy in lockstep — the auto-provision effect keys off it, and
     // load() won't re-run to refresh it. Without this, a fresh account that just
-    // picked Hired would still look 'standard' and wrongly get a Default workspace.
+    // picked Hired would still look 'standard' and wrongly get a workspace.
     setAccountType(accountType);
     setNeedsRole(false);
   }, [selectAccountType]);
@@ -290,7 +307,7 @@ export function useOnboardingState(): OnboardingState {
 
   return {
     phase,
-    // Hold the gate's skeleton while the Default workspace/project provision, so
+    // Hold the gate's skeleton while the workspace/project/Session provision, so
     // the tenant picker never flashes for a brand-new builder.
     loading: loading || provisioning,
     terms,

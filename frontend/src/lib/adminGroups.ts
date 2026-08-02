@@ -43,6 +43,7 @@ export const ADMIN_GROUP_META: AdminGroupMeta[] = [
   ] },
   { id: 'workspaces', labelKey: 'tab.adminWorkspaces', icon: '🏢', subs: [
     { id: '', subKey: 'tenants', icon: '🏢' },
+    { id: 'creation-sessions', subKey: 'creationSessions', icon: '✦' },
   ] },
   { id: 'access', labelKey: 'tab.adminAccess', icon: '🔐', subs: [
     { id: '', subKey: 'permissions', icon: '🔐' },
@@ -88,6 +89,7 @@ export const LEGACY_ADMIN_TAB: Record<string, { group: string; sub: string }> = 
   security: { group: 'users', sub: 'security' },
   impsessions: { group: 'users', sub: 'emulation' },
   tenants: { group: 'workspaces', sub: '' },
+  creationSessions: { group: 'workspaces', sub: 'creation-sessions' },
   permissions: { group: 'access', sub: '' },
   modules: { group: 'access', sub: 'modules' },
   usage: { group: 'llm', sub: '' },

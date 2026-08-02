@@ -161,7 +161,7 @@ Principles:
 ```text
 /dashboard                              Default signed-in landing page
 /dashboard?tab=create                   Default dashboard tab
-/create                                 Session library; may redirect to dashboard Create tab
+/create                                 Redirects to the Dashboard Create tab
 /create/new                             Creates session, then replaces URL
 /create/:sessionId                      Canonical canvas session
 /create/:sessionId?focus=:objectId      Open with object selected
@@ -198,15 +198,11 @@ Remove **Brain Storm**, **Workflows**, and **IDE/Builder** as separate primary d
 
 ### Create navigation behavior
 
-When expanded, Create shows:
-
-- `+ New session`
-- Search sessions
-- Recent/pinned session list
-- Optional filters: All, Mine, Shared, Project-backed, Workflow, Website, Data, LLM, Voice
-- A session row opens `/create/:sessionId` and restores viewport, selections, and unread activity.
-
-When collapsed, Create is one icon with a badge for unread session activity. The current session title appears in the canvas header, not as a new global navigation level.
+Create is one primary sidebar destination. The sidebar does **not** embed a second
+session browser, search field, filter control, or `New session` hierarchy. Those
+controls belong on the Dashboard Create tab so the navigation remains compact in
+both expanded and collapsed states. The current Session title appears in the Canvas
+header, not as a new global navigation level.
 
 ### Project navigation behavior
 
@@ -224,6 +220,8 @@ Projects remain a primary destination for portfolio management, structured metri
 
 - A prominent bottom-style prompt or dashboard prompt: **“What would you like to create?”**
 - Submitting creates a session, saves the initial prompt, navigates to `/create/:sessionId`, and begins streaming Brain output.
+- Reuse the former IDE landing-page pattern as the top of Create: visual launchers for Website, Mobile, Web + Mobile, Video, Evermind, Fine-tune/LLM, and Voice. Choosing a type creates a Session and places that creation mode on its Canvas.
+- Show existing IDE builds, Everminds, LLMs, Voices, Videos, Workflow definitions, and legacy Brain sessions in the same Create catalog. Selecting one opens or creates its wrapper Session with the source Object focused and any attached Workflow loaded.
 - Visual session cards show a server-generated or cached miniature rendering of the canvas—not generic list rows.
 - Each card shows title, preview, collaborators, object-type chips, associated projects, last activity, running agents, and unread activity.
 - Card actions: Open, Pin, Rename, Duplicate, Share, Archive.
@@ -256,8 +254,8 @@ Projects remain a primary destination for portfolio management, structured metri
    - otherwise username/email prefix;
    - fallback `My workspace`, never the implementation-facing name `Default` in UI.
 5. Best-effort create a starter Project named `My first project`. Failure must not block creation.
-6. Create a first session titled `My first creation` and navigate to its canvas.
-7. Run an interactive walkthrough.
+6. Create a first session titled `My first creation` and show it on the default Dashboard Create tab. Opening it starts the Canvas walkthrough.
+7. Run the interactive walkthrough on the first Canvas.
 
 Users can rename the tenant and starter Project later. Invited users join the inviter’s tenant and skip tenant/project provisioning.
 
@@ -858,6 +856,7 @@ Use XYFlow as the one spatial engine. Do not nest `CanvasBoard` or a second Reac
 
 - Invited users concurrently see accepted canvas events, prompts, and AI output.
 - Session roles and underlying resource permissions are both enforced.
+- Email invitations are stored against the Session before delivery, including for addresses without accounts. They send through the transactional email channel, convert on sign-up, and appear with their Session in the super-admin Creation Sessions view. Invitation capture is prospect evidence, not marketing consent.
 - AI multi-resource mutations require a reviewable change set and existing approval policy.
 - Agent settings changed in the canvas are reflected across Builderforce.ai.
 
@@ -931,7 +930,7 @@ Priority meanings: **P0** is required before the new navigation becomes default;
 | CS-021 | P1 | Deliver an artifact to a Project/Task, assign an Agent, and stream execution back into the session. |
 | CS-022 | P1 | Synthesize requested features with citations and generate an expandable Mockup Set. |
 | CS-023 | P1 | Generate audience-specific Roadmap and Slide objects from Project context. |
-| CS-024 | P1 | Support session invitations with Viewer, Commenter, Editor, Runner, and Owner roles. |
+| CS-024 | P1 | Support persisted, emailed session invitations—including pre-account addresses—with Viewer, Commenter, Editor, Runner, and Owner roles, and expose invitation state with Sessions to super-admin. |
 | CS-025 | P1 | Remove redundant primary menu entries after migration gates pass. |
 | CS-026 | P1 | Supply a native VSIX Creation Session surface backed by the same APIs and command contracts. |
 | CS-027 | P2 | Provide presentation/follow mode and named session checkpoints. |
@@ -1358,7 +1357,7 @@ All repository-addressable functional requirements CS-001 through CS-030 are imp
 | CS-009–CS-014 | Homepage prompt → local Session, Dashboard Create cards, `/create/new`, compatibility adapters, intersection authorization, and project-independent onboarding in the homepage, dashboard, route adapters, API route service, and Creation Canvas tutorial. |
 | CS-015–CS-016 | Expiring/auditable invitations and five roles, durable presence/cursors/selections, authenticated tenant-qualified WebSocket revision broadcasts with reconnect catch-up, comments/mentions/activity, plus the complete creation object catalog in the API route service and canvas registry. |
 | CS-017–CS-023 | Batched permission-checked Project lens expansion, cited multi-project comparison, persistent evaluations, selectable AI change sets over the canonical Brain SSE gateway, artifact/task/Agent delivery through canonical Task/runtime APIs, top-feature Mockup Sets, Roadmaps, and Slides in `creationSessionRouteService.ts`, `CreationCanvas.tsx`, and the canonical clients. |
-| CS-024–CS-026 | Viewer/Commenter/Editor/Runner/Owner roles, consolidated primary navigation with legacy URL adapters, Edge route registration, and native VSIX full-editor Creation Sessions using the same Object-kind/command contract in `clients/vscode/src/creationCanvasPanel.ts` and `packages/creation-canvas-contract`. Specialized inspectors, comments, and advanced presence remain browser capabilities. |
+| CS-024–CS-026 | Persisted and localized transactional email invitations (including pre-account addresses), five Session roles, owner-visible pending-invitation management and revocation, a localized cross-tenant super-admin Session/invitation view, consolidated primary navigation without an embedded sidebar Session browser, legacy URL adapters, Edge route registration, and native VSIX full-editor Creation Sessions using the same Object-kind/command contract in `clients/vscode/src/creationCanvasPanel.ts` and `packages/creation-canvas-contract`. Specialized inspectors, comments, and advanced presence remain browser capabilities. |
 | CS-027 | Presentation mode, opt-in collaborator viewport follow, named checkpoints, revision restore, and personal viewport persistence in `CreationCanvas.tsx` and the history/presence APIs. |
 | CS-028 | Six capability-safe Marketplace session/object packs (Campaign, Product discovery, Data story, Stand-up, Evermind model lab, Executive review) in `creationTemplates.ts`, surfaced from the in-canvas template library. |
 | CS-029 | Real pointer-based freehand paths, editable stroke controls, spatial frames, frame colors/purpose, and private reusable frame presets in `CreationCanvas.tsx`, `CreationNode.tsx`, and canvas CSS. |
@@ -1374,11 +1373,13 @@ All repository-addressable functional requirements CS-001 through CS-030 are imp
 - **Localization:** the primary Canvas and Dashboard Session chrome and Object registry labels are present in English, Chinese, Spanish, French, and German catalogs; catalog parity tests enforce the shared key set. User-authored/AI-authored content remains unchanged by design.
 - **Operations:** deploy, smoke, observation, rollout, support, and rollback procedures live in `docs/design/creation-canvas/OPERATIONS.md`.
 - **Marketing:** the homepage, feature catalog, Product mega-menu/specifications, dedicated `/creation-canvas` page, and five Creation Canvas launch/use-case articles reflect the unified Session model.
+- **Unified Create catalog:** the default Dashboard tab now reuses the former IDE type-launcher model, combines visual Session cards with existing IDE/Evermind/LLM/Voice/Video builds, Workflow definitions, and Brain sessions, and opens every existing item through a focused wrapper Canvas. The global sidebar contains only the Create destination.
+- **Delivery affordances:** complete Canvas JSON export and Object-level copy, Markdown, CSV, Word, PowerPoint, and safe data downloads preserve the familiar output workflow; canonical Workflow definitions start and report live server runs from the Canvas.
 
 ### Repository verification completed
 
-- API TypeScript, migration sequence, schema drift, tenant-scope ratchets, and the full API suite pass: 400 test files and 4,347 tests (one environment-specific test skipped).
-- Frontend TypeScript, all 78 test files/768 tests, and the production Next build pass; `/create`, `/create/new`, `/create/[sessionId]`, invitation, and `/creation-canvas` routes register as dynamic Edge surfaces.
+- API TypeScript, migration sequence, schema drift, tenant-scope ratchets, and the full API suite pass: 400 test files and 4,353 tests (one environment-specific test skipped).
+- Frontend TypeScript, all 81 test files/773 tests, and the production Next build pass; `/create`, `/create/new`, `/create/[sessionId]`, invitation, and `/creation-canvas` routes register as dynamic Edge surfaces.
 - Canvas registry, local transcript durability, semantic connections, safe search text, graph integrity/limits, structured accessibility outline, API helpers, and the web/VSIX shared contract have automated coverage.
 - The native VSIX extension and webview production bundles compile; all 23 VSIX tests pass.
 - `qa-e2e/tests/creation-canvas.spec.ts` provides deployed-environment acceptance coverage for anonymous prompt → local Session and authenticated create/reopen. It typechecks; execution belongs to the rollout environment because it requires configured authenticated storage and a deployed API.

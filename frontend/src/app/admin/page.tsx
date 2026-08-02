@@ -15,6 +15,7 @@ import BillingPanel from '@/components/admin/panels/BillingPanel';
 import UsagePanel from '@/components/admin/panels/UsagePanel';
 import UsersPanel from '@/components/admin/panels/UsersPanel';
 import GuestSessionsPanel from '@/components/admin/panels/GuestSessionsPanel';
+import CreationSessionsPanel from '@/components/admin/panels/CreationSessionsPanel';
 import TenantsPanel from '@/components/admin/panels/TenantsPanel';
 import SecurityPanel from '@/components/admin/panels/SecurityPanel';
 import LegalPanel from '@/components/admin/panels/LegalPanel';
@@ -50,6 +51,7 @@ const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
   cron: CronPanel,
   directory: UsersPanel,
   sessions: GuestSessionsPanel,
+  creationSessions: CreationSessionsPanel,
   security: SecurityPanel,
   emulation: ImpersonationSessionsPanel,
   tenants: TenantsPanel,

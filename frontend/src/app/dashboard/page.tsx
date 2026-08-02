@@ -74,7 +74,7 @@ export default function DashboardPage() {
     dismiss: handleOnboardingDismiss,
   } = useOnboardingPrompt();
 
-  // Auth guard. A brand-new builder's Default workspace is auto-provisioned by the
+  // Auth guard. A brand-new builder's named workspace is auto-provisioned by the
   // onboarding gate before this page renders, so reaching here without a tenant means
   // the picker is the right destination (multi-workspace, or provisioning fell back).
   useEffect(() => {
@@ -163,7 +163,7 @@ export default function DashboardPage() {
 
   if (!isAuthenticated) return null;
 
-  // No tenant → the picker (a brand-new builder's Default workspace is provisioned
+  // No tenant → the picker (a brand-new builder's named workspace is provisioned
   // upstream by the onboarding gate, so this is the multi-workspace / fallback path).
   if (!hasTenant) {
     router.replace('/tenants?next=/dashboard');

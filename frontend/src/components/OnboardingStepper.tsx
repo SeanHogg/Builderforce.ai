@@ -40,7 +40,7 @@ type StepId = BuilderStepId | HiredStepId;
 
 // Step order per ACCOUNT TYPE. A builder ('standard') connects tickets/repos, runs
 // audits and hires an agent roster — its workspace and first project are already
-// provisioned ("Default", renameable) so those two steps no longer exist. A hired
+// provisioned (human-named workspace + "My first project", renameable) so those two steps no longer exist. A hired
 // ('freelancer') account has none of those; its first five minutes are about
 // becoming hireable. Labels resolve through the `onboarding.steps.*` i18n namespace.
 const BUILDER_STEP_IDS: StepId[] = ['ticketing', 'repos', 'audit', 'roster', 'install', 'invite'];
@@ -149,7 +149,7 @@ export function OnboardingStepper({
 
   // The ticketing / repos / audit / roster steps all act on ONE project. Prefer
   // the globally-scoped project, then the first project in the workspace (the
-  // auto-provisioned "Default" always qualifies) — so these steps reach their
+  // auto-provisioned starter project always qualifies) — so these steps reach their
   // adoption hooks instead of a "create a project first" placeholder.
   const activeProjectId =
     projectScope?.currentProjectId ?? projectScope?.projects[0]?.id ?? null;
