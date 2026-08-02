@@ -589,7 +589,11 @@ export function captureUpstreamDiagnostic(
   try {
     const url = new URL(endpoint);
     safeEndpoint = `${url.origin}${url.pathname}`;
-  } catch { /* a non-URL endpoint is already opaque; keep it verbatim */ }
+  } catch {
+    // A non-URL endpoint is already opaque. Assign explicitly so this intentional
+    // fallback remains visible to the silent-catch ratchet and future reviewers.
+    safeEndpoint = endpoint;
+  }
   return {
     endpoint: safeEndpoint,
     status,
