@@ -2,6 +2,9 @@ import { asc, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { agentHosts, agentRegistrations } from '../../infrastructure/database/schema';
 import { scopedToSegment } from '../../infrastructure/database/tenantScope';
+import type { IAuditRepository } from '../../domain/audit/IAuditRepository';
+import { AuditEvent } from '../../domain/audit/AuditEvent';
+import { AuditEventType, asTenantId } from '../../domain/shared/types';
 
 export type AgentRegistrationRecord = typeof agentRegistrations.$inferSelect;
 export type AgentRegistrationCreate = Omit<
@@ -11,6 +14,7 @@ export type AgentRegistrationCreate = Omit<
 export type AgentRegistrationUpdate = Partial<Pick<
   typeof agentRegistrations.$inferInsert,
   'name' | 'framework' | 'protocol' | 'endpoint' | 'externalAgentId' | 'credentialRef' |
+  'agentHostId' |
   'status' | 'healthStatus' | 'declaredCapabilities' | 'discoveredCapabilities' |
   'agentCard' | 'metadata' | 'lastSeenAt'
 >>;
@@ -21,7 +25,7 @@ export interface AgentRegistrationScope {
 }
 
 export class AgentRegistrationService {
-  constructor(private readonly db: Db) {}
+  constructor(private readonly db: Db, private readonly audit: IAuditRepository) {}
 
   async list(scope: AgentRegistrationScope): Promise<AgentRegistrationRecord[]> {
     return this.db.select().from(agentRegistrations)
@@ -56,6 +60,16 @@ export class AgentRegistrationService {
       segmentId: scope.segmentId,
     }).returning();
     if (!row) throw new Error('Agent registration insert returned no rows');
+    if (input.registeredBy) {
+      await this.audit.save(AuditEvent.create({
+        tenantId: asTenantId(scope.tenantId),
+        userId: input.registeredBy,
+        eventType: AuditEventType.AGENT_REGISTERED,
+        resourceType: 'agent_registration',
+        resourceId: row.id,
+        metadata: JSON.stringify({ framework: row.framework, protocol: row.protocol }),
+      }));
+    }
     return row;
   }
 

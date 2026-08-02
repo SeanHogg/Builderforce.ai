@@ -39,7 +39,10 @@ function buildTask(): Task {
 
 type Scope = { tenantId: number; projectId: number | null; agentRef: string | null };
 
-function makeService(resolver?: (s: Scope) => Promise<PolicyGate[]>) {
+function makeService(
+  resolver?: (s: Scope) => Promise<PolicyGate[]>,
+  registrationResolver?: (id: string, tenantId: number) => Promise<{ active: boolean } | null>,
+) {
   let savedPayload: string | null = null;
   const scopes: Scope[] = [];
 
@@ -61,6 +64,7 @@ function makeService(resolver?: (s: Scope) => Promise<PolicyGate[]>) {
     executions, tasks, agents, audit,
     undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
     wrapped,
+    registrationResolver,
   );
   return { svc, getPayload: () => savedPayload, scopes };
 }
@@ -137,5 +141,33 @@ describe('RuntimeService.submit — governance gate stamping', () => {
     await submit(svc, JSON.stringify({ cloudAgentRef: 'ada' }));
 
     expect(parsePolicyGates(getPayload() ?? undefined)).toEqual([]);
+  });
+
+  it('accepts an active canonical registration and persists its UUID', async () => {
+    const { svc } = makeService(undefined, async (id, tenantId) =>
+      id === '76e6dc1c-02c4-44be-ac8b-696114aaa1cd' && tenantId === 1 ? { active: true } : null);
+
+    const execution = await svc.submit({
+      taskId: 7,
+      tenantId: 1,
+      submittedBy: 'user-1',
+      agentRegistrationId: '76e6dc1c-02c4-44be-ac8b-696114aaa1cd',
+    });
+
+    expect(execution.agentRegistrationId).toBe('76e6dc1c-02c4-44be-ac8b-696114aaa1cd');
+  });
+
+  it('rejects missing and inactive canonical registrations', async () => {
+    const missing = makeService(undefined, async () => null).svc;
+    const inactive = makeService(undefined, async () => ({ active: false })).svc;
+    const dto = {
+      taskId: 7,
+      tenantId: 1,
+      submittedBy: 'user-1',
+      agentRegistrationId: '76e6dc1c-02c4-44be-ac8b-696114aaa1cd',
+    };
+
+    await expect(missing.submit(dto)).rejects.toThrow(/Agent registration/);
+    await expect(inactive.submit(dto)).rejects.toThrow(/not active/);
   });
 });

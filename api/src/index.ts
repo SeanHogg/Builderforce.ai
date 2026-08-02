@@ -288,7 +288,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   const marketingService = new MarketingService(db);
   const guestChatService = new GuestChatService(db);
   const authService     = new AuthService(userRepo, tenantRepo, auditRepo, env.JWT_SECRET);
-  const agentService    = new AgentService(agentRepo, skillRepo, auditRepo);
+  const agentService    = new AgentService(agentRepo, skillRepo);
   // RuntimeService.update is the single canonical execution-status transition;
   // its full wiring (self-heal, lane sync, autonomous chaining, audit) lives in
   // buildRuntimeService so the durable CloudRunnerDO shares the EXACT same instance
@@ -365,6 +365,16 @@ export function buildApp(env: Env): Hono<HonoEnv> {
         { url: 'https://api.builderforce.ai', description: 'Production (direct API subdomain)' },
       ],
       paths: {
+        '/api/agent-registrations': {
+          get: { summary: 'List canonical agent registrations', operationId: 'listAgentRegistrations', tags: ['Agents'] },
+          post: { summary: 'Register an agent runtime', operationId: 'registerAgent', tags: ['Agents'] },
+        },
+        '/api/agent-registrations/frameworks': {
+          get: { summary: 'List supported frameworks and protocols', operationId: 'listAgentFrameworks', tags: ['Agents'] },
+        },
+        '/api/agent-registrations/{id}/capabilities': {
+          post: { summary: 'Report discovered agent capabilities and health', operationId: 'reportAgentCapabilities', tags: ['Agents'] },
+        },
         '/api/agent-hosts': {
           post: { summary: 'Register a BuilderForce Agents instance', operationId: 'registerAgentHost', tags: ['AgentHosts'] },
         },
@@ -597,7 +607,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/tenants/:tenantId/api-keys', createTenantApiKeyRoutes(db));
   app.route('/api/tenants/:tenantId/mcp-extensions', createMcpExtensionRoutes(db));
   app.route('/api/agents',   createAgentRoutes(agentService));
-  app.route('/api/agent-registrations', createAgentRegistrationRoutes(new AgentRegistrationService(db)));
+  app.route('/api/agent-registrations', createAgentRegistrationRoutes(new AgentRegistrationService(db, auditRepo)));
   app.route('/api/skills',   createSkillRoutes(agentService));
   app.route('/api/runtime',  createRuntimeRoutes(runtimeService, db));
   app.route('/api/audit',    createAuditRoutes(auditService));

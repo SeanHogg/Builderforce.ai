@@ -42,6 +42,14 @@ function cleanOptionalString(value: unknown, field: string, max: number): string
   return value.trim();
 }
 
+function cleanCredentialRef(value: unknown): string | null {
+  const ref = cleanOptionalString(value, 'credentialRef', 255);
+  if (ref && !/^(vault|integration):[a-zA-Z0-9._:-]+$/.test(ref)) {
+    throw new Error('credentialRef must be an opaque vault: or integration: reference, never a secret');
+  }
+  return ref;
+}
+
 function parseHostId(value: unknown): number | null {
   if (value == null) return null;
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
@@ -114,7 +122,7 @@ export function createAgentRegistrationRoutes(service: AgentRegistrationService)
         endpoint,
         agentHostId,
         externalAgentId: cleanOptionalString(body.externalAgentId, 'externalAgentId', 255),
-        credentialRef: cleanOptionalString(body.credentialRef, 'credentialRef', 255),
+        credentialRef: cleanCredentialRef(body.credentialRef),
         declaredCapabilities: normalizeCapabilities(body.declaredCapabilities, 'declaredCapabilities'),
         discoveredCapabilities: normalizeCapabilities(body.discoveredCapabilities, 'discoveredCapabilities'),
         agentCard: normalizeJsonObject(body.agentCard, 'agentCard', 65_536),
@@ -136,6 +144,8 @@ export function createAgentRegistrationRoutes(service: AgentRegistrationService)
   router.patch('/:id', requireRole(TenantRole.MANAGER) as never, async (c) => {
     try {
       const body = await c.req.json<RegistrationInput & { status?: unknown }>();
+      const existing = await service.get(c.req.param('id'), scope(c));
+      if (!existing) return c.json({ error: 'Agent registration not found' }, 404);
       const update: AgentRegistrationUpdate = {};
       if (body.name !== undefined) {
         const name = cleanOptionalString(body.name, 'name', 255);
@@ -146,13 +156,23 @@ export function createAgentRegistrationRoutes(service: AgentRegistrationService)
       if (body.protocol !== undefined) update.protocol = normalizeProtocol(body.protocol);
       if (body.endpoint !== undefined) update.endpoint = normalizeEndpoint(body.endpoint);
       if (body.externalAgentId !== undefined) update.externalAgentId = cleanOptionalString(body.externalAgentId, 'externalAgentId', 255);
-      if (body.credentialRef !== undefined) update.credentialRef = cleanOptionalString(body.credentialRef, 'credentialRef', 255);
+      if (body.credentialRef !== undefined) update.credentialRef = cleanCredentialRef(body.credentialRef);
+      if (body.agentHostId !== undefined) {
+        const agentHostId = parseHostId(body.agentHostId);
+        if (agentHostId && !(await service.hostExists(agentHostId, scope(c)))) return c.json({ error: 'AgentHost not found' }, 404);
+        update.agentHostId = agentHostId;
+      }
       if (body.declaredCapabilities !== undefined) update.declaredCapabilities = normalizeCapabilities(body.declaredCapabilities, 'declaredCapabilities');
       if (body.metadata !== undefined) update.metadata = normalizeJsonObject(body.metadata, 'metadata', 32_768) ?? {};
       if (body.status !== undefined) {
         if (body.status !== 'active' && body.status !== 'inactive') throw new Error('status must be active or inactive');
         update.status = body.status;
       }
+      const nextProtocol = update.protocol ?? existing.protocol;
+      const nextEndpoint = update.endpoint === undefined ? existing.endpoint : update.endpoint;
+      const nextAgentHostId = update.agentHostId === undefined ? existing.agentHostId : update.agentHostId;
+      if (!nextEndpoint && !nextAgentHostId) throw new Error('endpoint or agentHostId is required');
+      if (nextProtocol === 'acp' && !nextAgentHostId) throw new Error('ACP agents must be bound to an agentHostId');
       const row = await service.update(c.req.param('id'), scope(c), update);
       if (!row) return c.json({ error: 'Agent registration not found' }, 404);
       return c.json({ agent: serialize(row) });
