@@ -519,6 +519,59 @@ describe('POST /provider-keys/:provider/test', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ ok: false, status: 'revoked' });
   });
+
+  // Kimi's hosted 403 is an EDGE rejection: the CDN refuses the Cloudflare Workers egress
+  // before the API validates the key. Telling the operator to replace a working key is the
+  // wrong instruction, so the copy branches on the transport's structured `edgeBlocked`
+  // verdict — not on an HTML tag surviving into a truncated 240-char detail string.
+  it('names the EDGE as the blocker on a Kimi hosted 403, and returns the redacted trace', async () => {
+    mocks.resolveTenantLlmCredentials.mockResolvedValue({
+      anthropicOAuthToken: null,
+      openaiCodexAuth: null,
+      xaiOAuthToken: null,
+      vendorKeys: { kimi: 'sk-kimi-code' },
+      configuredProviders: ['kimi'],
+      unresolvedReasons: {},
+      vendorPriority: ['kimi'],
+    });
+    const diagnostic = {
+      endpoint: 'https://api.kimi.com/coding/v1/chat/completions',
+      status: 403,
+      headers: { 'cf-ray': 'ray-1', server: 'cloudflare' },
+      edgeBlocked: true,
+      observedAt: '2026-08-02T10:00:00.000Z',
+    };
+    mocks.llmProxyForPlan.mockReturnValue({
+      complete: vi.fn(async () => ({
+        response: new Response('<!doctype html><html>Forbidden</html>', { status: 403 }),
+        resolvedModel: 'direct/kimi-code/kimi-for-coding',
+        resolvedVendor: 'kimi-code',
+        failovers: [{
+          model: 'direct/kimi-code/kimi-for-coding',
+          vendor: 'kimi-code',
+          code: 403,
+          // Deliberately WITHOUT an html tag: the old regex read this string, so a passing
+          // assertion here proves the copy now rides the structured flag instead.
+          detail: 'auth 403: Forbidden',
+          diagnostic,
+        }],
+      })),
+    });
+
+    const req = new Request('http://test.local/provider-keys/kimi/test', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer bfk_test' },
+    });
+    const res = await buildApp().request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+
+    expect(res.status).toBe(200);
+    const body = await res.json() as { ok: boolean; error: string; diagnostic?: typeof diagnostic & { traceId: string } };
+    expect(body.ok).toBe(false);
+    expect(body.error).toContain("Kimi's edge blocked the hosted Builderforce gateway");
+    // The evidence an operator attaches to the partnership submission.
+    expect(body.diagnostic).toMatchObject({ ...diagnostic, model: 'direct/kimi-code/kimi-for-coding' });
+    expect(body.diagnostic?.traceId).toMatch(/^llm-/);
+  });
 });
 
 describe('POST /v1/chat/completions strict-pin gate', () => {

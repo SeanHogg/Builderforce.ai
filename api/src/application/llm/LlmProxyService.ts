@@ -43,6 +43,7 @@ import {
   type DispatchAttempt,
   type VendorEnv,
   type VendorId,
+  type UpstreamDiagnostic,
 } from './vendors';
 // Consumed by the service below AND re-exported at the bottom of this file, so
 // callers that still import them from 'LlmProxyService' keep working.
@@ -193,6 +194,11 @@ export interface FailoverEvent {
    *  hides WHY the vendor `fetch()` threw — e.g. `network: <cause>` or a rejected body.
    *  Surfaced in diagnostics so a connected-account failure names its own cause. */
   detail?: string;
+  /** Redacted upstream evidence — where the call went, the provider's own correlation
+   *  headers, and whether the body was an edge block page rather than an API error.
+   *  This is what makes a provider support ticket actionable: "your gateway is broken"
+   *  and "your CDN refused us before the key was read" look identical in `detail` alone. */
+  diagnostic?: UpstreamDiagnostic;
 }
 
 export interface ProxyResult {
@@ -1700,6 +1706,7 @@ export function attemptToFailover(a: DispatchAttempt): FailoverEvent {
     ...(a.reason ? { reason: a.reason } : {}),
     ...(a.upstreamStatus != null ? { upstreamStatus: a.upstreamStatus } : {}),
     ...(a.error ? { detail: a.error.slice(0, 240) } : {}),
+    ...(a.diagnostic ? { diagnostic: a.diagnostic } : {}),
   };
 }
 

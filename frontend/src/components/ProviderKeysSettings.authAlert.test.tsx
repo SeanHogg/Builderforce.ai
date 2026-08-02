@@ -5,7 +5,12 @@ import * as api from '@/lib/builderforceApi';
 import type { ProviderAuthAlert, ProviderDiagnostic } from '@/lib/builderforceApi';
 
 vi.mock('@/components/ConfirmProvider', () => ({ useConfirm: () => vi.fn() }));
-vi.mock('@/components/ToastProvider', () => ({ useToast: () => vi.fn() }));
+// The real hook returns a dispatcher OBJECT — `useToast()` alone type-checks as a function
+// here, so a test that actually clicks Test used to blow up inside the handler rather than
+// assert anything. Mock the shape, not just the call.
+vi.mock('@/components/ToastProvider', () => ({
+  useToast: () => ({ error: vi.fn(), warning: vi.fn(), success: vi.fn(), info: vi.fn() }),
+}));
 
 /**
  * The reconnect prompt exists because "● connected" and a resolvable credential are
@@ -108,6 +113,63 @@ describe('ProviderKeysSettings — rejected-account prompt', () => {
     render(<ProviderKeysSettings />);
     expect(await screen.findByText(/providerKeys\.authAlert\.kimiNotEntitled 403/)).toBeInTheDocument();
     expect(screen.queryByText(/providerKeys\.authAlert\.xaiNotEntitled/)).not.toBeInTheDocument();
+  });
+
+  // An operator escalating a Kimi hosted 403 to the provider previously had nothing to
+  // send but our own prose about the failure — which is what stalled the integration
+  // request in docs/partnerships/kimi-code-hosted-integration-request.md. A failed test
+  // now offers the redacted trace, and the summary says an EDGE refused the call so the
+  // owner does not go re-enter a key that was never read.
+  it('offers the redacted trace after a failed test, naming the edge as the blocker', async () => {
+    mockApi([{ provider: 'kimi', authType: 'api_key', priority: 0 }]);
+    vi.spyOn(api.providerKeysApi, 'status').mockImplementation(async (provider) => ({
+      provider, configured: provider === 'kimi', usable: provider === 'kimi',
+      status: provider === 'kimi' ? 'needs_attention' : 'not_connected',
+      usage: { periodDays: 30, requests: 0, tokens: 0, lastUsedAt: null },
+    }));
+    vi.spyOn(api.providerKeysApi, 'test').mockResolvedValue({
+      ok: false,
+      status: 'failed',
+      error: "Kimi's edge blocked the hosted Builderforce gateway.",
+      diagnostic: {
+        endpoint: 'https://api.kimi.com/coding/v1/chat/completions',
+        status: 403,
+        headers: { 'cf-ray': 'ray-1' },
+        edgeBlocked: true,
+        observedAt: '2026-08-02T10:00:00.000Z',
+        traceId: 'llm-abc',
+        model: 'kimi-for-coding',
+      },
+    } as Awaited<ReturnType<typeof api.providerKeysApi.test>>);
+
+    render(<ProviderKeysSettings />);
+    fireEvent.click((await screen.findByText('Kimi')).closest('[role="button"]')!);
+    fireEvent.click(await screen.findByText('providerKeys.diagnostic.test'));
+
+    expect(await screen.findByText('providerKeys.diagnostic.copyTrace')).toBeInTheDocument();
+    // The edge-block wording, not the generic "here are the request ids" hint.
+    expect(screen.getByText(/providerKeys\.diagnostic\.traceEdgeBlocked/)).toBeInTheDocument();
+    expect(screen.queryByText(/providerKeys\.diagnostic\.traceHint/)).not.toBeInTheDocument();
+  });
+
+  it('offers no trace when the test never reached the provider', async () => {
+    // No response, no evidence — a copy button that yields nothing is worse than absent.
+    mockApi([{ provider: 'kimi', authType: 'api_key', priority: 0 }]);
+    vi.spyOn(api.providerKeysApi, 'status').mockImplementation(async (provider) => ({
+      provider, configured: provider === 'kimi', usable: provider === 'kimi',
+      status: provider === 'kimi' ? 'needs_attention' : 'not_connected',
+      usage: { periodDays: 30, requests: 0, tokens: 0, lastUsedAt: null },
+    }));
+    vi.spyOn(api.providerKeysApi, 'test').mockResolvedValue({
+      ok: false, status: 'revoked', error: 'Stored credential could not be used (revoked).',
+    } as Awaited<ReturnType<typeof api.providerKeysApi.test>>);
+
+    render(<ProviderKeysSettings />);
+    fireEvent.click((await screen.findByText('Kimi')).closest('[role="button"]')!);
+    fireEvent.click(await screen.findByText('providerKeys.diagnostic.test'));
+
+    await screen.findByText('Stored credential could not be used (revoked).');
+    expect(screen.queryByText('providerKeys.diagnostic.copyTrace')).not.toBeInTheDocument();
   });
 
   it('does NOT report a broken account as connected — the chip follows health, not storage', async () => {

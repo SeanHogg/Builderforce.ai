@@ -8964,6 +8964,10 @@
       "failedTitle": "{label} 连接失败",
       "upstreamTitle": "{label} — 模型提供方出错",
       "testCost": "测试会发送一次真实的小请求，费用计入被测试的账户。",
+      "copyTrace": "复制诊断记录",
+      "copyTraceAria": "复制本次失败的脱敏诊断记录，可附在提交给服务商的支持工单中",
+      "traceHint": "HTTP {status} — 包含服务商的请求 ID。不含密钥、提示词或请求正文。",
+      "traceEdgeBlocked": "HTTP {status} — 服务商的边缘节点在校验密钥之前就拒绝了请求。联系他们时请附上此记录。",
       "state": {
         "ready": "就绪",
         "capacity": "用量已耗尽",
@@ -11835,7 +11839,8 @@
     "duplicate": "复制", "align": "对齐", "frame": "添加框架", "lock": "锁定", "unlock": "解锁", "hide": "隐藏", "showHidden": "显示隐藏对象", "hideHidden": "收起隐藏对象", "focus": "聚焦", "edge": "连接", "conversation": "对话", "tutorial": "教程",
     "live": "实时", "offlineRetry": "离线 · 将重试编辑", "reconnecting": "正在重新连接…", "connecting": "正在连接…", "largeSession": "大型会话 · {count} 个对象",
     "dashboardTitle": "Create 会话", "dashboardSubtitle": "返回画布，从上次离开的地方继续。", "searchSessions": "搜索会话、对象、项目或人员…", "active": "活跃", "archived": "已归档", "continueCreating": "继续创作", "sharedWithMe": "与我共享", "recentlyCompleted": "最近完成",
-    "createTypeTitle": "你想创建什么？", "createTypeSubtitle": "从熟悉的 Builder 类型开始。它会作为对象在新画布中打开，你可以继续添加工作流、数据、人员和 Brain。", "existingCreations": "你现有的创作", "existingCreationsSubtitle": "在画布中打开现有的项目、智能体、网站、应用、Evermind、LLM、语音、视频、工作流或 Brain 会话。", "loadingCreations": "正在加载创作…", "noCreations": "没有符合此搜索的现有创作。", "brainSession": "Brain 会话", "workflowRuns": "工作流 · {count} 次运行", "projectTasks": "{count} 个任务", "exportCanvas": "导出",
+    "starterCampaign": "营销活动工作室", "starterCampaignDescription": "创建营销工作流、交互式落地页、预测仪表板和评估框架。", "starterProductDiscovery": "产品发现", "starterProductDiscoveryDescription": "将客户反馈汇总为需求功能、可视化模型稿和交付路线图。",
+    "createTypeTitle": "你想创建什么？", "createTypeSubtitle": "从 Builder 类型或引导模板开始。它会作为对象在新画布中打开，你可以继续添加工作流、数据、人员和 Brain。", "existingCreations": "你现有的创作", "existingCreationsSubtitle": "在画布中打开现有的项目、智能体、网站、应用、Evermind、LLM、语音、视频、工作流或 Brain 会话。", "loadingCreations": "正在加载创作…", "noCreations": "没有符合此搜索的现有创作。", "brainSession": "Brain 会话", "workflowRuns": "工作流 · {count} 次运行", "projectTasks": "{count} 个任务", "exportCanvas": "导出",
     "object": {"workflow":"工作流","project":"项目","website":"网站","dashboard":"仪表板","chat":"聊天","agent":"智能体","staff":"团队成员","evaluation":"评估","dataset":"数据集","table":"表格","spreadsheet":"电子表格","chart":"图表","report":"报告","kpi":"关键指标","prototype":"所见即所得原型","code":"代码","browser":"浏览器预览","llm":"大语言模型","voice":"语音","video":"视频","document":"文档","slides":"幻灯片","knowledge":"知识","file":"文件","url":"网址","note":"便笺","drawing":"绘图","frame":"框架","comment":"评论","timer":"计时器","roadmap":"路线图","prd":"产品需求文档","release":"发布","task":"任务","mockup":"模型稿","mockupSet":"模型稿集合","featureSummary":"功能摘要","team":"团队","role":"角色","mcp":"已连接工具","evermind":"Evermind","projectComparison":"项目对比","standup":"站会","repository":"代码仓库","selection":"编辑器选区","diagnostics":"诊断","terminal":"终端输出","service":"本地服务"}
   }
 }

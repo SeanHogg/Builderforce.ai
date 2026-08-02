@@ -35,6 +35,13 @@ vi.mock('@xyflow/react', async () => {
   };
 });
 
+vi.mock('@/components/workflow-builder/WorkflowBuilder', () => ({
+  WorkflowBuilder: ({ onSaved, onRunStarted }: { onSaved?: (id: string, name: string) => void; onRunStarted?: (id: number) => void }) => <div>
+    <button type="button" onClick={() => onSaved?.('workflow-updated', 'Updated campaign workflow')}>Save embedded workflow</button>
+    <button type="button" onClick={() => onRunStarted?.(91)}>Run embedded workflow</button>
+  </div>,
+}));
+
 describe('CreationCanvas', { timeout: 15_000 }, () => {
   beforeEach(() => {
     localStorage.clear();
@@ -49,6 +56,18 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByLabelText('Active collaborators')).toBeInTheDocument();
     fireEvent.click(screen.getAllByText('Campaign Strategist')[0]!);
     expect(screen.getByDisplayValue('Campaign Strategist')).toBeInTheDocument();
+  });
+
+  it('edits and runs a canonical workflow in an isolated Canvas focus editor', () => {
+    render(<CreationCanvas sessionId="workflow-focus-test" persistence="local" />);
+    fireEvent.click(screen.getByText('Fall campaign workflow'));
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Workflow on Canvas' }));
+
+    expect(screen.getByRole('dialog', { name: 'Workflow focus editor' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Save embedded workflow' }));
+    expect(screen.getByDisplayValue('Updated campaign workflow')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Run embedded workflow' }));
+    expect(screen.getByText('Workflow run 91 started')).toBeInTheDocument();
   });
 
   it('adds a selected object from the palette', () => {

@@ -120,9 +120,13 @@ interface Props {
   definitionId?: string | null;
   /** Pre-bind a new workflow to this project (from /workflows?projectId=…). */
   initialProjectId?: number | null;
+  /** Render inside an isolated Canvas focus surface without changing routes. */
+  embedded?: boolean;
+  onSaved?: (definitionId: string, name: string) => void;
+  onRunStarted?: (workflowId: number | string) => void;
 }
 
-export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props) {
+export function WorkflowBuilder({ definitionId, initialProjectId = null, embedded = false, onSaved, onRunStarted }: Props) {
   const router = useRouter();
   const t = useTranslations('evermindBuild');
   const tc = useTranslations('common');
@@ -291,13 +295,15 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
         await workflowDefinitions.update(defId, { name: nameVal, definition: graph, ...runTargetFields });
         setStatus(t('statusSaved'));
         refreshTriggers(defId);
+        onSaved?.(defId, nameVal);
         return defId;
       }
       const created = await workflowDefinitions.create({ name: nameVal, definition: graph, ...runTargetFields });
       setDefId(created.id);
-      router.replace(`/workflows/builder?id=${created.id}`);
+      if (!embedded) router.replace(`/workflows/builder?id=${created.id}`);
       setStatus(t('statusSaved'));
       refreshTriggers(created.id);
+      onSaved?.(created.id, nameVal);
       return created.id;
     } catch (e) {
       setStatus(e instanceof Error ? e.message : t('statusSaveFailed'));
@@ -305,7 +311,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
     } finally {
       setBusy(false);
     }
-  }, [defId, name, toGraph, router, runTargetFields, refreshTriggers]);
+  }, [defId, embedded, name, onSaved, refreshTriggers, router, runTargetFields, toGraph]);
 
   const run = useCallback(async () => {
     if (!runTarget) { setStatus(t('statusSelectRunTarget')); return; }
@@ -316,13 +322,15 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
       const id = await save();             // ensure the latest graph + target is persisted
       if (!id) return;
       const { workflowId } = await workflowDefinitions.run(id, runTarget);
-      router.push(`/workflows?run=${workflowId}`);
+      onRunStarted?.(workflowId);
+      if (!embedded) router.push(`/workflows?run=${workflowId}`);
+      else setStatus(`Workflow run ${workflowId} started`);
     } catch (e) {
       setStatus(e instanceof Error ? e.message : t('statusRunFailed'));
     } finally {
       setBusy(false);
     }
-  }, [runTarget, nodes.length, save, router]);
+  }, [embedded, nodes.length, onRunStarted, router, runTarget, save]);
 
   // Load a one-click Evermind BUILD template onto the canvas (replaces the graph)
   // as an editable, wired step chain — then the user runs it with "🧠 Build".
@@ -374,14 +382,28 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null }: Props
       try {
         const text = await file.text();
         const created = await workflowDefinitions.importYaml(file.name.replace(/\.ya?ml$|\.json$/i, ''), text);
-        router.push(`/workflows/builder?id=${created.id}`);
+        if (!embedded) {
+          router.push(`/workflows/builder?id=${created.id}`);
+        } else {
+          const detail = await workflowDefinitions.get(created.id);
+          setDefId(detail.id);
+          setName(detail.name);
+          setProjectId(detail.projectId ?? null);
+          setRunTarget(detail.runTargetRuntime === 'cloud'
+            ? { runtime: 'cloud', cloudAgentRef: detail.runTargetCloudAgentRef ?? null }
+            : detail.runTargetAgentHostId ? { runtime: 'host', agentHostId: detail.runTargetAgentHostId } : null);
+          setNodes(detail.definition.nodes.map((node) => ({ id: node.id, type: 'builder', position: node.position, data: { kind: node.kind, label: node.label, config: node.config ?? {} } })));
+          setEdges(detail.definition.edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target })));
+          onSaved?.(detail.id, detail.name);
+          setStatus(t('statusSaved'));
+        }
       } catch (e) {
         setStatus(e instanceof Error ? e.message : t('statusImportFailed'));
       } finally {
         setBusy(false);
       }
     },
-    [router],
+    [embedded, onSaved, router, setEdges, setNodes, t],
   );
 
   const selectedNode = useMemo(

@@ -96,7 +96,8 @@ export interface Env {
   XAI_API_KEY?: string;
   /** Perplexity — api.perplexity.ai. */
   PERPLEXITY_API_KEY?: string;
-  /** Moonshot AI (Kimi) — api.moonshot.cn/v1. */
+  /** Moonshot AI (Kimi) Open Platform — api.moonshot.ai/v1 (international); a key
+   *  issued by the China platform resolves to api.moonshot.cn/v1 automatically. */
   MOONSHOT_API_KEY?: string;
   /** Kimi Code subscription API — api.kimi.com/coding/v1. */
   KIMI_CODE_API_KEY?: string;

@@ -36,6 +36,7 @@ import {
   type VendorModelEntry,
   type VendorModule,
   type VendorStreamResult,
+  type UpstreamDiagnostic,
 } from './types';
 
 /**
@@ -295,6 +296,15 @@ export interface DispatchAttempt {
    *  class (e.g. a Gemini schema 400 normalized to the 422 request-error class is
    *  recorded here as `400`). Absent when `status` already IS the upstream status. */
   upstreamStatus?: number;
+  /** Redacted upstream evidence (endpoint, correlation headers, edge-block flag).
+   *  Absent when the attempt failed before a response existed. */
+  diagnostic?: UpstreamDiagnostic;
+}
+
+/** The redacted diagnostic a thrown vendor error carries, when it carries one. */
+function diagnosticOf(err: unknown): { diagnostic?: UpstreamDiagnostic } {
+  const d = (err as { diagnostic?: UpstreamDiagnostic }).diagnostic;
+  return d ? { diagnostic: d } : {};
 }
 
 /**
@@ -475,12 +485,13 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
         attempts.push({
           model, vendor: vendorId, status: 422, error: err.message, durationMs,
           kind: 'schema', reason: SCHEMA_TOO_COMPLEX_REASON, upstreamStatus: err.status,
+          ...diagnosticOf(err),
         });
         reportCaughtError(err, { source: "application/llm/vendors/registry.ts", operation: "dispatchInternal", level: 'warning', context: { logMessage: `[vendors] ${cfg.logTag}${vendorId}/${model} rejected json_schema as too complex (upstream ${err.status}); trying next vendor (${attempts.length}/${modelChain.length})` } });
         continue;
       }
       if (err instanceof VendorRetryableError) {
-        attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message) });
+        attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message), ...diagnosticOf(err) });
         reportCaughtError(err, { source: "application/llm/vendors/registry.ts", operation: "dispatchInternal", level: 'warning', context: { logMessage: `[vendors] ${cfg.logTag}${vendorId}/${model} returned ${err.status}; trying next in chain (${attempts.length}/${modelChain.length} failed)` } });
         continue;
       }
@@ -491,7 +502,7 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
       // these attempts and the proxy's exhaustedResponse surfaces a real 4xx (not
       // a misleading 429). recordFailure no-ops request_error, so no model cools.
       if (err instanceof VendorFatalError && (err.status === 400 || err.status === 422)) {
-        attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message) });
+        attempts.push({ model, vendor: vendorId, status: err.status, error: err.message, durationMs, kind: kindForStatus(err.status, err.message), ...diagnosticOf(err) });
         reportCaughtError(err, { source: "application/llm/vendors/registry.ts", operation: "dispatchInternal", level: 'warning', context: { logMessage: `[vendors] ${cfg.logTag}${vendorId}/${model} returned ${err.status} (request error); trying next vendor (${attempts.length}/${modelChain.length})` } });
         continue;
       }

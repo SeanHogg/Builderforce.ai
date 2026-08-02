@@ -4,6 +4,42 @@
 
 ---
 
+## 2026-08-02 — ✅ RESOLVED: a failed provider test produced prose, never evidence — so the Kimi Code submission had nothing to attach (api 2026.7.203, ui 2026.7.153)
+
+The hosted-integration request at [kimi-code-hosted-integration-request.md](./docs/partnerships/kimi-code-hosted-integration-request.md) asks for a redacted 403 trace — timestamp, response headers, request ID, endpoint, model, Builderforce trace ID. None of it survived: the transport read `resp.text()`, threw a message string, and dropped the response headers on the floor. An operator escalating to a vendor had only our own prose about the failure.
+
+**The transport now captures a redacted `UpstreamDiagnostic`** for every failed upstream call — endpoint (query string stripped, since a base URL can carry a key), status, an **allowlist** of correlation headers (`cf-ray`, `x-request-id`, `server`, `date`, …), and `edgeBlocked`. Captured once per response and attached to the error on its way out, so the status ladder stays readable and `onFatal` — whose signature is shared with the image and embedding surfaces — needed no new parameter. Both transports (`executeVendorPost` and the streaming path) do it identically. The allowlist is the point: an operator pastes this into a **third party's** ticket system, and it is the only thing standing between that and whatever the upstream chose to echo back.
+
+**`edgeBlocked` replaced a regex on prose.** The Kimi remediation copy used to fire on `/<!doctype\s+html|<html\b/` against `probe.error` — a detail string truncated to 240 chars and prefixed `auth 403:` — so it silently missed whenever the edge page led with a comment, a BOM, or a long `<meta>` block, and the operator was told to replace a key that had never been read. It now branches on the transport's own verdict about the body.
+
+**Threaded end to end, not just captured:** `VendorRetryableError`/`VendorFatalError`/`VendorSchemaError` → `DispatchAttempt` → `FailoverEvent` → `ProbeDiagnostic` (which adds the gateway trace id and the pinned model) → both test routes. It rides the ONE `dispatchProbe`, so the OpenRouter connection surface got it for free.
+
+**One UI seam, two surfaces.** `ProbeVerdict` carries the diagnostic, so `ProbeResultLine` — already shared by the provider drawer and every OpenRouter registration row — offers **Copy diagnostic trace** via the canonical `CopyButton`, and decides its own visibility rather than taking a flag the caller would derive from the same field. The copied block is deliberately unlocalized (a technical artifact addressed to the vendor's own support desk, like a log line); the button, aria-label and summary are localized in all five catalogs. Summary copy splits edge-block from ordinary failure so the operator knows the key was never the thing rejected.
+
+Also fixed: `ProviderKeysSettings.authAlert.test.tsx` mocked `useToast` as a bare function, so any test that actually clicked **Test connection** died inside the handler instead of asserting.
+
+Files: `api/src/application/llm/vendors/{types,registry}.ts`, `api/src/application/llm/{LlmProxyService,byoCredentialHealth}.ts`, `api/src/presentation/routes/llmRoutes.ts`, `frontend/src/lib/builderforceApi.ts`, `frontend/src/components/ProviderKeysSettings.tsx`, all five i18n catalogs, the partnership doc. Tests: `openaiCompatibleVendors.test.ts` (25, +5 — edge vs credential rejection, header allowlist excludes `set-cookie`/`authorization`, query-string stripping, reaches `failovers[0]`), `llmRoutes.test.ts` (+1 — the Kimi edge-block copy fires on the structured flag with a detail string containing **no** HTML tag, and the response carries the trace), `ProviderKeysSettings.authAlert.test.tsx` (12, +2). api `src/application/llm` + `llmRoutes` 929 green; frontend `ProviderKeysSettings` 34 green; both packages typecheck.
+
+Kimi Code hosted access itself remains blocked on Kimi's answer → [ROADMAP.md § 3](./ROADMAP.md#3--llm-gateway-routing--cost).
+
+---
+
+## 2026-08-02 — ✅ RESOLVED: the Moonshot escape hatch we tell blocked Kimi users to take was itself a dead end (api 2026.7.202)
+
+Found while diagnosing a tenant's Kimi card stuck on "needs attention". The remedy in that error message — "connect a Moonshot Open Platform API key instead" ([llmRoutes.ts:1354](./api/src/presentation/routes/llmRoutes.ts)) — sent the operator to a second failure.
+
+**The gateway called the wrong platform.** Moonshot runs two independent Open Platforms whose keys are **not interchangeable**: `api.moonshot.ai` (international) and `api.moonshot.cn` (China). The vendor was hard-pinned to `.cn`, while this repo's own docs ([providers/moonshot.md:142](./docs-site/src/content/docs/providers/moonshot.md)) and the local runtime (`models-config.providers.ts:85`) both use `.ai`. Nothing in a key marks which platform issued it, so a `platform.moonshot.ai` key — what any non-China signup gets — 401'd. Both hosts were confirmed live. The factory now takes an optional `altBaseUrl`: it calls the international host, and on an **auth rejection only** retries the China host once, so neither platform's tenants break. A transient failure (429/5xx) never crosses hosts — re-sending it to a platform the key doesn't belong to spends the tenant's money to learn nothing — and when both refuse, the *international* host's error propagates so the operator isn't sent to fix an account they never meant to use.
+
+**The resolved host is remembered per key**, as a bounded FIFO of non-reversible digests. Deliberately not `getOrSetCached`: that caches DATA needing cross-isolate invalidation and wants a KV binding `VendorEnv` doesn't carry, whereas which platform issued a key is immutable — a stale entry is impossible and a cold isolate costs exactly one extra 401. Without it every China-key call would pay a wasted rejection first.
+
+**The catalog was retired models.** `moonshot-v1-8k/32k/128k` + `kimi-k2-0711-preview` → the current `kimi-k2.5`, `kimi-k2-0905-preview`, `kimi-k2-turbo-preview`, `kimi-k2-thinking`, `kimi-k2-thinking-turbo`. The health probe dispatches the **first** catalog entry, so a retired lead id reported a perfectly good key as broken. Same drift had reached `BYO_FRONTIER_FLAGSHIPS` (`modelPool.ts:278`), which pinned auto-select for a connected Moonshot account at the dead `kimi-k2-0711-preview`; now `kimi-k2.5`, guarded by a test that fails if **any** `direct/<vendor>/` flagship names a model its vendor's catalog doesn't carry.
+
+Files: `api/src/application/llm/vendors/{openaiCompatible,openaiCompatibleVendors,types}.ts`, `api/src/application/llm/modelPool.ts`, `api/src/env.ts`. Tests: `openaiCompatibleVendors.test.ts` (20, +7 — regional resolution both directions, the memo, no-cross-on-transient, primary-error-wins, single-host vendors unchanged, catalog lead, flagship drift guard); full `src/application/llm` suite 887 green.
+
+Open follow-ups (Kimi Code itself is egress-blocked, scoped out by operator decision) → [ROADMAP.md § 3](./ROADMAP.md#3--llm-gateway-routing--cost).
+
+---
+
 ## 2026-07-31 — ✅ RESOLVED: provider priority is drag-orderable, and the write behind it is now one statement (ui 2026.7.151, api 2026.7.199, brain-embedded 2026.7.58, vsix 2026.7.112)
 
 **Shipped.** `/settings/integrations` ▸ Provider priority reorders by dragging a row onto the position it should hold — the ↑/↓ buttons stay as the keyboard and touch path (native HTML5 drag fires on neither). One shared primitive, `frontend/src/lib/useDragReorder.ts` (`moveItem` + `useDragReorder`), owns drag state, the insert-at-target commit, and the nudge; both existing reorder surfaces run on it — `ReorderableList` in `ProviderKeysSettings.tsx` (BYO account precedence **and** the OpenRouter model cascade) and `ReorderableWidgetGrid` (whose duplicate `move()` + four hand-rolled handlers were deleted). A drag inserts at the target and slides the rest; a swap would have produced a different order than the one dropped as soon as the drag spanned more than one row. New copy `providerKeys.precedence.drag` / `.rowLabel` in all five catalogs.

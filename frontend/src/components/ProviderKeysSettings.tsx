@@ -9,6 +9,7 @@ import { ClickableCard } from '@/components/ClickableCard';
 import { ConnectToggleButton } from '@/components/integrations/ConnectToggleButton';
 import { millicentsToUsd } from '@/lib/spendLimits';
 import { ConsumptionMeterCard } from '@/components/UsageMeter';
+import { CopyButton } from '@/components/CopyButton';
 import { useDragReorder } from '@/lib/useDragReorder';
 import {
   llmApi,
@@ -19,6 +20,7 @@ import {
   type LlmUsageStats,
   type OpenRouterCatalogModel,
   type OpenRouterConnection,
+  type ProbeDiagnostic,
   type ProviderAuthAlert,
   type ProviderAuthType,
   type ProviderDiagnostic,
@@ -306,6 +308,38 @@ type ProbeTone = 'ok' | 'warn' | 'error';
 export interface ProbeVerdict {
   message: string;
   tone: ProbeTone;
+  /** Redacted upstream evidence, when the probe reached a response. Rides the verdict so
+   *  BOTH surfaces get the copy affordance from the one seam — see {@link ProbeResultLine}. */
+  diagnostic?: ProbeDiagnostic;
+}
+
+/**
+ * The redacted diagnostic as a block an operator pastes into a provider support ticket.
+ *
+ * Deliberately NOT localized: this is a technical artifact addressed to the upstream
+ * provider's own support desk, in the same class as a log line or a request id. Its field
+ * names have to match what a provider engineer greps for, and translating them would make
+ * a French operator's ticket unreadable to the vendor they are filing it with. The copy
+ * BUTTON and every word of UI around it are localized.
+ */
+function formatDiagnosticTrace(d: ProbeDiagnostic): string {
+  const headers = Object.entries(d.headers);
+  return [
+    'Builderforce.ai upstream diagnostic (redacted)',
+    `observed-at:   ${d.observedAt}`,
+    `trace-id:      ${d.traceId}`,
+    `endpoint:      POST ${d.endpoint}`,
+    `model:         ${d.model}`,
+    `http-status:   ${d.status}`,
+    // The distinction the whole artifact exists to prove: an HTML body means something in
+    // front of the API refused the call, so the credential was never the thing rejected.
+    `edge-blocked:  ${d.edgeBlocked ? 'yes (response body was an HTML page, not the API error envelope)' : 'no'}`,
+    'response-headers:',
+    ...(headers.length > 0
+      ? headers.map(([name, value]) => `  ${name}: ${value}`)
+      : ['  (none of the correlation headers were present)']),
+    'No credential, prompt, or request body is included.',
+  ].join('\n');
 }
 
 /**
@@ -317,7 +351,7 @@ export interface ProbeVerdict {
  */
 function probeVerdict(
   t: TFn,
-  result: { ok: boolean; status: string; model?: string; error?: string },
+  result: { ok: boolean; status: string; model?: string; error?: string; diagnostic?: ProbeDiagnostic },
 ): ProbeVerdict {
   if (result.ok) {
     return {
@@ -329,21 +363,48 @@ function probeVerdict(
     // An upstream outage is not this account's fault and not this operator's job to fix.
     tone: result.status === 'upstream_error' ? 'warn' : 'error',
     message: result.error ?? t('diagnostic.failedFallback', { status: stateLabel(t, result.status) }),
+    ...(result.diagnostic ? { diagnostic: result.diagnostic } : {}),
   };
 }
 
-/** The verdict line under a Test button — same colour rules and a11y role wherever a probe
- *  reports back. Amber for an upstream outage, red only for something the owner can fix. */
-function ProbeResultLine({ result }: { result: ProbeVerdict }) {
+/**
+ * The verdict line under a Test button — same colour rules and a11y role wherever a probe
+ * reports back. Amber for an upstream outage, red only for something the owner can fix.
+ *
+ * When the probe reached a response it also offers the redacted trace. That exists because
+ * "tell me what happened" and "give me something I can send the provider" are different
+ * asks, and only the first was answerable: an operator escalating to a vendor had nothing
+ * but our own prose about the failure. The affordance decides its OWN visibility — no
+ * caller passes a `canShowTrace` flag it would have to derive from the same field.
+ */
+function ProbeResultLine({ result, t }: { result: ProbeVerdict; t: TFn }) {
   const color = result.tone === 'ok' ? 'rgba(34,197,94,0.9)'
     : result.tone === 'warn' ? 'var(--warning-text, #b45309)'
     : 'var(--error, #ef4444)';
+  const { diagnostic } = result;
   return (
     <div
       role={result.tone === 'error' ? 'alert' : 'status'}
       style={{ fontSize: 11.5, color, marginTop: 7, lineHeight: 1.5 }}
     >
       {result.message}
+      {diagnostic && (
+        // Wraps and stays tappable at 360px: the button is min-height 32 and the summary
+        // is free to drop to its own line rather than forcing a horizontal scroll.
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 8 }}>
+          <CopyButton
+            getText={() => formatDiagnosticTrace(diagnostic)}
+            label={t('diagnostic.copyTrace')}
+            ariaLabel={t('diagnostic.copyTraceAria')}
+            compact
+          />
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+            {diagnostic.edgeBlocked
+              ? t('diagnostic.traceEdgeBlocked', { status: diagnostic.status })
+              : t('diagnostic.traceHint', { status: diagnostic.status })}
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -635,7 +696,7 @@ function ProviderConnectionCard({
           lastUsedAt={diagnostic?.usage.lastUsedAt ?? null}
         />
         <ProbeCostNote t={t} />
-        {testResult && <ProbeResultLine result={testResult} />}
+        {testResult && <ProbeResultLine result={testResult} t={t} />}
         {/* Dispatch-observed rejection — the reason this "connected" account is not
             actually serving anything. Sits under the status strip because that is
             where an operator already looks to answer "is this working?". */}
@@ -920,7 +981,7 @@ function OpenRouterConnectionsPanel({
             <button type="button" style={buttonPrimary} onClick={() => begin(connection)}>{t('openRouter.edit')}</button>
             <button type="button" style={buttonDanger} onClick={() => void remove(connection)}>{t('remove')}</button>
           </div>
-          {testResults[connection.id] && <ProbeResultLine result={testResults[connection.id]!} />}
+          {testResults[connection.id] && <ProbeResultLine result={testResults[connection.id]!} t={t} />}
         </div>
       ))}
 

@@ -38,7 +38,7 @@ import {
   type LlmProxyService,
 } from './LlmProxyService';
 import { byoModelsFor } from './byoModelRouting';
-import { CASCADE_STATUSES } from './vendors/types';
+import { CASCADE_STATUSES, type UpstreamDiagnostic } from './vendors/types';
 import {
   connectionModelRef,
   listOpenRouterConnections,
@@ -77,6 +77,27 @@ import { raiseConnectionAuthAlert, raiseProviderAuthAlert } from './byoCredentia
  * marker, 5xx, timeout): worth showing to someone who just clicked Test, never worth
  * emailing about or painting the card red over.
  */
+/**
+ * The redacted, copy-pasteable evidence for ONE failed probe.
+ *
+ * Exists because "test it and tell me what happened" and "give me something I can send
+ * the provider" are different asks, and the second one was unanswerable: the operator
+ * saw prose, while the endpoint, the provider's own request id, and whether an EDGE
+ * refused the call before the key was read were all discarded inside the cascade. That
+ * gap is what stalled the Kimi Code hosted-integration submission, whose checklist asks
+ * for exactly these fields (`docs/partnerships/kimi-code-hosted-integration-request.md`).
+ *
+ * Everything here is safe to paste into a partner ticket: no credential, no prompt, no
+ * request body — see {@link UpstreamDiagnostic} for the header allowlist.
+ */
+export interface ProbeDiagnostic extends UpstreamDiagnostic {
+  /** The gateway trace id for this probe, so an operator's ticket and our own logs
+   *  name the same request. */
+  traceId: string;
+  /** The model id the probe pinned. */
+  model: string;
+}
+
 export interface ByoProbeResult {
   provider: LlmProvider;
   ok: boolean;
@@ -92,6 +113,8 @@ export interface ByoProbeResult {
   error?: string;
   /** The persisted owner-actionable alert, when the failure was one. */
   alert?: ProviderAuthAlert;
+  /** Redacted upstream evidence for a failed probe — see {@link ProbeDiagnostic}. */
+  diagnostic?: ProbeDiagnostic;
   checkedAt: string;
 }
 
@@ -150,6 +173,8 @@ interface ProbeDispatch<A> {
   upstreamStatus: number;
   /** Human-readable failure detail — absent on success. */
   error?: string;
+  /** Redacted upstream evidence, when the attempt actually reached a response. */
+  diagnostic?: ProbeDiagnostic;
   /** True when the failure is the transient class (429 without a capacity marker, 5xx,
    *  timeout): the credential was ACCEPTED and something downstream of it broke. The
    *  distinction IS the verdict — "your key is dead" and "the model provider had a bad
@@ -200,7 +225,8 @@ async function attemptProbe<A>(
     model, modelStrict: true, max_tokens: PROBE_MAX_TOKENS,
     messages: [{ role: 'user', content: 'Reply OK.' }],
   };
-  const result = await service.complete(body, undefined, newTraceId());
+  const traceId = newTraceId();
+  const result = await service.complete(body, undefined, traceId);
   if (result.response.status < 400) {
     return { ok: true, resolvedModel: result.resolvedModel, upstreamStatus: result.response.status, retryable: false };
   }
@@ -222,6 +248,13 @@ async function attemptProbe<A>(
     null,
   ) ?? classify(result.resolvedVendor, result.response.status, message);
 
+  // A strict pin makes ONE attempt, so `failovers[0]` is the call that actually happened
+  // and its diagnostic is the evidence for it. Absent when the failure predates a response
+  // (timeout, network, a gateway-side refusal) — there is nothing to correlate then.
+  const diagnostic: ProbeDiagnostic | undefined = attempt?.diagnostic
+    ? { ...attempt.diagnostic, traceId, model: result.resolvedModel }
+    : undefined;
+
   return {
     ok: false,
     resolvedModel: result.resolvedModel,
@@ -231,6 +264,7 @@ async function attemptProbe<A>(
     // transient. Anything else in the failing range is the upstream having a bad minute.
     retryable: !alert && isTransientProbeStatus(upstreamStatus),
     ...(alert ? { alert } : {}),
+    ...(diagnostic ? { diagnostic } : {}),
   };
 }
 
@@ -328,6 +362,7 @@ export async function probeByoProvider(
     upstreamStatus: outcome.upstreamStatus,
     ...(outcome.error ? { error: outcome.error } : {}),
     ...(outcome.alert ? { alert: outcome.alert } : {}),
+    ...(outcome.diagnostic ? { diagnostic: outcome.diagnostic } : {}),
     checkedAt,
   };
 }
@@ -362,6 +397,10 @@ export interface OpenRouterConnectionProbeResult {
   error?: string;
   /** The persisted owner-actionable alert, when the failure was one. */
   alert?: ConnectionAuthAlert;
+  /** Redacted upstream evidence for a failed probe — see {@link ProbeDiagnostic}. Same
+   *  shape as the provider probe's: both ride the one `dispatchProbe`, so a connection
+   *  failure is as reportable to a provider as a provider failure is. */
+  diagnostic?: ProbeDiagnostic;
   checkedAt: string;
 }
 
@@ -444,6 +483,7 @@ export async function probeOpenRouterConnection(
     model: bare, ownKey, upstreamStatus: outcome.upstreamStatus,
     ...(outcome.error ? { error: outcome.error } : {}),
     ...(outcome.alert ? { alert: outcome.alert } : {}),
+    ...(outcome.diagnostic ? { diagnostic: outcome.diagnostic } : {}),
     checkedAt,
   };
 }

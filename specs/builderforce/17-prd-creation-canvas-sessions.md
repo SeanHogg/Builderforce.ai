@@ -1,6 +1,6 @@
 # PRD 17 — Creation Sessions and the Infinite Canvas
 
-**Status:** Core CS-001–CS-030 repository implementation complete / release candidate (2026-08-02); embedded Workflow editing, extended Voice delivery, and production rollout evidence remain on the roadmap · **Owner:** Product + Platform · **Migrations:** `0388_creation_sessions.sql` through `0393_creation_session_timeline.sql`
+**Status:** Repository implementation complete / release candidate (2026-08-02); production rollout evidence remains on the roadmap · **Owner:** Product + Platform · **Migrations:** `0388_creation_sessions.sql` through `0393_creation_session_timeline.sql`
 
 ## 1. Executive summary
 
@@ -220,12 +220,12 @@ Projects remain a primary destination for portfolio management, structured metri
 
 - A prominent bottom-style prompt or dashboard prompt: **“What would you like to create?”**
 - Submitting creates a session, saves the initial prompt, navigates to `/create/:sessionId`, and begins streaming Brain output.
-- Reuse the former IDE landing-page pattern as the top of Create: visual launchers for Website, Mobile, Web + Mobile, Video, Evermind, Fine-tune/LLM, and Voice. Choosing a type creates a Session and places that creation mode on its Canvas.
+- Reuse the former IDE landing-page pattern as one unified **Start creating** grid: visual launchers for Website, Mobile, Web + Mobile, Video, Evermind, Fine-tune/LLM, Voice, Campaign studio, and Product discovery. Choosing any card creates a Session and places that creation mode/template on its Canvas. Do not render a second Dashboard Templates section or duplicate Evermind as “Evermind model lab”; the Evermind card carries the complete model-lab prompt.
 - Show existing Projects, tenant-owned Agents, IDE builds, Everminds, LLMs, Voices, Videos, Workflow definitions, and legacy Brain sessions in the same Create catalog. Selecting one opens or creates its segment-scoped wrapper Session with the source Object focused and any attached Workflow loaded.
 - Visual session cards show a server-generated or cached miniature rendering of the canvas—not generic list rows.
 - Each card shows title, preview, collaborators, object-type chips, associated projects, last activity, running agents, and unread activity.
 - Card actions: Open, Pin, Rename, Duplicate, Share, Archive.
-- Sections: Continue creating, Shared with me, Templates, Recently completed.
+- Session sections: Continue creating, Shared with me, and Recently completed. Starter templates belong only in the unified top grid; saved/existing creations remain in their own catalog below the Session library.
 - Empty state starts the guided first session rather than explaining product modules.
 
 ### Other dashboard tabs
@@ -338,7 +338,7 @@ type ConnectionKind =
 
 Edges have labels, direction where relevant, validation, and accessible text alternatives. Only explicit edges affect execution or AI relationship semantics.
 
-## 12. Canvas object registry — **Core complete; depth R-08/R-09**
+## 12. Canvas object registry — **Complete**
 
 Every application resource type registers:
 
@@ -362,7 +362,7 @@ interface CanvasObjectDefinition {
 | Category | Status | Objects | Representative live actions |
 | --- | --- | --- | --- |
 | Conversation | **Complete** | Chat, AI answer, evaluation | Prompt, branch, cite, apply recommendations |
-| Build | **Core complete; depth R-08/R-09** | Workflow, Website, WYSIWYG Prototype, Code, Browser Preview, LLM, Voice | Edit, run, preview, publish, train, evaluate |
+| Build | **Complete** | Workflow, Website, WYSIWYG Prototype, Code, Browser Preview, LLM, Voice | Edit, run, preview, publish, train, evaluate |
 | Work | **Complete** | Project, Task, Roadmap, PRD, Release, Feature, Mockup | Expand, compare, assign, approve, deliver |
 | Data | **Complete** | Dataset, Table, Spreadsheet, Chart, Report, Dashboard, KPI | Import, profile, filter, visualize, refresh, drill |
 | Knowledge | **Complete** | Document, Slide deck, Knowledge item, File, URL | Edit, summarize, export, use as context |
@@ -965,11 +965,11 @@ Priority meanings: **P0** is required before the new navigation becomes default;
 
 ### Building
 
+- **Complete —** As a creator, I can drag a Workflow into my session and run or edit it in an isolated focus editor without changing routes.
 - **Complete —** As a creator, I can drag in a Website and use a high-fidelity WYSIWYG experience without changing routes.
 - **Complete —** As an analyst, I can import data, visualize it, and bind the visualization into a prototype.
 - **Complete —** As a model builder, I can configure, train, compare, and package an LLM from objects in the same session.
-
-The complete embedded Workflow-editing story has been moved to R-09; canonical definitions can already be added and run from the Canvas. The extended canonical Voice creation story has been moved to R-08; Canvas voice dictation, the Voice Object, script/mode configuration, and blueprint status are already implemented.
+- **Complete —** As a voice creator, I can record or upload a consented sample, dictate/transcribe a script, synthesize and play speech, persist generation metadata, and connect the Voice Object to other Objects.
 
 ### Project context and delivery
 
@@ -1325,7 +1325,7 @@ Repository implementation status:
 - **Complete:** Migrations, rollback/support/analytics/localization/accessibility guidance, and operational runbooks exist.
 - **Complete:** No known repository-test P0/P1 security, data-loss, tenant-isolation, idempotency, or accessibility defect remains.
 
-Production Definition of Done is **Pending** until roadmap R-01–R-09 supplies deployed acceptance, performance, security, adoption, conformance, drill, Voice/Workflow depth, and owner sign-off evidence.
+Production Definition of Done is **Pending** until roadmap R-01–R-07 supplies deployed acceptance, performance, security, adoption, conformance, drill, and owner sign-off evidence.
 
 ## 48. Implementation audit and release evidence (2026-08-02)
 
@@ -1354,20 +1354,21 @@ All repository-addressable functional requirements CS-001 through CS-030 are imp
 - **Localization:** the primary Canvas and Dashboard Session chrome and Object registry labels are present in English, Chinese, Spanish, French, and German catalogs; catalog parity tests enforce the shared key set. User-authored/AI-authored content remains unchanged by design.
 - **Operations:** deploy, smoke, observation, rollout, support, and rollback procedures live in `docs/design/creation-canvas/OPERATIONS.md`.
 - **Marketing:** the homepage, feature catalog, Product mega-menu/specifications, dedicated `/creation-canvas` page, and five Creation Canvas launch/use-case articles reflect the unified Session model.
-- **Unified Create catalog:** the default Dashboard tab now reuses the former IDE type-launcher model, combines visual Session cards with existing Projects, tenant-owned Agents, IDE/Evermind/LLM/Voice/Video builds, Workflow definitions, and Brain sessions, and opens every existing item through a focused, segment-scoped wrapper Canvas with an immediate preview descriptor. The global sidebar contains only the Create destination.
+- **Unified Create catalog:** the default Dashboard tab now uses one deduplicated starter grid for Builder modalities and Canvas templates, combines visual Session cards with existing Projects, tenant-owned Agents, IDE/Evermind/LLM/Voice/Video builds, Workflow definitions, and Brain sessions, and opens every existing item through a focused, segment-scoped wrapper Canvas with an immediate preview descriptor. The global sidebar contains only the Create destination.
+- **Workflow and Voice depth:** Workflow Objects open the canonical builder in an isolated in-Canvas focus surface; save, import, and run remain in the Session and update Object status. Voice Objects reuse the canonical consented-clone stack for sample recording/upload, browser dictation/transcription, on-device-or-server synthesis, playback, and persisted clone/transcript/engine/timing/audio-reference metadata.
 - **Delivery affordances:** complete Canvas JSON export and Object-level copy, Markdown, CSV, Word, PowerPoint, and safe data downloads preserve the familiar output workflow; canonical Workflow definitions start and report live server runs from the Canvas.
 
 ### Repository verification completed
 
 - API TypeScript, migration sequence, schema drift, tenant-scope ratchets, and the full API suite pass: 400 test files and 4,353 tests (one environment-specific test skipped).
-- Frontend TypeScript, all 82 test files/776 tests, and the production Next build pass; `/create`, `/create/new`, `/create/[sessionId]`, invitation, and `/creation-canvas` routes register as dynamic Edge surfaces.
+- Frontend TypeScript, all 82 test files/777 tests, focused embedded-Workflow Canvas coverage, and the production Next build pass; `/create`, `/create/new`, `/create/[sessionId]`, invitation, and `/creation-canvas` routes register as dynamic Edge surfaces.
 - Canvas registry, local transcript durability, semantic connections, safe search text, graph integrity/limits, structured accessibility outline, API helpers, and the web/VSIX shared contract have automated coverage.
 - The native VSIX extension and webview production bundles compile; all 23 VSIX tests pass.
 - `qa-e2e/tests/creation-canvas.spec.ts` provides deployed-environment acceptance coverage for anonymous prompt → local Session and authenticated create/reopen. It typechecks; execution belongs to the rollout environment because it requires configured authenticated storage and a deployed API.
 
 ### Remaining release evidence
 
-All incomplete deliverables have been moved to the numbered roadmap in Section 49. Until R-01–R-09 are closed, the correct status is **core requirements implemented; embedded Workflow editing, extended Voice delivery, and production rollout pending**.
+All incomplete deliverables have been moved to the numbered roadmap in Section 49. Until R-01–R-07 are closed, the correct status is **repository implementation complete; production rollout pending**.
 
 ## 49. Production roadmap
 
@@ -1377,16 +1378,14 @@ This section is the single source of truth for work that is not complete. Items 
 | --- | --- | --- | --- | --- |
 | R-01 | **Pending evidence** | Internal dogfood and opt-in beta | Product + Platform | Run two weeks of daily internal usage; reach at least 50 tenant Sessions and five multiplayer Sessions; record command/data-loss below 0.1%, wrapper success ≥ 99%, support findings, and beta owner sign-off. Establish Activation, Creation, Delivery, and Collaboration metric baselines. |
 | R-02 | **Pending telemetry thresholds** | Navigation default and legacy retirement | App Shell + Product | Preserve the compatibility window for at least two releases; measure wrapper success ≥ 99.9%, return-to-session ≥ 80%, redirect success, legacy-route use, and qualifying defect counts. Only then retire hard legacy routes and close CS-025/Phase 4 rollout. |
-| R-03 | **Pending deployed E2E execution** | Beta | QA + Product Engineering | Run the full deployed matrix: onboarding/tutorial; Dashboard restore; Workflow + Website evaluation/change apply; Project expansion/comparison; feature synthesis → Mockup Set → Task/Agent completion; multiplayer edit/comment/reconnect; legacy URL wrapper/focus; and shared web/VSIX Session behavior. Retain traces and failure artifacts. |
+| R-03 | **Pending deployed E2E execution** | Beta | QA + Product Engineering | Run the full deployed matrix: onboarding/tutorial; Dashboard restore; embedded Workflow edit/save/run and Website evaluation/change apply; Voice record/transcribe/synthesize/reopen; Project expansion/comparison; feature synthesis → Mockup Set → Task/Agent completion; multiplayer edit/comment/reconnect; legacy URL wrapper/focus; and shared web/VSIX Session behavior. Retain traces and failure artifacts. |
 | R-04 | **Pending production security/capacity evidence** | GA readiness | Security + Platform | Complete production security review, invitation replay and cross-scope probes, malicious resource/embed checks, large Project expansion/restore tests, target-latency test with 100 visible/1,000 referenced Objects, and a 25-editor concurrency soak with revision consistency. Resolve every qualifying P0/P1 finding. |
 | R-05 | **Pending formal accessibility validation** | GA readiness | Frontend + Accessibility | Execute keyboard-only creation/delivery, screen-reader structured-graph, zoom, 360px responsive review, high-contrast, and reduced-motion audits in the deployed build; record results and remediate release-blocking findings. |
 | R-06 | **Pending production web/VSIX conformance** | GA and VSIX release | Developer Experience + Platform | Validate the same Session across deployed web and packaged VSIX, including accepted commands, persistence, permissions, reconnect behavior, theming, and supported rendering. Complete Cloudflare/Vercel packaging and smoke `/create`, `/create/new`, `/create/:sessionId`, invitations, and legacy adapters in the release environment. |
 | R-07 | **Pending operational drills and GA sign-off** | GA | SRE + Support + Product | Execute capacity, incident-response, backup/restore, feature-flag rollback, navigation rollback, and delivery kill-switch drills using `docs/design/creation-canvas/OPERATIONS.md`; record recovery results, support readiness, and final owner sign-off. |
-| R-08 | **Planned product completion** | Voice depth | Voice Platform + Frontend | Complete the Voice creator story entirely in the Canvas: record/upload audio, persist transcription on the Voice Object, invoke canonical synthesis, play generated audio, connect typed voice input/output to other Objects, and cover the saved/reopened flow with integration and deployed E2E tests. Existing browser dictation and Voice blueprint/configuration are the delivered baseline. |
-| R-09 | **Planned product completion** | Workflow depth | Workflow Platform + Frontend | Embed the canonical Workflow focus editor in the Canvas so a definition can be inspected and edited without route changes, while preserving current run/history behavior, approval policy, revision conflicts, permissions, and shared Session persistence. Cover edit → save → run → reopen in web and VSIX-supported fallback tests. |
 
 ### Roadmap closure rule
 
 - Evidence must link to a dated production/beta report, trace, dashboard, or signed drill record.
 - A roadmap item may move to **Complete** only when every exit criterion in its row is satisfied.
-- When R-01–R-09 are complete, update Gate A–D in Section 44, Phase 4 in Section 25, CS-025 in Section 32, the Workflow/Voice user-story status in Section 33, and the document-level status to production GA.
+- When R-01–R-07 are complete, update Gate A–D in Section 44, Phase 4 in Section 25, CS-025 in Section 32, and the document-level status to production GA.

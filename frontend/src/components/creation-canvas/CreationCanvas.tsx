@@ -42,6 +42,10 @@ import { downloadJson, downloadText, toCsv } from '@/lib/download';
 import { exportCsv, exportDocx, exportPptx } from '@/lib/exportApi';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 import { parseCSV } from '@/lib/importHelpers';
+import { WorkflowBuilder } from '@/components/workflow-builder/WorkflowBuilder';
+import { VoiceConfigPanel } from '@/components/ide/VoiceConfigPanel';
+import { VoiceOutput } from '@/components/ide/VoiceOutput';
+import { useVoiceStudio } from '@/lib/voiceStudio';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 type ProposedCanvasChange =
@@ -168,6 +172,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [followingUserId, setFollowingUserId] = useState<string | null>(null);
   const [branchParentId, setBranchParentId] = useState<string | null>(null);
   const [mergeReview, setMergeReview] = useState<MergeReview | null>(null);
+  const [workflowFocus, setWorkflowFocus] = useState<{ nodeId: string; definitionId: string | null } | null>(null);
   const [framePresets, setFramePresets] = useState<FramePreset[]>([]);
   const [serverTemplates, setServerTemplates] = useState<ServerCreationTemplate[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -1477,7 +1482,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           {CREATION_PALETTE_GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => `${t(`object.${item.kind}`)} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => <section key={group.group}><h4>{group.group}</h4><div className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} aria-label={t(`object.${item.kind}`)} disabled={!canEdit} draggable={canEdit} onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addAtCenter(item.kind)}><span>{item.icon}</span>{t(`object.${item.kind}`)}</button>)}</div></section>)}
         </aside>}
 
-        {!presentMode && selectedNode && <Inspector node={selectedNode} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onClose={() => setSelectedId(null)} onRun={runWorkflow} onSaveAgent={saveAgent} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}
+        {!presentMode && selectedNode && <Inspector node={selectedNode} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onClose={() => setSelectedId(null)} onRun={runWorkflow} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}
+
+        {workflowFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label="Workflow focus editor">
+          <header><div><strong>Edit Workflow on Canvas</strong><small>Changes save to the canonical Workflow definition.</small></div><button type="button" onClick={() => setWorkflowFocus(null)} aria-label="Close workflow editor">×</button></header>
+          <div className={styles.workflowFocusBody}><ReactFlowProvider><WorkflowBuilder definitionId={workflowFocus.definitionId} embedded onSaved={(definitionId, name) => { setWorkflowFocus((current) => current ? { ...current, definitionId } : current); setNodes((current) => current.map((node) => node.id === workflowFocus.nodeId ? { ...node, data: { ...node.data, title: name, resourceId: `workflow:${definitionId}`, workflowExecutable: true, resourceSubtype: 'definition', status: 'Saved' } } : node)); setNotice('Workflow saved from this Session'); }} onRunStarted={(workflowId) => { setNodes((current) => current.map((node) => node.id === workflowFocus.nodeId ? { ...node, data: { ...node.data, status: 'Running', workflowRunId: workflowId } } : node)); setNotice(`Workflow run ${workflowId} started`); }} /></ReactFlowProvider></div>
+        </section>}
 
         {historyOpen && <aside className={styles.historyPanel}><header><div><strong>Version history</strong><small>Restore creates a new revision</small></div><button onClick={() => setHistoryOpen(false)} aria-label="Close history">×</button></header>{persistence === 'local' ? <p>This session is currently stored on this device. Server version history begins after you save it.</p> : <><button className={styles.primaryButton} onClick={createCheckpoint} disabled={!canEdit}>+ Name current checkpoint</button><div>{history.length ? history.map((snapshot) => <button key={snapshot.revision} onClick={() => restoreRevision(snapshot.revision)} disabled={!canEdit}><b>{snapshot.label || `Revision ${snapshot.revision}`}</b><span>Revision {snapshot.revision} · {new Date(snapshot.createdAt).toLocaleString()}</span></button>) : <p>No saved revisions yet.</p>}</div></>}</aside>}
         {conversationOpen && <aside className={styles.historyPanel} aria-label="Session conversation"><header><div><strong>Session conversation</strong><small>Persists even when Chat Objects are removed</small></div><button onClick={() => setConversationOpen(false)} aria-label="Close conversation">×</button></header><div>{timeline.length ? timeline.map((message) => <article key={message.clientMessageId} style={{ padding: '9px 10px', borderBottom: '1px solid var(--border-subtle)' }}><strong style={{ textTransform: 'capitalize' }}>{message.messageRole === 'assistant' ? 'Brain' : message.messageRole}</strong><p style={{ margin: '4px 0', whiteSpace: 'pre-wrap' }}>{message.body}</p><small>{new Date(message.createdAt).toLocaleString()}</small></article>) : <p>No conversation yet. Ask Brain from the composer to begin.</p>}</div></aside>}
@@ -1503,7 +1513,7 @@ function RemoteCursors({ members, currentUserId, instance, container }: { member
   })}</div>;
 }
 
-function Inspector({ node, sessionId, persistence, role, editable, members, onChange, onClose, onRun, onSaveAgent, onSaveFramePreset, onExpandProject, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onAttachEvermindProject, onExpandEvermindPipeline, onStartStandup }: { node: CreationFlowNode; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onClose: () => void; onRun: () => void; onSaveAgent: () => void; onSaveFramePreset: () => void; onExpandProject: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onStartStandup: () => void }) {
+function Inspector({ node, sessionId, persistence, role, editable, members, onChange, onClose, onRun, onEditWorkflow, onSaveAgent, onSaveFramePreset, onExpandProject, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onAttachEvermindProject, onExpandEvermindPipeline, onStartStandup }: { node: CreationFlowNode; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onClose: () => void; onRun: () => void; onEditWorkflow: () => void; onSaveAgent: () => void; onSaveFramePreset: () => void; onExpandProject: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onStartStandup: () => void }) {
   const kind = node.data.kind;
   const [tab, setTab] = useState<'details' | 'activity'>('details');
   const [accessStatus, setAccessStatus] = useState('');
@@ -1553,10 +1563,10 @@ function Inspector({ node, sessionId, persistence, role, editable, members, onCh
       </>}
       {kind === 'staff' && <><label>Role<input value={node.data.role || ''} onChange={(event) => onChange({ role: event.target.value })} /></label><label>Current focus<textarea value={node.data.focus || ''} onChange={(event) => onChange({ focus: event.target.value })} rows={4} /></label></>}
       {(kind === 'website' || kind === 'prototype') && <><label>Headline<input value={typeof node.data.websiteHeadline === 'string' ? node.data.websiteHeadline : 'Fall in love with every look'} onChange={(event) => onChange({ websiteHeadline: event.target.value })} /></label><label>Supporting copy<textarea rows={3} value={typeof node.data.websiteBody === 'string' ? node.data.websiteBody : 'New arrivals for the season ahead.'} onChange={(event) => onChange({ websiteBody: event.target.value })} /></label><label>Call to action<input value={typeof node.data.websiteCta === 'string' ? node.data.websiteCta : 'Shop the collection'} onChange={(event) => onChange({ websiteCta: event.target.value })} /></label><label>Accent color<input type="color" value={typeof node.data.websiteAccent === 'string' ? node.data.websiteAccent : '#3978f6'} onChange={(event) => onChange({ websiteAccent: event.target.value })} /></label><label>Viewport<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onChange({ viewport: event.target.value })}><option value="desktop">Desktop · 1440</option><option value="tablet">Tablet · 768</option><option value="mobile">Mobile · 390</option></select></label><p className={styles.inspectorHint}>Changes render live in the interactive prototype on the canvas.</p></>}
-      {kind === 'workflow' && <><label>Execution target<select><option>BuilderForce.AI</option><option>Campaign Strategist</option></select></label><label>Approval mode<select><option>Required before publish</option><option>Fully autonomous</option></select></label><button className={styles.fullButton} onClick={onRun}>▶ Run workflow</button></>}
+      {kind === 'workflow' && <><label>Execution target<select><option>BuilderForce.AI</option><option>Campaign Strategist</option></select></label><label>Approval mode<select><option>Required before publish</option><option>Fully autonomous</option></select></label><button type="button" className={styles.fullButton} onClick={onEditWorkflow}>Edit Workflow on Canvas</button><button className={styles.fullButton} onClick={onRun}>▶ Run workflow</button></>}
       {kind === 'dashboard' && <><label>Date range<select><option>Last 30 days</option><option>Last 7 days</option><option>Quarter to date</option></select></label><button className={styles.fullButton}>Refresh live data</button></>}
       {kind === 'dataset' && <><label>Import CSV or TSV<input type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onImportDataset(file); }} /></label><p className={styles.inspectorHint}>A safe preview of up to 500 rows is stored with this session. Connect it to a dashboard or ask Brain to analyze it.</p><button className={styles.fullButton} onClick={onVisualizeDataset}>Create visualization</button></>}
-      {kind === 'voice' && <><label>Voice script<textarea rows={5} value={typeof node.data.voiceScript === 'string' ? node.data.voiceScript : ''} placeholder="Write or dictate what this Voice Object should say…" onChange={(event) => onChange({ voiceScript: event.target.value })} /></label><label>Experience<select value={typeof node.data.voiceMode === 'string' ? node.data.voiceMode : 'narration'} onChange={(event) => onChange({ voiceMode: event.target.value })}><option value="narration">Narration</option><option value="assistant">Interactive assistant</option><option value="standup">Stand-up facilitator</option></select></label><button type="button" className={styles.fullButton} onClick={() => onChange({ status: 'Ready for voice generation', subtitle: String(node.data.voiceScript || '') })}>Prepare voice experience</button></>}
+      {kind === 'voice' && <CanvasVoiceInspector node={node} persistence={persistence} onChange={onChange} />}
       {kind === 'project' && <><label>Project view<select value={typeof node.data.projectLens === 'string' ? node.data.projectLens : 'everything'} onChange={(event) => onChange({ projectLens: event.target.value })}><option value="everything">Everything</option><option value="delivery">Delivery</option><option value="metrics">Metrics</option><option value="customer-feedback">Customer feedback</option></select></label><p className={styles.inspectorHint}>Project context is optional. Add its related items to compare work visually or ground Brain in the complete project.</p><button className={styles.fullButton} onClick={onExpandProject}>Add all related items</button><button className={styles.fullButton} onClick={onCompareProjects}>Compare projects on canvas</button></>}
       {kind === 'projectComparison' && <><p className={styles.inspectorHint}>This comparison retains the source endpoints and fetch timestamp used for every project. Refresh to compare current delivery, velocity, and feature evidence.</p><button className={styles.fullButton} onClick={onCompareProjects}>Refresh project comparison</button><SourceList sources={node.data.sources} /></>}
       {kind === 'mockup' && <><label>Delivery project<select><option>BuilderForce launch</option><option>No project</option></select></label><label>Assign agent<select><option>Campaign Strategist</option><option>Web Analyst</option></select></label><button className={styles.fullButton} onClick={onDeliverMockup}>Add to project and assign</button></>}
@@ -1587,6 +1597,73 @@ function Inspector({ node, sessionId, persistence, role, editable, members, onCh
 function SourceList({ sources }: { sources: unknown }) {
   if (!Array.isArray(sources) || !sources.length) return null;
   return <div className={styles.sourceList}><strong>Evidence sources</strong>{sources.map((source, index) => { const item = source as { label?: string; resource?: string }; return <div key={`${item.resource}-${index}`}><span>{index + 1}</span><p><b>{item.label || 'Source'}</b><code>{item.resource || 'Canonical API'}</code></p></div>; })}</div>;
+}
+
+function CanvasVoiceInspector({ node, persistence, onChange }: { node: CreationFlowNode; persistence: 'local' | 'server'; onChange: (patch: Partial<CreationNodeData>) => void }) {
+  const storageProjectId = useMemo(() => {
+    const ref = node.data.resourceId;
+    if (!ref?.startsWith('project:')) return null;
+    const value = Number(ref.slice('project:'.length));
+    return Number.isInteger(value) && value > 0 ? value : null;
+  }, [node.data.resourceId]);
+  const voice = useVoiceStudio({ enabled: persistence === 'server', storageProjectId });
+  const loadedNode = useRef<string | null>(null);
+  const savedResult = useRef<unknown>(null);
+
+  useEffect(() => {
+    if (loadedNode.current === node.id) return;
+    loadedNode.current = node.id;
+    voice.setText(typeof node.data.voiceScript === 'string' && node.data.voiceScript.trim() ? node.data.voiceScript : '');
+  }, [node.data.voiceScript, node.id, voice.setText]);
+
+  useEffect(() => {
+    const savedCloneId = Number(node.data.voiceCloneId);
+    if (Number.isInteger(savedCloneId) && savedCloneId > 0 && voice.clones.some((clone) => clone.id === savedCloneId) && voice.selectedCloneId !== savedCloneId) {
+      voice.setSelectedCloneId(savedCloneId);
+    }
+  }, [node.data.voiceCloneId, voice.clones, voice.selectedCloneId, voice.setSelectedCloneId]);
+
+  useEffect(() => {
+    if (!voice.result || savedResult.current === voice.result) return;
+    savedResult.current = voice.result;
+    onChange({
+      voiceScript: voice.text,
+      voiceTranscript: voice.text,
+      voiceCloneId: voice.selectedCloneId,
+      voiceDurationMs: voice.result.durationMs,
+      voiceEngine: voice.result.engineId,
+      voiceAudioResource: voice.result.audioUrl ?? null,
+      voiceWordTimestamps: voice.result.wordTimestamps,
+      status: 'Generated',
+      subtitle: voice.text,
+    });
+  }, [onChange, voice.result, voice.selectedCloneId, voice.text]);
+
+  const dictate = () => {
+    const browserWindow = window as unknown as { SpeechRecognition?: new () => BrowserSpeechRecognition; webkitSpeechRecognition?: new () => BrowserSpeechRecognition };
+    const Recognition = browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition;
+    if (!Recognition) { onChange({ status: 'Voice dictation is not supported by this browser' }); return; }
+    const recognition = new Recognition();
+    recognition.lang = navigator.language || 'en-US';
+    recognition.interimResults = false;
+    recognition.onresult = (event) => {
+      const transcript = event.results[0]?.[0]?.transcript?.trim();
+      if (!transcript) return;
+      voice.setText(transcript);
+      onChange({ voiceScript: transcript, voiceTranscript: transcript, subtitle: transcript, status: 'Transcribed' });
+    };
+    recognition.onerror = () => onChange({ status: 'Voice transcription failed' });
+    recognition.onend = null;
+    recognition.start();
+  };
+
+  if (persistence === 'local') return <p className={styles.inspectorHint}>Save this Session to create or select a consented voice, record a sample, transcribe speech, and generate playable audio.</p>;
+  return <div className={styles.canvasVoiceStudio}>
+    <button type="button" className={styles.fullButton} onClick={dictate}>Dictate and transcribe script</button>
+    <VoiceConfigPanel voice={voice} />
+    <button type="button" className={styles.fullButton} disabled={voice.busy || !voice.selectedCloneId || !voice.text.trim()} onClick={() => { onChange({ voiceScript: voice.text, voiceTranscript: voice.text, status: 'Generating voice…' }); void voice.synth(); }}>{voice.busy ? 'Generating…' : 'Generate voice'}</button>
+    <div className={styles.canvasVoiceOutput}><VoiceOutput result={voice.result} audioUrl={voice.audioUrl} busy={voice.busy} unavailable={voice.unavailable} /></div>
+  </div>;
 }
 
 function EvermindInspector({ node, persistence, onAttach, onExpand }: { node: CreationFlowNode; persistence: 'local' | 'server'; onAttach: () => void; onExpand: () => void }) {

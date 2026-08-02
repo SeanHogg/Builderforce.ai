@@ -15,6 +15,16 @@ const KIND_COLOR: Record<string, string> = {
   project: '#f09a3e', agent: '#8a5cf5', dataset: '#12a6c8', mockup: '#ef6d92',
 };
 
+const CANVAS_STARTERS = [
+  { id: 'campaign-studio', icon: '◎', labelKey: 'starterCampaign', descriptionKey: 'starterCampaignDescription' },
+  { id: 'product-discovery', icon: '◇', labelKey: 'starterProductDiscovery', descriptionKey: 'starterProductDiscoveryDescription' },
+] as const;
+
+function modalityStarterPrompt(id: string, label: string, tagline: string): string {
+  if (id === 'evermind') return 'Create an Evermind dataset, tokenizer, tuning, evaluation, and telemetry pipeline on this Canvas.';
+  return `Create a ${label} in this Canvas. ${tagline}`;
+}
+
 export function DashboardCreationSessions() {
   const t = useTranslations('creationCanvas');
   const modalities = useLocalizedModalities();
@@ -136,8 +146,9 @@ export function DashboardCreationSessions() {
   return <section style={{ marginBottom: 40 }}>
     <section style={{ marginBottom: 34 }}>
       <div style={{ marginBottom: 14 }}><h2 style={{ margin: 0, fontSize: 20 }}>{t('createTypeTitle')}</h2><p style={{ margin: '5px 0 0', color: 'var(--text-secondary)', fontSize: 13 }}>{t('createTypeSubtitle')}</p></div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 12 }}>
-        {modalities.map((modality) => <button key={modality.id} type="button" disabled={creating || sessionLimitReached || !!modality.comingSoon} onClick={() => void startTemplate(modality.label, `Create a ${modality.label} in this Canvas. ${modality.tagline}`)} style={{ minHeight: 130, padding: 17, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 14, background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: modality.comingSoon ? 'not-allowed' : 'pointer', opacity: modality.comingSoon ? .55 : 1 }}><span style={{ fontSize: 28 }} aria-hidden>{modality.icon}</span><strong style={{ display: 'block', marginTop: 8 }}>{modality.label}</strong><span style={{ display: 'block', marginTop: 5, color: 'var(--text-secondary)', fontSize: 12, lineHeight: 1.45 }}>{modality.tagline}</span></button>)}
+      <div aria-label="Creation starters" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 12 }}>
+        {modalities.map((modality) => <button key={modality.id} type="button" disabled={creating || sessionLimitReached || !!modality.comingSoon} onClick={() => void startTemplate(modality.label, modalityStarterPrompt(modality.id, modality.label, modality.tagline))} style={{ minHeight: 130, padding: 17, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 14, background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: modality.comingSoon ? 'not-allowed' : 'pointer', opacity: modality.comingSoon ? .55 : 1 }}><span style={{ fontSize: 28 }} aria-hidden>{modality.icon}</span><strong style={{ display: 'block', marginTop: 8 }}>{modality.label}</strong><span style={{ display: 'block', marginTop: 5, color: 'var(--text-secondary)', fontSize: 12, lineHeight: 1.45 }}>{modality.tagline}</span></button>)}
+        {CANVAS_STARTERS.map((starter) => { const label = t(starter.labelKey); const description = t(starter.descriptionKey); return <button key={starter.id} type="button" disabled={creating || sessionLimitReached} onClick={() => void startTemplate(label, description)} style={{ minHeight: 130, padding: 17, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 14, background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}><span style={{ fontSize: 28 }} aria-hidden>{starter.icon}</span><strong style={{ display: 'block', marginTop: 8 }}>{label}</strong><span style={{ display: 'block', marginTop: 5, color: 'var(--text-secondary)', fontSize: 12, lineHeight: 1.45 }}>{description}</span></button>; })}
       </div>
     </section>
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 16 }}>
@@ -152,11 +163,6 @@ export function DashboardCreationSessions() {
         {!!shared.length && <section><h3 style={{ fontSize: 15, margin: '0 0 10px' }}>{t('sharedWithMe')}</h3>{renderCards(shared)}</section>}
         {!!completed.length && <section><h3 style={{ fontSize: 15, margin: '0 0 10px' }}>{t('recentlyCompleted')}</h3>{renderCards(completed)}</section>}
       </div>}
-    {status === 'active' && !query.trim() && <section style={{ marginTop: 28 }}><h3 style={{ fontSize: 15, margin: '0 0 10px' }}>Templates</h3><div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>{[
-      ['Campaign studio', 'Build a campaign workflow, interactive landing page, forecast dashboard, and evaluation frame.'],
-      ['Product discovery', 'Synthesize customer feedback into the top requested features, visual mockups, and a delivery roadmap.'],
-      ['Evermind model lab', 'Create an Evermind dataset, tokenizer, tuning, evaluation, and telemetry pipeline on this canvas.'],
-    ].map(([name, instruction]) => <button key={name} onClick={() => void startTemplate(name, instruction)} disabled={creating || sessionLimitReached} style={{ padding: 16, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 12, background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}><strong>{name}</strong><span style={{ display: 'block', marginTop: 5, color: 'var(--text-secondary)', fontSize: 12, lineHeight: 1.5 }}>{instruction}</span></button>)}</div></section>}
     <section style={{ marginTop: 34 }}>
       <div style={{ marginBottom: 12 }}><h3 style={{ fontSize: 16, margin: 0 }}>{t('existingCreations')}</h3><p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: 12 }}>{t('existingCreationsSubtitle')}</p></div>
       {resourcesLoading ? <div style={{ padding: 22, color: 'var(--text-secondary)' }}>{t('loadingCreations')}</div> : !visibleBuilds.length && !visibleWorkflows.length && !visibleChats.length && !visibleProjects.length && !visibleAgents.length ? <p className="text-muted">{t('noCreations')}</p> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(235px, 1fr))', gap: 12 }}>

@@ -32,6 +32,9 @@ interface VendorSpec {
   baseUrl: string;
   apiKeyEnv: Parameters<typeof createOpenAICompatibleVendor>[0]['apiKeyEnv'];
   brand: string;
+  /** Sibling regional host tried when `baseUrl` REJECTS a credential — set only
+   *  for providers running two platforms with non-interchangeable keys. */
+  altBaseUrl?: string;
   /** Default catalog model ids (real, current). */
   models: string[];
   /** Override the OpenAI `max_tokens` field name (rare). */
@@ -88,9 +91,20 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     models: ['sonar', 'sonar-pro', 'sonar-reasoning'],
   },
   {
+    // Moonshot runs TWO independent Open Platforms whose keys are not
+    // interchangeable: platform.moonshot.ai (international) and
+    // platform.moonshot.cn (China). A key carries no marker for which issued it,
+    // so pinning one host silently 401s the other platform's tenants. Default to
+    // the international host — it matches the docs (`providers/moonshot.md`) and
+    // the local runtime's `MOONSHOT_BASE_URL` — and let the factory fall back to
+    // the China host when a credential is rejected there.
     id: 'moonshot', brand: 'Moonshot', apiKeyEnv: 'MOONSHOT_API_KEY',
-    baseUrl: 'https://api.moonshot.cn/v1/chat/completions',
-    models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k', 'kimi-k2-0711-preview'],
+    baseUrl: 'https://api.moonshot.ai/v1/chat/completions',
+    altBaseUrl: 'https://api.moonshot.cn/v1/chat/completions',
+    // Current K2 ids, kept in step with `docs-site/.../providers/moonshot.md`. The
+    // credential health probe uses the FIRST entry, so the flagship leads: the
+    // retired `moonshot-v1-*` models it used to probe fail on a perfectly good key.
+    models: ['kimi-k2.5', 'kimi-k2-0905-preview', 'kimi-k2-turbo-preview', 'kimi-k2-thinking', 'kimi-k2-thinking-turbo'],
   },
   {
     id: 'kimi-code', brand: 'Kimi Code', apiKeyEnv: 'KIMI_CODE_API_KEY',
@@ -223,6 +237,7 @@ export const openAICompatibleModules: ReadonlyArray<VendorModule> = SPECS.map((s
   createOpenAICompatibleVendor({
     id: spec.id,
     baseUrl: spec.baseUrl,
+    ...(spec.altBaseUrl ? { altBaseUrl: spec.altBaseUrl } : {}),
     apiKeyEnv: spec.apiKeyEnv,
     catalog: spec.models.map((id) => ({
       id,

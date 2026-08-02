@@ -1257,6 +1257,8 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       // Echo the alert the probe just persisted so the card repaints from THIS response
       // instead of waiting for the list read's cache window to lapse.
       ...(probe.alert ? { authAlert: probe.alert } : {}),
+      // Same redacted evidence the provider test returns — one probe module, one shape.
+      ...(probe.diagnostic ? { diagnostic: probe.diagnostic } : {}),
       details: { connectionId: probe.connectionId, model: probe.model, upstreamStatus: probe.upstreamStatus },
     });
   });
@@ -1350,7 +1352,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
             ? `Kimi connection test paused: Kimi reports that this subscription's usage allowance is exhausted. Check the Kimi Code Console for the reset time. The key is valid and does not need to be replaced. (${probe.error})`
             : `${provider} connection test paused: this account's usage allowance is depleted (HTTP ${probe.alert.status}). Check the provider's Usage page for the reset time; to continue now, buy credits or enable auto top-up, or upgrade the provider plan.`
           : probe.alert?.reason === 'not_entitled'
-          ? provider === 'kimi' && /<!doctype\s+html|<html\b/i.test(probe.error)
+          // `edgeBlocked` is the transport's own verdict on the response body, so this
+          // no longer depends on an HTML tag surviving into a 240-char truncated detail
+          // string — the regex silently missed the case it existed for whenever the edge
+          // page led with a comment, a BOM, or a long `<meta>` block.
+          ? provider === 'kimi' && probe.diagnostic?.edgeBlocked
             ? `Kimi's edge blocked the hosted Builderforce gateway before the API could validate this key. Kimi Code subscription keys are limited to personal interactive clients and cannot be used through this hosted reverse proxy. Use Kimi Code locally, or connect a Moonshot Open Platform API key for hosted Builderforce agents.`
             : provider === 'xai'
             ? `xAI connection test failed: this account cannot use ${probe.model ?? 'the selected model'} (HTTP ${probe.alert.status}). Check the account's SuperGrok/API access, or use an xAI API key.`
@@ -1364,6 +1370,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       // Echo the alert the probe just persisted so the card repaints from THIS response
       // instead of waiting for the status read's 60s read-through window to lapse.
       ...(probe.alert ? { authAlert: probe.alert } : {}),
+      // Redacted upstream evidence — endpoint, the provider's own correlation headers,
+      // whether an EDGE refused the call before the key was read, and our trace id. This
+      // is what an operator attaches to a provider support ticket; without it the only
+      // artifact they had was our prose about the failure.
+      ...(probe.diagnostic ? { diagnostic: probe.diagnostic } : {}),
       details: { provider, model: probe.model, upstreamStatus: probe.upstreamStatus },
     });
   });

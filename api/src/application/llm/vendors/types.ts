@@ -115,7 +115,8 @@ export interface VendorEnv {
   XAI_API_KEY?: string | null;
   /** Perplexity — api.perplexity.ai. */
   PERPLEXITY_API_KEY?: string | null;
-  /** Moonshot AI (Kimi) — api.moonshot.cn/v1. */
+  /** Moonshot AI (Kimi) Open Platform — api.moonshot.ai/v1 (international), with
+   *  api.moonshot.cn/v1 (China) resolved automatically when the key is rejected there. */
   MOONSHOT_API_KEY?: string | null;
   /** Kimi Code subscription — api.kimi.com/coding/v1 (not interchangeable with Moonshot keys). */
   KIMI_CODE_API_KEY?: string | null;
@@ -404,6 +405,10 @@ export class VendorRetryableError extends Error {
   public readonly vendorId: string;
   public readonly status: number;
   public readonly model: string;
+  /** Redacted evidence about the upstream response — see {@link UpstreamDiagnostic}.
+   *  Set by the transport on its way out, absent for errors thrown before a
+   *  response existed (timeout, network). */
+  public diagnostic?: UpstreamDiagnostic;
   constructor(vendorId: string, model: string, status: number, message: string) {
     super(`[${vendorId}/${model}] ${status}: ${message}`);
     this.name = 'VendorRetryableError';
@@ -420,6 +425,8 @@ export class VendorRetryableError extends Error {
 export class VendorFatalError extends Error {
   public readonly vendorId: string;
   public readonly status: number;
+  /** See {@link VendorRetryableError.diagnostic}. */
+  public diagnostic?: UpstreamDiagnostic;
   constructor(vendorId: string, status: number, message: string) {
     super(`[${vendorId}] ${status}: ${message}`);
     this.name = 'VendorFatalError';
@@ -450,6 +457,8 @@ export class VendorSchemaError extends Error {
   /** The real upstream HTTP status (usually 400) before the gateway normalized
    *  it to the 422 request-error class. Surfaced as `FailoverEvent.upstreamStatus`. */
   public readonly status: number;
+  /** See {@link VendorRetryableError.diagnostic}. */
+  public diagnostic?: UpstreamDiagnostic;
   constructor(vendorId: string, model: string, status: number, message: string) {
     super(`[${vendorId}/${model}] schema_too_complex (upstream ${status}): ${message}`);
     this.name = 'VendorSchemaError';
@@ -522,6 +531,85 @@ export const CASCADE_STATUSES: ReadonlySet<number> = new Set<number>([
 ]);
 
 export const AUTH_STATUSES: ReadonlySet<number> = new Set<number>([401, 403]);
+
+/**
+ * Response headers worth keeping off a FAILED upstream call — the correlation
+ * identifiers a provider's own support team asks for first.
+ *
+ * Strictly an allowlist, and deliberately a narrow one: a diagnostic that a human
+ * will paste into a partner ticket must not be able to carry a `set-cookie`, an
+ * `authorization` echo, or anything else the upstream happened to reflect back.
+ * Nothing here is secret — these are request ids, edge node ids, and timestamps.
+ *
+ * `cf-ray` / `server` earn their place because they are how you tell an EDGE
+ * rejection from an API rejection: when a provider's CDN refuses a request before
+ * the key is ever validated, the body is an HTML block page and these headers are
+ * the only machine-readable evidence of who refused it. That distinction is
+ * exactly what Kimi Code's hosted 403 turns on.
+ */
+const UPSTREAM_CORRELATION_HEADERS: readonly string[] = [
+  'cf-ray', 'content-type', 'date', 'request-id', 'server', 'x-amzn-requestid',
+  'x-envoy-upstream-service-time', 'x-msedge-ref', 'x-request-id', 'x-trace-id',
+];
+
+/**
+ * Machine-readable evidence about ONE failed upstream call, safe to show an
+ * operator and to attach — redacted — to a provider support ticket.
+ *
+ * Carries no request body, no prompt, and no credential: only where the call went,
+ * what came back, and the identifiers needed to correlate it on the provider's side.
+ */
+export interface UpstreamDiagnostic {
+  /** Origin + path of the endpoint called. Query string dropped — it can carry keys. */
+  endpoint: string;
+  /** The status the UPSTREAM returned, before any gateway normalization. */
+  status: number;
+  /** Allowlisted correlation headers, lowercased. */
+  headers: Record<string, string>;
+  /** True when the body was an HTML page rather than the provider's JSON error
+   *  envelope — the signature of a CDN/WAF block that ran BEFORE the API saw the
+   *  credential, which is a different problem from a rejected key. */
+  edgeBlocked: boolean;
+  observedAt: string;
+}
+
+/** Capture the redacted diagnostic for a failed upstream response. */
+export function captureUpstreamDiagnostic(
+  endpoint: string,
+  status: number,
+  responseHeaders: Headers,
+  bodyText: string,
+): UpstreamDiagnostic {
+  const headers: Record<string, string> = {};
+  for (const name of UPSTREAM_CORRELATION_HEADERS) {
+    const value = responseHeaders.get(name);
+    if (value) headers[name] = value.slice(0, 200);
+  }
+  let safeEndpoint = endpoint;
+  try {
+    const url = new URL(endpoint);
+    safeEndpoint = `${url.origin}${url.pathname}`;
+  } catch { /* a non-URL endpoint is already opaque; keep it verbatim */ }
+  return {
+    endpoint: safeEndpoint,
+    status,
+    headers,
+    edgeBlocked: /^\s*(<!doctype\s+html|<html\b)/i.test(bodyText),
+    observedAt: new Date().toISOString(),
+  };
+}
+
+/** Attach `diagnostic` to a vendor error on its way out, so every throw site in the
+ *  status ladder carries it without repeating the field at each `new`. Returns the
+ *  error so callers can `throw withUpstreamDiagnostic(err, d)`. */
+export function withUpstreamDiagnostic(error: unknown, diagnostic: UpstreamDiagnostic): unknown {
+  if (error instanceof VendorRetryableError
+    || error instanceof VendorFatalError
+    || error instanceof VendorSchemaError) {
+    error.diagnostic = diagnostic;
+  }
+  return error;
+}
 
 /**
  * True when a non-OK 4xx body is a CAPACITY / BILLING / ACCOUNT condition — a
@@ -880,32 +968,41 @@ export async function executeVendorPost<T>(args: {
 
   const errText = (await resp.text()).slice(0, 400);
 
-  if (CASCADE_STATUSES.has(resp.status)) {
-    throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
-  }
+  // Capture the redacted evidence ONCE and attach it to whichever error the ladder
+  // below throws. Doing it here rather than at each `new` keeps the classification
+  // rules readable and means `onFatal` (whose signature is shared with the image and
+  // embedding surfaces) needs no extra parameter.
+  const diagnostic = captureUpstreamDiagnostic(endpoint, resp.status, resp.headers, errText);
+  try {
+    if (CASCADE_STATUSES.has(resp.status)) {
+      throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
+    }
 
-  // Some authenticated subscription APIs (notably Kimi Code) report an exhausted
-  // billing-cycle allowance as HTTP 403. Capacity text wins over the generic auth
-  // bucket: the key is valid and replacing it cannot help. Normalize it to the same
-  // retryable/cooldown signal used by providers that return 400/429 for this condition.
-  if (isCapacityLimitBody(errText)) {
-    throw new VendorRetryableError(
-      vendorId,
-      model,
-      429,
-      `${CAPACITY_LIMIT_MARKER} (upstream ${resp.status}): ${errText.slice(0, 200)}`,
-    );
-  }
+    // Some authenticated subscription APIs (notably Kimi Code) report an exhausted
+    // billing-cycle allowance as HTTP 403. Capacity text wins over the generic auth
+    // bucket: the key is valid and replacing it cannot help. Normalize it to the same
+    // retryable/cooldown signal used by providers that return 400/429 for this condition.
+    if (isCapacityLimitBody(errText)) {
+      throw new VendorRetryableError(
+        vendorId,
+        model,
+        429,
+        `${CAPACITY_LIMIT_MARKER} (upstream ${resp.status}): ${errText.slice(0, 200)}`,
+      );
+    }
 
-  if (AUTH_STATUSES.has(resp.status)) {
-    console.error(
-      `[${logPrefix}] ${vendorId}/${model} auth ${resp.status} — check ${vendorId.toUpperCase()}_API_KEY. Failing over to next ${authFailoverNoun}.`,
-      errText.slice(0, 200),
-    );
-    throw new VendorRetryableError(vendorId, model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);
-  }
+    if (AUTH_STATUSES.has(resp.status)) {
+      console.error(
+        `[${logPrefix}] ${vendorId}/${model} auth ${resp.status} — check ${vendorId.toUpperCase()}_API_KEY. Failing over to next ${authFailoverNoun}.`,
+        errText.slice(0, 200),
+      );
+      throw new VendorRetryableError(vendorId, model, resp.status, `auth ${resp.status}: ${errText.slice(0, 200)}`);
+    }
 
-  return onFatal(vendorId, model, resp.status, errText);
+    return onFatal(vendorId, model, resp.status, errText);
+  } catch (err) {
+    throw withUpstreamDiagnostic(err, diagnostic);
+  }
 }
 
 export async function executeChatCompletion(args: {
@@ -990,26 +1087,33 @@ export async function executeChatCompletionStream(args: {
 
   if (!resp.ok) {
     const errText = (await resp.text()).slice(0, 400);
-    if (CASCADE_STATUSES.has(resp.status)) {
-      throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
+    // Same single-capture / attach-on-the-way-out shape as `executeVendorPost`, so a
+    // streamed failure carries the identical evidence as a non-streamed one.
+    const diagnostic = captureUpstreamDiagnostic(endpoint, resp.status, resp.headers, errText);
+    try {
+      if (CASCADE_STATUSES.has(resp.status)) {
+        throw new VendorRetryableError(vendorId, model, resp.status, errText.slice(0, 240));
+      }
+      if (isCapacityLimitBody(errText)) {
+        throw new VendorRetryableError(
+          vendorId,
+          model,
+          429,
+          `${CAPACITY_LIMIT_MARKER} (upstream ${resp.status}): ${errText.slice(0, 200)}`,
+        );
+      }
+      if (AUTH_STATUSES.has(resp.status)) {
+        console.error(
+          `[vendors] ${vendorId}/${model} stream auth ${resp.status} — check ${vendorId.toUpperCase()}_API_KEY.`,
+          errText.slice(0, 200),
+        );
+        throw new VendorRetryableError(vendorId, model, resp.status, `auth ${resp.status}`);
+      }
+      // 400/422 → fatal, UNLESS the body is a capacity/billing limit (failover-able).
+      throwClassified4xx(vendorId, model, resp.status, errText);
+    } catch (err) {
+      throw withUpstreamDiagnostic(err, diagnostic);
     }
-    if (isCapacityLimitBody(errText)) {
-      throw new VendorRetryableError(
-        vendorId,
-        model,
-        429,
-        `${CAPACITY_LIMIT_MARKER} (upstream ${resp.status}): ${errText.slice(0, 200)}`,
-      );
-    }
-    if (AUTH_STATUSES.has(resp.status)) {
-      console.error(
-        `[vendors] ${vendorId}/${model} stream auth ${resp.status} — check ${vendorId.toUpperCase()}_API_KEY.`,
-        errText.slice(0, 200),
-      );
-      throw new VendorRetryableError(vendorId, model, resp.status, `auth ${resp.status}`);
-    }
-    // 400/422 → fatal, UNLESS the body is a capacity/billing limit (failover-able).
-    throwClassified4xx(vendorId, model, resp.status, errText);
   }
 
   if (!resp.body) {

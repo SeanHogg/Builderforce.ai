@@ -183,6 +183,14 @@
 
 .evermindConsoleHost { margin:14px -8px 0; padding-top:12px; border-top:1px solid #eadce6; font-size:11px; }
 .evermindConsoleHost :global(button),.evermindConsoleHost :global(input),.evermindConsoleHost :global(select),.evermindConsoleHost :global(textarea) { max-width:100%; }
+.workflowFocus { position:absolute; z-index:40; inset:10px; display:flex; flex-direction:column; overflow:hidden; border:1px solid var(--border-subtle); border-radius:14px; background:var(--bg-elevated,#fff); box-shadow:0 24px 80px rgba(20,35,60,.28); color:var(--text-primary); }
+.workflowFocus > header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 15px; border-bottom:1px solid var(--border-subtle); background:var(--bg-elevated,#fff); }
+.workflowFocus > header div { display:grid; gap:2px; }.workflowFocus > header small { color:var(--text-secondary); font-size:11px; }.workflowFocus > header button { width:32px; height:32px; border:1px solid var(--border-subtle); border-radius:8px; background:var(--bg-surface,#fff); color:inherit; font-size:20px; cursor:pointer; }
+.workflowFocusBody { display:flex; flex:1; min-height:0; }
+.canvasVoiceStudio { display:grid; gap:10px; }
+.canvasVoiceStudio > :global(div) { min-height:0; }
+.canvasVoiceOutput { height:260px; overflow:hidden; border:1px solid var(--border-subtle); border-radius:10px; }
+.canvasVoiceOutput > :global(div) { box-sizing:border-box; height:100%; padding:14px!important; }
 .activityEmpty { padding:14px; border:1px dashed #cfd9e6; border-radius:9px; background:#fbfdff; }
 .activityEmpty strong { font-size:12px; }.activityEmpty p { color:#6d7d94; font-size:10px; line-height:1.5; }
 .activityPanel { display:grid; gap:14px; }

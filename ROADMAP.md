@@ -87,7 +87,7 @@
 |---|-------|-----------|
 | 1 | [Cloud Agent Runtime & PR Loop](#1--cloud-agent-runtime--pr-loop) | ~17 (was ~19; reconciled 2026-07-22; +1 executor `never_started` trace 2026-07-28) |
 | 2 | [On-Prem Runtime, Engine & Tooling](#2--on-prem-runtime-engine--tooling) | ~9 |
-| 3 | [LLM Gateway, Routing & Cost](#3--llm-gateway-routing--cost) | ~24 |
+| 3 | [LLM Gateway, Routing & Cost](#3--llm-gateway-routing--cost) | ~26 (+2 Kimi Code egress 2026-08-02; Moonshot dual-host RESOLVED same pass → DONE.md) |
 | 4 | [Evermind / SSM](#4--evermind--ssm) | ~19 (all blocked) |
 | 5 | [Brain & Chat](#5--brain--chat) | ~14 (+1 Ask-the-Manager vendor-path narrowing 2026-07-31) |
 | 6 | [Workforce, Boards, Kanban & Ceremonies](#6--workforce-boards-kanban--ceremonies) | ~14 |
@@ -215,6 +215,13 @@
 - **A validated card never expires or revokes.** `card_validated_at` is stamped once and only `setup_intent.setup_failed` ever flips the status to `failed`. A card that later expires, is detached, or fails a real charge keeps premium unlocked indefinitely — Stripe's `payment_method.detached` / `customer.subscription.updated(past_due)` are not wired to clear it. Fixing needs those webhook events mapped to `card.validation_failed` plus a staleness window (re-validate after N months). Unblocks: premium can't run on a dead card.
 - **Container-surface runs cache premium entitlement for 10 min.** `resolveContainerRunContext` is `getOrSetCached(… kvTtlSeconds: 600)`, so `premiumEntitled` (like `effectivePlan`) is up to 10 minutes stale — a freshly validated card doesn't unlock container runs immediately. Worth an explicit invalidate on `card.validated`. Unblocks: instant unlock after validation.
 - **No end-to-end card-validation run.** The SetupIntent flow is unit-tested at the evaluator/classifier level but no test card has been driven through `POST /api/tenants/:id/card-validation` → `checkout.session.completed(mode=setup)` → `card_validated_at`. Blocked on the same Stripe config as the billing section below. Unblocks: confidence before live mode.
+
+### 🌙 Kimi Code on the hosted gateway — egress-blocked *(2026-08-02)*
+
+> **Blocked on Kimi, not on us.** The Moonshot half shipped 2026-08-02 (dual-host regional resolution + refreshed K2 catalog + the flagship pin drift), and the submission evidence shipped the same day (redacted `UpstreamDiagnostic` + in-product "Copy diagnostic trace" — see [DONE.md](./DONE.md)). What remains below needs Kimi's own answer to `docs/partnerships/kimi-code-hosted-integration-request.md`.
+
+- **Kimi Code subscription keys cannot reach `api.kimi.com` from the hosted gateway — the block is EGRESS, not headers. ⚠️ BLOCKER: an approval decision from Kimi.** Reproduced 2026-08-02: the exact request the gateway builds (`POST https://api.kimi.com/coding/v1/chat/completions`, `User-Agent: Builderforce.ai`, `openaiCompatibleVendors.ts:96-103`) returns a clean JSON `401 invalid_authentication` from an ordinary IP, but tenants get `403` + an HTML edge page. Kimi's edge is refusing the Cloudflare Workers ASN before the API validates the key. No header change fixes it, and spoofing a client identity is ruled out at `openaiCompatibleVendors.ts:98`. The approval request is written and the redacted 403 trace it asks for is now obtainable in-product; what is missing is Kimi's response naming a supported path. **Two legitimate paths, neither built, both contingent on that answer:** (a) dispatch Kimi-pinned cloud runs through the tenant's own on-prem `agent-runtime` (which already has a `kimi-coding` provider on `KIMI_API_KEY`/`k2p5`) so the request genuinely originates from the personal client Kimi licenses — needs a cloud-dispatcher→on-prem relay; (b) a static-egress relay on a non-blocked IP, which is still a hosted reverse proxy serving a subscription key and carries real ToS risk. Unblocks: hosted cloud agents on a Kimi Code subscription.
+- **`kimi-code` is absent from `BYO_FRONTIER_FLAGSHIPS`** (`modelPool.ts:271-282`), so a connected Kimi Code subscription never leads auto-select and its models fall outside `RECOGNIZED_CODER_MODELS` — a Kimi-funded run reports as "degraded onto a non-coder backstop". Deliberately left until the egress question above is settled: adding the flagship would advertise a route that cannot currently complete from the hosted gateway. Unblocks: correct coder recognition + BYO precedence for Kimi Code once it is reachable.
 
 ### 💳 Stripe card processing — Stripe-only, awaiting secrets
 

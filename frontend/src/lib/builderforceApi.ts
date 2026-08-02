@@ -3253,6 +3253,25 @@ export interface ProviderDiagnostic {
   authAlert?: ProviderAuthAlert;
 }
 
+/**
+ * Redacted evidence about ONE failed upstream call — safe to paste into a provider
+ * support ticket. Carries no credential, no prompt, and no request body: only where the
+ * call went, what came back, the provider's own correlation headers, and our trace id.
+ *
+ * `edgeBlocked` is the load-bearing field: it separates "the provider rejected this
+ * credential" from "the provider's CDN refused us before the API ever read it", which
+ * look identical in an error message but need opposite responses.
+ */
+export interface ProbeDiagnostic {
+  endpoint: string;
+  status: number;
+  headers: Record<string, string>;
+  edgeBlocked: boolean;
+  observedAt: string;
+  traceId: string;
+  model: string;
+}
+
 export interface ProviderConnectionTestResult {
   ok: boolean;
   status: string;
@@ -3263,6 +3282,8 @@ export interface ProviderConnectionTestResult {
   /** The alert the probe just persisted, echoed so the card can repaint from THIS
    *  response instead of waiting out the status read's cache window. */
   authAlert?: ProviderAuthAlert;
+  /** Redacted upstream evidence for a failed test — see {@link ProbeDiagnostic}. */
+  diagnostic?: ProbeDiagnostic;
   /** `attempts` is the per-model failover breakdown — the only place the real
    *  upstream status survives when the gateway collapses a retryable failure
    *  into its cascade summary. */
@@ -3331,6 +3352,8 @@ export interface OpenRouterConnectionTestResult {
   /** The alert the probe just persisted, echoed so the card can repaint from THIS
    *  response instead of waiting out the list read's cache window. */
   authAlert?: ConnectionAuthAlert;
+  /** Redacted upstream evidence for a failed test — see {@link ProbeDiagnostic}. */
+  diagnostic?: ProbeDiagnostic;
   details?: { connectionId: number; model?: string; upstreamStatus?: number };
 }
 
