@@ -7947,6 +7947,7 @@ export const creationSessionsApi = {
     request<{ userId: string; role: string; emailSent?: boolean } | { invitationId: string; email: string; role: string; expiresAt: string; acceptPath: string; emailSent?: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/invite`, { method: 'POST', body: JSON.stringify({ ...invitee, role }) }),
   invitations: {
     accept: (token: string) => request<{ sessionId: string; role: CreationSessionSummary['role'] }>(`/api/creation-sessions/invitations/${encodeURIComponent(token)}/accept`, { method: 'POST', body: '{}' }),
+    acceptWithAccount: (token: string) => webRequest<{ sessionId: string; tenantId: number; role: CreationSessionSummary['role'] }>(`/api/tenants/creation-invitations/${encodeURIComponent(token)}/accept`, { method: 'POST', body: '{}' }),
     list: (id: string) => request<{ invitations: CreationSessionInvitation[] }>(`/api/creation-sessions/${encodeURIComponent(id)}/invitations`),
     revoke: (id: string, invitationId: string) => request<void>(`/api/creation-sessions/${encodeURIComponent(id)}/invitations/${encodeURIComponent(invitationId)}`, { method: 'DELETE' }),
   },
@@ -7978,6 +7979,6 @@ export const creationSessionsApi = {
     request<{ sessionId: string; objectId: string; created: boolean }>(`/api/creation-sessions/ide-projects/${ideProjectId}/open`, { method: 'POST' }),
   expandProject: (id: string, projectId: number, lens: 'everything' | 'delivery' | 'metrics' | 'customer-feedback' = 'everything') =>
     request<{ project: { id: number; name: string; description: string | null; status: string }; lens: string; resources: Array<{ kind: string; resourceType: string; resourceId: string; title: string; subtitle: string | null; status: string; workflowExecutable?: boolean; resourceSubtype?: string }>; generated: Array<{ key: string; kind: string; title: string; status: string }>; fetchedAt: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/projects/${projectId}/expand`, { method: 'POST', body: JSON.stringify({ lens }) }),
-  openResource: (resourceType: 'chat' | 'workflow', resourceId: string | number) =>
+  openResource: (resourceType: 'chat' | 'workflow' | 'agent', resourceId: string | number) =>
     request<{ sessionId: string; objectId: string; created: boolean }>(`/api/creation-sessions/resources/${resourceType}/${encodeURIComponent(String(resourceId))}/open`, { method: 'POST' }),
 };

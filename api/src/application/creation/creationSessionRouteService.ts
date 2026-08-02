@@ -1811,25 +1811,27 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const projectSegment = segmentId == null ? isNull(projects.segmentId) : eq(projects.segmentId, segmentId);
     const [project] = await db.select({ id: projects.id, name: projects.name }).from(projects).where(and(eq(projects.id, projectId), eq(projects.tenantId, tenantId), projectSegment)).limit(1);
     if (!project) return c.json({ error: 'Project not found' }, 404);
+    const sessionSegment = segmentId == null ? isNull(creationSessions.segmentId) : eq(creationSessions.segmentId, segmentId);
     const [existing] = await db.select({ id: creationSessions.id, objectId: creationSessionObjects.id })
       .from(creationSessionProjectLinks)
       .innerJoin(creationSessions, eq(creationSessions.id, creationSessionProjectLinks.sessionId))
       .innerJoin(creationSessionMembers, and(eq(creationSessionMembers.sessionId, creationSessions.id), eq(creationSessionMembers.userId, userId)))
       .innerJoin(creationSessionObjects, and(eq(creationSessionObjects.sessionId, creationSessions.id), eq(creationSessionObjects.resourceType, 'project'), eq(creationSessionObjects.resourceId, String(projectId))))
-      .where(and(eq(creationSessionProjectLinks.projectId, projectId), eq(creationSessions.status, 'active')))
+      .where(and(eq(creationSessionProjectLinks.projectId, projectId), eq(creationSessions.tenantId, tenantId), sessionSegment, eq(creationSessions.status, 'active')))
       .orderBy(desc(creationSessions.lastActivityAt)).limit(1);
     if (existing) return c.json({ sessionId: existing.id, objectId: existing.objectId, created: false });
     const sessionId = crypto.randomUUID();
     const objectId = crypto.randomUUID();
-    await db.insert(creationSessions).values({ id: sessionId, tenantId, segmentId, title: project.name, createdBy: userId, updatedBy: userId, canvasRevision: 1 });
+    const projectObject: GraphObjectInput = { id: objectId, kind: 'project', resourceType: 'project', resourceId: String(projectId), canvasData: { x: 160, y: 120, w: 320, h: 220 }, content: { kind: 'project', title: project.name } };
+    await db.insert(creationSessions).values({ id: sessionId, tenantId, segmentId, title: project.name, createdBy: userId, updatedBy: userId, canvasRevision: 1, preview: buildPreview([projectObject]) });
     await db.batch([
       db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId }),
-      db.insert(creationSessionObjects).values({ id: objectId, sessionId, kind: 'project', resourceType: 'project', resourceId: String(projectId), canvasData: { x: 160, y: 120, w: 320, h: 220 }, content: { title: project.name }, searchText: project.name, createdBy: userId, updatedBy: userId }),
+      db.insert(creationSessionObjects).values({ id: objectId, sessionId, kind: 'project', resourceType: 'project', resourceId: String(projectId), canvasData: projectObject.canvasData ?? {}, content: projectObject.content, searchText: project.name, createdBy: userId, updatedBy: userId }),
       db.insert(creationSessionProjectLinks).values({ sessionId, projectId, addedBy: userId }),
       db.insert(creationSessionEvents).values({ sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: 'session.created_from_project', payload: { projectId } }),
       db.insert(creationSessionSnapshots).values({
         sessionId, revision: 1,
-        graph: { objects: [{ id: objectId, kind: 'project', resourceType: 'project', resourceId: String(projectId), canvasData: { x: 160, y: 120, w: 320, h: 220 }, content: { kind: 'project', title: project.name } }], connections: [] },
+        graph: { objects: [projectObject], connections: [] },
         viewport: { x: 0, y: 0, zoom: 1 }, createdBy: userId,
       }),
     ]);
@@ -1856,12 +1858,13 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!build) return c.json({ error: 'Build not found' }, 404);
 
     const kind = creationKindForModality(build.modality);
+    const sessionSegment = segmentId == null ? isNull(creationSessions.segmentId) : eq(creationSessions.segmentId, segmentId);
     const [existing] = await db.select({ sessionId: creationSessions.id, objectId: creationSessionObjects.id })
       .from(creationSessionObjects)
       .innerJoin(creationSessions, eq(creationSessions.id, creationSessionObjects.sessionId))
       .innerJoin(creationSessionMembers, and(eq(creationSessionMembers.sessionId, creationSessions.id), eq(creationSessionMembers.userId, userId)))
       .where(and(
-        eq(creationSessions.tenantId, tenantId), eq(creationSessions.status, 'active'),
+        eq(creationSessions.tenantId, tenantId), sessionSegment, eq(creationSessions.status, 'active'),
         eq(creationSessionObjects.kind, kind), eq(creationSessionObjects.resourceType, 'project'),
         eq(creationSessionObjects.resourceId, String(build.storageProjectId)),
       )).orderBy(desc(creationSessions.lastActivityAt)).limit(1);
@@ -1924,8 +1927,9 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const resourceType = c.req.param('resourceType');
     const resourceId = c.req.param('resourceId');
     let title: string;
-    let kind: 'chat' | 'workflow';
+    let kind: 'chat' | 'workflow' | 'agent';
     let projectId: number | null = null;
+    let resourceContent: Record<string, unknown> = {};
     let initialTimeline: Array<{ id: number; role: string; content: string; createdAt: Date }> = [];
     if (resourceType === 'chat') {
       const chatId = Number(resourceId);
@@ -1950,29 +1954,45 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       title = definition.name;
       projectId = definition.projectId;
       kind = 'workflow';
+      resourceContent = { workflowExecutable: true, resourceSubtype: 'definition' };
+    } else if (resourceType === 'agent') {
+      if (!/^[A-Za-z0-9_-]{1,64}$/.test(resourceId)) return c.json({ error: 'Invalid agent id' }, 400);
+      const [agent] = await db.select({ id: ideAgents.id, name: ideAgents.name, title: ideAgents.title, bio: ideAgents.bio, baseModel: ideAgents.baseModel, status: ideAgents.status })
+        .from(ideAgents).where(and(eq(ideAgents.id, resourceId), eq(ideAgents.tenantId, tenantId))).limit(1);
+      if (!agent) return c.json({ error: 'Agent not found' }, 404);
+      title = agent.name;
+      projectId = null;
+      kind = 'agent';
+      resourceContent = { agentTitle: agent.title, instructions: agent.bio, model: agent.baseModel, agentStatus: agent.status };
     } else {
       return c.json({ error: 'Unsupported resource type' }, 400);
     }
 
+    const sessionSegment = segmentId == null ? isNull(creationSessions.segmentId) : eq(creationSessions.segmentId, segmentId);
     const [existing] = await db.select({ sessionId: creationSessions.id, objectId: creationSessionObjects.id })
       .from(creationSessionObjects)
       .innerJoin(creationSessions, eq(creationSessions.id, creationSessionObjects.sessionId))
       .innerJoin(creationSessionMembers, and(eq(creationSessionMembers.sessionId, creationSessions.id), eq(creationSessionMembers.userId, userId)))
       .where(and(
-        eq(creationSessions.tenantId, tenantId), eq(creationSessions.status, 'active'),
+        eq(creationSessions.tenantId, tenantId), sessionSegment, eq(creationSessions.status, 'active'),
         eq(creationSessionObjects.resourceType, resourceType), eq(creationSessionObjects.resourceId, resourceId),
       )).orderBy(desc(creationSessions.lastActivityAt)).limit(1);
     if (existing) return c.json({ ...existing, created: false });
 
     const sessionId = crypto.randomUUID();
     const objectId = crypto.randomUUID();
+    const resourceObject: GraphObjectInput = {
+      id: objectId, kind, resourceType, resourceId,
+      canvasData: { x: 160, y: 120, w: kind === 'workflow' ? 460 : 320, h: 280 },
+      content: { kind, title, status: 'Live resource', ...resourceContent },
+    };
     const statements: unknown[] = [
-      db.insert(creationSessions).values({ id: sessionId, tenantId, segmentId, title, createdBy: userId, updatedBy: userId, canvasRevision: 1 }),
+      db.insert(creationSessions).values({ id: sessionId, tenantId, segmentId, title, createdBy: userId, updatedBy: userId, canvasRevision: 1, preview: buildPreview([resourceObject]) }),
       db.insert(creationSessionMembers).values({ sessionId, userId, role: 'owner', invitedBy: userId }),
       db.insert(creationSessionObjects).values({
         id: objectId, sessionId, kind, resourceType, resourceId,
-        canvasData: { x: 160, y: 120, w: kind === 'workflow' ? 460 : 320, h: 280 },
-        content: { kind, title, status: 'Live resource', ...(kind === 'workflow' ? { workflowExecutable: true, resourceSubtype: 'definition' } : {}) }, searchText: `${title} Live resource`, createdBy: userId, updatedBy: userId,
+        canvasData: resourceObject.canvasData ?? {},
+        content: resourceObject.content, searchText: `${title} Live resource`, createdBy: userId, updatedBy: userId,
       }),
       db.insert(creationSessionEvents).values({
         sessionId, revision: 1, actorType: 'user', actorRef: userId, eventType: `session.created_from_${resourceType}`,
@@ -1980,7 +2000,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       }),
       db.insert(creationSessionSnapshots).values({
         sessionId, revision: 1,
-        graph: { objects: [{ id: objectId, kind, resourceType, resourceId, canvasData: { x: 160, y: 120, w: kind === 'workflow' ? 460 : 320, h: 280 }, content: { kind, title, status: 'Live resource', ...(kind === 'workflow' ? { workflowExecutable: true, resourceSubtype: 'definition' } : {}) } }], connections: [] },
+        graph: { objects: [resourceObject], connections: [] },
         viewport: { x: 0, y: 0, zoom: 1 }, createdBy: userId,
       }),
     ];

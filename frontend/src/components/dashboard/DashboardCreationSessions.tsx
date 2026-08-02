@@ -5,8 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { brain, creationSessionsApi, workflowDefinitions, type BrainChat, type CreationSessionSummary, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
-import { listIdeProjects } from '@/lib/api';
-import type { IdeProject } from '@/lib/types';
+import { fetchProjects, listIdeProjects, listMyAgents } from '@/lib/api';
+import type { IdeProject, Project, PublishedAgent } from '@/lib/types';
 import { useLocalizedModalities } from '@/lib/useModalityCopy';
 import { getModality } from '@/lib/modality';
 
@@ -29,6 +29,8 @@ export function DashboardCreationSessions() {
   const [builds, setBuilds] = useState<IdeProject[]>([]);
   const [workflows, setWorkflows] = useState<WorkflowDefinitionSummary[]>([]);
   const [chats, setChats] = useState<BrainChat[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [agents, setAgents] = useState<PublishedAgent[]>([]);
   const [resourcesLoading, setResourcesLoading] = useState(true);
 
   const reload = useCallback(() => {
@@ -40,11 +42,13 @@ export function DashboardCreationSessions() {
   useEffect(() => { void creationSessionsApi.quotas().then((result) => setSessionQuota({ usage: result.usage.sessions, limit: result.limits.sessions })).catch(() => undefined); }, []);
   useEffect(() => {
     let active = true;
-    void Promise.allSettled([listIdeProjects(), workflowDefinitions.list(), brain.listChats({ limit: 100 })]).then(([buildResult, workflowResult, chatResult]) => {
+    void Promise.allSettled([listIdeProjects(), workflowDefinitions.list(), brain.listChats({ limit: 100 }), fetchProjects(), listMyAgents()]).then(([buildResult, workflowResult, chatResult, projectResult, agentResult]) => {
       if (!active) return;
       setBuilds(buildResult.status === 'fulfilled' ? buildResult.value : []);
       setWorkflows(workflowResult.status === 'fulfilled' ? workflowResult.value : []);
       setChats(chatResult.status === 'fulfilled' ? chatResult.value : []);
+      setProjects(projectResult.status === 'fulfilled' ? projectResult.value : []);
+      setAgents(agentResult.status === 'fulfilled' ? agentResult.value : []);
     }).finally(() => { if (active) setResourcesLoading(false); });
     return () => { active = false; };
   }, []);
@@ -102,9 +106,19 @@ export function DashboardCreationSessions() {
     const result = await creationSessionsApi.openResource('chat', chat.id);
     router.push(`/create/${result.sessionId}?focus=${result.objectId}`);
   };
+  const openProject = async (project: Project) => {
+    const result = await creationSessionsApi.openProject(project.id);
+    router.push(`/create/${result.sessionId}?focus=${result.objectId}`);
+  };
+  const openAgent = async (agent: PublishedAgent) => {
+    const result = await creationSessionsApi.openResource('agent', agent.id);
+    router.push(`/create/${result.sessionId}?focus=${result.objectId}`);
+  };
   const visibleBuilds = builds.filter((build) => !query.trim() || `${build.name} ${build.modality} ${build.containerName || ''}`.toLowerCase().includes(query.trim().toLowerCase()));
   const visibleWorkflows = workflows.filter((workflow) => !query.trim() || `${workflow.name} ${workflow.description || ''} ${workflow.projectName || ''}`.toLowerCase().includes(query.trim().toLowerCase()));
   const visibleChats = chats.filter((chat) => !query.trim() || `${chat.title} ${chat.capability || ''} ${chat.origin || ''}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const visibleProjects = projects.filter((project) => !query.trim() || `${project.name} ${project.description || ''} ${project.status || ''}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const visibleAgents = agents.filter((agent) => !query.trim() || `${agent.name} ${agent.title || ''} ${agent.bio || ''}`.toLowerCase().includes(query.trim().toLowerCase()));
   const renderCards = (items: typeof visible) => <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
     {items.map((session) => { const target = `/create/${session.id}${session.matchingObjectId ? `?focus=${session.matchingObjectId}` : ''}`; const running = (session.preview?.objects ?? []).filter((object) => ['agent','task','workflow'].includes(object.kind) && ['running','in progress','in_progress','queued','assigned'].includes(String(object.status || '').toLowerCase())).length; return <article key={session.id} onClick={() => router.push(target)} onKeyDown={(event) => { if (event.key === 'Enter') router.push(target); }} tabIndex={0} style={{ color: 'inherit', border: `1px solid ${session.unread ? 'var(--accent)' : 'var(--border-subtle)'}`, borderRadius: 16, overflow: 'hidden', background: 'var(--surface-raised)', boxShadow: '0 4px 16px rgba(20,35,60,.05)', cursor: 'pointer' }}>
       <div style={{ height: 150, position: 'relative', overflow: 'hidden', background: 'radial-gradient(circle, rgba(116,137,165,.2) 1px, transparent 1px)', backgroundSize: '18px 18px' }}>
@@ -145,10 +159,12 @@ export function DashboardCreationSessions() {
     ].map(([name, instruction]) => <button key={name} onClick={() => void startTemplate(name, instruction)} disabled={creating || sessionLimitReached} style={{ padding: 16, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 12, background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}><strong>{name}</strong><span style={{ display: 'block', marginTop: 5, color: 'var(--text-secondary)', fontSize: 12, lineHeight: 1.5 }}>{instruction}</span></button>)}</div></section>}
     <section style={{ marginTop: 34 }}>
       <div style={{ marginBottom: 12 }}><h3 style={{ fontSize: 16, margin: 0 }}>{t('existingCreations')}</h3><p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: 12 }}>{t('existingCreationsSubtitle')}</p></div>
-      {resourcesLoading ? <div style={{ padding: 22, color: 'var(--text-secondary)' }}>{t('loadingCreations')}</div> : !visibleBuilds.length && !visibleWorkflows.length && !visibleChats.length ? <p className="text-muted">{t('noCreations')}</p> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(235px, 1fr))', gap: 12 }}>
+      {resourcesLoading ? <div style={{ padding: 22, color: 'var(--text-secondary)' }}>{t('loadingCreations')}</div> : !visibleBuilds.length && !visibleWorkflows.length && !visibleChats.length && !visibleProjects.length && !visibleAgents.length ? <p className="text-muted">{t('noCreations')}</p> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(235px, 1fr))', gap: 12 }}>
         {visibleBuilds.map((build) => { const modality = getModality(build.modality); return <button key={`build-${build.id}`} type="button" onClick={() => void openBuild(build)} style={{ padding: 15, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 12, background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}><span aria-hidden style={{ fontSize: 22 }}>{modality.icon}</span><strong style={{ display: 'block', marginTop: 6 }}>{build.name}</strong><span style={{ display: 'block', marginTop: 4, color: 'var(--text-secondary)', fontSize: 12 }}>{modality.label} · {build.status}{build.containerName ? ` · ${build.containerName}` : ''}</span></button>; })}
         {visibleWorkflows.map((workflow) => <button key={`workflow-${workflow.id}`} type="button" onClick={() => void openWorkflow(workflow)} style={{ padding: 15, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 12, background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}><span aria-hidden style={{ fontSize: 22 }}>⌘</span><strong style={{ display: 'block', marginTop: 6 }}>{workflow.name}</strong><span style={{ display: 'block', marginTop: 4, color: 'var(--text-secondary)', fontSize: 12 }}>{t('workflowRuns', { count: workflow.runCount ?? 0 })}{workflow.projectName ? ` · ${workflow.projectName}` : ''}</span></button>)}
         {visibleChats.map((chat) => <button key={`chat-${chat.id}`} type="button" onClick={() => void openChat(chat)} style={{ padding: 15, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 12, background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}><span aria-hidden style={{ fontSize: 22 }}>●</span><strong style={{ display: 'block', marginTop: 6 }}>{chat.title}</strong><span style={{ display: 'block', marginTop: 4, color: 'var(--text-secondary)', fontSize: 12 }}>{t('brainSession')}{chat.capability ? ` · ${chat.capability}` : ''}</span></button>)}
+        {visibleProjects.map((project) => <button key={`project-${project.id}`} type="button" onClick={() => void openProject(project)} style={{ padding: 15, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 12, background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}><span aria-hidden style={{ fontSize: 22 }}>▦</span><strong style={{ display: 'block', marginTop: 6 }}>{project.name}</strong><span style={{ display: 'block', marginTop: 4, color: 'var(--text-secondary)', fontSize: 12 }}>{t('object.project')} · {project.status || t('active').toLowerCase()} · {t('projectTasks', { count: project.taskCount ?? 0 })}</span></button>)}
+        {visibleAgents.map((agent) => <button key={`agent-${agent.id}`} type="button" onClick={() => void openAgent(agent)} style={{ padding: 15, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 12, background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}><span aria-hidden style={{ fontSize: 22 }}>✦</span><strong style={{ display: 'block', marginTop: 6 }}>{agent.name}</strong><span style={{ display: 'block', marginTop: 4, color: 'var(--text-secondary)', fontSize: 12 }}>{t('object.agent')} · {agent.title || agent.status}</span></button>)}
       </div>}
     </section>
   </section>;

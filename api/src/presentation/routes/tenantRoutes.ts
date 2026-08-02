@@ -29,6 +29,8 @@ import {
   agentHosts,
   agentHostProjects,
   sourceControlIntegrations,
+  creationSessionInvites,
+  creationSessionMembers,
   tenantInvitations,
   tenantMembers,
   tenants,
@@ -84,6 +86,11 @@ async function assertTenantMember(db: Db, tenantId: number, userId: string): Pro
     .limit(1);
 
   return Boolean(row);
+}
+
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 /**
@@ -224,6 +231,59 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       reportCaughtError(error, { source: "presentation/routes/tenantRoutes.ts", operation: "createTenantRoutes" });
     });   // seed Validator + Security
     return c.json(tenant.toPlain(), 201);
+  });
+
+  // Accept a Creation Session invitation with the person-level web token. The
+  // invite itself identifies the destination workspace, so this must not depend
+  // on whichever tenant token happens to be selected in another browser tab.
+  // Landing the workspace invitation first also prevents a new account from
+  // being sent through redundant workspace creation.
+  router.post('/creation-invitations/:token/accept', webAuthMiddleware, async (c) => {
+    const rawToken = c.req.param('token');
+    if (!/^[0-9a-f]{64}$/i.test(rawToken)) return c.json({ error: 'Invalid invitation token' }, 400);
+    const tokenHash = await sha256Hex(rawToken);
+    const userId = c.get('userId') as string;
+    const [account] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
+    // This is the sole deliberate cross-tenant read: the unguessable one-time
+    // token is the lookup key and the selected tenantId becomes the scope for
+    // every subsequent membership check and write.
+    const [invitation] = await db.select({
+      id: creationSessionInvites.id,
+      sessionId: creationSessionInvites.sessionId,
+      tenantId: creationSessionInvites.tenantId,
+      email: creationSessionInvites.email,
+      role: creationSessionInvites.role,
+      expiresAt: creationSessionInvites.expiresAt,
+      acceptedAt: creationSessionInvites.acceptedAt,
+      revokedAt: creationSessionInvites.revokedAt,
+      createdBy: creationSessionInvites.createdBy,
+    }).from(creationSessionInvites)
+      .where(eq(creationSessionInvites.tokenHash, tokenHash)).limit(1);
+    if (!invitation || invitation.revokedAt || invitation.acceptedAt || invitation.expiresAt.getTime() <= Date.now()) {
+      return c.json({ error: 'Invitation is invalid, expired, or already used' }, 410);
+    }
+    if (!account?.email || account.email.trim().toLowerCase() !== invitation.email.trim().toLowerCase()) {
+      return c.json({ error: 'Sign in with the email address that received this invitation' }, 403);
+    }
+    await acceptPendingInvitations(db, c.env as Env, tenantService, userId, account.email);
+    if (!(await assertTenantMember(db, invitation.tenantId, userId))) {
+      return c.json({ error: 'The invited workspace cannot add another member yet', code: 'TENANT_SEAT_LIMIT' }, 409);
+    }
+    const role = ['viewer', 'commenter', 'editor', 'runner', 'owner'].includes(invitation.role)
+      ? invitation.role as 'viewer' | 'commenter' | 'editor' | 'runner' | 'owner'
+      : null;
+    if (!role) return c.json({ error: 'Invitation role is invalid' }, 409);
+    await db.batch([
+      db.insert(creationSessionMembers).values({ sessionId: invitation.sessionId, userId, role, invitedBy: invitation.createdBy })
+        .onConflictDoUpdate({ target: [creationSessionMembers.sessionId, creationSessionMembers.userId], set: { role } }),
+      db.update(creationSessionInvites).set({ acceptedBy: userId, acceptedAt: new Date() }).where(and(
+        eq(creationSessionInvites.id, invitation.id),
+        eq(creationSessionInvites.tenantId, invitation.tenantId),
+        isNull(creationSessionInvites.acceptedAt),
+        isNull(creationSessionInvites.revokedAt),
+      )),
+    ]);
+    return c.json({ sessionId: invitation.sessionId, tenantId: invitation.tenantId, role });
   });
 
   // PATCH /api/tenants/:id/name  – WebJWT required; renames a workspace (owner/manager only)
