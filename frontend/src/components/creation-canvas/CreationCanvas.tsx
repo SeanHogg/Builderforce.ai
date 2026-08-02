@@ -1472,7 +1472,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         </div>
       </div>
 
-      <div ref={flowWrapRef} className={styles.flowWrap} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPoints.current = []; }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
+      <div ref={flowWrapRef} className={styles.flowWrap} data-cursor-mode={drawingMode ? 'draw' : 'pan'} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPoints.current = []; }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
         {!presentMode && effectiveSelectedIds.length > 0 && <div className={styles.selectionToolbar} aria-label={t('selectionActions')}>
           <span>{t('selectedCount', { count: effectiveSelectedIds.length })}</span>
           <button onClick={focusSelection}>{t('focus')}</button>
@@ -1517,7 +1517,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         >
           <Background variant={BackgroundVariant.Dots} gap={24} size={1.2} color="var(--creation-dot, #c9d8ea)" />
           <Controls position="bottom-left" showInteractive={false} />
-          <MiniMap position="bottom-right" nodeColor={minimapColor} maskColor="rgba(244,248,253,.72)" pannable zoomable />
+          <MiniMap position="bottom-right" nodeColor={minimapColor} maskColor="var(--creation-minimap-mask, rgba(244,248,253,.72))" pannable zoomable />
         </ReactFlow>
 
         <RemoteCursors members={members} currentUserId={currentUserId} instance={flowRef.current} container={flowWrapRef.current} />

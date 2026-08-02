@@ -11830,6 +11830,19 @@
       "noSteps": "智能体没有产生任何副作用——既未写代码，也未存储任何内容。"
     }
   },
+  "quickStart": {
+    "sectionTitle": "快速开始",
+    "modeOneliner": "一键安装",
+    "modeHackable": "源码安装",
+    "change": "更改",
+    "beta": "测试版",
+    "copyCommandAria": "复制命令",
+    "macosTagline": "适用于 macOS 的 BuilderForce",
+    "macosSubtitle": "下载原生应用，开始使用智能体构建。",
+    "macosDownload": "下载 macOS 版",
+    "macosMeta": "需要 macOS 13 或更高版本",
+    "note": "选择安装方式，复制命令，然后在终端中运行。"
+  },
   "creationCanvas": {
     "sessionTitle": "会话标题", "saved": "会话已保存", "activeCollaborators": "在线协作者",
     "newSession": "新建会话", "add": "添加", "moreActions": "更多会话操作", "createAndView": "创建与查看", "sessionTools": "会话工具", "clearSearch": "清除搜索", "selectionActions": "选择操作", "selectedCount": "已选择 {count} 个", "diagnostics": "诊断", "openDiagnostics": "打开画布诊断", "diagnosticsHint": "会话、画布和 Brain 的实时状态", "copyDiagnostics": "复制诊断", "copyChatDiagnostics": "复制会话聊天诊断", "copyCanvasDiagnostics": "复制画布诊断", "templates": "模板", "history": "历史记录", "draw": "绘图", "stopDrawing": "停止绘图", "branch": "创建分支", "merge": "合并", "present": "演示", "exitPresentation": "退出演示", "share": "共享", "run": "运行", "saveCollaborate": "保存并协作",

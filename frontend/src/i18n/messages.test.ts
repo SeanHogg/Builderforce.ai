@@ -54,6 +54,20 @@ function argsFor(message: string): Record<string, number> {
 /** Rich messages carry `<tag>` markup and must be formatted through `t.rich`. */
 const hasTags = (message: string): boolean => /<[a-zA-Z]\w*>/.test(message);
 
+const QUICK_START_KEYS = [
+  'sectionTitle',
+  'modeOneliner',
+  'modeHackable',
+  'change',
+  'beta',
+  'copyCommandAria',
+  'macosTagline',
+  'macosSubtitle',
+  'macosDownload',
+  'macosMeta',
+  'note',
+] as const;
+
 /** Tag handlers for `t.rich` — every tag renders its chunks unchanged. */
 const tagsFor = (message: string): Record<string, (chunks: unknown) => unknown> =>
   Object.fromEntries(
@@ -62,6 +76,12 @@ const tagsFor = (message: string): Record<string, (chunks: unknown) => unknown> 
 
 describe('message catalogs', () => {
   const enPaths = leaves(en as Record<string, unknown>).map((l) => l.path);
+
+  it.each(LOCALES)('%s has every QuickStart message', (locale) => {
+    const quickStart = CATALOGS[locale].quickStart as Record<string, unknown> | undefined;
+    expect(quickStart).toBeDefined();
+    expect(Object.keys(quickStart ?? {}).sort()).toEqual([...QUICK_START_KEYS].sort());
+  });
 
   it.each(LOCALES)('%s has the managed-no-role stall label in the manager namespace', (locale) => {
     const t = createTranslator({ locale, messages: CATALOGS[locale] });

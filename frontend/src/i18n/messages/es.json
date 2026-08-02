@@ -11830,6 +11830,19 @@
       "noSteps": "El agente no produjo ningún efecto: ni escribió código ni guardó nada."
     }
   },
+  "quickStart": {
+    "sectionTitle": "Inicio rápido",
+    "modeOneliner": "una línea",
+    "modeHackable": "código fuente",
+    "change": "cambiar",
+    "beta": "Beta",
+    "copyCommandAria": "Copiar comando",
+    "macosTagline": "BuilderForce para macOS",
+    "macosSubtitle": "Descarga la aplicación nativa y empieza a crear con agentes.",
+    "macosDownload": "Descargar para macOS",
+    "macosMeta": "Requiere macOS 13 o posterior",
+    "note": "Elige un método de instalación, copia el comando y ejecútalo en tu terminal."
+  },
   "creationCanvas": {
     "sessionTitle": "Título de la sesión", "saved": "Sesión guardada", "activeCollaborators": "Colaboradores activos",
     "newSession": "Nueva sesión", "add": "Añadir", "moreActions": "Más acciones de sesión", "createAndView": "Crear y ver", "sessionTools": "Herramientas de sesión", "clearSearch": "Borrar búsqueda", "selectionActions": "Acciones de selección", "selectedCount": "{count} seleccionados", "diagnostics": "Diagnóstico", "openDiagnostics": "Abrir diagnóstico del Lienzo", "diagnosticsHint": "Estado en vivo de Sesión, Lienzo y Brain", "copyDiagnostics": "Copiar diagnóstico", "copyChatDiagnostics": "Copiar diagnóstico del chat de la Sesión", "copyCanvasDiagnostics": "Copiar diagnóstico del Lienzo", "templates": "Plantillas", "history": "Historial", "draw": "Dibujar", "stopDrawing": "Dejar de dibujar", "branch": "Crear rama", "merge": "Fusionar", "present": "Presentar", "exitPresentation": "Salir de la presentación", "share": "Compartir", "run": "Ejecutar", "saveCollaborate": "Guardar y colaborar",

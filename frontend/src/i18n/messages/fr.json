@@ -11830,6 +11830,19 @@
       "noSteps": "L’agent n’a produit aucun effet : il n’a ni écrit de code ni rien enregistré."
     }
   },
+  "quickStart": {
+    "sectionTitle": "Démarrage rapide",
+    "modeOneliner": "une ligne",
+    "modeHackable": "code source",
+    "change": "modifier",
+    "beta": "Bêta",
+    "copyCommandAria": "Copier la commande",
+    "macosTagline": "BuilderForce pour macOS",
+    "macosSubtitle": "Téléchargez l’application native et commencez à créer avec des agents.",
+    "macosDownload": "Télécharger pour macOS",
+    "macosMeta": "Nécessite macOS 13 ou une version ultérieure",
+    "note": "Choisissez une méthode d’installation, copiez la commande et exécutez-la dans votre terminal."
+  },
   "creationCanvas": {
     "sessionTitle": "Titre de la Session", "saved": "Session enregistrée", "activeCollaborators": "Collaborateurs actifs",
     "newSession": "Nouvelle Session", "add": "Ajouter", "moreActions": "Plus d’actions de Session", "createAndView": "Créer et afficher", "sessionTools": "Outils de Session", "clearSearch": "Effacer la recherche", "selectionActions": "Actions de sélection", "selectedCount": "{count} sélectionnés", "diagnostics": "Diagnostic", "openDiagnostics": "Ouvrir le diagnostic du Canevas", "diagnosticsHint": "État en direct de la Session, du Canevas et de Brain", "copyDiagnostics": "Copier le diagnostic", "copyChatDiagnostics": "Copier le diagnostic du chat de Session", "copyCanvasDiagnostics": "Copier le diagnostic du Canevas", "templates": "Modèles", "history": "Historique", "draw": "Dessiner", "stopDrawing": "Arrêter de dessiner", "branch": "Créer une branche", "merge": "Fusionner", "present": "Présenter", "exitPresentation": "Quitter la présentation", "share": "Partager", "run": "Exécuter", "saveCollaborate": "Enregistrer et collaborer",

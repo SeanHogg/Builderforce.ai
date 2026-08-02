@@ -11830,6 +11830,19 @@
       "noSteps": "The agent produced no effects at all — it neither wrote code nor stored anything."
     }
   },
+  "quickStart": {
+    "sectionTitle": "Quick start",
+    "modeOneliner": "one-liner",
+    "modeHackable": "hackable",
+    "change": "change",
+    "beta": "Beta",
+    "copyCommandAria": "Copy command",
+    "macosTagline": "BuilderForce for macOS",
+    "macosSubtitle": "Download the native app and start building with agents.",
+    "macosDownload": "Download for macOS",
+    "macosMeta": "Requires macOS 13 or later",
+    "note": "Choose an install method, copy the command, and run it in your terminal."
+  },
   "creationCanvas": {
     "sessionTitle": "Session title", "saved": "Session saved", "activeCollaborators": "Active collaborators",
     "newSession": "New session", "add": "Add", "moreActions": "More session actions", "createAndView": "Create and view", "sessionTools": "Session tools", "clearSearch": "Clear search", "selectionActions": "Selection actions", "selectedCount": "{count} selected", "diagnostics": "Diagnostics", "openDiagnostics": "Open Canvas diagnostics", "diagnosticsHint": "Live Session, Canvas, and Brain state", "copyDiagnostics": "Copy diagnostics", "copyChatDiagnostics": "Copy Session chat diagnostics", "copyCanvasDiagnostics": "Copy Canvas diagnostics", "templates": "Templates", "history": "History", "draw": "Draw", "stopDrawing": "Stop drawing", "branch": "Branch", "merge": "Merge", "present": "Present", "exitPresentation": "Exit presentation", "share": "Share", "run": "Run", "saveCollaborate": "Save & collaborate",

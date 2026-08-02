@@ -11830,6 +11830,19 @@
       "noSteps": "Der Agent hat überhaupt keine Auswirkungen erzeugt – weder Code geschrieben noch etwas gespeichert."
     }
   },
+  "quickStart": {
+    "sectionTitle": "Schnellstart",
+    "modeOneliner": "Einzeiler",
+    "modeHackable": "Quellcode",
+    "change": "ändern",
+    "beta": "Beta",
+    "copyCommandAria": "Befehl kopieren",
+    "macosTagline": "BuilderForce für macOS",
+    "macosSubtitle": "Lade die native App herunter und beginne mit Agenten zu entwickeln.",
+    "macosDownload": "Für macOS herunterladen",
+    "macosMeta": "Erfordert macOS 13 oder neuer",
+    "note": "Wähle eine Installationsmethode, kopiere den Befehl und führe ihn im Terminal aus."
+  },
   "creationCanvas": {
     "sessionTitle": "Sessiontitel", "saved": "Session gespeichert", "activeCollaborators": "Aktive Mitwirkende",
     "newSession": "Neue Session", "add": "Hinzufügen", "moreActions": "Weitere Session-Aktionen", "createAndView": "Erstellen und ansehen", "sessionTools": "Session-Werkzeuge", "clearSearch": "Suche löschen", "selectionActions": "Auswahlaktionen", "selectedCount": "{count} ausgewählt", "diagnostics": "Diagnose", "openDiagnostics": "Canvas-Diagnose öffnen", "diagnosticsHint": "Live-Status von Session, Canvas und Brain", "copyDiagnostics": "Diagnose kopieren", "copyChatDiagnostics": "Session-Chat-Diagnose kopieren", "copyCanvasDiagnostics": "Canvas-Diagnose kopieren", "templates": "Vorlagen", "history": "Verlauf", "draw": "Zeichnen", "stopDrawing": "Zeichnen beenden", "branch": "Branch erstellen", "merge": "Zusammenführen", "present": "Präsentieren", "exitPresentation": "Präsentation beenden", "share": "Teilen", "run": "Ausführen", "saveCollaborate": "Speichern und zusammenarbeiten",
