@@ -195,7 +195,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [serverTemplates, setServerTemplates] = useState<ServerCreationTemplate[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<CreationSessionSummary['role']>('editor');
-  const [prompt, setPrompt] = useState('Will this campaign workflow be effective with this landing page?');
+  const [prompt, setPrompt] = useState('');
   const [thinking, setThinking] = useState(false);
   const [tourStep, setTourStep] = useState(0);
   const [notice, setNotice] = useState('Session saved');

@@ -54,6 +54,7 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getAllByText('Campaign landing page').length).toBeGreaterThan(0);
     expect(screen.getByText('Campaign forecast')).toBeInTheDocument();
     expect(screen.getByLabelText('Active collaborators')).toBeInTheDocument();
+    expect(screen.getByLabelText('Ask Brain about this canvas')).toHaveValue('');
     fireEvent.click(screen.getAllByText('Campaign Strategist')[0]!);
     expect(screen.getByDisplayValue('Campaign Strategist')).toBeInTheDocument();
   });

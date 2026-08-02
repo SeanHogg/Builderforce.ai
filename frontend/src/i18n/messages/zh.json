@@ -5387,7 +5387,7 @@
   },
   "home": {
     "heroBadge": "一个画布 · 人类 + AI 智能体",
-    "heroTitle": "尽情想象，<em>共同创造。</em>",
+    "heroTitle": "尽情想象，<em>创造。</em>",
     "heroSub": "从一句提示开始，在同一个可视化会话中创建工作流、网站、数据故事、模型、语音体验并交付真实成果。",
     "heroPromptPlaceholder": "你想创造什么？",
     "heroPromptAria": "描述你想创造的内容",
