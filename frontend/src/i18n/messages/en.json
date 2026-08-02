@@ -5397,6 +5397,27 @@
       "Visualize customer feedback and mock up the top features",
       "Build, evaluate, and deliver a customer-support agent"
     ],
+    "createCanvas": {
+      "eyebrow": "Meet Create",
+      "heading": "Create Canvas — Where ideas become working systems",
+      "blurb": "Keep the speed of a prompt, then move beyond chat. Put workflows, websites, data, models, people, and agents on one multiplayer canvas—where every object stays live, connected, and ready to deliver.",
+      "features": [
+        { "title": "Start with intent", "desc": "Describe what you want and enter a private local canvas immediately. Add an account or project only when you need to collaborate or deliver." },
+        { "title": "Create with real objects", "desc": "Build with editable workflows, prototypes, datasets, dashboards, models, tasks, people, and agents—not flattened chat attachments." },
+        { "title": "Go from idea to outcome", "desc": "Let Brain reason across the canvas, review its proposed changes, then send approved work into governed execution." }
+      ],
+      "startCta": "Start creating free",
+      "exploreCta": "Explore Create",
+      "previewAria": "Example Creation Canvas with connected live objects",
+      "sessionLabel": "Launch campaign · Live session",
+      "objects": [
+        { "title": "Campaign workflow", "meta": "Audience → Create → Approve → Publish" },
+        { "title": "Interactive landing page", "meta": "Live WYSIWYG website prototype" },
+        { "title": "Campaign forecast", "meta": "Dataset-bound funnel and channel metrics" },
+        { "title": "Campaign strategist", "meta": "AI agent · configured and assignable" }
+      ],
+      "flow": ["Prompt", "Context", "Artifact", "Review", "Delivery", "Outcome"]
+    },
     "evermindHeadingSuffix": "A model that learns as it works — and never goes stale",
     "pillarsHeading": "Human in the loop. Fully agentic.",
     "pillarsLead": "Train your own agents, put them to work inside your agent, and stay in control of every step — from one place.",

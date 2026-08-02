@@ -101,6 +101,7 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
   it('turns an AI request into a connected evaluation object', async () => {
     render(<CreationCanvas sessionId="evaluation-test" persistence="local" />);
 
+    fireEvent.change(screen.getByLabelText('Ask Brain about this canvas'), { target: { value: 'Evaluate the selected canvas objects' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send to Brain' }));
     await waitFor(() => expect(screen.getByDisplayValue('Canvas evaluation')).toBeInTheDocument(), { timeout: 2_000 });
     expect(screen.getByText('Evaluation added to canvas')).toBeInTheDocument();

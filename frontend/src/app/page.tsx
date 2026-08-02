@@ -24,6 +24,8 @@ type RoleDesc = { role: string; desc: string };
 type StatLabel = { label: string };
 type FaqItem = { question: string; answer: string };
 type PricingTeaser = { name: string; price: string; perks: string[] };
+type CanvasFeature = { title: string; desc: string };
+type CanvasObject = { title: string; meta: string };
 
 export default function LandingPage() {
   const router = useRouter();
@@ -403,6 +405,126 @@ export default function LandingPage() {
           line-height: 1.55;
         }
 
+        /* ════════ CREATION CANVAS ════════ */
+        .lp-create {
+          position: relative;
+          overflow: hidden;
+          padding: 34px;
+          border: 1px solid var(--border-accent);
+          border-radius: 24px;
+          background:
+            radial-gradient(circle at 78% 30%, rgba(77,158,255,.12), transparent 34%),
+            linear-gradient(145deg, rgba(255,107,92,.08), var(--surface-card) 44%, rgba(0,229,204,.05));
+          box-shadow: inset 0 1px 0 var(--surface-inset-highlight), 0 24px 70px rgba(0,0,0,.12);
+        }
+        .lp-create::before {
+          content: '';
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          opacity: .28;
+          background-image: radial-gradient(var(--border-subtle) 1px, transparent 1px);
+          background-size: 24px 24px;
+          mask-image: linear-gradient(90deg, transparent 28%, #000 58%);
+        }
+        .lp-create-head { position: relative; z-index: 1; max-width: 820px; }
+        .lp-create-eyebrow {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 10px;
+          color: var(--coral-bright);
+          font: 700 .72rem/1 var(--font-display);
+          letter-spacing: .18em;
+          text-transform: uppercase;
+        }
+        .lp-create-layout {
+          position: relative;
+          z-index: 1;
+          display: grid;
+          grid-template-columns: minmax(250px,.75fr) minmax(520px,1.5fr);
+          gap: 30px;
+          align-items: stretch;
+          margin-top: 28px;
+        }
+        .lp-create-features { display: grid; gap: 10px; align-content: center; }
+        .lp-create-feature {
+          padding: 15px 16px;
+          border-left: 2px solid var(--coral-bright);
+          background: rgba(4,10,22,.32);
+          border-radius: 0 12px 12px 0;
+        }
+        .lp-create-feature strong {
+          display: block;
+          margin-bottom: 4px;
+          color: var(--text-primary);
+          font: 650 .9rem/1.3 var(--font-display);
+        }
+        .lp-create-feature span { color: var(--text-secondary); font-size: .8rem; line-height: 1.5; }
+        .lp-create-board {
+          position: relative;
+          min-height: 350px;
+          overflow: hidden;
+          border: 1px solid var(--border-subtle);
+          border-radius: 18px;
+          background-color: rgba(5,11,23,.78);
+          background-image: radial-gradient(rgba(126,154,195,.25) 1px, transparent 1px);
+          background-size: 22px 22px;
+          box-shadow: 0 18px 48px rgba(0,0,0,.22);
+        }
+        .lp-create-toolbar {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          height: 38px;
+          padding: 0 13px;
+          border-bottom: 1px solid var(--border-subtle);
+          background: rgba(7,14,28,.9);
+          color: var(--text-muted);
+          font-size: .7rem;
+        }
+        .lp-create-toolbar i { width: 7px; height: 7px; border-radius: 50%; background: var(--coral-bright); }
+        .lp-create-toolbar i:nth-child(2) { background: #f5c451; }
+        .lp-create-toolbar i:nth-child(3) { background: var(--cyan-bright); }
+        .lp-create-toolbar span { margin-left: 5px; }
+        .lp-create-object {
+          position: absolute;
+          width: 190px;
+          padding: 13px 14px;
+          border: 1px solid var(--border-subtle);
+          border-radius: 12px;
+          background: rgba(10,17,32,.96);
+          box-shadow: 0 12px 30px rgba(0,0,0,.25);
+        }
+        .lp-create-object:nth-of-type(2) { left: 5%; top: 22%; }
+        .lp-create-object:nth-of-type(3) { right: 7%; top: 15%; width: 210px; }
+        .lp-create-object:nth-of-type(4) { left: 20%; bottom: 10%; width: 205px; }
+        .lp-create-object:nth-of-type(5) { right: 4%; bottom: 14%; }
+        .lp-create-object strong { display: block; color: var(--text-primary); font-size: .78rem; margin-bottom: 5px; }
+        .lp-create-object small { display: block; color: var(--text-muted); font-size: .68rem; line-height: 1.45; }
+        .lp-create-flow {
+          position: relative;
+          z-index: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 22px;
+          color: var(--text-secondary);
+          font-size: .74rem;
+        }
+        .lp-create-flow b { color: var(--coral-bright); font-size: .85rem; }
+        @media (max-width: 900px) {
+          .lp-create-layout { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 640px) {
+          .lp-create { padding: 26px 20px; }
+          .lp-create-board { min-height: auto; padding: 50px 12px 12px; display: grid; gap: 10px; }
+          .lp-create-toolbar { position: absolute; inset: 0 0 auto; }
+          .lp-create-object, .lp-create-object:nth-of-type(n) { position: static; width: auto; }
+        }
+
         /* ════════ FEATURES ════════ */
         .lp-features {
           max-width: 1200px;
@@ -543,6 +665,49 @@ export default function LandingPage() {
               </div>
             </div>
           </div>
+          </div>
+        </section>
+
+        {/* ── Create: turn a prompt into connected, deliverable work ── */}
+        <section className="lp-features" id="create" style={{ paddingTop: 0, scrollMarginTop: '90px' }}>
+          <div className="lp-create">
+            <div className="lp-create-head">
+              <span className="lp-create-eyebrow">✦ {t('home.createCanvas.eyebrow')}</span>
+              <h2 className="section-title" style={{ marginBottom: 8 }}>
+                <span className="agentHost-accent">⟩</span> {t('home.createCanvas.heading')}
+              </h2>
+              <p style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
+                {t('home.createCanvas.blurb')}
+              </p>
+            </div>
+            <div className="lp-create-layout">
+              <div className="lp-create-features">
+                {(t.raw('home.createCanvas.features') as CanvasFeature[]).map((feature) => (
+                  <div className="lp-create-feature" key={feature.title}>
+                    <strong>{feature.title}</strong>
+                    <span>{feature.desc}</span>
+                  </div>
+                ))}
+                <div className="lp-actions" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
+                  <Link href="/create/new" className="lp-btn-primary">✦ {t('home.createCanvas.startCta')} →</Link>
+                  <Link href="/creation-canvas" className="lp-btn-secondary">{t('home.createCanvas.exploreCta')}</Link>
+                </div>
+              </div>
+              <div className="lp-create-board" aria-label={t('home.createCanvas.previewAria')}>
+                <div className="lp-create-toolbar"><i /><i /><i /><span>{t('home.createCanvas.sessionLabel')}</span></div>
+                {(t.raw('home.createCanvas.objects') as CanvasObject[]).map((object, i) => (
+                  <div className="lp-create-object" key={object.title}>
+                    <strong>{['⌘', '◎', '▥', '✦'][i]} {object.title}</strong>
+                    <small>{object.meta}</small>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="lp-create-flow">
+              {(t.raw('home.createCanvas.flow') as string[]).map((step, i, steps) => (
+                <span key={step}>{step}{i < steps.length - 1 && <b> &nbsp;→</b>}</span>
+              ))}
+            </div>
           </div>
         </section>
 

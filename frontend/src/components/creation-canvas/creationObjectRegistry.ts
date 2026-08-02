@@ -13,6 +13,9 @@ export interface CreationObjectDefinition {
   renderer: 'creation';
   inspector: 'creation';
   actions: readonly string[];
+  /** Content fields Brain may author for this object kind. Common identity fields
+   * (title, subtitle, status) are added automatically. */
+  mutableFields: readonly string[];
   allowedConnections: readonly CreationConnectionKind[];
   contextAdapter: (data: CreationNodeData) => Record<string, unknown>;
   previewAdapter: (data: CreationNodeData) => { kind: CreationObjectKind; title: string; status?: string };
@@ -78,7 +81,91 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   dataset: ['import', 'profile', 'visualize'], chart: ['refresh', 'drill'], dashboard: ['refresh', 'drill'],
   project: ['expand', 'compare'], task: ['assign', 'deliver'], agent: ['inspect', 'configure', 'assign'],
   evermind: ['teach', 'train', 'evaluate', 'publish'], voice: ['record', 'play'], video: ['generate', 'preview'], mcp: ['authenticate', 'execute'],
+  mockup: ['preview', 'deliver'], mockupSet: ['expand', 'deliver'], standup: ['start'],
 };
+
+const MUTABLE_FIELDS = {
+  workflow: ['content', 'steps', 'approvalMode', 'runTarget'],
+  website: ['content', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteAccent', 'viewport', 'pages'],
+  chat: ['content', 'aiResponse', 'messages'],
+  dataset: ['content', 'columns', 'rows', 'sampleRows', 'rowCount'],
+  table: ['content', 'columns', 'rows'],
+  spreadsheet: ['content', 'columns', 'rows', 'formulas'],
+  chart: ['content', 'chartType', 'chartLabels', 'chartValues', 'sources'],
+  kpi: ['content', 'value', 'target', 'unit', 'trend', 'sources'],
+  dashboard: ['content', 'kpis', 'chartLabels', 'chartValues', 'sources', 'fetchedAt'],
+  report: ['content', 'markdown', 'chartLabels', 'chartValues', 'sources'],
+  evaluation: ['content', 'verdict', 'gaps', 'recommendations', 'sources'],
+  projectComparison: ['content', 'projects', 'sources', 'fetchedAt'],
+  roadmap: ['content', 'items', 'milestones', 'sources'],
+  note: ['content', 'markdown'],
+  prototype: ['content', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteAccent', 'viewport', 'pages'],
+  code: ['content', 'code', 'language', 'path'],
+  browser: ['content', 'url', 'viewport'],
+  repository: ['content', 'url', 'branch'],
+  selection: ['content', 'code', 'language', 'path', 'range'],
+  diagnostics: ['content', 'items', 'severity'],
+  terminal: ['content', 'exitCode'],
+  service: ['content', 'url', 'port'],
+  llm: ['content', 'model', 'instructions', 'parameters'],
+  project: ['content', 'projectLens', 'sources'],
+  task: ['content', 'role', 'assignee', 'priority', 'acceptanceCriteria'],
+  prd: ['content', 'markdown', 'requirements', 'userStories'],
+  release: ['content', 'items', 'milestones', 'releaseDate'],
+  mockup: ['content', 'items', 'viewport', 'sources'],
+  mockupSet: ['content', 'items', 'sources'],
+  featureSummary: ['content', 'items', 'sources'],
+  staff: ['content', 'role', 'focus', 'accent'],
+  team: ['content', 'participants', 'summary'],
+  role: ['content', 'role', 'responsibilities'],
+  standup: ['content', 'participants', 'summary'],
+  agent: ['content', 'model', 'instructions', 'tools', 'autonomy'],
+  voice: ['content', 'transcript', 'voiceId', 'audioUrl'],
+  video: ['content', 'prompt', 'videoUrl', 'duration'],
+  document: ['content', 'markdown', 'sources'],
+  slides: ['content', 'markdown', 'items', 'sources'],
+  knowledge: ['content', 'markdown', 'sources'],
+  file: ['content', 'fileName', 'mimeType', 'url'],
+  url: ['content', 'url', 'sources'],
+  frame: ['content', 'framePurpose', 'frameColor', 'frameBorder'],
+  drawing: ['content', 'points', 'drawingWidth', 'drawingHeight', 'stroke', 'strokeWidth'],
+  comment: ['content', 'resolved', 'mentions'],
+  timer: ['content', 'duration', 'remaining', 'running'],
+  mcp: ['content', 'toolName', 'operation', 'arguments'],
+  evermind: ['content', 'model', 'instructions', 'teacherModel', 'inferenceEnabled', 'evermindVersion', 'contributions', 'trainingLoss', 'stages', 'sources'],
+} as const satisfies Record<CreationObjectKind, readonly string[]>;
+
+const COMMON_MUTABLE_FIELDS = ['title', 'subtitle', 'status'] as const;
+const SENSITIVE_MUTATION_KEY = /(?:secret|token|password|credential|authorization|api.?key|cookie)/i;
+
+function sanitizeMutationValue(value: unknown, depth = 0): unknown {
+  if (value == null || typeof value === 'boolean') return value;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value === 'string') return value.slice(0, 40_000);
+  if (depth >= 4) return undefined;
+  if (Array.isArray(value)) return value.slice(0, 500).map((item) => sanitizeMutationValue(item, depth + 1)).filter((item) => item !== undefined);
+  if (typeof value === 'object') return Object.fromEntries(Object.entries(value as Record<string, unknown>).slice(0, 100).flatMap(([key, item]) => {
+    if (SENSITIVE_MUTATION_KEY.test(key)) return [];
+    const safe = sanitizeMutationValue(item, depth + 1);
+    return safe === undefined ? [] : [[key, safe]];
+  }));
+  return undefined;
+}
+
+export function creationObjectMutableFields(kind: CreationObjectKind): readonly string[] {
+  return [...COMMON_MUTABLE_FIELDS, ...MUTABLE_FIELDS[kind]];
+}
+
+/** Drop unknown and sensitive values before an LLM-authored patch reaches state. */
+export function sanitizeCreationObjectPatch(kind: CreationObjectKind, value: unknown): Partial<CreationNodeData> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const allowed = new Set(creationObjectMutableFields(kind));
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).flatMap(([key, item]) => {
+    if (!allowed.has(key) || SENSITIVE_MUTATION_KEY.test(key)) return [];
+    const safe = sanitizeMutationValue(item);
+    return safe === undefined ? [] : [[key, safe]];
+  })) as Partial<CreationNodeData>;
+}
 /**
  * Explicit, content-safe fields Brain may receive from a Canvas Object.
  * Imported rows, prompts, credentials, tokens, and arbitrary inspector state are
@@ -89,7 +176,11 @@ const CONTEXT_FIELDS = [
   'kind', 'title', 'subtitle', 'status', 'resourceId', 'model', 'role', 'focus',
   'fetchedAt', 'projectLens', 'columns', 'rowCount', 'sampleRows', 'chartLabels', 'chartValues',
   'projects', 'sources', 'items', 'summary', 'participants', 'evermindVersion',
-  'contributions', 'inferenceEnabled', 'teacherModel', 'viewport',
+  'contributions', 'inferenceEnabled', 'teacherModel', 'viewport', 'content', 'markdown',
+  'steps', 'websiteHeadline', 'websiteBody', 'websiteCta', 'pages', 'kpis', 'verdict',
+  'gaps', 'recommendations', 'milestones', 'code', 'language', 'path', 'url', 'branch',
+  'instructions', 'parameters', 'assignee', 'priority', 'acceptanceCriteria', 'requirements',
+  'userStories', 'responsibilities', 'tools', 'autonomy', 'transcript', 'stages',
 ] as const;
 const SENSITIVE_CONTEXT_KEY = /(?:secret|token|password|credential|authorization|api.?key|cookie)/i;
 
@@ -120,7 +211,8 @@ export const CREATION_OBJECT_REGISTRY: readonly CreationObjectDefinition[] = BAS
   ...(CAPABILITIES[definition.kind] ? { capability: CAPABILITIES[definition.kind] } : {}),
   renderer: 'creation' as const,
   inspector: 'creation' as const,
-  actions: ACTIONS[definition.kind] ?? ['inspect'],
+  actions: [...new Set(['inspect', 'edit', ...(ACTIONS[definition.kind] ?? [])])],
+  mutableFields: creationObjectMutableFields(definition.kind),
   allowedConnections: CREATION_CONNECTION_KINDS,
   contextAdapter: creationObjectAiContext,
   previewAdapter: (data: CreationNodeData) => ({ kind: data.kind, title: data.title, ...(data.status ? { status: data.status } : {}) }),

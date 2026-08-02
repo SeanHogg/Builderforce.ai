@@ -12,6 +12,8 @@ Cross-functional work usually breaks into tool-shaped fragments. Product context
 
 Builderforce Creation Sessions give those artifacts a shared spatial home without forcing every collaborator into the same editor.
 
+![A high-fidelity shared Creation Session connecting a visual browser canvas and a native code editor through one prototype, shared objects, comments, cursors, presence, and implementation context](/blog/multiplayer-canvas-hero.webp)
+
 ## One server session, two native surfaces
 
 On the web, Creation Canvas is the default visual workspace for chat, workflows, websites, data, models, people, agents, and optional projects. In the BuilderForce VS Code extension, the same session opens in a full editor tab—not an iframe and not a narrow sidebar.
@@ -28,6 +30,8 @@ The native VS Code surface can add development context without leaving the edito
 - any shared Canvas object kind from the native palette.
 
 A product manager can connect customer evidence and a mockup on the web while a developer connects the failing diagnostic, relevant source selection, and local preview from VS Code.
+
+![The web Creation Canvas contributes customer evidence, prototypes, project lenses, activity, and inspectors while the native VS Code tab contributes files, repository context, diagnostics, terminal output, local services, and previews; both use one session graph with shared object identities, permissions, presence, comments, activity, and revisioned commands](/blog/multiplayer-canvas-shared-session.svg)
 
 ## Collaboration without viewport fights
 

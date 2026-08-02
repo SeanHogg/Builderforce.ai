@@ -5397,6 +5397,27 @@
       "Kundenfeedback visualisieren und Top-Funktionen gestalten",
       "Einen Kundensupport-Agenten bauen, bewerten und ausliefern"
     ],
+    "createCanvas": {
+      "eyebrow": "Create kennenlernen",
+      "heading": "Create Canvas — Wo Ideen zu funktionierenden Systemen werden",
+      "blurb": "Behalten Sie das Tempo eines Prompts und gehen Sie über Chat hinaus. Vereinen Sie Workflows, Websites, Daten, Modelle, Menschen und Agenten auf einer gemeinsamen Leinwand, auf der jedes Objekt aktiv, verbunden und lieferbereit bleibt.",
+      "features": [
+        { "title": "Mit der Absicht beginnen", "desc": "Beschreiben Sie Ihr Ziel und starten Sie sofort auf einer privaten lokalen Leinwand. Konto oder Projekt kommen erst hinzu, wenn Sie zusammenarbeiten oder liefern möchten." },
+        { "title": "Mit echten Objekten erstellen", "desc": "Arbeiten Sie mit editierbaren Workflows, Prototypen, Datensätzen, Dashboards, Modellen, Aufgaben, Menschen und Agenten statt mit flachen Chat-Anhängen." },
+        { "title": "Von der Idee zum Ergebnis", "desc": "Brain denkt über die gesamte Leinwand nach, Sie prüfen die vorgeschlagenen Änderungen und übergeben freigegebene Arbeit in eine kontrollierte Ausführung." }
+      ],
+      "startCta": "Kostenlos erstellen",
+      "exploreCta": "Create entdecken",
+      "previewAria": "Beispiel einer Creation Canvas mit verbundenen aktiven Objekten",
+      "sessionLabel": "Kampagnenstart · Live-Sitzung",
+      "objects": [
+        { "title": "Kampagnen-Workflow", "meta": "Zielgruppe → Erstellen → Freigeben → Veröffentlichen" },
+        { "title": "Interaktive Landingpage", "meta": "Aktiver WYSIWYG-Website-Prototyp" },
+        { "title": "Kampagnenprognose", "meta": "Datengestützte Funnel- und Kanalmetriken" },
+        { "title": "Kampagnenstratege", "meta": "KI-Agent · konfiguriert und zuweisbar" }
+      ],
+      "flow": ["Prompt", "Kontext", "Artefakt", "Prüfung", "Lieferung", "Ergebnis"]
+    },
     "evermindHeadingSuffix": "Ein Modell, das beim Arbeiten lernt – und nie veraltet",
     "pillarsHeading": "Human in the Loop. Vollständig agentisch.",
     "pillarsLead": "Trainieren Sie Ihre eigenen Agenten, setzen Sie sie in Ihrem Agenten ein und behalten Sie über jeden Schritt die Kontrolle – von einem einzigen Ort aus.",

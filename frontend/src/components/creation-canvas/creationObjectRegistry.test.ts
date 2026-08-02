@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, availableCreationObjects, createDefaultCreationData, creationObjectAiContext, creationObjectDefinition } from './creationObjectRegistry';
+import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, availableCreationObjects, createDefaultCreationData, creationObjectAiContext, creationObjectDefinition, creationObjectMutableFields, sanitizeCreationObjectPatch } from './creationObjectRegistry';
 import { CREATION_OBJECT_KINDS } from '@builderforce/creation-canvas-contract';
 
 describe('creation object registry', () => {
@@ -17,10 +17,36 @@ describe('creation object registry', () => {
       expect(data.title.trim()).not.toBe('');
       expect(creationObjectDefinition(definition.kind)).toBe(definition);
       expect(definition.actions.length).toBeGreaterThan(0);
+      expect(definition.actions).toEqual(expect.arrayContaining(['inspect', 'edit']));
+      expect(definition.mutableFields).toEqual(creationObjectMutableFields(definition.kind));
+      expect(definition.mutableFields).toEqual(expect.arrayContaining(['title', 'subtitle', 'status', 'content']));
       expect(definition.allowedConnections.length).toBe(6);
       expect(definition.contextAdapter({ ...data, secret: 'must-not-leak' })).not.toHaveProperty('secret');
       expect(definition.previewAdapter(data)).toMatchObject({ kind: definition.kind, title: data.title });
     }
+  });
+
+  it('accepts authored content for every palette object while rejecting unknown and sensitive fields', () => {
+    const longDocument = Array.from({ length: 500 }, (_, index) => `word${index}`).join(' ');
+    for (const definition of CREATION_OBJECT_REGISTRY) {
+      const patch = sanitizeCreationObjectPatch(definition.kind, {
+        title: `Authored ${definition.label}`,
+        content: longDocument,
+        secret: 'must-not-leak',
+        unknownField: 'must-not-persist',
+      });
+      expect(patch.title).toBe(`Authored ${definition.label}`);
+      expect(patch.content).toBe(longDocument);
+      expect(patch).not.toHaveProperty('secret');
+      expect(patch).not.toHaveProperty('unknownField');
+    }
+  });
+
+  it('sanitizes nested credentials from structured Brain-authored content', () => {
+    expect(sanitizeCreationObjectPatch('mcp', {
+      operation: 'summarize',
+      arguments: { projectId: 42, apiToken: 'do-not-store', nested: { password: 'nope', safe: true } },
+    })).toEqual({ operation: 'summarize', arguments: { projectId: 42, nested: { safe: true } } });
   });
 
   it('gates plan capabilities without hiding unrestricted object kinds', () => {

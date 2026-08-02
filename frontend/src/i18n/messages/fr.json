@@ -5397,6 +5397,27 @@
       "Visualiser les retours clients et maquetter les fonctions clés",
       "Créer, évaluer et livrer un agent de support client"
     ],
+    "createCanvas": {
+      "eyebrow": "Découvrez Create",
+      "heading": "Create Canvas — Là où les idées deviennent des systèmes opérationnels",
+      "blurb": "Gardez la rapidité d’un prompt, puis dépassez le chat. Réunissez workflows, sites web, données, modèles, personnes et agents sur un canevas multijoueur où chaque objet reste actif, connecté et prêt à être livré.",
+      "features": [
+        { "title": "Partez de l’intention", "desc": "Décrivez votre objectif et ouvrez immédiatement un canevas local privé. Ajoutez un compte ou un projet seulement au moment de collaborer ou livrer." },
+        { "title": "Créez avec de vrais objets", "desc": "Travaillez avec des workflows, prototypes, jeux de données, tableaux de bord, modèles, tâches, personnes et agents modifiables, pas avec des pièces jointes figées." },
+        { "title": "De l’idée au résultat", "desc": "Laissez Brain raisonner sur le canevas, examinez ses changements proposés, puis envoyez le travail approuvé vers une exécution gouvernée." }
+      ],
+      "startCta": "Créer gratuitement",
+      "exploreCta": "Explorer Create",
+      "previewAria": "Exemple de Creation Canvas avec des objets actifs connectés",
+      "sessionLabel": "Lancement de campagne · Session en direct",
+      "objects": [
+        { "title": "Workflow de campagne", "meta": "Audience → Créer → Approuver → Publier" },
+        { "title": "Page d’arrivée interactive", "meta": "Prototype de site WYSIWYG actif" },
+        { "title": "Prévisions de campagne", "meta": "Entonnoir et canaux liés aux données" },
+        { "title": "Stratège de campagne", "meta": "Agent IA · configuré et assignable" }
+      ],
+      "flow": ["Prompt", "Contexte", "Livrable", "Révision", "Livraison", "Résultat"]
+    },
     "evermindHeadingSuffix": "Un modèle qui apprend en travaillant — et ne se périme jamais",
     "pillarsHeading": "Intervention humaine. Pleinement agentique.",
     "pillarsLead": "Entraînez vos propres agents, mettez-les au travail au sein de votre agent et gardez la maîtrise de chaque étape — depuis un seul endroit.",

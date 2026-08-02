@@ -7,15 +7,29 @@ import { creationObjectDefinition } from './creationObjectRegistry';
 
 export type CreationFlowNode = Node<CreationNodeData, 'creation'>;
 
-function WorkflowBody({ status }: { status?: string }) {
-  const steps = ['Audience', 'Create campaign', 'Approve', 'Publish'];
+function authoredText(data: CreationNodeData): string | null {
+  const value = [data.content, data.markdown, data.code, data.transcript, data.subtitle].find((candidate) => typeof candidate === 'string' && candidate.trim());
+  return typeof value === 'string' ? value : null;
+}
+
+function asRecord(value: unknown, fallback: Record<string, unknown>): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : fallback;
+}
+
+function AuthoredContent({ data, fallback }: { data: CreationNodeData; fallback: string }) {
+  return <p className={styles.authoredContent}>{authoredText(data) || fallback}</p>;
+}
+
+function WorkflowBody({ data }: { data: CreationNodeData }) {
+  const authoredSteps = Array.isArray(data.steps) ? data.steps.slice(0, 12).map((step, index) => asRecord(step, { title: typeof step === 'string' ? step : `Step ${index + 1}` })) : [];
+  const steps: Record<string, unknown>[] = authoredSteps.length ? authoredSteps : ['Audience', 'Create campaign', 'Approve', 'Publish'].map((title) => ({ title }));
   return (
     <div className={styles.workflowSteps}>
       {steps.map((step, index) => (
-        <div className={styles.workflowStep} key={step}>
+        <div className={styles.workflowStep} key={`${String(step.title || 'Step')}-${index}`}>
           <span className={index === 0 ? styles.doneDot : index === 1 ? styles.liveDot : styles.idleDot} />
-          <strong>{step}</strong>
-          <small>{status === 'Running' && index === 1 ? 'Running…' : index === 0 ? 'Defined' : index === 1 ? 'In progress' : 'Pending'}</small>
+          <strong>{String(step.title || step.name || `Step ${index + 1}`)}</strong>
+          <small>{String(step.status || (data.status === 'Running' && index === 1 ? 'Running…' : index === 0 ? 'Defined' : index === 1 ? 'In progress' : 'Pending'))}</small>
         </div>
       ))}
     </div>
@@ -45,7 +59,7 @@ function DashboardBody({ data }: { data: CreationNodeData }) {
   const max = Math.max(1, ...values.filter(Number.isFinite));
   return (
     <>
-      <div className={styles.kpis}><div><small>Reach</small><strong>212K</strong><em>↑ 18.4%</em></div><div><small>CTR</small><strong>3.6%</strong><em>↑ 0.6pp</em></div><div><small>Conversion</small><strong>2.1%</strong><em>↑ 0.3pp</em></div></div>
+      <div className={styles.kpis}>{(Array.isArray(data.kpis) && data.kpis.length ? data.kpis.slice(0, 6) : [{ label: 'Reach', value: '212K', trend: '↑ 18.4%' }, { label: 'CTR', value: '3.6%', trend: '↑ 0.6pp' }, { label: 'Conversion', value: '2.1%', trend: '↑ 0.3pp' }]).map((raw, index) => { const item = asRecord(raw, { label: `Metric ${index + 1}`, value: raw }); return <div key={`${String(item.label)}-${index}`}><small>{String(item.label || `Metric ${index + 1}`)}</small><strong>{String(item.value ?? '—')}</strong><em>{String(item.trend || '')}</em></div>; })}</div>
       <div className={styles.charts}>
         <div><small>{labels.length ? 'Imported data' : 'Funnel'}</small>{labels.length ? <div style={{ display: 'grid', gap: 5, marginTop: 7 }}>{labels.map((label, index) => <div key={`${label}-${index}`} style={{ display: 'grid', gridTemplateColumns: '70px 1fr 38px', alignItems: 'center', gap: 5, fontSize: 9 }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span><i style={{ display: 'block', height: 7, borderRadius: 5, background: '#08b59d', width: `${Math.max(4, (values[index] || 0) / max * 100)}%` }} /><b>{Number.isFinite(values[index]) ? values[index] : 0}</b></div>)}</div> : <div className={styles.funnel}><i /><i /><i /><i /></div>}</div>
         <div><small>Channel mix</small><div className={styles.donut} /></div>
@@ -54,13 +68,25 @@ function DashboardBody({ data }: { data: CreationNodeData }) {
   );
 }
 
-function EvaluationBody() {
+function DataGridBody({ data }: { data: CreationNodeData }) {
+  const columns = Array.isArray(data.columns) ? data.columns.map((column) => typeof column === 'string' ? column : String((column as Record<string, unknown>)?.name || (column as Record<string, unknown>)?.key || 'Column')).slice(0, 6) : [];
+  const rows = Array.isArray(data.rows) ? data.rows.slice(0, 4) : Array.isArray(data.sampleRows) ? data.sampleRows.slice(0, 4) : [];
+  if (!columns.length && !rows.length) return <AuthoredContent data={data} fallback="Add or import data, then ask Brain to analyze or visualize it." />;
+  const resolvedColumns = columns.length ? columns : Object.keys(asRecord(rows[0], {})).slice(0, 6);
+  return <><p className={styles.fileMeta}>{typeof data.rowCount === 'number' ? data.rowCount : rows.length} rows · {resolvedColumns.length} columns</p><div className={styles.miniTable} style={{ gridTemplateColumns: `repeat(${Math.max(1, resolvedColumns.length)}, minmax(70px, 1fr))` }}>{resolvedColumns.map((column) => <b key={column}>{column}</b>)}{rows.flatMap((row, rowIndex) => { const record = asRecord(row, {}); const values = Array.isArray(row) ? row : resolvedColumns.map((column) => record[column]); return values.slice(0, resolvedColumns.length).map((value, columnIndex) => <span key={`${rowIndex}-${resolvedColumns[columnIndex]}`}>{String(value ?? '')}</span>); })}</div></>;
+}
+
+function KpiBody({ data }: { data: CreationNodeData }) {
+  return <div className={styles.kpis}><div><small>{data.title}</small><strong>{String(data.value ?? '—')}{data.unit ? ` ${String(data.unit)}` : ''}</strong><em>{data.trend ? String(data.trend) : data.target != null ? `Target ${String(data.target)}` : ''}</em></div></div>;
+}
+
+function EvaluationBody({ data }: { data: CreationNodeData }) {
+  const gaps = Array.isArray(data.gaps) ? data.gaps.slice(0, 3).map(String) : [];
+  const recommendations = Array.isArray(data.recommendations) ? data.recommendations.slice(0, 3).map(String) : [];
   return (
     <div className={styles.evaluationBody}>
-      <div className={styles.verdict}>Promising,<br />with 3 gaps</div>
-      <div><b>✓ Message match is strong</b><p>Campaign messaging aligns with the landing page.</p></div>
-      <div><b>△ Mobile CTA appears too late</b><p>Move the primary action above the fold.</p></div>
-      <div><b>◷ Approval timing risks launch</b><p>Publishing may miss the planned window.</p></div>
+      <div className={styles.verdict}>{String(data.verdict || 'Evaluation ready')}</div>
+      {(gaps.length ? gaps : ['Message match needs review', 'Validate the primary action', 'Confirm delivery timing']).map((gap, index) => <div key={`${gap}-${index}`}><b>{index ? '△' : '✓'} {gap}</b><p>{recommendations[index] || (index ? 'Ask Brain to propose a resolution.' : authoredText(data) || 'Evidence is available on the canvas.')}</p></div>)}
       <button>Apply recommendations</button>
     </div>
   );
@@ -115,8 +141,8 @@ function DrawingBody({ data }: { data: CreationNodeData }) {
 }
 
 export function CreationNode({ data, selected }: NodeProps<CreationFlowNode>) {
-  const isWide = data.kind === 'workflow' || data.kind === 'website' || data.kind === 'prototype' || data.kind === 'dashboard' || data.kind === 'chart' || data.kind === 'report' || data.kind === 'evaluation' || data.kind === 'roadmap' || data.kind === 'slides' || data.kind === 'featureSummary' || data.kind === 'mockupSet' || data.kind === 'evermind' || data.kind === 'projectComparison' || data.kind === 'frame';
-  const specialized = new Set(['workflow','website','prototype','dashboard','chart','report','evaluation','agent','staff','chat','dataset','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame']);
+  const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'report', 'evaluation', 'roadmap', 'slides', 'document', 'prd', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame'].includes(data.kind);
+  const specialized = new Set(['workflow','website','prototype','dashboard','chart','report','evaluation','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame']);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || '#f8f6ff'), borderColor: String(data.frameBorder || '#9d8bea') } : undefined;
   return (
     <article style={frameStyle} className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
@@ -129,28 +155,29 @@ export function CreationNode({ data, selected }: NodeProps<CreationFlowNode>) {
         <button className={styles.moreButton} aria-label={`More options for ${data.title}`}>•••</button>
       </header>
       <div className={styles.nodeBody}>
-        {data.kind === 'workflow' && <WorkflowBody status={data.status} />}
+        {data.kind === 'workflow' && <WorkflowBody data={data} />}
         {(data.kind === 'website' || data.kind === 'prototype') && <WebsiteBody data={data} />}
         {(data.kind === 'dashboard' || data.kind === 'chart' || data.kind === 'report') && <DashboardBody data={data} />}
-        {data.kind === 'evaluation' && <EvaluationBody />}
+        {data.kind === 'evaluation' && <EvaluationBody data={data} />}
         {data.kind === 'agent' && <><div className={styles.personRow}><span className={styles.presence} /><b>{data.status || 'Online'}</b><span>{data.model || 'gpt-4o'}</span></div><p>{data.subtitle}</p><div className={styles.pills}><span>Audience Analyzer</span><span>Copy Optimizer</span><span>Autonomy: Medium</span></div></>}
         {data.kind === 'staff' && <><div className={styles.personRow}><span className={styles.avatar} style={{ background: data.accent }}>{data.title.slice(0, 1)}</span><b>{data.role}</b><span className={styles.presence} /></div><small>Current focus</small><p>{data.focus}</p></>}
         {data.kind === 'chat' && <><div className={styles.message}><b>You</b><p>{data.subtitle || 'What would you like to create?'}</p></div><div className={styles.aiMessage}><b>Brain</b><p>{typeof data.aiResponse === 'string' ? data.aiResponse : 'I added your starting objects to the canvas. Keep creating freely; connect an account only when you want to collaborate or deliver the work.'}</p></div></>}
-        {data.kind === 'dataset' && (() => { const columns = Array.isArray(data.columns) ? data.columns.map(String).slice(0, 3) : ['User', 'Plan', 'Conversion']; const rows = Array.isArray(data.rows) ? (data.rows as Array<Record<string, unknown>>).slice(0, 2) : [{ User: 'user_001', Plan: 'Pro', Conversion: '8.3%' }, { User: 'user_002', Plan: 'Free', Conversion: '2.1%' }]; return <><p className={styles.fileMeta}>{typeof data.rowCount === 'number' ? data.rowCount : 18420} rows · {columns.length} columns</p><div className={styles.miniTable}>{columns.map((column) => <b key={column}>{column}</b>)}{rows.flatMap((row, rowIndex) => columns.map((column) => <span key={`${rowIndex}-${column}`}>{String(row[column] ?? '')}</span>))}</div></>; })()}
-        {data.kind === 'voice' && <><div className={styles.waveform}>▂▅▃▆▂▇▅▃▆▂▅▇▃▆▂▅</div><small>00:18 / 00:45</small></>}
-        {data.kind === 'note' && <p>{data.subtitle || 'Double-click to add a thought.'}</p>}
+        {(data.kind === 'dataset' || data.kind === 'table' || data.kind === 'spreadsheet') && <DataGridBody data={data} />}
+        {data.kind === 'kpi' && <KpiBody data={data} />}
+        {data.kind === 'voice' && <><div className={styles.waveform}>▂▅▃▆▂▇▅▃▆▂▅▇▃▆▂▅</div><AuthoredContent data={data} fallback="Record or generate a voice note." /></>}
+        {data.kind === 'note' && <AuthoredContent data={data} fallback="Double-click to add a thought." />}
         {data.kind === 'project' && <><div className={styles.projectHealth}><div><small>Maturity</small><b>3.8 / 5</b></div><div><small>Velocity</small><b>42 pts</b></div><div><small>Health</small><b className={styles.healthy}>On track</b></div></div><p>{data.subtitle || 'Optional project context. Expand to see related work.'}</p></>}
-        {data.kind === 'roadmap' && <div className={styles.roadmap}><div><b>Now</b><span>Validate narrative</span><span>Sales deck</span></div><div><b>Next</b><span>Executive review</span><span>Launch pilot</span></div><div><b>Later</b><span>Measure adoption</span><span>Scale channels</span></div></div>}
-        {data.kind === 'task' && <><div className={styles.personRow}><span className={styles.liveDot} /><b>{data.status || 'Ready'}</b><span>{data.role || 'Campaign Strategist'}</span></div><p>{data.subtitle || 'Build the approved mockup and deliver it to the project.'}</p></>}
+        {data.kind === 'roadmap' && <div className={styles.roadmap}>{(Array.isArray(data.items) && data.items.length ? data.items.slice(0, 12) : [{ title: 'Validate narrative', phase: 'Now' }, { title: 'Executive review', phase: 'Next' }, { title: 'Measure adoption', phase: 'Later' }]).map((raw, index) => { const item = asRecord(raw, { title: raw, phase: index < 2 ? 'Now' : 'Next' }); return <div key={`${String(item.title)}-${index}`}><b>{String(item.phase || item.status || `Phase ${index + 1}`)}</b><span>{String(item.title || item.name || `Item ${index + 1}`)}</span>{item.description ? <span>{String(item.description)}</span> : null}</div>; })}</div>}
+        {data.kind === 'task' && <><div className={styles.personRow}><span className={styles.liveDot} /><b>{data.status || 'Ready'}</b><span>{String(data.assignee || data.role || 'Unassigned')}</span></div><AuthoredContent data={data} fallback="Build the approved mockup and deliver it to the project." /></>}
         {data.kind === 'mockup' && <><div className={styles.mockupGrid}><i /><i /><i /></div><p>{data.subtitle || 'High-fidelity interactive concept ready for review.'}</p><div className={styles.pills}><span>{data.status || 'Draft'}</span><span>Desktop + mobile</span></div></>}
         {data.kind === 'mockupSet' && <><div className={styles.mockupGrid}><i /><i /><i /></div><p>{Array.isArray(data.items) && data.items.length ? `${data.items.length} linked concepts` : 'A reviewable collection of feature concepts. Ask Brain to expand every item.'}</p><div className={styles.pills}><span>Expandable</span><span>Citations retained</span></div></>}
-        {data.kind === 'featureSummary' && <div className={styles.featureGrid}>{['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration'].map((feature, index) => <span key={feature}><b>{index + 1}</b>{feature}</span>)}</div>}
+        {data.kind === 'featureSummary' && <div className={styles.featureGrid}>{(Array.isArray(data.items) && data.items.length ? data.items.map((item) => typeof item === 'string' ? item : String((item as Record<string, unknown>)?.title || (item as Record<string, unknown>)?.name || 'Feature')).slice(0, 20) : ['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration']).map((feature, index) => <span key={`${feature}-${index}`}><b>{index + 1}</b>{feature}</span>)}</div>}
         {data.kind === 'evermind' && <EvermindBody data={data} />}
         {data.kind === 'projectComparison' && <ProjectComparisonBody data={data} />}
         {data.kind === 'standup' && <StandupBody data={data} />}
         {data.kind === 'drawing' && <DrawingBody data={data} />}
         {data.kind === 'frame' && <div className={styles.frameBody}><strong>{String(data.framePurpose || 'Arrange related objects here')}</strong><p>{data.subtitle || 'A reusable spatial section for presentation, facilitation, or review.'}</p></div>}
-        {!specialized.has(data.kind) && <><p>{data.subtitle || `${creationObjectDefinition(data.kind).label} is ready to connect, edit, and use as Brain context.`}</p><div className={styles.pills}><span>{data.status || 'Canvas object'}</span><span>Live session context</span></div></>}
+        {!specialized.has(data.kind) && <><AuthoredContent data={data} fallback={`${creationObjectDefinition(data.kind).label} is ready to connect, edit, and use as Brain context.`} /><div className={styles.pills}><span>{data.status || 'Canvas object'}</span><span>Live session context</span></div></>}
       </div>
       <Handle type="source" position={Position.Right} className={styles.handle} />
     </article>

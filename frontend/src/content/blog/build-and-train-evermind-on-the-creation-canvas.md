@@ -10,6 +10,8 @@ author: Sean Hogg
 
 Model development is rarely one action. It combines evidence, dataset preparation, tokenizer choices, tuning, evaluation, packaging, deployment, and ongoing observation. Creation Canvas makes that lifecycle visible as a connected system instead of hiding it behind a sequence of separate pages.
 
+![A high-fidelity Evermind neural core connected to dataset crystals, tokenizer lattice, tuning chamber, evaluation gates, packaged model artifact, and telemetry in a continuous learning loop](/blog/evermind-canvas-hero.webp)
+
 ## Start with the model you need
 
 Open a blank session and describe the outcome:
@@ -23,6 +25,8 @@ Add an Evermind object or use the Model Lab pack. Anonymous creators can sketch 
 Expand the Evermind creation and training pipeline to place connected Dataset, tokenizer, tuning run, Evaluation, and telemetry objects on the canvas. Typed connections make the intent machine-readable: data feeds preparation and training; evaluations gate delivery; telemetry observes the deployed model.
 
 Dataset objects can import CSV or TSV evidence and create charts for quality review. Notes, reports, dashboards, and Project context can sit beside the pipeline. Brain can assess whether the available examples cover the intended audience, identify weak segments, and propose improvements.
+
+![The governed Evermind learning loop: approved datasets flow through preparation and tokenizer work into a versioned tuning run; accuracy, safety, and citation evaluations gate packaging and publishing; telemetry and approved resolutions feed new evidence back into the model](/blog/evermind-governed-learning-loop.svg)
 
 ## Keep model changes governed
 

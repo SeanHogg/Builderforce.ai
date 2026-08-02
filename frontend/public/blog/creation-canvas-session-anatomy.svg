@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+  <title id="title">Anatomy of a Builderforce Creation Session</title>
+  <desc id="desc">A scoped Brain composer connects live canvas objects through typed relationships, with collaboration, review, and governed delivery surrounding the work.</desc>
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="35%" r="80%"><stop offset="0" stop-color="#1b2050"/><stop offset=".58" stop-color="#10132f"/><stop offset="1" stop-color="#080a1b"/></radialGradient>
+    <linearGradient id="violet" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#b49aff"/><stop offset="1" stop-color="#6746ef"/></linearGradient>
+    <linearGradient id="cyan" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#59e4ff"/><stop offset="1" stop-color="#397cff"/></linearGradient>
+    <linearGradient id="mint" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#72f4c6"/><stop offset="1" stop-color="#22b986"/></linearGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 10 5 0 10z" fill="#7e8bba"/></marker>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <g font-family="Segoe UI,Arial,sans-serif">
+    <text x="72" y="76" fill="#a98bff" font-size="18" font-weight="700" letter-spacing="3">CREATION CANVAS</text>
+    <text x="72" y="126" fill="#f4f6ff" font-size="42" font-weight="800">A session is a living system, not a transcript</text>
+    <text x="72" y="160" fill="#9ea7c7" font-size="18">Canonical objects + typed relationships + scoped reasoning + governed delivery</text>
+
+    <rect x="72" y="206" width="1456" height="474" rx="30" fill="#0c1028" stroke="#343b70" stroke-width="2"/>
+    <g fill="none" stroke="#5f6aa0" stroke-width="2" marker-end="url(#arrow)">
+      <path d="M346 330 C440 330 438 286 524 286"/><path d="M346 330 C440 330 438 414 524 414"/>
+      <path d="M750 286 C828 286 816 330 896 330"/><path d="M750 414 C828 414 816 330 896 330"/>
+      <path d="M1122 330 C1200 330 1194 286 1270 286"/><path d="M1122 330 C1200 330 1194 414 1270 414"/>
+    </g>
+    <g fill="#8490b8" font-size="13" font-weight="700">
+      <text x="400" y="302">SUPPLIES DATA</text><text x="400" y="394">CITES EVIDENCE</text>
+      <text x="790" y="293">CONTROLS</text><text x="789" y="401">PRESENTS</text>
+      <text x="1161" y="300">DELIVERS TO</text><text x="1174" y="397">OBSERVES</text>
+    </g>
+
+    <g>
+      <rect x="116" y="270" width="230" height="120" rx="18" fill="#171c43" stroke="#8b6cff" stroke-width="2"/>
+      <circle cx="154" cy="308" r="14" fill="url(#violet)"/><text x="181" y="314" fill="#fff" font-size="21" font-weight="800">Dataset</text>
+      <text x="148" y="348" fill="#aab2d0" font-size="15">CSV · TSV · MCP sources</text><text x="148" y="373" fill="#70e3ff" font-size="14">canonical + permissioned</text>
+      <rect x="116" y="430" width="230" height="120" rx="18" fill="#171c43" stroke="#47cfff" stroke-width="2"/>
+      <circle cx="154" cy="468" r="14" fill="url(#cyan)"/><text x="181" y="474" fill="#fff" font-size="21" font-weight="800">Project</text>
+      <text x="148" y="508" fill="#aab2d0" font-size="15">metrics · tasks · feedback</text><text x="148" y="533" fill="#70e3ff" font-size="14">optional context</text>
+    </g>
+    <g>
+      <rect x="524" y="226" width="226" height="120" rx="18" fill="#181d44" stroke="#8b6cff" stroke-width="2"/>
+      <text x="556" y="269" fill="#fff" font-size="21" font-weight="800">Workflow</text><path d="M560 305h34l22-24 28 40 25-28h45" fill="none" stroke="#a98bff" stroke-width="4"/>
+      <rect x="524" y="354" width="226" height="120" rx="18" fill="#181d44" stroke="#47cfff" stroke-width="2"/>
+      <text x="556" y="397" fill="#fff" font-size="21" font-weight="800">Website prototype</text><rect x="557" y="417" width="158" height="29" rx="6" fill="#24305f"/><rect x="568" y="427" width="65" height="8" rx="4" fill="#5ee0ff"/>
+      <rect x="524" y="482" width="226" height="120" rx="18" fill="#181d44" stroke="#61e8b8" stroke-width="2"/>
+      <text x="556" y="525" fill="#fff" font-size="21" font-weight="800">Evermind + Agent</text><circle cx="587" cy="563" r="18" fill="url(#mint)"/><path d="M617 550h97M617 570h65" stroke="#60709d" stroke-width="8" stroke-linecap="round"/>
+    </g>
+
+    <g filter="url(#glow)"><rect x="896" y="266" width="226" height="128" rx="22" fill="#20195b" stroke="#b49aff" stroke-width="3"/><circle cx="1009" cy="305" r="20" fill="url(#violet)"/><text x="1009" y="312" text-anchor="middle" fill="#fff" font-size="20" font-weight="900">B</text><text x="1009" y="347" text-anchor="middle" fill="#fff" font-size="23" font-weight="800">Brain</text><text x="1009" y="375" text-anchor="middle" fill="#b9c0dc" font-size="14">canvas · selection · frame</text></g>
+
+    <g>
+      <rect x="1270" y="226" width="214" height="120" rx="18" fill="#171c43" stroke="#ffca69" stroke-width="2"/><text x="1300" y="269" fill="#fff" font-size="21" font-weight="800">Change set</text><text x="1300" y="301" fill="#aab2d0" font-size="15">review · select · apply</text><circle cx="1450" cy="303" r="12" fill="#ffca69"/>
+      <rect x="1270" y="354" width="214" height="120" rx="18" fill="#171c43" stroke="#61e8b8" stroke-width="2"/><text x="1300" y="397" fill="#fff" font-size="21" font-weight="800">Task + Agent</text><text x="1300" y="429" fill="#aab2d0" font-size="15">approval policy · run</text><path d="m1440 429 11 11 23-25" fill="none" stroke="#61e8b8" stroke-width="5"/>
+      <rect x="1270" y="482" width="214" height="120" rx="18" fill="#171c43" stroke="#47cfff" stroke-width="2"/><text x="1300" y="525" fill="#fff" font-size="21" font-weight="800">Status + output</text><text x="1300" y="557" fill="#aab2d0" font-size="15">returns to the session</text><path d="M1310 579h142" stroke="#27345f" stroke-width="8" stroke-linecap="round"/><path d="M1310 579h98" stroke="#47cfff" stroke-width="8" stroke-linecap="round"/>
+    </g>
+
+    <rect x="72" y="716" width="1456" height="108" rx="22" fill="#121735" stroke="#2f3767"/>
+    <g font-size="17" font-weight="700" text-anchor="middle"><text x="190" y="761" fill="#a98bff">PROMPT</text><text x="394" y="761" fill="#72dfff">CONTEXT</text><text x="600" y="761" fill="#72dfff">ARTIFACT</text><text x="806" y="761" fill="#ffca69">REVIEW</text><text x="1012" y="761" fill="#72f4c6">GOVERNED EXECUTION</text><text x="1328" y="761" fill="#72f4c6">MEASURABLE OUTCOME</text></g>
+    <path d="M190 790H1370" stroke="#59648e" stroke-width="3" marker-end="url(#arrow)"/><g fill="#fff"><circle cx="190" cy="790" r="6"/><circle cx="394" cy="790" r="6"/><circle cx="600" cy="790" r="6"/><circle cx="806" cy="790" r="6"/><circle cx="1012" cy="790" r="6"/><circle cx="1328" cy="790" r="6"/></g>
+  </g>
+</svg>

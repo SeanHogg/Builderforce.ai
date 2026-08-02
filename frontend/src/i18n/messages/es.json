@@ -5397,6 +5397,27 @@
       "Visualiza comentarios y diseña las funciones principales",
       "Crea, evalúa y entrega un agente de atención al cliente"
     ],
+    "createCanvas": {
+      "eyebrow": "Conoce Create",
+      "heading": "Create Canvas — Donde las ideas se convierten en sistemas reales",
+      "blurb": "Conserva la velocidad de un prompt y ve más allá del chat. Reúne flujos de trabajo, sitios web, datos, modelos, personas y agentes en un lienzo multijugador donde cada objeto permanece activo, conectado y listo para entregar.",
+      "features": [
+        { "title": "Empieza con la intención", "desc": "Describe lo que quieres y entra de inmediato en un lienzo local privado. Añade una cuenta o proyecto solo cuando necesites colaborar o entregar." },
+        { "title": "Crea con objetos reales", "desc": "Trabaja con flujos, prototipos, conjuntos de datos, paneles, modelos, tareas, personas y agentes editables, no con adjuntos planos de chat." },
+        { "title": "De la idea al resultado", "desc": "Deja que Brain razone sobre todo el lienzo, revisa los cambios propuestos y envía el trabajo aprobado a una ejecución gobernada." }
+      ],
+      "startCta": "Empieza a crear gratis",
+      "exploreCta": "Explorar Create",
+      "previewAria": "Ejemplo de Creation Canvas con objetos activos conectados",
+      "sessionLabel": "Lanzamiento de campaña · Sesión en vivo",
+      "objects": [
+        { "title": "Flujo de campaña", "meta": "Audiencia → Crear → Aprobar → Publicar" },
+        { "title": "Página de destino interactiva", "meta": "Prototipo web WYSIWYG activo" },
+        { "title": "Previsión de campaña", "meta": "Métricas de embudo y canal vinculadas a datos" },
+        { "title": "Estratega de campaña", "meta": "Agente de IA · configurado y asignable" }
+      ],
+      "flow": ["Prompt", "Contexto", "Artefacto", "Revisión", "Entrega", "Resultado"]
+    },
     "evermindHeadingSuffix": "Un modelo que aprende mientras trabaja y nunca queda obsoleto",
     "pillarsHeading": "Con intervención humana. Totalmente agéntico.",
     "pillarsLead": "Entrena tus propios agentes, ponlos a trabajar dentro de tu agente y mantén el control de cada paso, todo desde un solo lugar.",

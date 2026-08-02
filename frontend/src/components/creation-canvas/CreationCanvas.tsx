@@ -33,7 +33,7 @@ import { isAwaitingApprovalExecution } from '@/lib/builderforceApi';
 import { fetchProjects } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
 import { updateAgent } from '@/lib/api';
-import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData, creationObjectDefinition, type CreationObjectGroup } from './creationObjectRegistry';
+import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData, creationObjectDefinition, sanitizeCreationObjectPatch, type CreationObjectGroup } from './creationObjectRegistry';
 import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
@@ -52,18 +52,25 @@ import { buildCreationCanvasDiagnosticsReport } from '@/lib/creationCanvasDiagno
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
+const ACCOUNT_REQUIRED_OBJECT_ACTIONS = new Set(['publish', 'deliver', 'assign', 'authenticate', 'execute', 'record', 'generate', 'train', 'start', 'compare']);
 const PALETTE_GROUP_ICONS: Record<CreationObjectGroup, string> = {
   Build: '✦', Data: '▦', Knowledge: '▤', Insights: '↗', Work: '✓', People: '●', Agents: '✧', Models: '◉', Collaborate: '◇', Integrations: '⌘',
 };
 type ProposedCanvasChange =
   | { id: string; type: 'object.add'; label: string; node: CreationFlowNode }
   | { id: string; type: 'object.update'; label: string; objectId: string; patch: Partial<CreationNodeData> }
-  | { id: string; type: 'connection.add'; label: string; edge: Edge };
+  | { id: string; type: 'object.delete'; label: string; objectId: string }
+  | { id: string; type: 'object.layout'; label: string; objectId: string; position?: { x: number; y: number }; width?: number; height?: number; hidden?: boolean; locked?: boolean }
+  | { id: string; type: 'object.action'; label: string; objectId: string; action: string }
+  | { id: string; type: 'connection.add'; label: string; edge: Edge }
+  | { id: string; type: 'connection.update'; label: string; connectionId: string; patch: { label?: string; kind?: CreationConnectionKind } }
+  | { id: string; type: 'connection.delete'; label: string; connectionId: string };
 type MergeItem = { key: string; source: CreationFlowNode; target: CreationFlowNode | null; choice: 'branch' | 'parent' };
 type MergeReview = { parentId: string; parentRevision: number; parentNodes: CreationFlowNode[]; parentEdges: Edge[]; items: MergeItem[] };
 type FramePreset = { id: string; name: string; data: CreationNodeData };
 type CanvasTimelineMessage = Pick<CreationTimelineMessage, 'clientMessageId' | 'messageRole' | 'body' | 'createdAt'> & { id?: number };
 type BrowserSpeechRecognition = { lang: string; interimResults: boolean; onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void };
+type AccountGate = { title: string; description: string; action: string };
 
 function newNode(kind: CreationObjectKind, position: { x: number; y: number }): CreationFlowNode {
   return { id: crypto.randomUUID(), type: 'creation', position, data: createDefaultCreationData(kind) };
@@ -171,6 +178,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [title, setTitle] = useState('Untitled session');
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [shareOpen, setShareOpen] = useState(initialShareOpen);
+  const [accountGate, setAccountGate] = useState<AccountGate | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [paletteSearch, setPaletteSearch] = useState('');
@@ -212,6 +220,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [proposedChanges, setProposedChanges] = useState<ProposedCanvasChange[]>([]);
   const [acceptedProposalIds, setAcceptedProposalIds] = useState<Set<string>>(new Set());
+  const [pendingBrainActions, setPendingBrainActions] = useState<Array<{ objectId: string; action: string }>>([]);
   const [sessionRole, setSessionRole] = useState<CreationSessionSummary['role']>('owner');
   const [lockBlocked, setLockBlocked] = useState(false);
   const [datasetRowLimit, setDatasetRowLimit] = useState(500);
@@ -1123,41 +1132,96 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     parameters: { type: 'object', properties: {}, additionalProperties: false },
     run: () => ({
       scope: resolvedScopeMode,
-      objects: scopedNodes.map((node) => ({ id: node.id, ...creationObjectDefinition(node.data.kind).contextAdapter(node.data) })),
+      objects: scopedNodes.map((node) => { const definition = creationObjectDefinition(node.data.kind); return { id: node.id, ...definition.contextAdapter(node.data), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, width: node.width ?? node.style?.width, height: node.height ?? node.style?.height, hidden: node.hidden === true, locked: node.data.placementLocked === true }; }),
       connections: scopedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
     }),
   }, {
     name: 'canvas_add_object',
-    description: 'Add a visual object to the canvas. Use this whenever the user asks to create a website, workflow, chart, roadmap, mockup, task, agent, note, or other canvas artifact.',
+    description: 'Create a fully authored visual object. Put type-specific content in fields; supported fields depend on kind and are listed in the current canvas snapshot.',
     parameters: {
-      type: 'object', required: ['kind', 'title'], additionalProperties: false,
+      type: 'object', required: ['kind'], additionalProperties: false,
       properties: {
         kind: { type: 'string', enum: CREATION_OBJECT_REGISTRY.map((definition) => definition.kind) },
-        title: { type: 'string' }, subtitle: { type: 'string' }, status: { type: 'string' }, x: { type: 'number' }, y: { type: 'number' },
+        title: { type: 'string' }, subtitle: { type: 'string' }, status: { type: 'string' },
+        fields: { type: 'object', description: 'Type-specific authored content. Unknown or sensitive fields are rejected.', additionalProperties: true },
+        x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' },
       },
     },
     mutates: true,
     run: (raw: unknown) => {
-      const args = raw as { kind?: CreationObjectKind; title?: string; subtitle?: string; status?: string; x?: number; y?: number };
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { kind?: CreationObjectKind; title?: string; subtitle?: string; status?: string; fields?: unknown; x?: number; y?: number; width?: number; height?: number };
       const allowed = new Set(CREATION_OBJECT_REGISTRY.map((definition) => definition.kind));
       if (!args.kind || !allowed.has(args.kind)) return { error: 'Unsupported canvas object kind' };
       const node = newNode(args.kind, { x: Number(args.x ?? 520), y: Number(args.y ?? 280) });
-      node.data = { ...node.data, title: String(args.title || node.data.title).slice(0, 160), subtitle: args.subtitle?.slice(0, 2_000), status: args.status?.slice(0, 80) };
+      const authored = sanitizeCreationObjectPatch(args.kind, { ...((args.fields && typeof args.fields === 'object') ? args.fields : {}), title: args.title, subtitle: args.subtitle, status: args.status });
+      node.data = { ...node.data, ...authored, title: typeof authored.title === 'string' && authored.title.trim() ? authored.title.slice(0, 160) : node.data.title };
+      const width = Number(args.width); const height = Number(args.height);
+      if (Number.isFinite(width) || Number.isFinite(height)) node.style = { width: Number.isFinite(width) ? Math.max(240, Math.min(width, 2_400)) : undefined, height: Number.isFinite(height) ? Math.max(130, Math.min(height, 1_800)) : undefined };
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add ${node.data.kind} “${node.data.title}”`, node });
-      return { ok: true, proposed: true, object: { id: node.id, kind: node.data.kind, title: node.data.title } };
+      return { ok: true, proposed: true, object: { id: node.id, kind: node.data.kind, title: node.data.title }, mutableFields: creationObjectDefinition(args.kind).mutableFields };
     },
   }, {
     name: 'canvas_update_object',
-    description: 'Update the title, explanatory content, or status of an existing canvas object.',
-    parameters: { type: 'object', required: ['objectId'], additionalProperties: false, properties: { objectId: { type: 'string' }, title: { type: 'string' }, subtitle: { type: 'string' }, status: { type: 'string' } } },
+    description: 'Author or revise any supported field of an existing canvas object. Read the snapshot first to learn its kind and mutableFields.',
+    parameters: { type: 'object', required: ['objectId', 'fields'], additionalProperties: false, properties: { objectId: { type: 'string' }, fields: { type: 'object', additionalProperties: true } } },
     mutates: true,
     run: (raw: unknown) => {
-      const args = raw as { objectId?: string; title?: string; subtitle?: string; status?: string };
-      const exists = !!args.objectId && (nodes.some((node) => node.id === args.objectId) || proposalBuffer.current.some((change) => change.type === 'object.add' && change.node.id === args.objectId));
-      if (!args.objectId || !exists) return { error: 'Object not found' };
-      const patch = { ...(args.title ? { title: args.title.slice(0, 160) } : {}), ...(args.subtitle ? { subtitle: args.subtitle.slice(0, 2_000) } : {}), ...(args.status ? { status: args.status.slice(0, 80) } : {}) };
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { objectId?: string; fields?: unknown };
+      const target = nodes.find((node) => node.id === args.objectId) || proposalBuffer.current.find((change): change is Extract<ProposedCanvasChange, { type: 'object.add' }> => change.type === 'object.add' && change.node.id === args.objectId)?.node;
+      if (!args.objectId || !target) return { error: 'Object not found' };
+      const patch = sanitizeCreationObjectPatch(target.data.kind, args.fields);
+      if (!Object.keys(patch).length) return { error: `No supported fields supplied. Mutable fields: ${creationObjectDefinition(target.data.kind).mutableFields.join(', ')}` };
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Update ${args.objectId}`, objectId: args.objectId, patch });
+      return { ok: true, proposed: true, objectId: args.objectId, updatedFields: Object.keys(patch) };
+    },
+  }, {
+    name: 'canvas_delete_object',
+    description: 'Remove an object and all of its connections from the canvas.',
+    parameters: { type: 'object', required: ['objectId'], additionalProperties: false, properties: { objectId: { type: 'string' } } },
+    mutates: true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const objectId = (raw as { objectId?: string }).objectId;
+      const target = nodes.find((node) => node.id === objectId) || proposalBuffer.current.find((change): change is Extract<ProposedCanvasChange, { type: 'object.add' }> => change.type === 'object.add' && change.node.id === objectId)?.node;
+      if (!objectId || !target) return { error: 'Object not found' };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.delete', label: `Delete ${target.data.title}`, objectId });
+      return { ok: true, proposed: true, objectId };
+    },
+  }, {
+    name: 'canvas_set_object_layout',
+    description: 'Move, resize, hide, show, lock, or unlock an existing canvas object.',
+    parameters: { type: 'object', required: ['objectId'], additionalProperties: false, properties: { objectId: { type: 'string' }, x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' }, hidden: { type: 'boolean' }, locked: { type: 'boolean' } } },
+    mutates: true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { objectId?: string; x?: number; y?: number; width?: number; height?: number; hidden?: boolean; locked?: boolean };
+      const current = nodes.find((node) => node.id === args.objectId) || proposalBuffer.current.find((change): change is Extract<ProposedCanvasChange, { type: 'object.add' }> => change.type === 'object.add' && change.node.id === args.objectId)?.node;
+      if (!args.objectId || !current) return { error: 'Object not found' };
+      const hasPosition = Number.isFinite(args.x) || Number.isFinite(args.y);
+      const position = hasPosition ? { x: Number.isFinite(args.x) ? Number(args.x) : current.position.x, y: Number.isFinite(args.y) ? Number(args.y) : current.position.y } : undefined;
+      const change: Extract<ProposedCanvasChange, { type: 'object.layout' }> = { id: crypto.randomUUID(), type: 'object.layout', label: `Arrange ${current.data.title}`, objectId: args.objectId, ...(position ? { position } : {}), ...(Number.isFinite(args.width) ? { width: Math.max(240, Math.min(Number(args.width), 2_400)) } : {}), ...(Number.isFinite(args.height) ? { height: Math.max(130, Math.min(Number(args.height), 1_800)) } : {}), ...(typeof args.hidden === 'boolean' ? { hidden: args.hidden } : {}), ...(typeof args.locked === 'boolean' ? { locked: args.locked } : {}) };
+      if (!change.position && change.width == null && change.height == null && change.hidden == null && change.locked == null) return { error: 'No layout change supplied' };
+      proposalBuffer.current.push(change);
       return { ok: true, proposed: true, objectId: args.objectId };
+    },
+  }, {
+    name: 'canvas_invoke_object_action',
+    description: 'Invoke a native capability declared by a canvas object. Inspect and edit return guidance immediately; operational actions are proposed for user review before execution.',
+    parameters: { type: 'object', required: ['objectId', 'action'], additionalProperties: false, properties: { objectId: { type: 'string' }, action: { type: 'string' } } },
+    mutates: (raw: unknown) => !['inspect', 'edit'].includes(String((raw as { action?: unknown })?.action || '')),
+    run: (raw: unknown) => {
+      const args = raw as { objectId?: string; action?: string };
+      const target = nodes.find((node) => node.id === args.objectId) || proposalBuffer.current.find((change): change is Extract<ProposedCanvasChange, { type: 'object.add' }> => change.type === 'object.add' && change.node.id === args.objectId)?.node;
+      if (!args.objectId || !target) return { error: 'Object not found' };
+      const definition = creationObjectDefinition(target.data.kind);
+      if (!args.action || !definition.actions.includes(args.action)) return { error: `Unsupported action. Available actions: ${definition.actions.join(', ')}` };
+      if (args.action === 'inspect') return { object: { id: target.id, ...definition.contextAdapter(target.data) }, actions: definition.actions, mutableFields: definition.mutableFields };
+      if (args.action === 'edit') return { objectId: target.id, kind: target.data.kind, mutableFields: definition.mutableFields, instruction: 'Call canvas_update_object with the desired fields.' };
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.action', label: `${args.action} ${target.data.title}`, objectId: target.id, action: args.action });
+      return { ok: true, proposed: true, objectId: target.id, action: args.action };
     },
   }, {
     name: 'canvas_connect_objects',
@@ -1165,6 +1229,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     parameters: { type: 'object', required: ['sourceId', 'targetId'], additionalProperties: false, properties: { sourceId: { type: 'string' }, targetId: { type: 'string' }, kind: { type: 'string', enum: [...CREATION_CONNECTION_KINDS] }, label: { type: 'string' } } },
     mutates: true,
     run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       const args = raw as { sourceId?: string; targetId?: string; kind?: CreationConnectionKind; label?: string };
       const exists = (id: string) => nodes.some((node) => node.id === id) || proposalBuffer.current.some((change) => change.type === 'object.add' && change.node.id === id);
       if (!args.sourceId || !args.targetId || !exists(args.sourceId) || !exists(args.targetId)) return { error: 'Source or target object not found' };
@@ -1172,7 +1237,35 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Connect objects${args.label ? `: ${args.label}` : ''}`, edge });
       return { ok: true, proposed: true, connectionId: edge.id };
     },
-  }], [nodes, resolvedScopeMode, scopedEdges, scopedNodes]);
+  }, {
+    name: 'canvas_update_connection',
+    description: 'Change the label or semantic kind of an existing connection.',
+    parameters: { type: 'object', required: ['connectionId'], additionalProperties: false, properties: { connectionId: { type: 'string' }, kind: { type: 'string', enum: [...CREATION_CONNECTION_KINDS] }, label: { type: 'string' } } },
+    mutates: true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { connectionId?: string; kind?: CreationConnectionKind; label?: string };
+      const exists = edges.some((edge) => edge.id === args.connectionId) || proposalBuffer.current.some((change) => change.type === 'connection.add' && change.edge.id === args.connectionId);
+      if (!args.connectionId || !exists) return { error: 'Connection not found' };
+      const patch = { ...(typeof args.label === 'string' ? { label: args.label.slice(0, 120) } : {}), ...(args.kind && CREATION_CONNECTION_KINDS.includes(args.kind) ? { kind: args.kind } : {}) };
+      if (!Object.keys(patch).length) return { error: 'No connection change supplied' };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.update', label: `Update connection ${args.connectionId}`, connectionId: args.connectionId, patch });
+      return { ok: true, proposed: true, connectionId: args.connectionId };
+    },
+  }, {
+    name: 'canvas_delete_connection',
+    description: 'Remove an existing relationship between canvas objects.',
+    parameters: { type: 'object', required: ['connectionId'], additionalProperties: false, properties: { connectionId: { type: 'string' } } },
+    mutates: true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const connectionId = (raw as { connectionId?: string }).connectionId;
+      const exists = edges.some((edge) => edge.id === connectionId) || proposalBuffer.current.some((change) => change.type === 'connection.add' && change.edge.id === connectionId);
+      if (!connectionId || !exists) return { error: 'Connection not found' };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.delete', label: `Delete connection ${connectionId}`, connectionId });
+      return { ok: true, proposed: true, connectionId };
+    },
+  }], [canEdit, edges, nodes, resolvedScopeMode, scopedEdges, scopedNodes]);
 
   const evaluateCanvas = useCallback((event: FormEvent) => {
     event.preventDefault();
@@ -1189,7 +1282,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const request = requestText;
       const snapshot = JSON.stringify({
         sessionId, scope: resolvedScopeMode, selectedObjectIds: effectiveSelectedIds,
-        objects: scopedNodes.map((node) => ({ id: node.id, ...creationObjectDefinition(node.data.kind).contextAdapter(node.data), position: node.position })),
+        objects: scopedNodes.map((node) => { const definition = creationObjectDefinition(node.data.kind); return { id: node.id, ...definition.contextAdapter(node.data), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, width: node.width ?? node.style?.width, height: node.height ?? node.style?.height, hidden: node.hidden === true, locked: node.data.placementLocked === true }; }),
         connections: scopedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
       });
       setPrompt('');
@@ -1263,18 +1356,43 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const selected = proposedChanges.filter((change) => acceptedProposalIds.has(change.id));
     const additions = selected.filter((change): change is Extract<ProposedCanvasChange, { type: 'object.add' }> => change.type === 'object.add');
     const updates = selected.filter((change): change is Extract<ProposedCanvasChange, { type: 'object.update' }> => change.type === 'object.update');
-    const connections = selected.filter((change): change is Extract<ProposedCanvasChange, { type: 'connection.add' }> => change.type === 'connection.add');
+    const deletions = selected.filter((change): change is Extract<ProposedCanvasChange, { type: 'object.delete' }> => change.type === 'object.delete');
+    const layouts = selected.filter((change): change is Extract<ProposedCanvasChange, { type: 'object.layout' }> => change.type === 'object.layout');
+    const actions = selected.filter((change): change is Extract<ProposedCanvasChange, { type: 'object.action' }> => change.type === 'object.action');
+    const connectionAdditions = selected.filter((change): change is Extract<ProposedCanvasChange, { type: 'connection.add' }> => change.type === 'connection.add');
+    const connectionUpdates = selected.filter((change): change is Extract<ProposedCanvasChange, { type: 'connection.update' }> => change.type === 'connection.update');
+    const connectionDeletions = selected.filter((change): change is Extract<ProposedCanvasChange, { type: 'connection.delete' }> => change.type === 'connection.delete');
+    const deletedObjectIds = new Set(deletions.map((change) => change.objectId));
+    const deletedConnectionIds = new Set(connectionDeletions.map((change) => change.connectionId));
     setNodes((current) => {
       const next = [...current, ...additions.map((change) => change.node)];
-      return next.map((node) => updates.reduce((value, change) => value.id === change.objectId ? { ...value, data: { ...value.data, ...change.patch } } : value, node));
+      return next
+        .filter((node) => !deletedObjectIds.has(node.id))
+        .map((node) => updates.reduce((value, change) => value.id === change.objectId ? { ...value, data: { ...value.data, ...change.patch } } : value, node))
+        .map((node) => layouts.reduce((value, change) => {
+          if (value.id !== change.objectId) return value;
+          const locked = change.locked ?? value.data.placementLocked === true;
+          return {
+            ...value,
+            ...(change.position ? { position: change.position } : {}),
+            ...(change.hidden != null ? { hidden: change.hidden } : {}),
+            draggable: !locked,
+            style: { ...value.style, ...(change.width != null ? { width: change.width } : {}), ...(change.height != null ? { height: change.height } : {}) },
+            data: { ...value.data, ...(change.hidden != null ? { placementHidden: change.hidden } : {}), ...(change.locked != null ? { placementLocked: change.locked } : {}) },
+          };
+        }, node));
     });
-    setEdges((current) => [...current, ...connections.map((change) => change.edge)]);
+    setEdges((current) => [...current, ...connectionAdditions.map((change) => change.edge)]
+      .filter((edge) => !deletedConnectionIds.has(edge.id) && !deletedObjectIds.has(edge.source) && !deletedObjectIds.has(edge.target))
+      .map((edge) => connectionUpdates.reduce((value, change) => value.id === change.connectionId ? { ...value, ...(change.patch.label != null ? { label: change.patch.label } : {}), data: { ...value.data, ...(change.patch.kind ? { connectionKind: change.patch.kind } : {}) } } : value, edge)));
     if (additions.length) setSelectedId(additions[additions.length - 1]!.node.id);
+    else if (selectedId && deletedObjectIds.has(selectedId)) { setSelectedId(null); setSelectedIds([]); }
+    if (actions.length) setPendingBrainActions((current) => [...current, ...actions.filter((change) => !deletedObjectIds.has(change.objectId)).map(({ objectId, action }) => ({ objectId, action }))]);
     setProposedChanges([]);
     setAcceptedProposalIds(new Set());
     setNotice(`${selected.length} reviewed Brain changes applied`);
     trackActivity('creation_change_set_applied', { sessionId, metadata: { clientSurface: 'web', commandCount: selected.length } });
-  }, [acceptedProposalIds, proposedChanges, sessionId, setEdges, setNodes]);
+  }, [acceptedProposalIds, proposedChanges, selectedId, sessionId, setEdges, setNodes]);
 
   const rejectProposedChanges = useCallback(() => {
     setProposedChanges([]);
@@ -1349,6 +1467,44 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       .then(() => setNotice('Agent settings saved everywhere'))
       .catch((error) => setNotice(error instanceof Error ? error.message : 'Agent settings could not be saved'));
   }, [selectedNode]);
+
+  useEffect(() => {
+    const pending = pendingBrainActions[0];
+    if (!pending) return;
+    const target = nodes.find((node) => node.id === pending.objectId);
+    if (!target) { setPendingBrainActions((current) => current.slice(1)); return; }
+    if (selectedId !== target.id) {
+      setSelectedId(target.id);
+      setSelectedIds([target.id]);
+      return;
+    }
+    const finish = () => setPendingBrainActions((current) => current.slice(1));
+    if (target.data.kind === 'workflow' && pending.action === 'run') runWorkflow();
+    else if (target.data.kind === 'dataset' && pending.action === 'visualize') visualizeDataset();
+    else if (target.data.kind === 'project' && pending.action === 'expand') expandProject();
+    else if (target.data.kind === 'project' && pending.action === 'compare') compareProjects();
+    else if (target.data.kind === 'mockupSet' && pending.action === 'expand') expandMockupSet();
+    else if ((target.data.kind === 'mockup' || target.data.kind === 'mockupSet') && pending.action === 'deliver') deliverMockup();
+    else if (target.data.kind === 'standup' && pending.action === 'start') startStandup();
+    else if (target.data.kind === 'evermind' && pending.action === 'train') expandEvermindPipeline();
+    else if (target.data.kind === 'evermind' && pending.action === 'evaluate') {
+      const evaluation = newNode('evaluation', { x: target.position.x + 560, y: target.position.y });
+      evaluation.data = { ...evaluation.data, title: `${target.data.title} evaluation`, status: 'Ready', content: `Evaluate ${target.data.title} against its connected dataset, training evidence, and quality criteria.` };
+      setNodes((current) => [...current, evaluation]);
+      setEdges((current) => [...current, { id: crypto.randomUUID(), source: target.id, target: evaluation.id, type: 'smoothstep', label: 'evaluates', animated: true }]);
+      setNotice('Evermind evaluation added to the canvas');
+    } else if (['preview', 'drill', 'play', 'profile'].includes(pending.action)) {
+      void flowRef.current?.fitView({ nodes: [{ id: target.id }], padding: .3, duration: 350 });
+      setNotice(`${target.data.title} ready to ${pending.action}`);
+    } else if (pending.action === 'publish' && ['website', 'evermind'].includes(target.data.kind)) {
+      setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: persistence === 'local' ? 'Publish-ready draft' : 'Publish requested' } } : node));
+      setNotice(persistence === 'local' ? 'Save the session to publish this artifact' : `${target.data.title} is ready for its canonical publish step`);
+    } else {
+      setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: `${pending.action} requested` } } : node));
+      setNotice(`${pending.action} is ready in the ${creationObjectDefinition(target.data.kind).label} inspector`);
+    }
+    finish();
+  }, [compareProjects, deliverMockup, expandEvermindPipeline, expandMockupSet, expandProject, nodes, pendingBrainActions, persistence, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
 
   const openHistory = useCallback(() => {
     setHistoryOpen(true);

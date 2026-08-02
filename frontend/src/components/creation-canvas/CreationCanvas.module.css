@@ -148,6 +148,7 @@
 .status + .moreButton { margin-left: 0; }
 .nodeBody { padding: 11px; font-size: 11px; }
 .nodeBody p { margin: 6px 0; color: #53647a; line-height: 1.45; }
+.authoredContent { max-height:210px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
 .handle { width: 8px !important; height: 8px !important; background: #6e8099 !important; border: 2px solid #fff !important; }
 
 .workflowSteps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }

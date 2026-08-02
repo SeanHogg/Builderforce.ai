@@ -16,6 +16,8 @@ A campaign is not only a paragraph. It has an audience, a workflow, a landing pa
 
 Builderforce Creation Canvas keeps the prompt and changes what can surround it.
 
+![A high-fidelity Creation Canvas radiating from one prompt into live workflow, website prototype, dashboard, model, agent, data visualization, mobile, and code artifacts](/blog/creation-canvas-beyond-chat-hero.webp)
+
 ## A session is the new creative container
 
 The Creation Canvas is organized around a **Session**, not a Project. A visitor can type an idea on [builderforce.ai](/), enter a local canvas immediately, and begin creating without an account or an assigned team. The complete draft stays on that device. When the visitor signs in, Builderforce claims the session into their workspace so it can be saved, shared, and delivered.
@@ -31,6 +33,8 @@ On the canvas, a workflow is not a screenshot of a workflow. It is the saved wor
 Other objects include Chat, Project, Task, Roadmap, Slides, Voice, Code, Browser Preview, Staff Member, Report, Note, Drawing, and reusable Frame.
 
 Connections have meaning. One object can supply data to another, control it, cite it as evidence, present it, or receive its delivered output. Spatial proximity alone never implies execution.
+
+![Anatomy of a Creation Session: permissioned Dataset and optional Project context supply live Workflow, Website prototype, Evermind, and Agent objects; scoped Brain reasoning produces a reviewable change set that becomes a governed Task and returns status and output to the session](/blog/creation-canvas-session-anatomy.svg)
 
 ## Brain can reason across the work
 

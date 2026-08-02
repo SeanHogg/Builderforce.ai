@@ -10,6 +10,8 @@ author: Sean Hogg
 
 Project reports are usually read one at a time. That makes it difficult to see duplicated features, shared risks, or why one initiative is moving faster than another. Builderforce Creation Canvas lets a portfolio owner place two or more live Project objects in one session and ask Brain to compare their authoritative data.
 
+![High-fidelity project worlds with dashboards, metrics, risks, and feature evidence converging into one illuminated executive roadmap whose milestones remain connected to their source data](/blog/project-roadmap-hero.webp)
+
 ## Projects are context, not the starting gate
 
 A Creation Session does not require a Project. Begin with the question, evidence, or concept you care about. Add Project objects only when their planning and delivery data makes the work more useful.
@@ -25,6 +27,8 @@ Select the Project objects and ask:
 Brain evaluates structured project facts and returns a persistent comparison with inspectable sources and freshness. That distinction matters: the result is not based on where cards happen to sit or on an old pasted summary.
 
 Place dashboards, KPIs, reports, customer-feedback datasets, or task groups beside the comparison to make disagreements visible. A reviewer can follow a citation back to its source object, comment, or request another lens.
+
+![Live Project objects feed an inspectable Brain comparison across requested features, maturity, rating, performance, productivity, delivery risk, strategic overlap, and dependencies; the result becomes an executive or sales Roadmap and Slides package, then governed Task and Agent delivery](/blog/project-comparison-roadmap.svg)
 
 ## Turn analysis into a presentation
 

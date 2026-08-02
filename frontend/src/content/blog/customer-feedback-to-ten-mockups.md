@@ -12,6 +12,8 @@ Product teams rarely lack feedback. They lack a trustworthy path from thousands 
 
 Creation Canvas turns that path into one visible session.
 
+![Thousands of customer feedback signals pass through a crystalline synthesis engine and fan out into ten distinct high-fidelity interactive product concepts, with evidence threads visibly preserved from every source to every mockup](/blog/feedback-to-mockups-hero.webp)
+
 ## 1. Bring in the evidence
 
 Start a session with a prompt such as:
@@ -44,6 +46,8 @@ Connect the Feature Summary to a Mockup Set and ask Brain to expand every item. 
 Use a WYSIWYG Prototype object when a concept needs higher fidelity. Edit headlines, calls to action, color, responsive viewport, navigation, or data bindings directly in the inspector. Add drawings and notes around a concept during critique. Group related variants in a reusable Frame.
 
 At this point the canvas becomes a visual decision room: evidence to the left, synthesized opportunities in the middle, and interactive concepts to the right.
+
+![The Product Discovery pack preserves provenance from CSV, reports, dashboards, and MCP sources through a cited Feature Summary into ten individually reviewable Mockups, then evaluates customer impact, overlap, and delivery risk before creating an approved Task and Agent run](/blog/feedback-mockup-provenance.svg)
 
 ## 4. Evaluate concepts against reality
 
