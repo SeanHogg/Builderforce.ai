@@ -10,6 +10,9 @@
     "report": "tsx src/report.ts",
     "ci": "tsx src/pull-tests.ts && (playwright test; true) && tsx src/report.ts",
     "explore": "tsx src/explore.ts",
+    "canvas:release": "playwright test tests/creation-canvas*.spec.ts",
+    "canvas:capacity": "tsx src/canvas-capacity.ts",
+    "canvas:audit": "tsx src/canvas-release-audit.ts",
     "type-check": "tsc --noEmit",
     "typecheck:native": "tsgo --noEmit"
   },

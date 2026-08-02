@@ -11832,7 +11832,7 @@
   },
   "creationCanvas": {
     "sessionTitle": "Título de la sesión", "saved": "Sesión guardada", "activeCollaborators": "Colaboradores activos",
-    "newSession": "Nueva sesión", "templates": "Plantillas", "history": "Historial", "draw": "Dibujar", "branch": "Crear rama", "merge": "Fusionar", "present": "Presentar", "exitPresentation": "Salir de la presentación", "share": "Compartir", "run": "Ejecutar", "saveCollaborate": "Guardar y colaborar",
+    "newSession": "Nueva sesión", "add": "Añadir", "moreActions": "Más acciones de sesión", "selectionActions": "Acciones de selección", "selectedCount": "{count} seleccionados", "templates": "Plantillas", "history": "Historial", "draw": "Dibujar", "stopDrawing": "Dejar de dibujar", "branch": "Crear rama", "merge": "Fusionar", "present": "Presentar", "exitPresentation": "Salir de la presentación", "share": "Compartir", "run": "Ejecutar", "saveCollaborate": "Guardar y colaborar",
     "addToCanvas": "Añadir al Lienzo", "searchEverything": "Buscar en todo…", "askBrain": "Pregunta a Brain sobre este Lienzo", "sendBrain": "Enviar a Brain", "entireCanvas": "Todo el Lienzo", "loading": "Cargando tu Lienzo…", "requestAccess": "Solicitar acceso", "accessRequired": "Acceso necesario",
     "canvasTemplates": "Plantillas del Lienzo", "savedAccount": "Guardado en tu cuenta", "reusableFrames": "Tus marcos reutilizables", "marketplacePacks": "Paquetes de Objetos reutilizables y seguros",
     "details": "Detalles", "activity": "Actividad", "name": "Nombre", "saveChanges": "Guardar cambios", "next": "Siguiente", "startCreating": "Empezar a crear",

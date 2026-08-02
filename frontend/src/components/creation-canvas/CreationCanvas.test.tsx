@@ -173,6 +173,7 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
 
   it('adds a reusable Marketplace object pack to the session', () => {
     render(<CreationCanvas sessionId="template-test" persistence="local" />);
+    fireEvent.click(screen.getByRole('button', { name: 'More session actions' }));
     fireEvent.click(screen.getByRole('button', { name: 'Templates' }));
     fireEvent.click(screen.getByRole('button', { name: /Product discovery/i }));
 
@@ -186,11 +187,22 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     fireEvent.click(screen.getAllByRole('button', { name: 'Frame' }).find((button) => button.getAttribute('draggable') === 'true')!);
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Decision review' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save as reusable frame' }));
+    fireEvent.click(screen.getByRole('button', { name: 'More session actions' }));
     fireEvent.click(screen.getByRole('button', { name: 'Templates' }));
 
     expect(screen.getByText('Reusable frame saved to your template library')).toBeInTheDocument();
     expect(screen.getByText('Your reusable frames')).toBeInTheDocument();
     expect(screen.getByText('Private custom frame')).toBeInTheDocument();
+  });
+
+  it('keeps the session header focused and moves object commands into contextual controls', () => {
+    render(<CreationCanvas sessionId="header-test" persistence="local" />);
+
+    expect(screen.getByRole('button', { name: 'More session actions' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Templates' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('Fall campaign workflow'));
+    expect(screen.getByLabelText('Selection actions')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Duplicate' })).toBeInTheDocument();
   });
 
   it('provides a keyboard-readable structured graph and semantic connections', () => {

@@ -11832,7 +11832,7 @@
   },
   "creationCanvas": {
     "sessionTitle": "Session title", "saved": "Session saved", "activeCollaborators": "Active collaborators",
-    "newSession": "New session", "templates": "Templates", "history": "History", "draw": "Draw", "branch": "Branch", "merge": "Merge", "present": "Present", "exitPresentation": "Exit presentation", "share": "Share", "run": "Run", "saveCollaborate": "Save & collaborate",
+    "newSession": "New session", "add": "Add", "moreActions": "More session actions", "selectionActions": "Selection actions", "selectedCount": "{count} selected", "templates": "Templates", "history": "History", "draw": "Draw", "stopDrawing": "Stop drawing", "branch": "Branch", "merge": "Merge", "present": "Present", "exitPresentation": "Exit presentation", "share": "Share", "run": "Run", "saveCollaborate": "Save & collaborate",
     "addToCanvas": "Add to canvas", "searchEverything": "Search everything…", "askBrain": "Ask Brain about this canvas", "sendBrain": "Send to Brain", "entireCanvas": "Entire canvas", "loading": "Loading your canvas…", "requestAccess": "Request access", "accessRequired": "Access required",
     "canvasTemplates": "Canvas templates", "savedAccount": "Saved to your account", "reusableFrames": "Your reusable frames", "marketplacePacks": "Reusable, capability-safe object packs",
     "details": "Details", "activity": "Activity", "name": "Name", "saveChanges": "Save changes", "next": "Next", "startCreating": "Start creating",

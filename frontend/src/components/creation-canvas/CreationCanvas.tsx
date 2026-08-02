@@ -164,6 +164,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [title, setTitle] = useState('Untitled session');
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [shareOpen, setShareOpen] = useState(initialShareOpen);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [paletteSearch, setPaletteSearch] = useState('');
   const [presentMode, setPresentMode] = useState(initialPresent);
@@ -1387,28 +1388,24 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           </div>
           <button className={styles.secondaryButton} onClick={undo} aria-label="Undo canvas change">↶</button>
           <button className={styles.secondaryButton} onClick={redo} aria-label="Redo canvas change">↷</button>
-          <button className={styles.secondaryButton} onClick={duplicateSelection} disabled={!canEdit || !effectiveSelectedIds.length}>{t('duplicate')}</button>
-          <button className={styles.secondaryButton} onClick={alignSelection} disabled={!canEdit || effectiveSelectedIds.length < 2}>{t('align')}</button>
-          <button className={styles.secondaryButton} onClick={frameSelection} disabled={!canEdit || effectiveSelectedIds.length < 2}>{t('frame')}</button>
-          <button className={styles.secondaryButton} onClick={togglePlacementLock} disabled={!canEdit || !effectiveSelectedIds.length}>{effectiveSelectedIds.some((id) => nodes.find((node) => node.id === id)?.data.placementLocked !== true) ? t('lock') : t('unlock')}</button>
-          <button className={styles.secondaryButton} onClick={toggleHidden} disabled={!canEdit || !effectiveSelectedIds.length}>{t('hide')}</button>
-          <button className={styles.secondaryButton} onClick={() => setShowHidden((value) => !value)}>{showHidden ? t('hideHidden') : t('showHidden')}</button>
-          <button className={styles.secondaryButton} onClick={focusSelection} disabled={!effectiveSelectedIds.length}>{t('focus')}</button>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11 }}>{t('edge')}
-            <select aria-label="Connection kind" value={connectionKind} onChange={(event) => setConnectionKind(event.target.value as CreationConnectionKind)}>{CREATION_CONNECTION_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select>
-          </label>
-          <button className={styles.secondaryButton} onClick={openHistory}>{t('history')}</button>
-          <button className={styles.secondaryButton} onClick={exportSession}>{t('exportCanvas')}</button>
-          <button className={styles.secondaryButton} onClick={() => setConversationOpen((value) => !value)}>{t('conversation')}</button>
-          <button className={`${styles.secondaryButton} ${drawingMode ? styles.canvasToolActive : ''}`} aria-pressed={drawingMode} onClick={() => setDrawingMode((value) => !value)}>{t('draw')}</button>
-          <button className={styles.secondaryButton} onClick={() => setTemplateOpen((value) => !value)}>{t('templates')}</button>
-          <button className={styles.secondaryButton} onClick={createBranch}>{t('branch')}</button>
-          {branchParentId && <button className={styles.secondaryButton} onClick={prepareMerge}>{t('merge')}</button>}
-          <button className={styles.secondaryButton} onClick={() => setPresentMode((value) => !value)}>{presentMode ? t('exitPresentation') : t('present')}</button>
-          <button className={styles.secondaryButton} onClick={() => setTourStep(1)}>{t('tutorial')}</button>
-          <button className={styles.secondaryButton} onClick={() => setShareOpen((value) => !value)}>{t('share')} ▾</button>
+          <button className={styles.secondaryButton} onClick={() => setPaletteOpen(true)}>＋ {t('add')}</button>
+          <button className={styles.secondaryButton} aria-expanded={moreOpen} aria-label={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}>•••</button>
+          <button className={styles.secondaryButton} onClick={() => { setShareOpen((value) => !value); setMoreOpen(false); }}>{t('share')} ▾</button>
           {persistence === 'local' && <button className={styles.primaryButton} onClick={() => { window.location.href = `/login?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>{t('saveCollaborate')}</button>}
           <button className={styles.primaryButton} disabled={!canRun} onClick={runWorkflow}>▶ {t('run')}</button>
+          {moreOpen && <div className={styles.moreMenu} aria-label={t('moreActions')}>
+            <button onClick={() => { setTemplateOpen(true); setMoreOpen(false); }}>{t('templates')}</button>
+            <button onClick={() => { setConversationOpen((value) => !value); setMoreOpen(false); }}>{t('conversation')}</button>
+            <button onClick={() => { openHistory(); setMoreOpen(false); }}>{t('history')}</button>
+            <button onClick={() => { exportSession(); setMoreOpen(false); }}>{t('exportCanvas')}</button>
+            <button aria-pressed={drawingMode} onClick={() => { setDrawingMode((value) => !value); setMoreOpen(false); }}>{drawingMode ? t('stopDrawing') : t('draw')}</button>
+            <button onClick={() => { setPresentMode((value) => !value); setMoreOpen(false); }}>{presentMode ? t('exitPresentation') : t('present')}</button>
+            <button onClick={() => { setTourStep(1); setMoreOpen(false); }}>{t('tutorial')}</button>
+            <button onClick={() => { setShowHidden((value) => !value); setMoreOpen(false); }}>{showHidden ? t('hideHidden') : t('showHidden')}</button>
+            <button onClick={() => { createBranch(); setMoreOpen(false); }}>{t('branch')}</button>
+            {branchParentId && <button onClick={() => { prepareMerge(); setMoreOpen(false); }}>{t('merge')}</button>}
+            <label>{t('edge')}<select aria-label="Connection kind" value={connectionKind} onChange={(event) => setConnectionKind(event.target.value as CreationConnectionKind)}>{CREATION_CONNECTION_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label>
+          </div>}
           {shareOpen && <div className={styles.shareMenu}>
             <strong>{persistence === 'local' ? 'Save to invite people' : 'Invite collaborators'}</strong>
             <p>{persistence === 'local' ? 'Your work is safe on this device. Create a free account when you want live collaboration or delivery.' : 'Anyone invited can build with you and ask Brain questions.'}</p>
@@ -1434,6 +1431,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       </div>
 
       <div ref={flowWrapRef} className={styles.flowWrap} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPoints.current = []; }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
+        {!presentMode && effectiveSelectedIds.length > 0 && <div className={styles.selectionToolbar} aria-label={t('selectionActions')}>
+          <span>{t('selectedCount', { count: effectiveSelectedIds.length })}</span>
+          <button onClick={focusSelection}>{t('focus')}</button>
+          <button onClick={duplicateSelection} disabled={!canEdit}>{t('duplicate')}</button>
+          {effectiveSelectedIds.length > 1 && <button onClick={alignSelection} disabled={!canEdit}>{t('align')}</button>}
+          {effectiveSelectedIds.length > 1 && <button onClick={frameSelection} disabled={!canEdit}>{t('frame')}</button>}
+          <button onClick={togglePlacementLock} disabled={!canEdit}>{effectiveSelectedIds.some((id) => nodes.find((node) => node.id === id)?.data.placementLocked !== true) ? t('lock') : t('unlock')}</button>
+          <button onClick={toggleHidden} disabled={!canEdit}>{t('hide')}</button>
+        </div>}
         {loadingSession && <div className={styles.canvasSkeleton} role="status" aria-live="polite"><span /><span /><span /><b>Loading session…</b></div>}
         {nodes.length > 100 && <div className={styles.performanceNotice} role="status"><strong>{t('largeSession', { count: nodes.length })}</strong><span>Only visible Objects are rendered. Use frames or hide heavy Objects to keep navigation fast.</span><button type="button" onClick={() => setPaletteOpen(true)}>{t('frame')}</button></div>}
         {tourStep > 0 && <div style={{ position: 'absolute', zIndex: 30, top: 18, left: '50%', transform: 'translateX(-50%)', width: 'min(430px, calc(100% - 32px))', padding: 16, borderRadius: 14, background: 'var(--bg-elevated, white)', boxShadow: '0 14px 44px rgba(25,40,70,.22)', border: '1px solid var(--border-subtle)' }}>
