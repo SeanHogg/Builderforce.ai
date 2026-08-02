@@ -140,7 +140,12 @@ function DrawingBody({ data }: { data: CreationNodeData }) {
   </svg>;
 }
 
-export function CreationNode({ data, selected }: NodeProps<CreationFlowNode>) {
+type CreationNodeProps = NodeProps<CreationFlowNode> & {
+  canRun?: boolean;
+  onRun?: (nodeId: string) => void;
+};
+
+export function CreationNode({ id, data, selected, canRun = true, onRun }: CreationNodeProps) {
   const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'report', 'evaluation', 'roadmap', 'slides', 'document', 'prd', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame'].includes(data.kind);
   const specialized = new Set(['workflow','website','prototype','dashboard','chart','report','evaluation','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame']);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || '#f8f6ff'), borderColor: String(data.frameBorder || '#9d8bea') } : undefined;
@@ -152,6 +157,13 @@ export function CreationNode({ data, selected }: NodeProps<CreationFlowNode>) {
         <span className={styles.nodeIcon}>{creationObjectDefinition(data.kind).icon}</span>
         <strong>{data.title}</strong>
         {data.status && <span className={styles.status}>{data.status}</span>}
+        {data.kind === 'workflow' && onRun && <button
+          type="button"
+          className={`${styles.workflowRunButton} nodrag nowheel`}
+          disabled={!canRun}
+          aria-label={`Run ${data.title}`}
+          onClick={(event) => { event.stopPropagation(); onRun(id); }}
+        >▶ Run</button>}
         <button className={styles.moreButton} aria-label={`More options for ${data.title}`}>•••</button>
       </header>
       <div className={styles.nodeBody}>

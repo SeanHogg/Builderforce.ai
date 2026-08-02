@@ -141,6 +141,7 @@ import { evaluateFrontierAccess, evaluatePremiumModelAccess, premiumModelGateBod
 import { isCardValidated } from '../../application/tenant/cardValidationService';
 import { GuestChatService } from '../../application/guest/GuestChatService';
 import { verifyGuestToken, guestBrainEnabled, GUEST_TOKEN_PREFIX } from '../../application/guest/guestToken';
+import { restrictGuestTools } from '../../application/guest/guestCanvasTools';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import {
   utcDayStart,
@@ -1000,7 +1001,7 @@ function proxyForCompletion(
  * tenant JWT, so the main handler routes here BEFORE `requireTenantAccess` — the
  * tenant auth/metering path never sees anonymous traffic. Deliberately minimal
  * and isolated from the tenant machinery:
- *   • cheapest FREE pool, no tool loop, small max_tokens (cost containment);
+ *   • cheapest FREE pool, only local Canvas tools, small max_tokens (cost containment);
  *   • metered per visitorId AND per IP (GuestChatService) with a tiny cap;
  *   • NO tenant usage rows written (a guest has no tenant), so guest spend never
  *     touches `llm_usage_log` or any tenant meter.
@@ -1042,10 +1043,12 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
     }, 429);
   }
 
-  // ── Cost containment: cheapest FREE pool, plain chat, clamped output ──────
+  // ── Cost containment: cheapest FREE pool, local-only tools, clamped output
   const bodyAny = body as Record<string, unknown>;
-  delete bodyAny.tools;         // no agentic tool loop for guests (plain chat only)
-  delete bodyAny.tool_choice;
+  // The Creation Canvas executes these operations in the browser against the
+  // guest's local document. Preserve that fixed vocabulary; strip every tenant,
+  // MCP, filesystem, and caller-invented tool from anonymous requests.
+  restrictGuestTools(body);
   delete bodyAny.model;         // let the FREE pool pick its cheapest cascade
   delete bodyAny.modelStrict;
   if (typeof body.max_tokens !== 'number' || body.max_tokens > GUEST_CHAT_LIMITS.maxTokensPerRequest) {

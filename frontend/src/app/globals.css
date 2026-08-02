@@ -81,7 +81,6 @@
   --bg: var(--bg-deep);
   --bg-base: var(--bg-surface);
   --bg-accent: var(--bg-surface);
-  --bg-elevated: var(--bg-elevated);
   --bg-hover: rgba(255, 255, 255, 0.06);
   --bg-muted: var(--bg-elevated);
   --card: var(--surface-card-strong);

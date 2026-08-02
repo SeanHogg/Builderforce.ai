@@ -123,8 +123,6 @@ const INITIAL_EDGES: Edge[] = [
   { id: SEED.websiteDashboard, source: SEED.website, target: SEED.dashboard, label: 'measures', type: 'smoothstep', data: { connectionKind: 'data' } },
 ];
 
-const nodeTypes: NodeTypes = { creation: CreationNode };
-
 function flowFromSession(detail: CreationSessionDetail): { nodes: CreationFlowNode[]; edges: Edge[] } {
   return {
     nodes: detail.objects.map((object) => ({
@@ -226,6 +224,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [datasetRowLimit, setDatasetRowLimit] = useState(500);
   const canEdit = persistence === 'local' || sessionRole === 'editor' || sessionRole === 'runner' || sessionRole === 'owner';
   const canRun = persistence === 'local' || sessionRole === 'runner' || sessionRole === 'owner';
+  const requireAccount = useCallback((action: string, title: string, description: string) => {
+    setAccountGate({ action, title, description });
+    trackActivity('creation_account_gate_shown', { sessionId, metadata: { clientSurface: 'web', action } });
+  }, [sessionId]);
   useEffect(() => {
     if (!palettePreferencesReady) return;
     try { localStorage.setItem(PALETTE_COLLAPSE_STORAGE_KEY, JSON.stringify([...collapsedPaletteGroups])); } catch { /* storage can be unavailable in hardened contexts */ }
@@ -853,12 +855,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [canEdit, persistence, sessionId, setEdges, setNodes]);
 
   const createBranch = useCallback(() => {
-    if (persistence !== 'server') { setNotice('Save this session before creating a branch'); return; }
+    if (persistence !== 'server') { requireAccount('branch', 'Create an account to branch this canvas', 'Branches need durable version history so you can compare and merge safely without losing your local work.'); return; }
     setNotice('Creating an independent branch…');
     void creationSessionsApi.branch(sessionId, `${title} — branch`).then(async ({ session }) => {
       window.location.href = `/create/${session.id}`;
     }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not create branch'));
-  }, [persistence, sessionId, title]);
+  }, [persistence, requireAccount, sessionId, title]);
 
   const prepareMerge = useCallback(() => {
     if (!branchParentId || persistence !== 'server') return;
@@ -941,9 +943,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [nodes, persistence, selectedNode, sessionId, setEdges, setNodes]);
 
   const compareProjects = useCallback(() => {
+    if (persistence !== 'server') { requireAccount('compare', 'Create an account to compare projects', 'Project comparisons use live tenant projects, delivery metrics, feature evidence, and saved source references.'); return; }
     const projectNodes = nodes.filter((node) => node.data.kind === 'project' && /^project:\d+$/.test(node.data.resourceId || '')).slice(0, 6);
     if (projectNodes.length < 2) { setNotice('Add at least two saved projects to compare'); return; }
-    if (persistence !== 'server') { setNotice('Save this session to load current project evidence'); return; }
     setNotice('Loading fresh project evidence…');
     void fetchProjects().then(async (available) => {
       const byId = new Map(available.map((project) => [project.id, project]));
@@ -978,10 +980,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice('Evidence-backed project comparison added');
       trackActivity('creation_projects_compared', { sessionId, metadata: { clientSurface: 'web', projectCount: projectNodes.length } });
     }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not compare projects'));
-  }, [nodes, persistence, setEdges, setNodes]);
+  }, [nodes, persistence, requireAccount, setEdges, setNodes]);
 
   const deliverMockup = useCallback(() => {
     if (!selectedNode || (selectedNode.data.kind !== 'mockup' && selectedNode.data.kind !== 'mockupSet')) return;
+    if (persistence === 'local') { requireAccount('deliver', 'Create an account to deliver this mockup', 'Delivery creates a durable project task, assigns an authorized Agent, and keeps execution status connected to this canvas.'); return; }
     const project = nodes.find((node) => node.data.kind === 'project');
     const agent = nodes.find((node) => node.data.kind === 'agent');
     const projectId = project?.data.resourceId?.startsWith('project:') ? Number(project.data.resourceId.slice('project:'.length)) : NaN;
@@ -1041,8 +1044,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return;
     }
     addTaskNode(`draft-task:${crypto.randomUUID()}`, 'Draft');
-    setNotice(persistence === 'local' ? 'Draft delivery task added; save to deliver it' : 'Add a real project to deliver this task');
-  }, [nodes, persistence, selectedNode, sessionId, setEdges, setNodes]);
+    setNotice('Add a real project to deliver this task');
+  }, [nodes, persistence, requireAccount, selectedNode, sessionId, setEdges, setNodes]);
 
   const expandMockupSet = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'mockupSet') return;
@@ -1089,6 +1092,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   const startStandup = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'standup') return;
+    if (persistence === 'local') { requireAccount('start', 'Create an account to start a collaborative stand-up', 'A live stand-up needs durable participants, shared activity, follow-up tasks, and tenant permissions.'); return; }
     const people = nodes.filter((node) => node.data.kind === 'staff' || node.data.kind === 'agent').slice(0, 25);
     if (!people.length) { setNotice('Add staff members or agents to the canvas first'); return; }
     const participants = people.map((node) => ({
@@ -1113,8 +1117,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return;
     }
     applyStandup();
-    setNotice(persistence === 'local' ? 'Draft stand-up gathered; save to start it live' : 'Add a project to start a live stand-up');
-  }, [nodes, persistence, selectedNode, setEdges, setNodes]);
+    setNotice('Add a project to start a live stand-up');
+  }, [nodes, persistence, requireAccount, selectedNode, setEdges, setNodes]);
 
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -1219,6 +1223,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!args.action || !definition.actions.includes(args.action)) return { error: `Unsupported action. Available actions: ${definition.actions.join(', ')}` };
       if (args.action === 'inspect') return { object: { id: target.id, ...definition.contextAdapter(target.data) }, actions: definition.actions, mutableFields: definition.mutableFields };
       if (args.action === 'edit') return { objectId: target.id, kind: target.data.kind, mutableFields: definition.mutableFields, instruction: 'Call canvas_update_object with the desired fields.' };
+      if (persistence === 'local' && ACCOUNT_REQUIRED_OBJECT_ACTIONS.has(args.action)) {
+        requireAccount(args.action, `Create an account to ${args.action}`, `Your ${target.data.title} remains saved on this device. Create a free account to ${args.action} it with durable tenant resources, permissions, and history.`);
+        return { requiresAccount: true, action: args.action, objectId: target.id, message: 'The account creation prompt is open. The local canvas remains unchanged.' };
+      }
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.action', label: `${args.action} ${target.data.title}`, objectId: target.id, action: args.action });
       return { ok: true, proposed: true, objectId: target.id, action: args.action };
@@ -1265,7 +1273,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.delete', label: `Delete connection ${connectionId}`, connectionId });
       return { ok: true, proposed: true, connectionId };
     },
-  }], [canEdit, edges, nodes, resolvedScopeMode, scopedEdges, scopedNodes]);
+  }], [canEdit, edges, nodes, persistence, requireAccount, resolvedScopeMode, scopedEdges, scopedNodes]);
 
   const evaluateCanvas = useCallback((event: FormEvent) => {
     event.preventDefault();
@@ -1401,9 +1409,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNotice('Brain changes rejected; canvas unchanged');
   }, []);
 
-  const runWorkflow = useCallback(() => {
+  const runWorkflow = useCallback((workflowId?: string) => {
     if (!canRun) { setNotice('Runner or owner access is required'); return; }
-    const target = selectedNode?.data.kind === 'workflow' ? selectedNode : nodes.find((node) => node.data.kind === 'workflow');
+    const requestedTarget = typeof workflowId === 'string' ? nodes.find((node) => node.id === workflowId && node.data.kind === 'workflow') : null;
+    const target = requestedTarget ?? (selectedNode?.data.kind === 'workflow' ? selectedNode : nodes.find((node) => node.data.kind === 'workflow'));
     if (!target) { setNotice('Add a workflow to run it'); return; }
     const targetId = target.id;
     setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Running' } } : node));
@@ -1557,6 +1566,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     return colors[node.data.kind] ?? '#9aa8bd';
   }, []);
   const renderedNodes = useMemo(() => nodes.map((node) => node.data.placementHidden === true ? { ...node, hidden: !showHidden, style: showHidden ? { ...node.style, opacity: .42 } : node.style } : node), [nodes, showHidden]);
+  const canvasNodeTypes = useMemo<NodeTypes>(() => ({
+    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={(nodeId) => runWorkflow(nodeId)} />,
+  }), [canRun, runWorkflow]);
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
     sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
     objectCount: nodes.length, connectionCount: edges.length,
@@ -1579,16 +1591,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         <div className={styles.sessionActions}>
           <div className={styles.collaborators} aria-label="Active collaborators">
             {(persistence === 'local' ? [{ userId: 'local', displayName: 'You', role: 'owner' as const }] : members).slice(0, 4).map((member, index) => <button key={member.userId} type="button" aria-pressed={followingUserId === member.userId} title={`${member.displayName || 'Collaborator'} · ${member.role}${member.userId !== currentUserId ? ' · click to follow viewport' : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button>)}
-            <button aria-label="Invite collaborator" onClick={() => setShareOpen(true)}>+</button>
+            <button aria-label="Invite collaborator" onClick={() => persistence === 'local' ? requireAccount('invite', 'Create an account to invite collaborators', 'Your canvas will be saved securely so teammates can join the same live session with roles, comments, and presence.') : setShareOpen(true)}>+</button>
           </div>
           <button className={styles.secondaryButton} onClick={undo} aria-label="Undo canvas change">↶</button>
           <button className={styles.secondaryButton} onClick={redo} aria-label="Redo canvas change">↷</button>
           <button className={styles.secondaryButton} onClick={() => setPaletteOpen(true)}>＋ {t('add')}</button>
           <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-label={t('openDiagnostics')} onClick={() => setDiagnosticsOpen((value) => !value)}>⚠ <span>{t('diagnostics')}</span></button>
           <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}>•••</button>
-          <button className={styles.secondaryButton} onClick={() => { setShareOpen((value) => !value); setMoreOpen(false); }}>{t('share')} ▾</button>
-          {persistence === 'local' && <button className={styles.primaryButton} onClick={() => { window.location.href = `/login?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>{t('saveCollaborate')}</button>}
-          <button className={styles.primaryButton} disabled={!canRun} onClick={runWorkflow}>▶ {t('run')}</button>
+          <button className={styles.secondaryButton} onClick={() => { if (persistence === 'local') requireAccount('share', 'Create an account to share this canvas', 'Your work is already safe on this device. An account saves it to your tenant and enables live collaboration, invitations, and access controls.'); else setShareOpen((value) => !value); setMoreOpen(false); }}>{t('share')} ▾</button>
+          {persistence === 'local' && <button className={styles.primaryButton} onClick={() => requireAccount('save', 'Create an account to save and collaborate', 'Move this local session into a secure tenant workspace without losing its objects, conversation, or layout.')}>{t('saveCollaborate')}</button>}
           {moreOpen && <div className={styles.moreMenu} aria-label={t('moreActions')}>
             <span className={styles.moreMenuHeading}>{t('createAndView')}</span>
             <button onClick={() => { setTemplateOpen(true); setMoreOpen(false); }}><span aria-hidden>▦</span>{t('templates')}</button>
@@ -1607,7 +1618,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           {shareOpen && <div className={styles.shareMenu}>
             <strong>{persistence === 'local' ? 'Save to invite people' : 'Invite collaborators'}</strong>
             <p>{persistence === 'local' ? 'Your work is safe on this device. Create a free account when you want live collaboration or delivery.' : 'Anyone invited can build with you and ask Brain questions.'}</p>
-            {persistence === 'local' ? <button onClick={() => { window.location.href = `/login?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>Save this session</button> : <>
+            {persistence === 'local' ? <button onClick={() => requireAccount('save', 'Create an account to save this session', 'Move this local session into a secure tenant workspace without losing its objects, conversation, or layout.')}>Create free account</button> : <>
               <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="name@company.com" /><select aria-label="Invitation role" value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">Viewer</option><option value="commenter">Commenter</option><option value="editor">Editor</option><option value="runner">Runner</option><option value="owner">Owner</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await copyTextToClipboard(`${window.location.origin}${result.acceptPath}`); setPendingInvitations((current) => [...current.filter((item) => item.id !== result.invitationId), { id: result.invitationId, email: result.email, role: result.role as CreationSessionSummary['role'], expiresAt: result.expiresAt, acceptedAt: null, revokedAt: null, createdAt: new Date().toISOString() }]); setNotice(result.emailSent ? 'Invitation emailed and backup link copied' : 'Invitation saved; backup link copied (email delivery is not configured)'); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice(result.emailSent ? 'Collaborator invited by email' : 'Collaborator invited in Builderforce'); } setInviteEmail(''); }).catch((error) => setNotice(error instanceof Error ? error.message : 'Invite failed')); }}>Invite</button></div>
               {sessionRole === 'owner' && <div aria-label="Session members">{allMembers.map((member) => <div key={member.userId} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
                 <span>{member.displayName || 'Collaborator'}{member.userId === currentUserId ? ' (you)' : ''}</span>
@@ -1627,6 +1638,22 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           </div>}
         </div>
       </div>
+
+      {accountGate && <div className={styles.accountGateBackdrop} role="presentation">
+        <section className={styles.accountGate} role="dialog" aria-modal="true" aria-labelledby="canvas-account-gate-title">
+          <button type="button" className={styles.accountGateClose} aria-label="Close account prompt" onClick={() => setAccountGate(null)}>×</button>
+          <span className={styles.accountGateIcon} aria-hidden>✦</span>
+          <small>Keep your momentum</small>
+          <h2 id="canvas-account-gate-title">{accountGate.title}</h2>
+          <p>{accountGate.description}</p>
+          <div className={styles.accountGateBenefits}><span>✓ Keep this entire local session</span><span>✓ Unlock durable resources and history</span><span>✓ Collaborate with your team</span></div>
+          <div className={styles.accountGateActions}>
+            <button type="button" className={styles.primaryButton} onClick={() => { trackActivity('creation_account_gate_accepted', { sessionId, metadata: { clientSurface: 'web', action: accountGate.action } }); window.location.href = `/register?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>Create free account</button>
+            <button type="button" className={styles.secondaryButton} onClick={() => { window.location.href = `/login?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>Sign in</button>
+          </div>
+          <button type="button" className={styles.accountGateLater} onClick={() => setAccountGate(null)}>Not now — keep creating locally</button>
+        </section>
+      </div>}
 
       <div ref={flowWrapRef} className={styles.flowWrap} data-cursor-mode={drawingMode ? 'draw' : 'pan'} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPoints.current = []; }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
         {!presentMode && effectiveSelectedIds.length > 0 && <div className={styles.selectionToolbar} aria-label={t('selectionActions')}>
@@ -1648,7 +1675,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         <ReactFlow<CreationFlowNode, Edge>
           nodes={renderedNodes}
           edges={edges}
-          nodeTypes={nodeTypes}
+          nodeTypes={canvasNodeTypes}
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={onConnect}

@@ -59,6 +59,30 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByDisplayValue('Campaign Strategist')).toBeInTheDocument();
   });
 
+  it('runs workflows from the workflow widget instead of the session header', () => {
+    render(<CreationCanvas sessionId="workflow-widget-run-test" persistence="local" />);
+
+    expect(screen.queryByRole('button', { name: 'Run' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Run Fall campaign workflow' }));
+
+    expect(screen.getByText('Draft workflow running locally…')).toBeInTheDocument();
+  });
+
+  it('gates durable guest actions with account creation while preserving local creation', () => {
+    render(<CreationCanvas sessionId="account-gate-test" persistence="local" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save & collaborate' }));
+    expect(screen.getByRole('dialog', { name: 'Create an account to save and collaborate' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create free account' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Not now — keep creating locally' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Ask Brain about this canvas')).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('button', { name: /Share/ }));
+    expect(screen.getByRole('dialog', { name: 'Create an account to share this canvas' })).toBeInTheDocument();
+  });
+
   it('edits and runs a canonical workflow in an isolated Canvas focus editor', () => {
     render(<CreationCanvas sessionId="workflow-focus-test" persistence="local" />);
     fireEvent.click(screen.getByText('Fall campaign workflow'));
@@ -123,7 +147,8 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     fireEvent.click(screen.getByRole('button', { name: 'Send to Brain' }));
     await waitFor(() => expect(screen.getByDisplayValue('Top 10 feature mockups')).toBeInTheDocument(), { timeout: 2_000 });
     fireEvent.click(screen.getByRole('button', { name: 'Add to project and assign' }));
-    expect(screen.getByText('Draft delivery task added; save to deliver it')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Create an account to deliver this mockup' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create free account' })).toBeInTheDocument();
   });
 
   it('edits a website prototype live from the inspector', () => {
@@ -179,7 +204,7 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     fireEvent.click(screen.getByRole('button', { name: 'Project' }));
     fireEvent.click(screen.getByRole('button', { name: 'Compare projects on canvas' }));
 
-    expect(screen.getByText('Add at least two saved projects to compare')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Create an account to compare projects' })).toBeInTheDocument();
   });
 
   it('gathers staff and agents into an impromptu stand-up frame', () => {
@@ -187,7 +212,7 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     fireEvent.click(screen.getByRole('button', { name: 'Stand-up' }));
     fireEvent.click(screen.getByRole('button', { name: 'Gather and start stand-up' }));
 
-    expect(screen.getByText('Draft stand-up gathered; save to start it live')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Create an account to start a collaborative stand-up' })).toBeInTheDocument();
     expect(screen.getAllByText('Sarah').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Campaign Strategist').length).toBeGreaterThan(0);
   });

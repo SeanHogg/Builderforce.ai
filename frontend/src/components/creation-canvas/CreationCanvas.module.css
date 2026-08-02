@@ -61,6 +61,14 @@
 .shareMenu input { min-width: 0; flex: 1; padding: 8px; border: 1px solid var(--border, var(--canvas-line)); border-radius: 7px; background: var(--bg-deep, #fff); color: var(--text-primary, var(--canvas-ink)); }
 .shareMenu button { padding: 7px 10px; background: var(--canvas-blue); color: #fff; border: 0; border-radius: 7px; }
 .shareMenu small { display: block; margin-top: 10px; color: var(--text-muted, var(--canvas-muted)); }
+.accountGateBackdrop { position:fixed; z-index:80; inset:0; display:grid; place-items:center; padding:20px; background:rgba(3,8,18,.58); backdrop-filter:blur(5px); }
+.accountGate { position:relative; box-sizing:border-box; width:min(440px,100%); display:grid; justify-items:center; padding:30px; border:1px solid var(--canvas-line); border-radius:18px; background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:0 28px 90px rgba(0,0,0,.4); text-align:center; }
+.accountGateClose { position:absolute; top:11px; right:12px; width:30px; height:30px; border:0; border-radius:8px; background:transparent; color:var(--canvas-muted); font-size:21px; cursor:pointer; }.accountGateClose:hover { background:var(--canvas-hover); }
+.accountGateIcon { width:44px; height:44px; display:grid; place-items:center; margin-bottom:11px; border-radius:13px; background:color-mix(in srgb,var(--canvas-blue) 16%,var(--canvas-panel)); color:var(--canvas-blue); font-size:22px; }
+.accountGate > small { color:var(--canvas-blue); font-size:10px; font-weight:750; letter-spacing:.08em; text-transform:uppercase; }.accountGate h2 { margin:6px 0 9px; font-size:21px; line-height:1.2; }.accountGate > p { max-width:360px; margin:0; color:var(--canvas-muted); font-size:12px; line-height:1.55; }
+.accountGateBenefits { width:100%; display:grid; gap:7px; box-sizing:border-box; margin:18px 0; padding:12px 14px; border:1px solid var(--canvas-line); border-radius:10px; background:var(--canvas-panel-muted); color:var(--canvas-ink); font-size:11px; text-align:left; }
+.accountGateActions { width:100%; display:grid; grid-template-columns:1fr 1fr; gap:8px; }.accountGateActions button { min-height:39px; }
+.accountGateLater { margin-top:12px; border:0; background:transparent; color:var(--canvas-muted); font:600 10px var(--font-sans); cursor:pointer; }.accountGateLater:hover { color:var(--canvas-ink); text-decoration:underline; }
 .moreMenu {
   position:absolute; right:150px; top:42px; width:250px; display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:9px;
   border:1px solid var(--border, var(--canvas-line)); border-radius:13px; background:var(--bg-elevated, #fff); box-shadow:0 20px 60px rgba(28,51,84,.2);
@@ -146,6 +154,11 @@
 .status { margin-left: auto; padding: 3px 7px; border-radius: 999px; color: #16835a; background: #eaf8f2; font-size: 9px; }
 .moreButton { margin-left: auto; border: 0; background: transparent; color: #708097; cursor: pointer; letter-spacing: 1px; }
 .status + .moreButton { margin-left: 0; }
+.workflowRunButton { margin-left:auto; padding:5px 9px; border:1px solid var(--canvas-blue); border-radius:7px; background:var(--canvas-blue); color:#fff; font:650 9px var(--font-sans); cursor:pointer; white-space:nowrap; }
+.workflowRunButton:hover,.workflowRunButton:focus-visible { outline:none; filter:brightness(1.08); box-shadow:0 0 0 2px color-mix(in srgb,var(--canvas-blue) 24%,transparent); }
+.workflowRunButton:disabled { opacity:.45; cursor:not-allowed; filter:none; box-shadow:none; }
+.status + .workflowRunButton { margin-left:0; }
+.workflowRunButton + .moreButton { margin-left:0; }
 .nodeBody { padding: 11px; font-size: 11px; }
 .nodeBody p { margin: 6px 0; color: #53647a; line-height: 1.45; }
 .authoredContent { max-height:210px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
@@ -391,3 +404,73 @@
 .mergePanel,
 .inspector,
 .composer { box-shadow:0 14px 42px var(--canvas-shadow); }
+
+/* The Canvas is a workspace, so its dark theme uses layered ink surfaces instead
+   of the marketing site's near-black background. This keeps hierarchy visible
+   without turning cards and controls into bright white islands. */
+:global(html:not([data-theme='light'])) .canvasShell {
+  --canvas-board:#09111f;
+  --canvas-panel:#111d2f;
+  --canvas-panel-muted:#0d1828;
+  --canvas-hover:#192a40;
+  --canvas-ink:#edf4ff;
+  --canvas-muted:#9eafc6;
+  --canvas-line:rgba(148,163,184,.24);
+  --canvas-shadow:rgba(0,0,0,.42);
+  --creation-dot:rgba(116,145,184,.24);
+  --creation-minimap-mask:rgba(7,14,25,.76);
+}
+:global(html:not([data-theme='light'])) .sessionBar {
+  background:color-mix(in srgb,var(--canvas-panel) 94%,#172b48);
+  box-shadow:0 7px 22px rgba(0,0,0,.18);
+}
+:global(html:not([data-theme='light'])) .node {
+  background:linear-gradient(180deg,#132136 0%,var(--canvas-panel) 100%);
+  box-shadow:0 14px 38px rgba(0,0,0,.28);
+}
+:global(html:not([data-theme='light'])) .selected {
+  box-shadow:0 0 0 2px #4b8cff,0 16px 42px rgba(0,0,0,.36);
+}
+:global(html:not([data-theme='light'])) .paletteGrid button,
+:global(html:not([data-theme='light'])) .selectionToolbar button,
+:global(html:not([data-theme='light'])) .iconButton,
+:global(html:not([data-theme='light'])) .scopeChip {
+  background:#142238;
+}
+:global(html:not([data-theme='light'])) .paletteGrid button:hover,
+:global(html:not([data-theme='light'])) .paletteGrid button:focus-visible,
+:global(html:not([data-theme='light'])) .selectionToolbar button:hover {
+  background:#1c304b;
+  border-color:rgba(103,156,255,.5);
+}
+:global(html:not([data-theme='light'])) .composer {
+  background:rgba(17,29,47,.96);
+  backdrop-filter:blur(14px);
+}
+:global(html:not([data-theme='light'])) .message {
+  background:#172b49;
+}
+:global(html:not([data-theme='light'])) .aiMessage {
+  background:#241f43;
+}
+:global(html:not([data-theme='light'])) .status {
+  background:#12382f;
+  color:#80e4c3;
+}
+:global(html:not([data-theme='light'])) .nodeIcon {
+  background:#272048;
+  color:#a991ff;
+}
+:global(html:not([data-theme='light'])) .selectionToolbar,
+:global(html:not([data-theme='light'])) .realtimeStatus,
+:global(html:not([data-theme='light'])) .historyPanel,
+:global(html:not([data-theme='light'])) .historyPanel header {
+  background:rgba(17,29,47,.97);
+}
+:global(html:not([data-theme='light'])) .flowWrap :global(.react-flow__controls-button),
+:global(html:not([data-theme='light'])) .flowWrap :global(.react-flow__minimap) {
+  background:#111d2f;
+}
+:global(html:not([data-theme='light'])) .flowWrap :global(.react-flow__controls-button svg) {
+  fill:#c6d4e8;
+}
