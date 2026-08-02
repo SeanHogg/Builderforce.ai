@@ -6,7 +6,7 @@ export interface ExecutionProps {
   taskId:       TaskId;
   agentId:      AgentId | null;
   /** Canonical framework-neutral registration. Legacy rows may only have agentId. */
-  agentRegistrationId: string | null;
+  agentRegistrationId?: string | null;
   agentHostId:       AgentHostId | null;
   tenantId:     TenantId;
   submittedBy:  string;           // userId
@@ -98,7 +98,7 @@ export class Execution {
   get id():           ExecutionId      { return this.props.id; }
   get taskId():       TaskId           { return this.props.taskId; }
   get agentId():      AgentId | null   { return this.props.agentId; }
-  get agentRegistrationId(): string | null { return this.props.agentRegistrationId; }
+  get agentRegistrationId(): string | null { return this.props.agentRegistrationId ?? null; }
   get agentHostId():       AgentHostId | null    { return this.props.agentHostId; }
   get tenantId():     TenantId         { return this.props.tenantId; }
   get submittedBy():  string           { return this.props.submittedBy; }
