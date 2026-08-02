@@ -1,6 +1,6 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { AgentService } from '../../application/agent/AgentService';
-import { AgentType, TenantRole } from '../../domain/shared/types';
+import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import type { Agent } from '../../domain/agent/Agent';
@@ -31,60 +31,60 @@ export function createAgentRoutes(agentService: AgentService): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
+  const markDeprecated = (c: Context<HonoEnv>) => {
+    c.header('Deprecation', 'true');
+    c.header('Sunset', 'Wed, 31 Dec 2026 23:59:59 GMT');
+    c.header('Link', '</api/agent-registrations>; rel="successor-version"');
+  };
+
   // List agents for caller's tenant
   router.get('/', async (c) => {
+    markDeprecated(c);
     const agents = await agentService.listAgents(c.get('tenantId'));
     return c.json(agents.map(serializeAgent));
   });
 
-  // Register an agent (MANAGER+)
-  router.post('/', requireRole(TenantRole.MANAGER), async (c) => {
-    const body = await c.req.json<{
-      name:     string;
-      type:     AgentType;
-      endpoint: string;
-      apiKey?:  string;
-      config?:  string;
-    }>();
-    const agent = await agentService.registerAgent({
-      ...body,
-      tenantId:    c.get('tenantId'),
-      submittedBy: c.get('userId'),
-    });
-    return c.json(serializeAgent(agent), 201);
+  // Legacy writes are intentionally closed. Keeping the route with an explicit
+  // successor is safer for older clients than silently accepting more enum-bound rows.
+  router.post('/', requireRole(TenantRole.MANAGER), (c) => {
+    markDeprecated(c);
+    return c.json({
+      error: 'The legacy agents registry is read-only',
+      code: 'LEGACY_AGENTS_DEPRECATED',
+      successor: '/api/agent-registrations',
+    }, 410);
   });
 
   // Get a single agent — tenant-scoped (404 on a cross-tenant id)
   router.get('/:id', async (c) => {
+    markDeprecated(c);
     const agent = await agentService.getAgent(Number(c.req.param('id')), c.get('tenantId'));
     return c.json(serializeAgent(agent));
   });
 
   // Deactivate an agent (MANAGER+) — tenant-scoped (404 on a cross-tenant id)
   router.delete('/:id', requireRole(TenantRole.MANAGER), async (c) => {
+    markDeprecated(c);
     const agent = await agentService.deactivateAgent(Number(c.req.param('id')), c.get('tenantId'));
     return c.json(serializeAgent(agent));
   });
 
   // List skills for a specific agent — gated by tenant-scoped agent ownership.
   router.get('/:id/skills', async (c) => {
+    markDeprecated(c);
     const agentId = Number(c.req.param('id'));
     await agentService.getAgent(agentId, c.get('tenantId')); // 404s if the agent isn't in the caller's tenant
     const skills = await agentService.listSkills(agentId);
     return c.json(skills.map(s => s.toPlain()));
   });
 
-  // Register a skill for an agent (MANAGER+) — tenant-scoped guard inside registerSkill
-  router.post('/:id/skills', requireRole(TenantRole.MANAGER), async (c) => {
-    const agentId = Number(c.req.param('id'));
-    const body = await c.req.json<{
-      name:          string;
-      description?:  string;
-      inputSchema?:  string;
-      outputSchema?: string;
-    }>();
-    const skill = await agentService.registerSkill({ agentId, ...body }, c.get('tenantId'));
-    return c.json(skill.toPlain(), 201);
+  router.post('/:id/skills', requireRole(TenantRole.MANAGER), (c) => {
+    markDeprecated(c);
+    return c.json({
+      error: 'Legacy skills are read-only; report capabilities on the canonical registration',
+      code: 'LEGACY_AGENTS_DEPRECATED',
+      successor: '/api/agent-registrations',
+    }, 410);
   });
 
   return router;

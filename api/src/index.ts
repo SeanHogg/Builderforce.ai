@@ -77,6 +77,7 @@ import { createMcpExtensionRoutes } from './presentation/routes/mcpExtensionRout
 import { createAuthRoutes }        from './presentation/routes/authRoutes';
 import { createOAuthRoutes }       from './presentation/routes/oauthRoutes';
 import { createAgentRoutes, createSkillRoutes } from './presentation/routes/agentRoutes';
+import { createAgentRegistrationRoutes } from './presentation/routes/agentRegistrationRoutes';
 import { createRuntimeRoutes }     from './presentation/routes/runtimeRoutes';
 import { createAuditRoutes }       from './presentation/routes/auditRoutes';
 import { createMarketplaceRoutes } from './presentation/routes/marketplaceRoutes';
@@ -595,6 +596,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/tenants/:tenantId/api-keys', createTenantApiKeyRoutes(db));
   app.route('/api/tenants/:tenantId/mcp-extensions', createMcpExtensionRoutes(db));
   app.route('/api/agents',   createAgentRoutes(agentService));
+  app.route('/api/agent-registrations', createAgentRegistrationRoutes(db));
   app.route('/api/skills',   createSkillRoutes(agentService));
   app.route('/api/runtime',  createRuntimeRoutes(runtimeService, db));
   app.route('/api/audit',    createAuditRoutes(auditService));

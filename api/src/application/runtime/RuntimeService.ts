@@ -23,6 +23,7 @@ import { ticketKindForTaskType, type RunMilestonePhase } from '../brain/ChatTick
 export interface SubmitTaskDto {
   taskId:      number;
   agentId?:    number;
+  agentRegistrationId?: string;
   agentHostId?:     number | null;
   tenantId:    number;
   submittedBy: string;
@@ -188,6 +189,11 @@ export class RuntimeService {
     private readonly resolvePolicyGates?: (scope: {
       tenantId: number; projectId: number | null; agentRef: string | null;
     }) => Promise<PolicyGate[]>,
+    /** Canonical registry lookup. Appended to preserve constructor compatibility in tests. */
+    private readonly resolveAgentRegistration?: (
+      id: string,
+      tenantId: number,
+    ) => Promise<{ active: boolean } | null>,
   ) {}
 
   /**
@@ -344,6 +350,11 @@ export class RuntimeService {
       if (!agent) throw new NotFoundError('Agent', dto.agentId);
       if (!agent.isActive) throw new ForbiddenError('Agent is not active');
     }
+    if (dto.agentRegistrationId !== undefined) {
+      const registration = await this.resolveAgentRegistration?.(dto.agentRegistrationId, dto.tenantId);
+      if (!registration) throw new NotFoundError('Agent registration', dto.agentRegistrationId);
+      if (!registration.active) throw new ForbiddenError('Agent registration is not active');
+    }
 
     // Governance: stamp the tenant's effective policy gates onto the payload so the
     // engine's `evaluatePolicyGate` seam enforces them. Done here — the single
@@ -356,6 +367,7 @@ export class RuntimeService {
       Execution.create({
         taskId:      asTaskId(dto.taskId),
         agentId:     dto.agentId != null ? asAgentId(dto.agentId) : null,
+        agentRegistrationId: dto.agentRegistrationId ?? null,
         agentHostId:      dto.agentHostId != null ? asAgentHostId(dto.agentHostId) : null,
         tenantId:    asTenantId(dto.tenantId),
         submittedBy: dto.submittedBy,
@@ -373,6 +385,7 @@ export class RuntimeService {
       metadata:     JSON.stringify({
         taskId: dto.taskId,
         agentId: dto.agentId,
+        agentRegistrationId: dto.agentRegistrationId ?? null,
         agentHostId: dto.agentHostId ?? null,
         sessionId: dto.sessionId ?? null,
       }),

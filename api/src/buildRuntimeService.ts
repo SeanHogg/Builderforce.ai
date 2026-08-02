@@ -30,6 +30,8 @@ import { attributeRunToManifest } from './application/kanban/attributeRunToManif
 import { coordinateCompletedStage } from './application/manager/coordinateTicket';
 import { findCanonicalBoard } from './application/swimlane/canonicalBoard';
 import { resolvePolicyGates } from './application/governance/policyPackService';
+import { agentRegistrations } from './infrastructure/database/schema';
+import { and, eq } from 'drizzle-orm';
 
 export function buildRuntimeService(env: Env, db: Db): RuntimeService {
   // eslint-disable-next-line prefer-const -- the lane-auto callback closes over the
@@ -107,6 +109,13 @@ export function buildRuntimeService(env: Env, db: Db): RuntimeService {
     // enforcement machinery already existed but never received gates. Cached
     // read-through, invalidated on every pack/gate write.
     (scope) => resolvePolicyGates(env, db, scope),
+    async (id, tenantId) => {
+      const [row] = await db.select({ status: agentRegistrations.status })
+        .from(agentRegistrations)
+        .where(and(eq(agentRegistrations.id, id), eq(agentRegistrations.tenantId, tenantId)))
+        .limit(1);
+      return row ? { active: row.status === 'active' } : null;
+    },
   );
   return runtimeService;
 }

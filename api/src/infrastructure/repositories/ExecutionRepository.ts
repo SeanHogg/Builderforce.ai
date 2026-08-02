@@ -68,6 +68,7 @@ export class ExecutionRepository implements IExecutionRepository {
       .values({
         taskId:      plain.taskId,
         agentId:     plain.agentId ?? undefined,
+        agentRegistrationId: plain.agentRegistrationId ?? undefined,
         agentHostId:      plain.agentHostId ?? undefined,
         tenantId:    plain.tenantId,
         submittedBy: plain.submittedBy,
@@ -114,6 +115,7 @@ function toDomain(row: typeof executionsTable.$inferSelect): Execution {
     id:           asExecutionId(row.id),
     taskId:       asTaskId(row.taskId),
     agentId:      row.agentId != null ? asAgentId(row.agentId) : null,
+    agentRegistrationId: row.agentRegistrationId ?? null,
     agentHostId:       row.agentHostId != null ? asAgentHostId(row.agentHostId) : null,
     tenantId:     asTenantId(row.tenantId),
     submittedBy:  row.submittedBy,

@@ -271,6 +271,39 @@ export const agents = pgTable('agents', {
 
 
 /**
+ * Canonical registry for callable agents, independent of their implementation.
+ * `framework` describes what built the agent; `protocol` describes how Builderforce
+ * communicates with it. The legacy numeric `agents` table is read-only compatibility.
+ */
+export const agentRegistrations = pgTable('agent_registrations', {
+  id:                     uuid('id').primaryKey().defaultRandom(),
+  tenantId:               integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:              uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  agentHostId:            integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
+  legacyAgentId:          integer('legacy_agent_id').unique().references(() => agents.id, { onDelete: 'set null' }),
+  name:                   varchar('name', { length: 255 }).notNull(),
+  framework:              varchar('framework', { length: 64 }).notNull(),
+  protocol:               varchar('protocol', { length: 32 }).notNull(),
+  endpoint:               text('endpoint'),
+  externalAgentId:        varchar('external_agent_id', { length: 255 }),
+  credentialRef:          varchar('credential_ref', { length: 255 }),
+  status:                 varchar('status', { length: 16 }).notNull().default('active'),
+  healthStatus:           varchar('health_status', { length: 16 }).notNull().default('unknown'),
+  declaredCapabilities:   jsonb('declared_capabilities').$type<string[]>().notNull().default([]),
+  discoveredCapabilities: jsonb('discovered_capabilities').$type<string[]>().notNull().default([]),
+  agentCard:              jsonb('agent_card').$type<Record<string, unknown>>(),
+  metadata:               jsonb('metadata').$type<Record<string, unknown>>().notNull().default({}),
+  registeredBy:           varchar('registered_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  lastSeenAt:             timestamp('last_seen_at'),
+  createdAt:              timestamp('created_at').notNull().defaultNow(),
+  updatedAt:              timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenantStatus: index('idx_agent_registrations_tenant_status').on(t.tenantId, t.status, t.framework, t.protocol),
+  byHost: index('idx_agent_registrations_host').on(t.agentHostId),
+}));
+
+
+/**
  * Cloud agents (the workforce "marketplace + my agents" tier). A cloud agent is
  * an `ide_agents` row with project_id NULL + tenant_id set (migration 0075). When
  * `published` it appears in the world-readable marketplace registry. Tenant-scoped
@@ -378,6 +411,7 @@ export const executions = pgTable('executions', {
   id:           serial('id').primaryKey(),
   taskId:       integer('task_id').notNull().references(() => tasks.id, { onDelete: 'cascade' }),
   agentId:      integer('agent_id').references(() => agents.id),
+  agentRegistrationId: uuid('agent_registration_id').references(() => agentRegistrations.id, { onDelete: 'set null' }),
   agentHostId:       integer('agent_host_id').references(() => agentHosts.id, { onDelete: 'set null' }),
   tenantId:     integer('tenant_id').notNull().references(() => tenants.id),
   segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
@@ -1126,6 +1160,7 @@ export const agentDispatches = pgTable('agent_dispatches', {
   assignmentId: uuid('assignment_id').references(() => swimlaneAgentAssignments.id, { onDelete: 'set null' }),
   taskId:       integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
   agentId:      integer('agent_id').references(() => agents.id, { onDelete: 'set null' }),
+  agentRegistrationId: uuid('agent_registration_id').references(() => agentRegistrations.id, { onDelete: 'set null' }),
   /** Monotonic per-ticket stage counter so a retried lane is a distinct stage. */
   stageSeq:     integer('stage_seq').notNull().default(0),
   role:         varchar('role', { length: 120 }).notNull(),

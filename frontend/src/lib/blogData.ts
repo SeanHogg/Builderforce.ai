@@ -63,6 +63,13 @@ import feedbackToMockups from '@/content/blog/customer-feedback-to-ten-mockups.m
 import multiplayerCanvas from '@/content/blog/multiplayer-creation-canvas-web-vscode.md';
 import projectComparisonRoadmap from '@/content/blog/compare-projects-and-build-an-executive-roadmap.md';
 import evermindCanvas from '@/content/blog/build-and-train-evermind-on-the-creation-canvas.md';
+import createBeforeSignup from '@/content/blog/create-before-you-sign-up.md';
+import brainCanvasOperator from '@/content/blog/brain-operates-the-creation-canvas.md';
+import liveDataStories from '@/content/blog/live-data-stories-on-the-creation-canvas.md';
+import designBuildDebug from '@/content/blog/design-build-debug-one-spatial-workspace.md';
+import visualTeamRituals from '@/content/blog/visual-team-rituals-humans-and-agents.md';
+import canvasReuseVersioning from '@/content/blog/creation-canvas-templates-frames-branches-checkpoints.md';
+import creationObjectRegistry from '@/content/blog/forty-eight-live-objects-one-creation-canvas.md';
 
 export interface BlogPost {
   slug: string;
@@ -125,6 +132,13 @@ function buildPost(slug: string, raw: string): BlogPost {
 
 /** All published blog posts, sorted newest-first. */
 export const BLOG_POSTS: BlogPost[] = [
+  buildPost('create-before-you-sign-up', createBeforeSignup),
+  buildPost('brain-operates-the-creation-canvas', brainCanvasOperator),
+  buildPost('live-data-stories-on-the-creation-canvas', liveDataStories),
+  buildPost('design-build-debug-one-spatial-workspace', designBuildDebug),
+  buildPost('visual-team-rituals-humans-and-agents', visualTeamRituals),
+  buildPost('creation-canvas-templates-frames-branches-checkpoints', canvasReuseVersioning),
+  buildPost('forty-eight-live-objects-one-creation-canvas', creationObjectRegistry),
   buildPost('creation-canvas-beyond-chat', creationCanvasBeyondChat),
   buildPost('customer-feedback-to-ten-mockups', feedbackToMockups),
   buildPost('multiplayer-creation-canvas-web-vscode', multiplayerCanvas),

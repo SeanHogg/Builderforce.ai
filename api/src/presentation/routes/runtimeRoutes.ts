@@ -1006,6 +1006,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const body = await c.req.json<{
       taskId:   number;
       agentId?: number;
+      agentRegistrationId?: string;
       agentHostId?:  number | null;
       sessionId?: string;
       payload?: string;
@@ -1069,6 +1070,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const execution = await runtimeService.submit({
       taskId:      body.taskId,
       agentId:     body.agentId,
+      agentRegistrationId: body.agentRegistrationId,
       agentHostId:      agentHostIdFromHeader ?? body.agentHostId,
       tenantId:    c.get('tenantId'),
       submittedBy: c.get('userId'),
@@ -1100,6 +1102,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const body = await c.req.json<{
       taskId:   number;
       agentId?: number;
+      agentRegistrationId?: string;
       agentHostId?:  number | null;
       sessionId?: string;
       payload?: string;
@@ -1159,6 +1162,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     const execution = await runtimeService.submit({
       taskId:      body.taskId,
       agentId:     body.agentId,
+      agentRegistrationId: body.agentRegistrationId,
       agentHostId:      agentHostIdFromHeader ?? body.agentHostId,
       tenantId:    c.get('tenantId'),
       submittedBy: c.get('userId'),
