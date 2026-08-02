@@ -78,6 +78,25 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByDisplayValue('Imported dataset.csv')).toBeInTheDocument();
   });
 
+  it('collapses palette sections, reveals search matches, and retains the state', async () => {
+    const first = render(<CreationCanvas sessionId="palette-collapse-test" persistence="local" />);
+    const build = screen.getByRole('button', { name: /Build/ });
+    fireEvent.click(build);
+    expect(build).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: 'Workflow' })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search everything…' }), { target: { value: 'Workflow' } });
+    expect(screen.getByRole('button', { name: 'Workflow' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear search' }));
+    expect(screen.queryByRole('button', { name: 'Workflow' })).not.toBeInTheDocument();
+    await waitFor(() => expect(localStorage.getItem('builderforce:create:palette-collapsed-groups')).toContain('Build'));
+
+    first.unmount();
+    render(<CreationCanvas sessionId="palette-collapse-reopen-test" persistence="local" />);
+    await waitFor(() => expect(screen.getByRole('button', { name: /Build/ })).toHaveAttribute('aria-expanded', 'false'));
+    expect(screen.queryByRole('button', { name: 'Workflow' })).not.toBeInTheDocument();
+  });
+
   it('turns an AI request into a connected evaluation object', async () => {
     render(<CreationCanvas sessionId="evaluation-test" persistence="local" />);
 

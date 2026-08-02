@@ -33,7 +33,7 @@ import { isAwaitingApprovalExecution } from '@/lib/builderforceApi';
 import { fetchProjects } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
 import { updateAgent } from '@/lib/api';
-import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData, creationObjectDefinition } from './creationObjectRegistry';
+import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData, creationObjectDefinition, type CreationObjectGroup } from './creationObjectRegistry';
 import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
@@ -51,6 +51,10 @@ import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
 import { buildCreationCanvasDiagnosticsReport } from '@/lib/creationCanvasDiagnostics';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
+const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
+const PALETTE_GROUP_ICONS: Record<CreationObjectGroup, string> = {
+  Build: '✦', Data: '▦', Knowledge: '▤', Insights: '↗', Work: '✓', People: '●', Agents: '✧', Models: '◉', Collaborate: '◇', Integrations: '⌘',
+};
 type ProposedCanvasChange =
   | { id: string; type: 'object.add'; label: string; node: CreationFlowNode }
   | { id: string; type: 'object.update'; label: string; objectId: string; patch: Partial<CreationNodeData> }
@@ -170,6 +174,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [moreOpen, setMoreOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [paletteSearch, setPaletteSearch] = useState('');
+  const [collapsedPaletteGroups, setCollapsedPaletteGroups] = useState<Set<CreationObjectGroup>>(new Set());
+  const [palettePreferencesReady, setPalettePreferencesReady] = useState(false);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(PALETTE_COLLAPSE_STORAGE_KEY) || '[]') as unknown;
+      const allowed = new Set(CREATION_PALETTE_GROUPS.map((group) => group.group));
+      setCollapsedPaletteGroups(new Set(Array.isArray(saved) ? saved.filter((group): group is CreationObjectGroup => typeof group === 'string' && allowed.has(group as CreationObjectGroup)) : []));
+    } catch { setCollapsedPaletteGroups(new Set()); }
+    setPalettePreferencesReady(true);
+  }, []);
   const [presentMode, setPresentMode] = useState(initialPresent);
   const [drawingMode, setDrawingMode] = useState(false);
   const [showHidden, setShowHidden] = useState(false);
@@ -203,6 +217,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [datasetRowLimit, setDatasetRowLimit] = useState(500);
   const canEdit = persistence === 'local' || sessionRole === 'editor' || sessionRole === 'runner' || sessionRole === 'owner';
   const canRun = persistence === 'local' || sessionRole === 'runner' || sessionRole === 'owner';
+  useEffect(() => {
+    if (!palettePreferencesReady) return;
+    try { localStorage.setItem(PALETTE_COLLAPSE_STORAGE_KEY, JSON.stringify([...collapsedPaletteGroups])); } catch { /* storage can be unavailable in hardened contexts */ }
+  }, [collapsedPaletteGroups, palettePreferencesReady]);
   const flowRef = useRef<ReactFlowInstance<CreationFlowNode, Edge> | null>(null);
   const hydrated = useRef(false);
   const revision = useRef(1);
@@ -1416,17 +1434,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           {persistence === 'local' && <button className={styles.primaryButton} onClick={() => { window.location.href = `/login?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>{t('saveCollaborate')}</button>}
           <button className={styles.primaryButton} disabled={!canRun} onClick={runWorkflow}>▶ {t('run')}</button>
           {moreOpen && <div className={styles.moreMenu} aria-label={t('moreActions')}>
-            <button onClick={() => { setTemplateOpen(true); setMoreOpen(false); }}>{t('templates')}</button>
-            <button onClick={() => { setConversationOpen((value) => !value); setMoreOpen(false); }}>{t('conversation')}</button>
-            <button onClick={() => { openHistory(); setMoreOpen(false); }}>{t('history')}</button>
-            <button onClick={() => { exportSession(); setMoreOpen(false); }}>{t('exportCanvas')}</button>
-            <button aria-pressed={drawingMode} onClick={() => { setDrawingMode((value) => !value); setMoreOpen(false); }}>{drawingMode ? t('stopDrawing') : t('draw')}</button>
-            <button onClick={() => { setPresentMode((value) => !value); setMoreOpen(false); }}>{presentMode ? t('exitPresentation') : t('present')}</button>
-            <button onClick={() => { setTourStep(1); setMoreOpen(false); }}>{t('tutorial')}</button>
-            <button onClick={() => { setShowHidden((value) => !value); setMoreOpen(false); }}>{showHidden ? t('hideHidden') : t('showHidden')}</button>
-            <button onClick={() => { createBranch(); setMoreOpen(false); }}>{t('branch')}</button>
-            {branchParentId && <button onClick={() => { prepareMerge(); setMoreOpen(false); }}>{t('merge')}</button>}
-            <label>{t('edge')}<select aria-label="Connection kind" value={connectionKind} onChange={(event) => setConnectionKind(event.target.value as CreationConnectionKind)}>{CREATION_CONNECTION_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label>
+            <span className={styles.moreMenuHeading}>{t('createAndView')}</span>
+            <button onClick={() => { setTemplateOpen(true); setMoreOpen(false); }}><span aria-hidden>▦</span>{t('templates')}</button>
+            <button onClick={() => { setConversationOpen((value) => !value); setMoreOpen(false); }}><span aria-hidden>◌</span>{t('conversation')}</button>
+            <button aria-pressed={drawingMode} onClick={() => { setDrawingMode((value) => !value); setMoreOpen(false); }}><span aria-hidden>⌁</span>{drawingMode ? t('stopDrawing') : t('draw')}</button>
+            <button onClick={() => { setPresentMode((value) => !value); setMoreOpen(false); }}><span aria-hidden>▶</span>{presentMode ? t('exitPresentation') : t('present')}</button>
+            <span className={styles.moreMenuHeading}>{t('sessionTools')}</span>
+            <button onClick={() => { openHistory(); setMoreOpen(false); }}><span aria-hidden>↶</span>{t('history')}</button>
+            <button onClick={() => { exportSession(); setMoreOpen(false); }}><span aria-hidden>↓</span>{t('exportCanvas')}</button>
+            <button onClick={() => { setTourStep(1); setMoreOpen(false); }}><span aria-hidden>?</span>{t('tutorial')}</button>
+            <button onClick={() => { setShowHidden((value) => !value); setMoreOpen(false); }}><span aria-hidden>◉</span>{showHidden ? t('hideHidden') : t('showHidden')}</button>
+            <button onClick={() => { createBranch(); setMoreOpen(false); }}><span aria-hidden>⑂</span>{t('branch')}</button>
+            {branchParentId && <button onClick={() => { prepareMerge(); setMoreOpen(false); }}><span aria-hidden>⇄</span>{t('merge')}</button>}
+            <label><span><i aria-hidden>⌁</i>{t('edge')}</span><select aria-label="Connection kind" value={connectionKind} onChange={(event) => setConnectionKind(event.target.value as CreationConnectionKind)}>{CREATION_CONNECTION_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label>
           </div>}
           {shareOpen && <div className={styles.shareMenu}>
             <strong>{persistence === 'local' ? 'Save to invite people' : 'Invite collaborators'}</strong>
@@ -1506,8 +1526,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         {!presentMode && <button className={styles.paletteToggle} onClick={() => setPaletteOpen((value) => !value)} aria-label="Toggle object palette">{paletteOpen ? '‹' : '+'}</button>}
         {!presentMode && paletteOpen && <aside className={styles.palette}>
           <div className={styles.paletteHeader}><strong>{t('addToCanvas')}</strong><button onClick={() => setPaletteOpen(false)} aria-label="Close palette">×</button></div>
-          <input className={styles.search} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder={t('searchEverything')} />
-          {CREATION_PALETTE_GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => `${t(`object.${item.kind}`)} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => <section key={group.group}><h4>{group.group}</h4><div className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} aria-label={t(`object.${item.kind}`)} disabled={!canEdit} draggable={canEdit} onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addAtCenter(item.kind)}><span>{item.icon}</span>{t(`object.${item.kind}`)}</button>)}</div></section>)}
+          <div className={styles.paletteSearchWrap}><span aria-hidden>⌕</span><input className={styles.search} aria-label={t('searchEverything')} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder={t('searchEverything')} />{paletteSearch && <button type="button" aria-label={t('clearSearch')} onClick={() => setPaletteSearch('')}>×</button>}</div>
+          <div className={styles.paletteSections}>{CREATION_PALETTE_GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => `${t(`object.${item.kind}`)} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => {
+            const collapsed = !paletteSearch.trim() && collapsedPaletteGroups.has(group.group);
+            const regionId = `canvas-palette-${group.group.toLowerCase()}`;
+            return <section key={group.group} className={styles.paletteSection}>
+              <button type="button" className={styles.paletteSectionToggle} aria-expanded={!collapsed} aria-controls={regionId} onClick={() => setCollapsedPaletteGroups((current) => { const next = new Set(current); if (next.has(group.group)) next.delete(group.group); else next.add(group.group); return next; })}>
+                <span className={styles.paletteGroupIcon} aria-hidden>{PALETTE_GROUP_ICONS[group.group]}</span><strong>{group.group}</strong><small>{group.items.length}</small><span className={styles.paletteChevron} aria-hidden>{collapsed ? '›' : '⌄'}</span>
+              </button>
+              {!collapsed && <div id={regionId} className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} aria-label={t(`object.${item.kind}`)} disabled={!canEdit} draggable={canEdit} onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addAtCenter(item.kind)}><span>{item.icon}</span>{t(`object.${item.kind}`)}</button>)}</div>}
+            </section>;
+          })}</div>
         </aside>}
 
         {!presentMode && selectedNode && <Inspector node={selectedNode} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onClose={() => setSelectedId(null)} onRun={runWorkflow} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}
