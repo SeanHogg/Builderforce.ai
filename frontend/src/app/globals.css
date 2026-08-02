@@ -3135,10 +3135,79 @@ textarea.input { resize: vertical; line-height: 1.5; }
   z-index: 0;
   overflow: hidden;
   pointer-events: none;
+  background:
+    radial-gradient(ellipse 54% 64% at 50% 43%, rgba(28, 90, 158, 0.18), transparent 72%),
+    linear-gradient(180deg, #030711 0%, #07101d 72%, #0a1220 100%);
 }
 /* The canvas render loop owns all colour + motion and is DPR-aware. It renders
    one detailed still when reduced motion is requested. */
 .wb-canvas { width: 100%; height: 100%; display: block; }
+.wb-brain-aura {
+  position: absolute;
+  width: min(92vw, 880px);
+  aspect-ratio: 1 / 1.08;
+  left: 50%;
+  top: 43%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(30, 178, 229, 0.2), rgba(83, 77, 210, 0.09) 42%, transparent 72%);
+  filter: blur(24px);
+  animation: wb-aura-pulse 3.2s ease-in-out infinite;
+}
+.wb-brain-shell {
+  position: absolute;
+  width: min(86vw, 780px);
+  aspect-ratio: 972 / 1201;
+  left: 50%;
+  top: 43%;
+  transform: translate(-50%, -49%);
+  transform-origin: 50% 52%;
+  animation: wb-brain-breathe 4s ease-in-out infinite;
+  filter: drop-shadow(0 0 18px rgba(27, 211, 225, 0.42)) drop-shadow(0 0 52px rgba(84, 100, 240, 0.24));
+}
+.wb-brain-image {
+  object-fit: contain;
+  object-position: center;
+  user-select: none;
+}
+.wb-brain-scan {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  mix-blend-mode: screen;
+  -webkit-mask-image: url('/images/hero/evermind-brain.png');
+  mask-image: url('/images/hero/evermind-brain.png');
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+}
+.wb-brain-scan::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 20%;
+  top: -24%;
+  background: linear-gradient(180deg, transparent, rgba(121, 239, 255, 0.42), rgba(255,255,255,0.58), transparent);
+  filter: blur(7px);
+  animation: wb-scan 2.8s linear infinite;
+}
+.wb-activity-canvas { position: absolute; inset: 0; }
+@keyframes wb-brain-breathe {
+  0%, 100% { transform: translate(-50%, -49%) scale(0.985) rotate(-0.25deg); filter: drop-shadow(0 0 16px rgba(27, 211, 225, 0.38)) drop-shadow(0 0 44px rgba(84, 100, 240, 0.2)); }
+  50% { transform: translate(-50%, -50.2%) scale(1.025) rotate(0.25deg); filter: drop-shadow(0 0 27px rgba(27, 211, 225, 0.62)) drop-shadow(0 0 72px rgba(84, 100, 240, 0.34)); }
+}
+@keyframes wb-aura-pulse {
+  0%, 100% { opacity: 0.54; transform: translate(-50%, -50%) scale(0.9); }
+  50% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+}
+@keyframes wb-scan {
+  from { transform: translateY(0); }
+  to { transform: translateY(620%); }
+}
 /* A narrow text-safe vignette preserves contrast without hiding the cortex. */
 .wb-veil {
   position: absolute;
@@ -3146,9 +3215,9 @@ textarea.input { resize: vertical; line-height: 1.5; }
   pointer-events: none;
   background: radial-gradient(
     ellipse 43% 47% at 50% 42%,
-    rgba(3, 7, 17, 0.72) 0%,
-    rgba(3, 7, 17, 0.52) 42%,
-    rgba(3, 7, 17, 0.14) 72%,
+    rgba(3, 7, 17, 0.54) 0%,
+    rgba(3, 7, 17, 0.36) 42%,
+    rgba(3, 7, 17, 0.08) 72%,
     transparent 100%
   );
 }
@@ -3159,6 +3228,13 @@ textarea.input { resize: vertical; line-height: 1.5; }
   bottom: 0;
   height: 150px;
   background: linear-gradient(to bottom, transparent, var(--bg));
+}
+@media (max-width: 700px) {
+  .wb-brain-shell { width: 94vw; top: 42%; }
+  .wb-brain-aura { width: 116vw; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-brain-shell, .wb-brain-aura, .wb-brain-scan::before { animation: none; }
 }
 
 /* Blog post body images / diagrams — keep SVGs and screenshots responsive within
