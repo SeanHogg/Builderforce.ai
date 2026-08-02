@@ -88,6 +88,8 @@
 .remoteCursors i { font-size:17px; line-height:1; font-style:normal; }.remoteCursors b { margin:12px 0 0 2px; padding:3px 6px; border-radius:5px; background:currentColor; color:#fff; font-size:8px; white-space:nowrap; }
 .historyPanel { position:absolute; z-index:14; top:14px; right:14px; bottom:86px; width:280px; border:1px solid #d7e0ed; border-radius:13px; background:rgba(255,255,255,.98); box-shadow:0 14px 42px rgba(31,55,88,.14); color:var(--canvas-ink); overflow:auto; }
 .historyPanel header { position:sticky; top:0; display:flex; justify-content:space-between; padding:14px; border-bottom:1px solid #e2e8f0; background:#fff; }.historyPanel header div { display:grid; gap:3px; }.historyPanel header strong { font-size:12px; }.historyPanel header small { color:#7f8da1; font-size:9px; }.historyPanel header button { border:0; background:transparent; color:#77869b; font-size:17px; cursor:pointer; }
+.panelHeaderActions { display:flex; align-items:center; gap:5px; }.panelHeaderActions > button:first-child { min-height:27px!important; padding:3px 7px!important; border:1px solid var(--border-subtle)!important; font-size:9px!important; }
+.diagnosticsPanel { right:14px; }.diagnosticsSummary { padding:12px!important; }.diagnosticsSummary dl { display:grid; gap:7px; margin:0; }.diagnosticsSummary dl div { display:flex; justify-content:space-between; gap:12px; padding-bottom:6px; border-bottom:1px solid #edf1f5; }.diagnosticsSummary dt { color:#718097; font-size:9px; }.diagnosticsSummary dd { margin:0; color:#28384d; font-size:9px; font-weight:650; text-align:right; }
 .historyPanel > p,.historyPanel > div > p { padding:14px; color:#6d7d94; font-size:10px; line-height:1.5; }.historyPanel > div { display:grid; padding:8px; gap:6px; }.historyPanel > div > button { display:grid; gap:3px; padding:9px; border:1px solid #dce4ef; border-radius:8px; background:#fbfdff; color:#2c3b50; text-align:left; cursor:pointer; }.historyPanel > div > button b { font-size:10px; }.historyPanel > div > button span { color:#8090a3; font-size:8px; }
 .changeSetPanel { position:absolute; z-index:15; top:14px; right:310px; width:330px; border:1px solid #cfc5f0; border-radius:13px; background:rgba(255,255,255,.99); box-shadow:0 16px 48px rgba(58,40,112,.18); color:var(--canvas-ink); overflow:hidden; }
 .changeSetPanel header { display:flex; justify-content:space-between; padding:13px; border-bottom:1px solid #e6e0f5; background:#faf8ff; }.changeSetPanel header div { display:grid; gap:3px; }.changeSetPanel header strong { font-size:12px; }.changeSetPanel header small { color:#796d99; font-size:9px; }.changeSetPanel header button { border:0; background:transparent; color:#77869b; font-size:17px; cursor:pointer; }
@@ -235,6 +237,8 @@
 @media (max-width: 760px) {
   .canvasShell { height:calc(100dvh - 108px); min-height:520px; }
   .saved,.secondaryButton { display:none; }
+  .sessionBar { gap:5px; padding:0 7px; }.sessionActions { gap:4px; }.titleBlock { gap:3px; }.titleBlock input { width:92px; padding-inline:4px; }.spark,.collaborators { display:none; }
+  .mobileAction { display:inline-flex; padding:7px 9px; }.mobileAction span { display:none; }.primaryButton { padding:7px 8px; font-size:10px; }
   .palette { left:45px; width:175px; }
   .inspector { left:8px; right:8px; top:auto; bottom:82px; width:auto; height:48%; }
   .composer { width:calc(100% - 24px); min-width:0; bottom:10px; }

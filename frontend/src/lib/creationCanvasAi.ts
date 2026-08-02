@@ -15,6 +15,9 @@ type CanvasAiOptions = {
   canvasSnapshot: string;
   persistence: 'local' | 'server';
   canvasActions: BrainAction[];
+  /** Session-owned transcript. The Canvas is the chat, so prior turns must travel with
+   * every request just as they do in the standalone Brain surface. */
+  conversation?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
   onText?: (text: string) => void;
 };
 
@@ -55,6 +58,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       role: 'system',
       content: `You are Brain operating BuilderForce's unified creation canvas. Use canvas tools to make requested visual changes instead of merely describing them. Use MCP tools when the user asks to read or change tenant resources. Never claim a mutation succeeded unless its tool result confirms it. Current canvas:\n${options.canvasSnapshot}`,
     },
+    ...(options.conversation || []).slice(-20).map((message) => ({ ...message, content: message.content.slice(0, 8_000) })),
     { role: 'user', content: options.prompt },
   ];
   let finalText = '';
@@ -90,4 +94,3 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   }
   return finalText || 'I made the available canvas changes.';
 }
-

@@ -205,6 +205,17 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByRole('button', { name: 'Duplicate' })).toBeInTheDocument();
   });
 
+  it('exposes one-paste Canvas and Session chat diagnostics', () => {
+    render(<CreationCanvas sessionId="diagnostics-test" persistence="local" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Canvas diagnostics' }));
+    expect(screen.getByLabelText('Canvas diagnostics')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Copy Canvas diagnostics' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'More session actions' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Conversation' }));
+    expect(screen.getByRole('button', { name: 'Copy Session chat diagnostics' })).toBeInTheDocument();
+  });
+
   it('provides a keyboard-readable structured graph and semantic connections', () => {
     render(<CreationCanvas sessionId="accessible-graph-test" persistence="local" />);
 

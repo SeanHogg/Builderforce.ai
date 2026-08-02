@@ -25,15 +25,18 @@
 3. Default navigation: enable `creation_sessions_nav` only after web and the current VSIX pass the shared session smoke suite.
 4. Legacy menu removal: keep compatibility URLs and rollback controls for at least one full supported client window.
 
-## Repository release-candidate evidence — 2026-08-01
+## Repository release-candidate evidence — 2026-08-02
 
 - API: TypeScript and all schema, migration, layering, tenant-scope, source, dispatch, and prompt-tool ratchets pass; 400 test files and 4,347 tests pass (one environment-specific test skipped).
-- Web: TypeScript, 78 test files/768 tests, and the optimized Next production build pass. `/create`, `/create/new`, `/create/[sessionId]`, `/create/invitations/[token]`, and `/creation-canvas` register as dynamic Edge surfaces.
+- Web: TypeScript, the complete frontend test suite, and the optimized Next production build pass. `/create`, `/create/new`, `/create/[sessionId]`, `/create/invitations/[token]`, and `/creation-canvas` register as dynamic Edge surfaces.
 - VSIX: extension and native webview production bundles compile; 23 tests pass against the shared Creation Canvas object/command contract.
-- Acceptance project: `qa-e2e/tests/creation-canvas.spec.ts` typechecks and is ready for the deployed authenticated/local-first smoke environment.
+- Acceptance project: `qa-e2e/tests/creation-canvas.spec.ts` and `creation-canvas-release.spec.ts` typecheck and cover guest creation, durable restore, legacy adaptation, Canvas-native Workflow/Voice, Brain review, structured accessibility, reduced motion, forced colors, zoom, and 360px review.
+- Capacity/evidence: `pnpm canvas:capacity` exercises an explicitly named disposable Session with 25 simulated presence editors by default; `pnpm canvas:audit -- <evidence.json>` refuses GA until every PRD threshold, artifact, and owner sign-off is recorded. See `docs/design/creation-canvas/evidence/README.md`.
 - Database repair: migrations 0388 and 0389 both define the presence `last_seen_at` column with forward-compatible guards, and schema drift verification passes.
 
 ## Support playbook
+
+- **Canvas/Brain issue:** open **Diagnostics** in the Session header or **Conversation → Copy diagnostics**. The pasteable report includes UI/API build, Session/revision/realtime/access state, graph counts, selection, Brain scope/pending changes, and the bounded recent transcript. The global floating Brain is intentionally absent on `/create/*`; the Canvas composer is the authoritative Session conversation and uses the shared Brain transport and MCP catalog.
 
 - **Guest draft does not claim:** preserve the local-storage snapshot, confirm a tenant token exists, retry claim with the same idempotency key, and never clear the guest key until the saved session opens successfully.
 - **Session reports missing `last_seen_at`:** confirm migrations 0388–0393 were applied in order—especially the forward-compatible `0389` repair—and run schema checks before restarting presence traffic.

@@ -19,9 +19,10 @@ const evidence = JSON.parse(readFileSync(path, 'utf8')) as Evidence;
 const metrics = evidence.metrics || {};
 const artifacts = evidence.artifacts || {};
 const signoffs = evidence.ownerSignoffs || {};
+const recorded = (value: unknown) => typeof value === 'string' && value.trim() !== '' && !value.startsWith('REPLACE_');
 const checks: Array<[string, boolean]> = [
-  ['release identifier recorded', !!evidence.release],
-  ['evidence timestamp recorded', !!evidence.generatedAt],
+  ['release identifier recorded', recorded(evidence.release)],
+  ['evidence timestamp recorded', recorded(evidence.generatedAt) && !Number.isNaN(Date.parse(evidence.generatedAt!))],
   ['two-week dogfood completed', (metrics.dogfoodDays || 0) >= 14],
   ['at least 50 tenant Sessions', (metrics.tenantSessions || 0) >= 50],
   ['at least five multiplayer Sessions', (metrics.multiplayerSessions || 0) >= 5],
@@ -37,15 +38,14 @@ const checks: Array<[string, boolean]> = [
   ['accessibility report attached', (artifacts.accessibilityAudit || []).length > 0],
   ['web/VSIX conformance attached', (artifacts.webVsixConformance || []).length > 0],
   ['operations drill records attached', (artifacts.operationsDrills || []).length >= 5],
-  ['Product sign-off', !!signoffs.product?.owner && !!signoffs.product?.approvedAt && !!signoffs.product?.evidenceUrl],
-  ['Platform sign-off', !!signoffs.platform?.owner && !!signoffs.platform?.approvedAt && !!signoffs.platform?.evidenceUrl],
-  ['Security sign-off', !!signoffs.security?.owner && !!signoffs.security?.approvedAt && !!signoffs.security?.evidenceUrl],
-  ['Accessibility sign-off', !!signoffs.accessibility?.owner && !!signoffs.accessibility?.approvedAt && !!signoffs.accessibility?.evidenceUrl],
-  ['SRE/Support sign-off', !!signoffs.operations?.owner && !!signoffs.operations?.approvedAt && !!signoffs.operations?.evidenceUrl],
+  ['Product sign-off', recorded(signoffs.product?.owner) && recorded(signoffs.product?.approvedAt) && recorded(signoffs.product?.evidenceUrl)],
+  ['Platform sign-off', recorded(signoffs.platform?.owner) && recorded(signoffs.platform?.approvedAt) && recorded(signoffs.platform?.evidenceUrl)],
+  ['Security sign-off', recorded(signoffs.security?.owner) && recorded(signoffs.security?.approvedAt) && recorded(signoffs.security?.evidenceUrl)],
+  ['Accessibility sign-off', recorded(signoffs.accessibility?.owner) && recorded(signoffs.accessibility?.approvedAt) && recorded(signoffs.accessibility?.evidenceUrl)],
+  ['SRE/Support sign-off', recorded(signoffs.operations?.owner) && recorded(signoffs.operations?.approvedAt) && recorded(signoffs.operations?.evidenceUrl)],
 ];
 
 for (const [label, passed] of checks) process.stdout.write(`${passed ? 'PASS' : 'FAIL'}  ${label}\n`);
 const failed = checks.filter(([, passed]) => !passed).length;
 process.stdout.write(`\n${checks.length - failed}/${checks.length} release-evidence checks passed for ${evidence.release || 'unidentified release'}.\n`);
 if (failed) process.exitCode = 1;
-

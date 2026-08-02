@@ -3,8 +3,7 @@
 /**
  * The global Brain: a floating icon (bottom-right) that opens a docked
  * slide-out drawer hosting the shared <BrainPanel>. Mounted once, app-wide, by
- * ConditionalAppShell. Hidden on /brainstorm, where the same Brain UI is
- * already the whole page.
+ * ConditionalAppShell. Hidden where Brain is already the primary surface.
  *
  * It reads ambient page context (active project, modality, open-file system
  * context) from BrainContext, so the IDE (and any page) can steer the Brain
@@ -92,9 +91,11 @@ export function FloatingBrain() {
     };
   }, [hasTenant, setOpen, pathname]);
 
-  // On the full Brain Storm page the docked Brain is redundant; on the auth
+  // Brainstorm and Creation Sessions already provide a first-class Brain conversation;
+  // mounting a second launcher there splits context and creates two competing chats.
   // pages a "sign in to use Brain" CTA would be redundant with the form itself.
   if (pathname?.startsWith('/brainstorm')) return null;
+  if (pathname === '/create' || pathname?.startsWith('/create/')) return null;
   if (pathname === '/login' || pathname === '/register') return null;
   // Embedded surfaces render bare inside a host iframe — no floating chrome.
   if (pathname?.startsWith('/embed')) return null;

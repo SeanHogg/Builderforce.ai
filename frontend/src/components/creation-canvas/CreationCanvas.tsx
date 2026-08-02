@@ -46,6 +46,9 @@ import { WorkflowBuilder } from '@/components/workflow-builder/WorkflowBuilder';
 import { VoiceConfigPanel } from '@/components/ide/VoiceConfigPanel';
 import { VoiceOutput } from '@/components/ide/VoiceOutput';
 import { useVoiceStudio } from '@/lib/voiceStudio';
+import { CopyButton } from '@/components/CopyButton';
+import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
+import { buildCreationCanvasDiagnosticsReport } from '@/lib/creationCanvasDiagnostics';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 type ProposedCanvasChange =
@@ -192,6 +195,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [history, setHistory] = useState<CreationSnapshotSummary[]>([]);
   const [timeline, setTimeline] = useState<CanvasTimelineMessage[]>([]);
   const [conversationOpen, setConversationOpen] = useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [proposedChanges, setProposedChanges] = useState<ProposedCanvasChange[]>([]);
   const [acceptedProposalIds, setAcceptedProposalIds] = useState<Set<string>>(new Set());
   const [sessionRole, setSessionRole] = useState<CreationSessionSummary['role']>('owner');
@@ -1171,7 +1175,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         connections: scopedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
       });
       setPrompt('');
-      void runCreationCanvasAi({ prompt: request, canvasSnapshot: snapshot, persistence, canvasActions }).then((answer) => {
+      void runCreationCanvasAi({
+        prompt: request, canvasSnapshot: snapshot, persistence, canvasActions,
+        conversation: timeline.map((message) => ({ role: message.messageRole, content: message.body })),
+      }).then((answer) => {
         if (answer.trim()) {
           appendTimeline('assistant', answer.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds] }, `${requestMessageId}:assistant`);
           const chat = nodes.find((node) => node.data.kind === 'chat');
@@ -1376,6 +1383,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     return colors[node.data.kind] ?? '#9aa8bd';
   }, []);
   const renderedNodes = useMemo(() => nodes.map((node) => node.data.placementHidden === true ? { ...node, hidden: !showHidden, style: showHidden ? { ...node.style, opacity: .42 } : node.style } : node), [nodes, showHidden]);
+  const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
+    sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
+    objectCount: nodes.length, connectionCount: edges.length,
+    objectKinds: nodes.reduce<Record<string, number>>((counts, node) => ({ ...counts, [node.data.kind]: (counts[node.data.kind] || 0) + 1 }), {}),
+    selectedObjectIds: effectiveSelectedIds,
+    hiddenObjectCount: nodes.filter((node) => node.data.placementHidden === true).length,
+    lockedObjectCount: nodes.filter((node) => node.data.placementLocked === true).length,
+    redactedObjectCount: nodes.filter((node) => node.data.redacted === true).length,
+    canonicalResourceCount: nodes.filter((node) => !!node.data.resourceId).length,
+    memberCount: persistence === 'local' ? 1 : allMembers.length,
+    pendingInvitationCount: pendingInvitations.length,
+    timeline: timeline.map((message) => ({ role: message.messageRole === 'assistant' ? 'Brain' : message.messageRole, body: message.body, createdAt: message.createdAt })),
+    brain: { scope: resolvedScopeMode, thinking, proposedChangeCount: proposedChanges.length, actionCount: canvasActions.length },
+  }, await captureDiagnosticsContext()), [allMembers.length, canvasActions.length, edges.length, effectiveSelectedIds, nodes, pendingInvitations.length, persistence, proposedChanges.length, realtimeState, resolvedScopeMode, sessionId, sessionRole, thinking, timeline, title]);
 
   return (
     <div className={`${styles.canvasShell} app-full-height`}>
@@ -1389,7 +1410,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <button className={styles.secondaryButton} onClick={undo} aria-label="Undo canvas change">↶</button>
           <button className={styles.secondaryButton} onClick={redo} aria-label="Redo canvas change">↷</button>
           <button className={styles.secondaryButton} onClick={() => setPaletteOpen(true)}>＋ {t('add')}</button>
-          <button className={styles.secondaryButton} aria-expanded={moreOpen} aria-label={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}>•••</button>
+          <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-label={t('openDiagnostics')} onClick={() => setDiagnosticsOpen((value) => !value)}>⚠ <span>{t('diagnostics')}</span></button>
+          <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}>•••</button>
           <button className={styles.secondaryButton} onClick={() => { setShareOpen((value) => !value); setMoreOpen(false); }}>{t('share')} ▾</button>
           {persistence === 'local' && <button className={styles.primaryButton} onClick={() => { window.location.href = `/login?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>{t('saveCollaborate')}</button>}
           <button className={styles.primaryButton} disabled={!canRun} onClick={runWorkflow}>▶ {t('run')}</button>
@@ -1496,7 +1518,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         </section>}
 
         {historyOpen && <aside className={styles.historyPanel}><header><div><strong>Version history</strong><small>Restore creates a new revision</small></div><button onClick={() => setHistoryOpen(false)} aria-label="Close history">×</button></header>{persistence === 'local' ? <p>This session is currently stored on this device. Server version history begins after you save it.</p> : <><button className={styles.primaryButton} onClick={createCheckpoint} disabled={!canEdit}>+ Name current checkpoint</button><div>{history.length ? history.map((snapshot) => <button key={snapshot.revision} onClick={() => restoreRevision(snapshot.revision)} disabled={!canEdit}><b>{snapshot.label || `Revision ${snapshot.revision}`}</b><span>Revision {snapshot.revision} · {new Date(snapshot.createdAt).toLocaleString()}</span></button>) : <p>No saved revisions yet.</p>}</div></>}</aside>}
-        {conversationOpen && <aside className={styles.historyPanel} aria-label="Session conversation"><header><div><strong>Session conversation</strong><small>Persists even when Chat Objects are removed</small></div><button onClick={() => setConversationOpen(false)} aria-label="Close conversation">×</button></header><div>{timeline.length ? timeline.map((message) => <article key={message.clientMessageId} style={{ padding: '9px 10px', borderBottom: '1px solid var(--border-subtle)' }}><strong style={{ textTransform: 'capitalize' }}>{message.messageRole === 'assistant' ? 'Brain' : message.messageRole}</strong><p style={{ margin: '4px 0', whiteSpace: 'pre-wrap' }}>{message.body}</p><small>{new Date(message.createdAt).toLocaleString()}</small></article>) : <p>No conversation yet. Ask Brain from the composer to begin.</p>}</div></aside>}
+        {conversationOpen && <aside className={styles.historyPanel} aria-label="Session conversation"><header><div><strong>Session conversation</strong><small>Persists even when Chat Objects are removed</small></div><span className={styles.panelHeaderActions}><CopyButton compact label={t('copyDiagnostics')} ariaLabel={t('copyChatDiagnostics')} getText={buildDiagnostics} /><button onClick={() => setConversationOpen(false)} aria-label="Close conversation">×</button></span></header><div>{timeline.length ? timeline.map((message) => <article key={message.clientMessageId} style={{ padding: '9px 10px', borderBottom: '1px solid var(--border-subtle)' }}><strong style={{ textTransform: 'capitalize' }}>{message.messageRole === 'assistant' ? 'Brain' : message.messageRole}</strong><p style={{ margin: '4px 0', whiteSpace: 'pre-wrap' }}>{message.body}</p><small>{new Date(message.createdAt).toLocaleString()}</small></article>) : <p>No conversation yet. Ask Brain from the composer to begin.</p>}</div></aside>}
+        {diagnosticsOpen && <aside className={`${styles.historyPanel} ${styles.diagnosticsPanel}`} aria-label="Canvas diagnostics"><header><div><strong>{t('diagnostics')}</strong><small>{t('diagnosticsHint')}</small></div><button onClick={() => setDiagnosticsOpen(false)} aria-label="Close diagnostics">×</button></header><div className={styles.diagnosticsSummary}><dl><div><dt>Session</dt><dd>{persistence} · revision {revision.current}</dd></div><div><dt>Realtime</dt><dd>{realtimeState}</dd></div><div><dt>Canvas</dt><dd>{nodes.length} objects · {edges.length} connections</dd></div><div><dt>Brain</dt><dd>{thinking ? 'responding' : 'ready'} · {canvasActions.length} actions</dd></div><div><dt>Scope</dt><dd>{resolvedScopeMode}</dd></div><div><dt>Access</dt><dd>{sessionRole}</dd></div></dl><CopyButton label={t('copyDiagnostics')} ariaLabel={t('copyCanvasDiagnostics')} getText={buildDiagnostics} /></div></aside>}
 
         {!!proposedChanges.length && <aside className={styles.changeSetPanel}><header><div><strong>Review Brain changes</strong><small>Select exactly what should change</small></div><button onClick={rejectProposedChanges} aria-label="Close change set">×</button></header><div>{proposedChanges.map((change) => <label key={change.id}><input type="checkbox" checked={acceptedProposalIds.has(change.id)} onChange={() => setAcceptedProposalIds((current) => { const next = new Set(current); if (next.has(change.id)) next.delete(change.id); else next.add(change.id); return next; })} /><span><b>{change.label}</b><small>{change.type.replace('.', ' ')}</small></span></label>)}</div><footer><button className={styles.secondaryButton} onClick={rejectProposedChanges}>Reject all</button><button className={styles.primaryButton} disabled={!acceptedProposalIds.size} onClick={applyProposedChanges}>Apply {acceptedProposalIds.size} selected</button></footer></aside>}
         {mergeReview && <aside className={styles.mergePanel}><header><div><strong>Merge branch into parent</strong><p>Resolve each object explicitly. Parent-only objects are preserved.</p></div><button onClick={() => setMergeReview(null)} aria-label="Close merge review">×</button></header>{mergeReview.items.map((item) => <label key={item.key}><b>{item.source.data.title}</b><small>{item.target ? `Both sessions contain this ${item.source.data.kind}.` : `New ${item.source.data.kind} from this branch.`}</small>{item.target && <span><select aria-label={`Merge choice for ${item.source.data.title}`} value={item.choice} onChange={(event) => setMergeReview((current) => current ? { ...current, items: current.items.map((candidate) => candidate.key === item.key ? { ...candidate, choice: event.target.value as 'branch' | 'parent' } : candidate) } : current)}><option value="branch">Use branch version</option><option value="parent">Keep parent version</option></select></span>}</label>)}<button className={styles.primaryButton} onClick={applyMerge}>Apply reviewed merge</button></aside>}
