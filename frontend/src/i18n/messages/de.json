@@ -3151,6 +3151,7 @@
   "quality": {
     "title": "Produktqualität",
     "subtitle": "Jeder Fehler in Ihrem Produkt – erfasst, gruppiert und bereit zur Behebung.",
+    "copyDiagnosticsAria": "Alle passenden Fehlergruppen und Qualitätsdiagnosen kopieren",
     "loading": "Wird geladen…",
     "empty": "Noch keine Fehler. Verbinden Sie eine Quelle, um mit der Erfassung zu beginnen.",
     "summary": {
@@ -3287,6 +3288,7 @@
     "stats": {
       "empty": "Noch keine Daten erfasst — füge einen Collector hinzu, um Fehler zu visualisieren.",
       "unassigned": "Nicht zugewiesen",
+      "noCollector": "Direkt / gelöschter Collector",
       "eventsCollected": "Erfasste Ereignisse",
       "windowDays": "Zeitraum",
       "events": "Ereignisse",
@@ -11872,7 +11874,7 @@
     "details": "Details", "activity": "Aktivität", "name": "Name", "saveChanges": "Änderungen speichern", "next": "Weiter", "startCreating": "Mit dem Erstellen beginnen",
     "duplicate": "Duplizieren", "align": "Ausrichten", "frame": "Rahmen", "lock": "Sperren", "unlock": "Entsperren", "hide": "Ausblenden", "showHidden": "Ausgeblendete zeigen", "hideHidden": "Ausgeblendete verbergen", "focus": "Fokussieren", "edge": "Verbindung", "conversation": "Unterhaltung", "tutorial": "Tutorial",
     "live": "Live", "offlineRetry": "Offline · Änderungen werden erneut versucht", "reconnecting": "Verbindung wird wiederhergestellt…", "connecting": "Verbindung wird hergestellt…", "largeSession": "Große Session · {count} Objekte",
-    "dashboardTitle": "Create Sessions", "dashboardSubtitle": "Kehre zu einem Canvas zurück und mache genau dort weiter.", "searchSessions": "Sessions, Objekte, Projekte oder Personen suchen…", "active": "Aktiv", "archived": "Archiviert", "continueCreating": "Weiter erstellen", "sharedWithMe": "Mit mir geteilt", "recentlyCompleted": "Kürzlich abgeschlossen",
+    "dashboardTitle": "Kreationen", "dashboardSubtitle": "Öffne Canvas-Sitzungen, Projekte, Workflows, Agenten, Modelle, Apps und Brain-Unterhaltungen an einem Ort.", "searchSessions": "Kreationen, Objekte, Projekte oder Personen suchen…", "active": "Aktiv", "archived": "Archiviert", "continueCreating": "Weiter erstellen", "sharedWithMe": "Mit mir geteilt", "recentlyCompleted": "Kürzlich abgeschlossen",
     "starterCampaign": "Kampagnenstudio", "starterCampaignDescription": "Erstelle einen Kampagnen-Workflow, eine interaktive Landingpage, ein Prognose-Dashboard und einen Bewertungsrahmen.", "starterProductDiscovery": "Produktentdeckung", "starterProductDiscoveryDescription": "Fasse Kundenfeedback zu gewünschten Funktionen, visuellen Mockups und einer Liefer-Roadmap zusammen.",
     "createTypeTitle": "Was möchtest du erstellen?", "createTypeSubtitle": "Starte mit einem Builder-Typ oder einer geführten Vorlage. Sie öffnet sich als Objekt in einem neuen Canvas, wo du Workflows, Daten, Personen und Brain hinzufügen kannst.", "existingCreations": "Deine bestehenden Kreationen", "existingCreationsSubtitle": "Öffne ein Projekt, einen Agenten, eine Website, App, Evermind, ein LLM, Voice, Video, einen Workflow oder eine Brain-Session in ihrem Canvas.", "loadingCreations": "Kreationen werden geladen…", "noCreations": "Keine bestehende Kreation passt zur Suche.", "brainSession": "Brain-Session", "workflowRuns": "Workflow · {count} Läufe", "projectTasks": "{count} Aufgaben", "exportCanvas": "Exportieren",
     "object": {"workflow":"Workflow","project":"Projekt","website":"Website","dashboard":"Dashboard","chat":"Chat","agent":"Agent","staff":"Teammitglied","evaluation":"Bewertung","dataset":"Datensatz","table":"Tabelle","spreadsheet":"Tabellenblatt","chart":"Diagramm","report":"Bericht","kpi":"KPI","prototype":"WYSIWYG","code":"Code","browser":"Browser-Vorschau","llm":"LLM","voice":"Sprache","video":"Video","document":"Dokument","slides":"Folien","knowledge":"Wissen","file":"Datei","url":"URL","note":"Notiz","drawing":"Zeichnung","frame":"Rahmen","comment":"Kommentar","timer":"Timer","roadmap":"Roadmap","prd":"PRD","release":"Release","task":"Aufgabe","mockup":"Mockup","mockupSet":"Mockup-Satz","featureSummary":"Funktionsübersicht","team":"Team","role":"Rolle","mcp":"Verbundenes Werkzeug","evermind":"Evermind","projectComparison":"Projektvergleich","standup":"Stand-up","repository":"Repository","selection":"Editor-Auswahl","diagnostics":"Diagnosen","terminal":"Terminalausgabe","service":"Lokaler Dienst"}

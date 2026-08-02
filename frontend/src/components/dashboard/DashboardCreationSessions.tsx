@@ -20,6 +20,9 @@ const CANVAS_STARTERS = [
   { id: 'product-discovery', icon: '◇', labelKey: 'starterProductDiscovery', descriptionKey: 'starterProductDiscoveryDescription' },
 ] as const;
 
+type CreationLibraryView = 'card' | 'list';
+const CREATION_LIBRARY_VIEW_KEY = 'builderforce.dashboard.creationLibraryView';
+
 function modalityStarterPrompt(id: string, label: string, tagline: string): string {
   if (id === 'evermind') return 'Create an Evermind dataset, tokenizer, tuning, evaluation, and telemetry pipeline on this Canvas.';
   return `Create a ${label} in this Canvas. ${tagline}`;
@@ -42,6 +45,16 @@ export function DashboardCreationSessions() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [agents, setAgents] = useState<PublishedAgent[]>([]);
   const [resourcesLoading, setResourcesLoading] = useState(true);
+  const [libraryView, setLibraryView] = useState<CreationLibraryView>('card');
+
+  useEffect(() => {
+    const savedView = window.localStorage.getItem(CREATION_LIBRARY_VIEW_KEY);
+    if (savedView === 'card' || savedView === 'list') setLibraryView(savedView);
+  }, []);
+  const selectLibraryView = (view: CreationLibraryView) => {
+    setLibraryView(view);
+    window.localStorage.setItem(CREATION_LIBRARY_VIEW_KEY, view);
+  };
 
   const reload = useCallback(() => {
     setLoading(true);
@@ -91,13 +104,6 @@ export function DashboardCreationSessions() {
   };
 
   const visible = [...sessions].filter((session) => !searchParams.get('filter') || session.preview?.kinds?.includes(searchParams.get('filter')!)).sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned));
-  const isCompleted = (session: CreationSessionSummary) => {
-    const objects = session.preview?.objects ?? [];
-    return objects.length > 0 && objects.some((object) => ['complete', 'completed', 'done', 'delivered', 'published'].includes(String(object.status || '').toLowerCase()));
-  };
-  const completed = visible.filter(isCompleted);
-  const shared = visible.filter((session) => session.role !== 'owner' && !isCompleted(session));
-  const continuing = visible.filter((session) => session.role === 'owner' && !isCompleted(session));
   const startTemplate = async (name: string, initialPrompt: string) => {
     if (creating || sessionLimitReached) return;
     setCreating(true);
@@ -129,19 +135,27 @@ export function DashboardCreationSessions() {
   const visibleChats = chats.filter((chat) => !query.trim() || `${chat.title} ${chat.capability || ''} ${chat.origin || ''}`.toLowerCase().includes(query.trim().toLowerCase()));
   const visibleProjects = projects.filter((project) => !query.trim() || `${project.name} ${project.description || ''} ${project.status || ''}`.toLowerCase().includes(query.trim().toLowerCase()));
   const visibleAgents = agents.filter((agent) => !query.trim() || `${agent.name} ${agent.title || ''} ${agent.bio || ''}`.toLowerCase().includes(query.trim().toLowerCase()));
-  const renderCards = (items: typeof visible) => <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
-    {items.map((session) => { const target = `/create/${session.id}${session.matchingObjectId ? `?focus=${session.matchingObjectId}` : ''}`; const running = (session.preview?.objects ?? []).filter((object) => ['agent','task','workflow'].includes(object.kind) && ['running','in progress','in_progress','queued','assigned'].includes(String(object.status || '').toLowerCase())).length; return <article key={session.id} onClick={() => router.push(target)} onKeyDown={(event) => { if (event.key === 'Enter') router.push(target); }} tabIndex={0} style={{ color: 'inherit', border: `1px solid ${session.unread ? 'var(--accent)' : 'var(--border-subtle)'}`, borderRadius: 16, overflow: 'hidden', background: 'var(--surface-raised)', boxShadow: '0 4px 16px rgba(20,35,60,.05)', cursor: 'pointer' }}>
-      <div style={{ height: 150, position: 'relative', overflow: 'hidden', background: 'radial-gradient(circle, rgba(116,137,165,.2) 1px, transparent 1px)', backgroundSize: '18px 18px' }}>
+  const representedResources = new Set(visible.flatMap((session) => (session.preview?.objects ?? [])
+    .filter((object) => object.resourceType && object.resourceId)
+    .map((object) => `${object.resourceType}:${object.resourceId}`)));
+  const resourceItems = status === 'archived' ? [] : [
+    ...visibleBuilds.filter((build) => !representedResources.has(`project:${build.storageProjectId}`)).map((build) => { const modality = getModality(build.modality); return { key: `build-${build.id}`, icon: modality.icon, title: build.name, meta: `${modality.label} · ${build.status}${build.containerName ? ` · ${build.containerName}` : ''}`, open: () => openBuild(build) }; }),
+    ...visibleWorkflows.filter((workflow) => !representedResources.has(`workflow:${workflow.id}`)).map((workflow) => ({ key: `workflow-${workflow.id}`, icon: '⌘', title: workflow.name, meta: `${t('workflowRuns', { count: workflow.runCount ?? 0 })}${workflow.projectName ? ` · ${workflow.projectName}` : ''}`, open: () => openWorkflow(workflow) })),
+    ...visibleChats.filter((chat) => !representedResources.has(`chat:${chat.id}`)).map((chat) => ({ key: `chat-${chat.id}`, icon: '●', title: chat.title, meta: `${t('brainSession')}${chat.capability ? ` · ${chat.capability}` : ''}`, open: () => openChat(chat) })),
+    ...visibleProjects.filter((project) => !representedResources.has(`project:${project.id}`)).map((project) => ({ key: `project-${project.id}`, icon: '▦', title: project.name, meta: `${t('object.project')} · ${project.status || t('active').toLowerCase()} · ${t('projectTasks', { count: project.taskCount ?? 0 })}`, open: () => openProject(project) })),
+    ...visibleAgents.filter((agent) => !representedResources.has(`agent:${agent.id}`)).map((agent) => ({ key: `agent-${agent.id}`, icon: '✦', title: agent.name, meta: `${t('object.agent')} · ${agent.title || agent.status}`, open: () => openAgent(agent) })),
+  ];
+  const renderSessionItems = (items: typeof visible) => items.map((session) => { const target = `/create/${session.id}${session.matchingObjectId ? `?focus=${session.matchingObjectId}` : ''}`; const running = (session.preview?.objects ?? []).filter((object) => ['agent','task','workflow'].includes(object.kind) && ['running','in progress','in_progress','queued','assigned'].includes(String(object.status || '').toLowerCase())).length; return <article key={`session-${session.id}`} onClick={() => router.push(target)} onKeyDown={(event) => { if (event.key === 'Enter') router.push(target); }} tabIndex={0} style={{ display: libraryView === 'list' ? 'grid' : 'block', gridTemplateColumns: libraryView === 'list' ? '108px minmax(0, 1fr)' : undefined, alignItems: 'stretch', color: 'inherit', border: `1px solid ${session.unread ? 'var(--accent)' : 'var(--border-subtle)'}`, borderRadius: libraryView === 'list' ? 12 : 16, overflow: 'hidden', background: 'var(--surface-raised)', boxShadow: '0 4px 16px rgba(20,35,60,.05)', cursor: 'pointer' }}>
+      <div style={{ height: libraryView === 'list' ? '100%' : 150, minHeight: libraryView === 'list' ? 82 : undefined, position: 'relative', overflow: 'hidden', borderRight: libraryView === 'list' ? '1px solid var(--border-subtle)' : undefined, background: 'radial-gradient(circle, rgba(116,137,165,.2) 1px, transparent 1px)', backgroundSize: '18px 18px' }}>
         {(session.preview?.objects ?? []).slice(0, 8).map((object, index) => <span key={object.id} title={object.title} style={{ position: 'absolute', left: `${12 + ((Math.abs(object.x) + index * 31) % 68)}%`, top: `${14 + ((Math.abs(object.y) + index * 23) % 58)}%`, width: 42, height: 26, borderRadius: 7, border: `2px solid ${KIND_COLOR[object.kind] ?? '#8291a8'}`, background: 'var(--surface-raised)', transform: 'translate(-50%, -50%)', boxShadow: '0 3px 9px #26364d22' }} />)}
         {!session.preview?.objects?.length && <span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'var(--text-muted)', fontSize: 12 }}>Blank canvas</span>}
       </div>
-      <div style={{ padding: 14 }}><strong style={{ display: 'block', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{session.pinned ? '★ ' : ''}{session.title}{session.unread ? ' · New' : ''}</strong>
+      <div style={{ padding: libraryView === 'list' ? '11px 14px' : 14 }}><strong style={{ display: 'block', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{session.pinned ? '★ ' : ''}{session.title}{session.unread ? ' · New' : ''}</strong>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>{(session.preview?.kinds ?? []).slice(0, 5).map((kind) => <small key={kind} style={{ border: '1px solid var(--border-subtle)', borderRadius: 10, padding: '2px 6px' }}>{kind}</small>)}{(session.projectIds ?? []).map((id) => <small key={id} style={{ borderRadius: 10, padding: '2px 6px', background: 'var(--surface-subtle)' }}>Project {id}</small>)}</div>
         <span style={{ display: 'flex', justifyContent: 'space-between', marginTop: 9, color: 'var(--text-secondary)', fontSize: 12 }}><span>{session.preview?.objectCount ?? 0} objects · {session.collaboratorCount ?? 1} people{running ? ` · ${running} running` : ''}</span><span>{new Date(session.lastActivityAt).toLocaleDateString()}</span></span>
         <div onClick={(event) => event.stopPropagation()} style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 10 }}>{(['pin','rename','duplicate','share', status === 'archived' ? 'restore' : 'archive'] as const).map((action) => <button key={action} type="button" onClick={() => void act(action, session)} style={{ border: '1px solid var(--border-subtle)', borderRadius: 6, background: 'transparent', color: 'var(--text-secondary)', padding: '4px 7px', cursor: 'pointer', textTransform: 'capitalize' }}>{action === 'pin' && session.pinned ? 'Unpin' : action}</button>)}</div>
       </div>
-    </article>; })}
-  </div>;
+    </article>; });
 
   return <section style={{ marginBottom: 40 }}>
     <section style={{ marginBottom: 34 }}>
@@ -153,25 +167,26 @@ export function DashboardCreationSessions() {
     </section>
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 16 }}>
       <div><h2 style={{ margin: 0, fontSize: 20 }}>{t('dashboardTitle')}</h2><p style={{ margin: '5px 0 0', color: 'var(--text-secondary)', fontSize: 13 }}>{t('dashboardSubtitle')}</p></div>
-      <div style={{ display: 'flex', gap: 8 }}><select aria-label="Session status" value={status} onChange={(event) => setStatus(event.target.value as 'active' | 'archived')} style={{ border: '1px solid var(--border-default)', borderRadius: 9, background: 'var(--bg-input)', color: 'var(--text-primary)', padding: '9px' }}><option value="active">{t('active')}</option><option value="archived">{t('archived')}</option></select><input aria-label="Search Creation Sessions" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('searchSessions')} style={{ width: 310, maxWidth: '42vw', border: '1px solid var(--border-default)', borderRadius: 9, padding: '9px 11px', background: 'var(--bg-input)', color: 'var(--text-primary)' }} /><button onClick={createBlank} disabled={creating || sessionLimitReached} title={sessionLimitReached ? 'Archive a Session or upgrade before creating another.' : undefined} className="btn btn-primary">{creating ? 'Creating…' : sessionLimitReached ? 'Session limit reached' : `+ ${t('newSession')}`}</button></div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        <div role="group" aria-label="Creation library view" style={{ display: 'flex', padding: 3, border: '1px solid var(--border-default)', borderRadius: 9, background: 'var(--bg-input)' }}>
+          <button type="button" aria-pressed={libraryView === 'card'} onClick={() => selectLibraryView('card')} title="Card view" style={{ border: 0, borderRadius: 6, padding: '6px 9px', background: libraryView === 'card' ? 'var(--accent)' : 'transparent', color: libraryView === 'card' ? '#fff' : 'var(--text-secondary)', cursor: 'pointer' }}>▦ <span>Card</span></button>
+          <button type="button" aria-pressed={libraryView === 'list'} onClick={() => selectLibraryView('list')} title="List view" style={{ border: 0, borderRadius: 6, padding: '6px 9px', background: libraryView === 'list' ? 'var(--accent)' : 'transparent', color: libraryView === 'list' ? '#fff' : 'var(--text-secondary)', cursor: 'pointer' }}>☷ <span>List</span></button>
+        </div>
+        <select aria-label="Creation status" value={status} onChange={(event) => setStatus(event.target.value as 'active' | 'archived')} style={{ border: '1px solid var(--border-default)', borderRadius: 9, background: 'var(--bg-input)', color: 'var(--text-primary)', padding: '9px' }}><option value="active">{t('active')}</option><option value="archived">{t('archived')}</option></select>
+        <input aria-label="Search creations" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('searchSessions')} style={{ width: 310, maxWidth: '42vw', border: '1px solid var(--border-default)', borderRadius: 9, padding: '9px 11px', background: 'var(--bg-input)', color: 'var(--text-primary)' }} />
+        <button onClick={createBlank} disabled={creating || sessionLimitReached} title={sessionLimitReached ? 'Archive a Session or upgrade before creating another.' : undefined} className="btn btn-primary">{creating ? 'Creating…' : sessionLimitReached ? 'Session limit reached' : `+ ${t('newSession')}`}</button>
+      </div>
     </div>
     {sessionLimitReached && <p role="alert" style={{ margin: '-7px 0 14px', color: 'var(--warning, #b45309)', fontSize: 12 }}>Your plan includes {sessionQuota?.limit} Sessions. Archive one or upgrade before starting another saved Session.</p>}
-    {loading ? <div style={{ padding: 36, color: 'var(--text-secondary)' }}>Loading sessions…</div> : sessions.length === 0 ?
+    {loading || resourcesLoading ? <div style={{ padding: 36, color: 'var(--text-secondary)' }}>{t('loadingCreations')}</div> : visible.length === 0 && resourceItems.length === 0 ?
       <button onClick={createBlank} style={{ width: '100%', minHeight: 220, border: '1px dashed var(--border-default)', borderRadius: 16, background: 'var(--surface-raised)', color: 'var(--text-secondary)', cursor: 'pointer' }}><strong style={{ display: 'block', color: 'var(--text-primary)', fontSize: 18, marginBottom: 6 }}>Start with a blank canvas</strong>Describe what you want to create above, or click here.</button> :
-      <div style={{ display: 'grid', gap: 28 }}>
-        {!!continuing.length && <section><h3 style={{ fontSize: 15, margin: '0 0 10px' }}>{t('continueCreating')}</h3>{renderCards(continuing)}</section>}
-        {!!shared.length && <section><h3 style={{ fontSize: 15, margin: '0 0 10px' }}>{t('sharedWithMe')}</h3>{renderCards(shared)}</section>}
-        {!!completed.length && <section><h3 style={{ fontSize: 15, margin: '0 0 10px' }}>{t('recentlyCompleted')}</h3>{renderCards(completed)}</section>}
+      <div aria-label="Creation library" data-view={libraryView} style={{ display: 'grid', gridTemplateColumns: libraryView === 'card' ? 'repeat(auto-fill, minmax(260px, 1fr))' : '1fr', gap: libraryView === 'card' ? 16 : 8 }}>
+        {renderSessionItems(visible)}
+        {resourceItems.map((item) => <button key={item.key} type="button" onClick={() => void item.open()} style={{ minHeight: libraryView === 'card' ? 132 : 70, display: 'grid', gridTemplateColumns: libraryView === 'list' ? '42px minmax(0, 1fr) auto' : '1fr', alignItems: 'center', gap: libraryView === 'list' ? 12 : 0, padding: libraryView === 'list' ? '12px 16px' : 15, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 12, background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}>
+          <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: libraryView === 'list' ? 36 : 'auto', height: libraryView === 'list' ? 36 : 'auto', borderRadius: 9, background: libraryView === 'list' ? 'var(--surface-subtle)' : 'transparent', fontSize: 22 }}>{item.icon}</span>
+          <span style={{ minWidth: 0 }}><strong style={{ display: 'block', marginTop: libraryView === 'card' ? 8 : 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</strong><span style={{ display: 'block', marginTop: 4, color: 'var(--text-secondary)', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.meta}</span></span>
+          {libraryView === 'list' && <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 18 }}>›</span>}
+        </button>)}
       </div>}
-    <section style={{ marginTop: 34 }}>
-      <div style={{ marginBottom: 12 }}><h3 style={{ fontSize: 16, margin: 0 }}>{t('existingCreations')}</h3><p style={{ margin: '4px 0 0', color: 'var(--text-secondary)', fontSize: 12 }}>{t('existingCreationsSubtitle')}</p></div>
-      {resourcesLoading ? <div style={{ padding: 22, color: 'var(--text-secondary)' }}>{t('loadingCreations')}</div> : !visibleBuilds.length && !visibleWorkflows.length && !visibleChats.length && !visibleProjects.length && !visibleAgents.length ? <p className="text-muted">{t('noCreations')}</p> : <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(235px, 1fr))', gap: 12 }}>
-        {visibleBuilds.map((build) => { const modality = getModality(build.modality); return <button key={`build-${build.id}`} type="button" onClick={() => void openBuild(build)} style={{ padding: 15, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 12, background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}><span aria-hidden style={{ fontSize: 22 }}>{modality.icon}</span><strong style={{ display: 'block', marginTop: 6 }}>{build.name}</strong><span style={{ display: 'block', marginTop: 4, color: 'var(--text-secondary)', fontSize: 12 }}>{modality.label} · {build.status}{build.containerName ? ` · ${build.containerName}` : ''}</span></button>; })}
-        {visibleWorkflows.map((workflow) => <button key={`workflow-${workflow.id}`} type="button" onClick={() => void openWorkflow(workflow)} style={{ padding: 15, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 12, background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}><span aria-hidden style={{ fontSize: 22 }}>⌘</span><strong style={{ display: 'block', marginTop: 6 }}>{workflow.name}</strong><span style={{ display: 'block', marginTop: 4, color: 'var(--text-secondary)', fontSize: 12 }}>{t('workflowRuns', { count: workflow.runCount ?? 0 })}{workflow.projectName ? ` · ${workflow.projectName}` : ''}</span></button>)}
-        {visibleChats.map((chat) => <button key={`chat-${chat.id}`} type="button" onClick={() => void openChat(chat)} style={{ padding: 15, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 12, background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}><span aria-hidden style={{ fontSize: 22 }}>●</span><strong style={{ display: 'block', marginTop: 6 }}>{chat.title}</strong><span style={{ display: 'block', marginTop: 4, color: 'var(--text-secondary)', fontSize: 12 }}>{t('brainSession')}{chat.capability ? ` · ${chat.capability}` : ''}</span></button>)}
-        {visibleProjects.map((project) => <button key={`project-${project.id}`} type="button" onClick={() => void openProject(project)} style={{ padding: 15, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 12, background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}><span aria-hidden style={{ fontSize: 22 }}>▦</span><strong style={{ display: 'block', marginTop: 6 }}>{project.name}</strong><span style={{ display: 'block', marginTop: 4, color: 'var(--text-secondary)', fontSize: 12 }}>{t('object.project')} · {project.status || t('active').toLowerCase()} · {t('projectTasks', { count: project.taskCount ?? 0 })}</span></button>)}
-        {visibleAgents.map((agent) => <button key={`agent-${agent.id}`} type="button" onClick={() => void openAgent(agent)} style={{ padding: 15, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 12, background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}><span aria-hidden style={{ fontSize: 22 }}>✦</span><strong style={{ display: 'block', marginTop: 6 }}>{agent.name}</strong><span style={{ display: 'block', marginTop: 4, color: 'var(--text-secondary)', fontSize: 12 }}>{t('object.agent')} · {agent.title || agent.status}</span></button>)}
-      </div>}
-    </section>
   </section>;
 }

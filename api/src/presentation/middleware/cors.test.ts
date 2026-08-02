@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { Hono } from 'hono';
-import { corsMiddleware, EXPOSED_HEADERS } from './cors';
+import { ALLOWED_REQUEST_HEADERS, corsMiddleware, EXPOSED_HEADERS } from './cors';
 import type { HonoEnv } from '../../env';
 
 /**
@@ -38,6 +38,24 @@ describe('corsMiddleware', () => {
     const res = await appWithHeader().request('/thing', { method: 'OPTIONS', headers: ORIGIN }, ENV);
     expect(res.status).toBe(204);
     expect(res.headers.get('Access-Control-Expose-Headers')).toBe(EXPOSED_HEADERS);
+  });
+
+  it('allows creation-session command preflights with If-Match', async () => {
+    const res = await appWithHeader().request('/thing', {
+      method: 'OPTIONS',
+      headers: {
+        ...ORIGIN,
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'authorization,content-type,idempotency-key,if-match',
+      },
+    }, ENV);
+
+    expect(res.status).toBe(204);
+    const allowed = (res.headers.get('Access-Control-Allow-Headers') ?? '')
+      .toLowerCase()
+      .split(',');
+    expect(allowed).toContain('if-match');
+    expect(res.headers.get('Access-Control-Allow-Headers')).toBe(ALLOWED_REQUEST_HEADERS);
   });
 
   it('covers every header the gateway sets for turn provenance', () => {

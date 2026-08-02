@@ -3151,6 +3151,7 @@
   "quality": {
     "title": "Product Quality",
     "subtitle": "Every error across your product — ingested, grouped, and ready to fix.",
+    "copyDiagnosticsAria": "Copy every matching error group and Quality diagnostics",
     "loading": "Loading…",
     "empty": "No errors yet. Connect a source to start ingesting.",
     "summary": {
@@ -3287,6 +3288,7 @@
     "stats": {
       "empty": "No data collected yet — add a collector to start charting errors.",
       "unassigned": "Unassigned",
+      "noCollector": "Direct / removed collector",
       "eventsCollected": "Events collected",
       "windowDays": "Window",
       "events": "events",
@@ -11872,7 +11874,7 @@
     "details": "Details", "activity": "Activity", "name": "Name", "saveChanges": "Save changes", "next": "Next", "startCreating": "Start creating",
     "duplicate": "Duplicate", "align": "Align", "frame": "Frame", "lock": "Lock", "unlock": "Unlock", "hide": "Hide", "showHidden": "Show hidden", "hideHidden": "Hide hidden", "focus": "Focus", "edge": "Connection", "conversation": "Conversation", "tutorial": "Tutorial",
     "live": "Live", "offlineRetry": "Offline · edits will retry", "reconnecting": "Reconnecting…", "connecting": "Connecting…", "largeSession": "Large Session · {count} Objects",
-    "dashboardTitle": "Create Sessions", "dashboardSubtitle": "Return to a Canvas and continue exactly where you left off.", "searchSessions": "Search Sessions, Objects, Projects, people…", "active": "Active", "archived": "Archived", "continueCreating": "Continue creating", "sharedWithMe": "Shared with me", "recentlyCompleted": "Recently completed",
+    "dashboardTitle": "Creations", "dashboardSubtitle": "Open any Canvas session, project, workflow, agent, model, app, or Brain conversation in one place.", "searchSessions": "Search creations, objects, projects, or people…", "active": "Active", "archived": "Archived", "continueCreating": "Continue creating", "sharedWithMe": "Shared with me", "recentlyCompleted": "Recently completed",
     "starterCampaign": "Campaign studio", "starterCampaignDescription": "Build a campaign workflow, interactive landing page, forecast dashboard, and evaluation frame.", "starterProductDiscovery": "Product discovery", "starterProductDiscoveryDescription": "Synthesize customer feedback into requested features, visual mockups, and a delivery roadmap.",
     "createTypeTitle": "What do you want to create?", "createTypeSubtitle": "Start with a Builder type or guided template. It opens as an Object in a new Canvas, where you can add Workflows, data, people, and Brain.", "existingCreations": "Your existing creations", "existingCreationsSubtitle": "Open an existing Project, Agent, Website, App, Evermind, LLM, Voice, Video, Workflow, or Brain session inside its Canvas.", "loadingCreations": "Loading creations…", "noCreations": "No existing creations match this search.", "brainSession": "Brain session", "workflowRuns": "Workflow · {count} runs", "projectTasks": "{count} tasks", "exportCanvas": "Export",
     "object": {"workflow":"Workflow","project":"Project","website":"Website","dashboard":"Dashboard","chat":"Chat","agent":"Agent","staff":"Staff member","evaluation":"Evaluation","dataset":"Dataset","table":"Table","spreadsheet":"Spreadsheet","chart":"Chart","report":"Report","kpi":"KPI","prototype":"WYSIWYG","code":"Code","browser":"Browser preview","llm":"LLM","voice":"Voice","video":"Video","document":"Document","slides":"Slides","knowledge":"Knowledge","file":"File","url":"URL","note":"Note","drawing":"Drawing","frame":"Frame","comment":"Comment","timer":"Timer","roadmap":"Roadmap","prd":"PRD","release":"Release","task":"Task","mockup":"Mockup","mockupSet":"Mockup set","featureSummary":"Feature summary","team":"Team","role":"Role","mcp":"Connected tool","evermind":"Evermind","projectComparison":"Project comparison","standup":"Stand-up","repository":"Repository","selection":"Editor selection","diagnostics":"Diagnostics","terminal":"Terminal output","service":"Local service"}

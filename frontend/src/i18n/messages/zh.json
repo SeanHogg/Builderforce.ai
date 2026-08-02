@@ -3151,6 +3151,7 @@
   "quality": {
     "title": "产品质量",
     "subtitle": "汇总产品中的每一个错误——采集、归类，并随时可修复。",
+    "copyDiagnosticsAria": "复制所有匹配的错误组和质量诊断",
     "loading": "加载中…",
     "empty": "暂无错误。连接一个数据源即可开始采集。",
     "summary": {
@@ -3287,6 +3288,7 @@
     "stats": {
       "empty": "尚未采集到数据 — 添加采集器即可开始绘制错误图表。",
       "unassigned": "未分配",
+      "noCollector": "直接上报 / 采集器已删除",
       "eventsCollected": "已采集事件",
       "windowDays": "时间窗",
       "events": "个事件",

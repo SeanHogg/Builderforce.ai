@@ -37,10 +37,11 @@ export const EXPOSED_HEADERS = [
 
 /** Request headers the browser may SEND (preflight allow-list).
  *  X-Builderforce-Locale carries the user's picked locale (see i18n/config.ts +
- *  emailLocaleResolver); omitting it here made the browser reject the preflight
- *  for EVERY authed request that set it, blocking the whole app. */
+ *  emailLocaleResolver). If-Match carries the optimistic-concurrency revision
+ *  for creation-session commands. Omitting either makes the browser reject the
+ *  preflight before the request reaches its route. */
 export const ALLOWED_REQUEST_HEADERS =
-  'Content-Type,Authorization,Idempotency-Key,X-Emulation-Token,X-AgentHost-Signature,X-Builderforce-Locale';
+  'Content-Type,Authorization,Idempotency-Key,If-Match,X-Emulation-Token,X-AgentHost-Signature,X-Builderforce-Locale';
 
 /**
  * VS Code (and other editor) webviews load from an opaque, per-session origin

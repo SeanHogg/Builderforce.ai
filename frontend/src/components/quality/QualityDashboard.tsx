@@ -1,12 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
+import { CopyButton } from '@/components/CopyButton';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle } from '@/components/dataTableStyles';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { qualityApi, type ErrorGroup } from '@/lib/builderforceApi';
+import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
+import { buildQualityDiagnosticsReport } from '@/lib/qualityDiagnostics';
 import { ErrorGroupDetail } from './ErrorGroupDetail';
 import { QualityStatsPanel } from './QualityStatsPanel';
 import { ErrorConsumptionCard } from './ErrorConsumptionCard';
@@ -35,6 +38,7 @@ function Badge({ text, color }: { text: string; color: string }) {
  */
 export function QualityDashboard() {
   const t = useTranslations('quality');
+  const tCommon = useTranslations('common');
   const { currentProjectId } = useProjectScope();
   const [groups, setGroups] = useState<ErrorGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,6 +73,37 @@ export function QualityDashboard() {
 
   useEffect(() => { load(); }, [load]);
 
+  const buildDiagnostics = useCallback(async (): Promise<string> => {
+    const filter = {
+      projectId: currentProjectId,
+      status: status || undefined,
+      level: level || undefined,
+      limit: 200,
+    };
+    const allGroups: ErrorGroup[] = [];
+    let cursor: string | null = null;
+    do {
+      const page = await qualityApi.groups.list({ ...filter, cursor });
+      allGroups.push(...page.groups);
+      // A repeated cursor would otherwise make a malformed server response loop forever.
+      if (page.nextCursor === cursor) break;
+      cursor = page.nextCursor;
+    } while (cursor);
+
+    const stats = await qualityApi.stats(currentProjectId, 30).catch(() => null);
+    return buildQualityDiagnosticsReport(
+      {
+        projectId: currentProjectId ?? null,
+        status: status || null,
+        level: level || null,
+        groups: allGroups,
+        stats,
+        statsError: stats == null ? 'the quality overview could not be loaded' : null,
+      },
+      await captureDiagnosticsContext(),
+    );
+  }, [currentProjectId, status, level]);
+
   const fmt = (iso: string) => new Date(iso).toLocaleString();
 
   return (
@@ -90,6 +125,11 @@ export function QualityDashboard() {
           {LEVELS.map((l) => <option key={l} value={l}>{t(`level.${l}`)}</option>)}
         </Select>
         <div style={{ flex: 1 }} />
+        <CopyButton
+          label={tCommon('copyDiagnostics')}
+          ariaLabel={t('copyDiagnosticsAria')}
+          getText={buildDiagnostics}
+        />
         <ViewToggle value={view} onChange={setView} card table />
       </div>
 

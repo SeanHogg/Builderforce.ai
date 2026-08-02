@@ -103,6 +103,16 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByDisplayValue('Imported dataset.csv')).toBeInTheDocument();
   });
 
+  it('makes Add useful when the object palette is already open', async () => {
+    render(<CreationCanvas sessionId="palette-add-test" persistence="local" />);
+
+    const add = screen.getByRole('button', { name: 'Add' });
+    expect(add).toHaveAttribute('aria-expanded', 'true');
+    fireEvent.click(add);
+
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Search everything…' })).toHaveFocus());
+  });
+
   it('collapses palette sections, reveals search matches, and retains the state', async () => {
     const first = render(<CreationCanvas sessionId="palette-collapse-test" persistence="local" />);
     const build = screen.getByRole('button', { name: /Build/ });

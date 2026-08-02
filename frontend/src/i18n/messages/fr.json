@@ -3151,6 +3151,7 @@
   "quality": {
     "title": "Qualité produit",
     "subtitle": "Chaque erreur de votre produit : ingérée, regroupée et prête à corriger.",
+    "copyDiagnosticsAria": "Copier tous les groupes d’erreurs correspondants et les diagnostics de qualité",
     "loading": "Chargement…",
     "empty": "Aucune erreur pour l’instant. Connectez une source pour commencer l’ingestion.",
     "summary": {
@@ -3287,6 +3288,7 @@
     "stats": {
       "empty": "Aucune donnée collectée — ajoutez un collecteur pour commencer à visualiser les erreurs.",
       "unassigned": "Non attribué",
+      "noCollector": "Direct / collecteur supprimé",
       "eventsCollected": "Événements collectés",
       "windowDays": "Période",
       "events": "événements",

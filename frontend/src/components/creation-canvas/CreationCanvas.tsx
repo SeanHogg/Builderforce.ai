@@ -243,6 +243,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const cursorRef = useRef<{ x: number; y: number } | null>(null);
   const pendingViewport = useRef<{ x: number; y: number; zoom: number } | null>(null);
   const flowWrapRef = useRef<HTMLDivElement | null>(null);
+  const paletteSearchRef = useRef<HTMLInputElement | null>(null);
   const proposalBuffer = useRef<ProposedCanvasChange[]>([]);
   const undoStack = useRef<string[]>([]);
   const redoStack = useRef<string[]>([]);
@@ -252,6 +253,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const canvasClipboard = useRef<{ nodes: CreationFlowNode[]; edges: Edge[] } | null>(null);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
   const initialPromptSubmitted = useRef(false);
+
+  const openPalette = useCallback(() => {
+    setPaletteOpen(true);
+    // The palette starts open on wide screens. Focusing its search field makes
+    // every Add affordance useful even when opening it is otherwise a no-op.
+    window.requestAnimationFrame(() => paletteSearchRef.current?.focus());
+  }, []);
 
   const tourStorageKey = `builderforce:create-tour-complete:${currentUserId || (persistence === 'local' ? 'guest' : 'pending')}`;
 
@@ -1595,7 +1603,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           </div>
           <button className={styles.secondaryButton} onClick={undo} aria-label="Undo canvas change">↶</button>
           <button className={styles.secondaryButton} onClick={redo} aria-label="Redo canvas change">↷</button>
-          <button className={styles.secondaryButton} onClick={() => setPaletteOpen(true)}>＋ {t('add')}</button>
+          <button className={styles.secondaryButton} aria-expanded={paletteOpen} aria-controls="canvas-object-palette" onClick={openPalette}>＋ {t('add')}</button>
           <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-label={t('openDiagnostics')} onClick={() => setDiagnosticsOpen((value) => !value)}>⚠ <span>{t('diagnostics')}</span></button>
           <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}>•••</button>
           <button className={styles.secondaryButton} onClick={() => { if (persistence === 'local') requireAccount('share', 'Create an account to share this canvas', 'Your work is already safe on this device. An account saves it to your tenant and enables live collaboration, invitations, and access controls.'); else setShareOpen((value) => !value); setMoreOpen(false); }}>{t('share')} ▾</button>
@@ -1666,7 +1674,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <button onClick={toggleHidden} disabled={!canEdit}>{t('hide')}</button>
         </div>}
         {loadingSession && <div className={styles.canvasSkeleton} role="status" aria-live="polite"><span /><span /><span /><b>Loading session…</b></div>}
-        {nodes.length > 100 && <div className={styles.performanceNotice} role="status"><strong>{t('largeSession', { count: nodes.length })}</strong><span>Only visible Objects are rendered. Use frames or hide heavy Objects to keep navigation fast.</span><button type="button" onClick={() => setPaletteOpen(true)}>{t('frame')}</button></div>}
+        {nodes.length > 100 && <div className={styles.performanceNotice} role="status"><strong>{t('largeSession', { count: nodes.length })}</strong><span>Only visible Objects are rendered. Use frames or hide heavy Objects to keep navigation fast.</span><button type="button" onClick={openPalette}>{t('frame')}</button></div>}
         {tourStep > 0 && <div style={{ position: 'absolute', zIndex: 30, top: 18, left: '50%', transform: 'translateX(-50%)', width: 'min(430px, calc(100% - 32px))', padding: 16, borderRadius: 14, background: 'var(--bg-elevated, white)', boxShadow: '0 14px 44px rgba(25,40,70,.22)', border: '1px solid var(--border-subtle)' }}>
           <strong>{['', 'Ask Brain from the composer', 'Everything is an object', 'Select to focus Brain', 'Connect ideas explicitly', 'Build with collaborators', 'Deliver when you are ready'][tourStep]}</strong>
           <p style={{ margin: '7px 0 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{['', 'The familiar prompt stays at the bottom and can create or evaluate anything in this session.', 'Drag workflows, sites, data, agents, people, and project context from the palette.', 'Select one object for a focused question, or click the background to evaluate the complete session.', 'Connect two objects to define a real data, control, reference, presentation, or delivery relationship.', 'Share the session, comment on objects, and see live cursors without moving anyone else’s viewport.', 'Projects are optional. Add one only when you want to turn an artifact into a Task and assign an Agent.'][tourStep]}</p>
@@ -1707,9 +1715,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         <details className={styles.structuredGraph}><summary>Accessible canvas outline</summary><ol>{nodes.map((node) => <li key={node.id}><button aria-label={`Focus ${node.data.title}`} onClick={() => { setSelectedId(node.id); setSelectedIds([node.id]); }}>{node.data.title} ({node.data.kind})</button><span>{node.data.status || 'Canvas object'}{node.data.placementLocked === true ? ' · placement locked' : ''}</span><ul>{edges.filter((edge) => edge.source === node.id).map((edge) => <li key={edge.id}>{String(edge.data?.connectionKind || 'reference')} connection to {nodes.find((target) => target.id === edge.target)?.data.title || 'object'}{edge.label ? `: ${String(edge.label)}` : ''}</li>)}</ul></li>)}</ol></details>
 
         {!presentMode && <button className={styles.paletteToggle} onClick={() => setPaletteOpen((value) => !value)} aria-label="Toggle object palette">{paletteOpen ? '‹' : '+'}</button>}
-        {!presentMode && paletteOpen && <aside className={styles.palette}>
+        {!presentMode && paletteOpen && <aside id="canvas-object-palette" className={styles.palette}>
           <div className={styles.paletteHeader}><strong>{t('addToCanvas')}</strong><button onClick={() => setPaletteOpen(false)} aria-label="Close palette">×</button></div>
-          <div className={styles.paletteSearchWrap}><span aria-hidden>⌕</span><input className={styles.search} aria-label={t('searchEverything')} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder={t('searchEverything')} />{paletteSearch && <button type="button" aria-label={t('clearSearch')} onClick={() => setPaletteSearch('')}>×</button>}</div>
+          <div className={styles.paletteSearchWrap}><span aria-hidden>⌕</span><input ref={paletteSearchRef} className={styles.search} aria-label={t('searchEverything')} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder={t('searchEverything')} />{paletteSearch && <button type="button" aria-label={t('clearSearch')} onClick={() => setPaletteSearch('')}>×</button>}</div>
           <div className={styles.paletteSections}>{CREATION_PALETTE_GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => `${t(`object.${item.kind}`)} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => {
             const collapsed = !paletteSearch.trim() && collapsedPaletteGroups.has(group.group);
             const regionId = `canvas-palette-${group.group.toLowerCase()}`;
@@ -1738,7 +1746,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
         {!presentMode && <form ref={composerFormRef} className={styles.composer} onSubmit={evaluateCanvas}>
           <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} aria-label={t('askBrain')} placeholder={t('askBrain')} rows={1} />
-          <div className={styles.composerBottom}><button type="button" className={styles.iconButton} onClick={() => setPaletteOpen(true)} aria-label={t('addToCanvas')}>＋</button><label className={styles.scopeChip}>⌁ <span className="sr-only">Brain scope</span><select aria-label="Brain scope" value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">Entire canvas</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects` : 'Selected object'}</option><option value="connected" disabled={!effectiveSelectedIds.length}>Connected objects</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>Current frame</option></select></label><span className={styles.composerSpacer} /><button type="button" className={styles.iconButton} aria-label="Use voice" onClick={startVoiceInput}>◖</button><button className={styles.sendButton} aria-label={t('sendBrain')} disabled={thinking || !prompt.trim()}>{thinking ? '•••' : '➤'}</button></div>
+          <div className={styles.composerBottom}><button type="button" className={styles.iconButton} onClick={openPalette} aria-label={t('addToCanvas')}>＋</button><label className={styles.scopeChip}>⌁ <span className="sr-only">Brain scope</span><select aria-label="Brain scope" value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">Entire canvas</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects` : 'Selected object'}</option><option value="connected" disabled={!effectiveSelectedIds.length}>Connected objects</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>Current frame</option></select></label><span className={styles.composerSpacer} /><button type="button" className={styles.iconButton} aria-label="Use voice" onClick={startVoiceInput}>◖</button><button className={styles.sendButton} aria-label={t('sendBrain')} disabled={thinking || !prompt.trim()}>{thinking ? '•••' : '➤'}</button></div>
         </form>}
       </div>
     </div>
