@@ -86,7 +86,7 @@ AC-5  GIVEN the test suite runs AC-1 through AC-4 in sequence
 ## Out of Scope
 
 - Effects triggered by **computed/derived values** (separate dependency graph layer)
-- Batch-update APIs that intentionally coalesce multiple assignments into a single effect run
+- Batch-update APIs that intentionally coalesces multiple assignments into a single effect run
 - Performance optimization of the scheduler beyond correctness
 - Changes to the public API surface of the reactive system
 - Cross-framework compatibility (Vue, MobX, Solid, etc.) — this targets the project's own reactive primitive only
