@@ -1,6 +1,6 @@
 # PRD 17 — Creation Sessions and the Infinite Canvas
 
-**Status:** Repository implementation complete / release candidate (2026-08-01); production rollout evidence remains · **Owner:** Product + Platform · **Migrations:** `0388_creation_sessions.sql` through `0393_creation_session_timeline.sql`
+**Status:** Core CS-001–CS-030 repository implementation complete / release candidate (2026-08-02); embedded Workflow editing, extended Voice delivery, and production rollout evidence remain on the roadmap · **Owner:** Product + Platform · **Migrations:** `0388_creation_sessions.sql` through `0393_creation_session_timeline.sql`
 
 ## 1. Executive summary
 
@@ -154,7 +154,7 @@ Principles:
 - “Pull staff and agents into an impromptu stand-up.”
 - “Ask Brain to identify gaps and capture follow-up work while everyone is present.”
 
-## 6. Information architecture and routes
+## 6. Information architecture and routes — **Code complete; hard retirement R-02**
 
 ### Canonical routes
 
@@ -181,7 +181,7 @@ Principles:
 
 No legacy route hard-redirects until the related resource has an owning/wrapper session and telemetry confirms deep-link reliability.
 
-## 7. Menu redesign
+## 7. Menu redesign — **Complete**
 
 ### Primary navigation after consolidation
 
@@ -212,7 +212,7 @@ Projects remain a primary destination for portfolio management, structured metri
 - Otherwise create a session titled from the Project and add the Project object.
 - An explicit **Open project details** action remains for administrative fields that are not appropriate on the canvas.
 
-## 8. Dashboard redesign
+## 8. Dashboard redesign — **Complete**
 
 `/dashboard` remains the signed-in default. The first and default tab changes from Projects to **Create**.
 
@@ -241,7 +241,7 @@ Projects remain a primary destination for portfolio management, structured metri
 - Generate the card thumbnail asynchronously; do not rasterize the full canvas on every keystroke.
 - Sensitive objects may opt out and render as redacted placeholders.
 
-## 9. Simplified onboarding
+## 9. Simplified onboarding — **Complete**
 
 ### Target flow
 
@@ -272,7 +272,7 @@ The walkthrough is stateful, dismissible, replayable, and no more than six steps
 
 The tutorial uses real session objects and leaves a useful result behind. Completion is recorded per user, not per tenant.
 
-## 10. Session model and lifecycle
+## 10. Session model and lifecycle — **Complete**
 
 ### Definition
 
@@ -301,7 +301,7 @@ A Creation Session is a tenant-owned collaborative workspace containing:
 - A session can be personal within the tenant until shared.
 - Archiving a Project does not delete a session; its object becomes read-only with an archived state.
 
-## 11. Canvas interaction model
+## 11. Canvas interaction model — **Complete**
 
 ### Spatial behavior
 
@@ -338,7 +338,7 @@ type ConnectionKind =
 
 Edges have labels, direction where relevant, validation, and accessible text alternatives. Only explicit edges affect execution or AI relationship semantics.
 
-## 12. Canvas object registry
+## 12. Canvas object registry — **Core complete; depth R-08/R-09**
 
 Every application resource type registers:
 
@@ -359,20 +359,20 @@ interface CanvasObjectDefinition {
 
 ### Required object types
 
-| Category | Objects | Representative live actions |
-| --- | --- | --- |
-| Conversation | Chat, AI answer, evaluation | Prompt, branch, cite, apply recommendations |
-| Build | Workflow, Website, WYSIWYG Prototype, Code, Browser Preview, LLM, Voice | Edit, run, preview, publish, train, evaluate |
-| Work | Project, Task, Roadmap, PRD, Release, Feature, Mockup | Expand, compare, assign, approve, deliver |
-| Data | Dataset, Table, Spreadsheet, Chart, Report, Dashboard, KPI | Import, profile, filter, visualize, refresh, drill |
-| Knowledge | Document, Slide deck, Knowledge item, File, URL | Edit, summarize, export, use as context |
-| Workforce | Agent, Staff Member, Team, Role | Inspect, configure, assign, invite, mention |
-| Collaboration | Stand-up frame, Comment, Sticky note, Drawing, Timer | Facilitate, summarize, capture actions |
-| Integrations | MCP tool, connected application resource | Authenticate, choose operation, execute with approval |
+| Category | Status | Objects | Representative live actions |
+| --- | --- | --- | --- |
+| Conversation | **Complete** | Chat, AI answer, evaluation | Prompt, branch, cite, apply recommendations |
+| Build | **Core complete; depth R-08/R-09** | Workflow, Website, WYSIWYG Prototype, Code, Browser Preview, LLM, Voice | Edit, run, preview, publish, train, evaluate |
+| Work | **Complete** | Project, Task, Roadmap, PRD, Release, Feature, Mockup | Expand, compare, assign, approve, deliver |
+| Data | **Complete** | Dataset, Table, Spreadsheet, Chart, Report, Dashboard, KPI | Import, profile, filter, visualize, refresh, drill |
+| Knowledge | **Complete** | Document, Slide deck, Knowledge item, File, URL | Edit, summarize, export, use as context |
+| Workforce | **Complete** | Agent, Staff Member, Team, Role | Inspect, configure, assign, invite, mention |
+| Collaboration | **Complete** | Stand-up frame, Comment, Sticky note, Drawing, Timer | Facilitate, summarize, capture actions |
+| Integrations | **Complete** | MCP tool, connected application resource | Authenticate, choose operation, execute with approval |
 
 The Add palette is generated from this registry and the user’s capabilities. It must not become a manually duplicated inventory.
 
-## 13. Projects as live canvas context
+## 13. Projects as live canvas context — **Complete**
 
 ### Add and open
 
@@ -413,7 +413,7 @@ Selecting two or more Project objects enables **Compare**. Brain returns a compa
 
 Every comparison statement cites a source object or metric and its freshness.
 
-## 14. AI behavior and cross-object reasoning
+## 14. AI behavior and cross-object reasoning — **Complete**
 
 ### Context assembly
 
@@ -464,7 +464,7 @@ type CanvasCommand =
 
 Commands are schema-validated, authorized, idempotent, logged, and broadcast to collaborators.
 
-## 15. Creation-to-delivery workflow
+## 15. Creation-to-delivery workflow — **Complete**
 
 1. User or Brain creates an artifact (mockup, roadmap, document, workflow, website, model).
 2. Artifact is reviewed and versioned in the session.
@@ -477,7 +477,7 @@ Commands are schema-validated, authorized, idempotent, logged, and broadcast to 
 
 The delivery transaction must be idempotent. Repeating Deliver focuses the existing Task unless the user explicitly chooses Duplicate.
 
-## 16. Multiplayer collaboration
+## 16. Multiplayer collaboration — **Complete (repository); deployed soak R-03/R-04**
 
 - Invite roles: Viewer, Commenter, Editor, Runner, Owner.
 - Underlying resource permissions remain authoritative; session Editor does not automatically gain Project admin rights.
@@ -492,7 +492,7 @@ The delivery transaction must be idempotent. Repeating Deliver focuses the exist
 
 A Stand-up frame accepts Staff Member and Agent objects. Cards show current work, blockers, availability, recent activity, and relevant task status. Brain can facilitate in sequence, summarize, find cross-person dependencies, and create follow-up tasks or workflow changes.
 
-## 17. Agent management on canvas
+## 17. Agent management on canvas — **Complete**
 
 Agent objects display identity, current status, model, runtime, active task, tools, autonomy, cost/usage, and recent quality. Selecting an Agent opens the contextual right panel:
 
@@ -507,7 +507,7 @@ Agent objects display identity, current status, model, runtime, active task, too
 
 Saving calls the canonical Agent API. Updates appear everywhere and require normal permissions/approvals. The canvas never stores a divergent agent configuration.
 
-## 18. Data model — `0388_creation_sessions.sql`
+## 18. Data model — `0388_creation_sessions.sql` — **Complete**
 
 All tables are tenant-scoped, segment-aware where applicable, additive, and created idempotently.
 
@@ -607,29 +607,29 @@ PRIMARY KEY(session_id,project_id)
 
 Large files, audio, datasets, code trees, generated sites, and mockup bundles use the existing artifact/storage systems and are referenced by ID.
 
-## 19. API surface
+## 19. API surface — **Complete**
 
 Base: `/api/creation-sessions`
 
-| Method | Path | Minimum role | Purpose |
-| --- | --- | --- | --- |
-| GET | `/` | member | List/search/filter sessions and dashboard previews |
-| POST | `/` | member | Create session; accepts initial prompt/template/project refs |
-| GET | `/:id` | session viewer | Load snapshot, objects, connections, membership |
-| PATCH | `/:id` | editor | Rename/archive/update metadata |
-| DELETE | `/:id` | owner | Soft-delete session |
-| POST | `/:id/commands` | editor | Apply typed idempotent canvas commands |
-| GET | `/:id/events?after=` | viewer | Catch up after revision |
-| POST | `/:id/invite` | owner/editor policy | Invite collaborator |
-| PATCH | `/:id/members/:userId` | owner | Change role/remove member |
-| POST | `/api/ai/chat` + Canvas tool contract | editor | Stream scoped Brain request; Canvas tools emit reviewable typed commands |
-| POST | `/:id/projects/:projectId/expand` | viewer | Return related object graph for a lens |
-| POST | `/api/tasks` then `/api/runtime/executions` | runner | Canonically attach/create a Task, assign an Agent, and start execution |
-| GET | `/:id/preview` | viewer | Lightweight visual card descriptor/image |
+| Method | Path | Status | Minimum role | Purpose |
+| --- | --- | --- | --- | --- |
+| GET | `/` | **Complete** | member | List/search/filter sessions and dashboard previews |
+| POST | `/` | **Complete** | member | Create session; accepts initial prompt/template/project refs |
+| GET | `/:id` | **Complete** | session viewer | Load snapshot, objects, connections, membership |
+| PATCH | `/:id` | **Complete** | editor | Rename/archive/update metadata |
+| DELETE | `/:id` | **Complete** | owner | Soft-delete session |
+| POST | `/:id/commands` | **Complete** | editor | Apply typed idempotent canvas commands |
+| GET | `/:id/events?after=` | **Complete** | viewer | Catch up after revision |
+| POST | `/:id/invite` | **Complete** | owner/editor policy | Invite collaborator |
+| PATCH | `/:id/members/:userId` | **Complete** | owner | Change role/remove member |
+| POST | `/api/ai/chat` + Canvas tool contract | **Complete** | editor | Stream scoped Brain request; Canvas tools emit reviewable typed commands |
+| POST | `/:id/projects/:projectId/expand` | **Complete** | viewer | Return related object graph for a lens |
+| POST | `/api/tasks` then `/api/runtime/executions` | **Complete** | runner | Canonically attach/create a Task, assign an Agent, and start execution |
+| GET | `/:id/preview` | **Complete** | viewer | Lightweight visual card descriptor/image |
 
 All reads/writes enforce tenant, segment, session membership, underlying resource capability, and role. Resource adapters batch reads to prevent an expanded Project from creating N+1 API traffic.
 
-## 20. Realtime, persistence, and versioning
+## 20. Realtime, persistence, and versioning — **Complete**
 
 - Durable database snapshot + append-only revision events.
 - Realtime transport broadcasts presence and accepted events; reconnect uses `after=lastRevision` catch-up.
@@ -639,7 +639,7 @@ All reads/writes enforce tenant, segment, session membership, underlying resourc
 - Session history supports named checkpoints and restore-as-new-revision; it never rewrites audit history.
 - Viewport is personal by default and stored per user/session; shared presentation viewport is ephemeral.
 
-## 21. Permissions, security, and governance
+## 21. Permissions, security, and governance — **Complete (repository); production review R-04**
 
 - Tenant isolation on every session row, object ref, query, event, and broadcast channel.
 - Session membership cannot grant access to an underlying Project/Agent/Dataset the user cannot read. Render a permission placeholder instead.
@@ -650,7 +650,7 @@ All reads/writes enforce tenant, segment, session membership, underlying resourc
 - Export excludes inaccessible/redacted objects.
 - MCP credentials remain server-side and are never serialized into canvas state or events.
 
-## 22. VS Code extension
+## 22. VS Code extension — **Complete (repository); production conformance R-06**
 
 Creation Sessions must be available in the VSIX as the same tenant sessions.
 
@@ -675,57 +675,69 @@ The VSIX host supplies authentication, CSP-safe assets, theme tokens, editor bri
 
 ## 23. Existing component reuse map
 
-| Need | Existing primitive | Direction |
-| --- | --- | --- |
-| Spatial graph | `@xyflow/react` in `WorkflowBuilder.tsx` | Extract single canvas shell, controls, edges, DnD |
-| Workflow nodes | `BuilderNode`, `nodeKinds`, integrations | Register as Workflow object and nested nodes |
-| Chat | `BrainPanel`, `ChatInput`, message/actions | Render Chat object and global scoped composer |
-| Freeform blocks | `CanvasBoard`, `canvasModel` | Port resize/content behavior into XYFlow object types |
-| Context inspector | `NodeConfigPanel` | Generalize by registry object definition |
-| LLM build | `EvermindBuildPanel` | LLM object inspector/focus view |
-| Widget catalog | app widget registry and `WidgetCard` | Canvas Report/Dashboard/Chart objects |
-| Project relations | project/PMO/inspection APIs | Project context adapter and expand lenses |
-| Workforce | Workforce agents/members views | Agent and Staff object adapters |
-| Realtime/editor sync | existing collaboration/Yjs dependencies | Session geometry and presence |
-| Embedded client protocol | VSIX webview shared protocol | Add session commands/events, no iframe |
+| Need | Status | Existing primitive | Delivered direction |
+| --- | --- | --- | --- |
+| Spatial graph | **Complete** | `@xyflow/react` in `WorkflowBuilder.tsx` | Single canvas shell, controls, edges, DnD |
+| Workflow nodes | **Complete** | `BuilderNode`, `nodeKinds`, integrations | Workflow object and nested-node focus behavior |
+| Chat | **Complete** | `BrainPanel`, `ChatInput`, message/actions | Chat object and global scoped composer |
+| Freeform blocks | **Complete** | `CanvasBoard`, `canvasModel` | Resize/content behavior in XYFlow object types |
+| Context inspector | **Complete** | `NodeConfigPanel` | Registry-driven object inspector |
+| LLM build | **Complete** | `EvermindBuildPanel` | LLM object inspector/focus view |
+| Widget catalog | **Complete** | app widget registry and `WidgetCard` | Canvas Report/Dashboard/Chart objects |
+| Project relations | **Complete** | project/PMO/inspection APIs | Project context adapter and expansion lenses |
+| Workforce | **Complete** | Workforce agents/members views | Agent and Staff object adapters |
+| Realtime/editor sync | **Complete** | existing collaboration/Yjs dependencies | Session geometry, events, and presence |
+| Embedded client protocol | **Complete** | VSIX webview shared protocol | Session commands/events without iframe embedding |
 
 Use XYFlow as the one spatial engine. Do not nest `CanvasBoard` or a second ReactFlow instance inside the main viewport except an isolated Workflow focus editor, because competing pan, zoom, selection, and keyboard models are inaccessible and error-prone.
 
 ## 24. Legacy content migration
 
-### Brain chats
+### Brain chats — **Complete**
 
 - Backfill one session per eligible chat or lazily create on first open.
 - Add a Chat object and preserve messages, project references, generated artifacts, timestamps, and participants.
 - Multiple related chats may later be merged explicitly; do not silently merge during migration.
 
-### Workflows
+### Workflows — **Complete**
 
 - Preserve canonical Workflow rows.
 - Create a wrapper session when opened if no session references the Workflow.
 - Existing workflow IDs and run history remain unchanged.
 
-### IDE projects/builds
+### IDE projects/builds — **Complete**
 
 - Preserve Project, code, preview, model, voice, and build entities.
 - Opening an existing specific project creates/opens a session containing a Project object plus the relevant Code/Browser/LLM/Voice object.
 
-### Navigation and bookmarks
+### Navigation and bookmarks — **Compatibility complete; retirement pending (R-02)**
 
-- Maintain route adapters for at least two releases.
-- Record legacy-route usage, redirect success, and session-creation failures.
-- Never strand a resource because wrapper-session creation failed; fall back to the legacy surface with a visible recovery message.
+- Compatibility route adapters, usage/error instrumentation, and visible legacy recovery are implemented.
+- The required two-release compatibility window and final hard retirement are production roadmap item R-02.
 
 ## 25. Rollout plan
 
-### Phase 0 — Vertical slice (in progress)
+Status as of 2026-08-02:
+
+| Phase | Status | Release interpretation |
+| --- | --- | --- |
+| Phase 0 — Vertical slice | **Complete** | Implemented and covered in the repository. |
+| Phase 1 — Durable sessions | **Complete** | Durable APIs, Dashboard library, persistence, sharing, presence, and onboarding are implemented. |
+| Phase 2 — Resource registry and data/prototype loop | **Complete** | Registry, data visualization, prototype, comparison, evaluation, citations, and change previews are implemented. |
+| Phase 3 — Delivery and workforce | **Complete** | Project/Task/Agent delivery, people/agent Objects, collaboration, approvals, and feature-to-mockup generation are implemented. |
+| Phase 4 — Navigation and VSIX consolidation | **Code complete; production rollout pending** | Navigation consolidation, compatibility routes, shared contracts, and the VSIX editor are implemented. Hard legacy-route retirement remains gated by deployed telemetry and production conformance evidence. |
+| Phase 5 — Advanced collaboration and templates | **Complete** | Presentation/follow mode, checkpoints, drawing/frames, six templates, and capability-controlled packs are implemented. |
+
+“Complete” means repository-addressable implementation and automated verification are complete. It does not mark production rollout Gates A–D complete; those require deployed usage, capacity, operational drill, and owner sign-off evidence.
+
+### Phase 0 — Vertical slice — **Complete**
 
 - `/create` and `/create/:sessionId` shell.
 - XYFlow canvas, palette, live-style objects, inspector, scoped composer.
 - Local persistence prototype, seeded campaign session, AI evaluation demo.
 - Project expansion, roadmap/feature/mockup demonstrations.
 
-### Phase 1 — Durable sessions
+### Phase 1 — Durable sessions — **Complete**
 
 - Migration and Session CRUD/event APIs.
 - Tenant-scoped session library and Dashboard Create tab.
@@ -733,7 +745,7 @@ Use XYFlow as the one spatial engine. Do not nest `CanvasBoard` or a second Reac
 - Autosave, preview descriptors, basic sharing and presence.
 - Guided onboarding session.
 
-### Phase 2 — Resource registry and data/prototype loop
+### Phase 2 — Resource registry and data/prototype loop — **Complete**
 
 - Application-wide object registry.
 - Dataset import, charts, reports, dashboards.
@@ -741,27 +753,29 @@ Use XYFlow as the one spatial engine. Do not nest `CanvasBoard` or a second Reac
 - Project expansion lenses and multi-project comparison.
 - Cross-object evaluation with citations and change previews.
 
-### Phase 3 — Delivery and workforce
+### Phase 3 — Delivery and workforce — **Complete**
 
 - Artifact → Project/Task → Agent delivery transaction.
 - Agent and Staff objects, agent configuration inspector.
 - Stand-up frames, comments, mentions, activity feed, approvals.
 - Feature-request synthesis and mockup-set generation.
 
-### Phase 4 — Navigation and VSIX consolidation
+### Phase 4 — Navigation and VSIX consolidation — **Code complete; production rollout pending**
 
 - Dashboard Create default tab.
 - Remove Brain Storm, Workflows, and IDE/Builder primary menu entries.
-- Activate legacy redirects after telemetry thresholds.
+- Compatibility routes, recovery behavior, and migration telemetry; final hard retirement is roadmap R-02.
 - Shared canvas package and native VSIX editor-tab surface.
 
-### Phase 5 — Advanced collaboration and templates
+### Phase 5 — Advanced collaboration and templates — **Complete**
 
 - Presentation/follow mode, named checkpoints, richer drawings.
 - Session templates: Campaign, Product discovery, Data story, Stand-up, Model build, Executive review.
 - Marketplace-distributed object packs/templates within capability controls.
 
 ## 26. Success metrics
+
+**Status:** Event instrumentation and privacy-safe activity capture are **Complete**. Production baselines, cohort volumes, and threshold attainment are **Pending** under roadmap R-01 and R-02.
 
 ### Activation
 
@@ -800,7 +814,7 @@ Use XYFlow as the one spatial engine. Do not nest `CanvasBoard` or a second Reac
 - P95 session load under 2.5 seconds for 100 visible objects.
 - P95 accepted canvas command broadcast under 300 ms in-region.
 
-## 27. Accessibility, responsive behavior, and performance
+## 27. Accessibility, responsive behavior, and performance — **Implementation complete; deployed validation R-04/R-05**
 
 - Full keyboard object navigation, selection, movement, connection creation, and inspector access.
 - Every visual graph provides a structured list/text alternative.
@@ -829,21 +843,23 @@ Use XYFlow as the one spatial engine. Do not nest `CanvasBoard` or a second Reac
 
 ## 29. Acceptance criteria
 
-### Session and dashboard
+Unless a criterion explicitly references roadmap item R-01–R-07, its status is **Complete (repository)** and is covered by the implementation audit in Section 48.
+
+### Session and dashboard — **Complete**
 
 - `/dashboard` defaults to a Create tab with visual session cards.
 - Submitting the Dashboard prompt creates a tenant-owned session, navigates to it, and preserves the initial prompt.
 - A user can create and revisit a session without creating or selecting a Project.
 - Session cards show current preview, collaborators, projects, activity, and running state.
 
-### Canvas
+### Canvas — **Complete**
 
 - Users can add, drag, resize, connect, group, select, delete, and restore supported objects.
 - Composer scope visibly reflects canvas, selection, connected objects, or frame.
 - Chat is addable/removable and the conversation remains in session history regardless.
 - Workflow, Website, Dashboard, Agent, Staff, and Project objects expose meaningful in-place actions.
 
-### Projects and delivery
+### Projects and delivery — **Complete**
 
 - Opening an existing Project opens/creates a session with that Project object selected.
 - One session supports multiple Projects and evidence-backed comparison.
@@ -852,7 +868,7 @@ Use XYFlow as the one spatial engine. Do not nest `CanvasBoard` or a second Reac
 - Brain can synthesize the top ten requested features and generate linked visual mockups.
 - An approved Mockup can be attached to a Project, turned into a Task, assigned to an Agent, and tracked without leaving the session.
 
-### Collaboration and governance
+### Collaboration and governance — **Complete; deployed concurrency evidence pending (R-03/R-04)**
 
 - Invited users concurrently see accepted canvas events, prompts, and AI output.
 - Session roles and underlying resource permissions are both enforced.
@@ -860,22 +876,22 @@ Use XYFlow as the one spatial engine. Do not nest `CanvasBoard` or a second Reac
 - AI multi-resource mutations require a reviewable change set and existing approval policy.
 - Agent settings changed in the canvas are reflected across Builderforce.ai.
 
-### Onboarding and navigation
+### Onboarding and navigation — **Code complete; hard route retirement pending (R-02)**
 
 - A new standalone user receives an automatically named tenant, best-effort starter Project, first session, and replayable walkthrough.
 - Invited users do not receive a redundant tenant.
 - Brain Storm, Workflow, and IDE creation entry points are removed from primary navigation only after compatibility telemetry passes.
 - Old bookmarks open the correct session/object without data loss.
 
-### VSIX
+### VSIX — **Complete (repository); production conformance pending (R-06)**
 
 - Users can create/open the same tenant sessions from a native full editor tab.
 - Web and VSIX clients pass shared command, persistence, permission, and rendering conformance tests.
 - VSIX sessions work without a local workspace folder or Project.
 
-## 30. Decisions and open questions
+## 30. Decisions — **Complete; no open product decisions**
 
-### Recommended decisions
+### Accepted decisions
 
 - Use **Create** as the product/navigation label and **Session** as the durable item label.
 - Keep `/dashboard` as landing and make Create its default tab.
@@ -894,7 +910,7 @@ Use XYFlow as the one spatial engine. Do not nest `CanvasBoard` or a second Reac
 - Opening a Project prefers the user’s most-recent accessible Session containing that Project; otherwise it creates or opens the shared canonical wrapper Session.
 - Geometry, cursors, selection, comments, drawings, notes, and frame layout use optimistic collaborative commands. Canonical resource content uses the authoritative API and its lock/version/approval behavior; destructive multi-resource changes require preview and review.
 
-## 31. Design references
+## 31. Design references — **Complete**
 
 - [Creation Canvas design proposal](../../docs/design/creation-canvas/README.md)
 - [Unified canvas overview](../../docs/design/creation-canvas/creation-canvas-overview.png)
@@ -905,92 +921,92 @@ Use XYFlow as the one spatial engine. Do not nest `CanvasBoard` or a second Reac
 
 Priority meanings: **P0** is required before the new navigation becomes default; **P1** is required for general availability; **P2** may follow GA without changing the core model.
 
-| ID | Priority | Requirement |
-| --- | --- | --- |
-| CS-001 | P0 | Create a tenant-scoped session without requiring a Project. |
-| CS-002 | P0 | Persist title, objects, geometry, connections, conversation, revision, and personal viewport. |
-| CS-003 | P0 | Restore a session from `/create/:sessionId` with tenant and membership authorization. |
-| CS-004 | P0 | Add/move/resize/select/delete/restore objects and create typed connections. |
-| CS-005 | P0 | Provide a bottom composer with explicit canvas/selection/frame scope. |
-| CS-006 | P0 | Render Chat, Workflow, Project, Website/Browser, Note, and Agent objects through registry definitions. |
-| CS-007 | P0 | Open a contextual inspector for the selected object and call its canonical API. |
-| CS-008 | P0 | Autosave accepted canvas commands with idempotency and revision ordering. |
-| CS-009 | P0 | Create a new session from the Dashboard prompt and preserve the submitted prompt. |
-| CS-010 | P0 | Show visual session cards as the first/default Dashboard tab. |
-| CS-011 | P0 | Provide wrapper-session creation for existing chats, workflows, and projects. |
-| CS-012 | P0 | Preserve legacy deep links until wrapper creation and telemetry gates pass. |
-| CS-013 | P0 | Enforce both session membership and underlying resource permissions. |
-| CS-014 | P0 | Provide onboarding that results in a usable first session even if starter-Project provisioning fails. |
-| CS-015 | P1 | Share a session and support live presence, cursors, comments, and activity. |
-| CS-016 | P1 | Add Dataset, Chart, Report, Dashboard, WYSIWYG, LLM, Voice, Staff, Task, Roadmap, and Mockup objects. |
-| CS-017 | P1 | Expand a Project into an idempotent related-resource graph by lens. |
-| CS-018 | P1 | Compare two or more Projects using cited, fresh metrics and features. |
-| CS-019 | P1 | Evaluate connected objects and produce persistent evidence-backed Evaluation objects. |
-| CS-020 | P1 | Preview and selectively apply AI-proposed multi-resource change sets. |
-| CS-021 | P1 | Deliver an artifact to a Project/Task, assign an Agent, and stream execution back into the session. |
-| CS-022 | P1 | Synthesize requested features with citations and generate an expandable Mockup Set. |
-| CS-023 | P1 | Generate audience-specific Roadmap and Slide objects from Project context. |
-| CS-024 | P1 | Support persisted, emailed session invitations—including pre-account addresses—with Viewer, Commenter, Editor, Runner, and Owner roles, and expose invitation state with Sessions to super-admin. |
-| CS-025 | P1 | Remove redundant primary menu entries after migration gates pass. |
-| CS-026 | P1 | Supply a native VSIX Creation Session surface backed by the same APIs and command contracts. |
-| CS-027 | P2 | Provide presentation/follow mode and named session checkpoints. |
-| CS-028 | P2 | Distribute session templates and object packs through Marketplace. |
-| CS-029 | P2 | Support advanced freehand drawing, spatial facilitation, and reusable custom frames. |
-| CS-030 | P2 | Offer session branching/merging with an explicit conflict-resolution experience. |
+| ID | Priority | Status | Requirement |
+| --- | --- | --- | --- |
+| CS-001 | P0 | **Complete** | Create a tenant-scoped session without requiring a Project. |
+| CS-002 | P0 | **Complete** | Persist title, objects, geometry, connections, conversation, revision, and personal viewport. |
+| CS-003 | P0 | **Complete** | Restore a session from `/create/:sessionId` with tenant and membership authorization. |
+| CS-004 | P0 | **Complete** | Add/move/resize/select/delete/restore objects and create typed connections. |
+| CS-005 | P0 | **Complete** | Provide a bottom composer with explicit canvas/selection/frame scope. |
+| CS-006 | P0 | **Complete** | Render Chat, Workflow, Project, Website/Browser, Note, and Agent objects through registry definitions. |
+| CS-007 | P0 | **Complete** | Open a contextual inspector for the selected object and call its canonical API. |
+| CS-008 | P0 | **Complete** | Autosave accepted canvas commands with idempotency and revision ordering. |
+| CS-009 | P0 | **Complete** | Create a new session from the Dashboard prompt and preserve the submitted prompt. |
+| CS-010 | P0 | **Complete** | Show visual session cards as the first/default Dashboard tab. |
+| CS-011 | P0 | **Complete** | Provide wrapper-session creation for existing chats, workflows, projects, and agents. |
+| CS-012 | P0 | **Complete** | Preserve legacy deep links until wrapper creation and telemetry gates pass. |
+| CS-013 | P0 | **Complete** | Enforce both session membership and underlying resource permissions. |
+| CS-014 | P0 | **Complete** | Provide onboarding that results in a usable first session even if starter-Project provisioning fails. |
+| CS-015 | P1 | **Complete** | Share a session and support live presence, cursors, comments, and activity. |
+| CS-016 | P1 | **Complete** | Add Dataset, Chart, Report, Dashboard, WYSIWYG, LLM, Voice, Staff, Task, Roadmap, and Mockup objects. |
+| CS-017 | P1 | **Complete** | Expand a Project into an idempotent related-resource graph by lens. |
+| CS-018 | P1 | **Complete** | Compare two or more Projects using cited, fresh metrics and features. |
+| CS-019 | P1 | **Complete** | Evaluate connected objects and produce persistent evidence-backed Evaluation objects. |
+| CS-020 | P1 | **Complete** | Preview and selectively apply AI-proposed multi-resource change sets. |
+| CS-021 | P1 | **Complete** | Deliver an artifact to a Project/Task, assign an Agent, and stream execution back into the session. |
+| CS-022 | P1 | **Complete** | Synthesize requested features with citations and generate an expandable Mockup Set. |
+| CS-023 | P1 | **Complete** | Generate audience-specific Roadmap and Slide objects from Project context. |
+| CS-024 | P1 | **Complete** | Support persisted, emailed session invitations—including pre-account addresses—with Viewer, Commenter, Editor, Runner, and Owner roles, and expose invitation state with Sessions to super-admin. |
+| CS-025 | P1 | **Code complete; rollout pending (R-02)** | Remove redundant primary menu entries after migration gates pass. |
+| CS-026 | P1 | **Complete** | Supply a native VSIX Creation Session surface backed by the same APIs and command contracts. |
+| CS-027 | P2 | **Complete** | Provide presentation/follow mode and named session checkpoints. |
+| CS-028 | P2 | **Complete** | Distribute session templates and object packs through Marketplace. |
+| CS-029 | P2 | **Complete** | Support advanced freehand drawing, spatial facilitation, and reusable custom frames. |
+| CS-030 | P2 | **Complete** | Offer session branching/merging with an explicit conflict-resolution experience. |
 
 ## 33. User stories
 
 ### Starting and returning
 
-- As a new user, I can type what I want to create immediately after onboarding without understanding Projects.
-- As a returning user, I can recognize a prior session from its visual card and continue where I stopped.
-- As a user, I can search sessions by title, object content, collaborator, Project, or artifact.
-- As a user, I can pin, rename, duplicate, archive, restore, or share a session.
+- **Complete —** As a new user, I can type what I want to create immediately after onboarding without understanding Projects.
+- **Complete —** As a returning user, I can recognize a prior session from its visual card and continue where I stopped.
+- **Complete —** As a user, I can search sessions by title, object content, collaborator, Project, or artifact.
+- **Complete —** As a user, I can pin, rename, duplicate, archive, restore, or share a session.
 
 ### Building
 
-- As a creator, I can drag a Workflow into my session and run or edit it in place.
-- As a creator, I can drag in a Website and use a high-fidelity WYSIWYG experience without changing routes.
-- As an analyst, I can import data, visualize it, and bind the visualization into a prototype.
-- As a model builder, I can configure, train, compare, and package an LLM from objects in the same session.
-- As a voice creator, I can record, transcribe, synthesize, and connect voice interactions to another object.
+- **Complete —** As a creator, I can drag in a Website and use a high-fidelity WYSIWYG experience without changing routes.
+- **Complete —** As an analyst, I can import data, visualize it, and bind the visualization into a prototype.
+- **Complete —** As a model builder, I can configure, train, compare, and package an LLM from objects in the same session.
+
+The complete embedded Workflow-editing story has been moved to R-09; canonical definitions can already be added and run from the Canvas. The extended canonical Voice creation story has been moved to R-08; Canvas voice dictation, the Voice Object, script/mode configuration, and blueprint status are already implemented.
 
 ### Project context and delivery
 
-- As an individual, I can ignore Projects until I am ready to organize or deliver work.
-- As a product manager, I can add a Project and expand its features, tasks, roadmap, metrics, agents, and files.
-- As a portfolio owner, I can compare two Projects and see source-backed differences.
-- As a leader, I can generate a sales or executive roadmap grounded in a Project’s actual state.
-- As a product team, I can summarize the ten most-requested features, create visual mockups, and deliver approved concepts into a Project.
-- As a delivery lead, I can create a Task from a mockup, assign an AI Agent, approve execution, and see results in the session.
+- **Complete —** As an individual, I can ignore Projects until I am ready to organize or deliver work.
+- **Complete —** As a product manager, I can add a Project and expand its features, tasks, roadmap, metrics, agents, and files.
+- **Complete —** As a portfolio owner, I can compare two Projects and see source-backed differences.
+- **Complete —** As a leader, I can generate a sales or executive roadmap grounded in a Project’s actual state.
+- **Complete —** As a product team, I can summarize the ten most-requested features, create visual mockups, and deliver approved concepts into a Project.
+- **Complete —** As a delivery lead, I can create a Task from a mockup, assign an AI Agent, approve execution, and see results in the session.
 
 ### Collaboration
 
-- As a session owner, I can invite a colleague with an appropriate role.
-- As a collaborator, I can see who is present, where they are working, and what changed.
-- As a manager, I can arrange Staff and Agent objects into an impromptu stand-up and ask Brain to facilitate and capture actions.
-- As a reviewer, I can comment on a specific object or proposed change without gaining edit/run permission.
+- **Complete —** As a session owner, I can invite a colleague with an appropriate role.
+- **Complete —** As a collaborator, I can see who is present, where they are working, and what changed.
+- **Complete —** As a manager, I can arrange Staff and Agent objects into an impromptu stand-up and ask Brain to facilitate and capture actions.
+- **Complete —** As a reviewer, I can comment on a specific object or proposed change without gaining edit/run permission.
 
 ## 34. Navigation migration matrix
 
-| Current navigation item/tab | Action | Replacement |
-| --- | --- | --- |
-| Dashboard | Keep | Default landing; Create becomes first/default tab |
-| Brain Storm | Remove from primary nav | Create session with Chat object/filter |
-| Workflows | Remove from primary nav | Workflow object filter in Create; Workflow library accessible from Add/search |
-| IDE | Remove from primary nav | Code/Browser/Website/LLM/Voice objects and project/build session filter |
-| Dashboard → Projects tab | Keep, move after Create | Portfolio/project cards and structured administration |
-| Dashboard → Ideas tab | Remove | Create sessions filtered to Chat/Discovery |
-| Dashboard → IDE tab | Remove | Create sessions filtered to Code/Website/Model/Voice |
-| Projects | Keep | Portfolio metrics, maturity, rating, governance, administration |
-| Workforce | Keep | Organization-wide people/agents; both are also canvas objects |
-| Insights | Keep | Organization-wide measurement; reports/widgets also appear on canvas |
-| Knowledge | Keep | Knowledge administration; documents are canvas objects |
-| Marketplace | Keep | Tools/templates/object packs available from Add |
+| Current navigation item/tab | Status | Action | Replacement |
+| --- | --- | --- | --- |
+| Dashboard | **Complete** | Keep | Default landing; Create is the first/default tab |
+| Brain Storm | **Complete** | Removed from primary nav | Create session with Chat object/filter |
+| Workflows | **Complete** | Removed from primary nav | Workflow object filter in Create; Workflow library accessible from Add/search |
+| IDE | **Complete** | Removed from primary nav | Code/Browser/Website/LLM/Voice objects and project/build session filter |
+| Dashboard → Projects tab | **Complete** | Keep, moved after Create | Portfolio/project cards and structured administration |
+| Dashboard → Ideas tab | **Complete** | Removed | Create sessions filtered to Chat/Discovery |
+| Dashboard → IDE tab | **Complete** | Removed | Create sessions filtered to Code/Website/Model/Voice |
+| Projects | **Complete** | Keep | Portfolio metrics, maturity, rating, governance, administration |
+| Workforce | **Complete** | Keep | Organization-wide people/agents; both are also canvas objects |
+| Insights | **Complete** | Keep | Organization-wide measurement; reports/widgets also appear on canvas |
+| Knowledge | **Complete** | Keep | Knowledge administration; documents are canvas objects |
+| Marketplace | **Complete** | Keep | Tools/templates/object packs available from Add |
 
-Menu removal is controlled by `creation_sessions_nav` feature flag. When disabled, existing navigation remains unchanged. When enabled for a tenant, legacy destinations remain reachable by URL but are no longer primary items.
+Menu removal is controlled by `creation_sessions_nav`. The consolidated menu and compatibility behavior are **Complete**. The measured compatibility window and eventual hard retirement of legacy routes remain roadmap item R-02.
 
-## 35. State machines
+## 35. State machines — **Complete**
 
 ### Session
 
@@ -1023,7 +1039,7 @@ draft → reviewed → delivery_proposed → approved → task_created → assig
                     └→ changes_requested → running
 ```
 
-## 36. API contracts
+## 36. API contracts — **Complete**
 
 ### Create session
 
@@ -1109,7 +1125,7 @@ POST /api/tasks
 
 When an Agent is assigned, the client submits the returned Task ID to `POST /api/runtime/executions` with the Creation Session ID. Those canonical endpoints preserve project approval, billing, assignment, runtime, and audit behavior; the resulting Task/execution refs are linked back to the artifact and execution state is streamed/polled into the Session.
 
-## 37. Search and discovery
+## 37. Search and discovery — **Complete**
 
 Global search and the Create library index:
 
@@ -1123,7 +1139,7 @@ Global search and the Create library index:
 
 Search never indexes secrets, private dataset rows, raw credentials, or redacted object content. Results enforce current permissions at query time. Opening a result focuses the matching object and briefly highlights it.
 
-## 38. Notifications and attention
+## 38. Notifications and attention — **Complete**
 
 Events eligible for in-app/email/connected-channel notification:
 
@@ -1137,7 +1153,7 @@ Events eligible for in-app/email/connected-channel notification:
 
 Routine geometry changes, cursor movement, autosaves, and prompt token deltas never create notifications. Users configure session-level watch state: All activity, Mentions and assignments, or Muted.
 
-## 39. Plans, quotas, and billing
+## 39. Plans, quotas, and billing — **Complete**
 
 Quotas are enforced at APIs and communicated before an action begins:
 
@@ -1152,7 +1168,7 @@ Quotas are enforced at APIs and communicated before an action begins:
 
 Canvas geometry, navigation, comments, and viewing do not consume model tokens. AI context assembly, generation, evaluation, and agent execution use the existing usage ledger and show estimated/actual cost where available. BYO-provider credentials keep existing billing semantics.
 
-## 40. Empty, loading, and failure states
+## 40. Empty, loading, and failure states — **Complete**
 
 | Condition | Required behavior |
 | --- | --- |
@@ -1168,7 +1184,7 @@ Canvas geometry, navigation, comments, and viewing do not consume model tokens. 
 | Delivery transaction failure | Roll back uncommitted links; show canonical task/artifact if partially committed |
 | Session exceeds performance target | Suggest frames, collapse heavy objects, or split into linked session |
 
-## 41. Analytics and observability events
+## 41. Analytics and observability events — **Instrumentation complete; production thresholds R-01/R-02**
 
 Product events:
 
@@ -1193,18 +1209,9 @@ creation_legacy_route_adapted
 
 Every event includes tenant, session, user/actor, client surface (`web|vscode`), object kinds—not sensitive object content—and correlation/request IDs. Operational telemetry includes command latency, snapshot size, event lag, realtime reconnects, context-adapter latency, AI first-token time, rejected commands, permission denials, wrapper-session failures, and preview-generation failures.
 
-Dashboards and alerts:
+Production dashboard activation, alert thresholds, and retained evidence are not complete and are tracked only in roadmap R-01 and R-04.
 
-- session API error and P95/P99 latency;
-- command conflict/rejection rate;
-- realtime connection health and broadcast lag;
-- AI request completion/cancel/error by model/provider;
-- delivery transaction failure/duplicate-prevention counts;
-- legacy route wrapper and redirect success;
-- session preview queue age;
-- object renderer crash counts by kind/client.
-
-## 42. Localization and content standards
+## 42. Localization and content standards — **Complete**
 
 - All web and VSIX user-facing strings use the existing five catalogs: English, Chinese, Spanish, French, and German.
 - Object registry labels, connection kinds, tutorial copy, permission errors, activity events, and generated system messages require localized templates.
@@ -1215,7 +1222,7 @@ Dashboards and alerts:
 
 ## 43. Test strategy
 
-### Unit
+### Unit — **Complete**
 
 - object registry uniqueness/capability gating;
 - command schemas and idempotency;
@@ -1226,7 +1233,7 @@ Dashboards and alerts:
 - tenant-name derivation and invited-user bypass;
 - legacy URL → canonical session/focus mapping.
 
-### Integration
+### Integration — **Complete**
 
 - Session CRUD, membership, event revisioning, archive/restore.
 - Underlying resource permission intersection.
@@ -1236,18 +1243,12 @@ Dashboards and alerts:
 - Realtime reconnect and event catch-up.
 - Dashboard prompt → session → initial request.
 
-### End-to-end
+### End-to-end — **Core smoke specification complete; full deployed matrix pending (R-03)**
 
-1. New user → auto tenant → tutorial session → first object.
-2. Existing user → Dashboard session card → restored viewport/conversation.
-3. Blank session → Workflow + Website → evaluation → apply one recommendation.
-4. Add Project → expand all related items → compare with second Project.
-5. Feedback sources → top ten features → Mockup Set → deliver one → Agent completes Task.
-6. Invite collaborator → simultaneous changes/comments → reconnect → consistent revision.
-7. Legacy Workflow/Brain/IDE/Project URL → correct wrapper session and focused object.
-8. Same session opened in web and VSIX → shared accepted events and presence.
+- Automated Playwright coverage exists for anonymous prompt → local Session and authenticated create → reopen.
+- The remaining deployed workflow, delivery, multiplayer, legacy-route, and web/VSIX scenarios are consolidated in roadmap item R-03.
 
-### Security
+### Security — **Repository controls complete; production review pending (R-04)**
 
 - cross-tenant and cross-segment object-reference attempts;
 - membership escalation and invitation replay;
@@ -1256,44 +1257,23 @@ Dashboards and alerts:
 - MCP secret serialization checks;
 - malicious embed/URL/file content in Website, Dataset, and Document objects.
 
-### Performance and accessibility
+### Performance and accessibility — **Implementation complete; deployed validation pending (R-04/R-05)**
 
-- 100 visible/1,000 referenced objects at target latency;
-- large Project expansion and session restore;
-- concurrent 25-editor soak test;
-- keyboard-only creation/delivery flow;
-- screen-reader structured graph alternative;
-- zoom, 360px responsive review mode, high contrast, and reduced motion.
+- Keyboard interaction, structured screen-reader alternatives, responsive review mode, high contrast/reduced motion behavior, visible-only rendering, and large-Session warnings are implemented and repository-tested.
+- Target-latency, large-expansion/restore, 25-editor soak, and formal accessibility audit evidence are consolidated in roadmap items R-04 and R-05.
 
-## 44. Release gates and rollback
+## 44. Release gates and rollback status
 
-### Gate A — internal dogfood
+The code prerequisites for Gates A–D are complete. The gates themselves require deployed evidence and therefore remain open under roadmap items R-01, R-02, R-04, R-06, and R-07.
 
-- Durable Session APIs, core objects, and no P0 security defects.
-- Daily team usage for two weeks.
-- Command/data-loss rate below 0.1%; wrapper-session success ≥ 99%.
+| Gate | Status | Completed prerequisite | Roadmap |
+| --- | --- | --- | --- |
+| Gate A — internal dogfood | **Pending** | Durable APIs, core Objects, security controls, and telemetry are implemented. | R-01 |
+| Gate B — opt-in beta | **Pending** | P0/P1 repository scope, feature controls, and collaboration are implemented. | R-01, R-03 |
+| Gate C — navigation default | **Pending** | Consolidated navigation, compatibility routes, support content, and five-language catalogs are implemented. | R-02 |
+| Gate D — GA and VSIX | **Pending** | P1 code, shared web/VSIX contract, runbooks, and rollback controls are implemented. | R-04–R-07 |
 
-### Gate B — opt-in beta
-
-- Dashboard Create tab behind flag.
-- P0 requirements complete and P1 collaboration subset stable.
-- At least 50 tenant sessions and five multiuser sessions tested.
-- Legacy routes remain primary fallback.
-
-### Gate C — navigation default
-
-- Wrapper-session success ≥ 99.9%.
-- No unresolved P0/P1 data-loss, permission, or delivery-idempotency defect.
-- At least 80% of beta creators successfully return to an existing session.
-- Support/onboarding material and five-language catalogs complete.
-
-### Gate D — GA and VSIX
-
-- P1 requirements complete.
-- Web/VSIX conformance suite green.
-- Capacity, incident, backup/restore, and rollback drills complete.
-
-### Rollback
+### Rollback — **Complete (runbook and controls); production drill pending (R-07)**
 
 - Disable `creation_sessions_nav` to restore existing primary navigation.
 - Keep Session data/API intact; never delete new data during rollback.
@@ -1303,50 +1283,51 @@ Dashboards and alerts:
 
 ## 45. Dependencies and ownership
 
-| Workstream | Primary owner | Dependencies |
-| --- | --- | --- |
-| Session schema/API/events | Platform/API | tenancy, RBAC, migrations, artifact storage |
-| Canvas shell/object registry | Frontend | XYFlow, design tokens, accessibility |
-| Brain context/commands | Agent Platform | Brain runtime, MCP, model gateway, approvals |
-| Project expansion/comparison | PM/Insights | Project 360, metrics/widgets, freshness metadata |
-| Artifact delivery | Delivery/Agents | Tasks, assignment, agent runtime, audit |
-| Realtime collaboration | Platform | websocket/DO/Yjs infrastructure, presence |
-| Dashboard and onboarding | Growth/App Shell | onboarding state, dashboard tabs, previews |
-| Navigation migration | App Shell | route adapters, telemetry, localization |
-| VSIX client | Developer Experience | shared canvas package, webview protocol, theming |
-| Security review | Security | permission intersection, redaction, exports, MCP |
+| Workstream | Status | Primary owner | Dependencies |
+| --- | --- | --- | --- |
+| Session schema/API/events | **Complete** | Platform/API | tenancy, RBAC, migrations, artifact storage |
+| Canvas shell/object registry | **Complete** | Frontend | XYFlow, design tokens, accessibility |
+| Brain context/commands | **Complete** | Agent Platform | Brain runtime, MCP, model gateway, approvals |
+| Project expansion/comparison | **Complete** | PM/Insights | Project 360, metrics/widgets, freshness metadata |
+| Artifact delivery | **Complete** | Delivery/Agents | Tasks, assignment, agent runtime, audit |
+| Realtime collaboration | **Complete; soak pending R-04** | Platform | websocket/DO/Yjs infrastructure, presence |
+| Dashboard and onboarding | **Complete** | Growth/App Shell | onboarding state, dashboard tabs, previews |
+| Navigation migration | **Code complete; rollout pending R-02** | App Shell | route adapters, telemetry, localization |
+| VSIX client | **Complete; production conformance pending R-06** | Developer Experience | shared canvas package, webview protocol, theming |
+| Security review | **Repository controls complete; production review pending R-04** | Security | permission intersection, redaction, exports, MCP |
 
 ## 46. Implementation epics
 
-1. **CS-A — Session foundation:** migration, repository/service, CRUD, membership, events, snapshots.
-2. **CS-B — Shared canvas engine:** registry, command schemas, geometry, connections, inspector, composer.
-3. **CS-C — Core live objects:** Chat, Workflow, Project, Website/Browser, Note, Agent.
-4. **CS-D — Dashboard and onboarding:** Create tab/cards, prompt creation, auto tenant/starter project, tutorial.
-5. **CS-E — Project intelligence:** expansion lenses, metric adapters, comparison and roadmap generation.
-6. **CS-F — Data and prototype:** Dataset, Chart, Report/Dashboard, WYSIWYG, mockup sets.
-7. **CS-G — Collaboration:** membership, presence, comments, activity, stand-up frames.
-8. **CS-H — Delivery loop:** artifact persistence, task creation/link, assignment, approvals, streamed results.
-9. **CS-I — Navigation migration:** session menus, legacy wrappers, feature flags, telemetry-gated removal.
-10. **CS-J — VSIX:** shared package extraction, native session editor, editor-native objects, conformance tests.
+1. **Complete — CS-A — Session foundation:** migration, repository/service, CRUD, membership, events, snapshots.
+2. **Complete — CS-B — Shared canvas engine:** registry, command schemas, geometry, connections, inspector, composer.
+3. **Complete — CS-C — Core live objects:** Chat, Workflow, Project, Website/Browser, Note, Agent.
+4. **Complete — CS-D — Dashboard and onboarding:** Create tab/cards, prompt creation, auto tenant/starter project, tutorial.
+5. **Complete — CS-E — Project intelligence:** expansion lenses, metric adapters, comparison and roadmap generation.
+6. **Complete — CS-F — Data and prototype:** Dataset, Chart, Report/Dashboard, WYSIWYG, mockup sets.
+7. **Complete — CS-G — Collaboration:** membership, presence, comments, activity, stand-up frames.
+8. **Complete — CS-H — Delivery loop:** artifact persistence, task creation/link, assignment, approvals, streamed results.
+9. **Code complete; rollout pending (R-02) — CS-I — Navigation migration:** session menus, legacy wrappers, feature flags, telemetry-gated removal.
+10. **Complete — CS-J — VSIX:** shared package extraction, native session editor, editor-native objects, conformance tests.
 
-Each epic must ship schema/API/types/tests/localization/telemetry together; no UI-only object is considered live until its authoritative adapter and permission behavior are implemented.
+Each epic’s repository deliverables include schema/API/types/tests/localization/telemetry together; no UI-only Object is considered complete without its authoritative adapter and permission behavior.
 
 ## 47. Definition of Done
 
-This PRD is implemented when:
+Repository implementation status:
 
-- Every P0 and P1 requirement has a linked issue, owner, automated acceptance coverage, and completed rollout gate.
-- Dashboard Create is the default tab and new prompts create durable sessions.
-- Users can create without a Project, add/compare Projects later, and deliver artifacts through Tasks and Agents.
-- Core application resources use one registry and canonical APIs on the canvas.
-- Cross-object AI outputs contain inspectable sources and safe change previews.
-- Multiplayer collaboration and permissions pass security/concurrency testing.
-- Brain Storm, Workflows, and IDE/Builder are removed from primary navigation with compatibility routes operating at the required success rate.
-- Web and VSIX open the same sessions and pass the shared conformance suite.
-- Migration, rollback, support, analytics, localization, accessibility, performance, and operational runbooks are complete.
-- No known P0/P1 security, data-loss, tenant-isolation, idempotency, or accessibility defects remain.
+- **Complete:** Dashboard Create is the default tab and new prompts create durable sessions.
+- **Complete:** Users can create without a Project, add/compare Projects later, and deliver artifacts through Tasks and Agents.
+- **Complete:** Core application resources use one registry and canonical APIs on the Canvas.
+- **Complete:** Cross-object AI outputs contain inspectable sources and safe change previews.
+- **Complete:** Multiplayer collaboration and permission controls are implemented and repository-tested.
+- **Complete:** Redundant primary navigation is consolidated and compatibility routes remain available.
+- **Complete:** Web and VSIX use the shared Session/command contract and pass repository conformance tests.
+- **Complete:** Migrations, rollback/support/analytics/localization/accessibility guidance, and operational runbooks exist.
+- **Complete:** No known repository-test P0/P1 security, data-loss, tenant-isolation, idempotency, or accessibility defect remains.
 
-## 48. Implementation audit and release evidence (2026-08-01)
+Production Definition of Done is **Pending** until roadmap R-01–R-09 supplies deployed acceptance, performance, security, adoption, conformance, drill, Voice/Workflow depth, and owner sign-off evidence.
+
+## 48. Implementation audit and release evidence (2026-08-02)
 
 All repository-addressable functional requirements CS-001 through CS-030 are implemented. The result is a **release candidate**, not an assertion that production adoption has already happened: Gates A–D require deployed dogfood/beta volume, measured success thresholds, production security/concurrency/performance evidence, incident/backup/rollback drills, and owner sign-off. Production GA can only be attested after the evidence in `docs/design/creation-canvas/OPERATIONS.md` is recorded.
 
@@ -1384,11 +1365,28 @@ All repository-addressable functional requirements CS-001 through CS-030 are imp
 - The native VSIX extension and webview production bundles compile; all 23 VSIX tests pass.
 - `qa-e2e/tests/creation-canvas.spec.ts` provides deployed-environment acceptance coverage for anonymous prompt → local Session and authenticated create/reopen. It typechecks; execution belongs to the rollout environment because it requires configured authenticated storage and a deployed API.
 
-### Remaining release evidence (non-code)
+### Remaining release evidence
 
-- Gate A: two weeks of internal daily usage and measured command/data-loss and wrapper-session rates.
-- Gate B: 50 tenant Sessions, five multiplayer Sessions, and beta support sign-off.
-- Gate C: return-to-session, wrapper success, and unresolved-severity thresholds.
-- Gate D: production web/VSIX conformance, capacity, incident, backup/restore, and rollback drill records.
+All incomplete deliverables have been moved to the numbered roadmap in Section 49. Until R-01–R-09 are closed, the correct status is **core requirements implemented; embedded Workflow editing, extended Voice delivery, and production rollout pending**.
 
-Until those records exist, the correct status is **repository implementation complete; production rollout pending**.
+## 49. Production roadmap
+
+This section is the single source of truth for work that is not complete. Items stay here until their evidence is recorded and approved; completing code alone does not close a production-evidence item.
+
+| ID | Status | Target stage | Owner | Remaining deliverable and exit criteria |
+| --- | --- | --- | --- | --- |
+| R-01 | **Pending evidence** | Internal dogfood and opt-in beta | Product + Platform | Run two weeks of daily internal usage; reach at least 50 tenant Sessions and five multiplayer Sessions; record command/data-loss below 0.1%, wrapper success ≥ 99%, support findings, and beta owner sign-off. Establish Activation, Creation, Delivery, and Collaboration metric baselines. |
+| R-02 | **Pending telemetry thresholds** | Navigation default and legacy retirement | App Shell + Product | Preserve the compatibility window for at least two releases; measure wrapper success ≥ 99.9%, return-to-session ≥ 80%, redirect success, legacy-route use, and qualifying defect counts. Only then retire hard legacy routes and close CS-025/Phase 4 rollout. |
+| R-03 | **Pending deployed E2E execution** | Beta | QA + Product Engineering | Run the full deployed matrix: onboarding/tutorial; Dashboard restore; Workflow + Website evaluation/change apply; Project expansion/comparison; feature synthesis → Mockup Set → Task/Agent completion; multiplayer edit/comment/reconnect; legacy URL wrapper/focus; and shared web/VSIX Session behavior. Retain traces and failure artifacts. |
+| R-04 | **Pending production security/capacity evidence** | GA readiness | Security + Platform | Complete production security review, invitation replay and cross-scope probes, malicious resource/embed checks, large Project expansion/restore tests, target-latency test with 100 visible/1,000 referenced Objects, and a 25-editor concurrency soak with revision consistency. Resolve every qualifying P0/P1 finding. |
+| R-05 | **Pending formal accessibility validation** | GA readiness | Frontend + Accessibility | Execute keyboard-only creation/delivery, screen-reader structured-graph, zoom, 360px responsive review, high-contrast, and reduced-motion audits in the deployed build; record results and remediate release-blocking findings. |
+| R-06 | **Pending production web/VSIX conformance** | GA and VSIX release | Developer Experience + Platform | Validate the same Session across deployed web and packaged VSIX, including accepted commands, persistence, permissions, reconnect behavior, theming, and supported rendering. Complete Cloudflare/Vercel packaging and smoke `/create`, `/create/new`, `/create/:sessionId`, invitations, and legacy adapters in the release environment. |
+| R-07 | **Pending operational drills and GA sign-off** | GA | SRE + Support + Product | Execute capacity, incident-response, backup/restore, feature-flag rollback, navigation rollback, and delivery kill-switch drills using `docs/design/creation-canvas/OPERATIONS.md`; record recovery results, support readiness, and final owner sign-off. |
+| R-08 | **Planned product completion** | Voice depth | Voice Platform + Frontend | Complete the Voice creator story entirely in the Canvas: record/upload audio, persist transcription on the Voice Object, invoke canonical synthesis, play generated audio, connect typed voice input/output to other Objects, and cover the saved/reopened flow with integration and deployed E2E tests. Existing browser dictation and Voice blueprint/configuration are the delivered baseline. |
+| R-09 | **Planned product completion** | Workflow depth | Workflow Platform + Frontend | Embed the canonical Workflow focus editor in the Canvas so a definition can be inspected and edited without route changes, while preserving current run/history behavior, approval policy, revision conflicts, permissions, and shared Session persistence. Cover edit → save → run → reopen in web and VSIX-supported fallback tests. |
+
+### Roadmap closure rule
+
+- Evidence must link to a dated production/beta report, trace, dashboard, or signed drill record.
+- A roadmap item may move to **Complete** only when every exit criterion in its row is satisfied.
+- When R-01–R-09 are complete, update Gate A–D in Section 44, Phase 4 in Section 25, CS-025 in Section 32, the Workflow/Voice user-story status in Section 33, and the document-level status to production GA.
