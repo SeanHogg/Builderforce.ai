@@ -3139,8 +3139,7 @@ textarea.input { resize: vertical; line-height: 1.5; }
     radial-gradient(ellipse 54% 64% at 50% 43%, rgba(28, 90, 158, 0.18), transparent 72%),
     linear-gradient(180deg, #030711 0%, #07101d 72%, #0a1220 100%);
 }
-/* The canvas render loop owns all colour + motion and is DPR-aware. It renders
-   one detailed still when reduced motion is requested. */
+/* The canvas render loop owns all colour + motion and is DPR-aware. */
 .wb-canvas { width: 100%; height: 100%; display: block; }
 .wb-brain-aura {
   position: absolute;
@@ -3232,9 +3231,6 @@ textarea.input { resize: vertical; line-height: 1.5; }
 @media (max-width: 700px) {
   .wb-brain-shell { width: 94vw; top: 42%; }
   .wb-brain-aura { width: 116vw; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .wb-brain-shell, .wb-brain-aura, .wb-brain-scan::before { animation: none; }
 }
 
 /* Blog post body images / diagrams — keep SVGs and screenshots responsive within

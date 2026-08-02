@@ -37,7 +37,6 @@ export default function BrainBackdrop({ className = '' }: { className?: string }
     let dpr = 1;
     let frameId = 0;
     let visible = true;
-    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
     const resize = () => {
       width = Math.max(1, host.clientWidth);
@@ -54,7 +53,6 @@ export default function BrainBackdrop({ className = '' }: { className?: string }
       const brainHeight = brainWidth * 1.12;
       const left = (width - brainWidth) / 2;
       const top = height * .43 - brainHeight * .47;
-      const still = reducedMotion.matches;
 
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
@@ -75,7 +73,7 @@ export default function BrainBackdrop({ className = '' }: { className?: string }
           }
         });
         const hue = pathIndex % 2 ? '118, 109, 255' : '22, 225, 213';
-        const wave = still ? .5 : .5 + .5 * Math.sin(time * .0024 + pathIndex * 1.7);
+        const wave = .5 + .5 * Math.sin(time * .0024 + pathIndex * 1.7);
         ctx.strokeStyle = `rgba(${hue}, ${.1 + wave * .14})`;
         ctx.lineWidth = 1.1 + wave * 1.4;
         ctx.shadowColor = `rgba(${hue}, .9)`;
@@ -84,7 +82,7 @@ export default function BrainBackdrop({ className = '' }: { className?: string }
 
         const packets = pathIndex < 4 ? 3 : 2;
         for (let packet = 0; packet < packets; packet++) {
-          const progress = still ? (packet + 1) / (packets + 1) : (time * (.0001 + pathIndex * .000009) + packet / packets + pathIndex * .13) % 1;
+          const progress = (time * (.0001 + pathIndex * .000009) + packet / packets + pathIndex * .13) % 1;
           const point = pointOnPath(path, progress);
           const x = left + point.x * brainWidth;
           const y = top + point.y * brainHeight;
@@ -100,7 +98,7 @@ export default function BrainBackdrop({ className = '' }: { className?: string }
 
       // Large, visible waves travel out from the brain's core.
       for (let ring = 0; ring < 3; ring++) {
-        const phase = still ? .45 + ring * .14 : (time * .00022 + ring / 3) % 1;
+        const phase = (time * .00022 + ring / 3) % 1;
         ctx.beginPath();
         ctx.ellipse(width / 2, top + brainHeight * .49, brainWidth * (.08 + phase * .48), brainHeight * (.05 + phase * .35), 0, 0, Math.PI * 2);
         ctx.strokeStyle = `rgba(${ring === 1 ? '121, 108, 255' : '24, 211, 224'}, ${Math.max(0, .32 * (1 - phase))})`;
@@ -110,7 +108,7 @@ export default function BrainBackdrop({ className = '' }: { className?: string }
       }
       ctx.restore();
 
-      if (visible && !still) frameId = requestAnimationFrame(draw);
+      if (visible) frameId = requestAnimationFrame(draw);
     };
 
     const restart = () => {
@@ -127,7 +125,6 @@ export default function BrainBackdrop({ className = '' }: { className?: string }
     const observer = new ResizeObserver(() => { resize(); restart(); });
     observer.observe(host);
     document.addEventListener('visibilitychange', onVisibility);
-    reducedMotion.addEventListener('change', restart);
     restart();
 
     return () => {
@@ -135,7 +132,6 @@ export default function BrainBackdrop({ className = '' }: { className?: string }
       cancelAnimationFrame(frameId);
       observer.disconnect();
       document.removeEventListener('visibilitychange', onVisibility);
-      reducedMotion.removeEventListener('change', restart);
     };
   }, []);
 
