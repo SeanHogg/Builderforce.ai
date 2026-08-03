@@ -88,11 +88,12 @@ export class IncrementalMetricsCollector {
 
     // Compute score using a lightweight approach
     // We reuse the scoring logic but we don't need to return full metadata each time
-    const placeholderSet = new Set<string>(
+    // Create placeholder set for this instance - used for scoring
+    this._placeholderSet = new Set<string>(
       this.placeholders.map((p) => String(p).toLowerCase().trim())
     );
 
-    const scoreData = calculateRecordScore(record, this.fieldWeights, placeholderSet, this.thresholds);
+    const scoreData = calculateRecordScore(record, this.fieldWeights, this._placeholderSet, this.thresholds);
 
     this.sumScores += scoreData.score;
 
