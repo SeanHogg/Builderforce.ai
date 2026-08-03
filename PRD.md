@@ -1,4 +1,5 @@
 > **PRD** — drafted by Ada (Sr. Product Mgr) · task #586
+> **Requirements** — authored by Business Analyst · task #586
 > _Each agent that updates this PRD signs its change below._
 
 # Product Requirements Document: GAP-G2 Sanity-of-Life Compliance Closure
@@ -62,65 +63,120 @@ Formally close GAP-G2 by recording the determined sanity-of-life compliance conc
 - Broad retrospective changes to other GAP items not directly related to GAP-G2.
 - User-facing product changes, unless those changes were explicitly part of a pre-existing remediation plan executed before closure.
 
+---
+
 ## Requirements
 
-**Author:** Business Analyst · task #586
+### BR-1: GAP-G2 Workstream Closure — Data Integrity
 
-### BR1 — Business Context & Justification
-| ID | Requirement | Rationale |
-|----|-------------|-----------|
-| BR1.1 | GAP-G2 must transition from an open compliance gap to a formally closed state, recorded with an immutable audit trail. | Open gaps represent unresolved risk that directly impacts SOC 2 audit posture and customer trust. Closure eliminates a known finding from the compliance register. |
-| BR1.2 | The closure must reference the completed validation workstream (task #575 — Secret Lifecycle Validation) as the basis for the sanity-of-life determination. | Traceability from closure back to the executed validation ensures auditors can walk the full evidence chain without ambiguity. |
-| BR1.3 | No further remediation work is required for GAP-G2; the closure is a determination, not a work order. | The validation executed under task #575 produced a passed verdict. Any residual risk is accepted and documented, not deferred. |
+**Priority:** P0 (Critical)
 
-### BR2 — Stakeholder Requirements
-| ID | Stakeholder | Requirement |
-|----|-------------|-------------|
-| BR2.1 | Compliance Officer | A read-only, timestamped closure record visible in the workstream tracker (task #144) with an immutable conclusion field containing the phrase "Sanity-of-Life Compliance." |
-| BR2.2 | Product Architect | The GAP-G2 closure must propagate to the central compliance register within 1 hour so architecture decisions referencing GAP-G2 reflect its resolved state. |
-| BR2.3 | Engineering Lead | No open sub-tasks or dependents under task #144 may be blocked by the GAP-G2 closure. All child tasks (including #575) must already be in a terminal state (`done`) before closure is committed. |
-| BR2.4 | Security Validator (Agent) | The validation evidence produced by the Infrastructure/Cloud Security Validator under task #575 must be linked as the signed-off determination artifact. |
+The closure of GAP-G2 task #144 in the workstream tracker must be performed as a single atomic operation that transitions the task status to `done` (or an equivalent terminal `Closed` state) and simultaneously records:
 
-### BR3 — Business Rules
-| ID | Rule | Enforcement |
-|----|------|-------------|
-| BR3.1 | GAP-G2 closure is **irreversible** without a documented waiver. Re-opening requires a new waiver/exception task linked to the closure record. | System-level: the workstream tracker must reject status transitions from `Closed` back to any open state unless a linked waiver task exists. |
-| BR3.2 | The closure event must generate an audit-log entry with actor, timestamp, and rationale. | Platform governance: closure mutations are logged in the `audit_log` table. |
-| BR3.3 | The compliance register query for identifier "GAP-G2" must return `Resolved` within 60 minutes of the tracker update. | Integration-level: the compliance dashboard ingests workstream tracker state changes on its standard polling cycle (≤ 60 min). |
-| BR3.4 | All child tasks of the parent workstream item (task #144) that reference GAP-G2 must be in a terminal status (`done`, `closed`, or `archived`) before closure can be committed. | Pre-condition check: the closure action enumerates children and blocks if any non-terminal child is found. |
+| Field | Value / Constraint |
+|-------|--------------------|
+| `status` | `done` (terminal; maps to "Closed" in the workstream tracker display) |
+| `updatedAt` | Server-issued timestamp at the moment of closure (immutable once written) |
+| `conclusion` | Literal string: `"Sanity-of-Life Compliance — determined via GAP-G2 Secret Lifecycle Validation (task #575). All lifecycle checks (creation, rotation, revocation, plaintext scans, expiry enforcement) returned a pass or waived verdict. No blocking P1 findings remain. See signed determination artefact: builderforce/task-575 / PR #306."` |
+| `closedBy` | Reference to the agent or user identity executing the closure |
 
-### BR4 — Data Requirements
-| ID | Field | Type | Description |
-|----|-------|------|-------------|
-| BR4.1 | `status` | Enum (`Closed`) | The workstream tracker status for task #144 after closure. |
-| BR4.2 | `conclusion` | Text | Must contain the string "Sanity-of-Life Compliance" and a link to the determination artifact (task #575 validation report / PR #306). |
-| BR4.3 | `closed_at` | Timestamp (ISO 8601) | Immutable; set once on closure, never updated. |
-| BR4.4 | `closed_by` | Actor reference | The identity (agent or human) that executed the closure. |
-| BR4.5 | `determination_artifact_url` | URL | Link to the signed-off validation evidence (PR #306 on task #575). |
+**Rationale:** FR1 and FR2 require the tracker to display `Closed` status with an immutable timestamp and a `Conclusion` field containing the determined outcome. A single atomic write prevents incomplete states.
 
-### BR5 — Non-Functional Requirements
-| ID | NFR | Target |
-|----|-----|--------|
-| BR5.1 | Closure must be recorded atomically — status, conclusion, timestamp, and actor committed in one transaction or none. | No partial closure state visible. |
-| BR5.2 | The compliance register must reflect the resolved state within 1 hour (AC3). | SLA: ≤ 60 minutes from tracker update to register ingestion. |
-| BR5.3 | The closure record must survive platform restores and backups without data loss. | Standard durability guarantee of the platform's PostgreSQL backing store. |
-| BR5.4 | Any attempt to re-open GAP-G2 without a waiver must be logged as a security event. | Audit trail completeness. |
+### BR-2: Immutable Closure Guard
 
-### BR6 — Traceability Matrix
-| Business Req | Functional Req | Acceptance Criterion | Verification Method |
-|--------------|---------------|---------------------|---------------------|
-| BR1.1, BR2.1 | FR1 | AC1 | Inspect task #144: status = `Closed`, read-only for non-admin roles. |
-| BR1.2, BR2.4 | FR2 | AC2 | Inspect task #144 resolution comment: contains "Sanity-of-Life Compliance" + link to PR #306. |
-| BR3.1, BR3.4 | FR3 | AC4 | Attempt to re-open GAP-G2 without waiver → rejected. Enumerate children of task #144 → all terminal. |
-| BR2.2, BR5.2 | FR4 | AC3 | Query compliance register for GAP-G2 → `Resolved` within 60 min. |
+**Priority:** P1 (High)
 
-### BR7 — Dependencies & Assumptions
-| ID | Dependency / Assumption | Status |
-|----|--------------------------|--------|
-| BR7.1 | Task #575 (Secret Lifecycle Validation) is **done** — its PR #306 contains the validation evidence serving as the determination artifact. | ✅ Confirmed: task #575 status = `done`, PR #306 exists. |
-| BR7.2 | No child task of #144 that references GAP-G2 is in a non-terminal state. Only task #575 (done) is directly under #144 for this workstream. | ✅ Confirmed: task #575 is `done`. |
-| BR7.3 | The compliance register ingests workstream tracker state changes on a polling cycle ≤ 60 minutes. | Assumed: standard platform behavior. |
-| BR7.4 | The closure is a determination (not a remediation), so no code changes are required in the application codebase. | Assumed per PRD Section 3 (Scope) and Section 6 (Out of Scope). |
+Once GAP-G2 task #144 reaches its terminal `done` status:
+- The `status` field must be read-only for all non-admin roles (including agents).
+- Any attempt to transition the task from `done` back to an active status (`ready`, `in_progress`, `backlog`) must be rejected unless the caller presents a documented waiver or exception reference. The rejection response must include a message indicating the waiver requirement.
+- Admin-role users may override this guard by providing a `waiverId` or `exceptionRef` that links to a documented exception process.
+
+**Rationale:** FR3 requires that GAP-G2 cannot be re-opened without a waiver or exception process. This BR formalises the guard as both a role-based access control and a required reference check.
+
+### BR-3: Compliance Register Propagation
+
+**Priority:** P1 (High)
+
+Upon successful closure of task #144:
+- A closure event must be emitted to the compliance register, keyed by the GAP-G2 identifier.
+- The compliance register entry for GAP-G2 must transition to `Resolved` status within a **1-hour SLA** from the tracker closure event timestamp.
+- If the compliance register is unreachable, the system must retry with exponential backoff (initial: 30 seconds, maximum: 15 minutes) and log each attempt. After 1 hour of failed attempts, the closure must remain valid in the tracker and an alert must be raised to the platform operations channel.
+- Downstream dashboards that source from the compliance register must reflect the `Resolved` state on their next refresh cycle (no additional action required beyond the register update).
+
+**Rationale:** FR4 and AC3 require the compliance register to ingest the closure and reflect `Resolved` status within 1 hour. This BR specifies the propagation mechanism, retry policy, and failure mode.
+
+### BR-4: Dependency Integrity Check (Pre-Closure)
+
+**Priority:** P0 (Critical)
+
+Before task #144 can be closed, a dependency integrity check must execute:
+
+1. Query all child tasks of Epic #144.
+2. Verify that **every child task** has a status of `done` (terminal) — no child may be `in_progress`, `ready`, `backlog`, or any non-terminal state.
+3. If any child task is non-terminal, the closure must be **blocked** and the caller must receive a response listing each blocking child by ID, title, and current status.
+4. The check must execute within the same transaction as the closure so that a child completing concurrently does not produce a race condition.
+
+**Rationale:** AC4 requires no open sub-tasks or dependents are blocked by the GAP-G2 closure. Task #575 (GAP-G2 validation) is currently `done`, satisfying this check for the immediate child. This BR ensures any future children are also accounted for before closure.
+
+### BR-5: Closure Event Audit Trail
+
+**Priority:** P2 (Medium)
+
+Every GAP-G2 closure event (including the initial closure and any subsequent admin re-open/re-close with a waiver) must produce an immutable audit log entry containing:
+
+| Field | Description |
+|-------|-------------|
+| `eventType` | `gap_closure` |
+| `gapId` | `GAP-G2` |
+| `taskId` | `144` |
+| `action` | `closed` or `reopened` |
+| `actorRef` | Identity of the agent or user who performed the action |
+| `timestamp` | Server-issued timestamp |
+| `waiverId` | Present only if the action was performed with a waiver/exception |
+| `rationale` | Summary of the reason for the action |
+
+This log must be queryable by compliance officers through the existing audit interface and preserved for the duration of the workspace retention policy.
+
+**Rationale:** While not explicitly stated in the FR table, an audit trail is a baseline compliance expectation for any gap closure, particularly one designated "sanity-of-life." This BR ensures the closure is auditable.
+
+### BR-6: No Functional Side-Effects
+
+**Priority:** P0 (Critical)
+
+The closure of GAP-G2 must **not** trigger any of the following side-effects:
+- No repository code changes, schema migrations, or configuration modifications.
+- No automated agent dispatch, deployment, or infrastructure provisioning.
+- No changes to the state of non-GAP-G2 tasks, projects, or resources.
+- No modification to the secret lifecycle validation results recorded by task #575.
+
+The closure is a **declarative status change only**. The validation work (task #575) and its evidence (PR #306) are already complete and recorded.
+
+**Rationale:** The PRD explicitly states that no functional code changes are implemented solely to satisfy this closure. This BR makes that constraint operational and testable.
+
+---
+
+## Non-Functional Requirements
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| NFR-1 | The closure operation must complete in under 2 seconds (p95) under normal load. | P2 |
+| NFR-2 | The audit log for GAP-G2 must be preserved for a minimum of 7 years to satisfy SOC 2 retention requirements. | P1 |
+| NFR-3 | The compliance register propagation must succeed with 99.9% reliability over a rolling 30-day window. | P1 |
+
+---
+
+## Traceability Matrix
+
+| Business Req | Functional Req | Acceptance Criteria |
+|-------------|---------------|---------------------|
+| BR-1 | FR1, FR2 | AC1, AC2 |
+| BR-2 | FR3 | AC1 |
+| BR-3 | FR4 | AC3 |
+| BR-4 | — (derived) | AC4 |
+| BR-5 | — (derived) | — (compliance baseline) |
+| BR-6 | — (scope guard) | — (out-of-scope enforcement) |
+
+---
 
 ## Design
 
