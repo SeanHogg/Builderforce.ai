@@ -66,7 +66,64 @@ Synchronize PR #361 with the current `main` branch by performing a `git rebase m
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+### Manual Git Operations Required
+
+Since this task requires direct Git operations that cannot be performed from the serverless executor, the following manual steps must be performed by a developer with repository access:
+
+1. **Prerequisite Check**
+   - Verify access to the BurnRateOS repository
+   - Confirm PR #361 exists and note its source branch name
+
+2. **Create Backup Branch**
+   ```bash
+   git checkout <pr-branch-name>
+   git branch <pr-branch-name>-backup
+   git push origin <pr-branch-name>-backup
+   ```
+
+3. **Synchronize with Main**
+   - Option A (Rebase - preferred for clean history):
+     ```bash
+     git fetch origin
+     git checkout <pr-branch-name>
+     git rebase origin/main
+     ```
+   - Option B (Merge - if rebase has complex conflicts):
+     ```bash
+     git fetch origin
+     git checkout <pr-branch-name>
+     git merge origin/main
+     ```
+
+4. **Resolve Conflicts**
+   - If conflicts occur, resolve them manually
+   - Use `git status` to identify conflicted files
+   - After resolution: `git add <resolved-files>` and `git rebase --continue` (or `git commit` for merge)
+
+5. **Force Push (if using rebase)**
+   ```bash
+   git push origin <pr-branch-name> --force-with-lease
+   ```
+   - **Warning**: Never use `--force` without `--with-lease` as it can overwrite others' changes
+
+6. **Verify Mergeability**
+   - Check GitHub PR #361 UI for "This branch is up to date with main" message
+   - Confirm "Merge pull request" button is enabled
+   - Ensure all CI checks pass
+
+7. **Documentation**
+   - Document any conflicts that were resolved
+   - Note the final commit state in the PR description
+
+### Verification Checklist
+
+- [ ] Backup branch created and pushed
+- [ ] Branch synchronized with current main (rebase or merge completed)
+- [ ] All conflicts resolved (if any)
+- [ ] Changes pushed to remote
+- [ ] PR #361 shows "up to date with main"
+- [ ] Merge button is enabled
+- [ ] CI checks pass
 
 ## Design
 
@@ -75,6 +132,8 @@ _Owned by the architect — to be authored._
 ## Implementation Notes
 
 _Owned by the developer — to be authored._
+
+> **Execution Note:** This task cannot be completed from the serverless executor as it requires direct Git CLI access. The requirements above document the exact steps needed to resolve the stale fork point. This task should be reassigned to a human developer with repository access to perform the actual rebase/merge operation, or completed in a local development environment with Git CLI available.
 
 ## Review
 
