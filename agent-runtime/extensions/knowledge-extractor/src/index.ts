@@ -13,6 +13,8 @@ import type {
   ExtractionEvent,
 } from "./types.js";
 
+import { DEFAULT_EXTRACTOR_CONFIG } from "./types.js";
+
 import {
   extractExplicit,
 } from "./explicit.js";
