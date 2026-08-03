@@ -9,7 +9,7 @@
  *
  * FR-6 scannability:
  *   - Summary before the fold.
- *   - RAG color prominent (badge).
+ *   - RAG colour prominent (badge).
  *   - Desktop-first with mobile-friendly font sizing.
  *
  * FR-5 refresh options:
@@ -32,7 +32,7 @@ const colors = {
   text: 'var(--text)',
 } as const;
 
-/* ─── Utility types for type-safe color lookups ────────────────────────────── */
+/* ─── Utility types for type-safe colour lookups ────────────────────────────── */
 
 type ColorKey = 'green' | 'amber' | 'red';
 
@@ -49,6 +49,19 @@ function getEmoji(rag: string): string {
   return '🔴';
 }
 
+/**
+ * FR-2: Progress bar colour based on completion %, not RAG.
+ *   < 30% → red
+ *   30–70% → amber
+ *   > 70% → green
+ */
+function getProgressBarColor(pct: number | null): string {
+  if (pct === null || pct === 0) return colors.muted;
+  if (pct < 30) return colors.red;
+  if (pct <= 70) return colors.amber;
+  return colors.green;
+}
+
 /* ─── Project Card Component (FR-1) ──────────────────────────────────────── */
 
 interface ProjectCardProps {
@@ -58,6 +71,8 @@ interface ProjectCardProps {
 function ProjectCard({ p }: ProjectCardProps) {
   const ragColorKey = getColorKey(p.rag ?? 'Red');
   const ragEmoji = getEmoji(p.rag ?? 'Red');
+  const progBarColor = getProgressBarColor(p.completionPct);
+  const hasNoTasks = p.completionPct === null;
 
   return (
     <div
@@ -65,9 +80,16 @@ function ProjectCard({ p }: ProjectCardProps) {
       role="region"
       aria-label={`${p.name}: ${ragEmoji} — ${p.completionPct ?? 'N/A'}% complete`}
     >
-      {/* Status bar with RAG badge (FR-6 coloring) */}
+      {/* Status bar with RAG badge (FR-6 colouring) */}
       <div style={statusRowStyle}>
-        <span style={{ textTransform: 'uppercase', letterSpacing: '0.05em', color: colors.subtle, fontSize: '0.68rem' }}>
+        <span
+          style={{
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em',
+            color: colors.subtle,
+            fontSize: '0.68rem',
+          }}
+        >
           {p.status}
         </span>
         <div
@@ -88,15 +110,27 @@ function ProjectCard({ p }: ProjectCardProps) {
 
       {/* Title + risk level */}
       <h2 style={headingStyle}>{p.name}</h2>
-      <div style={{ fontSize: '0.8rem', color: colors.subtle, marginBottom: 8 }}>
-        {p.riskLevel} — {p.riskRationale}
+      <div style={{ fontSize: '0.8rem', color: colors.subtle, marginBottom: 4 }}>
+        Risk: {p.riskLevel} — {p.riskRationale}
       </div>
 
-      {/* Completion (progress bar style) */}
-      {p.completionPct !== null ? (
+      {/* FR-3: RAG rationale — visible without interaction (AC-3) */}
+      <div
+        style={{
+          fontSize: '0.82rem',
+          color: ragColorKey ? (colors as Record<ColorKey, string>)[ragColorKey] : colors.red,
+          fontWeight: 500,
+          marginBottom: 10,
+        }}
+      >
+        RAG: {p.ragRationale}
+      </div>
+
+      {/* FR-2: Completion progress bar */}
+      {!hasNoTasks ? (
         <div style={{ marginBottom: 6 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: 2 }}>
-            <span style={{ color: colors.green, fontWeight: 600 }}>{p.completionPct}%</span>
+            <span style={{ color: progBarColor, fontWeight: 600 }}>{p.completionPct}%</span>
           </div>
           <div
             style={{
@@ -112,31 +146,57 @@ function ProjectCard({ p }: ProjectCardProps) {
               style={{
                 width: `${p.completionPct}%`,
                 height: '100%',
-                backgroundColor: p.rag === 'Green' ? colors.green : p.rag === 'Amber' ? colors.amber : colors.red,
+                backgroundColor: progBarColor,
                 position: 'absolute',
               }}
             />
           </div>
         </div>
       ) : (
-        <div style={naStyle}>N/A (no tasks defined)</div>
+        /* AC-4: Grey bar when completion=0% and tasks=0 */
+        <div style={{ marginBottom: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: 2 }}>
+            <span style={{ color: colors.muted, fontWeight: 600 }}>0%</span>
+          </div>
+          <div
+            style={{
+              width: '100%',
+              height: 10,
+              borderRadius: 10,
+              backgroundColor: 'rgba(107, 114, 128, 0.2)',
+              overflow: 'hidden',
+              position: 'relative',
+            }}
+          >
+            <div
+              style={{
+                width: '0%',
+                height: '100%',
+                backgroundColor: colors.muted,
+                position: 'absolute',
+              }}
+            />
+          </div>
+        </div>
       )}
 
-      {/* Task summary */}
+      {/* FR-4: Task summary */}
       <div style={{ fontSize: '0.86rem', lineHeight: '1.45', color: colors.muted, marginBottom: 6 }}>
         {p.taskSummary}
       </div>
 
-      {/* Key blocker */}
+      {/* FR-5: Key blocker — "None" when none (AC-5) */}
       <div style={sectionLabelStyle}>
         <strong style={{ color: colors.subtle }}>Key blocker:</strong>{' '}
-        <span style={{ color: '#fff' }}>{p.keyBlocker}</span>
+        <span style={{ color: '#fff' }}>{p.keyBlocker || 'None'}</span>
       </div>
 
-      {/* Recommended next action */}
+      {/* FR-7: Recommended next action — "No action needed" when none (AC-5) */}
       <div style={sectionLabelStyle}>
         <strong style={{ color: colors.subtle }}>Next action:</strong>{' '}
-        <span style={{ color: colors.emergency }}>{p.recommendedAction}</span>
+        <span style={{ color: colors.emergency }}>
+          {p.recommendedAction || 'No action needed'}
+        </span>
       </div>
     </div>
   );
@@ -169,7 +229,11 @@ function PortfolioSummary({ summary }: { summary: typeof portfolioSummary }) {
 
       <div style={overallBannerStyle}>
         <strong>Overall portfolio health:</strong>{' '}
-        <span style={{ color: overall === 'Red' ? colors.red : overall === 'Amber' ? colors.amber : colors.green }}>
+        <span
+          style={{
+            color: overall === 'Red' ? colors.red : overall === 'Amber' ? colors.amber : colors.green,
+          }}
+        >
           {overall}
         </span>
       </div>
@@ -199,7 +263,15 @@ function statCountStyle(count: number, fallback: ColorKey): React.CSSProperties 
 export function CrossProjectHealthDashboard() {
   return (
     <main style={mainStyle}>
-      <header style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 24, alignItems: 'flex-start' }}>
+      <header
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          marginBottom: 24,
+          alignItems: 'flex-start',
+        }}
+      >
         <h1 style={pageheadingStyle}>Cross-Project Health Dashboard</h1>
         <div style={{ fontSize: '0.8rem', color: colors.subtle }}>
           {new Date(portfolioSummary.generatedAt).toLocaleString()}
@@ -209,7 +281,10 @@ export function CrossProjectHealthDashboard() {
       <PortfolioSummary summary={portfolioSummary} />
 
       <section aria-labelledby="projects-heading">
-        <h2 id="projects-heading" style={{ ...headingStyle, paddingLeft: 40, marginTop: 32 }}>
+        <h2
+          id="projects-heading"
+          style={{ ...headingStyle, paddingLeft: 40, marginTop: 32 }}
+        >
           Project Health Cards ({portfolioSummary.totalProjects})
         </h2>
         <div style={cardGridStyle}>
@@ -257,7 +332,7 @@ const pageheadingStyle: React.CSSProperties = {
 
 const summaryHeadingStyle: React.CSSProperties = {
   ...headingStyle,
-  textAlign: 'left',
+  textAlign: 'left' as const,
   marginBottom: 20,
   marginLeft: -40,
 };
@@ -283,7 +358,7 @@ const statCardStyle = (count: number): React.CSSProperties => ({
   border: `1px solid ${count > 0 ? 'rgba(34, 197, 94, 0.3)' : 'rgba(150, 150, 150, 0.25)'}`,
   borderRadius: 8,
   padding: 12,
-  textAlign: 'center',
+  textAlign: 'center' as const,
   boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
 });
 
@@ -341,10 +416,4 @@ const sectionLabelStyle: React.CSSProperties = {
   lineHeight: 1.4,
   color: colors.subtle,
   marginBottom: 4,
-};
-
-const naStyle: React.CSSProperties = {
-  fontSize: '0.8rem',
-  color: colors.muted,
-  marginBottom: 8,
 };
