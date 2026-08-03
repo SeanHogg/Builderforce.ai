@@ -27,7 +27,7 @@ import {
   type ChatDiagnosticsData,
 } from '@seanhogg/builderforce-brain-embedded';
 import { useConfirm } from '@/components/ConfirmProvider';
-import { ChatInput } from '@/components/ChatInput';
+import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
 import { EvermindStatusBadge } from '@/components/ide/EvermindStatusBadge';
 import { recallProjectEvermind, getProjectEvermindContributions } from '@/lib/projectEvermindApi';
 import { APP_VERSION, fetchApiVersion } from '@/lib/appVersions';
@@ -256,6 +256,7 @@ export function BrainPanel({
   const [effort, setEffort] = useState<BrainEffort>('balanced');
   const [thinking, setThinking] = useState(false);
   const [webBrowsing, setWebBrowsing] = useState(false);
+  const [modelSelection, setModelSelection] = useState<ChatModelSelection>({ mode: 'auto' });
   // "Add context" from a connected repo: when the active chat's project has one
   // or more repositories, the composer's + menu offers a repo file picker whose
   // selection is attached as context. Same repo the agent clones from, so it
@@ -484,6 +485,13 @@ export function BrainPanel({
   // — because the run loop needs it to fail over when a model will not emit tool
   // calls; the diagnostics capture below reads the same cached object.
   const llmModels = useLlmModels();
+  const modelOptions = useMemo(() => ({
+    configured: llmModels.tenantModels.map((model) => ({ id: model.ref, label: model.name })),
+    byo: llmModels.fundingSurface.byo.models.map(({ id, vendor }) => ({ id, vendor })),
+    plan: llmModels.models,
+    paid: llmModels.premiumModels.map((model) => model.id),
+  }), [llmModels]);
+  const selectedModel = modelSelection.mode === 'model' ? modelSelection.model : undefined;
   // Tool-call failover: the SHARED selector over that surface, so "which model next"
   // is decided in one place for every host rather than per surface.
   const pickFallbackModel = useCallback(
@@ -496,8 +504,10 @@ export function BrainPanel({
     modality,
     extraSystem: ambientSystem,
     systemPrompt: personaSystemPrompt,
-    model: personaModel,
-    pickFallbackModel,
+    model: selectedModel,
+    modelStrict: modelSelection.mode === 'model',
+    routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
+    pickFallbackModel: modelSelection.mode === 'model' ? undefined : pickFallbackModel,
     toolSpecs,
     runTool,
     needsConfirm,
@@ -1437,6 +1447,9 @@ export function BrainPanel({
               thinking={thinking}
               onThinkingChange={setThinking}
               accountSettingsHref="/settings"
+              modelSelection={modelSelection}
+              modelOptions={modelOptions}
+              onModelSelectionChange={setModelSelection}
               autoMode={autoApprove}
               onAutoModeChange={setAutoApproveMode}
               showBrainIcon={false}

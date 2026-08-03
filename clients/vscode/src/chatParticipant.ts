@@ -7,7 +7,7 @@ import { formatChatError } from "./upgradeAction";
 import { getGroundingSummary } from "./grounding";
 import { getEditorContextLive } from "./editorContext";
 import { editorContextDirective } from "./idePersona";
-import { resolveEffectiveModel } from "./modelState";
+import { resolveEffectiveModelChoice } from "./modelState";
 import { getSelectedProject } from "./projectState";
 import { buildSystemMessages } from "./prompt";
 
@@ -48,7 +48,7 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
     const cfg = vscode.workspace.getConfiguration("builderforce");
     // Resolve per turn so an explicit pick, the active project's Evermind, or the
     // configured default is honored the same way the Brain webview + cloud/on-prem do.
-    const model = await resolveEffectiveModel(ctx.secrets);
+    const modelChoice = await resolveEffectiveModelChoice(ctx.secrets);
     const permissionMode = cfg.get<"ask" | "acceptEdits">("permissionMode") ?? "ask";
 
     // Limbic affective layer + PERSONALITY (gateway-injected) — parity with the
@@ -108,7 +108,9 @@ export function createBuilderForceHandler(ctx: vscode.ExtensionContext): vscode.
         root,
         ...(activeProject ? { projectId: activeProject.id } : {}),
         ...(brainChatId != null ? { chatId: brainChatId } : {}),
-        model,
+        model: modelChoice.model,
+        modelStrict: modelChoice.modelStrict,
+        routingMode: modelChoice.routingMode,
         permissionMode,
         approve: async (summary) => {
           const pick = await vscode.window.showWarningMessage(

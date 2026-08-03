@@ -265,8 +265,13 @@ function describeModelFunding(
   model: string | undefined,
   surface: ModelSurface | null,
   t: (key: string, fallback: string) => string,
+  routingMode: 'auto' | 'byo_pool' = 'auto',
 ): { name: string; funding: string } | null {
   if (!surface) return null;
+  if (!model && routingMode === 'byo_pool') return {
+    name: t('app.modelPool', 'Pool — your BYO priority order'),
+    funding: t('app.modelFundingPool', 'Tries your connected accounts in the order configured in Account settings.'),
+  };
   // SHARED classifier (see classifyModelFunding) — the diagnostics report records the
   // same key this sentence is rendered from, so the two can't drift.
   const funding = classifyModelFunding(model, surface);
@@ -777,8 +782,8 @@ function Chat({ init }: { init: InitData }) {
   }, [apiReq]);
 
   const modelFunding = useMemo(
-    () => describeModelFunding(init.model, modelSurface, t),
-    [init.model, modelSurface, t],
+    () => describeModelFunding(init.model, modelSurface, t, init.routingMode),
+    [init.model, init.routingMode, modelSurface, t],
   );
 
   // Tool-call failover: hand the run loop the SHARED selector over the surface above,
@@ -884,10 +889,12 @@ function Chat({ init }: { init: InitData }) {
     // code without recording one.
     projectId: evermindProjectId,
     model: init.model,
+    modelStrict: init.modelStrict,
+    routingMode: init.routingMode ?? 'auto',
     // When a model burns its stall budget describing tool calls it never makes, the
     // run switches models itself instead of stranding the user with a promise. Reads
     // the model surface already loaded for the picker — no extra fetch.
-    pickFallbackModel: pickFallbackModel,
+    pickFallbackModel: init.modelStrict ? undefined : pickFallbackModel,
     maxTokens: effortMaxTokens,
     reasoning,
     extraSystem,
@@ -1919,16 +1926,14 @@ function Chat({ init }: { init: InitData }) {
               composer. Self-gates (renders nothing until a seeded Evermind). */}
           <EvermindStatusBadge baseUrl={init.baseUrl} projectId={associatedProjectId} t={t} />
 
-          {init.model && (
-            <button
-              type="button"
-              className="bf-model bf-model--btn"
-              title={t('app.pickModel', 'Change model')}
-              onClick={() => post('pickModel')}
-            >
-              {init.model}
-            </button>
-          )}
+          <button
+            type="button"
+            className="bf-model bf-model--btn"
+            title={t('app.pickModel', 'Change model')}
+            onClick={() => post('pickModel')}
+          >
+            {init.model ?? (init.routingMode === 'byo_pool' ? t('app.modelPoolShort', 'Pool') : t('app.modelAutoShort', 'Auto'))}
+          </button>
 
           {/* Speech-to-text — only where the runtime supports it, and never while a
               run is streaming (the composer is otherwise showing Stop). */}

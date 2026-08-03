@@ -10,7 +10,7 @@
     "secrets:from-env": "node scripts/set-secrets-from-env.mjs",
     "db:generate": "npx drizzle-kit@0.30.6 generate",
     "db:push": "npx drizzle-kit@0.30.6 push",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsgo --noEmit && tsc --noEmit",
     "check:schema": "node scripts/check-schema-drift.mjs",
     "check:db-access": "node scripts/check-db-access.mjs",
     "check:migrations": "node scripts/check-migrations.mjs",

@@ -55,6 +55,8 @@ import { buildCreationCanvasDiagnosticsReport } from '@/lib/creationCanvasDiagno
 import { arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions, type CanvasArrangement } from './creationCanvasLayout';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { useLlmModels } from '@/lib/useLlmModels';
+import type { ChatModelSelection } from '@/components/ChatInput';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
@@ -259,6 +261,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [inviteRole, setInviteRole] = useState<CreationSessionSummary['role']>('editor');
   const [prompt, setPrompt] = useState('');
   const [thinking, setThinking] = useState(false);
+  const [modelSelection, setModelSelection] = useState<ChatModelSelection>({ mode: 'auto' });
+  const llmModels = useLlmModels();
+  const canvasModelChoices = useMemo(() => [
+    ...llmModels.tenantModels.map((model) => ({ id: model.ref, label: `${model.name} — configured` })),
+    ...llmModels.fundingSurface.byo.models.map((model) => ({ id: model.id, label: `${model.id} — BYO ${model.vendor}` })),
+    ...llmModels.models.map((id) => ({ id, label: `${id} — plan` })),
+    ...llmModels.premiumModels.map((model) => ({ id: model.id, label: `${model.id} — paid` })),
+  ].filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index), [llmModels]);
   const [tourStep, setTourStep] = useState(0);
   const [notice, setNotice] = useState('Session saved');
   const [loadingSession, setLoadingSession] = useState(persistence === 'server');
@@ -1533,6 +1543,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setPrompt('');
       void runCreationCanvasAi({
         prompt: request, canvasSnapshot: snapshot, persistence, canvasActions,
+        ...(modelSelection.mode === 'model' ? { model: modelSelection.model, modelStrict: true } : {}),
+        routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
         autoApprove: autoApplyRef.current,
         confirmAction: ({ name, args }) => {
           let preview = '';
@@ -1604,7 +1616,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setPrompt('');
       setNotice('Evaluation added to canvas');
     }, 850);
-  }, [appendTimeline, canvasActions, confirm, effectiveSelectedIds, edges, evermindProjectId, memoryEnabled, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, setEdges, setNodes, thinking, timeline]);
+  }, [appendTimeline, canvasActions, confirm, effectiveSelectedIds, edges, evermindProjectId, memoryEnabled, modelSelection, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, setEdges, setNodes, thinking, timeline]);
 
   useEffect(() => {
     if (!hydrated.current || initialPromptSubmitted.current || thinking) return;
@@ -2026,7 +2038,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
         {!presentMode && <form ref={composerFormRef} className={styles.composer} onSubmit={evaluateCanvas}>
           <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} aria-label={t('askBrain')} placeholder={t('askBrain')} rows={1} />
-          <div className={styles.composerBottom}><button type="button" className={styles.iconButton} onClick={openPalette} aria-label={t('addToCanvas')}>＋</button><label className={styles.scopeChip}>⌁ <span className="sr-only">Brain scope</span><select aria-label="Brain scope" value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">Entire canvas</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects` : 'Selected object'}</option><option value="connected" disabled={!effectiveSelectedIds.length}>Connected objects</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>Current frame</option></select></label><button type="button" className={`${styles.autoApplyButton} ${autoApply ? styles.autoApplyButtonActive : ''}`} aria-pressed={autoApply} title="Automatically apply Brain actions without showing the review batch" onClick={() => setAutoApplyMode(!autoApply)}><span aria-hidden>⚡</span> Auto apply</button><button type="button" className={`${styles.memoryButton} ${memoryEnabled ? styles.memoryButtonActive : ''}`} aria-pressed={memoryEnabled} disabled={evermindProjectId == null || persistence !== 'server'} title={evermindProjectId == null ? 'Add a saved Project to connect its Evermind' : memoryEnabled ? 'Evermind recall and learning are enabled' : 'Evermind is disabled for this canvas chat'} onClick={() => setMemoryMode(!memoryEnabled)}><span aria-hidden>🧠</span> Memory</button><span className={styles.composerSpacer} /><button type="button" className={styles.iconButton} aria-label="Use microphone" title="Use microphone" onClick={startVoiceInput}><svg className={styles.microphoneIcon} viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" /><path d="M6 11.5v.5a6 6 0 0 0 12 0v-.5M12 18v3M9 21h6" /></svg></button><button className={styles.sendButton} aria-label={t('sendBrain')} disabled={thinking || !prompt.trim()}>{thinking ? '•••' : '➤'}</button></div>
+          <div className={styles.composerBottom}><button type="button" className={styles.iconButton} onClick={openPalette} aria-label={t('addToCanvas')}>＋</button><label className={styles.scopeChip}>⌁ <span className="sr-only">Brain scope</span><select aria-label="Brain scope" value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">Entire canvas</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects` : 'Selected object'}</option><option value="connected" disabled={!effectiveSelectedIds.length}>Connected objects</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>Current frame</option></select></label><label className={styles.scopeChip}>◉ <span className="sr-only">LLM routing</span><select aria-label="LLM routing" value={modelSelection.mode === 'model' ? `model:${modelSelection.model}` : modelSelection.mode} onChange={(event) => { const value = event.target.value; setModelSelection(value === 'auto' ? { mode: 'auto' } : value === 'byo_pool' ? { mode: 'byo_pool' } : { mode: 'model', model: value.slice('model:'.length) }); }}><option value="auto">Auto</option>{llmModels.byoProviders.length > 0 && <option value="byo_pool">Pool (BYO order)</option>}{canvasModelChoices.map((choice) => <option key={choice.id} value={`model:${choice.id}`}>{choice.label}</option>)}</select></label><button type="button" className={`${styles.autoApplyButton} ${autoApply ? styles.autoApplyButtonActive : ''}`} aria-pressed={autoApply} title="Automatically apply Brain actions without showing the review batch" onClick={() => setAutoApplyMode(!autoApply)}><span aria-hidden>⚡</span> Auto apply</button><button type="button" className={`${styles.memoryButton} ${memoryEnabled ? styles.memoryButtonActive : ''}`} aria-pressed={memoryEnabled} disabled={evermindProjectId == null || persistence !== 'server'} title={evermindProjectId == null ? 'Add a saved Project to connect its Evermind' : memoryEnabled ? 'Evermind recall and learning are enabled' : 'Evermind is disabled for this canvas chat'} onClick={() => setMemoryMode(!memoryEnabled)}><span aria-hidden>🧠</span> Memory</button><span className={styles.composerSpacer} /><button type="button" className={styles.iconButton} aria-label="Use microphone" title="Use microphone" onClick={startVoiceInput}><svg className={styles.microphoneIcon} viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" /><path d="M6 11.5v.5a6 6 0 0 0 12 0v-.5M12 18v3M9 21h6" /></svg></button><button className={styles.sendButton} aria-label={t('sendBrain')} disabled={thinking || !prompt.trim()}>{thinking ? '•••' : '➤'}</button></div>
         </form>}
       </div>
     </div>

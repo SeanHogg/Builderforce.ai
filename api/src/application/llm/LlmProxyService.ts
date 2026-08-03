@@ -144,6 +144,9 @@ export interface ChatCompletionRequest {
    *  `model` with NO substitution — an unavailable model 503s rather than
    *  silently swapping. Normalized onto `modelStrict` by `resolveStrictPin`. */
   strict?: boolean;
+  /** Explicit interactive routing choice. Absent preserves legacy BYO-first,
+   * fail-closed behavior for existing SDK and autonomous callers. */
+  routingMode?: 'auto' | 'byo_pool';
   /** OPTIONAL vendor-neutral reasoning intent (the VS Code chat "Thinking" toggle).
    *  Omitted entirely when the toggle is off. The level names are `AgentThinkLevel`
    *  members, so `reasoningCapability` maps them to the CORRECT vendor param for the
@@ -372,6 +375,10 @@ export interface LlmProxyOptions {
    *  put a hard ceiling on overflow spend (a Free tenant's primary free pool
    *  still runs — only the funded overflow path is closed). */
   disablePaidOverflow?: boolean;
+  /** Explicit interactive Auto selection: keep connected accounts at the head,
+   * but allow the gateway to continue into entitled shared routes. Absent keeps
+   * the legacy BYO execution boundary used by autonomous callers. */
+  allowGatewayAuto?: boolean;
   /** When true, this proxy is serving a CODING run: the appended premium fallback
    *  chain is the coding-capable one (`CODING_PREMIUM_FALLBACK_MODELS`, paid
    *  coders) instead of the general non-coder gemini chain, so an exhausted coding
@@ -466,6 +473,7 @@ export class LlmProxyService {
   private readonly openRouterModelKeys: Readonly<Record<string, string>>;
   private readonly openRouterConnectionModels: ReadonlySet<string>;
   private readonly byoRequired: boolean;
+  private readonly allowGatewayAuto: boolean;
   private readonly byoDiagnostics: ByoDiagnostics;
 
   constructor(env: ProxyEnv, options?: LlmProxyOptions) {
@@ -490,6 +498,7 @@ export class LlmProxyService {
     this.openRouterModelKeys = options?.openRouterModelKeys ?? {};
     this.openRouterConnectionModels = new Set(connectionModelRefs(this.openRouterConnections));
     this.byoRequired = options?.byoRequired ?? false;
+    this.allowGatewayAuto = options?.allowGatewayAuto ?? false;
     this.byoDiagnostics = options?.byoDiagnostics ?? {};
     // Mark every vendor a BYO key overrides as tenant-funded up front, so any
     // resolution landing on that vendor this request is stamped byo (cost 0,
@@ -582,7 +591,7 @@ export class LlmProxyService {
 
   /** BYO is strict when configured OR when at least one credential resolved. */
   private get byoStrict(): boolean {
-    return this.byoRequired || this.connectedByoVendors.size > 0;
+    return !this.allowGatewayAuto && (this.byoRequired || this.connectedByoVendors.size > 0);
   }
 
   /** The premium fallback chain appended to every cascade — empty when the tenant
@@ -1798,7 +1807,7 @@ export function llmProxyForPlan(
   env: ProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; hostEgress?: VendorEgress | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[]; byoProviderPriorities?: readonly { vendor: string; priority: number | null }[]; openRouterConnections?: readonly OpenRouterConnection[]; openRouterModelKeys?: Readonly<Record<string, string>>; byoRequired?: boolean; byoDiagnostics?: ByoDiagnostics },
+  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; hostEgress?: VendorEgress | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[]; byoProviderPriorities?: readonly { vendor: string; priority: number | null }[]; openRouterConnections?: readonly OpenRouterConnection[]; openRouterModelKeys?: Readonly<Record<string, string>>; byoRequired?: boolean; allowGatewayAuto?: boolean; byoDiagnostics?: ByoDiagnostics },
 ): LlmProxyService {
   const routing = resolveRouting(effectivePlan, premiumOverride);
   const { productName, modelPool } = routing;
@@ -1819,6 +1828,7 @@ export function llmProxyForPlan(
     ...(vendorCallTimeoutMs ? { vendorCallTimeoutMs } : {}),
     ...(opts?.backstopModels ? { backstopModels: opts.backstopModels } : {}),
     ...(opts?.disablePaidOverflow ? { disablePaidOverflow: true } : {}),
+    ...(opts?.allowGatewayAuto ? { allowGatewayAuto: true } : {}),
     ...(opts?.hostEgress ? { hostEgress: opts.hostEgress } : {}),
     // A coding run walks the WHOLE free coding pool before any paid/metered coder
     // (cost over latency), so the funded direct-Anthropic floor is genuine last-resort.

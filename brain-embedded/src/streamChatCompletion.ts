@@ -123,6 +123,12 @@ export interface StreamChatOptions {
   tools?: BrainToolSpec[];
   tool_choice?: 'auto' | 'none';
   model?: string;
+  /** Hard-pin {@link model}. Used by an explicit user pick so validation cannot
+   * silently succeed on a gateway substitute. */
+  modelStrict?: boolean;
+  /** `auto` lets the gateway choose across every entitled route; `byo_pool`
+   * constrains the turn to the tenant's ordered connected-account cascade. */
+  routingMode?: 'auto' | 'byo_pool';
   temperature?: number;
   maxTokens?: number;
   /**
@@ -270,6 +276,8 @@ export async function streamChatCompletion(
   // unpinned chat has always meant on every other surface.
   const model = opts.model ?? transport.defaultModel;
   if (model) body.model = model;
+  if (model && opts.modelStrict) body.strict = true;
+  if (opts.routingMode) body.routingMode = opts.routingMode;
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
     body.tool_choice = opts.tool_choice ?? 'auto';

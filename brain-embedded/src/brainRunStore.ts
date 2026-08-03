@@ -221,6 +221,10 @@ export interface BrainRunRequest {
   resolvedSystemPrompt: string;
   tools?: BrainToolSpec[];
   model?: string;
+  /** Hard-pin a deliberate user-selected model. */
+  modelStrict?: boolean;
+  /** Explicit routing choice when no model is pinned. */
+  routingMode?: 'auto' | 'byo_pool';
   /**
    * Pick the next model to try when the current one has burned its whole stall budget
    * without emitting a single tool call — i.e. re-prompting it is spent and only a
@@ -1165,7 +1169,7 @@ async function autoLinkCreatedItem(
 export { startRun as runBrainLoop };
 
 async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promise<void> {
-  const { resolvedSystemPrompt, tools: toolSpecs, model, pickFallbackModel, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
+  const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, routingMode, pickFallbackModel, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
   const allTools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined;
   // Tools this run has actually called — pinned into every later turn's selection
@@ -1427,7 +1431,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     }
     try {
       result = await stream(
-        { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model: activeModel, maxTokens, reasoning, metadata, signal: c.abort?.signal },
+        { messages: working, tools, tool_choice: tools ? 'auto' : undefined, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         { onTextDelta: (d) => { if (firstTokenAt === undefined) firstTokenAt = nowMs(); c.streamingText += d; emit(c); } },
       );
     } catch (e) {
@@ -1801,7 +1805,7 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
       let closeFirstTokenAt: number | undefined;
       const closing = await stream(
         // No `tools` → the model can't call another tool and must produce text.
-        { messages: working, model: activeModel, maxTokens, reasoning, metadata, signal: c.abort?.signal },
+        { messages: working, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         { onTextDelta: (d) => { if (closeFirstTokenAt === undefined) closeFirstTokenAt = nowMs(); c.streamingText += d; emit(c); } },
       );
       accrueByoUnresolved(c, closing.byoUnresolved);

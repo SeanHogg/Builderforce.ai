@@ -45,6 +45,8 @@ export interface AgentDeps {
    */
   chatId?: number;
   model?: string;
+  modelStrict?: boolean;
+  routingMode?: "auto" | "byo_pool";
   permissionMode: "ask" | "acceptEdits";
   /** Returns true if the user approves a mutating tool call. */
   approve: (summary: string) => Promise<boolean>;
@@ -255,6 +257,8 @@ export async function runAgent(
           messages: messages as unknown as ChatCompletionMessage[],
           tools: tools as BrainToolSpec[] | undefined,
           model: deps.model,
+          modelStrict: deps.modelStrict,
+          routingMode: deps.routingMode,
           signal: deps.signal,
           transport,
         },

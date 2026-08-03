@@ -19,6 +19,9 @@ type CanvasAiOptions = {
   canvasSnapshot: string;
   persistence: 'local' | 'server';
   canvasActions: BrainAction[];
+  model?: string;
+  modelStrict?: boolean;
+  routingMode?: 'auto' | 'byo_pool';
   /** Uses the same persisted mode as the canonical Brain: mutating tenant tools run
    * without an additional browser confirmation and canvas proposals auto-apply. */
   autoApprove?: boolean;
@@ -114,6 +117,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       tool_choice: 'auto',
       maxTokens: 1600,
       reasoning: { level: 'low' },
+      model: options.model,
+      modelStrict: options.modelStrict,
+      routingMode: options.routingMode,
     }, { onTextDelta: (delta) => { finalText += delta; options.onText?.(finalText); } });
     if (!result.toolCalls.length) return finish(result.text || finalText);
     messages.push({

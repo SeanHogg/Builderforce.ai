@@ -58,6 +58,8 @@ export interface InitData {
   baseUrl: string;
   token: string | null;
   model?: string;
+  modelStrict?: boolean;
+  routingMode?: 'auto' | 'byo_pool';
   grounding?: string;
   signedIn: boolean;
   hasWorkspace: boolean;

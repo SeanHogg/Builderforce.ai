@@ -5,7 +5,7 @@ import { getBaseUrl, getWebBaseUrl, SECRET_KEY, fetchPersonalityBlock, fetchLimb
 import { attentionFor, sessionTabIcon, sessionTabPrefix } from "./attention";
 import { getGroundingSummary } from "./grounding";
 import { getEditorContext, getEditorContextLive, watchEditorContext } from "./editorContext";
-import { resolveEffectiveModel } from "./modelState";
+import { resolveEffectiveModelChoice } from "./modelState";
 import { getSelectedProject } from "./projectState";
 import { getProjectNames } from "./projectNames";
 import { WebviewPanelBase, type WebviewInbound } from "./webviewShared";
@@ -169,6 +169,10 @@ function buildLabels(): Record<string, string> {
     // `{provider}` in the BYO line is the title-cased vendor (e.g. Anthropic).
     "app.modelInUse": t("Model in use"),
     "app.modelAuto": t("Auto — the gateway chooses"),
+    "app.modelAutoShort": t("Auto"),
+    "app.modelPool": t("Pool — your BYO priority order"),
+    "app.modelPoolShort": t("Pool"),
+    "app.modelFundingPool": t("Tries your connected accounts in the order configured in Account settings."),
     "app.modelFundingAuto": t("Routed per turn: your connected accounts first, then your plan."),
     "app.modelFundingByo": t("Billed to your own {provider} account — no plan credit used."),
     "app.modelFundingPlan": t("Included in your plan."),
@@ -592,6 +596,7 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
         /* personality is best-effort — never blocks init */
       }
     }
+    const modelChoice = await resolveEffectiveModelChoice(this.ctx.secrets);
     void this.panel.webview.postMessage({
       type: "init",
       baseUrl: getBaseUrl(),
@@ -602,7 +607,9 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       // Manual pick > active project's Evermind pin > configured default. Sending the
       // `project_evermind:<id>` pin lets the gateway serve the project's CURRENT learned
       // model on every completion (auto-following learning bumps mid-session).
-      model: await resolveEffectiveModel(this.ctx.secrets),
+      model: modelChoice.model,
+      modelStrict: modelChoice.modelStrict,
+      routingMode: modelChoice.routingMode,
       grounding: root ? getGroundingSummary() : undefined,
       // Live editor context (active file / selection / open tabs). Seeds the React
       // app's ambient system channel; refreshed via `editorContext` messages below.

@@ -16,7 +16,7 @@ import { EvermindViewProvider } from "./evermindView";
 import { DiagnosticsController } from "./diagnostics";
 import { clearPlatformToolsCache } from "./platformTools";
 import { setGroundingSummary } from "./grounding";
-import { onModelChange, setSelectedModel } from "./modelState";
+import { onModelChange, setSelectedModel, setSelectedModelPool } from "./modelState";
 import { getSelectedProject, initProjectState, onProjectChange, setSelectedProject } from "./projectState";
 import { invalidateProjectNames } from "./projectNames";
 import { ProjectsTreeProvider } from "./projectsTree";
@@ -1059,6 +1059,7 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
     const { models, canUsePremiumModels, premiumModels, canChooseModel, byo, premiumInfo } =
       await getModels(context.secrets, true);
     const auto = "(auto — let the gateway choose)";
+    const pool = "$(layers) Pool — use my BYO priority order";
 
     // When premium is locked, the gateway tells us WHY and which step opens it.
     // Same unlock vocabulary the chat error banner uses, so the picker and a failed
@@ -1098,7 +1099,8 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
     //   3. Premium — any paid OpenRouter model, metered at cost + 1¢/request.
     // Groups the tenant isn't entitled to never render, so the picker can only ever
     // offer models the gateway will accept.
-    const items: vscode.QuickPickItem[] = [{ label: auto, description: "Default · gateway picks per turn" }];
+    const items: vscode.QuickPickItem[] = [{ label: auto, description: "Gateway chooses across entitled routes" }];
+    if (byo.providers.length > 0) items.push({ label: pool, description: "Try your connected accounts in your configured order" });
 
     // Group the BYO models by their serving provider, preserving catalog order.
     const byVendor = new Map<string, typeof byo.models>();
@@ -1164,7 +1166,8 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
       );
       return;
     }
-    setSelectedModel(pick.label === auto ? undefined : pick.label);
+    if (pick.label === pool) setSelectedModelPool();
+    else setSelectedModel(pick.label === auto ? undefined : pick.label);
   } catch (e) {
     const message = (e as { message?: string }).message ?? String(e);
     if (message.includes("not_signed_in")) {

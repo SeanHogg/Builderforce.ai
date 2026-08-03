@@ -974,7 +974,7 @@ function proxyForCompletion(
   env: Env,
   access: TenantAccess,
   body: ChatCompletionRequest,
-  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; hostEgress?: VendorEgress | null; byoVendorPriority?: readonly string[]; byoProviderPriorities?: readonly { vendor: string; priority: number | null }[]; openRouterConnections?: readonly import('../../application/llm/openRouterConnectionService').OpenRouterConnection[]; openRouterModelKeys?: Readonly<Record<string, string>>; byoRequired?: boolean; byoDiagnostics?: ByoDiagnostics },
+  opts: { disablePaidOverflow: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; hostEgress?: VendorEgress | null; byoVendorPriority?: readonly string[]; byoProviderPriorities?: readonly { vendor: string; priority: number | null }[]; openRouterConnections?: readonly import('../../application/llm/openRouterConnectionService').OpenRouterConnection[]; openRouterModelKeys?: Readonly<Record<string, string>>; byoRequired?: boolean; allowGatewayAuto?: boolean; byoDiagnostics?: ByoDiagnostics },
 ): ReturnType<typeof llmProxyForPlan> {
   return llmProxyForPlan(env, access.effectivePlan, access.premiumOverride, {
     disablePaidOverflow: opts.disablePaidOverflow,
@@ -989,6 +989,7 @@ function proxyForCompletion(
     ...(opts.openRouterConnections?.length ? { openRouterConnections: opts.openRouterConnections } : {}),
     ...(opts.openRouterModelKeys && Object.keys(opts.openRouterModelKeys).length ? { openRouterModelKeys: opts.openRouterModelKeys } : {}),
     ...(opts.byoRequired ? { byoRequired: true } : {}),
+    ...(opts.allowGatewayAuto ? { allowGatewayAuto: true } : {}),
     // Diagnostics only — so a fail-closed BYO 503 names the connected providers and
     // why each was unusable, matching `x-builderforce-byo-unresolved`.
     ...(opts.byoDiagnostics ? { byoDiagnostics: opts.byoDiagnostics } : {}),
@@ -2183,7 +2184,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // key (Kimi Code). Resolved once per request; null when this tenant has no
     // runtime connected, in which case those vendors call out directly as before.
     const hostEgress = await buildHostEgress(c.env, access.tenantId);
-    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, tenantVendorKeys, hostEgress, byoVendorPriority: tenantCreds.vendorPriority, byoProviderPriorities: tenantCreds.providerPriorities, openRouterConnections: tenantCreds.openRouterConnections, openRouterModelKeys: tenantCreds.openRouterModelKeys, byoRequired: tenantCreds.configuredProviders.length > 0, byoDiagnostics: { configuredProviders: tenantCreds.configuredProviders, unresolvedReasons: tenantCreds.unresolvedReasons as Record<string, string> } });
+    const routingMode = bodyAny.routingMode === 'auto' || bodyAny.routingMode === 'byo_pool'
+      ? bodyAny.routingMode
+      : undefined;
+    if (bodyAny.routingMode != null && routingMode == null) delete bodyAny.routingMode;
+    const service = proxyForCompletion(c.env, access, body, { disablePaidOverflow, anthropicOAuthToken, openaiCodexAuth, xaiOAuthToken, tenantVendorKeys, hostEgress, byoVendorPriority: tenantCreds.vendorPriority, byoProviderPriorities: tenantCreds.providerPriorities, openRouterConnections: tenantCreds.openRouterConnections, openRouterModelKeys: tenantCreds.openRouterModelKeys, byoRequired: routingMode === 'byo_pool' || (routingMode == null && tenantCreds.configuredProviders.length > 0), allowGatewayAuto: routingMode === 'auto', byoDiagnostics: { configuredProviders: tenantCreds.configuredProviders, unresolvedReasons: tenantCreds.unresolvedReasons as Record<string, string> } });
     // Context-fit seeding: estimate the turn's tokens so the proxy drops
     // small-window models from the first-pass seed. This is the preventive half
     // of the Brain "dies after several executions" fix — the reactive 413

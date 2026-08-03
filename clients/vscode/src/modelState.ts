@@ -12,14 +12,26 @@ import { getSelectedProject } from "./projectState";
  */
 const PROJECT_EVERMIND_PIN = "project_evermind:";
 
-/** The selected model, shared across all chat panels (single source of truth). */
-let selected: string | undefined;
+export type EffectiveModelChoice = {
+  model?: string;
+  modelStrict?: boolean;
+  routingMode: "auto" | "byo_pool";
+};
+
+/** Undefined means inherit project/config. Once the user chooses, Auto and Pool
+ * remain explicit choices rather than collapsing back into that inheritance. */
+let selected: { mode: "auto" | "byo_pool" | "model"; model?: string } | undefined;
 const emitter = new vscode.EventEmitter<string | undefined>();
 export const onModelChange = emitter.event;
 
 export function setSelectedModel(model: string | undefined): void {
-  selected = model;
+  selected = model ? { mode: "model", model } : { mode: "auto" };
   emitter.fire(model);
+}
+
+export function setSelectedModelPool(): void {
+  selected = { mode: "byo_pool" };
+  emitter.fire(undefined);
 }
 
 /** The configured fallback model (empty → let the gateway auto-select). */
@@ -41,13 +53,23 @@ function defaultModel(): string | undefined {
  * always works.
  */
 export async function resolveEffectiveModel(secrets: vscode.SecretStorage): Promise<string | undefined> {
-  if (selected) return entitled(secrets, selected);
+  return (await resolveEffectiveModelChoice(secrets)).model;
+}
+
+export async function resolveEffectiveModelChoice(secrets: vscode.SecretStorage): Promise<EffectiveModelChoice> {
+  if (selected?.mode === "auto") return { routingMode: "auto" };
+  if (selected?.mode === "byo_pool") return { routingMode: "byo_pool" };
+  if (selected?.mode === "model" && selected.model) {
+    const model = await entitled(secrets, selected.model);
+    return model ? { model, modelStrict: true, routingMode: "auto" } : { routingMode: "auto" };
+  }
   const project = getSelectedProject();
   if (project) {
     const head = await getProjectEvermindHead(secrets, project.id).catch(() => undefined);
-    if (head?.inferenceEnabled && head.seeded) return `${PROJECT_EVERMIND_PIN}${project.id}`;
+    if (head?.inferenceEnabled && head.seeded) return { model: `${PROJECT_EVERMIND_PIN}${project.id}`, routingMode: "auto" };
   }
-  return entitled(secrets, defaultModel());
+  const model = await entitled(secrets, defaultModel());
+  return { ...(model ? { model } : {}), routingMode: "auto" };
 }
 
 /**

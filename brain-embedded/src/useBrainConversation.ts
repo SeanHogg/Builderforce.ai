@@ -61,6 +61,10 @@ export interface UseBrainConversationOptions {
   systemPrompt?: string;
   /** Override the model (e.g. run the Brain as a specific assigned agent). */
   model?: string;
+  /** True when `model` came from a deliberate user pick. */
+  modelStrict?: boolean;
+  /** Gateway-owned routing or the tenant's ordered BYO pool. */
+  routingMode?: 'auto' | 'byo_pool';
   /**
    * Pick the next model when the current one burns its stall budget without emitting
    * a tool call. Hosts pass `(tried) => nextFallbackModel(surface, tried)` using the
@@ -342,6 +346,8 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       resolvedSystemPrompt: fullSystemPrompt,
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : undefined,
       model,
+      modelStrict,
+      routingMode,
       pickFallbackModel,
       maxTokens,
       reasoning,
@@ -356,7 +362,7 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
       userTurn,
       projectId,
     }),
-    [fullSystemPrompt, toolSpecs, model, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId],
+    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId],
   );
 
   const send = useCallback(
