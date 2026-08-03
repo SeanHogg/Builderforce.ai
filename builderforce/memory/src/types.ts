@@ -116,7 +116,10 @@ export interface MemoryStoreAPI {
   update(id: string, updates: Partial<Omit<MemoryEntry, 'id' | 'createdAt'>>): Promise<MemoryEntry | null>;
   delete(id: string): Promise<boolean>;
   get(id: string): Promise<MemoryEntry | null>;
-  list(filters?: MemoryEntry['metadata'], limit?: number): Promise<MemoryEntry[]>;
+  list(filters?: SearchQuery['filters'], limit?: number): Promise<MemoryEntry[]>;
+
+  // Raw access
+  getAllEntries(): MemoryEntry[];
 
   // Search operations
   search(query: SearchQuery): Promise<SearchResult[]>;
@@ -135,8 +138,8 @@ export interface MemoryStoreAPI {
   getUsage(): Promise<{ size: number; entries: number }>;
 
   // Events
-  on(event: MemoryEvent['type'], callback: EventCallback): () => void;
-  off(event: MemoryEvent['type'], callback: EventCallback): void;
+  on(event: MemoryEvent['type'] | string, callback: EventCallback | Function): () => void;
+  off(event: MemoryEvent['type'] | string, callback: EventCallback | Function): void;
   emit(event: MemoryEvent): Promise<void>;
 }
 
