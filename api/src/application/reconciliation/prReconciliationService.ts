@@ -184,6 +184,8 @@ export interface RunReconciliationArgs {
   repoId: string;
   mode?: 'dry_run' | 'apply';
   approvedPrNumbers?: number[];
+  /** Internal scheduled-agent policy. Never populated from an HTTP request. */
+  autoApplyCloseCandidates?: boolean;
   requestedBy?: string | null;
 }
 
@@ -197,6 +199,17 @@ export function reconciliationRequesterId(
   machineActor: unknown,
 ): string | null {
   return machineActor == null ? (userId || null) : null;
+}
+
+/** Exact unattended-action policy: no recommendation except a high-confidence close may enter the allowlist. */
+export function policyApprovedCloseNumbers(items: Array<{
+  pr: { number: number };
+  decision: { classification: string; confidence: string };
+}>): number[] {
+  return items
+    .filter(({ decision }) => decision.classification === 'close_candidate' && decision.confidence === 'high')
+    .map(({ pr }) => pr.number)
+    .sort((a, b) => a - b);
 }
 
 export interface ReconciliationRunResult {
@@ -214,7 +227,10 @@ export async function runPrTicketReconciliation(
 ): Promise<ReconciliationRunResult> {
   const mode = args.mode ?? 'dry_run';
   const approved = [...new Set((args.approvedPrNumbers ?? []).filter((n) => Number.isInteger(n) && n > 0))];
-  if (mode === 'apply' && approved.length === 0) {
+  if (args.autoApplyCloseCandidates && mode !== 'apply') {
+    throw new ReconciliationError('INVALID_AUTO_APPLY_MODE', 'Automatic close-candidate policy requires apply mode');
+  }
+  if (mode === 'apply' && approved.length === 0 && !args.autoApplyCloseCandidates) {
     throw new ReconciliationError('APPROVAL_REQUIRED', 'Apply mode requires an explicit non-empty approvedPrNumbers allowlist');
   }
 
@@ -278,6 +294,20 @@ export async function runPrTicketReconciliation(
       }) };
     });
 
+    // The scheduled reconciler is itself the policy approver for the one action it
+    // is allowed to take unattended: closing HIGH-confidence close candidates.
+    // Persist the resolved numbers before acting so diagnostics always show the
+    // exact allowlist the run used. HTTP callers cannot enable this flag.
+    const policyApproved = args.autoApplyCloseCandidates
+      ? policyApprovedCloseNumbers(decisions)
+      : [];
+    const resolvedApproved = [...new Set([...approved, ...policyApproved])].sort((a, b) => a - b);
+    if (mode === 'apply') {
+      await db.update(prReconciliationRuns)
+        .set({ approvedPrNumbers: resolvedApproved })
+        .where(scopedToTenant(prReconciliationRuns, args.tenantId, eq(prReconciliationRuns.id, runId)));
+    }
+
     for (let offset = 0; offset < decisions.length; offset += 100) {
       const batch = decisions.slice(offset, offset + 100).map(({ pr, taskId, ticket, decision }) => ({
         runId, tenantId: args.tenantId, repoId: repo.id, prNumber: pr.number, prUrl: pr.url,
@@ -297,7 +327,7 @@ export async function runPrTicketReconciliation(
 
     let applied = 0;
     if (mode === 'apply') {
-      const approvedSet = new Set(approved);
+      const approvedSet = new Set(resolvedApproved);
       for (const item of decisions.filter((d) => approvedSet.has(d.pr.number))) {
         if (item.decision.classification !== 'close_candidate' || item.decision.confidence !== 'high') {
           errorCount++;
@@ -336,7 +366,7 @@ export async function runPrTicketReconciliation(
       }
     }
 
-    const summary: Record<string, number> = { total: decisions.length, applied };
+    const summary: Record<string, number> = { total: decisions.length, applied, policyApproved: policyApproved.length };
     for (const { decision } of decisions) summary[decision.classification] = (summary[decision.classification] ?? 0) + 1;
     const status = errorCount > 0 ? 'completed_with_errors' : 'completed';
     await db.update(prReconciliationRuns).set({ status, summary, errorCount, finishedAt: new Date() })

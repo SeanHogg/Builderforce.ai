@@ -16,8 +16,8 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { PmCard } from '@/components/pm/pmShared';
 import { RoleGate } from '@/components/RoleGate';
+import { WorkspaceCanvas, type WorkspaceCanvasPanel } from '@/components/workspace-canvas/WorkspaceCanvas';
 import { usePermission } from '@/lib/rbac';
 import { DeliveryVerdict } from './DeliveryVerdict';
 import { DaysWindowSelect } from './LensShell';
@@ -75,33 +75,39 @@ export function DeliveryDashboard() {
     if (isDeliveryPanelId(panelParam)) open(panelParam as DeliveryPanelId);
   }, [panelParam, open]);
 
+  const panels: WorkspaceCanvasPanel[] = [
+    {
+      id: 'delivery-verdict', title: t('title'), subtitle: t('subtitle'), icon: '📦',
+      position: { x: 36, y: 36 }, width: 1300, height: 250,
+      content: <DeliveryVerdict days={days} />,
+    },
+    ...DELIVERY_PANEL_IDS.map((id, index) => {
+      const def = DELIVERY_PANELS[id];
+      const column = index % 3;
+      const row = Math.floor(index / 3);
+      return {
+        id: `delivery-${id}`,
+        title: t(def.titleKey),
+        subtitle: t(def.descKey),
+        icon: def.icon,
+        position: { x: 36 + column * 432, y: 314 + row * 330 },
+        width: 400,
+        height: 300,
+        content: <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minHeight: '100%' }}>
+          <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0 }}>{t(def.descKey)}</p>
+          <SummarySlot def={def} days={days} />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'auto' }}>
+            <DrillButton label={t('viewDetails')} onClick={() => open(id)} />
+          </div>
+        </div>,
+      } satisfies WorkspaceCanvasPanel;
+    }),
+  ];
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, alignItems: 'center' }}>
-        <ExportMenu days={days} />
-        <DaysWindowSelect value={days} onChange={setDays} />
-      </div>
-
-      {/* Narrative headline: are we delivering value? — the answer first. */}
-      <DeliveryVerdict days={days} />
-
-      {/* Denser two-up grid so the supporting reports read as one story, not a
-          spaced-out stack of rows. */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: 16, alignItems: 'start' }}>
-        {DELIVERY_PANEL_IDS.map((id) => {
-          const def = DELIVERY_PANELS[id];
-          return (
-            <PmCard
-              key={id}
-              title={`${def.icon} ${t(def.titleKey)}`}
-              action={<DrillButton label={t('viewDetails')} onClick={() => open(id)} />}
-            >
-              <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: '-6px 0 14px' }}>{t(def.descKey)}</p>
-              <SummarySlot def={def} days={days} />
-            </PmCard>
-          );
-        })}
-      </div>
-    </div>
+    <WorkspaceCanvas
+      panels={panels}
+      toolbar={<><ExportMenu days={days} /><DaysWindowSelect value={days} onChange={setDays} /></>}
+    />
   );
 }

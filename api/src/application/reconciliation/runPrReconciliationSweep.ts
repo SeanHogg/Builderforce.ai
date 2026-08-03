@@ -1,4 +1,4 @@
-/** Daily, dry-run-only producer for the dedicated PR/Ticket Reconciler agent. */
+/** Daily producer for the dedicated PR/Ticket Reconciler agent. */
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
@@ -32,6 +32,7 @@ export async function runPrReconciliationSweep(env: Env): Promise<PrReconciliati
       sql`NOT EXISTS (
         SELECT 1 FROM ${prReconciliationRuns} recent
         WHERE recent.repo_id = ${projectRepositories.id}
+          AND recent.mode = 'apply'
           AND recent.started_at >= ${cutoff}
       )`,
     ))
@@ -50,7 +51,8 @@ export async function runPrReconciliationSweep(env: Env): Promise<PrReconciliati
       const result = await runPrTicketReconciliation(env, db, {
         tenantId: repo.tenantId,
         repoId: repo.id,
-        mode: 'dry_run',
+        mode: 'apply',
+        autoApplyCloseCandidates: true,
       });
       completed++;
       prs += result.summary.total ?? 0;
@@ -69,4 +71,3 @@ export async function runPrReconciliationSweep(env: Env): Promise<PrReconciliati
   }
   return { due: repos.length, completed, failed, prs, findings };
 }
-

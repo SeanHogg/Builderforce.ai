@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fetchOpenPullRequests, reconciliationRequesterId } from './prReconciliationService';
+import { fetchOpenPullRequests, policyApprovedCloseNumbers, reconciliationRequesterId } from './prReconciliationService';
 
 const prNode = (number: number, checkName: string, conclusion: string) => ({
   number, title: `Task #${number}: work`, body: '', url: `https://github.com/acme/app/pull/${number}`,
@@ -17,6 +17,16 @@ describe('GitHub PR reconciliation collector', () => {
     expect(reconciliationRequesterId('agentHost:mcp', { kind: 'agent_host', agentHostId: null })).toBeNull();
     expect(reconciliationRequesterId('user-123', undefined)).toBe('user-123');
     expect(reconciliationRequesterId(undefined, undefined)).toBeNull();
+  });
+
+  it('auto-approves only high-confidence close candidates and records them in stable order', () => {
+    const items = [
+      { pr: { number: 9 }, decision: { classification: 'repair', confidence: 'high' } },
+      { pr: { number: 7 }, decision: { classification: 'close_candidate', confidence: 'low' } },
+      { pr: { number: 5 }, decision: { classification: 'close_candidate', confidence: 'high' } },
+      { pr: { number: 2 }, decision: { classification: 'close_candidate', confidence: 'high' } },
+    ];
+    expect(policyApprovedCloseNumbers(items)).toEqual([2, 5]);
   });
 
   it('batches and paginates the complete open-PR inventory with check evidence', async () => {

@@ -116,7 +116,7 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
   {
     key: 'pr-ticket-reconciler',
     cadence: 'daily',
-    description: 'Dry-run reconciliation of open GitHub PRs against BuilderForce tickets, with durable diagnostics.',
+    description: 'Reconcile open GitHub PRs against BuilderForce tickets; automatically close only high-confidence stale PRs under the recorded policy allowlist.',
     run: async ({ env }) => {
       const r = await runPrReconciliationSweep(env);
       return r.due > 0 || r.failed > 0

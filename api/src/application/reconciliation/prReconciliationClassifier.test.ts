@@ -64,13 +64,23 @@ describe('PR/ticket reconciliation classifier', () => {
     expect(classifyPullRequest({ pr: pr(), taskId: 42, ticket, duplicateOpenPrNumbers: [10, 11] }).classification).toBe('human_review');
   });
 
-  it('flags terminal-ticket/open-PR state drift instead of guessing which side is right', () => {
+  it('closes stale PRs whose ticket is currently done', () => {
     const result = classifyPullRequest({
       pr: pr(), taskId: 42,
       ticket: { ...ticket, status: 'done', completedAt: new Date() },
       duplicateOpenPrNumbers: [10],
     });
-    expect(result.reasonCodes).toContain('terminal_ticket_has_open_pr');
-    expect(result.classification).toBe('human_review');
+    expect(result.reasonCodes).toContain('done_ticket_has_stale_open_pr');
+    expect(result).toMatchObject({ classification: 'close_candidate', recommendedAction: 'close', confidence: 'high' });
+  });
+
+  it('does not treat a historical completedAt as terminal after a ticket is reopened', () => {
+    const result = classifyPullRequest({
+      pr: pr({ mergeable: 'CONFLICTING', mergeStateStatus: 'DIRTY' }), taskId: 42,
+      ticket: { ...ticket, status: 'in_review', completedAt: new Date() },
+      duplicateOpenPrNumbers: [10],
+    });
+    expect(result.reasonCodes).toContain('merge_conflict');
+    expect(result.classification).toBe('repair');
   });
 });

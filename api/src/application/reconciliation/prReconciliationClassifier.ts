@@ -128,8 +128,12 @@ export function classifyPullRequest(args: {
   if (abandonedTicket(ticket.status)) {
     return decision('close_candidate', 'close', 'high', 'ticket_abandoned', `ticket_status:${ticket.status}`);
   }
-  if (ticket.completedAt != null || ticket.status.toLowerCase() === 'done') {
-    return decision('human_review', 'investigate', 'high', 'terminal_ticket_has_open_pr');
+  // Current status is authoritative. A DONE ticket cannot retain an open PR: the
+  // delivery lifecycle has already finalized, so that PR is stale cleanup. Do not
+  // use completedAt here—a reopened ticket intentionally retains its historical
+  // completion timestamp and must remain actionable in its current lane.
+  if (ticket.status.toLowerCase() === 'done') {
+    return decision('close_candidate', 'close', 'high', 'done_ticket_has_stale_open_pr');
   }
   if (pr.mergeable === 'CONFLICTING' || pr.mergeStateStatus === 'DIRTY') {
     return decision('repair', 'repair_pr', 'high', 'merge_conflict');
@@ -145,4 +149,3 @@ export function classifyPullRequest(args: {
   if (checkSummary.total === 0) return decision('human_review', 'investigate', 'medium', 'no_check_evidence');
   return decision('ready_for_review', 'review', 'high', 'all_checks_successful');
 }
-
