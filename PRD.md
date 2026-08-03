@@ -1,25 +1,27 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #1535
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document: Dispatch Evaluation Coverage Fix
+
+**Parent**: #1145 (Platform: never_started cohort remediation)  
+**Status**: Draft  
+**Author**: Senior Product Architect
+
+---
 
 ## Problem & Goal
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+**Problem**: 104 tickets in project 11 exhibit an `unrecorded` stall reason—the autonomy dispatch evaluator has never assessed them. These tickets are non-terminal and should have been evaluated during routine sweeps. The gap points to one or more systemic issues: a pagination or batch‑size bug in the evaluation sweep, a cron schedule that misses windows, or a filter that erroneously excludes certain lanes or ticket states. Left unresolved, the coverage gap will silently accumulate more unevaluated tickets, eroding trust in autonomy and biasing decision metrics.
 
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
+**Goal**: Eliminate the evaluation coverage gap so that **all non-terminal tickets** in project 11 (and any affected projects) are reliably evaluated by the dispatch sweep. Specifically, after the fix, the 104 unevaluated tickets will be evaluated within the next scheduled sweep cycle, and no new tickets will fall into an unrecorded state.
 
 ---
 
 ## Target Users / ICP Roles
 
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
+- **Platform Engineering / Dispatch Service Owners**: Responsible for operating and maintaining the dispatch evaluation sweep infrastructure. They need clear root cause and a stable fix.
+- **Dispatch Operators & SREs**: Monitor evaluation health and rely on `stall_reason` for incident response. They require equal coverage across lanes so alerting is not muted.
+- **Data Analysts / Autonomy Performance Teams**: Consume evaluation outcomes for model performance dashboards; incomplete data skews cohort analyses and A/B comparisons.
 
 ---
 
@@ -27,99 +29,83 @@ Users need flexibility in how they provide data and configuration inputs to the 
 
 ### In Scope
 
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
+1. Audit the dispatch evaluation sweep’s code, configuration, and recent execution logs for project 11.
+2. Identify why the 104 specific tickets (and any other undiagnosed cohorts) are never reached by the evaluator.
+   - Examine batch‑query logic, pagination, cursor management, and transaction isolation.
+   - Verify cron schedule and execution overlap boundaries.
+   - Inspect lane/state filters, terminal‑state definitions, and exclusion rules.
+3. Implement a correction that guarantees all non‑terminal tickets (no `terminal_state` flag) are included in **at least one** sweep iteration.
+4. Verify the fix in a staging environment with a replica of the problematic dataset.
+5. Deploy to production and confirm that the 104 tickets are evaluated within **one sweep cycle** post‑deployment, with no new unrecorded tickets emerging.
 
 ### Out of Scope
 
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
+- Manual retroactive marking or backfilling of previous unrecorded periods (the fix will naturally catch them on the next sweep, but no historical record modification before that sweep).
+- Changes to the evaluation algorithm itself (scoring, decision logic) – only the scheduling/discovery layer.
+- Direct modification of ticket data in production databases outside of the standard evaluation write path.
+- Long‑term monitoring dashboard or alerting additions (though adding a simple metric/log is acceptable if it aids verification; a full observability revamp is out of scope).
 
 ---
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+1. **Audit Trail & Reproduction**
+   - The investigation must produce a documented root‑cause explanation and a reproducible test case that demonstrates the gap (using the set of 104 ticket IDs).
+   - Root cause must be traced to a specific code or configuration artifact (pagination offset error, missing join, cron overlap exclusion, etc.).
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+2. **Fix Implementation**
+   - Adjust the evaluation sweep such that **all non‑terminal tickets** are candidates for evaluation during one full sweep cycle.
+   - If pagination is the cause, correct the batch size and cursor logic so no ticket is skipped due to offset windows.
+   - If a filter is too restrictive, broaden it to include the missing lanes/states, or add a secondary catch‑all pass for any ticket with `NULL` or absent `stall_reason`.
+   - If the cron schedule is at fault, align the schedule with the evaluation window so no tickets are missed at boundaries.
 
----
+3. **Idempotency & Overlap Safety**
+   - The fix must not cause duplicate evaluation records for tickets already correctly processed in previous sweeps.
+   - Any re‑evaluation of the 104 tickets must respect existing data (they have no prior evaluation record, so the sweep should treat them as new candidates).
 
-### FR-2 — Guided (Interactive) Mode
-
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
-
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
+4. **Validation Instrument**
+   - Include a monitoring hook (e.g., a counter `unrecorded_tickets_after_sweep`) that is emitted after each sweep to detect any remaining unevaluated non‑terminal tickets. This value must be zero post‑fix.
 
 ---
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+1. **Root Cause Identified**: A documented, peer‑reviewed analysis pinpoints why the 104 tickets were excluded.
+2. **Fix Deployed to Production**: The revised sweep configuration or code is live.
+3. **Zero New Unrecorded Tickets**: After the first full sweep cycle post‑deployment:
+   - All 104 tickets now have a non‑null `stall_reason` and an evaluation record.
+   - A query `SELECT COUNT(*) FROM tickets WHERE project_id = 11 AND stall_reason IS NULL AND NOT terminal_state` returns 0.
+4. **No Regression**: Existing evaluation records for previously covered tickets remain unchanged (MD5 hash of key evaluation columns unchanged for a sampled subset).
+5. **Monitoring Confirmation**: The new `unrecorded_tickets_after_sweep` metric is 0 for at least 3 consecutive sweep cycles.
+6. **Stakeholder Sign‑Off**: Dispatch operators confirm the gap is closed and no anomalous alerts trigger due to missing evaluations.
 
 ---
 
 ## Out of Scope
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+(Already detailed above; reiterated for clarity.)
+
+- Historical backfill of missing records outside the next sweep.
+- Renovation of the overall evaluation framework.
+- Changes to ticket terminal‑state definitions.
+- Dashboard or UI changes beyond the metric addition.
+
+## Requirements
+
+_Owned by the business-analyst — to be authored._
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
