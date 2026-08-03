@@ -73,6 +73,7 @@ export class IncrementalMetricsCollector {
   private sumScores = 0;
   private minScore = Infinity;
   private maxScore = -Infinity;
+  private _placeholderSet: Set<string> = new Set();
 
   constructor(
     private fieldWeights: FieldWeightConfig,
