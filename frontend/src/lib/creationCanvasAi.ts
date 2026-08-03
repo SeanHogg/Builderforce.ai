@@ -27,6 +27,9 @@ type CanvasAiOptions = {
     learn: (answer: string, prompt: string) => Promise<{ ok: boolean; queued?: number }>;
   };
   onTrace?: (event: BrainTraceEvent) => void;
+  /** Awaitable in-app approval. Mutating tenant actions are refused when this is
+   * absent; the runner must never fall back to a browser-native prompt. */
+  confirmAction?: (request: { name: string; args: unknown }) => Promise<boolean>;
   /** Session-owned transcript. The Canvas is the chat, so prior turns must travel with
    * every request just as they do in the standalone Brain surface. */
   conversation?: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
@@ -78,7 +81,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   const messages: ChatCompletionMessage[] = [
     {
       role: 'system',
-      content: `You are Brain operating BuilderForce's unified creation canvas. Use the provided canvas_* function tools to make requested visual changes instead of writing code or merely describing them. Treat imperative requests as instructions to act now: do not ask for optional names or descriptions, and use sensible authored defaults when details are omitted. For requests to organize, tidy, align, evenly space, or stop objects overlapping, call canvas_arrange_objects; it uses measured object bounds and is safer than manually estimating x/y positions with canvas_set_object_layout. Requests to create or add an artifact on this Canvas must use canvas_add_object, even when an MCP tool has a similar resource name. Exception: a PRD belonging to a canonical project is durable project knowledge, not merely a visual artifact. For any request to create, consolidate, synthesize, or explain project PRDs or requirements, first call canvas_read_project_prds to read every ticket-linked PRD and its versions regardless of the current canvas selection. Then call canvas_create_project_prd with the complete synthesis; never use truncated task-card PRD summaries as the source and never use canvas_add_object for a project PRD. For example, "create a workflow" means call canvas_add_object with kind "workflow" and authored workflow fields; do not call builtin_workflows_create or ask a follow-up question. Use MCP tools for a mutation only when the user explicitly asks to create or change a canonical tenant resource outside the Canvas. For model requests, kind "llm" is a conventional language-model blueprint; kind "evermind" is BuilderForce's self-learning Evermind model with teach, train, evaluate, and publish capabilities. If the user says LLM, create kind "llm" unless they explicitly ask for Evermind or a continuously learning/self-updating model. Read each object's mutableFields before updating it. When creating an authored artifact, put the complete result in fields.content or fields.markdown and populate its other type-specific fields; do not create an empty shell. Canvas mutations are proposals the user reviews before they are applied. Never claim a mutation succeeded unless its tool result confirms it. Never emit tool_code, Python, or a simulated tool result in assistant text. Current canvas:\n${options.canvasSnapshot}${memoryBlock ? `\n\n${memoryBlock}` : ''}`,
+      content: `You are Brain operating BuilderForce's unified creation canvas. Use the provided canvas_* function tools to make requested visual changes instead of writing code or merely describing them. Treat imperative requests as instructions to act now: do not ask for optional names or descriptions, and use sensible authored defaults when details are omitted. For requests to organize, tidy, align, evenly space, or stop objects overlapping, call canvas_arrange_objects without objectIds unless the user explicitly identified a subset. Omitting objectIds arranges the entire visible canvas even if the composer scope says selection; the tool uses measured object bounds and is safer than manually estimating x/y positions with canvas_set_object_layout. Requests to create or add an artifact on this Canvas must use canvas_add_object, even when an MCP tool has a similar resource name. Exception: a PRD belonging to a canonical project is durable project knowledge, not merely a visual artifact. For any request to create, consolidate, synthesize, or explain project PRDs or requirements, first call canvas_read_project_prds to read every ticket-linked PRD and its versions regardless of the current canvas selection. Then call canvas_create_project_prd with the complete synthesis; never use truncated task-card PRD summaries as the source and never use canvas_add_object for a project PRD. For example, "create a workflow" means call canvas_add_object with kind "workflow" and authored workflow fields; do not call builtin_workflows_create or ask a follow-up question. Use MCP tools for a mutation only when the user explicitly asks to create or change a canonical tenant resource outside the Canvas. For model requests, kind "llm" is a conventional language-model blueprint; kind "evermind" is BuilderForce's self-learning Evermind model with teach, train, evaluate, and publish capabilities. If the user says LLM, create kind "llm" unless they explicitly ask for Evermind or a continuously learning/self-updating model. Read each object's mutableFields before updating it. When creating an authored artifact, put the complete result in fields.content or fields.markdown and populate its other type-specific fields; do not create an empty shell. Canvas mutations are proposals the user reviews before they are applied. Never claim a mutation succeeded unless its tool result confirms it. Never emit tool_code, Python, or a simulated tool result in assistant text. Current canvas:\n${options.canvasSnapshot}${memoryBlock ? `\n\n${memoryBlock}` : ''}`,
     },
     ...(options.conversation || []).slice(-20).map((message) => ({ ...message, content: message.content.slice(0, 8_000) })),
     { role: 'user', content: options.prompt },
@@ -101,6 +104,8 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
     return answer;
   };
   let finalText = '';
+  let proposedCanvasMutation = false;
+  let lastToolError = '';
   for (let turn = 0; turn < 3; turn += 1) {
     const result = await streamChatCompletion({
       transport,
@@ -122,15 +127,27 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       let outcome: unknown;
       if (!action) {
         outcome = { error: `Unknown tool: ${call.name}` };
-      } else if (!call.name.startsWith('canvas_') && mutates(action, args) && !options.autoApprove && !window.confirm(`Allow Brain to run ${call.name}?`)) {
-        outcome = { error: 'The user declined this tenant mutation.' };
+      } else if (!call.name.startsWith('canvas_') && mutates(action, args) && !options.autoApprove) {
+        const approved = options.confirmAction ? await options.confirmAction({ name: call.name, args }) : false;
+        if (!approved) outcome = { error: options.confirmAction ? 'The user declined this tenant mutation.' : 'This tenant mutation requires in-app approval.' };
+        else {
+          try { outcome = await action.run(args); } catch (error) { outcome = { error: error instanceof Error ? error.message : 'Tool failed' }; }
+        }
       } else {
         try { outcome = await action.run(args); } catch (error) { outcome = { error: error instanceof Error ? error.message : 'Tool failed' }; }
+      }
+      if (outcome && typeof outcome === 'object') {
+        const result = outcome as { proposed?: unknown; error?: unknown };
+        if (result.proposed === true) proposedCanvasMutation = true;
+        if (typeof result.error === 'string' && result.error.trim()) lastToolError = result.error.trim();
       }
       options.onTrace?.({ ts: new Date().toISOString(), category: outcome && typeof outcome === 'object' && 'error' in outcome ? 'error' : 'tool', label: call.name, args, result: outcome, isError: !!(outcome && typeof outcome === 'object' && 'error' in outcome) });
       messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(outcome) });
     }
     finalText = '';
   }
-  return finish(finalText || 'I prepared the available canvas changes for review.');
+  if (finalText.trim()) return finish(finalText);
+  if (proposedCanvasMutation) return finish('I prepared the canvas changes for review.');
+  if (lastToolError) return finish(`I couldn't prepare the requested canvas changes: ${lastToolError}`);
+  return finish("I couldn't prepare any canvas changes from that request.");
 }

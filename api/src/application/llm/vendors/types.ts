@@ -214,7 +214,30 @@ export interface VendorCallParams {
    *  it can load a published `.evermind` model. Undefined for all HTTP vendors
    *  (they reach their backend over the network, not R2). */
   uploads?: import('../evermindRuntime').ArtifactStore;
+  /** Perform this vendor's HTTP call from somewhere OTHER than the Worker — see
+   *  {@link VendorEgress}. Only ever attached to vendors that declare
+   *  {@link VendorModule.requiresLocalEgress}; every other vendor calls `fetch`
+   *  directly, exactly as before. */
+  egress?: VendorEgress;
 }
+
+/**
+ * An alternate origin for a vendor's HTTP call.
+ *
+ * Some providers refuse the Worker itself, not our credentials: Kimi Code's edge
+ * returns an HTML 403 to the Cloudflare Workers egress before the API ever reads the
+ * key — the identical request from an ordinary machine gets a clean JSON answer. No
+ * header can fix that, and impersonating an approved first-party client is off the
+ * table, so the only honest remedy is to make the request from a machine the provider
+ * does not refuse: the tenant's OWN connected runtime, which is the personal
+ * interactive client a Kimi Code subscription is licensed for in the first place.
+ *
+ * The port is deliberately `fetch`-shaped so it drops into
+ * {@link fetchWithVendorTimeout} without the surrounding status ladder, timeout
+ * handling, or error classification knowing anything about it. An implementation
+ * MUST resolve to a normal `Response` (any status) or reject like `fetch` would.
+ */
+export type VendorEgress = (endpoint: string, init: RequestInit, signal: AbortSignal) => Promise<Response>;
 
 export interface VendorUsage {
   prompt_tokens?: number;
@@ -306,6 +329,18 @@ export interface VendorModule {
    * here instead of editing the sanitizer (see jsonSchemaSanitize.ts).
    */
   schemaDialect?: { stripKeywords: readonly string[] };
+  /**
+   * Whether this vendor's upstream REFUSES the Worker's own egress and must therefore
+   * be called from the tenant's connected runtime when one is available — see
+   * {@link VendorEgress}. Default `false`.
+   *
+   * The flag is what stops a tenant's laptop becoming the route for all LLM traffic:
+   * `dispatchInternal` attaches the egress transport ONLY to a module that declares
+   * this, so every other vendor keeps calling `fetch` from the Worker. A declaring
+   * vendor still falls back to direct egress when no runtime is online — that path is
+   * likely to fail, but it is strictly better than refusing to try.
+   */
+  requiresLocalEgress?: boolean;
 }
 
 export type ResponseParser = (raw: unknown) => {
@@ -804,6 +839,11 @@ export async function fetchWithVendorTimeout(
   init: RequestInit,
   timeoutMsArg?: number,
   externalSignal?: AbortSignal,
+  /** Route this call through an alternate origin instead of the Worker's own
+   *  `fetch` — see {@link VendorEgress}. Every other behaviour (deadline, external
+   *  abort, subrequest-cap sentinel, error classification) is identical, which is
+   *  the point of putting the seam HERE: one choke point, no per-vendor variants. */
+  egress?: VendorEgress,
 ): Promise<Response> {
   const timeoutMs = timeoutMsArg && timeoutMsArg > 0 ? timeoutMsArg : DEFAULT_VENDOR_CALL_TIMEOUT_MS;
   const controller = new AbortController();
@@ -818,7 +858,9 @@ export async function fetchWithVendorTimeout(
     else externalSignal.addEventListener('abort', onExternalAbort, { once: true });
   }
   try {
-    return await fetch(endpoint, { ...init, signal: controller.signal });
+    return await (egress
+      ? egress(endpoint, init, controller.signal)
+      : fetch(endpoint, { ...init, signal: controller.signal }));
   } catch (err) {
     if (externalSignal?.aborted) {
       throw new RequestAbortedError(vendorId, model);
@@ -898,11 +940,13 @@ export function forwardCallOpts(params: VendorCallParams): {
   title?: string;
   timeoutMs?: number;
   signal?: AbortSignal;
+  egress?: VendorEgress;
 } {
   return {
     ...(params.title ? { title: params.title } : {}),
     ...(params.timeoutMs ? { timeoutMs: params.timeoutMs } : {}),
     ...(params.signal ? { signal: params.signal } : {}),
+    ...(params.egress ? { egress: params.egress } : {}),
   };
 }
 
@@ -929,6 +973,8 @@ export async function executeVendorPost<T>(args: {
   headers?: Record<string, string>;
   timeoutMs?: number;
   signal?: AbortSignal;
+  /** Alternate origin for this call — see {@link VendorEgress}. */
+  egress?: VendorEgress;
   /** Console log prefix for the auth-failure line, e.g. `vendors` / `imageVendors`. */
   logPrefix: string;
   /** Noun in the "Failing over to next <noun>." auth message (`model` / `vendor`). */
@@ -941,7 +987,7 @@ export async function executeVendorPost<T>(args: {
   onFatal: (vendorId: string, model: string, status: number, errText: string) => never;
 }): Promise<T> {
   const {
-    vendorId, endpoint, apiKey, model, body, headers, timeoutMs, signal,
+    vendorId, endpoint, apiKey, model, body, headers, timeoutMs, signal, egress,
     logPrefix, authFailoverNoun, parseResponse, onEmbeddedError, onFatal,
   } = args;
 
@@ -955,7 +1001,7 @@ export async function executeVendorPost<T>(args: {
       ...(headers ?? {}),
     },
     body: JSON.stringify(body),
-  }, timeoutMs, signal);
+  }, timeoutMs, signal, egress);
 
   if (resp.ok) {
     const raw = await resp.json();
@@ -1020,8 +1066,9 @@ export async function executeChatCompletion(args: {
   parseResponse?: ResponseParser;
   timeoutMs?: number;
   signal?: AbortSignal;
+  egress?: VendorEgress;
 }): Promise<VendorCallResult> {
-  const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs, signal } = args;
+  const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs, signal, egress } = args;
   const parseResponse = args.parseResponse ?? parseOpenAIResponse;
 
   return executeVendorPost<VendorCallResult>({
@@ -1034,6 +1081,7 @@ export async function executeChatCompletion(args: {
     headers: { 'X-Title': title ?? 'Builderforce.ai', ...(headers ?? {}) },
     ...(timeoutMs != null ? { timeoutMs } : {}),
     ...(signal ? { signal } : {}),
+    ...(egress ? { egress } : {}),
     logPrefix: 'vendors',
     authFailoverNoun: 'model',
     parseResponse: (raw): VendorCallResult => {
@@ -1075,8 +1123,9 @@ export async function executeChatCompletionStream(args: {
   title?: string;
   timeoutMs?: number;
   signal?: AbortSignal;
+  egress?: VendorEgress;
 }): Promise<VendorStreamResult> {
-  const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs, signal } = args;
+  const { vendorId, endpoint, apiKey, model, body, headers, title, timeoutMs, signal, egress } = args;
 
   const resp = await fetchWithVendorTimeout(vendorId, model, endpoint, {
     method: 'POST',
@@ -1087,7 +1136,7 @@ export async function executeChatCompletionStream(args: {
       ...(headers ?? {}),
     },
     body: JSON.stringify({ ...body, stream: true }),
-  }, timeoutMs, signal);
+  }, timeoutMs, signal, egress);
 
   if (!resp.ok) {
     const errText = (await resp.text()).slice(0, 400);

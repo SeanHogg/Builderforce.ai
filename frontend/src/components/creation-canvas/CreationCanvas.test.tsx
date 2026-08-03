@@ -21,6 +21,8 @@ vi.mock('next-intl', async (importOriginal) => {
   };
 });
 
+vi.mock('@/components/ConfirmProvider', () => ({ useConfirm: () => vi.fn(async () => true) }));
+
 vi.mock('@xyflow/react', async () => {
   const React = await import('react');
   const inert = () => null;
@@ -137,6 +139,53 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.queryByText('Maturity')).not.toBeInTheDocument();
   });
 
+  it('renders agent model, instructions, tools, and autonomy changes live', () => {
+    render(<CreationCanvas sessionId="agent-settings-test" persistence="local" />);
+    fireEvent.click(screen.getAllByText('Campaign Strategist')[0]!);
+
+    fireEvent.change(screen.getByLabelText('Model'), { target: { value: 'Evermind' } });
+    fireEvent.change(screen.getByLabelText('Instructions'), { target: { value: 'Investigate customer friction.' } });
+    fireEvent.change(screen.getByLabelText('Autonomy'), { target: { value: 'high' } });
+    fireEvent.click(screen.getByRole('button', { name: '+ Add tool' }));
+
+    expect(screen.getAllByText('Evermind').length).toBeGreaterThan(1);
+    expect(screen.getAllByText('Investigate customer friction.').length).toBeGreaterThan(1);
+    expect(screen.getByText('High autonomy')).toBeInTheDocument();
+    expect(screen.getByText('Research')).toBeInTheDocument();
+  });
+
+  it('renders workflow target and approval changes live', () => {
+    render(<CreationCanvas sessionId="workflow-settings-test" persistence="local" />);
+    fireEvent.click(screen.getByText('Fall campaign workflow'));
+
+    fireEvent.change(screen.getByLabelText('Execution target'), { target: { value: 'campaign-strategist' } });
+    fireEvent.change(screen.getByLabelText('Approval mode'), { target: { value: 'autonomous' } });
+
+    expect(screen.getAllByText('Campaign Strategist').length).toBeGreaterThan(1);
+    expect(screen.getAllByText('Fully autonomous').length).toBeGreaterThan(1);
+  });
+
+  it('renders dashboard range and refresh changes live', () => {
+    render(<CreationCanvas sessionId="dashboard-settings-test" persistence="local" />);
+    fireEvent.click(screen.getByText('Campaign forecast'));
+
+    fireEvent.change(screen.getByLabelText('Date range'), { target: { value: 'qtd' } });
+    expect(screen.getAllByText('Quarter to date').length).toBeGreaterThan(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh live data' }));
+    expect(screen.getByText('Refreshed')).toBeInTheDocument();
+  });
+
+  it('renders mockup delivery selections and uses explicit unassignment', () => {
+    render(<CreationCanvas sessionId="mockup-settings-test" persistence="local" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Mockup' }));
+
+    fireEvent.change(screen.getByLabelText('Delivery project'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Assign agent'), { target: { value: 'web-analyst' } });
+
+    expect(screen.getByText('Project: No project')).toBeInTheDocument();
+    expect(screen.getByText('Agent: Web Analyst')).toBeInTheDocument();
+  });
+
   it('shows task ownership, priority, PRD context, and completion criteria on the widget', () => {
     render(<CreationNode
       id="task-node" type="creation" selected={false} dragging={false} zIndex={0} selectable deletable draggable isConnectable
@@ -148,6 +197,24 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByText('high')).toBeInTheDocument();
     expect(screen.getByText('Task widget parity')).toBeInTheDocument();
     expect(screen.getByText('Owner, state, and requirements are visible.')).toBeInTheDocument();
+  });
+
+  it('renders staff and task inspector edits live on their widgets', () => {
+    render(<CreationCanvas sessionId="people-work-settings-test" persistence="local" />);
+    fireEvent.click(screen.getByText('Sarah'));
+    fireEvent.change(screen.getByDisplayValue('Marketing'), { target: { value: 'Product lead' } });
+    fireEvent.change(screen.getByLabelText('Current focus'), { target: { value: 'Validate the launch scope.' } });
+    expect(screen.getByText('Product lead')).toBeInTheDocument();
+    expect(screen.getAllByText('Validate the launch scope.').length).toBeGreaterThan(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Task' }));
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'blocked' } });
+    fireEvent.change(screen.getByLabelText('Priority'), { target: { value: 'urgent' } });
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Resolve the release dependency.' } });
+    fireEvent.change(screen.getByLabelText('Acceptance criteria'), { target: { value: 'Dependency is closed.' } });
+    expect(screen.getByText('urgent')).toBeInTheDocument();
+    expect(screen.getAllByText('Resolve the release dependency.').length).toBeGreaterThan(1);
+    expect(screen.getAllByText('Dependency is closed.').length).toBeGreaterThan(1);
   });
 
   it('gives task widgets actionable status, agent, and PRD details', () => {
@@ -244,14 +311,11 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByDisplayValue('Imported dataset.csv')).toBeInTheDocument();
   });
 
-  it('makes Add useful when the object palette is already open', async () => {
+  it('uses the open object palette without duplicating Add in the header', () => {
     render(<CreationCanvas sessionId="palette-add-test" persistence="local" />);
 
-    const add = screen.getByRole('button', { name: '＋ Add' });
-    expect(add).toHaveAttribute('aria-expanded', 'true');
-    fireEvent.click(add);
-
-    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Search everything…' })).toHaveFocus());
+    expect(screen.getByText('Add to canvas')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '＋ Add' })).not.toBeInTheDocument();
   });
 
   it('collapses palette sections, reveals search matches, and retains the state', async () => {
@@ -307,8 +371,9 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     fireEvent.click(screen.getByRole('button', { name: 'Website' }));
     fireEvent.change(screen.getByLabelText('Headline'), { target: { value: 'Build the future together' } });
     fireEvent.change(screen.getByLabelText('Call to action'), { target: { value: 'Start building' } });
+    fireEvent.change(screen.getByLabelText('Accent color'), { target: { value: '#d946ef' } });
     expect(screen.getByText('Build the future together')).toBeInTheDocument();
-    expect(screen.getByText('Start building')).toBeInTheDocument();
+    expect(screen.getByText('Start building')).toHaveStyle({ background: '#d946ef' });
   });
 
   it('resizes website viewport presets and renders supporting copy as Markdown', () => {
@@ -401,6 +466,22 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByText('Reusable frame saved to your template library')).toBeInTheDocument();
     expect(screen.getByText('Your reusable frames')).toBeInTheDocument();
     expect(screen.getByText('Private custom frame')).toBeInTheDocument();
+  });
+
+  it('renders frame colors and drawing stroke settings live', () => {
+    render(<CreationCanvas sessionId="spatial-settings-test" persistence="local" />);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Frame' }).find((button) => button.getAttribute('draggable') === 'true')!);
+    fireEvent.change(screen.getByLabelText('Purpose'), { target: { value: 'Architecture review' } });
+    fireEvent.change(screen.getByLabelText('Fill color'), { target: { value: '#123456' } });
+    fireEvent.change(screen.getByLabelText('Border color'), { target: { value: '#abcdef' } });
+    const purpose = screen.getByText('Architecture review');
+    expect(purpose.closest('article')).toHaveStyle({ background: '#123456', borderColor: '#abcdef' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Drawing' }));
+    fireEvent.change(screen.getByLabelText('Stroke color'), { target: { value: '#ff0000' } });
+    fireEvent.change(screen.getByLabelText('Stroke width'), { target: { value: '9' } });
+    expect(screen.getByText('9 px')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Sketch' })).toHaveStyle({ color: '#ff0000' });
   });
 
   it('keeps the session header focused and moves object commands into contextual controls', () => {

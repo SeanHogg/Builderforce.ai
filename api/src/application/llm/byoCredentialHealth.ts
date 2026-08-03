@@ -38,6 +38,7 @@ import {
   type LlmProxyService,
 } from './LlmProxyService';
 import { byoModelsFor } from './byoModelRouting';
+import { buildHostEgress } from './hostEgress';
 import { CASCADE_STATUSES, type UpstreamDiagnostic } from './vendors/types';
 import {
   connectionModelRef,
@@ -338,12 +339,17 @@ export async function probeByoProvider(
   const model = probeModelFor(provider, resolved);
   if (!model) return { provider, ok: false, status: 'no_test_model', checkedAt };
 
+  // The probe must ride the SAME egress a real completion would, or it becomes a test
+  // of a path nobody uses: Kimi Code answers the Worker with an edge 403 and the
+  // tenant's own runtime with a real reply, so a probe that skipped local egress would
+  // paint a working connection red on every sweep.
   const service = llmProxyForPlan(env, 'free', false, {
     disablePaidOverflow: true,
     anthropicOAuthToken: resolved.anthropicOAuthToken,
     openaiCodexAuth: resolved.openaiCodexAuth,
     xaiOAuthToken: resolved.xaiOAuthToken,
     tenantVendorKeys: resolved.vendorKeys,
+    hostEgress: await buildHostEgress(env, tenantId),
     byoVendorPriority: resolved.vendorPriority,
   });
   const outcome = await dispatchProbe(service, model, (vendor, status, detail) =>

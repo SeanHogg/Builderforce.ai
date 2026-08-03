@@ -135,18 +135,35 @@ function ProjectBody({ data }: { data: CreationNodeData }) {
   </div>;
 }
 
+function optionLabel(value: unknown, labels: Record<string, string>, fallback: string): string {
+  return typeof value === 'string' && labels[value] ? labels[value] : fallback;
+}
+
+function AgentBody({ data }: { data: CreationNodeData }) {
+  const tools = Array.isArray(data.tools) ? data.tools.map(String) : ['Audience Analyzer', 'Copy Optimizer'];
+  const autonomy = optionLabel(data.autonomy, { low: 'Low autonomy', medium: 'Medium autonomy', high: 'High autonomy' }, 'Medium autonomy');
+  return <>
+    <div className={styles.personRow}><span className={styles.presence} /><b>{data.status || 'Online'}</b><span>{data.model || 'gpt-4o'}</span></div>
+    <p>{textValue(data.instructions, data.subtitle || '')}</p>
+    <div className={styles.pills}>{tools.map((tool) => <span key={tool}>{tool}</span>)}<span>{autonomy}</span></div>
+  </>;
+}
+
 function WorkflowBody({ data }: { data: CreationNodeData }) {
   const authoredSteps = Array.isArray(data.steps) ? data.steps.slice(0, 12).map((step, index) => asRecord(step, { title: typeof step === 'string' ? step : `Step ${index + 1}` })) : [];
   const steps: Record<string, unknown>[] = authoredSteps.length ? authoredSteps : ['Audience', 'Create campaign', 'Approve', 'Publish'].map((title) => ({ title }));
+  const target = optionLabel(data.runTarget, { builderforce: 'BuilderForce.AI', 'campaign-strategist': 'Campaign Strategist' }, 'BuilderForce.AI');
+  const approval = optionLabel(data.approvalMode, { required: 'Approval required', autonomous: 'Fully autonomous' }, 'Approval required');
   return (
-    <div className={styles.workflowSteps}>
-      {steps.map((step, index) => (
-        <div className={styles.workflowStep} key={`${String(step.title || 'Step')}-${index}`}>
-          <span className={index === 0 ? styles.doneDot : index === 1 ? styles.liveDot : styles.idleDot} />
-          <strong>{String(step.title || step.name || `Step ${index + 1}`)}</strong>
-          <small>{String(step.status || (data.status === 'Running' && index === 1 ? 'Running…' : index === 0 ? 'Defined' : index === 1 ? 'In progress' : 'Pending'))}</small>
-        </div>
-      ))}
+    <div className={styles.configurableBody}>
+      <div className={styles.widgetSettings}><span><small>Execution target</small><b>{target}</b></span><span><small>Approval mode</small><b>{approval}</b></span></div>
+      <div className={styles.workflowSteps}>{steps.map((step, index) => (
+          <div className={styles.workflowStep} key={`${String(step.title || 'Step')}-${index}`}>
+            <span className={index === 0 ? styles.doneDot : index === 1 ? styles.liveDot : styles.idleDot} />
+            <strong>{String(step.title || step.name || `Step ${index + 1}`)}</strong>
+            <small>{String(step.status || (data.status === 'Running' && index === 1 ? 'Running…' : index === 0 ? 'Defined' : index === 1 ? 'In progress' : 'Pending'))}</small>
+          </div>
+        ))}</div>
     </div>
   );
 }
@@ -173,8 +190,10 @@ function DashboardBody({ data }: { data: CreationNodeData }) {
   const labels = Array.isArray(data.chartLabels) ? data.chartLabels.map(String).slice(0, 6) : [];
   const values = Array.isArray(data.chartValues) ? data.chartValues.map(Number).slice(0, 6) : [];
   const max = Math.max(1, ...values.filter(Number.isFinite));
+  const dateRange = optionLabel(data.dateRange, { '30d': 'Last 30 days', '7d': 'Last 7 days', qtd: 'Quarter to date' }, 'Last 30 days');
   return (
     <>
+      {data.kind === 'dashboard' && <div className={styles.widgetContext}><span><small>Date range</small><b>{dateRange}</b></span>{typeof data.fetchedAt === 'string' && <span><small>Refreshed</small><b>{new Date(data.fetchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</b></span>}</div>}
       <div className={styles.kpis}>{(Array.isArray(data.kpis) && data.kpis.length ? data.kpis.slice(0, 6) : [{ label: 'Reach', value: '212K', trend: '↑ 18.4%' }, { label: 'CTR', value: '3.6%', trend: '↑ 0.6pp' }, { label: 'Conversion', value: '2.1%', trend: '↑ 0.3pp' }]).map((raw, index) => { const item = asRecord(raw, { label: `Metric ${index + 1}`, value: raw }); return <div key={`${String(item.label)}-${index}`}><small>{String(item.label || `Metric ${index + 1}`)}</small><strong>{String(item.value ?? '—')}</strong><em>{String(item.trend || '')}</em></div>; })}</div>
       <div className={styles.charts}>
         <div><small>{labels.length ? 'Imported data' : 'Funnel'}</small>{labels.length ? <div style={{ display: 'grid', gap: 5, marginTop: 7 }}>{labels.map((label, index) => <div key={`${label}-${index}`} style={{ display: 'grid', gridTemplateColumns: '70px 1fr 38px', alignItems: 'center', gap: 5, fontSize: 9 }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span><i style={{ display: 'block', height: 7, borderRadius: 5, background: '#08b59d', width: `${Math.max(4, (values[index] || 0) / max * 100)}%` }} /><b>{Number.isFinite(values[index]) ? values[index] : 0}</b></div>)}</div> : <div className={styles.funnel}><i /><i /><i /><i /></div>}</div>
@@ -182,6 +201,16 @@ function DashboardBody({ data }: { data: CreationNodeData }) {
       </div>
     </>
   );
+}
+
+function MockupBody({ data }: { data: CreationNodeData }) {
+  const project = textValue(data.deliveryProjectName, 'BuilderForce launch');
+  const agent = textValue(data.mockupAgentName, 'Campaign Strategist');
+  return <>
+    <div className={styles.mockupGrid}><i /><i /><i /></div>
+    <p>{data.subtitle || 'High-fidelity interactive concept ready for review.'}</p>
+    <div className={styles.pills}><span>{data.status || 'Draft'}</span><span>Project: {project}</span><span>Agent: {agent}</span></div>
+  </>;
 }
 
 function DataGridBody({ data }: { data: CreationNodeData }) {
@@ -251,9 +280,14 @@ function DrawingBody({ data }: { data: CreationNodeData }) {
     ? data.points.filter((point): point is { x: number; y: number } => !!point && typeof point === 'object' && typeof (point as { x?: unknown }).x === 'number' && typeof (point as { y?: unknown }).y === 'number')
     : [];
   const path = points.map((point, index) => `${index ? 'L' : 'M'} ${point.x} ${point.y}`).join(' ');
-  return <svg className={styles.drawingSurface} viewBox={`0 0 ${Number(data.drawingWidth) || 240} ${Number(data.drawingHeight) || 120}`} role="img" aria-label={data.title} preserveAspectRatio="none">
-    {path ? <path d={path} fill="none" stroke={String(data.stroke || '#5b5ce2')} strokeWidth={Number(data.strokeWidth) || 3} strokeLinecap="round" strokeLinejoin="round" /> : <text x="12" y="28">Select Draw, then sketch on the canvas</text>}
-  </svg>;
+  const stroke = String(data.stroke || '#5b5ce2');
+  const strokeWidth = Number(data.strokeWidth) || 3;
+  return <div className={styles.drawingBody}>
+    <div className={styles.widgetContext}><span><small>Stroke</small><b><i className={styles.strokeSwatch} style={{ background: stroke }} />{strokeWidth} px</b></span></div>
+    <svg className={styles.drawingSurface} style={{ color: stroke }} viewBox={`0 0 ${Number(data.drawingWidth) || 240} ${Number(data.drawingHeight) || 120}`} role="img" aria-label={data.title} preserveAspectRatio="none">
+      {path ? <path d={path} fill="none" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" /> : <text x="12" y="28" fill="currentColor">Select Draw, then sketch on the canvas</text>}
+    </svg>
+  </div>;
 }
 
 type CreationNodeProps = NodeProps<CreationFlowNode> & {
@@ -290,7 +324,7 @@ export function CreationNode({ id, data, selected, width, height, canRun = true,
         {(data.kind === 'website' || data.kind === 'prototype') && <WebsiteBody data={data} />}
         {(data.kind === 'dashboard' || data.kind === 'chart' || data.kind === 'report') && <DashboardBody data={data} />}
         {data.kind === 'evaluation' && <EvaluationBody data={data} />}
-        {data.kind === 'agent' && <><div className={styles.personRow}><span className={styles.presence} /><b>{data.status || 'Online'}</b><span>{data.model || 'gpt-4o'}</span></div><p>{data.subtitle}</p><div className={styles.pills}><span>Audience Analyzer</span><span>Copy Optimizer</span><span>Autonomy: Medium</span></div></>}
+        {data.kind === 'agent' && <AgentBody data={data} />}
         {data.kind === 'staff' && <><div className={styles.personRow}><span className={styles.avatar} style={{ background: data.accent }}>{data.title.slice(0, 1)}</span><b>{data.role}</b><span className={styles.presence} /></div><small>Current focus</small><p>{data.focus}</p></>}
         {data.kind === 'chat' && <div className={`${styles.chatHistory} nowheel nodrag`} role="log" aria-label="Brain chat history" tabIndex={0}>
           <BrainTimeline messages={chatMessages} trace={chatTrace} streamingText="" isRunning={false} assistantName="Brain" labels={{ you: 'You', assistant: 'Brain' }} />
@@ -302,7 +336,7 @@ export function CreationNode({ id, data, selected, width, height, canRun = true,
         {data.kind === 'project' && <ProjectBody data={data} />}
         {data.kind === 'roadmap' && <div className={styles.roadmap}>{(Array.isArray(data.items) && data.items.length ? data.items.slice(0, 12) : [{ title: 'Validate narrative', phase: 'Now' }, { title: 'Executive review', phase: 'Next' }, { title: 'Measure adoption', phase: 'Later' }]).map((raw, index) => { const item = asRecord(raw, { title: raw, phase: index < 2 ? 'Now' : 'Next' }); return <div key={`${String(item.title)}-${index}`}><b>{String(item.phase || item.status || `Phase ${index + 1}`)}</b><span>{String(item.title || item.name || `Item ${index + 1}`)}</span>{item.description ? <span>{String(item.description)}</span> : null}</div>; })}</div>}
         {data.kind === 'task' && <TaskBody data={data} />}
-        {data.kind === 'mockup' && <><div className={styles.mockupGrid}><i /><i /><i /></div><p>{data.subtitle || 'High-fidelity interactive concept ready for review.'}</p><div className={styles.pills}><span>{data.status || 'Draft'}</span><span>Desktop + mobile</span></div></>}
+        {data.kind === 'mockup' && <MockupBody data={data} />}
         {data.kind === 'mockupSet' && <><div className={styles.mockupGrid}><i /><i /><i /></div><p>{Array.isArray(data.items) && data.items.length ? `${data.items.length} linked concepts` : 'A reviewable collection of feature concepts. Ask Brain to expand every item.'}</p><div className={styles.pills}><span>Expandable</span><span>Citations retained</span></div></>}
         {data.kind === 'featureSummary' && <div className={styles.featureGrid}>{(Array.isArray(data.items) && data.items.length ? data.items.map((item) => typeof item === 'string' ? item : String((item as Record<string, unknown>)?.title || (item as Record<string, unknown>)?.name || 'Feature')).slice(0, 20) : ['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration']).map((feature, index) => <span key={`${feature}-${index}`}><b>{index + 1}</b>{feature}</span>)}</div>}
         {data.kind === 'evermind' && <EvermindBody data={data} />}

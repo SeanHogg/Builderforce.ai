@@ -87,13 +87,13 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
 const MUTABLE_FIELDS = {
   workflow: ['content', 'steps', 'approvalMode', 'runTarget'],
   website: ['content', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteAccent', 'viewport', 'pages'],
-  chat: ['content', 'aiResponse', 'messages'],
+  chat: ['content', 'aiResponse', 'messages', 'trace'],
   dataset: ['content', 'columns', 'rows', 'sampleRows', 'rowCount'],
   table: ['content', 'columns', 'rows'],
   spreadsheet: ['content', 'columns', 'rows', 'formulas'],
   chart: ['content', 'chartType', 'chartLabels', 'chartValues', 'sources'],
   kpi: ['content', 'value', 'target', 'unit', 'trend', 'sources'],
-  dashboard: ['content', 'kpis', 'chartLabels', 'chartValues', 'sources', 'fetchedAt'],
+  dashboard: ['content', 'kpis', 'chartLabels', 'chartValues', 'sources', 'fetchedAt', 'dateRange'],
   report: ['content', 'markdown', 'chartLabels', 'chartValues', 'sources'],
   evaluation: ['content', 'verdict', 'gaps', 'recommendations', 'sources'],
   projectComparison: ['content', 'projects', 'sources', 'fetchedAt'],
@@ -112,7 +112,7 @@ const MUTABLE_FIELDS = {
   task: ['content', 'role', 'assignee', 'agentName', 'agentRef', 'priority', 'acceptanceCriteria', 'taskKey', 'prdTitle', 'prdStatus', 'prdSummary', 'prdCount'],
   prd: ['content', 'markdown', 'requirements', 'userStories'],
   release: ['content', 'items', 'milestones', 'releaseDate'],
-  mockup: ['content', 'items', 'viewport', 'sources'],
+  mockup: ['content', 'items', 'viewport', 'sources', 'deliveryProjectRef', 'deliveryProjectName', 'mockupAgentRef', 'mockupAgentName'],
   mockupSet: ['content', 'items', 'sources'],
   featureSummary: ['content', 'items', 'sources'],
   staff: ['content', 'role', 'focus', 'accent'],
@@ -174,7 +174,7 @@ export function sanitizeCreationObjectPatch(kind: CreationObjectKind, value: unk
  */
 const CONTEXT_FIELDS = [
   'kind', 'title', 'subtitle', 'status', 'resourceId', 'model', 'role', 'focus',
-  'fetchedAt', 'projectLens', 'columns', 'rowCount', 'sampleRows', 'chartLabels', 'chartValues',
+  'fetchedAt', 'dateRange', 'projectLens', 'columns', 'rowCount', 'sampleRows', 'chartLabels', 'chartValues',
   'projects', 'sources', 'items', 'summary', 'participants', 'evermindVersion',
   'contributions', 'inferenceEnabled', 'teacherModel', 'viewport', 'content', 'markdown',
   'steps', 'websiteHeadline', 'websiteBody', 'websiteCta', 'pages', 'kpis', 'verdict',
@@ -182,6 +182,7 @@ const CONTEXT_FIELDS = [
   'instructions', 'parameters', 'assignee', 'agentName', 'agentRef', 'priority', 'acceptanceCriteria', 'taskKey',
   'prdTitle', 'prdStatus', 'prdSummary', 'prdCount', 'requirements',
   'userStories', 'responsibilities', 'tools', 'autonomy', 'transcript', 'stages',
+  'approvalMode', 'runTarget', 'deliveryProjectRef', 'deliveryProjectName', 'mockupAgentRef', 'mockupAgentName',
 ] as const;
 const SENSITIVE_CONTEXT_KEY = /(?:secret|token|password|credential|authorization|api.?key|cookie)/i;
 

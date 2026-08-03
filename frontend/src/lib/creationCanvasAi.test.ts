@@ -73,25 +73,56 @@ describe('runCreationCanvasAi', () => {
     });
 
     expect(run).toHaveBeenCalledTimes(3);
-    expect(answer).toBe('I prepared the available canvas changes for review.');
+    expect(answer).toBe('I prepared the canvas changes for review.');
+  });
+
+  it('reports a rejected layout operation instead of claiming that changes exist', async () => {
+    const run = vi.fn(() => ({ error: 'At least two unlocked objects are required to arrange the canvas' }));
+    mocks.streamChatCompletion.mockResolvedValue({
+      text: '',
+      toolCalls: [{ id: 'call-layout', name: 'canvas_arrange_objects', args: '{}' }],
+    });
+
+    const answer = await runCreationCanvasAi({
+      prompt: 'fix the layout', canvasSnapshot: '{"scope":"selection","objects":[{"id":"brain"}]}', persistence: 'local',
+      canvasActions: [{ name: 'canvas_arrange_objects', description: 'Arrange', parameters: { type: 'object' }, mutates: true, run }],
+    });
+
+    expect(answer).toBe("I couldn't prepare the requested canvas changes: At least two unlocked objects are required to arrange the canvas");
   });
 
   it('uses canonical Brain auto-approve for mutating tenant actions', async () => {
     const run = vi.fn(() => ({ ok: true }));
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const confirmAction = vi.fn(async () => false);
     mocks.streamChatCompletion
       .mockResolvedValueOnce({ text: '', toolCalls: [{ id: 'call-tenant', name: 'tenant_update', args: '{"enabled":true}' }] })
       .mockResolvedValueOnce({ text: 'Updated.', toolCalls: [] });
 
     const answer = await runCreationCanvasAi({
       prompt: 'update it', canvasSnapshot: '{"objects":[]}', persistence: 'local', autoApprove: true,
+      confirmAction,
       canvasActions: [{ name: 'tenant_update', description: 'Update tenant state', parameters: { type: 'object' }, mutates: true, run }],
     });
 
     expect(run).toHaveBeenCalledWith({ enabled: true });
-    expect(confirm).not.toHaveBeenCalled();
+    expect(confirmAction).not.toHaveBeenCalled();
     expect(answer).toBe('Updated.');
-    confirm.mockRestore();
+  });
+
+  it('uses the in-app approval callback and never a browser prompt', async () => {
+    const run = vi.fn(() => ({ ok: true }));
+    const confirmAction = vi.fn(async () => true);
+    mocks.streamChatCompletion
+      .mockResolvedValueOnce({ text: '', toolCalls: [{ id: 'call-approved', name: 'tenant_update', args: '{"enabled":true}' }] })
+      .mockResolvedValueOnce({ text: 'Approved and updated.', toolCalls: [] });
+
+    await runCreationCanvasAi({
+      prompt: 'update it', canvasSnapshot: '{"objects":[]}', persistence: 'local', confirmAction,
+      canvasActions: [{ name: 'tenant_update', description: 'Update tenant state', parameters: { type: 'object' }, mutates: true, run }],
+    });
+
+    expect(confirmAction).toHaveBeenCalledWith({ name: 'tenant_update', args: { enabled: true } });
+    expect(run).toHaveBeenCalledOnce();
   });
 
   it('grounds a project canvas turn with Evermind and reports recall and learning steps', async () => {

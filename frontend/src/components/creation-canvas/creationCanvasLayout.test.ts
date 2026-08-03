@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CreationFlowNode } from './CreationNode';
-import { arrangeCanvasNodes, canvasNodeDimensions } from './creationCanvasLayout';
+import { arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions } from './creationCanvasLayout';
 
 function node(id: string, x: number, y: number, width: number, height: number): CreationFlowNode {
   return { id, type: 'creation', position: { x, y }, measured: { width, height }, data: { kind: 'task', title: id } };
@@ -24,5 +24,14 @@ describe('creation canvas layout', () => {
     expect(positions.get('b')).toEqual({ x: 440, y: 50 });
     expect(positions.get('c')).toEqual({ x: 100, y: 490 });
     expect(positions.get('d')).toEqual({ x: 440, y: 490 });
+  });
+
+  it('targets the whole visible canvas when no explicit ids were requested', () => {
+    const all = [node('brain', 0, 0, 280, 300), node('task-1', 20, 20, 300, 400), node('task-2', 30, 30, 300, 200)];
+    const selectedScope = [all[0]!];
+
+    expect(selectedScope).toHaveLength(1);
+    expect(canvasArrangementTargets(all).map((item) => item.id)).toEqual(['brain', 'task-1', 'task-2']);
+    expect(canvasArrangementTargets(all, new Set(['task-1', 'task-2'])).map((item) => item.id)).toEqual(['task-1', 'task-2']);
   });
 });

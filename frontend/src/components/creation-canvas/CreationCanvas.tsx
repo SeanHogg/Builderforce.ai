@@ -52,8 +52,9 @@ import { useVoiceStudio } from '@/lib/voiceStudio';
 import { CopyButton } from '@/components/CopyButton';
 import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
 import { buildCreationCanvasDiagnosticsReport } from '@/lib/creationCanvasDiagnostics';
-import { arrangeCanvasNodes, canvasNodeDimensions, type CanvasArrangement } from './creationCanvasLayout';
+import { arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions, type CanvasArrangement } from './creationCanvasLayout';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
@@ -215,6 +216,7 @@ function flowFromSnapshotGraph(graph: { objects: Array<{ id: string; kind: strin
 
 function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialPresent = false }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialPresent?: boolean }) {
   const t = useTranslations('creationCanvas');
+  const confirm = useConfirm();
   const storageKey = creationStorageKey(sessionId);
   const [nodes, setNodes, onNodesChange] = useNodesState<CreationFlowNode>(persistence === 'local' ? INITIAL_NODES : []);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(persistence === 'local' ? INITIAL_EDGES : []);
@@ -664,7 +666,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   useEffect(() => {
     const messages = timeline.map((message) => ({ role: message.messageRole, content: message.body, createdAt: message.createdAt }));
-    setNodes((current) => current.map((node) => node.data.kind === 'chat' ? { ...node, data: { ...node.data, messages, trace: brainTrace, aiResponse: [...timeline].reverse().find((message) => message.messageRole === 'assistant')?.body || node.data.aiResponse } } : node));
+    setNodes((current) => current.map((node) => node.data.kind === 'chat' ? { ...node, data: { ...node.data, messages, ...(brainTrace.length ? { trace: brainTrace } : {}), aiResponse: [...timeline].reverse().find((message) => message.messageRole === 'assistant')?.body || node.data.aiResponse } } : node));
   }, [brainTrace, setNodes, timeline]);
 
   useEffect(() => {
@@ -1123,8 +1125,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const deliverMockup = useCallback(() => {
     if (!selectedNode || (selectedNode.data.kind !== 'mockup' && selectedNode.data.kind !== 'mockupSet')) return;
     if (persistence === 'local') { requireAccount('deliver', 'Create an account to deliver this mockup', 'Delivery creates a durable project task, assigns an authorized Agent, and keeps execution status connected to this canvas.'); return; }
-    const project = nodes.find((node) => node.data.kind === 'project');
-    const agent = nodes.find((node) => node.data.kind === 'agent');
+    const configuredProjectRef = typeof selectedNode.data.deliveryProjectRef === 'string' ? selectedNode.data.deliveryProjectRef : null;
+    const configuredAgentRef = typeof selectedNode.data.mockupAgentRef === 'string' ? selectedNode.data.mockupAgentRef : null;
+    const project = configuredProjectRef == null
+      ? nodes.find((node) => node.data.kind === 'project')
+      : nodes.find((node) => node.data.kind === 'project' && (node.data.resourceId || node.id) === configuredProjectRef);
+    const agent = configuredAgentRef == null
+      ? nodes.find((node) => node.data.kind === 'agent')
+      : nodes.find((node) => node.data.kind === 'agent' && (node.data.resourceId || node.id) === configuredAgentRef);
     const projectId = project?.data.resourceId?.startsWith('project:') ? Number(project.data.resourceId.slice('project:'.length)) : NaN;
     const addTaskNode = (resourceId: string, status: string, detail: Partial<CreationNodeData> = {}) => {
       const taskId = crypto.randomUUID();
@@ -1384,14 +1392,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     },
   }, {
     name: 'canvas_arrange_objects',
-    description: 'Automatically position multiple canvas objects in a non-overlapping grid, row, or column using their actual rendered sizes. Use this for requests to organize, align, evenly space, tidy, or remove overlaps.',
-    parameters: { type: 'object', additionalProperties: false, properties: { objectIds: { type: 'array', items: { type: 'string' }, description: 'Objects to arrange. Omit to arrange every object in the active canvas scope.' }, arrangement: { type: 'string', enum: ['grid', 'row', 'column'] }, gap: { type: 'number', description: 'Space between object bounds in canvas pixels.' }, columns: { type: 'number', description: 'Optional grid column count.' } } },
+    description: 'Automatically position multiple canvas objects in a non-overlapping grid, row, or column using their actual rendered sizes. Use this for requests to organize, align, evenly space, tidy, or remove overlaps. When objectIds is omitted, this intentionally arranges the whole visible canvas regardless of the prompt selection scope.',
+    parameters: { type: 'object', additionalProperties: false, properties: { objectIds: { type: 'array', items: { type: 'string' }, description: 'Specific objects to arrange. Omit to arrange every visible unlocked object on the canvas, even when the composer is scoped to a single selection.' }, arrangement: { type: 'string', enum: ['grid', 'row', 'column'] }, gap: { type: 'number', description: 'Space between object bounds in canvas pixels.' }, columns: { type: 'number', description: 'Optional grid column count.' } } },
     mutates: true,
     run: (raw: unknown) => {
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       const args = raw as { objectIds?: unknown; arrangement?: CanvasArrangement; gap?: number; columns?: number };
       const requestedIds = Array.isArray(args.objectIds) ? new Set(args.objectIds.filter((id): id is string => typeof id === 'string')) : null;
-      const targets = scopedNodes.filter((node) => (!requestedIds || requestedIds.has(node.id)) && node.data.placementLocked !== true);
+      const targets = canvasArrangementTargets(nodes, requestedIds);
       if (targets.length < 2) return { error: 'At least two unlocked objects are required to arrange the canvas' };
       const positions = arrangeCanvasNodes(targets, args.arrangement, Number(args.gap ?? 48), Number(args.columns));
       let proposed = 0;
@@ -1497,6 +1505,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (process.env.NODE_ENV !== 'test') {
       proposalBuffer.current = [];
       setBrainTrace([]);
+      setNodes((current) => current.map((node) => node.data.kind === 'chat' ? { ...node, data: { ...node.data, trace: [] } } : node));
       setProposedChanges([]);
       const request = requestText;
       const snapshot = JSON.stringify({
@@ -1508,6 +1517,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       void runCreationCanvasAi({
         prompt: request, canvasSnapshot: snapshot, persistence, canvasActions,
         autoApprove: autoApplyRef.current,
+        confirmAction: ({ name, args }) => {
+          let preview = '';
+          try { const serialized = JSON.stringify(args ?? {}); preview = serialized === '{}' ? '' : serialized.length > 320 ? `${serialized.slice(0, 320)}…` : serialized; } catch { preview = ''; }
+          return confirm({ title: 'Approve Brain action', message: `Brain wants to run ${name.replaceAll('_', ' ')}.${preview ? `\n\n${preview}` : ''}`, confirmLabel: 'Approve', cancelLabel: 'Cancel', destructive: false });
+        },
         ...(persistence === 'server' && memoryEnabled && evermindProjectId != null ? { evermind: {
           recall: (query: string) => recallProjectEvermind(evermindProjectId, query).catch(() => null),
           learn: (answer: string, question: string) => teachProjectEvermindFromText(evermindProjectId, answer, question),
@@ -1573,7 +1587,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setPrompt('');
       setNotice('Evaluation added to canvas');
     }, 850);
-  }, [appendTimeline, canvasActions, effectiveSelectedIds, edges, evermindProjectId, memoryEnabled, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, setEdges, setNodes, thinking, timeline]);
+  }, [appendTimeline, canvasActions, confirm, effectiveSelectedIds, edges, evermindProjectId, memoryEnabled, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, setEdges, setNodes, thinking, timeline]);
 
   useEffect(() => {
     if (!hydrated.current || initialPromptSubmitted.current || thinking) return;
@@ -1727,7 +1741,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const ref = selectedNode.data.resourceId?.startsWith('agent:') ? selectedNode.data.resourceId.slice('agent:'.length) : '';
     if (!ref) { setNotice('This is a canvas draft. Link or create the agent before publishing settings.'); return; }
     setNotice('Saving canonical agent settings…');
-    void updateAgent(ref, { name: selectedNode.data.title, title: selectedNode.data.role || selectedNode.data.title, bio: selectedNode.data.subtitle || '', baseModel: selectedNode.data.model || 'gpt-4o' })
+    void updateAgent(ref, { name: selectedNode.data.title, title: selectedNode.data.role || selectedNode.data.title, bio: typeof selectedNode.data.instructions === 'string' ? selectedNode.data.instructions : selectedNode.data.subtitle || '', baseModel: selectedNode.data.model || 'gpt-4o' })
       .then(() => setNotice('Agent settings saved everywhere'))
       .catch((error) => setNotice(error instanceof Error ? error.message : 'Agent settings could not be saved'));
   }, [selectedNode]);
@@ -1850,7 +1864,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           </div>
           <button className={styles.secondaryButton} onClick={undo} aria-label="Undo canvas change">↶</button>
           <button className={styles.secondaryButton} onClick={redo} aria-label="Redo canvas change">↷</button>
-          <button className={styles.secondaryButton} aria-expanded={paletteOpen} aria-controls="canvas-object-palette" onClick={openPalette}>＋ {t('add')}</button>
           <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-label={t('openDiagnostics')} onClick={() => setDiagnosticsOpen((value) => !value)}>⚠ <span>{t('diagnostics')}</span></button>
           <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}>•••</button>
           <button className={styles.secondaryButton} onClick={() => { if (persistence === 'local') requireAccount('share', 'Create an account to share this canvas', 'Your work is already safe on this device. An account saves it to your tenant and enables live collaboration, invitations, and access controls.'); else setShareOpen((value) => !value); setMoreOpen(false); }}>{t('share')} ▾</button>
@@ -2039,13 +2052,14 @@ function BrainObjectDetails({ node, nodes, edges, timeline, trace }: { node: Cre
     metadata: null,
     createdAt: message.createdAt,
   }));
+  const visibleTrace = trace.length ? trace : Array.isArray(node.data.trace) ? node.data.trace.filter((value): value is BrainTraceEvent => !!value && typeof value === 'object' && typeof (value as { ts?: unknown }).ts === 'string' && typeof (value as { category?: unknown }).category === 'string' && typeof (value as { label?: unknown }).label === 'string') : [];
   const roster = (items: CreationFlowNode[], empty: string) => items.length ? <div className={styles.brainAssociationList}>{items.map((item) => <div key={item.id}><span aria-hidden>{creationObjectDefinition(item.data.kind).icon}</span><p><b>{item.data.title}</b><small>{item.data.status || creationObjectDefinition(item.data.kind).label}</small></p></div>)}</div> : <p className={styles.brainEmpty}>{empty}</p>;
 
   return <div className={styles.brainDetails}>
     <section aria-labelledby="brain-conversation-heading">
       <div className={styles.brainSectionHeading}><h3 id="brain-conversation-heading">Conversation</h3><span>{messages.length}</span></div>
       <div className={styles.brainInspectorTimeline} role="log" aria-label="Full Brain activity" tabIndex={0}>
-        <BrainTimeline messages={timelineMessages} trace={trace} streamingText="" isRunning={false} assistantName="Brain" labels={{ you: 'You', assistant: 'Brain', empty: 'No conversation yet. Ask Brain from the canvas prompt to begin.' }} />
+        <BrainTimeline messages={timelineMessages} trace={visibleTrace} streamingText="" isRunning={false} assistantName="Brain" labels={{ you: 'You', assistant: 'Brain', empty: 'No conversation yet. Ask Brain from the canvas prompt to begin.' }} />
       </div>
     </section>
     {canonicalChatId ? <section aria-label="Brain chat associations" className={styles.brainCanonicalAssociations}>
@@ -2067,6 +2081,14 @@ function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persis
   const csv = artifactCsv(node.data);
   const taskId = kind === 'task' && /^task:\d+$/.test(node.data.resourceId || '') ? Number(node.data.resourceId!.slice(5)) : null;
   const taskAgents = nodes.filter((candidate) => candidate.data.kind === 'agent');
+  const agentTools = Array.isArray(node.data.tools) ? node.data.tools.map(String) : ['Audience Analyzer', 'Copy Optimizer'];
+  const availableAgentTools = ['Audience Analyzer', 'Copy Optimizer', 'Research', 'Browser'];
+  const mockupProjects = nodes.filter((candidate) => candidate.data.kind === 'project');
+  const mockupAgents = taskAgents;
+  const defaultMockupProjectRef = mockupProjects[0]?.data.resourceId || mockupProjects[0]?.id || 'draft:builderforce-launch';
+  const mockupProjectValue = typeof node.data.deliveryProjectRef === 'string' ? node.data.deliveryProjectRef : defaultMockupProjectRef;
+  const defaultMockupAgentRef = mockupAgents[0]?.data.resourceId || mockupAgents[0]?.id || 'campaign-strategist';
+  const mockupAgentValue = typeof node.data.mockupAgentRef === 'string' ? node.data.mockupAgentRef : defaultMockupAgentRef;
   const selectedTaskAgent = taskAgents.find((agent) => agent.data.title === node.data.assignee || agent.data.title === node.data.role);
   const taskAgentValue = typeof node.data.agentRef === 'string' ? node.data.agentRef : selectedTaskAgent ? (selectedTaskAgent.data.resourceId?.replace(/^agent:/, '') || selectedTaskAgent.id) : '';
   const connectedPrd = kind === 'task' ? nodes.find((candidate) => candidate.data.kind === 'prd' && edges.some((edge) => (edge.source === node.id && edge.target === candidate.id) || (edge.target === node.id && edge.source === candidate.id))) : undefined;
@@ -2131,15 +2153,15 @@ function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persis
       {kind === 'chat' && <BrainObjectDetails node={node} nodes={nodes} edges={edges} timeline={timeline} trace={brainTrace} />}
       {kind === 'agent' && <>
         <label>Model<select value={node.data.model || 'gpt-4o'} onChange={(event) => onChange({ model: event.target.value })}><option>gpt-4o</option><option>claude-3.5-sonnet</option><option>Evermind</option></select></label>
-        <label>Instructions<textarea value={node.data.subtitle || ''} onChange={(event) => onChange({ subtitle: event.target.value })} rows={5} /></label>
-        <label>Tools<div className={styles.inspectorPills}><span>Audience Analyzer</span><span>Copy Optimizer</span><button>+ Add tool</button></div></label>
-        <label>Autonomy<select><option>Medium · request approvals</option><option>Low · suggest only</option><option>High · act within policy</option></select></label>
+        <label>Instructions<textarea value={typeof node.data.instructions === 'string' ? node.data.instructions : node.data.subtitle || ''} onChange={(event) => onChange({ instructions: event.target.value, subtitle: event.target.value })} rows={5} /></label>
+        <label>Tools<div className={styles.inspectorPills}>{agentTools.map((tool) => <button type="button" key={tool} aria-label={`Remove ${tool}`} onClick={() => onChange({ tools: agentTools.filter((candidate) => candidate !== tool) })}>{tool} ×</button>)}<button type="button" disabled={availableAgentTools.every((tool) => agentTools.includes(tool))} onClick={() => { const next = availableAgentTools.find((tool) => !agentTools.includes(tool)); if (next) onChange({ tools: [...agentTools, next] }); }}>+ Add tool</button></div></label>
+        <label>Autonomy<select value={typeof node.data.autonomy === 'string' ? node.data.autonomy : 'medium'} onChange={(event) => onChange({ autonomy: event.target.value })}><option value="medium">Medium · request approvals</option><option value="low">Low · suggest only</option><option value="high">High · act within policy</option></select></label>
         <button type="button" className={styles.fullButton} onClick={onSaveAgent}>Save agent settings everywhere</button>
       </>}
       {kind === 'staff' && <><label>Role<input value={node.data.role || ''} onChange={(event) => onChange({ role: event.target.value })} /></label><label>Current focus<textarea value={node.data.focus || ''} onChange={(event) => onChange({ focus: event.target.value })} rows={4} /></label></>}
       {(kind === 'website' || kind === 'prototype') && <><label>Headline<input value={typeof node.data.websiteHeadline === 'string' ? node.data.websiteHeadline : 'Fall in love with every look'} onChange={(event) => onChange({ websiteHeadline: event.target.value })} /></label><label>Supporting copy<textarea rows={3} value={typeof node.data.websiteBody === 'string' ? node.data.websiteBody : 'New arrivals for the season ahead.'} onChange={(event) => onChange({ websiteBody: event.target.value })} /></label><label>Call to action<input value={typeof node.data.websiteCta === 'string' ? node.data.websiteCta : 'Shop the collection'} onChange={(event) => onChange({ websiteCta: event.target.value })} /></label><label>Accent color<input type="color" value={typeof node.data.websiteAccent === 'string' ? node.data.websiteAccent : '#3978f6'} onChange={(event) => onChange({ websiteAccent: event.target.value })} /></label><label>Viewport<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onWebsiteViewportChange(event.target.value as 'desktop' | 'tablet' | 'mobile')}><option value="desktop">Desktop · 1440</option><option value="tablet">Tablet · 768</option><option value="mobile">Mobile · 390</option></select></label><p className={styles.inspectorHint}>Changes render live in the interactive prototype on the canvas.</p></>}
-      {kind === 'workflow' && <><label>Execution target<select><option>BuilderForce.AI</option><option>Campaign Strategist</option></select></label><label>Approval mode<select><option>Required before publish</option><option>Fully autonomous</option></select></label><button type="button" className={styles.fullButton} onClick={onEditWorkflow}>Edit Workflow on Canvas</button><button className={styles.fullButton} onClick={onRun}>▶ Run workflow</button></>}
-      {kind === 'dashboard' && <><label>Date range<select><option>Last 30 days</option><option>Last 7 days</option><option>Quarter to date</option></select></label><button className={styles.fullButton}>Refresh live data</button></>}
+      {kind === 'workflow' && <><label>Execution target<select value={typeof node.data.runTarget === 'string' ? node.data.runTarget : 'builderforce'} onChange={(event) => onChange({ runTarget: event.target.value })}><option value="builderforce">BuilderForce.AI</option><option value="campaign-strategist">Campaign Strategist</option></select></label><label>Approval mode<select value={typeof node.data.approvalMode === 'string' ? node.data.approvalMode : 'required'} onChange={(event) => onChange({ approvalMode: event.target.value })}><option value="required">Required before publish</option><option value="autonomous">Fully autonomous</option></select></label><button type="button" className={styles.fullButton} onClick={onEditWorkflow}>Edit Workflow on Canvas</button><button className={styles.fullButton} onClick={onRun}>▶ Run workflow</button></>}
+      {kind === 'dashboard' && <><label>Date range<select value={typeof node.data.dateRange === 'string' ? node.data.dateRange : '30d'} onChange={(event) => onChange({ dateRange: event.target.value })}><option value="30d">Last 30 days</option><option value="7d">Last 7 days</option><option value="qtd">Quarter to date</option></select></label><button type="button" className={styles.fullButton} onClick={() => onChange({ fetchedAt: new Date().toISOString(), status: 'Live' })}>Refresh live data</button></>}
       {kind === 'dataset' && <><label>Import CSV or TSV<input type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onImportDataset(file); }} /></label><p className={styles.inspectorHint}>A safe preview of up to 500 rows is stored with this session. Connect it to a dashboard or ask Brain to analyze it.</p><button className={styles.fullButton} onClick={onVisualizeDataset}>Create visualization</button></>}
       {kind === 'voice' && <CanvasVoiceInspector node={node} persistence={persistence} onChange={onChange} />}
       {kind === 'project' && <><label>Project view<select value={typeof node.data.projectLens === 'string' ? node.data.projectLens : 'everything'} onChange={(event) => onChange({ projectLens: event.target.value })}><option value="everything">Everything</option><option value="delivery">Delivery</option><option value="metrics">Metrics</option><option value="customer-feedback">Customer feedback</option></select></label><p className={styles.inspectorHint}>Project context is optional. Add its related items to compare work visually or ground Brain in the complete project.</p><button className={styles.fullButton} onClick={onExpandProject}>Add all related items</button><button className={styles.fullButton} onClick={onCompareProjects}>Compare projects on canvas</button></>}
@@ -2167,7 +2189,7 @@ function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persis
         {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
       </>}
       {kind === 'projectComparison' && <><p className={styles.inspectorHint}>This comparison retains the source endpoints and fetch timestamp used for every project. Refresh to compare current delivery, velocity, and feature evidence.</p><button className={styles.fullButton} onClick={onCompareProjects}>Refresh project comparison</button><SourceList sources={node.data.sources} /></>}
-      {kind === 'mockup' && <><label>Delivery project<select><option>BuilderForce launch</option><option>No project</option></select></label><label>Assign agent<select><option>Campaign Strategist</option><option>Web Analyst</option></select></label><button className={styles.fullButton} onClick={onDeliverMockup}>Add to project and assign</button></>}
+      {kind === 'mockup' && <><label>Delivery project<select value={mockupProjectValue} onChange={(event) => { const project = mockupProjects.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ deliveryProjectRef: event.target.value, deliveryProjectName: project?.data.title || (event.target.value === 'draft:builderforce-launch' ? 'BuilderForce launch' : 'No project') }); }}><option value="draft:builderforce-launch">BuilderForce launch</option>{mockupProjects.filter((project) => (project.data.resourceId || project.id) !== 'draft:builderforce-launch').map((project) => <option key={project.id} value={project.data.resourceId || project.id}>{project.data.title}</option>)}<option value="">No project</option></select></label><label>Assign agent<select value={mockupAgentValue} onChange={(event) => { const agent = mockupAgents.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ mockupAgentRef: event.target.value, mockupAgentName: agent?.data.title || (event.target.value === 'web-analyst' ? 'Web Analyst' : 'Unassigned') }); }}><option value="campaign-strategist">Campaign Strategist</option>{mockupAgents.filter((agent) => (agent.data.resourceId || agent.id) !== 'campaign-strategist').map((agent) => <option key={agent.id} value={agent.data.resourceId || agent.id}>{agent.data.title}</option>)}<option value="web-analyst">Web Analyst</option><option value="">Unassigned</option></select></label><button className={styles.fullButton} onClick={onDeliverMockup}>Add to project and assign</button></>}
       {kind === 'mockupSet' && <><p className={styles.inspectorHint}>Expand the set into individually reviewable mockups, or deliver the approved set as one project task.</p><button className={styles.fullButton} onClick={onExpandMockupSet}>Expand all mockups</button><button className={styles.fullButton} onClick={onDeliverMockup}>Add to project and assign</button><SourceList sources={node.data.sources} /></>}
       {kind === 'evermind' && <EvermindInspector node={node} persistence={persistence} onAttach={onAttachEvermindProject} onExpand={onExpandEvermindPipeline} />}
       {kind === 'standup' && <><p className={styles.inspectorHint}>Gather every Staff Member and Agent currently on the canvas. With a saved Project, this starts the canonical stand-up ceremony and keeps its resource link in the session.</p><button className={styles.fullButton} onClick={onStartStandup}>Gather and start stand-up</button></>}

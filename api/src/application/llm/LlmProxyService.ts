@@ -44,6 +44,7 @@ import {
   type VendorEnv,
   type VendorId,
   type UpstreamDiagnostic,
+  type VendorEgress,
 } from './vendors';
 // Consumed by the service below AND re-exported at the bottom of this file, so
 // callers that still import them from 'LlmProxyService' keep working.
@@ -406,6 +407,15 @@ export interface LlmProxyOptions {
    * this preserves gaps occupied by OpenRouter connections so both kinds can
    * interleave in one ordered list. */
   byoProviderPriorities?: readonly { vendor: string; priority: number | null }[];
+  /**
+   * Run vendors that declare `requiresLocalEgress` from the tenant's OWN connected
+   * runtime instead of from the Worker — see `hostEgress.ts`.
+   *
+   * Resolved per request by the caller (which knows the tenant) rather than here,
+   * because it is a tenant fact, not a plan fact. Absent = direct egress for
+   * everything, which is the behaviour every other vendor has always had.
+   */
+  hostEgress?: VendorEgress | null;
   /** Named OpenRouter registrations and their selected model sets. */
   openRouterConnections?: readonly OpenRouterConnection[];
   /** Bare OpenRouter model id -> tenant key for keyed registrations. */
@@ -449,6 +459,7 @@ export class LlmProxyService {
   private readonly openaiCodexAuth: { accessToken: string; accountId: string } | null;
   private readonly xaiOAuthToken: string | null;
   private readonly tenantVendorKeys: TenantVendorKeys;
+  private readonly hostEgress: VendorEgress | null;
   private readonly byoVendorPriority: readonly string[];
   private readonly byoProviderPriorities: readonly { vendor: string; priority: number | null }[];
   private readonly openRouterConnections: readonly OpenRouterConnection[];
@@ -472,6 +483,7 @@ export class LlmProxyService {
     this.openaiCodexAuth = options?.openaiCodexAuth ?? null;
     this.xaiOAuthToken = options?.xaiOAuthToken ?? null;
     this.tenantVendorKeys = options?.tenantVendorKeys ?? {};
+    this.hostEgress = options?.hostEgress ?? null;
     this.byoVendorPriority = options?.byoVendorPriority ?? [];
     this.byoProviderPriorities = options?.byoProviderPriorities ?? [];
     this.openRouterConnections = options?.openRouterConnections ?? [];
@@ -1227,6 +1239,10 @@ export class LlmProxyService {
       // Thread the R2 artifact store so the `evermind` vendor can load a
       // published model. Harmless for every other (HTTP) vendor — they ignore it.
       ...(this.env.UPLOADS ? { uploads: this.env.UPLOADS } : {}),
+      // Local egress for the one class of vendor whose upstream refuses OUR machine
+      // rather than our key (Kimi Code). `dispatchInternal` hands it only to a module
+      // that declares `requiresLocalEgress`, so this is inert for every other vendor.
+      ...(this.hostEgress ? { egress: this.hostEgress } : {}),
     };
 
     if (sanitizedBody.stream) {

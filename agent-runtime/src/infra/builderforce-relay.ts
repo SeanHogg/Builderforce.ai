@@ -32,6 +32,7 @@ import { normalizeBaseUrl } from "../utils/normalize-base-url.js";
 import type { RelayTaskEngine, EngineDispatch } from "./agent-engine.js";
 import { onAgentEvent } from "./agent-events.js";
 import { resolveApproval } from "./approval-gate.js";
+import { performHostEgress } from "./host-egress.js";
 import {
   makeCodingAgent,
   makeCodingGit,
@@ -922,6 +923,32 @@ export class BuilderforceRelayService implements IRelayService {
               error: String(err),
             });
           });
+        break;
+      }
+
+      case "host.egress.request": {
+        // Builderforce asked this machine to make ONE outbound call, because the
+        // provider refuses their cloud egress but not an ordinary client — which is
+        // exactly what this runtime is. The destination allowlist, the https rule and
+        // the response cap all live in `performHostEgress`; nothing here decides what
+        // is reachable. Never awaited: another egress request (or any chat traffic)
+        // must not queue behind a slow provider.
+        const requestId = typeof msg.requestId === "string" ? msg.requestId : "";
+        if (!requestId) {
+          break;
+        }
+        void performHostEgress({
+          requestId,
+          method: typeof msg.method === "string" ? msg.method : "POST",
+          url: typeof msg.url === "string" ? msg.url : undefined,
+          headers:
+            msg.headers && typeof msg.headers === "object" && !Array.isArray(msg.headers)
+              ? (msg.headers as Record<string, string>)
+              : {},
+          body: typeof msg.body === "string" ? msg.body : null,
+        }).then((frame) => {
+          this.sendToRelay(frame);
+        });
         break;
       }
 

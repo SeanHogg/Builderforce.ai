@@ -80,6 +80,8 @@ export interface OpenAICompatibleVendorOptions {
   noStream?: boolean;
   /** Per-vendor JSON-Schema strict-mode strip set (see `VendorModule.schemaDialect`). */
   schemaDialect?: { stripKeywords: readonly string[] };
+  /** This upstream refuses the Worker's own egress — see `VendorModule.requiresLocalEgress`. */
+  requiresLocalEgress?: boolean;
 }
 
 /**
@@ -186,6 +188,7 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
     autoRoute = false,
     noStream = false,
     schemaDialect,
+    requiresLocalEgress = false,
   } = opts;
 
   const catalogById = new Map(catalog.map((m) => [m.id, m]));
@@ -203,6 +206,7 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
     catalog,
     autoRoute,
     ...(schemaDialect ? { schemaDialect } : {}),
+    ...(requiresLocalEgress ? { requiresLocalEgress } : {}),
     tierFor(modelId: string): AiModelTier {
       return catalogById.get(modelId)?.tier ?? defaultTier;
     },

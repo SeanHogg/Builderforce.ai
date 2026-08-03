@@ -27,6 +27,16 @@ export function canvasNodeDimensions(node: CreationFlowNode): { width: number; h
   };
 }
 
+/** Arrangement is canvas-wide by default, even when the prompt composer is scoped to one selected object. */
+export function canvasArrangementTargets(nodes: CreationFlowNode[], requestedIds?: ReadonlySet<string> | null): CreationFlowNode[] {
+  return nodes.filter((node) => (
+    (!requestedIds || requestedIds.has(node.id))
+    && node.hidden !== true
+    && node.data.placementHidden !== true
+    && node.data.placementLocked !== true
+  ));
+}
+
 /**
  * Lay out nodes from their real footprints. Row/column maxima make the returned
  * rectangles non-overlapping even when cards have very different dimensions.

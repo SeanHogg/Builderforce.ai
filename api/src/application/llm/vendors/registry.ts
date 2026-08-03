@@ -449,10 +449,18 @@ async function dispatchInternal<R extends VendorCallResult | VendorStreamResult>
       ? reasoningParamsForModel(model, reasoningIntent.execParams, { isFirstTurn: reasoningIntent.isFirstTurn })
       : undefined;
 
+    // A tenant's own runtime is an egress of LAST resort, not a general route: only a
+    // vendor whose upstream refuses the Worker (Kimi Code's edge 403) declares
+    // `requiresLocalEgress`, and only that vendor is handed the transport. Without this
+    // gate every candidate in every cascade would be tunnelled through someone's laptop.
+    const { egress, ...restNoEgress } = rest as typeof rest & { egress?: unknown };
+    const egressForVendor = mod.requiresLocalEgress && egress ? { egress } : {};
+
     const startedAt = Date.now();
     try {
       const result = await cfg.invoke(mod, {
-        ...rest,
+        ...restNoEgress,
+        ...egressForVendor,
         apiKey,
         model: vendorModel,
         ...(reasoningParams ? { extraBody: { ...rest.extraBody, ...reasoningParams } } : {}),

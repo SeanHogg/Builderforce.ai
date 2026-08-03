@@ -173,6 +173,13 @@
 .workflowStep strong { font-size: 10px; }
 .workflowStep small { color: #8390a2; font-size: 8px; }
 .doneDot,.liveDot,.idleDot,.presence { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }.doneDot,.presence { background: #2bb879; }.liveDot { background: #3978f6; }.idleDot { background: #c5cfdd; }
+.configurableBody { display:grid; gap:8px; }
+.widgetSettings,.widgetContext { display:flex; flex-wrap:wrap; gap:6px; }
+.widgetSettings > span,.widgetContext > span { min-width:0; padding:5px 7px; border:1px solid #e0e7f0; border-radius:7px; background:#fafcff; }
+.widgetSettings small,.widgetContext small { display:block; color:#8290a3; font-size:7px; letter-spacing:.04em; text-transform:uppercase; }
+.widgetSettings b,.widgetContext b { display:block; overflow:hidden; margin-top:2px; color:#34445a; font-size:8px; text-overflow:ellipsis; white-space:nowrap; }
+.drawingBody { display:grid; gap:7px; height:100%; }
+.strokeSwatch { display:inline-block; width:9px; height:9px; margin-right:5px; border:1px solid currentColor; border-radius:50%; vertical-align:-2px; }
 
 .node_website .nodeBody,.node_prototype .nodeBody { display:flex; }
 .websitePreview { width:100%; min-height:0; display:flex; flex:1; flex-direction:column; overflow:auto; border:1px solid #dbe3ed; border-radius:9px; background:#fff; color:#172033; }
@@ -383,6 +390,10 @@
 .activityEmpty,
 .taskFacts span,
 .taskContext,
+.widgetSettings > span,
+.widgetContext > span,
+.projectOverview span,
+.projectFeedback,
 .taskPrdSummary {
   border-color: var(--canvas-line);
   background: var(--canvas-panel);
@@ -406,8 +417,8 @@
 }
 .statusGuidance { border-color:color-mix(in srgb, var(--canvas-blue) 35%, var(--canvas-line)); background:color-mix(in srgb, var(--canvas-blue) 9%, var(--canvas-panel)); }
 .statusGuidance b { color:var(--canvas-ink); }.statusGuidance p,.taskContext p,.taskPrdSummary p { color:var(--canvas-muted); }
-.taskFacts small,.taskContext small,.taskPrdSummary span { color:var(--canvas-muted); }
-.taskFacts b,.taskContext b,.taskPrdSummary strong { color:var(--canvas-ink); }
+.taskFacts small,.taskContext small,.taskPrdSummary span,.widgetSettings small,.widgetContext small,.projectOverview small,.projectFeedback small { color:var(--canvas-muted); }
+.taskFacts b,.taskContext b,.taskPrdSummary strong,.widgetSettings b,.widgetContext b,.projectOverview b { color:var(--canvas-ink); }
 .selectionToolbar button:hover,
 .paletteSectionToggle:hover,
 .paletteSectionToggle:focus-visible,

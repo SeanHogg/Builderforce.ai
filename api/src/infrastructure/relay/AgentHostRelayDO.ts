@@ -45,6 +45,24 @@ interface BufferedLog {
   message: string;
 }
 
+/**
+ * An in-flight `POST /host-egress` waiting on its `host.egress.response` frame.
+ *
+ * The relay is otherwise fire-and-forget (`/dispatch` returns as soon as the frame is
+ * on the wire), but egress is a REQUEST: the caller is a vendor module that must hand
+ * back a real `Response`. So the DO — the only place that holds the socket — keeps the
+ * HTTP request open and resolves it when the matching frame comes back.
+ */
+interface PendingEgress {
+  resolve: (frame: Record<string, unknown>) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
+
+/** Ceiling on how long a relayed call may hold a DO request open. Above the gateway's
+ *  own per-vendor deadline, so the vendor timeout is what a caller normally sees; this
+ *  only stops a wedged host leaking pending entries forever. */
+const EGRESS_TIMEOUT_MS = 120_000;
+
 export class AgentHostRelayDO implements DurableObject {
   // Required brand for DurableObjectNamespace<T> generic constraint
   declare readonly "__DURABLE_OBJECT_BRAND": never;
@@ -64,6 +82,8 @@ export class AgentHostRelayDO implements DurableObject {
   /** Circular buffer of last 200 log lines for replay in Logs tab */
   private logBuffer: BufferedLog[] = [];
   private readonly LOG_BUFFER_MAX = 200;
+  /** In-flight relayed HTTP calls, keyed by request id. See {@link PendingEgress}. */
+  private pendingEgress = new Map<string, PendingEgress>();
 
   constructor(private state: DurableObjectState, private env: unknown) {}
 
@@ -105,6 +125,22 @@ export class AgentHostRelayDO implements DurableObject {
         // Echo to browser clients so the chat thread shows the steering message.
         this.broadcast(JSON.stringify({ type: "chat.message", role: "user", text: built.frame.text, ephemeral: true }));
         return this.json({ ok: true, delivered: true }, 200);
+      }
+
+      // Egress: run ONE outbound HTTP call from the connected host's machine and
+      // return its response. This is what makes a provider that refuses our cloud
+      // egress (Kimi Code's edge 403s the Cloudflare Workers ASN before reading the
+      // key) reachable at all — the call is made by the tenant's own runtime, which
+      // is the personal interactive client such a subscription is licensed for.
+      // Unlike every other route here this one AWAITS a reply, so it correlates.
+      if (request.method === "POST" && url.pathname.endsWith("/host-egress")) {
+        let payload: Record<string, unknown>;
+        try {
+          payload = (await request.json()) as Record<string, unknown>;
+        } catch {
+          return this.json({ ok: false, error: "invalid_json" }, 400);
+        }
+        return this.relayEgress(payload);
       }
 
       // Cancel: forward an `execution.cancel` frame upstream so the host aborts
@@ -168,6 +204,10 @@ export class AgentHostRelayDO implements DurableObject {
 
     ws.addEventListener("message", (ev) => {
       const data = ev.data as string;
+      // Egress replies are answers to a specific in-flight request, not relay traffic:
+      // they carry the provider's own response body and must never be broadcast to
+      // browser clients. Claimed BEFORE the broadcast for exactly that reason.
+      if (this.resolveEgress(data)) return;
       // Broadcast every upstream message to all connected clients
       this.broadcast(data);
       // Persist complete messages (not deltas) to Postgres
@@ -178,6 +218,9 @@ export class AgentHostRelayDO implements DurableObject {
       if (this.upstreamSocket === ws) {
         this.upstreamSocket = null;
         this.clearPings();
+        // Nothing will ever answer these now — release them instead of making every
+        // caller wait out the full egress ceiling.
+        this.failPendingEgress();
         // Notify all clients that the agentHost went offline
         this.broadcast(JSON.stringify({ type: "agent_host_offline" }));
       }
@@ -627,6 +670,78 @@ export class AgentHostRelayDO implements DurableObject {
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+
+  /**
+   * Send one `host.egress.request` and hold this HTTP request open until the host
+   * answers, times out, or disconnects.
+   *
+   * Returns 409 `agent_host_offline` rather than hanging when nothing is connected —
+   * the caller (a vendor module) needs to fall back to direct egress immediately, not
+   * to sit on a request that can never be answered.
+   */
+  private async relayEgress(payload: Record<string, unknown>): Promise<Response> {
+    const requestId =
+      typeof payload.requestId === "string" && payload.requestId.length > 0
+        ? payload.requestId
+        : crypto.randomUUID();
+
+    if (this.upstreamSocket?.readyState !== WebSocket.OPEN) {
+      return this.json({ ok: false, delivered: false, error: "agent_host_offline" }, 409);
+    }
+
+    const frame = await new Promise<Record<string, unknown> | null>((resolve) => {
+      const timer = setTimeout(() => {
+        this.pendingEgress.delete(requestId);
+        resolve(null);
+      }, EGRESS_TIMEOUT_MS);
+      this.pendingEgress.set(requestId, {
+        resolve: (f) => { clearTimeout(timer); resolve(f); },
+        timer,
+      });
+      if (!this.sendUpstream({ ...payload, type: "host.egress.request", requestId })) {
+        clearTimeout(timer);
+        this.pendingEgress.delete(requestId);
+        resolve(null);
+      }
+    });
+
+    if (!frame) {
+      return this.json({ ok: false, delivered: false, error: "agent_host_timeout" }, 504);
+    }
+    return this.json({ ok: true, delivered: true, response: frame.response ?? null, error: frame.error ?? null }, 200);
+  }
+
+  /** Resolve a waiting {@link relayEgress} call. Returns true when the frame was an
+   *  egress reply, so the caller can stop before broadcasting it — a relayed response
+   *  carries the provider's payload and has no business reaching browser clients. */
+  private resolveEgress(data: string): boolean {
+    let msg: { type?: unknown; requestId?: unknown };
+    try {
+      msg = JSON.parse(data) as { type?: unknown; requestId?: unknown };
+    } catch {
+      return false;
+    }
+    if (msg.type !== "host.egress.response") return false;
+    const requestId = typeof msg.requestId === "string" ? msg.requestId : "";
+    const pending = requestId ? this.pendingEgress.get(requestId) : undefined;
+    if (pending) {
+      this.pendingEgress.delete(requestId);
+      pending.resolve(msg as Record<string, unknown>);
+    }
+    // Consume the frame either way: a late reply whose waiter already timed out is
+    // still not something to broadcast.
+    return true;
+  }
+
+  /** Fail every waiter at once — a disconnected host will never answer, and leaving
+   *  them to time out individually would stall each caller for the full ceiling. */
+  private failPendingEgress(): void {
+    for (const [, pending] of this.pendingEgress) {
+      clearTimeout(pending.timer);
+      pending.resolve({ error: "agent_host_offline" });
+    }
+    this.pendingEgress.clear();
+  }
 
   /** Send a JSON-serializable frame to the connected agent host. Returns false
    *  (without throwing) when no agent host is online. */

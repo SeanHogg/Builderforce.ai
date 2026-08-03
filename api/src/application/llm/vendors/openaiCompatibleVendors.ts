@@ -42,6 +42,9 @@ interface VendorSpec {
   /** Extra static headers (rare). */
   headers?: Record<string, string>;
   noStream?: boolean;
+  /** This upstream refuses the Worker's egress — run it from the tenant's connected
+   *  runtime when one is online. See `VendorModule.requiresLocalEgress`. */
+  requiresLocalEgress?: boolean;
 }
 
 const SPECS: ReadonlyArray<VendorSpec> = [
@@ -112,6 +115,16 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     // Kimi asks third-party coding clients to preserve their real identity. Do
     // not spoof kimi-code-cli/Claude/Codex; identify this gateway truthfully.
     headers: { 'User-Agent': 'Builderforce.ai' },
+    // Kimi's edge returns an HTML 403 to the Cloudflare Workers egress BEFORE the
+    // API reads the key — the same request from an ordinary machine gets a clean
+    // JSON answer. So this vendor runs from the tenant's own connected runtime when
+    // one is online: the personal interactive client the subscription is licensed
+    // for. See `hostEgress.ts`; falls back to direct egress when nothing is online.
+    requiresLocalEgress: true,
+    // The relay is request/response, so an SSE body would arrive whole anyway. Being
+    // honest about it here routes Kimi through the gateway's pseudo-stream instead of
+    // pretending to stream and delivering one giant frame.
+    noStream: true,
     // Keep the all-members model first: credential health probes use the first
     // catalog entry, while K3/high-speed access depends on the subscription tier.
     models: ['kimi-for-coding', 'k3-256k', 'k3', 'kimi-for-coding-highspeed'],
@@ -248,6 +261,7 @@ export const openAICompatibleModules: ReadonlyArray<VendorModule> = SPECS.map((s
     ...(spec.maxTokensField ? { maxTokensField: spec.maxTokensField } : {}),
     ...(spec.headers ? { headers: spec.headers } : {}),
     ...(spec.noStream ? { noStream: spec.noStream } : {}),
+    ...(spec.requiresLocalEgress ? { requiresLocalEgress: spec.requiresLocalEgress } : {}),
   }),
 );
 
