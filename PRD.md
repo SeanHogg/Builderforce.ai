@@ -89,7 +89,75 @@
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+### Current State Analysis (Business Analysis)
+
+#### File Existence Verification
+| File | Status | Notes |
+|------|--------|-------|
+| `diagnosticReport.ts` | **DOES NOT EXIST** | No such file found in api/src/domain/ or api/src/application/ |
+| `ReportDashboard.tsx` | **DOES NOT EXIST** | No such file found in web-ui/src/ or any frontend directory |
+
+#### Progress Percentage Bug Identified
+- **Location**: `api/src/application/project/computeProject360.ts` lines 217-222
+- **Issue**: When `hasData` is `false` (0 tasks), the progress dimension is hardcoded to `100`:
+  ```typescript
+  push('progress', 'Progress', 'delivery', hasData ? progressPct : 100, ...);
+  ```
+- **Impact**: Empty projects show 100% completion, misleading stakeholders
+- **Test Evidence**: `computeProject360.test.ts` line 57 explicitly expects this behavior
+
+#### Database Schema Gap
+- No dedicated `diagnostic_reports` table exists in the schema
+- Existing "diagnostic" references are limited to LLM tracing, runtime diagnostics, and kanban audit features
+- No entity to store generated diagnostic reports
+
+### Functional Requirements
+
+1. **Diagnostic Report Storage (REQ-DR-001)**
+   - The system MUST create a `diagnostic_reports` database table to persist report metadata and content
+   - Each report MUST have: id, projectId, tenantId, status, progressPct, generatedAt, completedAt, reportData (JSON)
+   - Report statuses: `pending`, `processing`, `completed`, `failed`
+
+2. **Progress Calculation Accuracy (REQ-DR-002)**
+   - The system MUST calculate progress based on actual work completed vs total work
+   - Progress MUST NOT default to 100% when there is no data
+   - Empty projects MUST display 0% or "No data" rather than 100%
+   - The progress value MUST accurately reflect: completed subtasks / total subtasks
+
+3. **Real-time Progress Updates (REQ-DR-003)**
+   - The system MUST update progress percentage as report generation proceeds
+   - Progress updates MUST be stored in the database and retrievable via API
+   - Frontend MUST poll or subscribe to progress changes
+
+4. **Report Dashboard UI (REQ-DR-004)**
+   - The system MUST implement `ReportDashboard.tsx` in the web-ui
+   - Dashboard MUST display a list of all diagnostic reports for the tenant/project
+   - Dashboard MUST support filtering by: status, date range, severity
+   - Dashboard MUST support sorting by: date, progress, project name
+
+5. **Report Generation Logic (REQ-DR-005)**
+   - The system MUST implement `diagnosticReport.ts` in api/src/domain/
+   - Must include: system metrics collection, error log aggregation, data integrity checks
+   - Must support both on-demand and scheduled report generation
+
+6. **Report Viewing & Export (REQ-DR-006)**
+   - Users MUST be able to view full report details from the dashboard
+   - Reports MUST be downloadable in JSON format
+   - Report sharing via unique URL MUST be supported
+
+### Non-Functional Requirements
+
+- **Performance**: Report generation should not block the main application
+- **Scalability**: System must handle 1000+ reports per tenant
+- **Security**: Report access must be restricted to authorized users (tenant isolation)
+
+### Acceptance Criteria for Requirements
+
+- [ ] `diagnosticReport.ts` exists with non-trivial implementation (>100 LOC, not a stub)
+- [ ] `ReportDashboard.tsx` exists with non-trivial implementation (>150 LOC, not a stub)
+- [ ] Progress percentage shows 0% for empty projects, not 100%
+- [ ] Database schema includes `diagnostic_reports` table
+- [ ] Reports can be created, listed, viewed, and downloaded
 
 ## Design
 
