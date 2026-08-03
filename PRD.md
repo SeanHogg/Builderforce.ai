@@ -88,7 +88,103 @@
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+> **Authored by:** Business Analyst (task #547, exec 24521+) · **Date:** 2026-08-03
+
+### Stakeholder Needs & Use Cases
+
+| # | Role | Scenario | Need |
+|---|------|----------|------|
+| R1 | VP Engineering | Prepares for weekly executive review | Scan all five projects' health status in under 30 seconds; see which projects need intervention |
+| R2 | TPM / Program Manager | Triages risk across the portfolio | Identify the worst-off project and understand the single most critical blocker for each |
+| R3 | Product Owner | Assesses cross-team dependency impact | Know whether a dependent project is healthy before committing to shared milestones |
+| R4 | Platform / Reliability Lead | Monitors aggregate engineering health | See build pass rates and test health in one place to prioritise infrastructure investment |
+| R5 | CEO / CTO | Monthly board deck preparation | One artefact that answers "how is engineering doing?" without drilling into individual boards |
+
+### Data Model — Input Schema (FR‑7)
+
+The dashboard generator accepts a single consolidated input file at `Builderforce.ai/frontend/src/dashboard/cross-project-health/portfolioHealthData.tsx` exporting two symbols:
+
+```
+ProjectHealth {
+  id:              string;           // stable machine key (e.g. "builderforce-ai")
+  name:            string;           // display name
+  status:          "Active" | "On Hold" | "Paused";
+  completionPct:   number | null;    // null = no tasks exist (N/A)
+  taskSummary:     string;           // e.g. "13/19 done, 40 in backlog"
+  keyBlocker:      string;           // single most critical impediment
+  riskLevel:        "Low" | "Medium" | "High";
+  riskRationale:   string;           // one-sentence justification
+  recommendedAction: string;         // concrete, time-bound next step
+  extras?: {
+    okrEpicsActive?: number;
+    failingTests?:   number;
+    tasksInBacklog?: number;
+    totalTasks?:     number;
+    doneTasks?:      number;
+  };
+  rag?:             "Green" | "Amber" | "Red";  // manual override; else derived
+}
+
+PortfolioSummary {
+  generatedAt:        string;          // ISO-8601 timestamp
+  totalProjects:      number;          // fixed at 5
+  greenCount:         number;
+  amberCount:         number;
+  redCount:           number;
+  overall:            "Green" | "Amber" | "Red";
+  topPriorityActions: { rank: 1|2|3; label: string }[];
+}
+```
+
+Data sources (per project, for manual refresh):
+- **BuilderForce.AI:** `builtin_tasks_list` (project 11) for completion counts; CI for test failures
+- **Hired.Video:** project board task counts + build pipeline status
+- **RumbleDating:** project board task counts (40 tasks, all backlog)
+- **BurnRateOS:** project board status + task counts (9 in backlog, on hold)
+- **pattysnob.com:** project existence check (shell only, no tasks)
+
+### RAG Status Derivation Rules (FR‑4)
+
+| RAG | Criteria | Example |
+|-----|----------|---------|
+| 🟢 **Green** | Active, >50% complete, no build failures, no stalled tasks | All tests green, >50% done, active sprint |
+| 🟡 **Amber** | Active with known blockers; OR on hold with defined plan; OR 25–50% complete with risks present | Test failures but progress continues; intentional hold with review date |
+| 🔴 **Red** | Build broken; OR 0% complete with active status; OR no tasks defined; OR stalled with no DRI | Broken CI, empty project shell, zero forward motion |
+
+Overall portfolio status is the **worst-case denominator**: Red if any project is Red, Amber if any is Amber and none is Red, Green only when all five are Green.
+
+### Non-Functional Requirements
+
+| ID | Requirement | Rationale |
+|----|-------------|-----------|
+| NFR-1 | The artifact must render in a standard GitHub Markdown viewer with no external CSS or JS (FR‑6) | Stakeholders view it directly in the repo; zero setup |
+| NFR-2 | The artifact must be scannable in ≤30 seconds by a human reader (FR‑2, FR‑3) | VP/CTO use case — at-a-glance decision support |
+| NFR-3 | Regeneration must complete in under 60 seconds (FR‑5) | CI job or pre-commit hook; must not block developer workflow |
+| NFR-4 | Missing/malformed data must never prevent artifact generation (FR‑8, AC‑10) | Graceful degradation — five "Unknown" cards are better than a missing file |
+| NFR-5 | Status legend must be embedded in the artifact itself (FR‑9, AC‑9) | Self-contained — no cross-reference needed |
+| NFR-6 | Artifact file size must not exceed 50 KB | Keeps the file lightweight for quick rendering and diff review |
+
+### Edge Cases (FR‑8)
+
+| Case | Behaviour |
+|------|-----------|
+| All five projects healthy | Overall status "All Healthy" (Green); no critical flags |
+| One project has missing/null data | Card displays "⚠️ Unknown" status; overall status appends "(Partial Data)" |
+| All five projects have missing data | Five "Unknown" cards; overall "Unknown — No Data"; artifact still written |
+| Data file is valid JSON but a project entry is malformed (missing `name`) | Card displays "⚠️ Unknown — Malformed Entry"; error logged to stderr |
+| Input file does not exist | Artifact written with five "Unknown" cards and a banner: "⚠️ Data source unavailable — regenerate after restoring portfolioHealthData" |
+| A project transitions from Red→Amber→Green over successive regenerations | Each regeneration captures the snapshot at that point in time; trend is visible in git history |
+
+### Glossary
+
+| Term | Definition |
+|------|------------|
+| **Health Card** | A per-project Markdown section displaying status indicator, key metric, blocker, and recommended action |
+| **RAG** | Red / Amber / Green traffic-light status derived from completion, blockers, and risk |
+| **Portfolio Snapshot** | The summary header aggregating RAG counts and overall status across all five projects |
+| **DRI** | Directly Responsible Individual — the person accountable for a project's forward motion |
+| **Key Blocker** | The single most critical impediment preventing progress (one per project) |
+| **Overall Status** | Worst-case RAG across the portfolio: Red if any project is Red |
 
 ## Design
 
