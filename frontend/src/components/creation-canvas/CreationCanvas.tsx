@@ -221,6 +221,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [pendingBrainActions, setPendingBrainActions] = useState<Array<{ objectId: string; action: string }>>([]);
   const [sessionRole, setSessionRole] = useState<CreationSessionSummary['role']>('owner');
   const [lockBlocked, setLockBlocked] = useState(false);
+  // Locks are server records. A freshly added Canvas node exists in React state
+  // before the debounced graph save creates its database row, so attempting to
+  // lock it immediately produces a misleading 404. Track confirmed server IDs
+  // and start the lease only after persistence succeeds.
+  const [persistedObjectIds, setPersistedObjectIds] = useState<Set<string>>(new Set());
   const [datasetRowLimit, setDatasetRowLimit] = useState(500);
   const canEdit = persistence === 'local' || sessionRole === 'editor' || sessionRole === 'runner' || sessionRole === 'owner';
   const canRun = persistence === 'local' || sessionRole === 'runner' || sessionRole === 'owner';
@@ -310,6 +315,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         setBranchParentId(detail.session.branchParentSessionId ?? null);
         setNodes(loadedNodes);
         setEdges(loadedEdges);
+        setPersistedObjectIds(new Set(loadedNodes.map((node) => node.id)));
         setMembers(detail.members);
         setAllMembers(detail.members);
         setCurrentUserId(detail.currentUserId || null);
@@ -365,6 +371,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       void creationSessionsApi.applyCommands(sessionId, revision.current, saveAttempt.key, [{ type: 'graph.replace', ...graph, viewport: viewportRef.current }]).then((saved) => {
         revision.current = saved.revision;
         lastSavedGraph.current = serialized;
+        setPersistedObjectIds(new Set(graph.objects.map((object) => object.id)));
         if (pendingSave.current?.key === saveAttempt.key) pendingSave.current = null;
         setNotice('Session saved');
       }).catch(async (error) => {
@@ -377,6 +384,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             lastSavedGraph.current = JSON.stringify(remote);
             setNodes(merged.nodes);
             setEdges(merged.edges);
+            setPersistedObjectIds(new Set(remote.nodes.map((node) => node.id)));
             pendingSave.current = null;
             setNotice('Concurrent changes merged; saving again…');
             return;
@@ -418,6 +426,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const remote = flowFromSession(detail);
         setNodes(remote.nodes);
         setEdges(remote.edges);
+        setPersistedObjectIds(new Set(remote.nodes.map((node) => node.id)));
         setTitle(detail.session.title);
         setAllMembers(detail.members);
         revision.current = remoteRevision;
@@ -450,6 +459,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const remote = flowFromSession(detail);
         setNodes(remote.nodes);
         setEdges(remote.edges);
+        setPersistedObjectIds(new Set(remote.nodes.map((node) => node.id)));
         setTitle(detail.session.title);
         setAllMembers(detail.members);
         revision.current = detail.session.canvasRevision ?? detail.session.revision ?? remoteRevision;
@@ -558,7 +568,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [setNodes, timeline]);
 
   useEffect(() => {
-    if (persistence !== 'server' || !selectedId || !canEdit) { setLockBlocked(false); return; }
+    if (persistence !== 'server' || !selectedId || !canEdit || !persistedObjectIds.has(selectedId)) { setLockBlocked(false); return; }
     let stopped = false;
     const acquire = async (action: 'acquire' | 'renew') => {
       try {
@@ -575,7 +585,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       window.clearInterval(timer);
       void creationSessionsApi.lock(sessionId, selectedId, 'release').catch(() => undefined);
     };
-  }, [canEdit, persistence, selectedId, sessionId]);
+  }, [canEdit, persistedObjectIds, persistence, selectedId, sessionId]);
 
   const importDataset = useCallback(async (file: File) => {
     if (!selectedId) return;
@@ -857,7 +867,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       revision.current = result.revision;
       const detail = await creationSessionsApi.get(sessionId);
       const flow = flowFromSession(detail);
-      setNodes(flow.nodes); setEdges(flow.edges); setTemplateOpen(false); setNotice(`${template.name} added`);
+      setNodes(flow.nodes); setEdges(flow.edges); setPersistedObjectIds(new Set(flow.nodes.map((node) => node.id))); setTemplateOpen(false); setNotice(`${template.name} added`);
       window.setTimeout(() => void flowRef.current?.fitView({ nodes: result.objectIds.map((id) => ({ id })), padding: .2, duration: 400 }), 0);
     }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not apply template'));
   }, [canEdit, persistence, sessionId, setEdges, setNodes]);
