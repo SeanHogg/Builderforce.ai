@@ -1,6 +1,5 @@
 -- Migration: add payment provider external IDs to tenants
--- Allows any payment provider (Stripe, Helcim, etc.) to link its customer
--- and subscription records back to a Builderforce tenant.
+-- Allows Stripe to link its customer and subscription records back to a Builderforce tenant.
 
 ALTER TABLE tenants
   ADD COLUMN IF NOT EXISTS external_customer_id      VARCHAR(255),
