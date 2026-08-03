@@ -181,7 +181,7 @@ export default function DashboardPage() {
 
   const panels: WorkspaceCanvasPanel[] = [
     {
-      id: 'dashboard-create', title: t('heading'), subtitle: 'Start a new creation session', icon: '⚡',
+      id: 'dashboard-prompt', title: t('heading'), subtitle: 'Start a new creation session', icon: '⚡',
       position: { x: 36, y: 36 }, width: 940, height: 230,
       content: <div className={styles.promptWidget}>
         <p>{t.rich('subheading', {
@@ -197,7 +197,10 @@ export default function DashboardPage() {
     ...metricPanels,
     { id: 'dashboard-pulse', title: 'Team pulse', subtitle: 'Current workforce sentiment', icon: '♡', position: { x: 996, y: 36 }, width: 470, height: 230, content: <PulseSubmitCard /> },
     {
-      id: `dashboard-${activeTab}`, title: activeTab === 'create' ? 'Recent creation sessions' : t(`tabs.${activeTab}`), subtitle: 'Workspace widget', icon: activeTab === 'quality' ? '◆' : activeTab === 'knowledge' ? '▤' : '◇',
+      id: activeTab === 'create' ? 'dashboard-artifacts' : `dashboard-view-${activeTab}`,
+      title: activeTab === 'create' ? 'All artifacts' : t(`tabs.${activeTab}`),
+      subtitle: activeTab === 'create' ? 'Card or list view of everything you created' : 'Workspace widget',
+      icon: activeTab === 'quality' ? '◆' : activeTab === 'knowledge' ? '▤' : '◇',
       position: { x: 36, y: 530 }, width: 1430, height: 720,
       content: <div className={styles.workspaceWidget}>
         <nav aria-label="Dashboard widgets">{([
