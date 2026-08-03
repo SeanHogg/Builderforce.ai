@@ -1,7 +1,7 @@
 > **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #157
 > _Each agent that updates this PRD signs its change below._
 >
-> **Signed:** Business Analyst (gap analysis + implementation plan, 2026-07-24)
+> - **BA analysis (2026-07-25)** — Gap analysis, technical feasibility, and implementation plan appended. Signed: Business Analyst.
 
 # Product Requirements Document: Diagnostic Report
 
@@ -58,199 +58,187 @@ This feature encompasses the generation of a comprehensive diagnostic report, in
 
 ---
 
-## Gap Analysis — Existing Artifact Audit (2026-07-24)
+# BA Gap Analysis & Implementation Plan
 
-### What Already Exists
+**Analysis performed against branch `builderforce/task-157`, repo `seanhogg/builderforce.ai`, 2026-07-25.**
 
-| Capability | Existing Artifact | Coverage |
+## 1. Existing Assets — What Already Serves This Need
+
+| Asset | Location | What It Does | AC Coverage |
+|---|---|---|---|
+| `computeProjectHealth()` | `frontend/src/lib/projectHealth.ts` | Composite health score (0–100), health tier (healthy/watch/at_risk/critical), progress %, overdue/blocked counts. Erodes health by share of open work that is overdue/blocked. | ✅ Health Score (0–100), ✅ overdue count |
+| `computeProjectInspection()` | `frontend/src/lib/projectInspection.ts` | Multi-dimension grading: Direction, Planning, Health, Progress, Execution. Letter grade A–F. Prescriptive recommendations sorted by urgency. | ⚠️ Partial — different dimensions from the six required categories |
+| `ProjectHealthGauges` | `frontend/src/components/ProjectHealth.tsx` | Gauge chart (health score) + donut chart (progress %). Used on project cards, table, details panel. | ✅ Visual building block |
+| `ProjectInspectionReport` | `frontend/src/components/ProjectInspection.tsx` | Full inspection report component with dimensions, grade, color-coded bars, recommendations. Slide-out panel pattern. | ✅ Report UI pattern to follow |
+| `ProjectDiagnosticsTab` | `frontend/src/components/ProjectDiagnosticsTab.tsx` | Diagnostic tools tab: runs diagnostics (architecture analysis + registered tools), shows results in a slide-out panel. | ✅ Diagnostic run/result pattern |
+| Report routes + scheduling | `api/src/presentation/routes/reportRoutes.ts` | Standup, code-review, executive summary, team comparison, inactive contributors, completed-by-assignee, portfolio rollup. Report schedule CRUD + subscriptions. | ✅ API pattern for report generation |
+| `toHtmlTable()` | `api/src/application/export/tabularExport.ts` | Self-contained HTML document with inline styles — Excel and browser print-to-PDF compatible. | ✅ PDF export pattern (HTML → print-to-PDF) |
+| `renderRfpDocHtml()` | `api/src/application/rfp/rfpBranding.ts` | Branded self-contained HTML document, print-to-PDF ready, same pattern. | ✅ PDF export pattern (HTML → print-to-PDF) |
+| Project 360 page | `frontend/src/app/projects/[id]/360/page.tsx` | Route at `/projects/[id]/360` — the web surface for the whole-picture project health view. | ✅ Shareable link target |
+| `computeProject360()` | `api/src/application/project/computeProject360.ts` | Server-side project 360 aggregate (loads live signals, assembles the model). | ✅ Backend computation infrastructure |
+| `computeProjectDeliverySignals()` | `api/src/application/insights/projectDeliverySignals.ts` | Compact project delivery signals (task status breakdown) attached to `/api/projects` list. | ✅ Data ingestion pipeline |
+| `tasks` table + `projects` table | `api/src/infrastructure/database/schema.ts` | Full task tracking with status, due dates, priorities, blocked state, assigned agents, sprints, releases. `projects` has `dueDate`, `status`, `governance`. | ✅ Core data source |
+| Task status transitions history | `taskStatusTransitions` table in schema | Append-only lane-move log with timestamps → enables trend analysis (time-in-status, cycle time). | ✅ Trend data source |
+| Workforce profiles + time entries | `memberProfiles`, `timeEntries` tables | Member capacity, skills, cost rates, logged effort. | ✅ Team-section data source |
+| Product releases | `productReleases` table in `schema/delivery.ts` | Release tracking with dates, status, scope. | ✅ Timeline data source |
+
+## 2. Gap Inventory — What Is Missing
+
+### GAP-1: Six Required Diagnostic Categories Not Implemented
+The PRD requires sections for **Timeline, Budget, Quality, Risk, Team, Alignment**. The existing `computeProjectInspection` uses different dimensions (Direction, Planning, Health, Progress, Execution). These are not 1:1 mappable:
+- **Timeline** → Partially covered by "Planning" (scheduling) and the tasks table's due dates, but no dedicated timeline section with trend/anomaly analysis.
+- **Budget** → No budget tracking exists in the schema. `timeEntries` has cost rates for labor but no project-level budget vs. actual. This is the largest structural gap.
+- **Quality** → No quality metrics exist (bug counts, redo rate, test coverage). `taskStatusTransitions` has `isBackward` (redo signal) but no bug/quality data.
+- **Risk** → No formal risk model (severity × likelihood). `computeProjectInspection` has recommendations ranked by priority, not a risk register.
+- **Team** → `memberProfiles` and `timeEntries` provide team data, but no team-health analysis (burnout signals, capacity vs. load, velocity).
+- **Alignment** → Partially covered by "Direction" (vision, goals/OKRs, architecture PRD), but no explicit alignment-to-strategy section.
+
+**Severity: Critical.** These six sections are the core deliverable.
+
+### GAP-2: Per-Section RAG State + Trend + Anomalies
+The codebase has health tiers (`healthy`/`watch`/`at_risk`/`critical`) mapped to colors, but no per-section RAG (Red/Yellow/Green) determination, no trend direction (improving/worsening/stable), and no anomaly detection logic. The task status transitions table provides the raw data for trend calculation.
+
+**Severity: High.** This is the primary visual output of the report.
+
+### GAP-3: Top 3 Risks (Severity × Likelihood)
+No risk register or risk-scoring model exists. The `computeProjectInspection` recommendations are prescriptive "what to target" items, not formal risks with severity and likelihood scores.
+
+**Severity: High.** Explicitly required by AC.
+
+### GAP-4: "What's Overdue?" Item-Level Listing
+`computeProjectHealth` returns an `overdue` **count** (number) but does not list the individual overdue tasks/bugs/deadlines. The API needs a query that returns overdue task rows with titles, due dates, and assignees.
+
+**Severity: Medium.** The count exists; the listing is a new query.
+
+### GAP-5: Diagnostic Questions Interface
+The PRD requires "an interface for users to answer diagnostic questions related to project health." The codebase has diagnostic **tools** (calculators, questionnaires, quizzes — see `frontend/src/lib/tools.ts`) but no project-health-specific diagnostic questionnaire UI.
+
+**Severity: Medium.** The tool infrastructure exists; a new questionnaire definition + UI is needed.
+
+### GAP-6: PDF Export of Diagnostic Report
+The codebase has HTML → print-to-PDF patterns (`tabularExport.ts`, `rfpBranding.ts`) but no diagnostic-report-specific export. A new API endpoint or client-side print-to-PDF must be built.
+
+**Severity: Medium.** The patterns are proven; implementation is wiring.
+
+### GAP-7: Shareable Link
+No dedicated shareable-link mechanism for the diagnostic report. The existing `/projects/[id]/360` route could serve as the target if made publicly readable, but there is no token-based or read-only share link infrastructure.
+
+**Severity: Low.** The 360 page provides a link target; sharing requires auth scoping.
+
+### GAP-8: Budget Data Source
+No budget table exists in the schema. The `timeEntries` table captures logged effort × cost rate (labor cost), but there is no project budget baseline, no actual-vs-budget tracking, and no financial data ingestion from external budget systems.
+
+**Severity: Critical for Budget section.** Without budget data, the Budget section would be limited to labor cost estimates from time entries only.
+
+## 3. Data Visualization Recommendations
+
+Based on the report structure and existing chart components (`GaugeChart`, `DonutChart`, `BandedMetricBar`), the following visualizations are recommended:
+
+| Section | Primary Visualization | Supporting Elements |
 |---|---|---|
-| **Health score (0–100)** | `frontend/src/lib/projectHealth.ts` → `computeProjectHealth()` | ✅ 0–100 score + 4-tier (healthy/watch/at_risk/critical) + overdue/blocked counts |
-| **Multi-dimension inspection** | `frontend/src/lib/projectInspection.ts` → `computeProjectInspection()` | ✅ 5 dims (direction/planning/health/progress/execution), letter grade A–F, prescriptive recs |
-| **Health visuals** | `frontend/src/components/ProjectHealth.tsx` (GaugeChart + DonutChart) | ✅ Reusable gauge + donut chart components |
-| **Inspection report UI** | `frontend/src/components/ProjectInspection.tsx` → `ProjectInspectionReport` | ✅ Full slide-out report pattern |
-| **Tool-based diagnostics** | `frontend/src/components/ProjectDiagnosticsTab.tsx` | ✅ DTO tools + architecture analysis runner |
-| **Report generation (server)** | `api/src/presentation/routes/reportRoutes.ts` | ✅ 7 report types, schedule/subscription infra, cache-read-through |
-| **HTML → PDF export** | `api/src/application/export/tabularExport.ts` | ✅ `toHtmlTable()` with inline styles → browser print-to-PDF |
-| **Project 360 (server)** | `api/src/application/project/computeProject360.ts` | ✅ Aggregated project signals (referenced from projectRoutes) |
-| **Overdue count** | `computeProjectHealth()` returns `overdue` count | ⚠️ Count only — no itemized list (names, dates) |
-| **Project data signals** | `/api/projects` returns taskCount, completedTaskCount, overdueTaskCount, blockedTaskCount | ✅ Feeds all existing health computations |
+| Overview (top) | **GaugeChart** for Health Score + **sparkline** for trend | DonutChart for progress % |
+| Timeline | **Horizontal bar chart** — tasks by status with due-date markers. Overdue items highlighted in red. | Trend arrow, anomaly callout for stalled/slipping tasks |
+| Budget | **Budget-vs-actual bar** (if data exists) or **cost-rate sunburst**. Fallback: labor cost table from time entries. | Trend comparison to prior period |
+| Quality | **Redo-rate sparkline** (from taskStatusTransitions `isBackward`). Bug count if available. | Anomaly: redo spike |
+| Risk | **Risk matrix** (2×2: severity × likelihood). Top 3 risks as prominent cards. | Color-coded severity badges |
+| Team | **Capacity-vs-load donut** per member. Availability status indicators. | Velocity trend (completed/week) |
+| Alignment | **Checklist/scorecard** — vision, goals/OKRs, architecture PRD, initiative link. Color-coded completeness. | Gap indicators |
+| What's Overdue? | **Sorted table** — task title, due date, days overdue, assignee, priority badge. | Count badge in section header |
 
-### What Is Partially Covered
+All visualizations should use the existing chart color conventions (`#22c55e` healthy, `#eab308` watch, `#f59e0b` at_risk, `#ef4444` critical) for consistency.
 
-| PRD Requirement | Status | Gap |
-|---|---|---|
-| **Timeline section** | ⚠️ Partial | Tasks have `dueDate`/`startDate`, project has `dueDate`. ProjectInspection checks "has deadline" as binary. No RAG/timeline-trend/overdue-list per section. |
-| **Budget section** | ❌ Missing | No budget ingestion/schema. `timeEntries` table exists for logged hours but no budget-baseline, burn-rate, or cost-variance data. |
-| **Quality section** | ⚠️ Partial | `ProjectDiagnosticsTab` runs DTO quality tools, but results are separate per-tool runs — not aggregated into a single Quality RAG. No bug/defect ingestion. |
-| **Risk section** | ⚠️ Partial | `blockedTaskCount` exists. `ProjectInspection` has recommendations but no severity × likelihood scoring for top-3 risks. No risk register. |
-| **Team section** | ⚠️ Partial | `memberProfiles` + `teamMembers` tables exist. No team health metric (velocity, churn, availability RAG). |
-| **Alignment section** | ⚠️ Partial | `initiativeId` + `linkedGoalCount` exist. ProjectInspection checks "has goals" as binary. No OKR-alignment score or strategic-fit RAG. |
-| **RAG (red/yellow/green)** | ⚠️ Partial | HealthTier is 4-level, not 3-level RAG. No per-section state. No single "current state" per category. |
-| **Trend (improving/worsening/stable)** | ❌ Missing | No historical snapshots. `computeProjectHealth` is point-in-time only. |
-| **Anomaly detection** | ❌ Missing | No deviation-from-baseline logic. |
-| **Top 3 risks** | ❌ Missing | No severity × likelihood model. |
-| **What's Overdue (itemized)** | ❌ Missing | Overdue COUNT exists, but no list with task names/dates. |
-| **PDF export** | ⚠️ Partial | `tabularExport.ts` pattern exists but not wired to diagnostic reports. |
-| **Shareable link** | ❌ Missing | No `shareableLink` anywhere in codebase. |
-| **Historical trend for health score** | ❌ Missing | No time-series storage for health snapshots. |
+## 4. Architecture Recommendation
 
----
-
-## Implementation Plan
-
-### Phase 1 — Data Foundation (backend)
-
-**New DB schema needed:**
-
-1. **`project_diagnostic_snapshots`** — append-only table storing a point-in-time snapshot of all 6 category scores + the composite health score. This enables TREND (compare current vs. previous snapshot) and ANOMALY detection (deviation from rolling baseline).
-
-   ```sql
-   CREATE TABLE project_diagnostic_snapshots (
-     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-     project_id INT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-     tenant_id INT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-     segment_id UUID NOT NULL REFERENCES segments(id) ON DELETE CASCADE,
-     composite_score REAL NOT NULL,            -- 0–100
-     timeline_score REAL,                      -- 0–100 per section
-     budget_score REAL,
-     quality_score REAL,
-     risk_score REAL,
-     team_score REAL,
-     alignment_score REAL,
-     timeline_state TEXT,                      -- red | yellow | green
-     budget_state TEXT,
-     quality_state TEXT,
-     risk_state TEXT,
-     team_state TEXT,
-     alignment_state TEXT,
-     overdue_items JSONB,                      -- [{id, title, dueDate, kind}]
-     top_risks JSONB,                          -- [{title, severity, likelihood, score}]
-     ingested_metrics JSONB,                   -- raw ingested data payload
-     manual_answers JSONB,                     -- user-provided questionnaire answers
-     generated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-   );
-   ```
-
-2. **`project_diagnostic_share_links`** — shareable read-only links with optional expiry.
-
-   ```sql
-   CREATE TABLE project_diagnostic_share_links (
-     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-     snapshot_id UUID NOT NULL REFERENCES project_diagnostic_snapshots(id) ON DELETE CASCADE,
-     token TEXT NOT NULL UNIQUE,               -- opaque URL token
-     expires_at TIMESTAMPTZ,
-     created_by TEXT NOT NULL REFERENCES users(id),
-     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-     accessed_at TIMESTAMPTZ
-   );
-   ```
-
-**New API route (Hono on Cloudflare Workers):**
-
-- `POST /api/projects/:id/diagnostic` — generate a new diagnostic snapshot (run all 6 category scorers, store snapshot, return full report)
-- `GET /api/projects/:id/diagnostic/latest` — get the most recent snapshot
-- `GET /api/projects/:id/diagnostic/history` — list historical snapshots for trend chart
-- `GET /api/projects/:id/diagnostic/export/pdf` — return self-contained HTML (print-to-PDF, reuse `toHtmlTable` pattern)
-- `POST /api/projects/:id/diagnostic/share` — create a shareable link
-- `GET /api/diagnostic/shared/:token` — read-only access via share link (no auth required, token-scoped)
-- `DELETE /api/diagnostic/shared/:token` — revoke a share link
-
-**New application service:**
-
-- `api/src/application/diagnostics/computeDiagnosticReport.ts` — the core scorer
-  - **Timeline scorer:** overdue ratio, schedule variance (current date vs. target), milestone slippage
-  - **Budget scorer:** (when budget data exists) burn rate vs. planned, cost variance — fallback: no-data = green
-  - **Quality scorer:** aggregate DTO tool scores, blocked-task ratio, redo/reopen counts
-  - **Risk scorer:** blocked-task ratio, overdue ratio, stale PR count, dependency chain health — produce severity × likelihood top-3
-  - **Team scorer:** member availability (ooo count), velocity trend (completed/week), unassigned-task ratio
-  - **Alignment scorer:** OKR linkage status, initiative alignment, goal coverage
-
-### Phase 2 — Frontend (Next.js, App Router)
-
-**New pages/components:**
-
-1. **`frontend/src/app/projects/[id]/diagnostic/page.tsx`** — the report page
-   - Renders the 6-section diagnostic report
-   - "Generate Report" button (POSTs to API, stores snapshot)
-   - "Export PDF" button (opens `/export/pdf` in new tab → browser print)
-   - "Share" button → copy link to clipboard
-   - Historical trend sparkline at top (composite score over time)
-
-2. **`frontend/src/components/DiagnosticReport.tsx`** — the structured report component
-   - Reuses `GaugeChart` for composite health score
-   - Per-section: RAG badge, trend arrow (↑ improving / → stable / ↓ worsening), anomaly callout, supporting data table
-   - "Top 3 Risks" card (severity × likelihood matrix)
-   - "What's Overdue" table (task name, due date, status, days overdue)
-
-3. **`frontend/src/lib/diagnosticReport.ts`** — shared types + helper (mirrors `projectHealth.ts` pattern)
-   - `DiagnosticReport`, `SectionState`, `Trend`, `RiskItem`, `OverdueItem` types
-
-4. **`frontend/src/components/charts/Sparkline.tsx`** — tiny trend sparkline (reusable, SVG-based)
-
-### Phase 3 — Integration & Polish
-
-- Wire the "Generate" action into the existing Project Details Panel (add a "Diagnostic Report" tab or action button)
-- Add i18n keys for all 6 sections, RAG labels, trend labels
-- Ensure the share link page renders read-only (no edit controls)
-- Add diagnostic snapshots to the existing report schedule/subscription system so PMs can auto-generate weekly
-
-### What to Reuse (do NOT rebuild)
-
-| Reuse | Source | Notes |
-|---|---|---|
-| Health score computation | `computeProjectHealth()` | Already returns overdue/blocked counts — feed into diagnostic |
-| Multi-dimension scoring pattern | `computeProjectInspection()` | Same weighted-score architecture, applied to 6 PRD categories |
-| Report route pattern | `reportRoutes.ts` | Same Hono router, auth middleware, cache-read-through |
-| HTML → PDF pattern | `tabularExport.ts` → `toHtmlTable()` | Same inline-style approach for diagnostic report |
-| Visual components | `GaugeChart`, `DonutChart` | Already themed with `var(--accent)` etc. |
-| Report scheduling | `reportSchedules`/`reportSubscriptions` | Add `report_type = 'diagnostic'` |
-| Project data signals | `/api/projects` response fields | taskCount, overdueTaskCount, blockedTaskCount, etc. |
-
----
-
-## Data Flow
+### Backend (API)
 
 ```
-User clicks "Generate Diagnostic Report"
-  ↓
-POST /api/projects/:id/diagnostic
-  ↓
-computeDiagnosticReport(db, projectId)
-  ├─ Query tasks (overdue, blocked, completed counts + itemized overdue list)
-  ├─ Query memberProfiles (team availability)
-  ├─ Query project (deadline, initiativeId, goals)
-  ├─ Query DTO tool results (quality scores)
-  ├─ Query timeEntries (budget burn)
-  ├─ Query previous snapshot (trend delta)
-  ├─ Compute 6 category scores + RAG states + trends + anomalies
-  ├─ Compute top-3 risks (severity × likelihood)
-  ├─ Insert project_diagnostic_snapshots row
-  └─ Return full DiagnosticReport JSON
-  ↓
-Frontend renders DiagnosticReport.tsx
-  ├─ GaugeChart (composite score)
-  ├─ Per-section cards (RAG + trend + anomalies + data)
-  ├─ Top 3 Risks card
-  ├─ What's Overdue table
-  └─ Action bar (Export PDF, Share, Regenerate)
+api/src/
+  application/
+    reports/
+      diagnosticReport.ts        ← NEW: Pure computation — assembles the six sections
+      diagnosticReport.test.ts   ← NEW: Unit tests
+  presentation/
+    routes/
+      reportRoutes.ts            ← EDIT: Add GET /api/reports/diagnostic/:projectId
 ```
 
----
+**`diagnosticReport.ts`** — a pure function module (like `computeProjectInspection`) that:
+1. Accepts a project aggregate (task breakdown, member profiles, time entries, status transitions, release data)
+2. Computes each of the six sections with RAG state, trend, anomalies, and supporting data
+3. Returns a typed `DiagnosticReport` object
 
-## Risks & Mitigations
+**`GET /api/reports/diagnostic/:projectId`** — queries the database for all needed data, calls the pure computation, caches the result, and returns JSON. Also supports `?format=html` for the print-to-PDF document (reusing the `toHtmlTable`/`rfpBranding` pattern).
 
-| Risk | Mitigation |
-|---|---|
-| Budget data may not exist for all projects | Budget section defaults to green + "No budget data ingested" note — not a blocker |
-| Trend requires ≥2 snapshots to compute | First snapshot shows "—" for trend; second onwards show delta |
-| Anomaly detection needs baseline | Use rolling 5-snapshot average; if <5 snapshots exist, skip anomaly flag |
-| Share link security | Token is opaque UUID; expiry optional but encouraged; accessed_at logged |
-| PDF rendering consistency | Use the same inline-style approach as `toHtmlTable()` (no external CSS) — tested across Chrome/Firefox/Safari print |
+### Frontend
 
----
+```
+frontend/src/
+  lib/
+    diagnosticReport.ts          ← NEW: Client-side computation mirror + types
+  components/
+    DiagnosticReport/
+      DiagnosticReport.tsx        ← NEW: Full report component
+      DiagnosticSection.tsx       ← NEW: One section card (RAG + trend + anomalies + data)
+      DiagnosticRiskMatrix.tsx    ← NEW: Risk matrix + top-3 cards
+      DiagnosticOverdueTable.tsx  ← NEW: Sorted overdue-items table
+      DiagnosticScoreTrend.tsx    ← NEW: Health score sparkline/trend
+    ProjectDiagnosticsTab.tsx     ← EDIT: Add "Diagnostic Report" row linking to the report
+  app/
+    projects/[id]/diagnostic/
+      page.tsx                    ← NEW: Diagnostic report page route
+```
 
-## Open Questions (for PM / stakeholder)
+### PDF Export
 
-1. **Budget data source:** Is budget data ingested from an external system (e.g., QuickBooks, Harvest), manually entered per-project, or derived from `timeEntries` × `costRateUsdCents`? The latter is available now.
-2. **Diagnostic questionnaire:** The PRD mentions "user-provided answers to diagnostic questions." Should this be a free-form questionnaire the PM fills out (like the existing DTO tools), or is it purely derived from ingested data? Recommendation: start data-driven with an optional "PM override" on each section.
-3. **Snapshot cadence:** Should snapshots be generated on-demand only, or also scheduled (weekly)? The report scheduling infrastructure already supports this — recommend both, with weekly auto-snapshots as default.
+Reuse the `api/src/application/export/tabularExport.ts` pattern: render the report as a self-contained HTML document (inline styles, no external assets), serve it at `GET /api/reports/diagnostic/:projectId?format=html`, and let the browser's print-to-PDF handle conversion. The frontend adds a "Download PDF" button that opens this URL in a new tab with `window.print()` auto-triggered.
+
+### Shareable Link
+
+The report page at `/projects/[id]/diagnostic` is the natural share target. For read-only sharing to non-members, add a short-lived signed token parameter (`?token=...`) validated by the API — this is deferred to a follow-up task (see GAP-7 note below).
+
+## 5. Implementation Phasing
+
+### Phase 1 — Core Computation & API (MVP)
+**Deliverable:** Backend module that produces a complete `DiagnosticReport` JSON.
+- [ ] `api/src/application/reports/diagnosticReport.ts` — Pure computation
+- [ ] `GET /api/reports/diagnostic/:projectId` — API endpoint
+- [ ] Covers: Timeline, Team, Alignment, Health Score, Overdue list (sections with available data)
+- [ ] Budget and Quality sections return "no data available" stub until data sources exist
+
+### Phase 2 — Frontend Report UI
+**Deliverable:** Rendered report with all six sections, visualizations, and export.
+- [ ] `DiagnosticReport` component tree
+- [ ] GaugeChart + sparkline for health score trend
+- [ ] Per-section cards with RAG badge, trend arrow, anomaly callout, supporting data table
+- [ ] Risk matrix + top-3 risk cards
+- [ ] Overdue items table
+- [ ] PDF export button (HTML → print-to-PDF)
+- [ ] Share link (copy-to-clipboard of the report URL)
+
+### Phase 3 — Diagnostic Questions Interface
+**Deliverable:** User-facing questionnaire that feeds into the report.
+- [ ] New tool definition (kind: `questionnaire`) for project health diagnostic
+- [ ] UI at `/tools/diagnostic?project=:id`
+- [ ] Answers stored and merged into the report's supporting data
+
+### Phase 4 — Budget & Quality Data Sources
+**Deliverable:** Real data for Budget and Quality sections.
+- [ ] `project_budgets` table (budget baseline, actuals, period) — requires schema migration
+- [ ] Quality metrics from `taskStatusTransitions` (redo rate, cycle time outliers)
+- [ ] Bug tracking integration (GitHub issues with `bug` label, or a `project_bugs` table)
+
+## 6. Risks & Mitigations
+
+| Risk | Severity | Mitigation |
+|---|---|---|
+| Budget section has no data source | High | Phase 1 ships with labor-cost estimate from `timeEntries`; Phase 4 adds proper budget table. The section renders "budget data not configured" rather than crashing. |
+| Trend computation requires historical snapshots that don't exist | Medium | Derive trends from `taskStatusTransitions` history (time-in-status deltas) and compare current period to prior period (e.g., last 30 days vs. 30–60 days ago). No snapshot storage needed. |
+| Shareable link requires auth model changes | Low | Phase 1 uses the existing auth-gated page URL. Read-only sharing tokens deferred to follow-up. |
+| Questionnaire UX may diverge from existing tool runner | Low | Reuse the `ToolRunner` component pattern from `frontend/src/app/tools/[id]/page.tsx`; define the diagnostic as a tool registered in the tools API. |
+
+## 7. Open Questions for PM
+
+1. **Budget data source:** Should Phase 1 include a new `project_budgets` table, or should it start with labor-cost estimates from `timeEntries` and defer the budget table? Recommendation: start with time-entries labor cost, add the budget table in Phase 4.
+2. **Diagnostic questions:** Should the questionnaire be part of the initial MVP (Phase 3), or can it ship post-MVP? Recommendation: defer to Phase 3 — the report is valuable with ingested data alone.
+3. **Share permissions:** Should the shareable link require Builderforce authentication, or should it support unauthenticated read-only access? Recommendation: auth-gated initially (the 360 page pattern), unauthenticated tokens deferred.
+4. **Bug tracking:** Is there a planned GitHub Issues integration for bug counts, or should we add a `project_bugs` table? The `projects` table already has `githubRepoUrl`/`githubRepoName` — a GitHub Issues integration is the natural path.
