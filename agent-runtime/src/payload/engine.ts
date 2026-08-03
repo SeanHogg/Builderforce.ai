@@ -453,7 +453,6 @@ export function createPayloadGenerator(
   };
 
   const generate = (context: InputContext): Result<Record<string, unknown>> => {
-    const logRef: LogEntry[] = [];
     const fields = planFields();
     const resolved = resolveAll(context, fields);
     const payload: Record<string, unknown> = {};
