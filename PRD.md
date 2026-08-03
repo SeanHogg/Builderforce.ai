@@ -83,7 +83,134 @@
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+> _Authored by the business-analyst — last updated 2026-08-04._
+
+### REQ-1: Deterministic RAG Engine
+
+The `deriveRagStatus` function in `Builderforce.ai/frontend/src/dashboard/cross-project-health/portfolioHealthData.tsx` must be **the single source of truth** for RAG computation. No other health mechanism (`frontend/src/lib/projectHealth.ts`'s `computeProjectHealth`, which operates on the healthy/watch/at_risk/critical delivery-health tier system and is NOT a RAG engine) may display or imply a RAG status.
+
+**REQ-1.1 — Strict rule ordering.** The engine must evaluate rules in priority order (Red > Amber > Green), returning the FIRST match. Red triggers short-circuit Amber and Green.
+
+**REQ-1.2 — Input data contract.** The engine must accept an explicit structured input rather than inferring from prose strings. Required inputs:
+
+| Field | Type | Source |
+|---|---|---|
+| `activeWorkPct` | `number` (0–100) | `(inProgress + inReview) / totalNonArchived × 100` |
+| `buildBroken` | `boolean` | CI status from project config or latest run |
+| `hasActiveBlocker` | `boolean` | Any non-archived task has `isBlocked === true` |
+| `projectOnHold` | `boolean` | Project status === 'On Hold' |
+| `hasRecoveryPlan` | `boolean` | Recovery plan document exists and is published |
+| `teamEmpty` | `boolean` | Project member count === 0 |
+| `hasDri` | `boolean` | Project has a non-null `driUserId` or equivalent |
+| `hasActiveFailure` | `boolean` | buildBroken OR hasActiveBlocker OR activeCriticalIncidents > 0 |
+
+**REQ-1.3 — Decision table.** The exact rules from FR-3, formalized:
+
+| Priority | RAG | Condition |
+|---|---|---|
+| 1 | 🔴 Red | `buildBroken === true` |
+| 2 | 🔴 Red | `activeWorkPct === 0` |
+| 3 | 🔴 Red | `teamEmpty === true` |
+| 4 | 🔴 Red | `hasDri === false` |
+| 5 | 🟡 Amber | `hasActiveBlocker === true` |
+| 6 | 🟡 Amber | `projectOnHold === true && hasRecoveryPlan === true` |
+| 7 | 🟡 Amber | `activeWorkPct >= 25 && activeWorkPct <= 50` |
+| 8 | 🟢 Green | `activeWorkPct > 50 && hasActiveFailure === false` |
+| — | 🟡 Amber | Fallback (any condition not matched above) |
+
+**REQ-1.4 — No prose-parsing fallback.** Remove the existing regex-based heuristics (`/build/.test(p.keyBlocker.toLowerCase())`, `p.keyBlocker.length > 10`) from `deriveRagStatus`. All decisions must trace to structured boolean fields.
+
+**REQ-1.5 — Override semantics (AC-9 compliance).** If a project's `rag` field is explicitly set (policy override), the engine must STILL compute the raw RAG and return both values:
+- `computedRag`: the engine's deterministic output
+- `effectiveRag`: the override if set, otherwise the computed value
+- `isOverridden`: boolean flag
+
+The UI must display the effective status AND, when overridden, a visual indicator (e.g., "⚠ Overridden — computed: {computedRag}"). The `buildPortfolioSummary` function must count by `computedRag` for an honest health picture, and separately report overrides.
+
+### REQ-2: "Generated on" Timestamp (AC-8)
+
+**REQ-2.1 — Format.** The timestamp must be rendered in the dashboard header as:
+
+```
+Generated on: YYYY-MM-DD HH:MM UTC
+```
+
+No locale-dependent formatting (`toLocaleString()`). Use explicit UTC methods (`getUTCFullYear`, `getUTCMonth`, etc.) or an ISO formatter locked to UTC.
+
+**REQ-2.2 — Source of truth.** The `generateAt` field on `PortfolioSummary` must be settable from the caller and recorded at the EXACT moment `buildPortfolioSummary` is invoked. The existing pattern (`new Date().toISOString()`) is acceptable but the timestamp passed to the UI must be the server-side computation time, not the client render time.
+
+**REQ-2.3 — Visibility.** The timestamp must appear in the page `<header>` block, above the fold on a 1920×1080 viewport, with the label "Generated on" in a consistent, readable font size (≥0.8rem). It must be present on EVERY view that displays RAG status — overview grid, detail panel, and any export artifact.
+
+**REQ-2.4 — Update trigger.** The timestamp must refresh whenever `buildPortfolioSummary` is recomputed. For the static data module, this means the timestamp changes when the data module is re-evaluated (page load). When wired to live data, it must reflect the API fetch completion time.
+
+### REQ-3: Consistent RAG Application (AC-9)
+
+**REQ-3.1 — Single engine.** The `deriveRagStatus` function must be the ONLY function that produces a RAG label in the system. Import and call it from every surface that displays project health.
+
+**REQ-3.2 — Reconciliation test harness.** Provide a test-helper function `validateRagConsistency(projects: ProjectHealthInput[]): RagConsistencyReport` that:
+1. Runs `deriveRagStatus` on every project
+2. Compares output against expected values for a known dataset
+3. Returns pass/fail and a detailed mismatch report
+
+**REQ-3.3 — Regression test cases.** The reconciliation test must cover these edge cases (minimum):
+
+| # | Scenario | Expected |
+|---|---|---|
+| 1 | activeWorkPct=80, no failures | Green |
+| 2 | activeWorkPct=50, no blockers | Amber (not Green — ≤50) |
+| 3 | activeWorkPct=25, no blockers | Amber (boundary — 25 inclusive) |
+| 4 | activeWorkPct=24, no blockers | Amber (fallback) |
+| 5 | activeWorkPct=80, buildBroken=true | Red (build broken beats Green) |
+| 6 | activeWorkPct=0, team non-empty | Red |
+| 7 | teamEmpty=true, activeWorkPct=50 | Red |
+| 8 | hasDri=false, everything else green | Red |
+| 9 | hasActiveBlocker=true, activeWorkPct=60 | Amber |
+| 10 | projectOnHold=true, hasRecoveryPlan=true, activeWorkPct=80 | Amber |
+| 11 | projectOnHold=true, hasRecoveryPlan=false | Amber (fallback — no recovery plan means neither Amber nor Green match) |
+| 12 | activeWorkPct=51, hasActiveFailure=true | Amber (active failure present → not Green, falls to Amber) |
+
+**REQ-3.4 — No dual health systems.** `frontend/src/lib/projectHealth.ts` and `frontend/src/components/ProjectHealth.tsx` must NOT display or imply a RAG status. They represent delivery-health (DORA-based speedometer), which is a distinct signal. The two systems must coexist without confusion: RAG = portfolio health snapshot; delivery-health = engineering throughput gauge.
+
+### REQ-4: Scannable UI (AC-10)
+
+**REQ-4.1 — Status-first visual hierarchy.** Each project card must present the RAG badge (colour + icon + label) as the most visually prominent element in the card header, before the project name and secondary details. The existing layout in `CrossProjectHealthDashboard.tsx`'s `ProjectCard` is close but must ensure the RAG badge is positioned in the card's visual scan-path (top-right or top-left, consistent across all cards).
+
+**REQ-4.2 — High-contrast colour coding.** RAG colours must meet WCAG AA contrast against the card background:
+- Green: `#16a34a` (darker than current `#22c55e` for AA on white)
+- Amber: `#d97706` (darker than current `#f59e0b` for AA on white)
+- Red: `#dc2626` (current `#ef4444` is borderline)
+
+**REQ-4.3 — Default sort.** The project card grid must sort cards by severity (Red first, then Amber, then Green) by default, so the worst-status projects are seen first without scrolling.
+
+**REQ-4.4 — Status-at-a-glance filter.** Provide a pill/tab filter bar above the project grid: "All (N) | 🔴 Red (N) | 🟡 Amber (N) | 🟢 Green (N)". Selecting a pill filters the grid to only that status. The default view is "All".
+
+**REQ-4.5 — Card density.** Each card must present in this order, with no more than 5 visual elements before the status is clear:
+1. RAG badge (colour + icon + label)
+2. Project name
+3. Active work % bar
+4. Key blocker (one line, truncated at 80 chars with "…" if longer)
+5. Recommended action (one line)
+
+The current card layout already approximates this; the main changes are the explicit sort, the filter bar, and ensuring the RAG badge is the first scanned element.
+
+### REQ-5: Data Contract Traceability
+
+Each requirement above must be traceable to an acceptance criterion. The mapping is:
+
+| Requirement | AC | FR |
+|---|---|---|
+| REQ-1.1–1.5 | AC-9 | FR-3 Rule 1 |
+| REQ-2.1–2.4 | AC-8 | FR-3 Rule 2 |
+| REQ-3.1–3.4 | AC-9 | FR-3 Rule 3 |
+| REQ-4.1–4.5 | AC-10 | FR-3 Rule 4 |
+| REQ-5 | AC-9 | — |
+
+### REQ-6: Non-Functional Requirements
+
+- **NFR-1 (Performance):** RAG computation for 100 projects must complete in under 50ms in a browser context (pure function, no I/O).
+- **NFR-2 (Testability):** `deriveRagStatus` must be a pure exported function with zero side effects, importable by test suites without mocking.
+- **NFR-3 (Backward compatibility):** The `ProjectHealth` interface in `portfolioHealthData.tsx` must retain the optional `rag?: RAG` field for existing consumers but add `computedRag` and `isOverridden` as described in REQ-1.5.
+- **NFR-4 (Accessibility):** RAG badges must use `role="status"` with an `aria-label` containing the status text (not just the emoji). Colour must not be the sole differentiator — text labels must accompany every colour indicator.
 
 ## Design
 
