@@ -133,7 +133,7 @@
     codebase scan/knowledge → learned routing). Out of scope: Visual Studio (C#/VSIX) and JetBrains —
     same backend, separate clients.
 
-15. **[15 — Resource Estimation: Human & AI Capacity Analysis](./15-resource-estimation.md)**
+15. **[18 — Resource Estimation: Human & AI Capacity Analysis](./18-resource-estimation.md)**
     A **one-time capacity deliverable** (refresh per-sprint) that maps the remaining multi-project
     backlog to the team of **1 human (Sean) + 4 cloud agents (Kevin BA/PM, Mike QA, Bob Developer,
     John Coder)**. Inventories every open task across all active projects with a story-point estimate
