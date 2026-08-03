@@ -375,6 +375,12 @@
 .composerBottom { display:flex; align-items:center; gap:8px; }.composerSpacer { flex:1; }.iconButton,.sendButton { width:29px; height:29px; display:grid; place-items:center; border:1px solid #d6dfeb; border-radius:8px; background:#fff; color:#53657b; cursor:pointer; }.microphoneIcon { width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }.sendButton { border-color:var(--canvas-blue); background:var(--canvas-blue); color:#fff; }.sendButton:disabled { opacity:.45; cursor:default; }.scopeChip { display:inline-flex; align-items:center; gap:3px; padding:4px 7px; border:1px solid #dce4ee; border-radius:7px; color:#52647b; background:#fafcff; font-size:9px; max-width:240px; white-space:nowrap; }.scopeChip select { min-width:0; max-width:205px; border:0; outline:0; background:transparent; color:inherit; font:inherit; text-overflow:ellipsis; }
 .autoApplyButton { display:inline-flex; align-items:center; gap:4px; padding:5px 7px; border:1px solid #dce4ee; border-radius:7px; background:#fafcff; color:#65758b; font:600 9px var(--font-sans); white-space:nowrap; cursor:pointer; }.autoApplyButtonActive { border-color:#8a72e8; background:#f0ecff; color:#5d43c6; }.autoApplyButton:focus-visible { outline:2px solid var(--canvas-blue); outline-offset:2px; }
 .memoryButton { display:inline-flex; align-items:center; gap:4px; padding:5px 7px; border:1px solid #dce4ee; border-radius:7px; background:#fafcff; color:#65758b; font:600 9px var(--font-sans); white-space:nowrap; cursor:pointer; }.memoryButtonActive { border-color:#d493c1; background:#fff0f9; color:#9b276e; }.memoryButton:disabled { opacity:.45; cursor:not-allowed; }.memoryButton:focus-visible { outline:2px solid var(--canvas-blue); outline-offset:2px; }
+.structuredGraph { position: absolute; z-index: 12; left: 62px; bottom: 16px; width: 250px; max-height: 45%; overflow: auto; padding: 8px 10px; border: 1px solid var(--border-subtle); border-radius: 9px; background: var(--bg-elevated, white); color: var(--text-secondary); font-size: 12px; }
+.structuredGraph summary { cursor: pointer; font-weight: 700; color: var(--text-primary); }
+.structuredGraph ol { margin: 8px 0 0; padding-left: 20px; }
+.structuredGraph button { padding: 2px 0; border: 0; background: none; color: var(--text-primary); font: inherit; font-weight: 650; cursor: pointer; }
+.structuredGraph span { display: block; font-size: 11px; }
+.structuredGraph ul { padding-left: 14px; }
 
 @media (max-width: 1100px) {
   .inspector { width:240px; }
@@ -409,12 +415,6 @@
 }
 .resizeLine { border-color: var(--accent, #3978f6) !important; }
 .resizeHandle { width: 9px !important; height: 9px !important; border-radius: 3px !important; border: 2px solid white !important; background: var(--accent, #3978f6) !important; }
-.structuredGraph { position: absolute; z-index: 12; left: 62px; bottom: 16px; width: 250px; max-height: 45%; overflow: auto; padding: 8px 10px; border: 1px solid var(--border-subtle); border-radius: 9px; background: var(--bg-elevated, white); color: var(--text-secondary); font-size: 12px; }
-.structuredGraph summary { cursor: pointer; font-weight: 700; color: var(--text-primary); }
-.structuredGraph ol { margin: 8px 0 0; padding-left: 20px; }
-.structuredGraph button { padding: 2px 0; border: 0; background: none; color: var(--text-primary); font: inherit; font-weight: 650; cursor: pointer; }
-.structuredGraph span { display: block; font-size: 11px; }
-.structuredGraph ul { padding-left: 14px; }
 
 /* Canvas chrome follows the application theme. Artifact previews (for example the
    website mockup) intentionally keep their authored colors so dark mode does not

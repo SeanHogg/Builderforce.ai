@@ -35,6 +35,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 import { convertVisitor } from '@/lib/marketingApi';
 import { createLocalCreationSession } from '@/lib/creationSessions';
+import { CanvasRouteArtifact } from './workspace-canvas/CanvasRouteArtifact';
 
 /** Preserve old campaign links while moving prompt-led creation onto Canvas. */
 function LegacyPromptCanvasRedirect() {
@@ -89,7 +90,7 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
     // routes (blog, marketplace, …) stay in PublicShell.
     const group = findActiveGroup(pathname);
     if (group?.tabs && group.tabs.length > 1) {
-      return <AppShell>{children}</AppShell>;
+      return <AppShell><CanvasRouteArtifact>{children}</CanvasRouteArtifact></AppShell>;
     }
     return <PublicShell>{children}</PublicShell>;
   }
@@ -125,7 +126,7 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
     return <AppShell>{null}</AppShell>;
   }
   return (
-    <OnboardingGate renderShell={(gated) => <AppShell>{gated}</AppShell>}>
+    <OnboardingGate renderShell={(gated) => <AppShell><CanvasRouteArtifact>{gated}</CanvasRouteArtifact></AppShell>}>
       {children}
     </OnboardingGate>
   );
