@@ -387,10 +387,61 @@
 }
 
 .trend-line-chart h3 {
-  margin: 0 0 1rem 0;
+  margin: 0;
   font-size: 1rem;
   font-weight: 600;
   color: #374151;
+}
+
+/* Chart Header with Series Toggles (FR-3) */
+.trend-line-chart .chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.series-toggles {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.series-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.375rem;
+  background: #ffffff;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.series-toggle.active {
+  border-color: #9ca3af;
+  color: #374151;
+}
+
+.series-toggle.inactive {
+  color: #9ca3af;
+  border-color: #e5e7eb;
+}
+
+.series-toggle:hover {
+  background: #f9fafb;
+}
+
+.toggle-indicator {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .chart-container {
