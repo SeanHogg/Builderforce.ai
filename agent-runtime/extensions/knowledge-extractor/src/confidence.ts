@@ -40,11 +40,11 @@ function calculatePreliminaryScore(
 
   // Signal type weight branch (EXPLICIT > IMPLICIT > BEHAVIORAL).
   if (record.signal_type === "EXPLICIT") {
-    score += weights.signalType * computeSignalWeight(record.confidence_score);
+    score += globalWeights.signalType * computeSignalWeight(record.confidence_score);
   } else if (record.signal_type === "IMPLICIT") {
-    score += weights.signalType * 0.5;
+    score += globalWeights.signalType * 0.5;
   } else {
-    score += weights.signalType * 0.35;
+    score += globalWeights.signalType * 0.35;
   }
 
   // Agent-provided confidence_hint weight (if present).
