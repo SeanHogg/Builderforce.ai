@@ -221,7 +221,11 @@ async function tokenForCredential(env: Env, tenantId: number, credentialId: stri
   const [cred] = await db
     .select()
     .from(integrationCredentials)
-    .where(and(eq(integrationCredentials.id, credentialId), eq(integrationCredentials.tenantId, tenantId)));
+    .where(and(
+      eq(integrationCredentials.id, credentialId),
+      eq(integrationCredentials.tenantId, tenantId),
+      eq(integrationCredentials.isEnabled, true),
+    ));
   if (!cred) return null;
   const creds = await decryptCredentials(cred.credentialsEnc, cred.iv, gitSecret(env), tenantId);
   return (creds?.accessToken as string | undefined) ?? (creds?.apiToken as string | undefined) ?? (creds?.token as string | undefined) ?? null;

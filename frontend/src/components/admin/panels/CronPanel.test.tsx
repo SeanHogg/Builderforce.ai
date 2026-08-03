@@ -35,10 +35,11 @@ const state = (over: Partial<AdminCronState['gate']> = {}): AdminCronState => ({
     { cadence: 'daily', cron: '0 9 * * *', sweeps: 1 },
   ],
   sweeps: [
-    { key: 'manager', cadence: 'frequent', description: 'AI Manager pass.', dispatches: true, available: true },
-    { key: 'exec-reaper', cadence: 'frequent', description: 'Fail stranded executions.', dispatches: false, available: true },
-    { key: 'demo-reseed', cadence: 'daily', description: 'Reseed demo tenants.', dispatches: false, available: false },
+    { key: 'manager', cadence: 'frequent', description: 'AI Manager pass.', dispatches: true, available: true, enabled: true },
+    { key: 'exec-reaper', cadence: 'frequent', description: 'Fail stranded executions.', dispatches: false, available: true, enabled: true },
+    { key: 'demo-reseed', cadence: 'daily', description: 'Reseed demo tenants.', dispatches: false, available: false, enabled: true },
   ],
+  controlsPersisted: true,
 });
 
 const runResult = (over: Partial<AdminCronRunResult> = {}): AdminCronRunResult => ({
@@ -159,5 +160,13 @@ describe('CronPanel', () => {
     const button = await screen.findByText('admin.cron.actions.signal');
     expect(button.closest('button')).toBeDisabled();
     expect(screen.getAllByText('admin.cron.gate.kvUnbound').length).toBeGreaterThan(0);
+  });
+
+  it('pauses and resumes an individual sweep', async () => {
+    const toggle = vi.spyOn(adminApi, 'cronSetEnabled').mockResolvedValue({ key: 'manager', enabled: false });
+    render(<CronPanel />);
+    const checkbox = await screen.findByLabelText(/manager/);
+    await act(async () => { fireEvent.click(checkbox); });
+    await waitFor(() => expect(toggle).toHaveBeenCalledWith('manager', false));
   });
 });

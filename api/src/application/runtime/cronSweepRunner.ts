@@ -57,6 +57,8 @@ export function cadenceForCron(expr: string | undefined | null): CronCadence {
 
 export interface CronSweepContext {
   env: Env;
+  /** Persisted platform switches read once by the caller for this invocation. */
+  controls?: Readonly<Record<string, boolean>>;
   /**
    * The ONE per-tenant dispatch ceiling for this invocation, shared by every
    * sweep that can start a billable run (see tickDispatchBudget). One budget per

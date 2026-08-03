@@ -32,6 +32,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { cronSweepEnabled, readCronControls } from '../runtime/cronControls';
 import type { RuntimeService } from '../runtime/RuntimeService';
 import {
   tasks, boards, swimlanes, swimlaneAgentAssignments, pullRequests,
@@ -977,6 +978,8 @@ export async function runManagerForProject(
      * behaviour exactly as `tickDispatchBudget` documents.
      */
     dispatchBudget?: TickDispatchBudget;
+    /** Platform PR kill switch; omitted callers resolve it from KV. */
+    prManagementEnabled?: boolean;
   },
 ): Promise<ManagerRunSummary> {
   const { tenantId, projectId } = args;
@@ -990,6 +993,8 @@ export async function runManagerForProject(
   // immediately so a human sees work start the instant they click. Callers may force
   // either way via `dispatch`.
   const shouldDispatch = args.dispatch ?? (submittedBy !== 'system:manager-cron');
+  const prManagementEnabled = args.prManagementEnabled
+    ?? cronSweepEnabled(await readCronControls(env), 'pr-ticket-reconciler');
   // The board task representing this run (manual runs only) — every decision below
   // links to it so the run task shows exactly what this pass changed.
   const runTaskId = args.runTaskId ?? null;
@@ -1057,6 +1062,7 @@ export async function runManagerForProject(
    * did not run out of time. See `carryOverRotation`.
    */
   const mayRunStage = (stage: string): boolean => {
+    if (!prManagementEnabled && (stage === 'pr_conduct' || stage === 'pr_merge')) return false;
     if (rotation.mayRun(stage)) return true;
     rotation.skip(stage);
     budget.shed(stage);

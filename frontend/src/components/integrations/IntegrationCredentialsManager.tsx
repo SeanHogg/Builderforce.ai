@@ -152,6 +152,7 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
   // rename / change base URL) rather than creating a new one.
   const [editingId, setEditingId] = useState<string | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
+  const [toggling, setToggling] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
 
   // Add-form state
@@ -268,6 +269,19 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
     }
   };
 
+  const toggleEnabled = async (credential: IntegrationCredential) => {
+    setToggling(credential.id);
+    setError(null);
+    try {
+      await integrationsApi.update(credential.id, { isEnabled: !credential.isEnabled });
+      load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('toggleFailed'));
+    } finally {
+      setToggling(null);
+    }
+  };
+
   const remove = async (id: string) => {
     if (!(await confirm(tc('deleteIntegrationKeyConfirm')))) return;
     await integrationsApi.remove(id);
@@ -294,7 +308,17 @@ export function IntegrationCredentialsManager({ projectId, providers, heading }:
         {result && !result.ok && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{result.message}</span>}
         {!readOnly && (
           <>
-            <button type="button" style={btnSubtle} disabled={testing === c.id} onClick={() => test(c.id)}>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-muted)', cursor: toggling === c.id ? 'wait' : 'pointer' }}>
+              <input
+                type="checkbox"
+                aria-label={t('toggleLabel', { name: c.name })}
+                checked={c.isEnabled}
+                disabled={toggling === c.id}
+                onChange={() => void toggleEnabled(c)}
+              />
+              {c.isEnabled ? t('enabled') : t('disabled')}
+            </label>
+            <button type="button" style={btnSubtle} disabled={testing === c.id || !c.isEnabled} onClick={() => test(c.id)}>
               {testing === c.id ? t('testing') : t('test')}
             </button>
             <button type="button" style={btnSubtle} onClick={() => openEdit(c)}>

@@ -190,6 +190,7 @@ import {
 } from './openapi/schema';
 import { evaluateCronGate, openCronTick } from './application/runtime/cronWorkSignal';
 import { createTickDispatchBudget } from './application/runtime/tickDispatchBudget';
+import { applyCronControls, readCronControls } from './application/runtime/cronControls';
 // Every scheduled sweep is declared ONCE in cronSweeps.ts and invoked through the
 // shared runner, so the cron handler below and the superadmin force-run route
 // (POST /api/admin/cron/:target) can never drift. See cronSweepRunner.ts.
@@ -764,8 +765,6 @@ export default {
       waitUntil: (task) => ctx.waitUntil(task),
     }, async () => {
       const cadence = cadenceForCron(event.cron);
-      const sweeps = sweepsForCadence(CRON_SWEEPS, cadence);
-      if (sweeps.length === 0) return;
 
       if (cadence === 'frequent') {
         // KV work-gate — the single change that lets Neon compute autosuspend.
@@ -785,11 +784,15 @@ export default {
         await openCronTick(env, tickNowMs, gate.floorDue);
       }
 
+      const controls = await readCronControls(env);
+      const sweeps = sweepsForCadence(applyCronControls(CRON_SWEEPS, controls), cadence);
+      if (sweeps.length === 0) return;
+
       // ONE per-tenant dispatch ceiling for this whole tick, shared by every sweep
       // that can start a billable run. Each sweep used to enforce its own private
       // 25/tenant, so the ceilings never composed and a tenant could take 25 from
       // the executor plus more from the manager in the same five minutes.
-      dispatchCronSweeps(sweeps, { env, budget: createTickDispatchBudget() }, (p) => ctx.waitUntil(p));
+      dispatchCronSweeps(sweeps, { env, budget: createTickDispatchBudget(), controls }, (p) => ctx.waitUntil(p));
     });
   },
 

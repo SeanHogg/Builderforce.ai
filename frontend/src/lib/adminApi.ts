@@ -222,6 +222,8 @@ export interface AdminCronSweep {
   dispatches: boolean;
   /** False when an env flag disables it (e.g. the demo reseed). */
   available: boolean;
+  /** Persisted operator switch; false skips scheduled and forced runs. */
+  enabled: boolean;
 }
 
 export interface AdminCronState {
@@ -239,6 +241,8 @@ export interface AdminCronState {
   };
   cadences: Array<{ cadence: AdminCronCadence; cron: string | null; sweeps: number }>;
   sweeps: AdminCronSweep[];
+  /** False when KV is unbound, so switches cannot safely survive a deploy. */
+  controlsPersisted: boolean;
 }
 
 export interface AdminCronOutcome {
@@ -930,6 +934,13 @@ export const adminApi = {
   /** Scheduled sweeps + the live KV work-gate decision. */
   async cronState(): Promise<AdminCronState> {
     return adminRequest<AdminCronState>('/api/admin/cron');
+  },
+
+  /** Enable or pause one registered sweep platform-wide. */
+  async cronSetEnabled(key: string, enabled: boolean): Promise<{ key: string; enabled: boolean }> {
+    return adminRequest(`/api/admin/cron/${encodeURIComponent(key)}`, {
+      method: 'PATCH', body: JSON.stringify({ enabled }),
+    });
   },
 
   /**

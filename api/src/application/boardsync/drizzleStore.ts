@@ -331,7 +331,11 @@ export async function loadConnectionCredentials(
   const [row] = await db
     .select()
     .from(integrationCredentials)
-    .where(and(eq(integrationCredentials.id, credentialId), eq(integrationCredentials.tenantId, tenantId)))
+    .where(and(
+      eq(integrationCredentials.id, credentialId),
+      eq(integrationCredentials.tenantId, tenantId),
+      eq(integrationCredentials.isEnabled, true),
+    ))
     .limit(1);
   if (!row) return null;
   const creds = await decryptCredentials(row.credentialsEnc, row.iv, secret, tenantId);

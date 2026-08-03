@@ -8825,7 +8825,8 @@
         "signal": "⚑ Signal pending work",
         "run": "Run",
         "runGroup": "▶ Run group",
-        "running": "Running…"
+        "running": "Running…",
+        "toggle": "Turn {sweep} on or off"
       },
       "cadence": {
         "frequent": "Frequent tick",
@@ -8837,12 +8838,15 @@
       "table": {
         "sweep": "Sweep",
         "description": "What it does",
-        "lastRun": "Last forced run"
+        "lastRun": "Last forced run",
+        "enabled": "Running"
       },
       "badge": {
         "dispatches": "starts agent runs",
-        "unavailable": "disabled in this environment"
+        "unavailable": "disabled in this environment",
+        "paused": "paused by operator"
       },
+      "status": { "on": "On", "off": "Off" },
       "outcome": {
         "ok": "OK in {ms} ms",
         "noop": "nothing to do",
@@ -10406,7 +10410,11 @@
     "fieldRequired": "{field} is required",
     "defaultKeyName": "{provider} key",
     "saveFailed": "Save failed",
-    "testFailed": "Test failed",
+      "testFailed": "Test failed",
+      "toggleFailed": "Could not change the integration state",
+      "toggleLabel": "Turn {name} on or off",
+      "enabled": "On",
+      "disabled": "Off",
     "workspaceTag": "(workspace)",
     "connected": "connected",
     "failed": "failed",

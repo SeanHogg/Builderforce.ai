@@ -8825,7 +8825,8 @@
         "signal": "⚑ Señalar trabajo pendiente",
         "run": "Ejecutar",
         "runGroup": "▶ Ejecutar el grupo",
-        "running": "Ejecutando…"
+        "running": "Ejecutando…",
+        "toggle": "Activar o desactivar {sweep}"
       },
       "cadence": {
         "frequent": "Disparo frecuente",
@@ -8837,12 +8838,15 @@
       "table": {
         "sweep": "Tarea",
         "description": "Qué hace",
-        "lastRun": "Última ejecución forzada"
+        "lastRun": "Última ejecución forzada",
+        "enabled": "Activo"
       },
       "badge": {
         "dispatches": "inicia ejecuciones de agentes",
-        "unavailable": "desactivada en este entorno"
+        "unavailable": "desactivada en este entorno",
+        "paused": "pausada por un operador"
       },
+      "status": { "on": "Sí", "off": "No" },
       "outcome": {
         "ok": "Correcto en {ms} ms",
         "noop": "nada que hacer",
@@ -10459,7 +10463,11 @@
     "errUpdate": "No se pudo actualizar el repositorio",
     "errAdd": "No se pudo añadir el repositorio",
     "errClipboard": "No se pudo copiar al portapapeles —— tu navegador lo bloqueó.",
-    "testFailed": "La prueba falló",
+      "testFailed": "La prueba falló",
+      "toggleFailed": "No se pudo cambiar el estado de la integración",
+      "toggleLabel": "Activar o desactivar {name}",
+      "enabled": "Activa",
+      "disabled": "Desactivada",
     "linkKeyFirst": "Vincula primero una clave de acceso.",
     "readingRepo": "Leyendo el repositorio…",
     "noImportableFiles": "No se encontraron archivos importables en esta rama.",

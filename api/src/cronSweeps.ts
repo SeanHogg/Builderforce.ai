@@ -56,6 +56,7 @@ import { dueSnapshots } from './application/reports/lensSnapshots';
 import { runDueCeremonies, runCeremonyReaper } from './application/ceremony/runDueCeremonies';
 import { buildScheduledReport } from './presentation/routes/reportRoutes';
 import { runPrReconciliationSweep } from './application/reconciliation/runPrReconciliationSweep';
+import { cronSweepEnabled } from './application/runtime/cronControls';
 
 /**
  * `null` from a sweep's `run` = nothing worth a log line. Preserved verbatim from
@@ -278,8 +279,12 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     cadence: 'frequent',
     description: 'AI Manager pass: score + rank the backlog, assign unowned work, conduct PRs.',
     dispatches: true,
-    run: async ({ env, budget }) => {
-      const r = await runManagerSweep(env, budget);
+    run: async ({ env, budget, controls }) => {
+      const r = await runManagerSweep(env, budget, {
+        // One switch owns PR management across both paths. Core manager work
+        // continues while the reconciler and the manager's PR stages are paused.
+        prManagementEnabled: cronSweepEnabled(controls ?? {}, 'pr-ticket-reconciler'),
+      });
       return r.managed > 0
         ? `projects=${r.projects} managed=${r.managed} notReached=${r.notReached} scored=${r.scored} ranked=${r.ranked} assigned=${r.assigned} prsConducted=${r.prsConducted} prsMerged=${r.prsMerged} dispatched=${r.dispatched} remediated=${r.remediated} remediationDeferred=${r.remediationDeferred} tokenBlocked=${r.tokenBlockedTenants}`
         : null;

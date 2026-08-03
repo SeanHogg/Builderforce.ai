@@ -8825,7 +8825,8 @@
         "signal": "⚑ Ausstehende Arbeit signalisieren",
         "run": "Ausführen",
         "runGroup": "▶ Gruppe ausführen",
-        "running": "Läuft…"
+        "running": "Läuft…",
+        "toggle": "{sweep} ein- oder ausschalten"
       },
       "cadence": {
         "frequent": "Häufiger Tick",
@@ -8837,12 +8838,15 @@
       "table": {
         "sweep": "Lauf",
         "description": "Aufgabe",
-        "lastRun": "Letzter erzwungener Lauf"
+        "lastRun": "Letzter erzwungener Lauf",
+        "enabled": "Aktiv"
       },
       "badge": {
         "dispatches": "startet Agenten-Läufe",
-        "unavailable": "in dieser Umgebung deaktiviert"
+        "unavailable": "in dieser Umgebung deaktiviert",
+        "paused": "vom Betreiber pausiert"
       },
+      "status": { "on": "Ein", "off": "Aus" },
       "outcome": {
         "ok": "OK in {ms} ms",
         "noop": "nichts zu tun",
@@ -10406,7 +10410,11 @@
     "fieldRequired": "{field} ist erforderlich",
     "defaultKeyName": "{provider}-Schlüssel",
     "saveFailed": "Speichern fehlgeschlagen",
-    "testFailed": "Test fehlgeschlagen",
+      "testFailed": "Test fehlgeschlagen",
+      "toggleFailed": "Integrationsstatus konnte nicht geändert werden",
+      "toggleLabel": "{name} ein- oder ausschalten",
+      "enabled": "Ein",
+      "disabled": "Aus",
     "workspaceTag": "(Arbeitsbereich)",
     "connected": "verbunden",
     "failed": "fehlgeschlagen",

@@ -194,6 +194,7 @@ export async function runManagerSweep(
    *  the autonomous executor both start billable runs in the SAME cron tick, so they
    *  must draw from one tenant budget rather than each granting a private 25. */
   budget: TickDispatchBudget = createTickDispatchBudget(),
+  options: { prManagementEnabled?: boolean } = {},
 ): Promise<ManagerSweepResult> {
   const db = buildDatabase(env);
   const runtimeService = buildRuntimeService(env, db);
@@ -243,6 +244,7 @@ export async function runManagerSweep(
         // the pass reserves against this before it starts work — see the note on the
         // removed replay loop below.
         dispatchBudget: budget,
+        prManagementEnabled: options.prManagementEnabled,
       });
       if (s.skipped) return;
       result.managed += 1;

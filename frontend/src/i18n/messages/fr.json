@@ -8825,7 +8825,8 @@
         "signal": "⚑ Signaler du travail en attente",
         "run": "Lancer",
         "runGroup": "▶ Lancer le groupe",
-        "running": "En cours…"
+        "running": "En cours…",
+        "toggle": "Activer ou désactiver {sweep}"
       },
       "cadence": {
         "frequent": "Tick fréquent",
@@ -8837,12 +8838,15 @@
       "table": {
         "sweep": "Tâche",
         "description": "Rôle",
-        "lastRun": "Dernière exécution forcée"
+        "lastRun": "Dernière exécution forcée",
+        "enabled": "Active"
       },
       "badge": {
         "dispatches": "démarre des exécutions d’agents",
-        "unavailable": "désactivée dans cet environnement"
+        "unavailable": "désactivée dans cet environnement",
+        "paused": "mise en pause par un opérateur"
       },
+      "status": { "on": "Oui", "off": "Non" },
       "outcome": {
         "ok": "OK en {ms} ms",
         "noop": "rien à faire",
@@ -10406,7 +10410,11 @@
     "fieldRequired": "{field} est requis",
     "defaultKeyName": "Clé {provider}",
     "saveFailed": "Échec de l'enregistrement",
-    "testFailed": "Échec du test",
+      "testFailed": "Échec du test",
+      "toggleFailed": "Impossible de modifier l’état de l’intégration",
+      "toggleLabel": "Activer ou désactiver {name}",
+      "enabled": "Active",
+      "disabled": "Désactivée",
     "workspaceTag": "(espace de travail)",
     "connected": "connecté",
     "failed": "en échec",

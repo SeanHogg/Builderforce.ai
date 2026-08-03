@@ -66,7 +66,7 @@ export default function CronPanel() {
     const affected = target === 'all'
       ? (data?.sweeps ?? [])
       : (data?.sweeps ?? []).filter((s) => s.key === target || s.cadence === target);
-    const dispatching = affected.filter((s) => s.dispatches);
+    const dispatching = affected.filter((s) => s.dispatches && s.enabled);
     if (dispatching.length > 0) {
       const ok = await confirm({
         title: t('confirm.title'),
@@ -107,6 +107,19 @@ export default function CronPanel() {
       setError('');
       await adminApi.cronSignal();
       setSignalled(true);
+      reload();
+    } catch (e) {
+      setError(errText(e));
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const toggle = async (key: string, enabled: boolean) => {
+    try {
+      setBusy(`toggle:${key}`);
+      setError('');
+      await adminApi.cronSetEnabled(key, enabled);
       reload();
     } catch (e) {
       setError(errText(e));
@@ -244,6 +257,7 @@ export default function CronPanel() {
                     <th>{t('table.sweep')}</th>
                     <th>{t('table.description')}</th>
                     <th>{t('table.lastRun')}</th>
+                    <th>{t('table.enabled')}</th>
                     <th />
                   </tr>
                 </thead>
@@ -257,6 +271,7 @@ export default function CronPanel() {
                           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
                             {sweep.dispatches && <span className="badge badge-neutral">{t('badge.dispatches')}</span>}
                             {!sweep.available && <span className="badge badge-neutral">{t('badge.unavailable')}</span>}
+                            {!sweep.enabled && <span className="badge badge-neutral">{t('badge.paused')}</span>}
                           </div>
                         </td>
                         <td className="text-muted">{sweep.description}</td>
@@ -279,10 +294,24 @@ export default function CronPanel() {
                           )}
                         </td>
                         <td>
+                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: data?.controlsPersisted ? 'pointer' : 'not-allowed' }}>
+                            <input
+                              type="checkbox"
+                              aria-label={t('actions.toggle', { sweep: sweep.key })}
+                              checked={sweep.enabled}
+                              disabled={Boolean(busy) || !data?.controlsPersisted}
+                              onChange={(event) => void toggle(sweep.key, event.target.checked)}
+                            />
+                            <span className="text-muted" style={{ fontSize: 12 }}>
+                              {sweep.enabled ? t('status.on') : t('status.off')}
+                            </span>
+                          </label>
+                        </td>
+                        <td>
                           <button
                             type="button"
                             className="btn-ghost"
-                            disabled={Boolean(busy) || !sweep.available}
+                            disabled={Boolean(busy) || !sweep.available || !sweep.enabled}
                             onClick={() => void run(sweep.key)}
                           >
                             {busy === sweep.key ? t('actions.running') : t('actions.run')}

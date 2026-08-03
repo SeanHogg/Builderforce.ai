@@ -8825,7 +8825,8 @@
         "signal": "⚑ 标记待处理工作",
         "run": "执行",
         "runGroup": "▶ 执行整组",
-        "running": "执行中…"
+        "running": "执行中…",
+        "toggle": "开启或关闭 {sweep}"
       },
       "cadence": {
         "frequent": "高频触发",
@@ -8837,12 +8838,15 @@
       "table": {
         "sweep": "任务",
         "description": "作用",
-        "lastRun": "上次强制执行"
+        "lastRun": "上次强制执行",
+        "enabled": "运行状态"
       },
       "badge": {
         "dispatches": "会启动智能体运行",
-        "unavailable": "在此环境中已禁用"
+        "unavailable": "在此环境中已禁用",
+        "paused": "已由管理员暂停"
       },
+      "status": { "on": "开启", "off": "关闭" },
       "outcome": {
         "ok": "成功，耗时 {ms} 毫秒",
         "noop": "无事可做",
@@ -10406,7 +10410,11 @@
     "fieldRequired": "{field} 为必填项",
     "defaultKeyName": "{provider} 密钥",
     "saveFailed": "保存失败",
-    "testFailed": "测试失败",
+      "testFailed": "测试失败",
+      "toggleFailed": "无法更改集成状态",
+      "toggleLabel": "开启或关闭 {name}",
+      "enabled": "开启",
+      "disabled": "关闭",
     "workspaceTag": "（工作区）",
     "connected": "已连接",
     "failed": "失败",

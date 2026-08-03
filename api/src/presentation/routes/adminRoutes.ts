@@ -14,6 +14,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * POST /api/admin/impersonate          — issue a tenant JWT for any user+tenant pair
  * GET  /api/admin/cron                 — scheduled sweeps + live KV work-gate state
  * POST /api/admin/cron/signal          — set the pending-work flag for the next tick
+ * PATCH /api/admin/cron/:target        — enable/disable one scheduled sweep
  * POST /api/admin/cron/:target         — force-run a sweep / cadence group / all
  */
 import { Hono } from 'hono';
@@ -99,6 +100,12 @@ import {
   updateTenantApiKey,
 } from '../../application/llm/tenantApiKeyService';
 import { normalizeOrigins } from './tenantApiKeyRoutes';
+import {
+  applyCronControls,
+  cronSweepEnabled,
+  readCronControls,
+  writeCronControl,
+} from '../../application/runtime/cronControls';
 import {
   amendActiveLegalDoc,
   enhanceLegalContent,
@@ -1785,6 +1792,7 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     // Read-only: evaluateCronGate never writes, so inspecting the gate cannot
     // consume a pending-work signal or move the floor timestamp.
     const gate = await evaluateCronGate(env, nowMs);
+    const controls = await readCronControls(env);
     return c.json({
       now: new Date(nowMs).toISOString(),
       gate: {
@@ -1812,8 +1820,31 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         description: s.description,
         dispatches: Boolean(s.dispatches),
         available: s.available ? s.available(env) : true,
+        enabled: cronSweepEnabled(controls, s.key),
       })),
+      controlsPersisted: Boolean(env.AUTH_CACHE_KV),
     });
+  });
+
+  // One switch per registry entry. Disabled sweeps are skipped by both real cron
+  // ticks and force-runs; no restart/deploy is required to resume them.
+  router.patch('/cron/:target', async (c) => {
+    const env = c.env as Env;
+    const target = c.req.param('target');
+    const sweep = CRON_SWEEPS.find((candidate) => candidate.key === target);
+    if (!sweep) return c.json({ error: `Unknown cron sweep '${target}'.` }, 404);
+    const body = await c.req.json<{ enabled?: unknown }>().catch(() => ({} as { enabled?: unknown }));
+    if (typeof body.enabled !== 'boolean') return c.json({ error: 'enabled must be a boolean.' }, 400);
+    try {
+      await writeCronControl(env, target, body.enabled);
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : 'Could not persist cron control.' }, 503);
+    }
+    await writeAdminAudit(buildDatabase(c.env), 'CRON_CONTROL_CHANGED', (c.get('userId') as string | undefined) ?? null, {
+      metadata: { sweep: target, enabled: body.enabled },
+      ipAddress: c.req.header('cf-connecting-ip') ?? null,
+    });
+    return c.json({ key: target, enabled: body.enabled });
   });
 
   // -------------------------------------------------------------------------
@@ -1872,7 +1903,9 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const body = await c.req.json<{ timeoutMs?: number }>().catch(() => ({} as { timeoutMs?: number }));
     const budget = createTickDispatchBudget();
     const started = Date.now();
-    const results = await runCronSweeps(resolved.sweeps, { env, budget }, {
+    const controls = await readCronControls(env);
+    const controlledSweeps = applyCronControls(resolved.sweeps, controls);
+    const results = await runCronSweeps(controlledSweeps, { env, budget, controls }, {
       timeoutMs: body.timeoutMs,
       // A sweep past its deadline keeps running after we answer; without this the
       // isolate would cancel it when the request ends and the force-run would
