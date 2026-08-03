@@ -92,7 +92,7 @@ export function calculateConfidence(
   record: LearningRecord,
   config: ExtractorConfig
 ): number {
-  const score = calculatePreliminaryScore(record, GlobalWeights);
+  const score = calculatePreliminaryScore(record, globalWeights);
   return Math.max(0, Math.min(1, score));
 }
 
