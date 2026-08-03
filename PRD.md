@@ -2,6 +2,8 @@
 > _Each agent that updates this PRD signs its change below._
 >
 > _Business Analyst sign-off: grounded against `seanhogg/builderforce.ai` as of 2026-08-03 — schema barrel, TenantService, ProjectService, tenantRoutes, projectRoutes, activityLog, AuditService, assignOwner, TenantRole enum, and tenantMembers table. Reference code paths cited inline._
+>
+> _Product Manager sign-off: validated 2026-08-03 — PRD is coherent end-to-end. Problem statement is crisp, target users are well-defined, scope boundaries are clear. FR1–FR5 and AC1–AC5 are testable, unambiguous, and traceable to RQ1–RQ11. The resolution priority (explicit → designated lead → creator → alert) is the correct product behaviour. The BA's requirements correctly model the `project_members` table to mirror the existing `tenantMembers` pattern, keeping the ownership model consistent. Owner-is-committed-regardless-of-sync-failure (FR5/AC5) is the right product decision — prevents role rollback from creating a worse state than a delayed sync. RQ11's idempotency (skip dispatch when owner unchanged) prevents noisy sync storms. Approved for Design phase._
 
 # PRD: Auto-resolve Owner Role (or Trigger Sync)
 
