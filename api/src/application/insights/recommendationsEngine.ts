@@ -81,9 +81,31 @@ export interface Recommendation {
   rank: number;
 }
 
+/**
+ * Aggregate time savings for a group of recommendations.
+ * Separates one-time vs recurring for clarity.
+ */
+export interface TimeSavingsAggregate {
+  /** Total one-time savings in minutes (e.g., one-time audit). */
+  oneTimeMinutes: number;
+  /** Recurring savings per week in minutes (e.g., weekly time saved). */
+  recurringWeeklyMinutes: number;
+  /** Human-readable summary, e.g. "3 recommendations could save you X hours/week". */
+  summary: string;
+  /** Breakdown by category for detail view. */
+  byCategory: {
+    category: RecCategory;
+    recurringWeeklyMinutes: number;
+    oneTimeMinutes: number;
+    recommendationCount: number;
+  }[];
+}
+
 export interface RecommendationsResult {
   windowDays: number;
   recommendations: Recommendation[];
+  /** Aggregate time savings for all visible recommendations. */
+  timeSavingsAggregate?: TimeSavingsAggregate;
 }
 
 const SEVERITY_BASE: Record<RecSeverity, number> = { critical: 1000, warning: 500, info: 100 };
