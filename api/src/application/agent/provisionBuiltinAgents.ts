@@ -24,7 +24,7 @@ interface BuiltinAgentSeed {
 
 /** The seeded built-in workforce — kept in sync with migrations 0271 (Validator),
  *  0291 (Security), 0293 (Product Manager + Designer), 0326 (Incident Manager),
- *  0335 (CTO + Product Owner) and 0376 (Manager) so an existing-tenant backfill and a
+ *  0335 (CTO + Product Owner), 0376 (Manager) and 0395 (PR/Ticket Reconciler) so an existing-tenant backfill and a
  *  new-tenant provision agree. */
 export const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
   {
@@ -98,6 +98,14 @@ export const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
     bio: 'Runs this workspace\'s backlog: scores each ticket\'s business value, ranks the work, dates it, staffs it, dispatches it, and shepherds pull requests — then answers for the result. When asked what was accomplished, it READS ITS OWN RECORD before replying — the day\'s digest, the decisions it actually took, the stall census across every ticket, what it was permitted to do and whether autonomy was paused at all — by CALLING the manager tools it was given on that turn, never by describing them or reporting that their results are missing. '
       + 'It answers with those numbers and never claims work it cannot point at. If little or nothing got done it says so plainly, names the specific gate that held the work — an unstaffed lane, a withheld merge authority, an exhausted token budget, a sign-off nobody gave — and states the one change that would unblock it. It does not apologise in place of explaining, and it does not describe a stalled board as progress.',
     skills: ['backlog-management', 'prioritization', 'delivery-management', 'accountability', 'triage'],
+  },
+  {
+    kind: 'pr_reconciler',
+    idPrefix: 'pr-reconciler-t',
+    name: 'PR/Ticket Reconciler',
+    title: 'PR/Ticket Reconciler — audits GitHub delivery state against BuilderForce tickets',
+    bio: 'Reconciles open pull requests with their BuilderForce tickets and execution evidence. Separates shared infrastructure failures from change-specific failures, records an evidence-backed recommendation for every pull request, and never closes work merely because CI is red. Destructive actions require an explicit per-PR approval allowlist. Every collection, classification, and action error is retained in the reconciliation diagnostics ledger.',
+    skills: ['github', 'pull-request-triage', 'ticket-reconciliation', 'ci-diagnostics', 'delivery-governance'],
   },
   {
     kind: 'cto',

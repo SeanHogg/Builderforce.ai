@@ -564,6 +564,61 @@ export const pullRequests = pgTable('pull_requests', {
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
 });
 
+/** One deterministic GitHub↔ticket audit by the dedicated reconciliation agent. */
+export const prReconciliationRuns = pgTable('pr_reconciliation_runs', {
+  id:                uuid('id').primaryKey().defaultRandom(),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:         integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  repoId:            uuid('repo_id').notNull().references(() => projectRepositories.id, { onDelete: 'cascade' }),
+  agentRef:          varchar('agent_ref', { length: 64 }),
+  mode:              varchar('mode', { length: 16 }).notNull().default('dry_run'),
+  status:            varchar('status', { length: 24 }).notNull().default('running'),
+  requestedBy:       varchar('requested_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  approvedPrNumbers: jsonb('approved_pr_numbers').notNull().default([]),
+  summary:           jsonb('summary').notNull().default({}),
+  errorCount:        integer('error_count').notNull().default(0),
+  startedAt:         timestamp('started_at').notNull().defaultNow(),
+  finishedAt:        timestamp('finished_at'),
+});
+
+/** Evidence and recommendation retained for every PR seen in a reconciliation run. */
+export const prReconciliationItems = pgTable('pr_reconciliation_items', {
+  id:                uuid('id').primaryKey().defaultRandom(),
+  runId:             uuid('run_id').notNull().references(() => prReconciliationRuns.id, { onDelete: 'cascade' }),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  repoId:            uuid('repo_id').notNull().references(() => projectRepositories.id, { onDelete: 'cascade' }),
+  prNumber:          integer('pr_number').notNull(),
+  prUrl:             varchar('pr_url', { length: 500 }).notNull(),
+  title:             text('title').notNull(),
+  headBranch:        varchar('head_branch', { length: 255 }),
+  taskId:            integer('task_id').references(() => tasks.id, { onDelete: 'set null' }),
+  taskStatus:        varchar('task_status', { length: 64 }),
+  classification:    varchar('classification', { length: 32 }).notNull(),
+  recommendedAction: varchar('recommended_action', { length: 32 }).notNull(),
+  confidence:        varchar('confidence', { length: 16 }).notNull(),
+  reasonCodes:       jsonb('reason_codes').notNull().default([]),
+  checkSummary:      jsonb('check_summary').notNull().default({}),
+  evidence:          jsonb('evidence').notNull().default({}),
+  appliedAction:     varchar('applied_action', { length: 32 }),
+  appliedAt:         timestamp('applied_at'),
+  createdAt:         timestamp('created_at').notNull().defaultNow(),
+});
+
+/** Every collection/classification/action error, readable from the diagnostics API. */
+export const prReconciliationErrors = pgTable('pr_reconciliation_errors', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  runId:     uuid('run_id').references(() => prReconciliationRuns.id, { onDelete: 'cascade' }),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  repoId:    uuid('repo_id').references(() => projectRepositories.id, { onDelete: 'set null' }),
+  prNumber:  integer('pr_number'),
+  phase:     varchar('phase', { length: 32 }).notNull(),
+  code:      varchar('code', { length: 64 }).notNull(),
+  message:   text('message').notNull(),
+  stack:     text('stack'),
+  details:   jsonb('details').notNull().default({}),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
 
 /** One repo per run: the sampled snapshot the LLM calls were grounded on. */
 export const repoAnalysisEvidence = pgTable('repo_analysis_evidence', {

@@ -41,6 +41,8 @@ import {
 } from '../../application/rehearsal/rehearsalService';
 import type { DbHandle } from '../../application/shared/dbHandle';
 import type { HonoEnv } from '../../env';
+import { getReconciliationDiagnostics, listReconciliationRuns, runPrTicketReconciliation } from '../../application/reconciliation/prReconciliationService';
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -120,6 +122,52 @@ export function createAgentOpsRoutes(db: DbHandle) {
   });
 
   // ── Rehearsal ───────────────────────────────────────────────────────────────
+
+  // ── PR/ticket reconciliation ───────────────────────────────────────────────
+
+  /** Durable run history. Every item and every handled error is retained per run. */
+  router.get('/pr-reconciliation/runs', async (c) => {
+    const repoId = c.req.query('repoId') || undefined;
+    const limit = numQuery(c.req.query('limit')) ?? 25;
+    return json({ runs: await listReconciliationRuns(db, c.get('tenantId'), repoId, limit) });
+  });
+
+  /** Full evidence, recommendations, errors, and self-verifying ledger invariants. */
+  router.get('/pr-reconciliation/runs/:id/diagnostics', async (c) => {
+    const diagnostics = await getReconciliationDiagnostics(db, c.get('tenantId'), c.req.param('id'));
+    return diagnostics ? json(diagnostics) : json({ error: 'reconciliation run not found' }, 404);
+  });
+
+  /**
+   * Run the dedicated reconciler. Dry-run is the default. Apply mode is doubly
+   * gated: MANAGER+ here and a non-empty, explicit PR-number allowlist in the
+   * service; only high-confidence close candidates can pass the second gate.
+   */
+  router.post('/pr-reconciliation/runs', requireRole(TenantRole.MANAGER), async (c) => {
+    const body = (await c.req.json<Record<string, unknown>>().catch(() => ({}))) as Record<string, unknown>;
+    const repoId = typeof body.repoId === 'string' ? body.repoId : '';
+    const mode = body.mode === 'apply' ? 'apply' : body.mode == null || body.mode === 'dry_run' ? 'dry_run' : null;
+    const approvedPrNumbers = Array.isArray(body.approvedPrNumbers)
+      ? body.approvedPrNumbers.map(Number).filter((n) => Number.isInteger(n) && n > 0)
+      : [];
+    if (!repoId) return json({ error: 'repoId is required' }, 400);
+    if (!mode) return json({ error: "mode must be 'dry_run' or 'apply'" }, 400);
+
+    try {
+      const result = await runPrTicketReconciliation(c.env, db, {
+        tenantId: c.get('tenantId'), repoId, mode, approvedPrNumbers,
+        requestedBy: c.get('userId') || null,
+      });
+      return json(result, 201);
+    } catch (error) {
+      reportCaughtError(error, {
+        source: 'presentation/routes/agentOpsRoutes.ts',
+        operation: 'POST /pr-reconciliation/runs',
+        context: { tenantId: c.get('tenantId'), repoId, mode, approvedPrNumbers },
+      });
+      return json({ error: error instanceof Error ? error.message : String(error) }, 400);
+    }
+  });
 
   router.get('/rehearsals', async (c) => {
     const rehearsalRows = await listRehearsals(db, c.get('tenantId'), {

@@ -55,6 +55,7 @@ import { runDueReports } from './application/reports/runDueReports';
 import { dueSnapshots } from './application/reports/lensSnapshots';
 import { runDueCeremonies, runCeremonyReaper } from './application/ceremony/runDueCeremonies';
 import { buildScheduledReport } from './presentation/routes/reportRoutes';
+import { runPrReconciliationSweep } from './application/reconciliation/runPrReconciliationSweep';
 
 /**
  * `null` from a sweep's `run` = nothing worth a log line. Preserved verbatim from
@@ -110,6 +111,17 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env }) => {
       await runAlertSweep(env);
       return null;
+    },
+  },
+  {
+    key: 'pr-ticket-reconciler',
+    cadence: 'daily',
+    description: 'Dry-run reconciliation of open GitHub PRs against BuilderForce tickets, with durable diagnostics.',
+    run: async ({ env }) => {
+      const r = await runPrReconciliationSweep(env);
+      return r.due > 0 || r.failed > 0
+        ? `due=${r.due} completed=${r.completed} failed=${r.failed} prs=${r.prs} findings=${r.findings}`
+        : null;
     },
   },
   {
