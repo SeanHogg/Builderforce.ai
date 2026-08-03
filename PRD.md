@@ -1,6 +1,7 @@
 > **PRD** — drafted by Ada (Sr. Product Mgr) · task #583
 > _Each agent that updates this PRD signs its change below._
-> - Business Analyst (code-creator): Requirements section — grounded in existing codebase failure surfaces, audit infra, and permission model.
+>
+> **Business Analyst** (2026-07-15) — authored Requirements section grounded in existing codebase.
 
 # Product Requirements Document (PRD): Remediation Notes for Failures
 
@@ -63,282 +64,172 @@ Failures in automated test runs, deployments, or incidents often recur because r
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+### 1. Failure Entity Taxonomy
 
-### R1 — Failure‑type taxonomy
+A "failure" in the BuilderForce platform is any entity that records a negative outcome requiring investigation or remediation. The following are the canonical failure surfaces the remediation-notes system **must** support as linkable targets:
 
-The system MUST attach remediation notes to a polymorphic "failure" target. The following existing entities qualify as note‑linkable failure surfaces:
-
-| Failure type key | Existing table | Join column | Scope |
+| Failure type | Source table | Key identifier | Existing linkage |
 |---|---|---|---|
-| `prod_incident` | `prod_incidents` (governance.ts) | `id` (uuid) | Tenant‑scoped; already has assignee, watchers, and timeline (`incidentEvents`) |
-| `security_incident` | `security_incidents` (governance.ts) | `id` (uuid) | Tenant‑scoped; separate lifecycle from prod incidents |
-| `deployment_event` | `deploymentEvents` (delivery.ts) | `id` (uuid) | Project‑scoped; filtered by `isFailure = true` |
-| `pr_reconciliation_error` | `prReconciliationErrors` (delivery.ts) | `id` (uuid) | Project‑scoped |
-| `qa_finding` | `qaFindings` (delivery.ts) | `id` (uuid) | Project‑scoped; tied to QA exploration runs |
-| `vulnerability_finding` | `vulnerabilityFindings` (delivery.ts) | `id` (uuid) | Tenant‑scoped; from security scans |
-| `error_event` | `errorEvents` (delivery.ts, `error_collectors` → `errorEvents`) | `id` (uuid) | Project‑scoped; ingested from error collectors |
-| `monitor_event` | `monitorEvents` (delivery.ts) | `id` (uuid) | Project‑scoped; synthetic monitor check failures |
+| Production incident | `prod_incidents` (schema/delivery.ts) | `id` (uuid) | Bridged to a `tasks` row via `boardTaskId`; `incidentEvents` timeline |
+| Security incident | `security_incidents` (schema/governance.ts) | `id` (uuid) | Bridged to a SECURITY board task via `boardTaskId` |
+| Deployment failure | `deployment_events` (schema/delivery.ts) | `id` (uuid) | `isFailure` boolean; linked to PRs via `prNumber` |
+| PR reconciliation error | `pr_reconciliation_errors` (schema/delivery.ts) | `id` (uuid) | Linked to `deploymentEvents` via `deploymentEventId` |
+| Error group | `error_groups` (schema/delivery.ts) | `id` (uuid) | Fingerprint-grouped; linked to a fix `taskId` |
+| QA finding | `qa_findings` (schema/quality.ts) | `id` (uuid) | Linked to `qa_runs` + `qa_explorations` |
+| Security finding | `security_findings` (schema/governance.ts) | `id` (uuid) | Linked to `security_incidents` via `incidentId` |
+| Monitor alert | `alerts` (schema/delivery.ts) | `id` (uuid) | Linked to `segments`; fired via `monitor_events` |
 
-A note may link to one or more failure targets; the junction table `remediation_note_failures` provides the M:N relationship. The `failure_type` discriminator (`prod_incident`, `deployment_event`, …) MUST be stored alongside each link so the system can route and display notes without polymorphic joins.
+The system **must** use a polymorphic association pattern — a single `remediation_notes` table with a `target_type` / `target_id` pair — so one note can link to any failure type, and a new failure type added later does not need a schema migration.
 
-Rationale: The codebase already has these eight failure tables (see `api/src/infrastructure/database/schema/governance.ts` lines ~303‑369, `delivery.ts` lines ~91‑114, ~653‑680, ~743‑761, ~817‑880, ~901‑975); a polymorphic approach reuses them instead of requiring a new unified failure table or migration of historical data.
+### 2. Data Model
 
-### R2 — Database schema
+#### 2.1 `remediation_notes` table
 
-Two new tables in the `governance` schema module (`api/src/infrastructure/database/schema/governance.ts`):
+Create via a new Drizzle schema module at `api/src/infrastructure/database/schema/remediation.ts` and re-export from `schema.ts`. Migration number: next available in `api/migrations/` (check the highest existing number and increment).
 
-**`remediationNotes`**
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | `uuid` | PK, `defaultRandom()` | |
+| `tenantId` | `integer` | NOT NULL, FK → `tenants.id` ON DELETE CASCADE | Tenant isolation |
+| `authorId` | `uuid` | NOT NULL, FK → `users.id` ON DELETE SET NULL | The note's creator |
+| `title` | `varchar(200)` | NOT NULL | Max 200 chars per FR-1 |
+| `body` | `text` | NOT NULL | Max 20k chars; Markdown |
+| `status` | `varchar(16)` | NOT NULL, DEFAULT `'draft'` | One of: `draft`, `in-progress`, `resolved`, `archived` |
+| `visibility` | `varchar(8)` | NOT NULL, DEFAULT `'public'` | `public` (team-visible) or `private` (author-only) |
+| `deletedAt` | `timestamp` | nullable | Soft-delete tombstone; non-null = hidden from normal queries |
+| `createdAt` | `timestamp` | NOT NULL, DEFAULT `now()` | |
+| `updatedAt` | `timestamp` | NOT NULL, DEFAULT `now()` | Bumped on every edit via application-layer trigger |
+
+Indexes:
+- `(tenantId, createdAt DESC)` — list all notes for a tenant, newest first
+- `(tenantId, status)` — filtered queries by status
+- `(tenantId, authorId)` — "my notes" queries
+- `(tenantId, deletedAt)` WHERE `deletedAt IS NULL` — soft-delete-aware scans
+- GIN index on `to_tsvector('english', title || ' ' || body)` for full‑text search (PostgreSQL `tsvector`)
+
+#### 2.2 `remediation_note_links` table (cross‑linking / polymorphic junction)
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | `uuid` | PK, `defaultRandom()` | |
+| `noteId` | `uuid` | NOT NULL, FK → `remediation_notes.id` ON DELETE CASCADE | |
+| `targetType` | `varchar(32)` | NOT NULL | One of the canonical failure types: `prod_incident`, `security_incident`, `deployment_event`, `pr_reconciliation_error`, `error_group`, `qa_finding`, `security_finding`, `alert` |
+| `targetId` | `uuid` | NOT NULL | The ID of the failure row |
+| `linkedBy` | `uuid` | NOT NULL, FK → `users.id` ON DELETE SET NULL | Who created the link |
+| `linkedAt` | `timestamp` | NOT NULL, DEFAULT `now()` | |
+
+Unique constraint: `(noteId, targetType, targetId)` — a note cannot be linked to the same failure twice.
+
+Indexes:
+- `(targetType, targetId)` — "show all notes for this failure"
+- `(noteId)` — "show all failures linked to this note"
+
+#### 2.3 `remediation_note_events` table (audit log)
+
 | Column | Type | Constraints | Notes |
 |---|---|---|---|
 | `id` | `uuid` | PK, `defaultRandom()` | |
 | `tenantId` | `integer` | NOT NULL, FK → `tenants.id` ON DELETE CASCADE | |
-| `title` | `varchar(200)` | NOT NULL | |
-| `body` | `text` | NOT NULL | Markdown; max 20 000 chars enforced in application layer |
-| `status` | `varchar(16)` | NOT NULL, default `'draft'` | One of `draft`, `in_progress`, `resolved`, `archived` |
-| `visibility` | `varchar(8)` | NOT NULL, default `'public'` | `public` or `private` |
-| `authorId` | `varchar(36)` | NOT NULL, FK → `users.id` ON DELETE SET NULL | `ON DELETE SET NULL` so notes survive user deletion |
-| `deletedAt` | `timestamp` | nullable | Soft‑delete marker; non‑null = hidden |
-| `createdAt` | `timestamp` | NOT NULL, `defaultNow()` | |
-| `updatedAt` | `timestamp` | NOT NULL, `defaultNow()` | |
+| `noteId` | `uuid` | NOT NULL, FK → `remediation_notes.id` ON DELETE CASCADE | |
+| `kind` | `varchar(24)` | NOT NULL | `created`, `edited`, `status_change`, `visibility_toggle`, `linked`, `unlinked`, `soft_deleted`, `restored`, `hard_deleted` |
+| `actorId` | `uuid` | nullable, FK → `users.id` ON DELETE SET NULL | Who performed the action |
+| `diff` | `jsonb` | nullable | Before/after snapshot for edits; `{ field, oldValue, newValue }` |
+| `createdAt` | `timestamp` | NOT NULL, DEFAULT `now()` | |
 
-Indexes:
-- `idx_remediation_notes_tenant` on (`tenantId`, `createdAt` DESC)
-- `idx_remediation_notes_author` on (`authorId`, `createdAt` DESC)
-- `idx_remediation_notes_status` on (`tenantId`, `status`)
-- Full‑text search index: `idx_remediation_notes_search` — a GIN index on `to_tsvector('english', title || ' ' || body)` (PostgreSQL full‑text search)
+Index: `(noteId, createdAt DESC)` — the note's history panel.
 
-**`remediationNoteFailures`** (junction)
-| Column | Type | Constraints | Notes |
+Retention: hard-deleted note audit events are retained for 90 days (matching AC-4), enforced by a nightly sweep job that deletes rows where `noteId` references a hard‑deleted note and `createdAt < NOW() - INTERVAL '90 days'`.
+
+### 3. API Surface
+
+All routes live under `/api/remediation-notes` following the existing Hono route conventions (`api/src/api/`). The service class `RemediationNoteService` lives at `api/src/application/remediation/RemediationNoteService.ts`.
+
+#### 3.1 Endpoints
+
+| Method | Path | Auth | Description |
 |---|---|---|---|
-| `id` | `uuid` | PK, `defaultRandom()` | |
-| `noteId` | `uuid` | NOT NULL, FK → `remediationNotes.id` ON DELETE CASCADE | |
-| `failureType` | `varchar(32)` | NOT NULL | One of the eight keys in R1 |
-| `failureId` | `uuid` | NOT NULL | The PK of the target failure row |
-| `linkedAt` | `timestamp` | NOT NULL, `defaultNow()` | |
-| `linkedBy` | `varchar(36)` | NOT NULL, FK → `users.id` ON DELETE SET NULL | |
+| `POST` | `/api/remediation-notes` | `requirePermission('failure_note:write')` | Create a note; body: `{ title, body, status?, visibility?, links?: [{targetType, targetId}] }`. Returns the created note with its links. |
+| `GET` | `/api/remediation-notes/:id` | `requirePermission('failure_note:read')` | Get a single note with its links, audit trail, and linked failure summaries. |
+| `PATCH` | `/api/remediation-notes/:id` | `requirePermission('failure_note:write')` + author or admin | Update title/body/status/visibility. Every edit writes an audit event. Returns updated note. |
+| `DELETE` | `/api/remediation-notes/:id` | `requirePermission('failure_note:write')` + author or admin | Soft-delete (set `deletedAt`). Admins pass `?hard=true` for permanent deletion. |
+| `POST` | `/api/remediation-notes/:id/restore` | `requirePermission('failure_note:admin')` | Admin-only: un‑soft‑delete (set `deletedAt = null`). |
+| `POST` | `/api/remediation-notes/:id/links` | `requirePermission('failure_note:write')` | Link the note to another failure; body: `{ targetType, targetId }`. |
+| `DELETE` | `/api/remediation-notes/:id/links/:linkId` | `requirePermission('failure_note:write')` | Remove a link. |
+| `GET` | `/api/remediation-notes` | `requirePermission('failure_note:read')` | Search & list. Query params: `q` (full‑text), `status`, `authorId`, `targetType`, `targetId`, `visibility` (defaults to excluding private notes by other users), `from`, `to` (date range), `page`, `limit`. |
+| `GET` | `/api/failures/:targetType/:targetId/notes` | `requirePermission('failure_note:read')` | Convenience: all notes for a specific failure. |
+| `GET` | `/api/remediation-notes/:id/history` | `requirePermission('failure_note:read')` | Paginated audit events for one note. |
 
-Unique constraint: `uq_note_failure` on (`noteId`, `failureType`, `failureId`) — prevents duplicate links.
-Index: `idx_note_failures_target` on (`failureType`, `failureId`) — enables "show all notes for this failure."
+#### 3.2 Response shapes
 
-**`remediationNoteVersions`** (audit log)
-| Column | Type | Constraints | Notes |
-|---|---|---|---|
-| `id` | `uuid` | PK, `defaultRandom()` | |
-| `noteId` | `uuid` | NOT NULL, FK → `remediationNotes.id` ON DELETE CASCADE | |
-| `actorId` | `varchar(36)` | NOT NULL, FK → `users.id` ON DELETE SET NULL | |
-| `action` | `varchar(24)` | NOT NULL | `created`, `edited`, `status_change`, `visibility_toggle`, `linked`, `unlinked`, `soft_deleted`, `restored`, `hard_deleted` |
-| `diff` | `jsonb` | nullable | Structured before/after for the changed fields: `{ "field": "status", "from": "draft", "to": "resolved" }` or `{ "field": "body", "lengthBefore": 420, "lengthAfter": 510 }` |
-| `createdAt` | `timestamp` | NOT NULL, `defaultNow()` | |
+- A note object always includes: `id`, `title`, `body` (truncated to 300 chars in list responses), `status`, `visibility`, `author` (`{ id, displayName, avatarUrl }`), `createdAt`, `updatedAt`, `deletedAt` (null for active notes), `linkCount`, and an `_links` map.
+- List/search responses: `{ data: Note[], total: number, page: number, limit: number }`.
+- Error responses use existing `ApiError` conventions (`{ error: string, code: string, status: number }`).
 
-Index: `idx_note_versions_note` on (`noteId`, `createdAt` DESC).
+### 4. Permission Model
 
-Rationale: The audit pattern mirrors the existing `incidentEvents` timeline table (governance.ts line ~830) but is dedicated to notes so that the note history panel is self‑contained. The `diff` column stores structured change data rather than raw text diffs to support the history panel UI.
+Integrate with the existing `permissionRegistry.ts` role matrix:
 
-### R3 — Domain model
-
-A new domain module at `api/src/domain/remediation/` containing:
-
-- **`RemediationNote.ts`** — value object / entity:
-  - `id: string` (uuid)
-  - `tenantId: number`
-  - `title: string` (max 200 chars)
-  - `body: string` (max 20 000 chars, validated in the entity constructor)
-  - `status: NoteStatus` (enum: `draft`, `in_progress`, `resolved`, `archived`)
-  - `visibility: NoteVisibility` (enum: `public`, `private`)
-  - `authorId: string`
-  - `isDeleted: boolean` (derived from `deletedAt !== null`)
-  - `createdAt: Date`
-  - `updatedAt: Date`
-  - `linkedFailures: LinkedFailure[]`
-
-- **`LinkedFailure.ts`** — value object:
-  - `failureType: FailureType` (union of the eight literal keys)
-  - `failureId: string`
-
-- **`IRemediationNoteRepository.ts`** — repository interface:
-  - `create(note: CreateRemediationNoteInput): Promise<RemediationNote>`
-  - `findById(id: string, tenantId: number): Promise<RemediationNote | null>`
-  - `update(id: string, patch: Partial<UpdateRemediationNoteInput>): Promise<RemediationNote>`
-  - `softDelete(id: string, actorId: string): Promise<void>`
-  - `hardDelete(id: string): Promise<void>`
-  - `restore(id: string, actorId: string): Promise<RemediationNote>`
-  - `search(query: RemediationNoteSearchQuery): Promise<RemediationNote[]>`
-  - `listByFailure(failureType: FailureType, failureId: string, opts?: { status?: NoteStatus; includePrivate?: boolean; viewerId?: string }): Promise<RemediationNote[]>`
-  - `link(noteId: string, failureType: FailureType, failureId: string, actorId: string): Promise<void>`
-  - `unlink(noteId: string, failureType: FailureType, failureId: string, actorId: string): Promise<void>`
-  - `getVersions(noteId: string): Promise<RemediationNoteVersion[]>` — for the history panel
-
-### R4 — Application service
-
-A new service at `api/src/application/remediation/RemediationNoteService.ts` with the following methods:
-
-- **`create(input: CreateNoteInput, actor: RequestActor): Promise<RemediationNote>`**
-  - Validates title length (1‑200 chars) and body length (1‑20 000 chars)
-  - Validates that `failureType` is a recognised key
-  - Checks that the actor has edit permission on the target failure's project/tenant (see R7)
-  - Persists the note, the junction row(s), and an audit version (`action: 'created'`)
-  - Sends notification to the failure's assignees (see R8)
-  - Returns the created note
-
-- **`update(input: UpdateNoteInput, actor: RequestActor): Promise<RemediationNote>`**
-  - Validates body length if body is provided
-  - Compares old vs new values to generate a structured `diff`
-  - Records an audit version with the appropriate `action` (`edited`, `status_change`, `visibility_toggle`)
-  - If status changed to `resolved`, sends a resolution notification
-  - Updates `updatedAt`
-
-- **`softDelete(noteId: string, actor: RequestActor): Promise<void>`**
-  - Sets `deletedAt = now()`
-  - Records audit version (`action: 'soft_deleted'`)
-  - Note is no longer visible to non‑admins
-
-- **`hardDelete(noteId: string, actor: RequestActor): Promise<void>`**
-  - Requires `failure_notes_admin` role
-  - Deletes the `remediationNotes` row (cascade deletes junction rows and versions)
-  - The versions table data is retained for 90 days via a separate retention sweep (see R6)
-
-- **`restore(noteId: string, actor: RequestActor): Promise<RemediationNote>`**
-  - Sets `deletedAt = null`
-  - Requires admin or note author
-
-- **`search(query: SearchInput, actor: RequestActor): Promise<SearchResult>`**
-  - Executes PostgreSQL full‑text search via `to_tsquery` / `plainto_tsquery` against the GIN index
-  - Filters: `status`, `authorId`, `dateFrom`, `dateTo`, `failureType`
-  - Excludes soft‑deleted notes
-  - Excludes private notes whose `authorId !== actor.userId` (unless actor is admin)
-  - Returns paginated results with linked failure summaries
-  - Supports ordering by `createdAt DESC` (default) or `relevance` (via `ts_rank`)
-
-- **`link(noteId: string, failureType: FailureType, failureId: string, actor: RequestActor): Promise<void>`**
-  - Validates that the failure exists (SELECT against the target table)
-  - Inserts a junction row; deduplicates via `ON CONFLICT DO NOTHING`
-  - Records audit version (`action: 'linked'`)
-
-- **`unlink(noteId: string, failureType: FailureType, failureId: string, actor: RequestActor): Promise<void>`**
-  - Deletes the junction row
-  - Records audit version (`action: 'unlinked'`)
-
-### R5 — API endpoints
-
-All endpoints are prefixed with `/api/remediation-notes`. The API follows the existing Hono‑based pattern used by the rest of the api (Cloudflare Workers, `api/src/api/` routes).
-
-| Method | Path | Description | Auth |
-|---|---|---|---|
-| `POST` | `/` | Create a note (body: `{ title, body, status?, visibility?, failureLinks: [{ failureType, failureId }] }`) | `tenant‑member` |
-| `GET` | `/:noteId` | Get a single note with its linked failures | `tenant‑member` |
-| `PATCH` | `/:noteId` | Update title, body, status, or visibility | Author or tenant‑editor |
-| `DELETE` | `/:noteId` | Soft‑delete a note | Author or admin |
-| `DELETE` | `/:noteId/permanent` | Hard‑delete a note | `failure_notes_admin` |
-| `POST` | `/:noteId/restore` | Restore a soft‑deleted note | Admin or author |
-| `GET` | `/search` | Full‑text search (qs: `q`, `status`, `authorId`, `dateFrom`, `dateTo`, `failureType`, `page`, `pageSize`) | `tenant‑member` |
-| `GET` | `/by-failure/:failureType/:failureId` | List notes for a specific failure | `tenant‑member` or `project‑member` |
-| `POST` | `/:noteId/link` | Link a note to a failure (body: `{ failureType, failureId }`) | `tenant‑editor` |
-| `DELETE` | `/:noteId/link/:failureType/:failureId` | Unlink a note from a failure | `tenant‑editor` |
-| `GET` | `/:noteId/versions` | Get the audit/version history for a note | `tenant‑member` |
-
-Response shapes:
-- Single note: `{ note: { id, title, body, status, visibility, author: { id, name }, linkedFailures: [{ failureType, failureId, summary }], createdAt, updatedAt, deletedAt } }`
-- Search results: `{ notes: [...], total, page, pageSize }`
-
-Error responses follow the existing `ApiError` pattern (`api/src/domain/shared/errors.ts`):
-- `400` — invalid input (title too long, unrecognised failure type, etc.)
-- `403` — insufficient permissions
-- `404` — note not found
-- `409` — duplicate link
-
-### R6 — Audit trail & retention
-
-The audit trail uses the `remediationNoteVersions` table (R2). Every mutation (create, edit, status change, visibility toggle, link, unlink, soft‑delete, restore, hard‑delete) writes one row with:
-
-- `actorId` — who performed the action
-- `action` — machine‑readable action type
-- `diff` — structured before/after (JSONB)
-
-The history panel endpoint (`GET /:noteId/versions`) returns all versions ordered by `createdAt DESC`.
-
-**Retention policy:**
-- Version rows for hard‑deleted notes are retained for 90 days, then purged by a cron sweep (`api/src/application/remediation/runVersionRetentionSweep.ts`).
-- Soft‑deleted notes (rows with `deletedAt IS NOT NULL`) are retained indefinitely until hard‑deleted; a sweep may archive notes soft‑deleted > 365 days ago if desired, but that is a future policy decision.
-- Active notes' version history is retained indefinitely.
-
-Rationale: The 90‑day retention on hard‑deleted notes mirrors typical SOC 2 audit‑trail requirements — the record survives deletion long enough for an audit window but not permanently.
-
-### R7 — Access control
-
-Permissions follow the existing pattern in `api/src/domain/permissions/permissionRegistry.ts`. Three new permissions:
-
-```
-REMEDIATION_NOTE_READ:    'remediation_note:read'
-REMEDIATION_NOTE_WRITE:   'remediation_note:write'
-REMEDIATION_NOTE_ADMIN:   'remediation_note:admin'
+```typescript
+// Add to PERMISSIONS constant:
+FAILURE_NOTE_READ:   'failure_note:read',
+FAILURE_NOTE_WRITE:  'failure_note:write',
+FAILURE_NOTE_ADMIN:  'failure_note:admin',
 ```
 
-Default role grants (following the existing `DEFAULT_ROLE_PERMISSIONS` matrix):
+Default role assignment:
+| Permission | Viewer | Developer | Manager | Owner |
+|---|---|---|---|---|
+| `failure_note:read` | ✓ | ✓ | ✓ | ✓ |
+| `failure_note:write` | — | ✓ | ✓ | ✓ |
+| `failure_note:admin` | — | — | — | ✓ |
 
-| Role | `remediation_note:read` | `remediation_note:write` | `remediation_note:admin` |
-|---|---|---|---|
-| Owner | ✓ | ✓ | ✓ |
-| Manager | ✓ | ✓ | |
-| Member | ✓ | ✓ (own notes only) | |
-| Viewer | ✓ (public only) | | |
+Rules:
+- **Read**: Any user with `failure_note:read` can see public notes. Private notes are visible only to their author (and admins). Soft‑deleted notes are excluded from all views except admin queries with `?includeDeleted=true`.
+- **Write**: Any user with `failure_note:write` can create notes and link them to any failure in a project they have access to. Editing is restricted to the note author or a `failure_note:admin`.
+- **Admin**: Hard‑delete, restore, view deleted notes, view all private notes, and access the global audit trail. Mapped to the Owner role by default; can be granted to other roles via `role_permission_overrides`.
 
-**Own‑note write rule:** A Member can edit only their own notes. A Manager can edit any public note in their tenant. Only Owner can edit private notes they do not own.
+### 5. Integration Points
 
-**Project‑scoped failures:** For failure types that are project‑scoped (`deployment_event`, `pr_reconciliation_error`, `qa_finding`, `error_event`, `monitor_event`), the actor must have project membership (any role) in addition to the note permission. The service resolves this by querying the failure's owning project via the target table's `projectId` column.
+#### 5.1 Failure detail views (Frontend)
+Each existing failure detail page (incident panel, deployment event detail, error group view, QA findings dashboard, security finding detail) **must** add an inline "Remediation Notes" section that:
+- Lists linked notes with title, status badge, author, and relative timestamp.
+- Shows an "Add Note" / "Link Existing" button (gated on `failure_note:write`).
+- Allows inline editing of notes the current user authored.
 
-**Visibility gating:**
-- `public` notes are visible to anyone with `remediation_note:read`.
-- `private` notes are visible only to the author and to users with `remediation_note:admin`.
-- Soft‑deleted notes (`deletedAt IS NOT NULL`) are visible only to `remediation_note:admin` users.
+#### 5.2 Notifications
+Reuse the existing notification infrastructure (`incidentNotifier.ts` pattern: Slack webhook + Resend email + MS Teams MessageCard):
+- When a note is created or its status changes to `resolved`: notify the failure's assignees (for incidents: the incident board task assignee; for deployment events: the deployment's author; for error groups: the fix task assignee).
+- In‑app notification via the existing activity-feed mechanism.
+- Notification content includes: note title (linked), failure reference, new status, actor name.
 
-### R8 — Notifications
+#### 5.3 Full‑text search
+Use PostgreSQL native `tsvector`/`tsquery` (no external search engine). The GIN index on `remediation_notes` supports the `q` parameter. The query builder in `RemediationNoteService` constructs a `to_tsquery('english', :q)` clause. This is consistent with how the platform handles `brainKnowledgeSearch` and `projectEvermind` embeddings — no Elasticsearch/Meilisearch dependency.
 
-Notifications follow the existing incident notification pattern (`api/src/application/incident/incidentNotifier.ts`).
+#### 5.4 Audit retention sweep
+Add a new cron job at `api/src/application/remediation/runRemediationAuditRetentionSweep.ts` (registered in the existing sweep runner) that runs daily and deletes `remediation_note_events` rows older than 90 days for hard‑deleted notes. This satisfies AC-4.
 
-**Trigger events:**
-1. **Note created** → Notify the failure's assignee (if any) and any explicit watchers on the failure. Message: `"{author} added a remediation note '{title}' to {failureType} {failureSummary}."`
-2. **Status changed to `resolved`** → Notify the failure's assignee and the note author. Message: `"Remediation note '{title}' was marked resolved."`
-3. **Status changed to `in_progress`** → Notify the failure's assignee. Message: `"Remediation note '{title}' is now in progress."`
+### 6. Cross‑cutting Constraints
 
-**Delivery channels:**
-- In‑app notification (existing `notifications` table, surfaced in the notification bell)
-- Email (if the user has email notifications enabled per `emailPreferences`)
+1. **Tenant isolation**: Every query includes `tenantId` from the request context (extracted via existing `requireTenant` middleware). Cross‑tenant note access is impossible by construction — the FK cascade on `tenants.id` is a safety net, not the primary gate.
 
-**Deduplication:** Notifications within a 5‑minute window for the same note + event type are coalesced (the notifier checks for a recent duplicate before sending).
+2. **No API‑key bypass of ownership**: Service accounts (API keys) authenticate as a user; the same permission checks apply. There is no "machine" role that skips ownership — consistent with the existing `ApiKeyService` pattern.
 
-### R9 — Cross‑linking UX requirements
+3. **Markdown rendering**: The frontend renders note bodies with the existing Markdown component (used in Brain chat messages and Knowledge articles). Auto‑linking of URLs and issue‑tracker references (e.g. `#123` → task link, `ORG/REPO#123` → GitHub issue) is a **frontend‑only** transformation — the stored body is plain Markdown.
 
-**Link existing note to a failure:**
-- From any failure detail view, a user opens a "Link Remediation Note" dialog.
-- The dialog provides a search field that queries the `/api/remediation-notes/search` endpoint (full‑text).
-- Results show title, author, status badge, and a snippet of the body (first ~120 chars).
-- Clicking a result fires `POST /:noteId/link`, and the note immediately appears in the failure's notes list.
+4. **Rate limiting**: The existing `rateLimiter` middleware applies to all `/api/remediation-notes` routes with the default tier limits. No special carve‑out is needed because remediation notes are human‑authored (low volume).
 
-**View linked failures from a note:**
-- The note detail view includes a "Linked Failures" section listing each linked failure with its type icon, summary line, and link to the failure's detail page.
-- Summary line per failure type:
-  - `prod_incident`: incident title + severity badge
-  - `security_incident`: title + severity
-  - `deployment_event`: "Deployment to {environment} failed at {timestamp}" (derived from `deploymentEvents` columns)
-  - `pr_reconciliation_error`: PR number + repo
-  - `qa_finding`: finding title + severity
-  - `vulnerability_finding`: CVE or finding title
-  - `error_event`: error message (first ~100 chars)
-  - `monitor_event`: monitor name + "check failed at {timestamp}"
+5. **Migration safety**: The new `remediation_notes`, `remediation_note_links`, and `remediation_note_events` tables are additive — no existing tables are altered. Rollback is a simple `DROP TABLE … CASCADE`.
 
-### R10 — Edge cases & constraints
+### 7. Non‑Functional Requirements
 
-1. **Note body validation:** The service MUST reject bodies exceeding 20 000 characters at the application layer (before the DB write). Title is capped at 200 chars by the DB column.
-2. **Empty body:** Rejected — a note must have at least 1 character of body content.
-3. **Orphaned notes:** A note with zero linked failures is allowed (a user may create a note first, then link it later). The search and list endpoints must handle this case gracefully.
-4. **Deleted failure target:** If a failure row is deleted (e.g., an incident is resolved and archived), the junction row in `remediationNoteFailures` is not cascade‑deleted — the note remains, and the linked failure shows as "Deleted" in the UI. This preserves institutional knowledge.
-5. **Concurrent edits:** No optimistic‑locking or version‑vector mechanism is required (out of scope per the PRD). Last‑write‑wins semantics apply.
-6. **Rate limiting:** The create and search endpoints are subject to the existing tenant‑level rate limiter. No special rate limit is needed.
-7. **Markdown rendering:** The API stores and returns raw Markdown. Rendering (sanitisation, linkification, syntax highlighting) is a frontend concern and follows the existing Markdown rendering pipeline used elsewhere in the platform.
-8. **Tenant isolation:** All queries are scoped by `tenantId`. The `tenantId` on `remediationNotes` is set from the actor's session; it is never taken from the request body.
-
----
+| Concern | Target |
+|---|---|
+| Note create/edit latency | < 500ms p95 (single‑row write + 1 audit event) |
+| Search latency | < 1s p95 for up to 100k notes (GIN index on `tsvector`) |
+| List notes for a failure | < 200ms p95 (indexed `targetType`/`targetId` lookup) |
+| History panel load | < 300ms p95 (indexed `noteId`/`createdAt` scan, paginated) |
+| Concurrent edits | Last‑write‑wins (no OT/CRDT; the audit trail records both versions) |
+| Availability | Inherits from the API Worker (no new SPOF) |
 
 ## Design
 
