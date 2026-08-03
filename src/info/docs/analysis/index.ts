@@ -137,7 +137,7 @@ export function planParallel(
     .map((id) => enriched.find((t) => t.id === id)?.name ?? id)
     .join(" → ");
 
-  const plan: ParallelPlan = {
+  const plan: ParallelPlanWithGraph = {
     metadata,
     waves,
     critical_path_summary: `Critical path (${graph.critical_path_length} tasks): ${cpNames}`,
