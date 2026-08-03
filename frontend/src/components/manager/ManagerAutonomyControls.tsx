@@ -276,7 +276,7 @@ export function ManagerEffectiveSummary({ effective }: { effective: ManagerPolic
  * on change, matching the rest of the manager policy form).
  */
 export function ManagerAutonomyControls({
-  tier, value, effective, inherited, disabled, onChange,
+  tier, value, effective, inherited, disabled, showEnabled = true, onChange,
 }: {
   tier: 'workspace' | 'project';
   /** The opinions stored AT THIS TIER (not the resolved policy). */
@@ -291,6 +291,8 @@ export function ManagerAutonomyControls({
    */
   inherited: ManagerPolicy;
   disabled?: boolean;
+  /** The workspace settings surface promotes this kill-switch into its header. */
+  showEnabled?: boolean;
   onChange: (patch: Partial<ManagerAutonomyValue>) => void;
 }) {
   const t = useTranslations('manager');
@@ -325,7 +327,7 @@ export function ManagerAutonomyControls({
         disabled={disabled}
         onChange={(v) => onChange({ requireSignoffToComplete: v })}
       />
-      <TriStateRow
+      {showEnabled && <TriStateRow
         label={t('policy.enabled.label')}
         help={t('policy.enabled.help')}
         value={value.enabled}
@@ -333,7 +335,7 @@ export function ManagerAutonomyControls({
         inheritedAs={inheritHint(inherited.enabled)}
         disabled={disabled}
         onChange={(v) => onChange({ enabled: v })}
-      />
+      />}
       <TriStateRow
         label={t('policy.autoBusinessValue.label')}
         help={t('policy.autoBusinessValue.help')}

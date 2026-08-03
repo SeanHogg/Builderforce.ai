@@ -61,4 +61,13 @@ describe('buildManagerCanvasModel', () => {
     expect(model.nodes.find((node) => node.id === 'policy')?.data.href).toBeUndefined();
     expect(model.nodes.find((node) => node.id === 'manager')?.data.onRun).toBeUndefined();
   });
+
+  it('does not expose the run action when the effective manager kill-switch is off', () => {
+    const input = props();
+    input.overview.policy.enabled = false;
+    const manager = buildManagerCanvasModel(input).nodes.find((node) => node.id === 'manager');
+
+    expect(manager?.data.badge).toBe('Paused');
+    expect(manager?.data.onRun).toBeUndefined();
+  });
 });

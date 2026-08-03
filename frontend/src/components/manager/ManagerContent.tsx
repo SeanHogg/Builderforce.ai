@@ -239,7 +239,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   }, [projectId]);
 
   const runNow = useCallback(async () => {
-    if (projectId == null || running) return;
+    if (projectId == null || running || data?.policy.enabled === false) return;
     setError(null);
     setRunning(true);
     const baseline = data?.stats.lastRunAt ?? null;
@@ -309,6 +309,8 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   if (!data) return null;
 
   const { config, policy, tenantPolicy, stats, backlog, actions, runTasks, autonomy, managerTypes, directives } = data;
+  const workspaceManagerDisabled = !tenantPolicy.enabled;
+  const managerRunDisabled = !policy.enabled || data.managed === false;
   const managerValue = policy.managerRef ?? '';
   const managerAssignee = parseAssigneeSelectValue(managerValue);
 
@@ -396,8 +398,9 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           <RoleGate capability="manager.manage">
             <button
               type="button"
-              style={{ ...primaryBtn, opacity: running ? 0.7 : 1 }}
-              disabled={running}
+              style={{ ...primaryBtn, opacity: running || managerRunDisabled ? 0.55 : 1, cursor: running || managerRunDisabled ? 'not-allowed' : 'pointer' }}
+              disabled={running || managerRunDisabled}
+              title={managerRunDisabled ? t('disabledNotice') : undefined}
               onClick={runNow}
             >
               {running ? t('running') : t('runNow')}
@@ -480,7 +483,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
         managerType={currentType ? typeLabel(currentType) : t('title')}
         lastManaged={stats.lastRunAt ? t('lastManaged', { when: relative(stats.lastRunAt) }) : t('neverManaged')}
         running={running}
-        canManage={canManage}
+        canManage={canManage && !managerRunDisabled}
         onRun={runNow}
         relative={relative}
         actionLabel={(action) => t(`action.${action.actionType}`)}
@@ -556,6 +559,12 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
 
       {activeSub === 'policy' && (
       <>
+      {workspaceManagerDisabled && (
+        <div role="alert" style={{ ...panelStyle, borderColor: 'var(--warning-fg, #b45309)', background: 'var(--warning-bg, rgba(180,83,9,.08))', color: 'var(--warning-fg, #b45309)', fontWeight: 600, fontSize: '0.85rem' }}>
+          {t('disabledNotice')}
+        </div>
+      )}
+      <fieldset disabled={workspaceManagerDisabled} style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0, margin: 0, padding: 0, border: 0, opacity: workspaceManagerDisabled ? 0.58 : 1 }}>
       {/* ── Policy panel ── */}
       <RoleGate capability="manager.manage" variant="block">
         <div style={panelStyle}>
@@ -570,7 +579,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
             <div style={{ ...mutedStyle, marginBottom: 8 }}>{t('policy.manager.help')}</div>
             <Select
               value={managerValue}
-              disabled={saving}
+              disabled={saving || workspaceManagerDisabled}
               onChange={(e) => savePatch({ managerRef: e.target.value })}
               style={controlStyle}
             >
@@ -607,7 +616,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
             <div style={{ ...mutedStyle, marginBottom: 8 }}>{t('type.help')}</div>
             <Select
               value={policy.managerType}
-              disabled={saving}
+              disabled={saving || workspaceManagerDisabled}
               onChange={(e) => savePatch({ managerType: e.target.value as typeof policy.managerType })}
               style={controlStyle}
             >
@@ -636,7 +645,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
             value={projectAutonomy}
             effective={policy}
             inherited={tenantPolicy}
-            disabled={saving}
+            disabled={saving || workspaceManagerDisabled}
             onChange={(patch) => savePatch(autonomyPatchToConfigPatch(patch))}
           />
           <div style={{ ...mutedStyle, marginTop: 12, fontSize: '0.72rem' }}>
@@ -777,6 +786,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           </div>
         </div>
       </RoleGate>
+      </fieldset>
       </>
       )}
 

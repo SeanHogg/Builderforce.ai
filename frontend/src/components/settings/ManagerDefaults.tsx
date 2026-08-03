@@ -120,8 +120,46 @@ function ManagerDefaultsInner() {
 
   return (
     <div style={cardStyle}>
-      <div style={sectionTitle}>{t('managerDefaultsTitle')}</div>
-      <p style={helpText}>{t('managerDefaultsSubtitle')}</p>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div style={{ minWidth: 0, flex: '1 1 420px' }}>
+          <div style={sectionTitle}>{t('managerDefaultsTitle')}</div>
+          <p style={{ ...helpText, marginBottom: 0 }}>{t('managerDefaultsSubtitle')}</p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={data.policy.enabled}
+          aria-label={tm('policy.enabled.label')}
+          disabled={saving || !allowed}
+          onClick={() => void save({ enabled: !data.policy.enabled })}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 10, minHeight: 42, padding: '7px 10px 7px 12px',
+            border: `1px solid ${data.policy.enabled ? 'var(--success, #22c55e)' : 'var(--coral-bright, #ef4444)'}`,
+            borderRadius: 12, background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+            cursor: saving || !allowed ? 'default' : 'pointer', opacity: saving || !allowed ? 0.65 : 1,
+          }}
+        >
+          <span style={{ display: 'grid', gap: 2, textAlign: 'left' }}>
+            <strong style={{ fontSize: 12 }}>{t('managerDefaults')}</strong>
+            <small style={{ color: 'var(--text-muted)', fontSize: 10 }}>
+              {data.policy.enabled ? tm('policy.effective.managingOn') : tm('policy.effective.managingOff')}
+            </small>
+          </span>
+          <span
+            aria-hidden="true"
+            style={{
+              position: 'relative', display: 'inline-block', width: 38, height: 22, flex: '0 0 auto',
+              borderRadius: 999, background: data.policy.enabled ? 'var(--success, #22c55e)' : 'var(--text-muted)',
+              transition: 'background .15s ease',
+            }}
+          >
+            <span style={{
+              position: 'absolute', top: 3, left: data.policy.enabled ? 19 : 3, width: 16, height: 16,
+              borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.28)', transition: 'left .15s ease',
+            }} />
+          </span>
+        </button>
+      </div>
 
       {error && (
         <p style={{ fontSize: 12, color: 'var(--coral-bright, #ef4444)', margin: '0 0 12px' }}>{error}</p>
@@ -136,6 +174,7 @@ function ManagerDefaultsInner() {
         effective={data.policy}
         inherited={data.builtinPolicy}
         disabled={saving || !allowed}
+        showEnabled={false}
         onChange={(patch) => void save(patch)}
       />
 
