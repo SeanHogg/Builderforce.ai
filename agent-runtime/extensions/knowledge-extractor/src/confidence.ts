@@ -49,7 +49,7 @@ function calculatePreliminaryScore(
 
   // Agent-provided confidence_hint weight (if present).
   const hint = record.confidence_hint ?? 0.5;
-  score += weights.confidenceHint * hint;
+  score += globalWeights.confidenceHint * hint;
 
   // Delta magnitude / divergence severity weight.
   let deltaScore: number;
