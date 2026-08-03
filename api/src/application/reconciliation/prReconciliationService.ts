@@ -18,12 +18,14 @@ import {
   extractTaskId,
   type ReconciliationCheck,
   type ReconciliationPrInput,
+  type ReconciliationDecision,
 } from './prReconciliationClassifier';
 
 type FetchLike = typeof fetch;
 
 export interface GithubPrSnapshot extends ReconciliationPrInput {
   url: string;
+  baseBranch: string;
   headOid: string;
   createdAt: string;
   updatedAt: string;
@@ -132,7 +134,7 @@ export async function fetchOpenPullRequests(
       }));
       result.push({
         number: node.number, title: node.title, body: '', url: node.url,
-        headBranch: node.headRefName, headOid: node.headRefOid, isDraft: node.isDraft,
+        headBranch: node.headRefName, baseBranch: node.baseRefName, headOid: node.headRefOid, isDraft: node.isDraft,
         createdAt: node.createdAt, updatedAt: node.updatedAt, author: node.author?.login ?? null,
         changedFiles: node.changedFiles, additions: node.additions, deletions: node.deletions,
         mergeable: node.mergeable, mergeStateStatus: node.mergeStateStatus, checks,
@@ -210,6 +212,40 @@ export function policyApprovedCloseNumbers(items: Array<{
     .filter(({ decision }) => decision.classification === 'close_candidate' && decision.confidence === 'high')
     .map(({ pr }) => pr.number)
     .sort((a, b) => a - b);
+}
+
+/** Canonical CI state consumed by the existing manager merge/remediation queue. */
+export function canonicalBuildState(decision: ReconciliationDecision): {
+  buildStatus: 'failure' | 'pending' | 'success' | null;
+  buildError: string | null;
+} {
+  const { checkSummary } = decision;
+  if (checkSummary.failed > 0) {
+    const failed = [...checkSummary.changeSpecificFailures, ...checkSummary.sharedInfrastructureFailures];
+    return { buildStatus: 'failure', buildError: failed.length > 0 ? failed.join(', ') : 'GitHub checks failed' };
+  }
+  if (checkSummary.pending > 0) return { buildStatus: 'pending', buildError: null };
+  if (checkSummary.total > 0) return { buildStatus: 'success', buildError: null };
+  return { buildStatus: null, buildError: null };
+}
+
+/**
+ * Persist how each non-close PR was handed off. These are queue dispositions, not
+ * destructive provider actions; diagnostics deliberately approval-check only `close`.
+ */
+export function reconciliationQueueAction(
+  decision: ReconciliationDecision,
+  hasValidTicket: boolean,
+): string | null {
+  if (!hasValidTicket) return 'quarantine_investigate';
+  switch (decision.recommendedAction) {
+    case 'review': return 'queue_review';
+    case 'repair_pr': return 'queue_repair_pr';
+    case 'repair_infrastructure': return 'queue_infrastructure';
+    case 'wait': return 'queue_wait';
+    case 'investigate': return 'queue_investigate';
+    case 'close': return null;
+  }
 }
 
 export interface ReconciliationRunResult {
@@ -294,6 +330,49 @@ export async function runPrTicketReconciliation(
       }) };
     });
 
+    // Reconciliation is the inventory boundary; the manager is the policy boundary.
+    // Every linked GitHub PR must exist in the canonical pull_requests queue so the
+    // existing manager can poll it, repair conflicts, enforce sign-off/authority and
+    // merge it. Unlinked/invalid references remain quarantined in reconciliation_items:
+    // feeding an orphan into the merge queue could bypass a ticket's review gates.
+    if (mode === 'apply') {
+      const linked = decisions.filter((item) => item.taskId != null && item.ticket != null);
+      const missing = linked.filter((item) => !internalByNumber.has(item.pr.number));
+      if (missing.length > 0) {
+        const inserted = await db.insert(pullRequests).values(missing.map(({ pr, taskId, decision }) => {
+          const build = canonicalBuildState(decision);
+          return {
+            tenantId: args.tenantId, segmentId: repo.segmentId ?? null,
+            projectId: repo.projectId, repoId: repo.id, taskId,
+            provider: 'github', number: pr.number, url: pr.url,
+            branchName: pr.headBranch, baseBranch: pr.baseBranch,
+            status: pr.isDraft ? 'draft' : 'open',
+            buildStatus: build.buildStatus, buildError: build.buildError,
+            createdAt: new Date(pr.createdAt), updatedAt: new Date(),
+          };
+        })).returning({ id: pullRequests.id, number: pullRequests.number, taskId: pullRequests.taskId });
+        for (const row of inserted) if (row.number != null) internalByNumber.set(row.number, row);
+      }
+
+      // Existing rows can predate ticket extraction and CI ingestion. Update them in
+      // bounded parallel batches; this is intentionally before item persistence so a
+      // failed handoff is visible as a failed run, never a misleading "queued" item.
+      const existing = linked.filter((item) => !missing.some((candidate) => candidate.pr.number === item.pr.number));
+      for (let offset = 0; offset < existing.length; offset += 25) {
+        await Promise.all(existing.slice(offset, offset + 25).map(({ pr, taskId, decision }) => {
+          const build = canonicalBuildState(decision);
+          return db.update(pullRequests).set({
+            taskId, url: pr.url, branchName: pr.headBranch, baseBranch: pr.baseBranch,
+            status: pr.isDraft ? 'draft' : 'open',
+            buildStatus: build.buildStatus, buildError: build.buildError, updatedAt: new Date(),
+          }).where(and(
+            eq(pullRequests.tenantId, args.tenantId), eq(pullRequests.repoId, repo.id),
+            eq(pullRequests.number, pr.number),
+          ));
+        }));
+      }
+    }
+
     // The scheduled reconciler is itself the policy approver for the one action it
     // is allowed to take unattended: closing HIGH-confidence close candidates.
     // Persist the resolved numbers before acting so diagnostics always show the
@@ -309,23 +388,32 @@ export async function runPrTicketReconciliation(
     }
 
     for (let offset = 0; offset < decisions.length; offset += 100) {
-      const batch = decisions.slice(offset, offset + 100).map(({ pr, taskId, ticket, decision }) => ({
+      const batch = decisions.slice(offset, offset + 100).map(({ pr, taskId, ticket, decision }) => {
+        const queueAction = mode === 'apply'
+          ? reconciliationQueueAction(decision, taskId != null && ticket != null)
+          : null;
+        return ({
         runId, tenantId: args.tenantId, repoId: repo.id, prNumber: pr.number, prUrl: pr.url,
         title: pr.title, headBranch: pr.headBranch, taskId, taskStatus: ticket?.status ?? null,
         classification: decision.classification, recommendedAction: decision.recommendedAction,
         confidence: decision.confidence, reasonCodes: decision.reasonCodes,
         checkSummary: decision.checkSummary,
+        appliedAction: queueAction,
+        appliedAt: queueAction == null ? null : new Date(),
         evidence: {
           headOid: pr.headOid, author: pr.author, createdAt: pr.createdAt, updatedAt: pr.updatedAt,
           changedFiles: pr.changedFiles, additions: pr.additions, deletions: pr.deletions,
           mergeable: pr.mergeable, mergeStateStatus: pr.mergeStateStatus,
           ticketSource: internalByNumber.get(pr.number)?.taskId != null ? 'builderforce_pull_request' : (taskId != null ? 'github_text' : null),
         },
-      }));
+      });
+      });
       if (batch.length) await db.insert(prReconciliationItems).values(batch);
     }
 
-    let applied = 0;
+    let applied = mode === 'apply'
+      ? decisions.filter(({ decision }) => decision.recommendedAction !== 'close').length
+      : 0;
     if (mode === 'apply') {
       const approvedSet = new Set(resolvedApproved);
       for (const item of decisions.filter((d) => approvedSet.has(d.pr.number))) {
@@ -413,7 +501,7 @@ export async function getReconciliationDiagnostics(db: Db, tenantId: number, run
       summaryErrorCount: run.errorCount,
       errorCountMatches: errors.length === run.errorCount,
       dryRunHadNoActions: run.mode !== 'dry_run' || items.every((item) => item.appliedAction == null),
-      allActionsWereExplicitlyApproved: items.filter((item) => item.appliedAction != null)
+      allActionsWereExplicitlyApproved: items.filter((item) => item.appliedAction === 'close')
         .every((item) => (run.approvedPrNumbers as number[]).includes(item.prNumber)),
     },
   };

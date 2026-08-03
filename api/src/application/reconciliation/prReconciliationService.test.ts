@@ -1,5 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fetchOpenPullRequests, policyApprovedCloseNumbers, reconciliationRequesterId } from './prReconciliationService';
+import {
+  canonicalBuildState,
+  fetchOpenPullRequests,
+  policyApprovedCloseNumbers,
+  reconciliationQueueAction,
+  reconciliationRequesterId,
+} from './prReconciliationService';
+import type { ReconciliationDecision } from './prReconciliationClassifier';
+
+const decision = (patch: Partial<ReconciliationDecision> = {}): ReconciliationDecision => ({
+  classification: 'ready_for_review', recommendedAction: 'review', confidence: 'high',
+  reasonCodes: ['all_checks_successful'],
+  checkSummary: {
+    total: 1, failed: 0, pending: 0, successful: 1,
+    sharedInfrastructureFailures: [], changeSpecificFailures: [],
+  },
+  ...patch,
+});
 
 const prNode = (number: number, checkName: string, conclusion: string) => ({
   number, title: `Task #${number}: work`, body: '', url: `https://github.com/acme/app/pull/${number}`,
@@ -27,6 +44,26 @@ describe('GitHub PR reconciliation collector', () => {
       { pr: { number: 2 }, decision: { classification: 'close_candidate', confidence: 'high' } },
     ];
     expect(policyApprovedCloseNumbers(items)).toEqual([2, 5]);
+  });
+
+  it('hands every valid active-ticket outcome to the appropriate canonical queue', () => {
+    expect(reconciliationQueueAction(decision(), true)).toBe('queue_review');
+    expect(reconciliationQueueAction(decision({ classification: 'repair', recommendedAction: 'repair_pr' }), true)).toBe('queue_repair_pr');
+    expect(reconciliationQueueAction(decision({ classification: 'infrastructure_failure', recommendedAction: 'repair_infrastructure' }), true)).toBe('queue_infrastructure');
+    expect(reconciliationQueueAction(decision({ classification: 'keep', recommendedAction: 'wait' }), true)).toBe('queue_wait');
+  });
+
+  it('quarantines missing/invalid ticket associations and keeps closes out of the manager queue', () => {
+    expect(reconciliationQueueAction(decision(), false)).toBe('quarantine_investigate');
+    expect(reconciliationQueueAction(decision({ classification: 'close_candidate', recommendedAction: 'close' }), true)).toBeNull();
+  });
+
+  it('projects GitHub check evidence into the build state used by the manager', () => {
+    expect(canonicalBuildState(decision())).toEqual({ buildStatus: 'success', buildError: null });
+    expect(canonicalBuildState(decision({ checkSummary: {
+      total: 2, failed: 1, pending: 0, successful: 1,
+      sharedInfrastructureFailures: [], changeSpecificFailures: ['CI'],
+    } }))).toEqual({ buildStatus: 'failure', buildError: 'CI' });
   });
 
   it('batches and paginates the complete open-PR inventory with check evidence', async () => {
