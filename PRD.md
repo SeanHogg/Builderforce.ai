@@ -1,5 +1,6 @@
 > **PRD** — drafted by Ada (Sr. Product Mgr) · task #775
 > _Each agent that updates this PRD signs its change below._
+> - 2026-08-03 — Business Analyst (task #775): authored Requirements section, grounded in existing RoleAssignmentService and project_role_assignments schema.
 
 # Product Requirements Document: Role Assignment Replacement
 
@@ -56,7 +57,104 @@ The feature covers the core behavior change for role assignment flows: whenever 
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+> _Authored by the business-analyst (task #775)._
+
+This section decomposes the seven in-scope functional requirements (FR1–FR7) into detailed, testable sub-requirements grounded in the existing codebase: `RoleAssignmentService.create` in `api/src/application/kanban/roleAssignmentService.ts` and the `project_role_assignments` table established by migration `0281_project_role_assignments.sql`.
+
+### REQ-1: Single-Assignee Data Constraint (FR1, FR2)
+
+1. **REQ-1.1** — Within a given scope (tenant + optional project), a `role_key` must have **at most one** explicit assignment row at any time. The current unique index `uq_project_role_assignment` spans `(tenant_id, COALESCE(project_id, 0), role_key, assignee_kind, assignee_ref)`, which permits multiple rows with different `assignee_ref` values for the same role. The constraint must be narrowed or augmented so that `(tenant_id, COALESCE(project_id, 0), role_key)` is unique.
+
+2. **REQ-1.2** — If a scope-level unique constraint is impractical (e.g. the `assignee_kind` dimension is still needed for separate agent/human/hire tracking), the service layer MUST enforce the constraint: before inserting, query for ANY existing row matching `(tenant_id, scope project_id, role_key)` and delete or overwrite it. This is the **replacement path**.
+
+3. **REQ-1.3** — The replacement must handle all three `assignee_kind` values (`agent`, `human`, `hire`) uniformly. If role `R` is held by an agent and a human is assigned, the agent row is removed and the human row is inserted. Cross-kind replacement is the most common real-world scenario.
+
+### REQ-2: Atomic Replacement in `RoleAssignmentService.create` (FR3)
+
+4. **REQ-2.1** — The `create` method in `RoleAssignmentService` (currently lines 73–129 of `roleAssignmentService.ts`) must be refactored to perform a **delete-then-insert** within a single database transaction when a conflicting assignment exists.
+
+5. **REQ-2.2** — The transaction must use `this.db.transaction(async (tx) => { ... })` so that both the DELETE and INSERT are committed atomically. No read-then-write gap outside a transaction is acceptable.
+
+6. **REQ-2.3** — Before deleting the previous assignment, capture its full row (id, assigneeKind, assigneeRef, assigneeName) into memory so it can be returned to the caller and logged in the audit entry. Do not rely on post-deletion queries — the data is gone once the DELETE runs.
+
+7. **REQ-2.4** — The cache invalidation (`invalidateCached(env, assignmentsKey(tenantId))`) must happen exactly once after the transaction commits, not before.
+
+### REQ-3: Idempotent No-Op (FR4)
+
+8. **REQ-3.1** — The existing idempotency check (lines 85–97) already compares `(tenantId, projectId, roleKey, assigneeKind, assigneeRef)`. This check must remain **first** — before any replacement logic — so assigning the same person again is a true no-op.
+
+9. **REQ-3.2** — When the no-op path is taken, no audit entry is emitted and no cache invalidation occurs. The existing behaviour (returning the existing row) is correct and must be preserved.
+
+### REQ-4: Replacement Path Logic (FR2, FR6)
+
+10. **REQ-4.1** — After the idempotency check passes (the new assignee is different), query for any existing assignment for the same `(tenantId, projectId, roleKey)` — regardless of `assigneeKind` or `assigneeRef`. Use `and(eq(tenantId), scopeClause, eq(roleKey))` without filtering on assignee fields.
+
+11. **REQ-4.2** — If a conflicting row exists, execute the atomic delete+insert (REQ-2). If none exists, proceed with a plain insert (the current happy path).
+
+12. **REQ-4.3** — The return value must indicate whether a replacement occurred. Extend the `RoleAssignment` return type or the method's return signature to include a `replaced: RoleAssignment | null` field so callers (including the API layer) can surface it.
+
+### REQ-5: Audit Trail for Replacements (FR7)
+
+13. **REQ-5.1** — The replacement must emit a `recordActivity` call with verb `'role.replaced'` (distinct from the existing `'role.assigned'` used on first-assignment). The activity metadata must include:
+
+    ```ts
+    metadata: {
+      assigneeKind: <new>,
+      assigneeRef: <new>,
+      projectId,
+      replaced: {
+        id: <previous assignment id>,
+        assigneeKind: <previous>,
+        assigneeRef: <previous>,
+        assigneeName: <previous name>,
+      }
+    }
+    ```
+
+14. **REQ-5.2** — The activity `summary` should read: `"Replaced {previousName} with {newName} on {roleKey}"`.
+
+15. **REQ-5.3** — Use the existing `recordActivity` function imported from `../activity/activityLog` and `resolveActorByRef` for the initiating actor. Follow the existing best-effort pattern (try/catch, never fail the assignment).
+
+### REQ-6: Database Migration for Constraint (FR1)
+
+16. **REQ-6.1** — Create a new migration that drops `uq_project_role_assignment` and replaces it with a narrower unique index:
+
+    ```sql
+    DROP INDEX IF EXISTS uq_project_role_assignment;
+    CREATE UNIQUE INDEX IF NOT EXISTS uq_project_role_assignment
+      ON project_role_assignments(tenant_id, COALESCE(project_id, 0), role_key);
+    ```
+
+17. **REQ-6.2** — Before dropping the old index, the migration must deduplicate: if multiple rows exist for the same `(tenant_id, COALESCE(project_id, 0), role_key)`, keep the **most recent** (`MAX(created_at)`) and delete the rest. This is a data-cleanup precondition for adding a tighter unique constraint.
+
+### REQ-7: API Layer Changes (FR6)
+
+18. **REQ-7.1** — Identify the route/handler that exposes role assignment (likely in the kanban or roster HTTP layer) and update it to return the `replaced` field from the service response in the JSON body (e.g. `{ "replaced": { "id": "...", "assigneeName": "Alice" } }`).
+
+19. **REQ-7.2** — The HTTP status code remains `200` for both new assignments and replacements. No `409 Conflict` or error response for a "duplicate" assignment — that is now handled by replacement or idempotent no-op.
+
+### REQ-8: Caching Considerations
+
+20. **REQ-8.1** — The cache key `kanban:roleAssignments:{tenantId}` covers all rows for the tenant. Since replacement deletes one row and inserts another (net unchanged count), the cache should be invalidated once per mutation (already implemented). No change needed beyond ensuring invalidation happens exactly once inside the transaction path.
+
+### REQ-9: Backward Compatibility
+
+21. **REQ-9.1** — The `listForRoster` and `listForScope` methods must continue to work unchanged. After the constraint change, they will naturally return at most one row per `(scope, roleKey)`, which is the desired behaviour.
+
+22. **REQ-9.2** — The `remove` method (lines 133–138) is unchanged and continues to delete by id.
+
+### Traceability Matrix
+
+| PRD FR | REQ(s) |
+|--------|--------|
+| FR1 Single-Assignee | REQ-1.1, REQ-1.2, REQ-6 |
+| FR2 Automatic Replacement | REQ-1.2, REQ-1.3, REQ-4 |
+| FR3 Atomic Operation | REQ-2.1 through REQ-2.4 |
+| FR4 Idempotent Assignment | REQ-3.1, REQ-3.2 |
+| FR5 Real-Time UI Update | REQ-8.1 (cache invalidation), REQ-7 |
+| FR6 API Behavior | REQ-7.1, REQ-7.2, REQ-4.3 |
+| FR7 Audit Trail | REQ-5.1 through REQ-5.3 |
+| FR8 Notification | Out of scope (optional — not required for MVP) |
 
 ## Design
 
