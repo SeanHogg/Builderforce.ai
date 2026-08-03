@@ -8,7 +8,7 @@
  * Rate limiting: applied upstream via the shared rate limiter middleware.
  */
 import { Hono } from 'hono';
-import { eq, and, isNull, desc, sql } from 'drizzle-orm';
+import { eq, and, isNull, desc, sql, gte, lte, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import * as schema from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
