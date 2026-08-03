@@ -641,6 +641,8 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       priority?: TaskPriority;
       taskType?: TaskType;
       parentTaskId?: number | null;
+      /** Opt-in flag: when true, parentTaskId: null explicitly detaches the task. */
+      explicitDetach?: boolean;
       sprintId?: string | null;
       releaseId?: string | null;
       storyPoints?: number | null;
