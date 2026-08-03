@@ -35,7 +35,7 @@ export function createWebhookRoutes(
       event = await paymentProvider.parseWebhook(rawBody, signatureHeader);
     } catch (err) {
       console.error('[webhook] signature verification failed:', err);
-      return c.json({ error: 'Invalid signature' }, 401);
+      return c.json({ error: 'Invalid signature' }, 400);
     }
 
     if (!event) {
