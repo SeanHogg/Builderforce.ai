@@ -1,125 +1,129 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #565
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document: Egress Boundary Map with Verdicts
 
-## Problem & Goal
+**Feature Name:** Egress Boundary Map
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
+**Status:** Draft
 
 ---
 
-## Target Users / ICP Roles
+## 1. Problem & Goal
 
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
+**Problem:** Security and network teams struggle to visualize and audit the organization’s egress posture. Existing tools focus on ingress traffic or provide only rule-level views, leaving blind spots on which internal assets can reach which external destinations and through which allowed paths. This leads to overly permissive egress, missed exposures, and slow compliance audits.
+
+**Goal:** Provide a dynamic, interactive boundary map that clearly displays all possible egress vectors (source asset → destination IP/FQDN / port / protocol) and attaches an allow/deny verdict based on the aggregation of all relevant security policies. The map empowers teams to instantly identify unintended exposures, verify policy intent, and accelerate audit preparation.
 
 ---
 
-## Scope
+## 2. Target Users / ICP Roles
 
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
+- **Cloud Security Architect:** Needs a holistic view of egress risk to validate segmentation designs and identify over‑privileged paths.
+- **Network Security Engineer:** Wants to troubleshoot connectivity issues and verify that firewall/NAT/proxy rules match the intended egress boundaries.
+- **Compliance & Risk Analyst:** Requires easy exportable evidence of egress controls for audits (PCI, SOC2, ISO 27001) without manual rule tracing.
+- **Incident Responder:** Needs fast lookup of which assets can egress to a suspect external IP or domain.
 
 ---
 
-## Functional Requirements
+## 3. Scope
 
-### FR-1 — Mode Selection
-
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
-
----
-
-### FR-2 — Guided (Interactive) Mode
-
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+- **In scope:**
+  - Egress vectors only (traffic originating from internal/cloud assets toward external/untrusted networks).
+  - Policy sources: cloud security groups (AWS, Azure, GCP), on‑prem firewalls, proxy servers, NACLs, and network security groups.
+  - Verdict resolution (allow/deny) considering rule priority, overlap, and default actions.
+  - Visual boundary map with interactive filtering and drill‑down.
+  - Tabular list view of all vectors with export capability.
+  - Incremental updates when policy changes are detected.
 
 ---
 
-### FR-3 — Bulk (Import) Mode
+## 4. Functional Requirements
 
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
+### 4.1 Data Ingestion
+- Support read‑only integration (API, file import, agent) with:
+  - AWS Security Groups (VPC, EC2) and Network ACLs
+  - Azure NSGs and Azure Firewall
+  - GCP VPC Firewall rules
+  - On‑prem firewall configurations (Palo Alto, Cisco ASA/FTD, Fortinet) via exported config
+  - Proxy/PAC file rules (Zscaler, Netskope, Squid)
+- Parse and normalize rule structures into a common schema (source [cidr/tag/asset], destination [fqdn/ip/range], port/protocol, action, priority).
 
----
+### 4.2 Vector Mapping
+- Generate all potential egress vectors as tuples: (Source Asset, Destination Endpoint, Port, Protocol).
+- Resolve network objects (tags, dynamic groups) to concrete IP/FQDN lists at runtime.
+- Apply all policies in order of precedence to derive a final allow/deny verdict per vector.
+- Handle overlapping rules: most specific wins (or admin‑defined conflict resolution).
+- Flag vectors with conflicting policies (e.g., one rule allows, another later denies due to priority).
 
-### FR-4 — Shared / Cross-Mode Requirements
+### 4.3 Visualization
+- Interactive graph view:
+  - Source assets (left) connected to destination tiles (right) via edges.
+  - Edge color: green (allow), red (deny), gray (no explicit rule → implicit deny or default).
+  - Hover/click reveals rule IDs, last updated, justification (if available).
+- Filtering by:
+  - Source asset name/tag/IP range
+  - Destination domain/IP/geolocation
+  - Port/service
+  - Verdict (allow/deny/conflict)
+  - Policy set (e.g., only AWS VPC rules)
+- Search capability for a specific destination or asset.
+- Toggle between map and a raw vector list (with sorting, grouping).
 
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
+### 4.4 Export & Sharing
+- Export the visible map (SVG/PNG) or full vector table (CSV, JSON, PDF) for audits.
+- One‑click “share” with permalink that replays the current view (including filters) for colleagues.
 
----
-
-## Acceptance Criteria
-
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+### 4.5 Freshness & Performance
+- Policy change detection: react within 15 minutes to updates from connected sources.
+- Map rendering: display up to 10,000 distinct egress vectors within 10 seconds.
+- Support environments with up to 50,000 total policy rules (across all sources).
 
 ---
 
-## Out of Scope
+## 5. Acceptance Criteria
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+1. **Correctness:** In a controlled test environment with a known set of firewall rules, the map correctly labels at least 95% of test vectors as allow/deny when compared to a manual packet‑forwarding simulation.
+2. **Conflict handling:** Conflicting rules are flagged with a warning badge; user can drill into the conflicting rules.
+3. **Default behavior:** For any destination not explicitly mentioned in any rule, the verdict is “deny (implicit)” with a note referencing the default policy.
+4. **Update latency:** After a security group rule is added/changed in AWS, the corresponding vector verdict updates within 15 minutes and triggers a timeline entry.
+5. **Scalability:** The UI successfully renders a map containing 10,000 vectors without browser freezing, and an interactive filter reduces the visible set in under 2 seconds.
+6. **Export integrity:** A CSV export contains all displayed columns (source, destination, port, protocol, verdict, supporting rule IDs) and matches the on‑screen data exactly.
+7. **Multi‑source synthesis:** A vector that traverses an on‑prem firewall *and* a cloud security group shows the aggregated verdict (e.g., both must allow; if either denies, final is deny). Test with a hybrid setup.
+8. **Audit readiness:** A generated PDF includes a timestamp, source list, and a disclaimer about rule freshness; its content passes a mock PCI DSS auditor review of egress documentation.
+
+---
+
+## 6. Out of Scope
+
+- Ingress (inbound) traffic mapping and verdicts.
+- Real‑time traffic flow monitoring or packet‑level verification (the map shows policy intent, not actual live traffic).
+- Automatic rule remediation or firewall configuration changes.
+- Machine‑learning‑based rule optimization suggestions.
+- Full network topology discovery (only assets relevant to egress paths).
+- User authentication/authorization (delegated to the platform’s existing RBAC).
+- Historical diff views between policy versions (snapshot only, though latest state).
+
+## Requirements
+
+_Owned by the business-analyst — to be authored._
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
+
+## Acceptance
+
+_Owned by the validator — to be authored._
