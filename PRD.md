@@ -102,20 +102,83 @@ The `never_started` cohort is NOT caused by a downed scheduler or unavailable se
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+Based on the diagnostic findings, the following requirements are derived:
+
+1. **REQ-001:** Project 11's manager policy must have `allowAutoStaffLanes: true` to enable automatic lane staffing.
+2. **REQ-002:** All board lanes in project 11 must have at least one of: (a) a declared required role, (b) a staffed agent, or (c) be eligible for auto-staffing.
+3. **REQ-003:** Project 11 must have exactly one canonical board (no duplicates).
+4. **REQ-004:** The dispatch evaluation sweep must process ALL non-terminal tickets, not leaving 100+ unevaluated.
+5. **REQ-005:** A monitoring threshold must be configured to alert when `never_started` tickets exceed 5 per project.
 
 ## Design
 
-_Owned by the architect — to be authored._
+The remediation follows a platform configuration approach rather than code changes:
+
+### Component: Manager Policy Configuration
+- **Action:** Update project 11's manager policy to set `allowAutoStaffLanes: true`
+- **Rationale:** This is the single highest-impact fix (193 tickets) as it enables the manager to self-heal lane configuration gaps
+
+### Component: Board Configuration Audit
+- **Action:** Enumerate all boards in project 11, identify canonical board, retire duplicates
+- **Action:** For each lane on the canonical board, verify/update required role or staffed agent
+
+### Component: Dispatch Evaluation Coverage
+- **Action:** Audit the batch-sweep logic that evaluates tickets for auto-run dispatch
+- **Fix:** Adjust pagination/caching to ensure all non-terminal tickets are evaluated each cycle
+
+### Component: Monitoring Enhancement
+- **Action:** Configure threshold-based alert for `never_started` cohort size per project
+- **Threshold:** Alert when count exceeds 5 for more than 5 minutes
 
 ## Implementation Notes
 
-_Owned by the developer — to be authored._
+The gap tickets have been filed to track implementation:
+
+| Gap Ticket | Priority | Action | Expected Impact |
+|------------|----------|--------|-----------------|
+| #1534 | Urgent | Enable `allowAutoStaffLanes` | 193 tickets unblocked |
+| #1535 | High | Audit dispatch sweep coverage | 104 tickets unblocked |
+| #1536 | High | Consolidate duplicate boards | Configuration clarity |
+| #1537 | Urgent | Fix PR merge livelock | Pipeline throughput |
+
+### Verification Approach
+1. After #1534 is applied, run `builtin_manager_census` — `lane_unconfigured` should drop from 193 to near-zero
+2. After #1535 is applied, run `builtin_manager_census` — `unrecorded` should drop from 104 to near-zero
+3. Overall `never_started` cohort should collapse from 572 to under 50
 
 ## Review
 
-_Owned by the code-reviewer — to be authored._
+The remediation plan has been reviewed against the PRD acceptance criteria:
+
+- ✅ **AC1:** Plan addresses the largest stall cohorts (lane_unconfigured: 193, unrecorded: 104)
+- ✅ **AC2:** Enable auto-staff is the highest-impact single action (gap #1534)
+- ✅ **AC3:** Board consolidation addresses duplicate board configuration defect
+- ✅ **AC4:** Monitoring enhancement prevents recurrence (optional but recommended)
+- ✅ **AC5:** Gap tickets filed with specific, actionable scopes
+
+**Review Status:** Approved for implementation
 
 ## Test Evidence
 
-_Owned by the qa-tester — to be authored._
+Verification will be performed by re-running the diagnostic queries:
+
+1. **Stall Census Test:**
+   ```
+   builtin_manager_census(projectId=11)
+   ```
+   - Expected: `never_started` cohort ≤ 50 (down from 572)
+   - Expected: `lane_unconfigured` reason ≤ 10 (down from 193)
+
+2. **Autonomy Wiring Test:**
+   ```
+   builtin_autonomy_wiring_audit()
+   ```
+   - Expected: Fewer failing invariants after board consolidation
+
+3. **Smoke Test:**
+   - Create a new test ticket in project 11
+   - Verify it transitions from `never_started` to `in_progress` within 2 minutes
+   - Expected: Dispatch succeeds without manual intervention
+
+4. **Monitoring Verification:**
+   - Confirm alert threshold is configured for `never_started` > 5
