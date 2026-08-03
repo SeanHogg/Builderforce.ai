@@ -1,5 +1,17 @@
 > **PRD** — drafted by Mike QA (Tester V2 (Durable) · task #353
 > _Each agent that updates this PRD signs its change below._
+>
+> ---
+>
+> ## Sign-offs
+>
+> | Role | Agent | Verdict | Date | Notes |
+> |---|---|---|---|---|
+> | **QA / Author** | Mike QA (Tester V2) | drafted | 2026-07-12 | Original PRD |
+> | **Developer** | Bob Developer (V2) | changes_requested | 2026-07-29 | Repo mismatch — `api/` backend not on branch; gap #1218 filed |
+> | **Business Analyst** | BA (this run) | approved (PRD) | 2026-07-30 | Requirements are clear, complete, and testable. Implementation blocked by infrastructure gap #1218 — re-dispatch once `api/` package is on branch. |
+
+---
 
 # PRD: Agent Channels Endpoint — Channel Registry Implementation
 
@@ -123,3 +135,28 @@ This effort covers:
 - **Admin UI** — channel management UI is out of scope; API only.
 - **Encryption of the `config` column at rest** — deferred to a security hardening pass; noted as a follow-up action.
 - **Pagination** of the channels list — the channel count is expected to remain small (<500); pagination is a future enhancement.
+
+---
+
+## Business Analyst Assessment (2026-07-30)
+
+### PRD Quality: ACCEPTED
+
+The PRD is well-structured, complete, and actionable. Every functional requirement (FR-1 through FR-5) is explicit, testable, and free of ambiguity. The acceptance criteria (AC-1 through AC-10) cover happy paths, error paths, filtering, idempotency, and regression — a solid test plan. The out-of-scope section correctly bounds the iteration and defers non-trivial concerns (auth, multi-tenancy, pagination, encryption) to future work.
+
+### Implementation Blocker
+
+**The bound repository `seanhogg/builderforce.ai` on branch `builderforce/task-353` does not contain the API backend package.** The `api/` directory, `clawRoutes.ts` (the stub location cited in ROADMAP.md), SQL migration infrastructure, and database client/ORM layer are all absent from this branch. The branch holds `agent-runtime/` (Swabble Swift CLI + chat-channel extensions) and root documentation — a different subsystem.
+
+This means FR-1 through FR-5 and AC-1 through AC-10 **cannot be implemented** on the current branch. The PRD itself is sound; the delivery path is blocked by infrastructure.
+
+### Prerequisite
+
+Gap task #1218 ("`api/` backend package must be present on branch before channel-registry code can be written") must be resolved first. Once the `api/` package with its existing route handler (`clawRoutes.ts`), migration runner, and database layer is on the branch, this ticket can be re-dispatched and implemented directly against the PRD.
+
+### Recommendation
+
+- **Do not** close or re-scope this ticket. The requirements are correct and the PRD is ready.
+- **Resolve gap #1218** to bring the `api/` backend onto the branch.
+- **Re-dispatch #353** to a developer lane once the infrastructure is in place.
+- **No changes needed to the PRD itself** — it is implementation-ready.
