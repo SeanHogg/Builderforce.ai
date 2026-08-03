@@ -542,10 +542,10 @@ export function createPayloadGenerator(
       return generate(context) as Result<T>;
     },
     getLog(): LogEntry[] {
-      return [];
+      return logRef;
     },
     resetLog(): void {
-      // Per-call state clearing; logs are reported from the result object in this design.
+      logRef.length = 0;
     },
   };
 }
