@@ -139,7 +139,7 @@ export function runExtraction(
   // VERIFY: Immediate persistence of audit entries (FR-8.3), extended target for AC-10.
   // In the placeholder phase we arrange an in-memory append for testing; external store integration
   // is a future API surface.
-  const startTimeIso = nowIso();
+  const startTimeIso = nowISO();
   scored.forEach((r) => {
     auditEntries.push({
       type: "Learning",
