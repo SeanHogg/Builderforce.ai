@@ -1058,10 +1058,6 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
     body.max_tokens = GUEST_CHAT_LIMITS.maxTokensPerRequest;
   }
 
-  // Consume one message up-front so an aborted/streamed request still counts
-  // (an abuser can't dodge the cap by killing the stream mid-flight).
-  const remaining = await guest.consumeMessage(c.env as Env, visitorId, ip);
-
   const requiredKey = c.env.OPENROUTER_API_KEY;
   if (!requiredKey) {
     return c.json({ error: 'LLM proxy not configured (missing OPENROUTER_API_KEY)' }, 503);
@@ -1072,10 +1068,23 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   const estimatedTokens = estimateRequestTokens(body.messages, undefined);
   const result = await service.complete(body, undefined, traceId, undefined, { estimatedTokens });
 
+  // Charge only once an upstream has accepted the request. For streaming calls
+  // this still happens before the response body is handed to the browser, so an
+  // aborted stream counts; gateway/vendor failures do not burn a guest turn.
+  let remaining = cap.remaining;
+  if (result.response.ok) {
+    remaining = await guest.consumeMessage(c.env as Env, visitorId, ip);
+  }
+
   const headers = new Headers();
   const contentType = result.response.headers.get('content-type');
   if (contentType) headers.set('content-type', contentType);
+  const retryAfter = result.response.headers.get('retry-after');
+  if (retryAfter) headers.set('retry-after', retryAfter);
   headers.set('x-builderforce-model', result.resolvedModel);
+  headers.set('x-builderforce-vendor', result.resolvedVendor);
+  headers.set('x-builderforce-trace-id', result.traceId ?? traceId);
+  headers.set('x-builderforce-retries', String(result.retries));
   headers.set('x-builderforce-guest', 'true');
   headers.set('x-builderforce-guest-remaining', String(remaining));
   headers.set('x-builderforce-guest-limit', String(cap.limit));
@@ -1084,15 +1093,20 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
     headers.set('cache-control', 'no-cache');
     headers.set('connection', 'keep-alive');
     logFailovers(c.env, c.executionCtx, result.failovers);
-    const instrumented = wrapStreamForUsage(result.response.body, (usage) => {
-      c.executionCtx.waitUntil(guest.addTokens(visitorId, usage.totalTokens ?? 0));
-    });
-    return new Response(instrumented, { status: result.response.status, headers });
+    if (result.response.ok) {
+      const instrumented = wrapStreamForUsage(result.response.body, (usage) => {
+        c.executionCtx.waitUntil(guest.addTokens(visitorId, usage.totalTokens ?? 0));
+      });
+      return new Response(instrumented, { status: result.response.status, headers });
+    }
+    return new Response(result.response.body, { status: result.response.status, headers });
   }
 
   const upstream = await result.response.json() as Record<string, unknown>;
   logFailovers(c.env, c.executionCtx, result.failovers);
-  c.executionCtx.waitUntil(guest.addTokens(visitorId, result.usage?.totalTokens ?? 0));
+  if (result.response.ok) {
+    c.executionCtx.waitUntil(guest.addTokens(visitorId, result.usage?.totalTokens ?? 0));
+  }
   return c.json({ ...upstream, _builderforce: { guest: true, remaining, limit: cap.limit } }, result.response.status as 200);
 }
 
