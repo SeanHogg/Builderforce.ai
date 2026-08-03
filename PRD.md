@@ -85,7 +85,35 @@ Develop BurnRateOS, a burn-rate intelligence platform that provides real-time fi
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+_Owned by the business-analyst — authored by business-analyst role on task #1375._
+
+### Domain Clarification
+
+**This PRD cannot be implemented in the bound repository (seanhogg/builderforce.ai).**
+
+The BurnRateOS PRD describes a standalone **financial burn-rate intelligence platform** that provides:
+- Real-time financial tracking and forecasting
+- Predictive analytics for burn rate
+- Customizable financial dashboards
+- Integration with financial systems (QuickBooks, SAP, Salesforce)
+
+However, the bound repository (**seanhogg/builderforce.ai**) is an **AI dev-workforce platform** — a system for managing AI agents that write code, manage tasks, and handle software development workflows.
+
+These are **completely different product domains**:
+- **BurnRateOS**: Financial/billing domain (cash flow, runway, forecasting)
+- **BuilderForce**: Software development workforce domain (tasks, agents, code)
+
+This is a similar domain mismatch to Task #276 (HealthProfile), where a clinical/health profile PRD was incorrectly bound to a dev-workforce platform.
+
+### Recommended Path Forward
+
+1. **If BurnRateOS is a new standalone product**: Create a separate repository for this product
+2. **If the intent was to integrate BuilderForce INTO BurnRateOS**: This would be a customer integration scenario, not a feature built within BuilderForce
+3. **If the intent was to ADD burn-rate tracking TO BuilderForce**: This would require a re-scoped PRD that describes financial tracking features as part of the existing dev-workforce platform
+
+### Gap Task Required
+
+A gap task should be filed to clarify the correct path forward before this PRD can proceed.
 
 ## Design
 
