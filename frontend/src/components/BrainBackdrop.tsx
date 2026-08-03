@@ -122,13 +122,24 @@ export default function BrainBackdrop({ className = '' }: { className?: string }
     };
 
     resize();
-    const observer = new ResizeObserver(() => { resize(); restart(); });
+    // Use requestAnimationFrame to debounce resize callbacks and prevent
+    // "ResizeObserver loop completed with undelivered notifications" errors.
+    let rafId: number | null = null;
+    const observer = new ResizeObserver(() => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        resize();
+        restart();
+      });
+    });
     observer.observe(host);
     document.addEventListener('visibilitychange', onVisibility);
     restart();
 
     return () => {
       visible = false;
+      if (rafId !== null) cancelAnimationFrame(rafId);
       cancelAnimationFrame(frameId);
       observer.disconnect();
       document.removeEventListener('visibilitychange', onVisibility);
