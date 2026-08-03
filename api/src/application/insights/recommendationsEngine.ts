@@ -110,6 +110,82 @@ export interface RecommendationsResult {
 
 const SEVERITY_BASE: Record<RecSeverity, number> = { critical: 1000, warning: 500, info: 100 };
 
+/**
+ * Compute aggregate time savings from a list of recommendations.
+ * Separates one-time vs recurring savings and groups by category.
+ */
+export function computeTimeSavingsAggregate(recs: Recommendation[]): TimeSavingsAggregate {
+  const byCategoryMap = new Map<RecCategory, { recurring: number; oneTime: number; count: number }>();
+
+  let totalRecurring = 0;
+  let totalOneTime = 0;
+
+  for (const rec of recs) {
+    if (!rec.estimation) continue;
+
+    const { type, valueMinutes } = rec.estimation;
+    const cat = rec.category;
+
+    if (type === 'recurring') {
+      totalRecurring += valueMinutes;
+    } else {
+      totalOneTime += valueMinutes;
+    }
+
+    const catEntry = byCategoryMap.get(cat) ?? { recurring: 0, oneTime: 0, count: 0 };
+    if (type === 'recurring') {
+      catEntry.recurring += valueMinutes;
+    } else {
+      catEntry.oneTime += valueMinutes;
+    }
+    catEntry.count += 1;
+    byCategoryMap.set(cat, catEntry);
+  }
+
+  // Build category breakdown
+  const byCategory: TimeSavingsAggregate['byCategory'] = [];
+  for (const [category, data] of byCategoryMap) {
+    byCategory.push({
+      category,
+      recurringWeeklyMinutes: data.recurring,
+      oneTimeMinutes: data.oneTime,
+      recommendationCount: data.count,
+    });
+  }
+
+  // Sort categories by total savings (descending)
+  byCategory.sort((a, b) => {
+    const aTotal = a.recurringWeeklyMinutes + a.oneTimeMinutes;
+    const bTotal = b.recurringWeeklyMinutes + b.oneTimeMinutes;
+    return bTotal - aTotal;
+  });
+
+  // Build human-readable summary
+  const recCount = recs.filter((r) => r.estimation).length;
+  let summary = '';
+  if (recCount === 0) {
+    summary = 'No time savings estimated for these recommendations.';
+  } else {
+    const parts: string[] = [];
+    if (totalRecurring > 0) {
+      const hours = totalRecurring >= 60 ? `${(totalRecurring / 60).toFixed(1)} hours` : `${totalRecurring} minutes`;
+      parts.push(`save you ${hours}/week`);
+    }
+    if (totalOneTime > 0) {
+      const hours = totalOneTime >= 60 ? `${(totalOneTime / 60).toFixed(1)} hours` : `${totalOneTime} minutes`;
+      parts.push(`save you ${hours} one-time`);
+    }
+    summary = `Implementing these ${recCount} recommendations could ${parts.join(' and ')}.`;
+  }
+
+  return {
+    oneTimeMinutes: totalOneTime,
+    recurringWeeklyMinutes: totalRecurring,
+    summary,
+    byCategory,
+  };
+}
+
 /** Severity → base rank + a 0..100 magnitude bump so worse offenders sort first. */
 function ranked(r: Omit<Recommendation, 'rank' | 'estimation'>, magnitude = 0): Recommendation {
   return { ...r, rank: SEVERITY_BASE[r.severity] + Math.max(0, Math.min(100, magnitude)) };
