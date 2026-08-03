@@ -220,6 +220,64 @@ Each requirement is identified by a unique ID (`REQ-SLP-###`), assigned a priori
 
 **Total Requirements:** 46
 
+## Product Manager Review & Sign-off
+
+> Authored by: Product Manager · task #576
+
+### Success Metrics (KPIs)
+
+| KPI | Target | Measurement |
+|-----|--------|-------------|
+| **Time-to-detection** | Non-compliant secrets detected within 1 evaluation cycle (≤ 24h) | Evaluation engine audit log |
+| **Compliance coverage** | ≥ 95% of secrets evaluated within 30 days of onboarding | Dashboard compliance percentage |
+| **Alert fidelity** | ≤ 5% false-positive alert rate for non-compliance notifications | Alert audit log vs manual verification |
+| **Connector breadth** | ≥ 3 secret managers supported by GA | Connector registry |
+| **Evaluation throughput** | 100K secrets × 50 policies ≤ 30 min (AC-7) | Evaluation cycle timing logs |
+| **API adoption** | ≥ 80% of tenants querying violations via API within 90 days | API access logs |
+| **Dashboard engagement** | ≥ 70% weekly active users among provisioned security engineers | Auth/access logs |
+| **Audit readiness** | Audit evidence (reports) generated in ≤ 5 min for any 90-day window | Report generation latency |
+
+### Competitive Landscape
+
+| Solution | Strengths | Weaknesses | Our Differentiator |
+|----------|-----------|------------|-------------------|
+| **HashiCorp Vault (built-in)** | Native secret management; tight Vault integration | Only covers Vault; no multi-manager visibility; no policy evaluation engine for external secrets | Multi-manager abstraction with unified policy engine |
+| **AWS Config + Secrets Manager** | AWS-native; good AWS ecosystem rules | AWS-only; no cross-cloud; limited to AWS Config rule format | Cross-cloud, extensible connector model |
+| **Open Policy Agent (OPA)** | General-purpose policy engine; Rego language | No secret discovery; policy authoring is complex (Rego learning curve); no dashboards or alerting | Purpose-built for secret lifecycle; turnkey dashboards + alerting |
+| **GitGuardian** | Excellent secret detection in code; broad integrations | Focused on detection/scanning, not lifecycle policy verification; no rotation/revocation policy evaluation | Lifecycle policy verification is our core — we validate ongoing compliance, not just point-in-time detection |
+| **Custom scripts / cron jobs** | Free; bespoke | No UI; no audit trail; fragile; no RBAC; no multi-tenancy | Enterprise-ready with full RBAC, multi-tenancy, dashboards, and audit trails |
+
+### Phased Go-to-Market Plan
+
+| Phase | Timeline | Scope | Exit Criteria |
+|-------|----------|-------|---------------|
+| **Phase 1 — MVP** | Q3 2026 | All P0 requirements (25 reqs). Vault + AWS connectors. Rotation & revocation policy evaluation. Basic dashboard + alerts API. Single-tenant mode. | AC-1 through AC-7 satisfied. 2 design partners running in production. |
+| **Phase 2 — Core** | Q4 2026 | All P1 requirements (14 reqs). GCP + K8s connectors. Multi-tenancy. Role-scoped visibility. Exemption management. Policy UI. Re-alerting. OpenAPI spec. Rate limiting. | 10 paying tenants. Dashboard engagement ≥ 50% WAU. |
+| **Phase 3 — Enterprise** | Q1 2027 | All P2 requirements (7 reqs). Webhook triggers for connectors. Dry-run evaluation. Role-based alert routing. Scheduled reports. SSE streaming. WCAG 2.1 AA. | 50+ tenants. SOC 2 Type II audit completed using our own reports. |
+
+### Product Decisions & Trade-offs
+
+1. **Verification-only, not remediation.** We deliberately scope out automatic rotation/revocation. This avoids the blast radius risk of a buggy policy engine destroying production secrets. Once trust is established, Phase 4 (post-GA) may introduce opt-in automated remediation with approval workflows.
+
+2. **Secret values never stored.** This is non-negotiable: we only ingest metadata. Our value prop is policy verification, not a secret store. This also significantly reduces our attack surface and simplifies SOC 2 compliance.
+
+3. **Connector model is gRPC/HTTP plugin, not SDK import.** Plugins run out-of-process, can be written in any language, and failures are isolated. The trade-off is operational complexity (running sidecars). SDK-based connectors would be simpler to deploy but would require Node.js/TypeScript ecosystem lock-in and risk crashing the evaluation engine on connector bugs.
+
+4. **P0 scope is deliberately narrow (25 requirements).** The MVP must prove the core loop: discover → evaluate → alert → dashboard. Every P1/P2 requirement adds value but also adds risk of delaying the MVP. We ship the "skeleton," prove demand, then invest.
+
+5. **Multi-tenancy deferred to Phase 2.** Most initial design partners will be single-tenant deployments. Building multi-tenancy correctly (tenant isolation, per-tenant rate limiting, cross-tenant query prevention) is high-effort and blocks nothing in the MVP if we don't need it yet.
+
+6. **No built-in identity provider integration.** We consume user/service-account metadata from secret managers and identity events via webhooks. Building native IdP connectors (Okta, Azure AD) is a potential Phase 3+ item. For now, revocation-on-user-disable works via webhook from the IdP or manual API call, which is sufficient for AC-3.
+
+### Sign-off
+
+- **Product Manager**: ✅ APPROVED — 2026-08-03
+  - PRD is complete with 46 traceable requirements across 8 categories.
+  - Acceptance criteria are specific, measurable, and mapped to requirements.
+  - MVP scope (P0) is appropriately constrained to 25 must-have requirements.
+  - Competitive analysis confirms differentiated positioning: multi-manager lifecycle policy verification.
+  - Phased roadmap aligns with realistic delivery cadence.
+
 ## Design
 
 _Owned by the architect — to be authored._
