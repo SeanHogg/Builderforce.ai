@@ -2,7 +2,7 @@
 > _Each agent that updates this PRD signs its change below._
 
 # PRD: Persistent Assignment on Manifest Re‑read  
-**Status:** WIP  
+**Status:** Approved (Product Manager review complete)  
 
 ## Problem & Goal  
 
@@ -85,6 +85,14 @@ Users create tasks by importing a declarative *manifest* (YAML, JSON, etc.). Aft
 - Handling of manifests that do not include stable task identifiers (such systems may lose assignments).  
 - Bulk “revert to manifest” capability.  
 - Support for assignment patterns like round‑robin or load‑based suggestions during re‑read.
+
+## Product Manager Sign-off
+
+- **Reviewed by:** Product Manager (code-creator/code-reviewer/test-generator/documentation-agent)
+- **Date:** 2026-08-03
+- **Verdict:** APPROVED — the PRD is complete and ready for downstream roles (business-analyst, architect, developer, code-reviewer, qa-tester). The problem is well-scoped, acceptance criteria are testable, and the out-of-scope list is explicit.
+
+---
 
 ## Requirements
 
