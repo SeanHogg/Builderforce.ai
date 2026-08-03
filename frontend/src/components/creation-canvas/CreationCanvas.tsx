@@ -22,7 +22,7 @@ import '@xyflow/react/dist/style.css';
 import { CreationNode, type CreationFlowNode } from './CreationNode';
 import type { CreationNodeData, CreationObjectKind } from './types';
 import styles from './CreationCanvas.module.css';
-import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, tasksApi, taskSpecsApi, workflowDefinitions, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
+import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, workflowDefinitions, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import { creationGraphFromSnapshot, creationStorageKey, readLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
 import { runCreationCanvasAi } from '@/lib/creationCanvasAi';
 import type { BrainAction, BrainMessage } from '@seanhogg/builderforce-brain-embedded';
@@ -53,6 +53,7 @@ import { CopyButton } from '@/components/CopyButton';
 import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
 import { buildCreationCanvasDiagnosticsReport } from '@/lib/creationCanvasDiagnostics';
 import { arrangeCanvasNodes, canvasNodeDimensions, type CanvasArrangement } from './creationCanvasLayout';
+import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
@@ -83,6 +84,21 @@ export function shouldAcquireCanvasObjectLock(
   persistedObjectIds: ReadonlySet<string>,
 ): boolean {
   return persistence === 'server' && !!selectedId && canEdit && persistedObjectIds.has(selectedId);
+}
+
+export async function persistCanonicalProjectPrd(
+  node: CreationFlowNode,
+  createSpec: typeof specsApi.create = specsApi.create,
+): Promise<CreationFlowNode> {
+  const projectId = Number(node.data.sourceProjectId);
+  if (!Number.isInteger(projectId) || projectId <= 0) throw new Error('The reviewed PRD has no canonical project');
+  const markdown = String(node.data.markdown || node.data.content || '').trim();
+  if (!markdown) throw new Error('The reviewed PRD has no authored content');
+  const requestedStatus = String(node.data.status || 'draft');
+  const status = (['draft', 'ready', 'in_progress', 'complete'].includes(requestedStatus) ? requestedStatus : 'draft') as 'draft' | 'ready' | 'in_progress' | 'complete';
+  const saved = await createSpec({ projectId, goal: node.data.title, prd: markdown, status, kind: 'feature' });
+  const { canonicalPrdPending: _pending, ...data } = node.data;
+  return { ...node, data: { ...data, resourceId: `spec:${saved.id}`, status: saved.status } };
 }
 
 function newNode(kind: CreationObjectKind, position: { x: number; y: number }): CreationFlowNode {
@@ -251,6 +267,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [proposedChanges, setProposedChanges] = useState<ProposedCanvasChange[]>([]);
   const [acceptedProposalIds, setAcceptedProposalIds] = useState<Set<string>>(new Set());
+  const [autoApply, setAutoApply] = useState(false);
+  const [autoApplyPending, setAutoApplyPending] = useState(false);
   const [pendingBrainActions, setPendingBrainActions] = useState<Array<{ objectId: string; action: string }>>([]);
   const [sessionRole, setSessionRole] = useState<CreationSessionSummary['role']>('owner');
   const [lockBlocked, setLockBlocked] = useState(false);
@@ -291,6 +309,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const canvasClipboard = useRef<{ nodes: CreationFlowNode[]; edges: Edge[] } | null>(null);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
   const initialPromptSubmitted = useRef(false);
+  const autoApplyRef = useRef(false);
+
+  useEffect(() => {
+    const enabled = isBrainAutoApprove();
+    autoApplyRef.current = enabled;
+    setAutoApply(enabled);
+  }, []);
+
+  const setAutoApplyMode = useCallback((enabled: boolean) => {
+    autoApplyRef.current = enabled;
+    setAutoApply(enabled);
+    setBrainAutoApprove(enabled);
+  }, []);
 
   const openPalette = useCallback(() => {
     setPaletteOpen(true);
@@ -1217,6 +1248,57 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       connections: scopedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
     }),
   }, {
+    name: 'canvas_read_project_prds',
+    description: 'Read the complete canonical PRDs and version history for every ticket in a project. Always use this before synthesizing, consolidating, or explaining project requirements; canvas selection does not limit this project-wide read.',
+    parameters: { type: 'object', additionalProperties: false, properties: { projectId: { type: 'number', description: 'Canonical project id. Omit when exactly one project is present on the canvas.' } } },
+    run: async (raw: unknown) => {
+      if (persistence !== 'server') return { error: 'Canonical project PRDs require a saved session' };
+      const requested = Number((raw as { projectId?: unknown })?.projectId);
+      const available = nodes.flatMap((node) => {
+        const match = node.data.kind === 'project' ? node.data.resourceId?.match(/^project:(\d+)$/) : null;
+        return match ? [Number(match[1])] : [];
+      });
+      const projectId = Number.isInteger(requested) && requested > 0 ? requested : available.length === 1 ? available[0]! : NaN;
+      if (!Number.isInteger(projectId) || projectId <= 0) return { error: available.length ? 'Specify which canvas project to read' : 'Add a canonical project to the canvas first' };
+      return creationSessionsApi.projectPrdContext(sessionId, projectId);
+    },
+  }, {
+    name: 'canvas_create_project_prd',
+    description: 'Propose a complete canonical PRD assigned to a project and represented on the canvas. Use this—not canvas_add_object—for a project PRD, consolidated PRD, or requirements synthesis.',
+    parameters: {
+      type: 'object', required: ['title', 'markdown'], additionalProperties: false,
+      properties: {
+        projectId: { type: 'number', description: 'Canonical project id. Omit when exactly one project is present on the canvas.' },
+        title: { type: 'string' }, markdown: { type: 'string', description: 'Complete authored PRD in Markdown.' },
+        status: { type: 'string', enum: ['draft', 'ready', 'in_progress', 'complete'] },
+      },
+    },
+    mutates: true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      if (persistence !== 'server') return { error: 'Create an account and save the session before creating a canonical project PRD' };
+      const args = raw as { projectId?: unknown; title?: unknown; markdown?: unknown; status?: unknown };
+      const requested = Number(args.projectId);
+      const projectNodes = nodes.filter((node) => node.data.kind === 'project' && /^project:\d+$/.test(String(node.data.resourceId || '')));
+      const project = Number.isInteger(requested) && requested > 0
+        ? projectNodes.find((node) => node.data.resourceId === `project:${requested}`)
+        : projectNodes.length === 1 ? projectNodes[0] : undefined;
+      if (!project) return { error: projectNodes.length ? 'Specify which canvas project owns this PRD' : 'Add a canonical project to the canvas first' };
+      const title = typeof args.title === 'string' ? args.title.trim().slice(0, 160) : '';
+      const markdown = typeof args.markdown === 'string' ? args.markdown.trim() : '';
+      if (!title || !markdown) return { error: 'A project PRD requires a title and complete Markdown content' };
+      const projectId = Number(project.data.resourceId!.slice('project:'.length));
+      const node = newNode('prd', { x: project.position.x + 390, y: project.position.y });
+      node.data = {
+        ...node.data, title, markdown, content: markdown,
+        status: ['draft', 'ready', 'in_progress', 'complete'].includes(String(args.status)) ? String(args.status) : 'draft',
+        sourceProjectId: projectId, canonicalPrdPending: true,
+      };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Create project PRD “${title}”`, node });
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Assign ${title} to ${project.data.title}`, edge: { id: crypto.randomUUID(), source: node.id, target: project.id, type: 'smoothstep', label: 'requirements for', data: { connectionKind: 'reference' } } });
+      return { ok: true, proposed: true, projectId, object: { id: node.id, kind: 'prd', title }, persistence: 'canonical-after-review' };
+    },
+  }, {
     name: 'canvas_add_object',
     description: 'Create a fully authored visual object. Put type-specific content in fields; supported fields depend on kind and are listed in the current canvas snapshot.',
     parameters: {
@@ -1371,7 +1453,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.delete', label: `Delete connection ${connectionId}`, connectionId });
       return { ok: true, proposed: true, connectionId };
     },
-  }], [canEdit, edges, nodes, persistence, requireAccount, resolvedScopeMode, scopedEdges, scopedNodes]);
+  }], [canEdit, edges, nodes, persistence, requireAccount, resolvedScopeMode, scopedEdges, scopedNodes, sessionId]);
 
   const evaluateCanvas = useCallback((event: FormEvent) => {
     event.preventDefault();
@@ -1394,6 +1476,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setPrompt('');
       void runCreationCanvasAi({
         prompt: request, canvasSnapshot: snapshot, persistence, canvasActions,
+        autoApprove: autoApplyRef.current,
         conversation: timeline.map((message) => ({ role: message.messageRole, content: message.body })),
       }).then((answer) => {
         const changes = [...proposalBuffer.current];
@@ -1412,6 +1495,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         if (changes.length) {
           setProposedChanges(changes);
           setAcceptedProposalIds(new Set(changes.map((change) => change.id)));
+          setAutoApplyPending(autoApplyRef.current);
         }
         setThinking(false);
         setNotice(changes.length ? `${changes.length} Brain changes await review` : 'Brain finished evaluating the canvas');
@@ -1464,7 +1548,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     window.setTimeout(() => composerFormRef.current?.requestSubmit(), 0);
   }, [thinking, timeline]);
 
-  const applyProposedChanges = useCallback(() => {
+  const applyProposedChanges = useCallback(async () => {
     const selected = proposedChanges.filter((change) => acceptedProposalIds.has(change.id));
     const additions = selected.filter((change): change is Extract<ProposedCanvasChange, { type: 'object.add' }> => change.type === 'object.add');
     const updates = selected.filter((change): change is Extract<ProposedCanvasChange, { type: 'object.update' }> => change.type === 'object.update');
@@ -1476,8 +1560,22 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const connectionDeletions = selected.filter((change): change is Extract<ProposedCanvasChange, { type: 'connection.delete' }> => change.type === 'connection.delete');
     const deletedObjectIds = new Set(deletions.map((change) => change.objectId));
     const deletedConnectionIds = new Set(connectionDeletions.map((change) => change.connectionId));
+    let materializedAdditions = additions;
+    const canonicalPrds = additions.filter((change) => change.node.data.kind === 'prd' && change.node.data.canonicalPrdPending === true);
+    if (canonicalPrds.length) {
+      setNotice('Saving reviewed PRD to its project…');
+      try {
+        materializedAdditions = await Promise.all(additions.map(async (change) => {
+          if (!canonicalPrds.includes(change)) return change;
+          return { ...change, node: await persistCanonicalProjectPrd(change.node) };
+        }));
+      } catch (error) {
+        setNotice(error instanceof Error ? `Project PRD was not saved: ${error.message}` : 'Project PRD was not saved');
+        return;
+      }
+    }
     setNodes((current) => {
-      const next = [...current, ...additions.map((change) => change.node)];
+      const next = [...current, ...materializedAdditions.map((change) => change.node)];
       return next
         .filter((node) => !deletedObjectIds.has(node.id))
         .map((node) => updates.reduce((value, change) => value.id === change.objectId ? { ...value, data: { ...value.data, ...change.patch } } : value, node))
@@ -1499,22 +1597,34 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         .filter((edge) => !deletedConnectionIds.has(edge.id) && !deletedObjectIds.has(edge.source) && !deletedObjectIds.has(edge.target))
         .map((edge) => connectionUpdates.reduce((value, change) => value.id === change.connectionId ? { ...value, ...(change.patch.label != null ? { label: change.patch.label } : {}), data: { ...value.data, ...(change.patch.kind ? { connectionKind: change.patch.kind } : {}) } } : value, edge));
       const brain = nodes.find((node) => node.data.kind === 'chat');
-      const changedArtifactIds = [...additions.map((change) => change.node.id), ...updates.map((change) => change.objectId), ...layouts.map((change) => change.objectId), ...actions.map((change) => change.objectId)];
+      const changedArtifactIds = [...materializedAdditions.map((change) => change.node.id), ...updates.map((change) => change.objectId), ...layouts.map((change) => change.objectId), ...actions.map((change) => change.objectId)];
       return brain && changedArtifactIds.length ? associateBrainWithArtifacts(reviewed, brain.id, changedArtifactIds, 'Changed with Brain') : reviewed;
     });
-    if (additions.length) setSelectedId(additions[additions.length - 1]!.node.id);
+    if (materializedAdditions.length) setSelectedId(materializedAdditions[materializedAdditions.length - 1]!.node.id);
     else if (selectedId && deletedObjectIds.has(selectedId)) { setSelectedId(null); setSelectedIds([]); }
     if (actions.length) setPendingBrainActions((current) => [...current, ...actions.filter((change) => !deletedObjectIds.has(change.objectId)).map(({ objectId, action }) => ({ objectId, action }))]);
     setProposedChanges([]);
     setAcceptedProposalIds(new Set());
-    setNotice(`${selected.length} reviewed Brain changes applied`);
+    setNotice(canonicalPrds.length ? `${canonicalPrds.length} project PRD${canonicalPrds.length === 1 ? '' : 's'} saved and ${selected.length} reviewed Brain changes applied` : `${selected.length} reviewed Brain changes applied`);
     trackActivity('creation_change_set_applied', { sessionId, metadata: { clientSurface: 'web', commandCount: selected.length } });
   }, [acceptedProposalIds, nodes, proposedChanges, selectedId, sessionId, setEdges, setNodes]);
+
+  useEffect(() => {
+    if (!autoApplyPending || !proposedChanges.length || acceptedProposalIds.size !== proposedChanges.length) return;
+    setAutoApplyPending(false);
+    void applyProposedChanges();
+  }, [acceptedProposalIds.size, applyProposedChanges, autoApplyPending, proposedChanges.length]);
+
+  const applyAndEnableAutoApply = useCallback(() => {
+    setAutoApplyMode(true);
+    void applyProposedChanges();
+  }, [applyProposedChanges, setAutoApplyMode]);
 
   const rejectProposedChanges = useCallback(() => {
     setProposedChanges([]);
     setAcceptedProposalIds(new Set());
     proposalBuffer.current = [];
+    setAutoApplyPending(false);
     setNotice('Brain changes rejected; canvas unchanged');
   }, []);
 
@@ -1842,12 +1952,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         {conversationOpen && <aside className={styles.historyPanel} aria-label="Session conversation"><header><div><strong>Session conversation</strong><small>Persists even when Chat Objects are removed</small></div><span className={styles.panelHeaderActions}><CopyButton compact label={t('copyDiagnostics')} ariaLabel={t('copyChatDiagnostics')} getText={buildDiagnostics} /><button onClick={() => setConversationOpen(false)} aria-label="Close conversation">×</button></span></header><div>{timeline.length ? timeline.map((message) => <article key={message.clientMessageId} style={{ padding: '9px 10px', borderBottom: '1px solid var(--border-subtle)' }}><strong style={{ textTransform: 'capitalize' }}>{message.messageRole === 'assistant' ? 'Brain' : message.messageRole}</strong><p style={{ margin: '4px 0', whiteSpace: 'pre-wrap' }}>{message.body}</p><small>{new Date(message.createdAt).toLocaleString()}</small></article>) : <p>No conversation yet. Ask Brain from the composer to begin.</p>}</div></aside>}
         {diagnosticsOpen && <aside className={`${styles.historyPanel} ${styles.diagnosticsPanel}`} aria-label="Canvas diagnostics"><header><div><strong>{t('diagnostics')}</strong><small>{t('diagnosticsHint')}</small></div><button onClick={() => setDiagnosticsOpen(false)} aria-label="Close diagnostics">×</button></header><div className={styles.diagnosticsSummary}><dl><div><dt>Session</dt><dd>{persistence} · revision {revision.current}</dd></div><div><dt>Realtime</dt><dd>{realtimeState}</dd></div><div><dt>Canvas</dt><dd>{nodes.length} objects · {edges.length} connections</dd></div><div><dt>Brain</dt><dd>{thinking ? 'responding' : 'ready'} · {canvasActions.length} actions</dd></div><div><dt>Scope</dt><dd>{resolvedScopeMode}</dd></div><div><dt>Access</dt><dd>{sessionRole}</dd></div></dl><CopyButton label={t('copyDiagnostics')} ariaLabel={t('copyCanvasDiagnostics')} getText={buildDiagnostics} /></div></aside>}
 
-        {!!proposedChanges.length && <aside className={styles.changeSetPanel}><header><div><strong>Review Brain changes</strong><small>Select exactly what should change</small></div><button onClick={rejectProposedChanges} aria-label="Close change set">×</button></header><div>{proposedChanges.map((change) => <label key={change.id}><input type="checkbox" checked={acceptedProposalIds.has(change.id)} onChange={() => setAcceptedProposalIds((current) => { const next = new Set(current); if (next.has(change.id)) next.delete(change.id); else next.add(change.id); return next; })} /><span><b>{change.label}</b><small>{change.type.replace('.', ' ')}</small></span></label>)}</div><footer><button className={styles.secondaryButton} onClick={rejectProposedChanges}>Reject all</button><button className={styles.primaryButton} disabled={!acceptedProposalIds.size} onClick={applyProposedChanges}>Apply {acceptedProposalIds.size} selected</button></footer></aside>}
+        {!!proposedChanges.length && <aside className={styles.changeSetPanel}><header><div><strong>Review Brain changes</strong><small>Select exactly what should change</small></div><button onClick={rejectProposedChanges} aria-label="Close change set">×</button></header><div>{proposedChanges.map((change) => <label key={change.id}><input type="checkbox" checked={acceptedProposalIds.has(change.id)} onChange={() => setAcceptedProposalIds((current) => { const next = new Set(current); if (next.has(change.id)) next.delete(change.id); else next.add(change.id); return next; })} /><span><b>{change.label}</b><small>{change.type.replace('.', ' ')}</small></span></label>)}</div><footer><button className={styles.secondaryButton} onClick={rejectProposedChanges}>Reject all</button><button className={styles.secondaryButton} disabled={!acceptedProposalIds.size} onClick={applyAndEnableAutoApply} title="Apply this batch and automatically apply following Brain actions">Apply &amp; auto-apply</button><button className={styles.primaryButton} disabled={!acceptedProposalIds.size} onClick={applyProposedChanges}>Apply {acceptedProposalIds.size} selected</button></footer></aside>}
         {mergeReview && <aside className={styles.mergePanel}><header><div><strong>Merge branch into parent</strong><p>Resolve each object explicitly. Parent-only objects are preserved.</p></div><button onClick={() => setMergeReview(null)} aria-label="Close merge review">×</button></header>{mergeReview.items.map((item) => <label key={item.key}><b>{item.source.data.title}</b><small>{item.target ? `Both sessions contain this ${item.source.data.kind}.` : `New ${item.source.data.kind} from this branch.`}</small>{item.target && <span><select aria-label={`Merge choice for ${item.source.data.title}`} value={item.choice} onChange={(event) => setMergeReview((current) => current ? { ...current, items: current.items.map((candidate) => candidate.key === item.key ? { ...candidate, choice: event.target.value as 'branch' | 'parent' } : candidate) } : current)}><option value="branch">Use branch version</option><option value="parent">Keep parent version</option></select></span>}</label>)}<button className={styles.primaryButton} onClick={applyMerge}>Apply reviewed merge</button></aside>}
 
         {!presentMode && <form ref={composerFormRef} className={styles.composer} onSubmit={evaluateCanvas}>
           <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} aria-label={t('askBrain')} placeholder={t('askBrain')} rows={1} />
-          <div className={styles.composerBottom}><button type="button" className={styles.iconButton} onClick={openPalette} aria-label={t('addToCanvas')}>＋</button><label className={styles.scopeChip}>⌁ <span className="sr-only">Brain scope</span><select aria-label="Brain scope" value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">Entire canvas</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects` : 'Selected object'}</option><option value="connected" disabled={!effectiveSelectedIds.length}>Connected objects</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>Current frame</option></select></label><span className={styles.composerSpacer} /><button type="button" className={styles.iconButton} aria-label="Use microphone" title="Use microphone" onClick={startVoiceInput}><svg className={styles.microphoneIcon} viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" /><path d="M6 11.5v.5a6 6 0 0 0 12 0v-.5M12 18v3M9 21h6" /></svg></button><button className={styles.sendButton} aria-label={t('sendBrain')} disabled={thinking || !prompt.trim()}>{thinking ? '•••' : '➤'}</button></div>
+          <div className={styles.composerBottom}><button type="button" className={styles.iconButton} onClick={openPalette} aria-label={t('addToCanvas')}>＋</button><label className={styles.scopeChip}>⌁ <span className="sr-only">Brain scope</span><select aria-label="Brain scope" value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">Entire canvas</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects` : 'Selected object'}</option><option value="connected" disabled={!effectiveSelectedIds.length}>Connected objects</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>Current frame</option></select></label><button type="button" className={`${styles.autoApplyButton} ${autoApply ? styles.autoApplyButtonActive : ''}`} aria-pressed={autoApply} title="Automatically apply Brain actions without showing the review batch" onClick={() => setAutoApplyMode(!autoApply)}><span aria-hidden>⚡</span> Auto apply</button><span className={styles.composerSpacer} /><button type="button" className={styles.iconButton} aria-label="Use microphone" title="Use microphone" onClick={startVoiceInput}><svg className={styles.microphoneIcon} viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" /><path d="M6 11.5v.5a6 6 0 0 0 12 0v-.5M12 18v3M9 21h6" /></svg></button><button className={styles.sendButton} aria-label={t('sendBrain')} disabled={thinking || !prompt.trim()}>{thinking ? '•••' : '➤'}</button></div>
         </form>}
       </div>
     </div>

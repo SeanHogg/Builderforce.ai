@@ -7860,6 +7860,32 @@ export interface CreationSessionDetail {
   personalViewport?: { x?: number; y?: number; zoom?: number } | null;
 }
 
+export interface CreationProjectPrdVersion {
+  id: string;
+  specId: string;
+  version: number;
+  prd: string | null;
+  archSpec: string | null;
+  taskList: string | null;
+  origin: string;
+  frozen: boolean;
+  frozenAt: string | null;
+  createdBy: string | null;
+  createdAt: string;
+}
+
+export interface CreationProjectPrd extends Spec {
+  versions: CreationProjectPrdVersion[];
+}
+
+export interface CreationProjectPrdContext {
+  project: { id: number; name: string; description: string | null; status: string };
+  tickets: Array<Pick<Task, 'id' | 'key' | 'title' | 'description' | 'status' | 'updatedAt'> & {
+    prds: Array<CreationProjectPrd & { isPrimary: boolean }>;
+  }>;
+  projectPrds: CreationProjectPrd[];
+}
+
 export interface CreationGraphInput {
   objects: Array<{ id: string; kind: string; resourceType?: string | null; resourceId?: string | null; canvasData: Record<string, unknown>; content: Record<string, unknown> }>;
   connections: Array<{ id: string; sourceObjectId: string; targetObjectId: string; kind?: string; label?: string | null; metadata?: Record<string, unknown> }>;
@@ -8002,6 +8028,8 @@ export const creationSessionsApi = {
     request<{ sessionId: string; objectId: string; created: boolean }>(`/api/creation-sessions/ide-projects/${ideProjectId}/open`, { method: 'POST' }),
   expandProject: (id: string, projectId: number, lens: 'everything' | 'delivery' | 'metrics' | 'customer-feedback' = 'everything') =>
     request<{ project: { id: number; name: string; description: string | null; status: string }; lens: string; resources: Array<{ kind: string; resourceType: string; resourceId: string; title: string; subtitle: string | null; status: string; workflowExecutable?: boolean; resourceSubtype?: string }>; generated: Array<{ key: string; kind: string; title: string; status: string }>; fetchedAt: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/projects/${projectId}/expand`, { method: 'POST', body: JSON.stringify({ lens }) }),
+  projectPrdContext: (id: string, projectId: number) =>
+    request<CreationProjectPrdContext>(`/api/creation-sessions/${encodeURIComponent(id)}/projects/${projectId}/prd-context`),
   openResource: (resourceType: 'chat' | 'workflow' | 'agent', resourceId: string | number) =>
     request<{ sessionId: string; objectId: string; created: boolean }>(`/api/creation-sessions/resources/${resourceType}/${encodeURIComponent(String(resourceId))}/open`, { method: 'POST' }),
 };

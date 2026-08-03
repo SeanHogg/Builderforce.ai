@@ -1,7 +1,9 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { associateBrainWithArtifacts, CreationCanvas, shouldAcquireCanvasObjectLock } from './CreationCanvas';
+import { associateBrainWithArtifacts, CreationCanvas, persistCanonicalProjectPrd, shouldAcquireCanvasObjectLock } from './CreationCanvas';
 import { CreationNode } from './CreationNode';
+import { specsApi } from '@/lib/builderforceApi';
+import type { CreationFlowNode } from './CreationNode';
 
 vi.mock('next-intl', async (importOriginal) => {
   const actual = await importOriginal<typeof import('next-intl')>();
@@ -52,6 +54,23 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     const objectId = 'a5d80af7-bb65-45cc-bd2b-d190616fc904';
     expect(shouldAcquireCanvasObjectLock('server', objectId, true, new Set())).toBe(false);
     expect(shouldAcquireCanvasObjectLock('server', objectId, true, new Set([objectId]))).toBe(true);
+  });
+
+  it('persists an accepted PRD to its canonical project before materializing its canvas reference', async () => {
+    const createSpec = vi.fn(async (body: Parameters<typeof specsApi.create>[0]) => ({
+      id: '6f4b36f8-f8a0-49e8-aeed-faa42cacad11', projectId: body.projectId ?? null,
+      goal: body.goal, prd: body.prd ?? null, status: body.status ?? 'draft', kind: body.kind,
+    })) as typeof specsApi.create;
+    const node = {
+      id: 'prd-node', type: 'creation', position: { x: 500, y: 200 },
+      data: { kind: 'prd', title: 'BuilderForce consolidated PRD', status: 'ready', markdown: '# Complete requirements', sourceProjectId: 42, canonicalPrdPending: true },
+    } satisfies CreationFlowNode;
+
+    const saved = await persistCanonicalProjectPrd(node, createSpec);
+
+    expect(createSpec).toHaveBeenCalledWith({ projectId: 42, goal: 'BuilderForce consolidated PRD', prd: '# Complete requirements', status: 'ready', kind: 'feature' });
+    expect(saved.data.resourceId).toBe('spec:6f4b36f8-f8a0-49e8-aeed-faa42cacad11');
+    expect(saved.data.canonicalPrdPending).toBeUndefined();
   });
 
   it('associates Brain with artifacts once without duplicating relationships', () => {
@@ -124,6 +143,11 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByRole('log', { name: 'Brain chat history' })).toHaveAttribute('tabindex', '0');
     const microphone = screen.getByRole('button', { name: 'Use microphone' });
     expect(microphone.querySelector('svg')).toBeInTheDocument();
+    const autoApply = screen.getByRole('button', { name: 'Auto apply' });
+    expect(autoApply).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(autoApply);
+    expect(autoApply).toHaveAttribute('aria-pressed', 'true');
+    expect(localStorage.getItem('brain.autoApprove')).toBe('1');
 
     fireEvent.click(screen.getAllByText('Brain')[0]!);
     expect(screen.getByRole('log', { name: 'Full Brain activity' })).toBeInTheDocument();

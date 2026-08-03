@@ -31,6 +31,9 @@ import {
   workflows,
   workflowDefinitions,
   projects,
+  specs,
+  taskSpecs,
+  specVersions,
   tenantMembers,
   tenantInvitations,
   tenants,
@@ -1833,6 +1836,64 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       ...(lens === 'everything' || lens === 'customer-feedback' ? [{ key: `project:${projectId}:feedback`, kind: 'featureSummary', title: `${project.name} requested features`, status: 'Evidence view' }] : []),
     ];
     return c.json({ project, lens, resources, generated, fetchedAt: new Date().toISOString() });
+  });
+
+  /**
+   * Return the canonical PRD history for a project, grouped by ticket. Canvas
+   * placement is deliberately irrelevant here: project-wide synthesis must read
+   * every ticket-linked PRD even when the user currently has one object selected.
+   */
+  router.get('/:id/projects/:projectId/prd-context', async (c) => {
+    const access = await requireSession(c, 'viewer');
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const projectId = Number(c.req.param('projectId'));
+    if (!Number.isInteger(projectId) || projectId <= 0) return c.json({ error: 'Invalid project id' }, 400);
+    const segmentClause = access.session.segmentId == null
+      ? isNull(projects.segmentId)
+      : eq(projects.segmentId, access.session.segmentId);
+    const [project] = await db.select({ id: projects.id, name: projects.name, description: projects.description, status: projects.status })
+      .from(projects).where(and(
+        eq(projects.id, projectId), eq(projects.tenantId, access.session.tenantId), segmentClause,
+      )).limit(1);
+    if (!project) return c.json({ error: 'Project not found or unavailable' }, 404);
+
+    const taskSegment = access.session.segmentId == null ? isNull(tasks.segmentId) : eq(tasks.segmentId, access.session.segmentId);
+    const [taskRows, projectSpecs, links] = await Promise.all([
+      db.select({ id: tasks.id, key: tasks.key, title: tasks.title, description: tasks.description, status: tasks.status, updatedAt: tasks.updatedAt })
+        .from(tasks).where(and(eq(tasks.projectId, projectId), taskSegment)).orderBy(asc(tasks.id)),
+      db.select({ id: specs.id, goal: specs.goal, status: specs.status, kind: specs.kind, prd: specs.prd, archSpec: specs.archSpec, taskList: specs.taskList, createdAt: specs.createdAt, updatedAt: specs.updatedAt })
+        .from(specs).where(and(eq(specs.projectId, projectId), eq(specs.tenantId, access.session.tenantId))).orderBy(asc(specs.createdAt)),
+      db.select({ taskId: taskSpecs.taskId, specId: taskSpecs.specId, isPrimary: taskSpecs.isPrimary })
+        .from(taskSpecs)
+        .innerJoin(tasks, eq(tasks.id, taskSpecs.taskId))
+        .where(and(eq(tasks.projectId, projectId), eq(taskSpecs.tenantId, access.session.tenantId), taskSegment)),
+    ]);
+    const specIds = projectSpecs.map((spec) => spec.id);
+    const versions = specIds.length ? await db.select({
+      id: specVersions.id, specId: specVersions.specId, version: specVersions.version,
+      prd: specVersions.prd, archSpec: specVersions.archSpec, taskList: specVersions.taskList,
+      origin: specVersions.origin, frozen: specVersions.frozen, frozenAt: specVersions.frozenAt,
+      createdBy: specVersions.createdBy, createdAt: specVersions.createdAt,
+    }).from(specVersions).where(and(
+      eq(specVersions.tenantId, access.session.tenantId), inArray(specVersions.specId, specIds),
+    )).orderBy(asc(specVersions.specId), asc(specVersions.version)) : [];
+
+    const versionsBySpec = new Map<string, typeof versions>();
+    for (const version of versions) versionsBySpec.set(version.specId, [...(versionsBySpec.get(version.specId) ?? []), version]);
+    const linksByTask = new Map<number, typeof links>();
+    for (const link of links) linksByTask.set(link.taskId, [...(linksByTask.get(link.taskId) ?? []), link]);
+    const specsById = new Map(projectSpecs.map((spec) => [spec.id, spec]));
+    return c.json({
+      project,
+      tickets: taskRows.map((task) => ({
+        ...task,
+        prds: (linksByTask.get(task.id) ?? []).flatMap((link) => {
+          const spec = specsById.get(link.specId);
+          return spec ? [{ ...spec, isPrimary: link.isPrimary, versions: versionsBySpec.get(spec.id) ?? [] }] : [];
+        }),
+      })),
+      projectPrds: projectSpecs.map((spec) => ({ ...spec, versions: versionsBySpec.get(spec.id) ?? [] })),
+    });
   });
 
   router.post('/projects/:projectId/open', async (c) => {
