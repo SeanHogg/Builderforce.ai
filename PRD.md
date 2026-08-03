@@ -90,7 +90,57 @@ Implement a reliable and real-time monitoring system that provides users with cl
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+### Data Model
+
+| Entity | Description | Key Attributes |
+|--------|-------------|-----------------|
+| `Device` | A registered device to monitor | `id`, `name`, `type`, `location`, `registeredAt`, `status` |
+| `DeviceStatusEvent` | Connection status change log | `id`, `deviceId`, `status`, `timestamp`, `metadata` |
+| `DeviceNotification` | Notification delivery record | `id`, `deviceId`, `type`, `sentAt`, `status` |
+| `DeviceExport` | CSV export job | `id`, `userId`, `filters`, `createdAt`, `status`, `url` |
+
+### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/devices` | List all registered devices with current status |
+| `POST` | `/api/devices` | Register a new device |
+| `DELETE` | `/api/devices/:id` | Deregister a device |
+| `GET` | `/api/devices/:id/status` | Get current connection status for a device |
+| `GET` | `/api/devices/:id/history` | Get connection history (last 30 days) |
+| `GET` | `/api/devices/export` | Generate CSV export of connection logs |
+| `POST` | `/api/devices/:id/heartbeat` | Device heartbeat endpoint (called by device) |
+
+### Notification Channels
+
+- **Email**: Transactional email via existing email service
+- **In-App**: Real-time WebSocket push to connected clients
+- **Webhook** (optional): Outbound POST to user-configured URL
+
+### Role-Based Access Control
+
+| Role | Permissions |
+|------|-------------|
+| `admin` | Full access: register, deregister, view all, export |
+| `operator` | View all devices, receive notifications, export |
+| `viewer` | View own-devices only, no export |
+
+### Performance Requirements
+
+- Status updates reflected in dashboard within **5 seconds** of change
+- Support monitoring of **100+ devices** per tenant
+- Historical data retention: **30 days**
+- CSV export: up to 10,000 records per request
+
+### Integration Points
+
+- **Authentication**: Use existing tenant authentication system
+- **Notifications**: Reuse existing notification infrastructure (email service, in-app push)
+- **Database**: Use existing tenant-scoped PostgreSQL instance
+
+---
+
+_Authored by: business-analyst (task #634)_
 
 ## Design
 
