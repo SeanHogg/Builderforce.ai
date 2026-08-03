@@ -50,6 +50,32 @@ function AuthoredContent({ data, fallback }: { data: CreationNodeData; fallback:
   return <p className={styles.authoredContent}>{authoredText(data) || fallback}</p>;
 }
 
+function textValue(value: unknown, fallback = ''): string {
+  return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+function TaskBody({ data }: { data: CreationNodeData }) {
+  const agent = textValue(data.assignee, textValue(data.agentName, textValue(data.role, 'Unassigned')));
+  const priority = textValue(data.priority, 'Not set');
+  const prdTitle = textValue(data.prdTitle);
+  const prdSummary = textValue(data.prdSummary);
+  const acceptance = textValue(data.acceptanceCriteria);
+  return <div className={styles.taskBody}>
+    <div className={styles.taskFacts}>
+      <span><small>Agent</small><b>{agent}</b></span>
+      <span><small>Priority</small><b>{priority}</b></span>
+    </div>
+    <AuthoredContent data={data} fallback="No task description yet." />
+    <div className={styles.taskContext}>
+      <small>PRD</small>
+      {prdTitle || prdSummary
+        ? <><b>{prdTitle || 'Linked requirements'}</b>{prdSummary && <p>{prdSummary}</p>}</>
+        : <p className={styles.taskEmpty}>No PRD linked</p>}
+    </div>
+    {acceptance && <div className={styles.taskContext}><small>Done when</small><p>{acceptance}</p></div>}
+  </div>;
+}
+
 function WorkflowBody({ data }: { data: CreationNodeData }) {
   const authoredSteps = Array.isArray(data.steps) ? data.steps.slice(0, 12).map((step, index) => asRecord(step, { title: typeof step === 'string' ? step : `Step ${index + 1}` })) : [];
   const steps: Record<string, unknown>[] = authoredSteps.length ? authoredSteps : ['Audience', 'Create campaign', 'Approve', 'Publish'].map((title) => ({ title }));
@@ -215,7 +241,7 @@ export function CreationNode({ id, data, selected, width, height, canRun = true,
         {data.kind === 'note' && <AuthoredContent data={data} fallback="Double-click to add a thought." />}
         {data.kind === 'project' && <><div className={styles.projectHealth}><div><small>Maturity</small><b>3.8 / 5</b></div><div><small>Velocity</small><b>42 pts</b></div><div><small>Health</small><b className={styles.healthy}>On track</b></div></div><p>{data.subtitle || 'Optional project context. Expand to see related work.'}</p></>}
         {data.kind === 'roadmap' && <div className={styles.roadmap}>{(Array.isArray(data.items) && data.items.length ? data.items.slice(0, 12) : [{ title: 'Validate narrative', phase: 'Now' }, { title: 'Executive review', phase: 'Next' }, { title: 'Measure adoption', phase: 'Later' }]).map((raw, index) => { const item = asRecord(raw, { title: raw, phase: index < 2 ? 'Now' : 'Next' }); return <div key={`${String(item.title)}-${index}`}><b>{String(item.phase || item.status || `Phase ${index + 1}`)}</b><span>{String(item.title || item.name || `Item ${index + 1}`)}</span>{item.description ? <span>{String(item.description)}</span> : null}</div>; })}</div>}
-        {data.kind === 'task' && <><div className={styles.personRow}><span className={styles.liveDot} /><b>{data.status || 'Ready'}</b><span>{String(data.assignee || data.role || 'Unassigned')}</span></div><AuthoredContent data={data} fallback="Build the approved mockup and deliver it to the project." /></>}
+        {data.kind === 'task' && <TaskBody data={data} />}
         {data.kind === 'mockup' && <><div className={styles.mockupGrid}><i /><i /><i /></div><p>{data.subtitle || 'High-fidelity interactive concept ready for review.'}</p><div className={styles.pills}><span>{data.status || 'Draft'}</span><span>Desktop + mobile</span></div></>}
         {data.kind === 'mockupSet' && <><div className={styles.mockupGrid}><i /><i /><i /></div><p>{Array.isArray(data.items) && data.items.length ? `${data.items.length} linked concepts` : 'A reviewable collection of feature concepts. Ask Brain to expand every item.'}</p><div className={styles.pills}><span>Expandable</span><span>Citations retained</span></div></>}
         {data.kind === 'featureSummary' && <div className={styles.featureGrid}>{(Array.isArray(data.items) && data.items.length ? data.items.map((item) => typeof item === 'string' ? item : String((item as Record<string, unknown>)?.title || (item as Record<string, unknown>)?.name || 'Feature')).slice(0, 20) : ['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration']).map((feature, index) => <span key={`${feature}-${index}`}><b>{index + 1}</b>{feature}</span>)}</div>}

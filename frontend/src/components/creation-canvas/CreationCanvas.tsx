@@ -22,7 +22,7 @@ import '@xyflow/react/dist/style.css';
 import { CreationNode, type CreationFlowNode } from './CreationNode';
 import type { CreationNodeData, CreationObjectKind } from './types';
 import styles from './CreationCanvas.module.css';
-import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, tasksApi, workflowDefinitions, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
+import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, tasksApi, taskSpecsApi, workflowDefinitions, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import { creationGraphFromSnapshot, creationStorageKey, readLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
 import { runCreationCanvasAi } from '@/lib/creationCanvasAi';
 import type { BrainAction, BrainMessage } from '@seanhogg/builderforce-brain-embedded';
@@ -52,6 +52,7 @@ import { useVoiceStudio } from '@/lib/voiceStudio';
 import { CopyButton } from '@/components/CopyButton';
 import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
 import { buildCreationCanvasDiagnosticsReport } from '@/lib/creationCanvasDiagnostics';
+import { arrangeCanvasNodes, canvasNodeDimensions, type CanvasArrangement } from './creationCanvasLayout';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
@@ -1194,7 +1195,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     parameters: { type: 'object', properties: {}, additionalProperties: false },
     run: () => ({
       scope: resolvedScopeMode,
-      objects: scopedNodes.map((node) => { const definition = creationObjectDefinition(node.data.kind); return { id: node.id, ...definition.contextAdapter(node.data), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, width: node.width ?? node.style?.width, height: node.height ?? node.style?.height, hidden: node.hidden === true, locked: node.data.placementLocked === true }; }),
+      objects: scopedNodes.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true }; }),
       connections: scopedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
     }),
   }, {
@@ -1250,6 +1251,27 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!objectId || !target) return { error: 'Object not found' };
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.delete', label: `Delete ${target.data.title}`, objectId });
       return { ok: true, proposed: true, objectId };
+    },
+  }, {
+    name: 'canvas_arrange_objects',
+    description: 'Automatically position multiple canvas objects in a non-overlapping grid, row, or column using their actual rendered sizes. Use this for requests to organize, align, evenly space, tidy, or remove overlaps.',
+    parameters: { type: 'object', additionalProperties: false, properties: { objectIds: { type: 'array', items: { type: 'string' }, description: 'Objects to arrange. Omit to arrange every object in the active canvas scope.' }, arrangement: { type: 'string', enum: ['grid', 'row', 'column'] }, gap: { type: 'number', description: 'Space between object bounds in canvas pixels.' }, columns: { type: 'number', description: 'Optional grid column count.' } } },
+    mutates: true,
+    run: (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { objectIds?: unknown; arrangement?: CanvasArrangement; gap?: number; columns?: number };
+      const requestedIds = Array.isArray(args.objectIds) ? new Set(args.objectIds.filter((id): id is string => typeof id === 'string')) : null;
+      const targets = scopedNodes.filter((node) => (!requestedIds || requestedIds.has(node.id)) && node.data.placementLocked !== true);
+      if (targets.length < 2) return { error: 'At least two unlocked objects are required to arrange the canvas' };
+      const positions = arrangeCanvasNodes(targets, args.arrangement, Number(args.gap ?? 48), Number(args.columns));
+      let proposed = 0;
+      for (const target of targets) {
+        const position = positions.get(target.id);
+        if (!position || (position.x === target.position.x && position.y === target.position.y)) continue;
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.layout', label: `Arrange ${target.data.title}`, objectId: target.id, position });
+        proposed += 1;
+      }
+      return { ok: true, proposed: true, arrangedObjects: targets.length, proposedChanges: proposed, arrangement: args.arrangement || 'grid', gap: Math.max(16, Math.min(Number(args.gap ?? 48), 320)) };
     },
   }, {
     name: 'canvas_set_object_layout',
@@ -1348,7 +1370,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const request = requestText;
       const snapshot = JSON.stringify({
         sessionId, scope: resolvedScopeMode, selectedObjectIds: effectiveSelectedIds,
-        objects: scopedNodes.map((node) => { const definition = creationObjectDefinition(node.data.kind); return { id: node.id, ...definition.contextAdapter(node.data), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, width: node.width ?? node.style?.width, height: node.height ?? node.style?.height, hidden: node.hidden === true, locked: node.data.placementLocked === true }; }),
+        objects: scopedNodes.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true }; }),
         connections: scopedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
       });
       setPrompt('');

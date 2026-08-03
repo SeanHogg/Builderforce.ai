@@ -109,7 +109,7 @@ const MUTABLE_FIELDS = {
   service: ['content', 'url', 'port'],
   llm: ['content', 'model', 'instructions', 'parameters'],
   project: ['content', 'projectLens', 'sources'],
-  task: ['content', 'role', 'assignee', 'priority', 'acceptanceCriteria'],
+  task: ['content', 'role', 'assignee', 'agentName', 'agentRef', 'priority', 'acceptanceCriteria', 'taskKey', 'prdTitle', 'prdStatus', 'prdSummary', 'prdCount'],
   prd: ['content', 'markdown', 'requirements', 'userStories'],
   release: ['content', 'items', 'milestones', 'releaseDate'],
   mockup: ['content', 'items', 'viewport', 'sources'],
@@ -179,7 +179,8 @@ const CONTEXT_FIELDS = [
   'contributions', 'inferenceEnabled', 'teacherModel', 'viewport', 'content', 'markdown',
   'steps', 'websiteHeadline', 'websiteBody', 'websiteCta', 'pages', 'kpis', 'verdict',
   'gaps', 'recommendations', 'milestones', 'code', 'language', 'path', 'url', 'branch',
-  'instructions', 'parameters', 'assignee', 'priority', 'acceptanceCriteria', 'requirements',
+  'instructions', 'parameters', 'assignee', 'agentName', 'agentRef', 'priority', 'acceptanceCriteria', 'taskKey',
+  'prdTitle', 'prdStatus', 'prdSummary', 'prdCount', 'requirements',
   'userStories', 'responsibilities', 'tools', 'autonomy', 'transcript', 'stages',
 ] as const;
 const SENSITIVE_CONTEXT_KEY = /(?:secret|token|password|credential|authorization|api.?key|cookie)/i;

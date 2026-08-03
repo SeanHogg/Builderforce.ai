@@ -10,6 +10,7 @@ export const GUEST_CANVAS_TOOL_NAMES = new Set([
   'canvas_add_object',
   'canvas_update_object',
   'canvas_delete_object',
+  'canvas_arrange_objects',
   'canvas_set_object_layout',
   'canvas_invoke_object_action',
   'canvas_connect_objects',

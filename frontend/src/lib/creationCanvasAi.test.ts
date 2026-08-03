@@ -52,6 +52,7 @@ describe('runCreationCanvasAi', () => {
     expect(firstRequest.messages[0].content).toContain('kind "evermind" is BuilderForce\'s self-learning Evermind model');
     expect(firstRequest.messages[0].content).toContain('"create a workflow" means call canvas_add_object');
     expect(firstRequest.messages[0].content).toContain('do not call builtin_workflows_create or ask a follow-up question');
+    expect(firstRequest.messages[0].content).toContain('call canvas_arrange_objects');
     expect(firstRequest.messages[0].content).toContain('Never emit tool_code');
   });
 });

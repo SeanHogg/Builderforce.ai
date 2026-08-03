@@ -198,6 +198,14 @@
 .evaluationBody { display: grid; grid-template-columns: 1fr 1.35fr 1.35fr 1.35fr auto; align-items: center; gap: 0; }.evaluationBody > div { min-height: 62px; padding: 5px 10px; border-right: 1px solid #e7e2fa; box-sizing: border-box; }.evaluationBody b { font-size: 9px; }.evaluationBody p { font-size: 8px; }.evaluationBody button { margin-left: 9px; border: 0; border-radius: 7px; padding: 8px; background: #7357e7; color:#fff; font-family:inherit; font-size:8px; font-weight:650; }.verdict { color:#6941d7; font-size:17px; line-height:1.25; font-weight:700; }
 .node_evaluation { border-color:#9178eb; width:650px; }.node_agent { width:285px; }.node_staff { width:245px; }.node_chat { width:280px; height:300px; }
 .personRow { display:flex; align-items:center; gap:7px; font-size:9px; }.personRow > span:last-child:not(.presence) { margin-left:auto; padding:3px 6px; border-radius:999px; background:#f1f4f8; }.avatar { display:grid!important; place-items:center; width:25px!important; height:25px!important; color:#fff; font-weight:700; }
+.taskBody { display:grid; gap:9px; }
+.taskFacts { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,.65fr); gap:7px; }
+.taskFacts span,.taskContext { min-width:0; padding:7px 8px; border:1px solid #dfe6ef; border-radius:7px; background:#fafcff; }
+.taskFacts small,.taskContext small { display:block; margin-bottom:3px; color:#7c8ca1; font-size:7px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+.taskFacts b,.taskContext b { display:block; overflow:hidden; color:#34445a; font-size:9px; text-overflow:ellipsis; white-space:nowrap; text-transform:capitalize; }
+.taskContext p { max-height:44px; margin:3px 0 0; overflow:hidden; color:#607188; font-size:8px; line-height:1.45; }
+.taskContext .taskEmpty { color:#8a98aa; font-style:italic; }
+.taskBody > .authoredContent { max-height:72px; margin:0; }
 .pills,.inspectorPills { display:flex; flex-wrap:wrap; gap:5px; margin-top:9px; }.pills span,.inspectorPills span,.inspectorPills button { padding:4px 6px; border:1px solid #dfe6ef; border-radius:5px; background:#fafcff; color:#53647a; font-size:8px; }
 .chatHistory { box-sizing:border-box; height:100%; min-height:0; overflow:hidden; --bf-surface:var(--canvas-panel); --bf-text:var(--canvas-ink); --bf-text-muted:var(--canvas-muted); --bf-border:var(--canvas-line); --bf-accent:var(--canvas-blue); }
 .chatHistory:focus-visible { outline:2px solid var(--canvas-blue); outline-offset:2px; border-radius:8px; }
