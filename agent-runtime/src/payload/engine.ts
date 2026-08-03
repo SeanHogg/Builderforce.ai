@@ -384,6 +384,8 @@ export function createPayloadGenerator(
   const functions = options?.functions ?? {};
   const logSink = options?.logSink;
   const contextId = `gen:${payloadDefinition.id}`;
+  // Shared log buffer across all generate() calls on this generator instance
+  const logRef: LogEntry[] = [];
 
   const planFields = (): OutputField[] => [...payloadDefinition.fields];
 
