@@ -2,9 +2,10 @@
  * Trend Line Chart
  * Shows time-series trends for open bugs, newly opened, and resolved
  * Using pure HTML/CSS/SVG with animation
+ * Supports toggling individual series on/off (FR-3)
  */
 
-import React from "react";
+import React, { useState } from "react";
 import { TrendData } from "../../types/quality";
 import "./TrendLineChart.css";
 
@@ -21,20 +22,57 @@ export function TrendLineChart({
   newlyOpened,
   resolved,
 }: TrendLineChartProps) {
+  // State for toggling series visibility (FR-3)
+  const [visibleSeries, setVisibleSeries] = useState({
+    totalOpen: true,
+    newlyOpened: true,
+    resolved: true,
+  });
+
+  const toggleSeries = (series: keyof typeof visibleSeries) => {
+    setVisibleSeries((prev) => ({
+      ...prev,
+      [series]: !prev[series],
+    }));
+  };
+
   const maxTotalOpen = Math.max(...totalOpen, 1);
   const maxPoint = Math.max(
-    ...totalOpen,
-    ...newlyOpened,
-    ...resolved,
+    ...(visibleSeries.totalOpen ? totalOpen : []),
+    ...(visibleSeries.newlyOpened ? newlyOpened : []),
+    ...(visibleSeries.resolved ? resolved : []),
     0
   );
-  const minPoint = Math.min(...totalOpen, ...newlyOpened, ...resolved, 0);
+  const minPoint = Math.min(
+    ...(visibleSeries.totalOpen ? totalOpen : [Infinity]),
+    ...(visibleSeries.newlyOpened ? newlyOpened : [Infinity]),
+    ...(visibleSeries.resolved ? resolved : [Infinity]),
+    0
+  );
   const range = maxPoint - minPoint || 1;
 
   const allData = [
-    { series: "Total Open", values: totalOpen, color: "#3b82f6" },
-    { series: "Newly Opened", values: newlyOpened, color: "#10b981" },
-    { series: "Resolved", values: resolved, color: "#ef4444" },
+    { 
+      series: "Total Open", 
+      values: totalOpen, 
+      color: "#3b82f6",
+      key: "totalOpen" as const,
+      visible: visibleSeries.totalOpen,
+    },
+    { 
+      series: "Newly Opened", 
+      values: newlyOpened, 
+      color: "#10b981",
+      key: "newlyOpened" as const,
+      visible: visibleSeries.newlyOpened,
+    },
+    { 
+      series: "Resolved", 
+      values: resolved, 
+      color: "#ef4444",
+      key: "resolved" as const,
+      visible: visibleSeries.resolved,
+    },
   ];
 
   const getYPosition = (value: number) => {
@@ -50,7 +88,25 @@ export function TrendLineChart({
 
   return (
     <div className="trend-line-chart">
-      <h3>Trend Analysis</h3>
+      <div className="chart-header">
+        <h3>Trend Analysis</h3>
+        <div className="series-toggles">
+          {allData.map((item) => (
+            <button
+              key={item.key}
+              className={`series-toggle ${item.visible ? "active" : "inactive"}`}
+              onClick={() => toggleSeries(item.key)}
+              title={item.visible ? `Hide ${item.series}` : `Show ${item.series}`}
+            >
+              <span 
+                className="toggle-indicator" 
+                style={{ backgroundColor: item.visible ? item.color : "#d1d5db" }}
+              />
+              {item.series}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="chart-container">
         {isDataEmpty ? (
           <div className="no-data">No data available for the selected time range</div>
