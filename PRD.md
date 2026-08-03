@@ -1,58 +1,91 @@
-> **PRD** — drafted by CTO · task #487
+> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #173
 > _Each agent that updates this PRD signs its change below._
 
-# Evermind Knowledge & Learning Pipeline PRD
+# Product Requirements Document: Explicit Listing of Code Gaps
 
-## Problem & Goal
-Teams building memory-enabled agents lack a repeatable pipeline to baseline existing knowledge, extract new insights, review for quality, store durably, and transfer to downstream systems. The goal is to deliver a reliable, auditable pipeline that turns raw interactions into structured, transferable knowledge while minimizing hallucination and drift.
+## 1. Problem & Goal
 
-## Target Users / ICP Roles
-- Memory-engine maintainers and platform engineers
-- AI application developers integrating long-term memory
-- Knowledge operations roles responsible for review and governance
+### Problem
+Current code analysis primarily focuses on what *is* present in the codebase. However, there is no explicit mechanism to identify and list planned features, functionalities, or architectural components that were intended to be developed but are currently absent from the codebase. This lack of transparency leads to:
+*   An incomplete understanding of project status relative to design and product intentions.
+*   Difficulty for stakeholders (e.g., Product Managers, Architects, new developers) in discerning discrepancies between design and implementation.
+*   Potential for missed features, architectural inconsistencies, and miscommunication across teams.
+*   Challenges in onboarding new team members who lack historical context on intended but unimplemented work.
 
-## Scope
-Implement the five-stage pipeline (baseline → extract → review → store → transfer) as a core workflow inside `memory-engine`. Cover orchestration, data models, review interfaces, and transfer adapters for the initial release.
+### Goal
+To provide a clear, explicit, and actionable listing of planned features or functionalities that are absent from the current codebase. This will enhance transparency, facilitate accurate project status assessments, and enable better prioritization of development, refactoring, or documentation efforts to align code with design intent.
 
-## Functional Requirements
-- **Baseline**: Snapshot current knowledge graph and vector store state with versioning.
-- **Extract**: Identify and pull candidate facts, entities, and relationships from new sessions or documents.
-- **Review**: Human-in-the-loop or automated quality gates for accuracy, relevance, and conflict detection.
-- **Store**: Persist reviewed items into the canonical knowledge store with provenance metadata.
-- **Transfer**: Export approved knowledge to external targets (vector DBs, graphs, downstream agents) via configurable adapters.
-- Provide CLI and SDK entry points for pipeline execution and status tracking.
-- Log every stage transition for auditability.
+## 2. Target Users / ICP Roles
 
-## Acceptance Criteria
-- Pipeline completes an end-to-end run on a 100-session corpus with <5% manual intervention.
-- Baseline and store operations produce immutable snapshots retrievable by version.
-- Review step surfaces conflicts and requires explicit approval before storage.
-- Transfer adapters successfully sync to at least two target systems with zero data loss.
-- All stages expose metrics (latency, items processed, rejection rate) via Prometheus.
+*   **Product Managers:** To verify feature completeness against product roadmaps and designs.
+*   **Software Architects:** To ensure the codebase adheres to architectural specifications and identify missing components.
+*   **Development Leads/Managers:** To assess project scope, identify potential technical debt (unimplemented features), and plan future work.
+*   **Developers (especially new hires):** To gain a comprehensive understanding of the project's intended scope, not just its current state.
+*   **Quality Assurance (QA) Engineers:** To identify potential test coverage gaps based on unimplemented features.
 
-## Out of Scope
-- Advanced LLM fine-tuning or model training
-- Real-time streaming ingestion
-- Multi-tenant isolation or billing features
-- Mobile or non-engine client SDKs
-- Historical data migration from legacy systems
+## 3. Scope
 
-## Requirements
+This project focuses on establishing a system to:
+1.  Define planned features or components.
+2.  Analyze the existing codebase to identify the presence or absence of these defined items.
+3.  Generate an explicit, structured list of all identified "gaps" (planned but not found items).
 
-_Owned by the business-analyst — to be authored._
+## 4. Functional Requirements
 
-## Design
+*   **FR1: Planned Item Definition:** The system MUST allow for the definition of planned features, functionalities, or components. Each definition MUST include:
+    *   A unique identifier (e.g., `feature-id-001`).
+    *   A descriptive name (e.g., "User Profile Avatar Upload").
+    *   An expected code signature or artifact (e.g., `class UserProfileAvatarService`, `function uploadAvatar(userId, file)`, `api/v1/user/{id}/avatar`).
+    *   An optional association with a source document (e.g., design document ID, Jira ticket).
+    *   An optional priority level.
+*   **FR2: Codebase Analysis Integration:** The system MUST integrate with code analysis mechanisms to scan the current codebase. This analysis MUST be capable of identifying the presence or absence of the code signatures/artifacts defined in FR1.
+*   **FR3: Gap Identification Logic:** The system MUST compare the defined planned items (FR1) against the results of the codebase analysis (FR2) to accurately identify items that are *planned* but *not found*.
+*   **FR4: Gap Listing Output:** The system MUST generate an explicit list of all identified gaps. For each gap, the output MUST include:
+    *   The unique identifier of the planned item.
+    *   Its descriptive name.
+    *   The expected code signature/artifact that was not found.
+    *   Any associated source document or priority.
+*   **FR5: Output Format:** The gap list MUST be available in a human-readable, machine-parsable format (e.g., Markdown table, JSON, CSV).
 
-_Owned by the architect — to be authored._
+## 5. Acceptance Criteria
 
-## Implementation Notes
+*   **AC1: Gap Identification Accuracy:** Given a defined planned item (e.g., "Feature: Email Notifications - `NotificationService.sendEmail(...)`") and a codebase where this item is demonstrably absent, the system MUST correctly list "Email Notifications" as a gap.
+*   **AC2: No False Positives:** Given a defined planned item and a codebase where the item *is* present (matching the defined signature/artifact), the system MUST NOT list it as a gap.
+*   **AC3: Detailed Reporting:** The generated gap report MUST include the planned item's descriptive name, its unique ID, and the expected code signature/artifact for each identified gap.
+*   **AC4: Performance:** The system MUST be able to process a minimum of 100 planned items against a typical-sized codebase (e.g., 50k LOC) and generate a gap report within 5 minutes.
+*   **AC5: Usability:** The output format of the gap report must be clear and easily understandable by the target users.
 
-_Owned by the developer — to be authored._
+## 6. Out of Scope
 
-## Review
+*   **Automated Remediation:** The system will not automatically generate code stubs or templates for identified gaps.
+*   **Reason Tracking:** The system will not track or infer the *reason* why a planned item is missing (e.g., intentionally deferred, cut from scope, forgotten). It only reports the *absence*.
+*   **Prioritization/Assignment:** The system will not manage the prioritization, assignment, or workflow integration of identified gaps into project management tools (e.g., creating Jira tickets). It provides the raw data for such processes.
+*   **Semantic Inference:** The system will rely on explicit definitions for identifying planned items. It will not perform deep semantic analysis or AI-driven inference to guess if a general concept (e.g., "user profile management") is present if not explicitly defined with a matching code signature.
+*   **Historic Gap Tracking:** While a report is generated, the system will not maintain a historical log or trend analysis of gaps over time.
+
+## 7. Implementation Notes
+
+### Extension Structure
+The code-gaps feature is implemented as a BuilderForceAgents extension at `agent-runtime/extensions/code-gaps/`:
+- **`index.ts`** — Plugin entry point; registers the `code-gaps` tool via `api.registerTool()`.
+- **`src/code-gaps-tool.ts`** — Core tool logic: file collection, signature matching, gap identification, and output formatting (markdown/json/csv).
+- **`src/code-gaps-tool.test.ts`** — Comprehensive test suite covering FR1–FR5 and AC1–AC5.
+- **`builderforce.plugin.json`** — Plugin manifest and configuration schema.
+- **`package.json`** — Extension package metadata.
+
+### Signature Detection Strategy
+Signatures are matched using a multi-layer approach:
+1. **Literal substring match** — fastest path; searches indexed file contents for the exact signature string.
+2. **Path-like signature** — when the signature looks like a file path (contains `/` or `\`), checks `fs.existsSync()` and glob-style matching against the file tree.
+3. **Regex fallback** — when the signature contains regex metacharacters, compiles and tests it against each file's content (truncated for safety).
+
+### Performance (AC4)
+The tool uses a single-pass file index: `collectFileIndex()` walks the directory tree once, collecting file paths and reading text contents into a `Map<string, string>`. This index is reused for all signature checks, avoiding repeated filesystem scans. The test suite validates <5s for 100 items against a 20-file codebase on the Vitest runner.
+
+## 8. Review
 
 _Owned by the code-reviewer — to be authored._
 
-## Test Evidence
+## 9. Test Evidence
 
 _Owned by the qa-tester — to be authored._
