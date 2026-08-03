@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { pmoApi, type PmoTree, type PmoScopeKind } from '@/lib/builderforceApi';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmEmpty, PmError } from './pmShared';
+import { PortfolioSnapshot } from './PortfolioSnapshot';
 import { PmoRollup } from './PmoRollup';
 import { PmoStructure } from './PmoStructure';
 import { PmoCostReconciliation } from './PmoCostReconciliation';
