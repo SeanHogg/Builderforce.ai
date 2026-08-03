@@ -71,7 +71,47 @@ To resolve the merge conflict by syncing the `builderforce/task-248` branch with
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+### Business Requirements
+
+1. **Merge Status Resolution**
+   - The `builderforce/task-248` branch must achieve a "clean" mergeable state (mergeable=true) when checked via GitHub API.
+   - The mergeable state must not be "dirty" (mergeable=false with conflicts).
+
+2. **Shell-Based Execution Required**
+   - The merge operation MUST be executed using a shell-capable runner with git CLI access.
+   - Serverless agent executors cannot perform this operation due to lack of shell access.
+
+3. **Authorship Integrity**
+   - All commits from the `main` branch must retain their original authorship (committer and author).
+   - The single authored commit on `builderforce/task-248` (PRD.md) must be preserved.
+   - No commits may be reconstructed or rebased in a way that alters original commit metadata.
+
+4. **Minimal Conflict Expectation**
+   - Given that the only authored file is PRD.md (which does not exist on main), actual content conflicts are expected to be zero.
+   - If conflicts occur, they must be resolved through standard git merge conflict resolution, not by manually rewriting files.
+
+5. **CI Verification Required**
+   - After pushing the merged branch, CI must run and pass to verify the merge did not introduce build failures.
+   - The branch must not be merged to main until CI confirms a green build.
+
+### Stakeholder Requirements
+
+6. **Developer Experience**
+   - Developers must be able to continue working on the branch after the merge without manual intervention.
+   - The git history must remain readable and accurate.
+
+7. **Process Compliance**
+   - The resolution must follow the documented approach (shell-based merge) rather than invalid heuristics (searching for conflict markers).
+   - Future similar issues should be detected earlier via fork-point monitoring.
+
+### Success Metrics
+
+8. **Measurable Outcomes**
+   - `mergeable` status returns `true` on the GitHub PR.
+   - `mergeable_state` returns "clean" (not "dirty").
+   - `rebaseable` returns `true`.
+   - CI checks pass with no failures.
+   - Commit count on branch reflects the merge (approximately 243+ commits).
 
 ## Design
 
