@@ -291,6 +291,71 @@ The audit log shall be append‑only (no UPDATE or DELETE permitted at the appli
 
 ---
 
+## Product Strategy
+
+> Authored by Product Manager · `builderforce/task-574`
+
+### Strategic Rationale
+
+GAP-G1 — the lack of documented sandbox/network egress isolation for Cloud V2 runs using `bypassPermissions` + Bash — is the **single biggest GA blocker** for the Cloud Agent product line (per PRD #09 §4.G). Buyers evaluating the platform cannot commit to cloud-based agent execution without a verifiable isolation model. Every day GAP-G1 remains open is a day the Cloud Agent SKU cannot be sold with a straight face to security-conscious enterprises.
+
+Reflecting GAP-G1 closure on the Security Provisioning dashboard is not cosmetic — it is a **trust signal**. The dashboard is the surface that SOC analysts, IAM admins, and internal auditors already monitor for access-security posture. Surfacing this gap's state there closes the loop between the engineering remediation (owned by the Cloud Agent validation pass) and the stakeholder's awareness of risk reduction.
+
+### Success Metrics (OKR-aligned)
+
+| Metric | Target | Measurement |
+|--------|--------|-------------|
+| **Mean-time-to-awareness (MTTA) of GAP-G1 closure** | ≤ 5 minutes from source-system state change | Delta between `closedAt` in source system and `lastRefreshedAt` in widget response |
+| **Manual audit queries eliminated** | 0 per week after feature launch | Count of direct source-system queries tagged `gap-g1` in audit logs |
+| **Widget render time** | ≤ 2 seconds from page load (p95) | Client-side `gap_g1_widget.render_time` metric |
+| **Dashboard confidence score** | +15 points on internal security-posture NPS survey | Pre/post launch survey of SOC and IAM team leads |
+| **Audit finding resolution time** | Reduced by ≥ 50 % for findings citing GAP-G1 | Mean days from audit finding → evidence accepted, before vs. after feature |
+
+### MVP Definition
+
+The Minimum Viable Product is:
+
+1. **Widget on the Security Provisioning dashboard** displaying `OPEN`/`CLOSED` for GAP-G1.
+2. **Polling integration** to the authoritative source (configurable endpoint + cache).
+3. **Evidence link** when closed.
+4. **Stale-data indicator** when the source is unreachable.
+
+The following are **post-MVP enhancements** (ship in v1.1 or later):
+- Manual override with audit log (REQ-7) — deferrable if no admin workflow yet exists.
+- Historical timeline / "View History" (REQ-5.2) — nice-to-have, not launch-blocking.
+- Transition highlight animation (REQ-6) — polish, not function.
+
+### Prioritization
+
+| Capability | Priority | Rationale |
+|------------|----------|-----------|
+| REQ-1 (Widget UI) | P0 — must ship | The visible artifact; without it, nothing exists. |
+| REQ-2 (API contract) | P0 — must ship | Data plumbing; widget is dead without it. |
+| REQ-3 (Polling & staleness) | P0 — must ship | Without refresh, the dashboard is a static snapshot, not a live reflection. |
+| REQ-4 (Evidence link) | P0 — must ship | Audit evidence is the primary user job-to-be-done. |
+| REQ-5 (Historical context) | P1 — ship in v1 if schedule permits | Adds trust but not strictly required for closure awareness. |
+| REQ-6 (Transition highlight) | P2 — v1.1 | Visual polish; no functional gap. |
+| REQ-7 (Manual override) | P1 — ship in v1 if schedule permits | Important for audit edge cases; requires backend audit log infra. |
+| REQ-8 (Error handling) | P0 — must ship | Stale/missing data without a warning is worse than no widget. |
+| REQ-9 (NFRs) | P0 — must ship | Performance, security, config — table stakes for production. |
+| REQ-10 (Dependency map) | Informational | Drives implementation sequencing. |
+
+### Risks & Mitigations
+
+| Risk | Likelihood | Impact | Mitigation |
+|------|-----------|--------|------------|
+| **Source system API changes or is unreachable** | Medium | High — widget shows stale data, eroding trust | Cache with TTL + stale indicator; configurable endpoint so it can be repointed without a deploy. |
+| **GAP-G1 is re-opened after being marked closed** | Medium | Medium — dashboard must accurately reflect re-open | Status is poll-based; the widget transitions back to `OPEN` on the next poll cycle (≤ 5 min). Transition highlight (REQ-6) covers the re-open case. |
+| **"Security Provisioning dashboard" does not yet exist as a product surface** | High | High — widget has nowhere to render | **This is the key architectural risk.** The PRD assumes a Security Provisioning dashboard exists. If it does not, the widget must either (a) live on the existing Cross-Project Health Dashboard as a new tile, (b) be created as a standalone page under `/dashboard/security-provisioning`, or (c) be embedded in the Observability timeline. The architect must resolve this in the Design section. |
+| **Manual override creates conflicting state with source system** | Low | Medium — audit confusion | Override is clearly marked "Manual – not system verified"; clearing the override re-syncs to system source. |
+| **Polling load on source system at scale** | Low | Low — single endpoint, 60 s interval, cached backend-side | Backend caches the source response; frontend polls the cache, not the source directly. |
+
+### Alignment with Portfolio
+
+This feature directly serves the **Cloud Agent Validation & Hardening** initiative (PRD #09). GAP-G1 is a P0 blocker enumerated in that PRD's §4.G. The dashboard widget is the **user-visible signal** that the underlying remediation (sandbox isolation model + red-team check) has been completed. It should ship in the same release window as the GAP-G1 engineering closure, or immediately after.
+
+---
+
 ## Design
 
 _Owned by the architect — to be authored._
