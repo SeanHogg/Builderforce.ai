@@ -305,6 +305,8 @@ export async function raiseSystemicFindings(
     personaDirective?: string | null;
     /** Files the platform-fix ticket; returns its id. See {@link ManagerService.createManagerCoachingTask}. */
     createTicket: (directive: string, title: string) => Promise<number | null>;
+    /** Re-arm an existing remediation ticket that completed without clearing its cohort. */
+    ensureTicket?: (taskId: number) => Promise<boolean>;
   },
 ): Promise<SystemicOutcome> {
   const out: SystemicOutcome = { findings: [], ticketsCreated: 0, resolved: 0, journal: [] };
@@ -374,9 +376,28 @@ export async function raiseSystemicFindings(
             .where(eq(tasks.id, existing.createdTaskId))
             .catch(() => undefined);
         }
+        let recoveryTaskId = existing.createdTaskId;
+        // Older findings could be created without a task (or with dispatch deliberately
+        // disabled). Repair that historical diagnosis-only state in place.
+        if (recoveryTaskId == null) {
+          const executable = repair ?? heuristicFinding(cohort, projectId);
+          recoveryTaskId = await args.createTicket(
+            buildFindingDirective(executable, projectId),
+            `Platform: ${cohort.count} tickets stalled on "${cohort.cause}"`,
+          ).catch(() => null);
+          if (recoveryTaskId != null) {
+            await db.update(managerSystemicFindings)
+              .set({ createdTaskId: recoveryTaskId, updatedAt: now })
+              .where(scopedToTenant(managerSystemicFindings, tenantId, eq(managerSystemicFindings.id, existing.id)))
+              .catch(() => undefined);
+            out.ticketsCreated += 1;
+          }
+        } else if (args.ensureTicket) {
+          await args.ensureTicket(recoveryTaskId).catch(() => false);
+        }
         if (repair) {
           out.journal.push({
-            taskId: existing.createdTaskId ?? null,
+            taskId: recoveryTaskId ?? null,
             summary: `Rewrote the "${cohort.cause}" platform finding — its remediation proposed weakening a safety limit.`,
             detail: { cause: cohort.cause, ticketCount: cohort.count, repaired: 'remediation', source: repair.source },
           });

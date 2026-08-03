@@ -48,7 +48,12 @@ import { isActionExhausted } from './stallTriage';
  * near 4s of the 14s discretionary window, which is what leaves room for the stages
  * after it AND the triage reserve. Deeper does not merge more — only the head can merge.
  */
-export const MERGE_QUEUE_DEPTH = 3;
+export const MERGE_QUEUE_DEPTH = 1;
+
+/** A conflicting head is retried autonomously, but never on every five-minute pass.
+ * One retry per half hour is enough to pick up a repaired/restarted agent without
+ * recreating the conflict storm this queue was introduced to stop. */
+export const CONFLICT_RETRY_COOLDOWN_MS = 30 * 60_000;
 
 /** The counters a queued PR is judged on. All are per-PULL-REQUEST (0383), never per
  *  ticket: `pull_requests.task_id` is nullable, and keying any of this on the ticket is
@@ -62,13 +67,16 @@ export interface QueuedPr {
   mergeFailures: number | null;
   /** Times the branch was found conflicting with its base. */
   conflicts: number | null;
+  /** Newest conflict observation. Required to turn the old permanent ceiling into a
+   * bounded autonomous retry rather than an unbounded five-minute loop. */
+  lastConflictAt?: Date | string | null;
 }
 
 export type PrDisposition =
   /** A ceiling is spent — report once and leave it for a human. Costs nothing. */
   | 'sync_exhausted'
   | 'merge_exhausted'
-  | 'conflict_exhausted'
+  | 'conflict_backoff'
   /** A resolution run already owns this branch; touching it would race that run. */
   | 'running'
   /** In the head — may spend provider round-trips this pass. */
@@ -94,30 +102,38 @@ export interface PrPlanEntry<T> {
  * Pure and total — every PR in the window gets an entry, so a caller cannot silently
  * drop one, and the counts are journalled so a pass can be read afterwards.
  *
- * A retired or already-running PR does NOT consume a head slot. Retiring is three map
- * reads and one journal write, and a PR whose resolution run is in flight is having the
- * expensive work done for it. Slots meter what the MANAGER spends, not what is happening
- * to the branch — and letting the queue slide past a long-running resolution is what
- * stops one slow run holding all three slots for hours.
+ * A retired PR does not consume the head. An already-running repair DOES: allowing the
+ * next branch to merge while the head is being repaired would immediately make that
+ * repair stale, recreating the parallel conflict factory this queue replaces.
  */
 export function planMergeQueue<T extends QueuedPr>(
   prs: readonly T[],
-  opts: { hasActiveRun: (pr: T) => boolean; depth?: number },
+  opts: { hasActiveRun: (pr: T) => boolean; depth?: number; nowMs?: number },
 ): PrPlanEntry<T>[] {
   const depth = opts.depth ?? MERGE_QUEUE_DEPTH;
+  const nowMs = opts.nowMs ?? Date.now();
   let worked = 0;
   return prs.map((pr) => {
     const at = (disposition: PrDisposition, mayRecover = false): PrPlanEntry<T> =>
       ({ pr, disposition, mayRecover });
-    // Ceilings first, and before the active-run check: an exhausted PR is retired even
-    // while something is still running against it, because the whole point of the
-    // ceiling is that those runs are not working.
+    // Sync/provider refusals are structural ceilings. Conflicts are different: an agent
+    // can repair one, so a running repair owns the head and an exhausted conflict merely
+    // enters a bounded cooldown before autonomy tries again.
     if (isActionExhausted(pr.syncs ?? 0)) return at('sync_exhausted');
     if (isActionExhausted(pr.mergeFailures ?? 0)) return at('merge_exhausted');
-    if (isActionExhausted(pr.conflicts ?? 0)) return at('conflict_exhausted');
-    if (opts.hasActiveRun(pr)) return at('running');
+    if (opts.hasActiveRun(pr)) {
+      if (worked >= depth) return at('queued');
+      worked += 1;
+      return at('running');
+    }
     if (worked >= depth) return at('queued');
     worked += 1;
+    if (isActionExhausted(pr.conflicts ?? 0)) {
+      const observedAt = pr.lastConflictAt == null ? Number.NaN : new Date(pr.lastConflictAt).getTime();
+      if (Number.isFinite(observedAt) && nowMs - observedAt < CONFLICT_RETRY_COOLDOWN_MS) {
+        return at('conflict_backoff');
+      }
+    }
     return at('work', worked === 1);
   });
 }
@@ -125,14 +141,15 @@ export function planMergeQueue<T extends QueuedPr>(
 /** Shape of a planned pass, for the closing journal — so the next capture can show
  *  whether the queue is draining without anyone having to infer it from decision counts. */
 export function summarizeMergeQueue<T>(plan: readonly PrPlanEntry<T>[]): {
-  worked: number; queued: number; retired: number; running: number; depth: number;
+  worked: number; queued: number; retired: number; running: number; cooling: number; depth: number;
 } {
   const count = (d: PrDisposition) => plan.filter((e) => e.disposition === d).length;
   return {
     worked: count('work'),
     queued: count('queued'),
-    retired: count('sync_exhausted') + count('merge_exhausted') + count('conflict_exhausted'),
+    retired: count('sync_exhausted') + count('merge_exhausted'),
     running: count('running'),
+    cooling: count('conflict_backoff'),
     depth: MERGE_QUEUE_DEPTH,
   };
 }

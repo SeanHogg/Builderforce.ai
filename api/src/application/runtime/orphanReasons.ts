@@ -205,7 +205,7 @@ export const HOST_ORPHAN_REASON =
  */
 export function isInfrastructureEviction(message: string | null | undefined): boolean {
   if (!message) return false;
-  return /durable object reset|code was updated|durable object is overloaded|isolate (was )?(reset|evicted|destroyed)|execution context was (cancelled|canceled)/i.test(
+  return /durable object reset|code was updated|durable object is overloaded|isolate (was )?(reset|evicted|destroyed)|execution context was (cancelled|canceled)|new version rollout|runtime signalled (?:the container to )?exit[^.]*\b143\b/i.test(
     message,
   );
 }

@@ -37,11 +37,18 @@ const NOT_ASSIGNED: AssignOwnerResult = { assigned: false, label: '', memberKind
 export async function assignTicketOwner(
   env: Env,
   db: Db,
-  args: { projectId: number; taskId: number; actionType: string | null },
+  args: {
+    projectId: number; taskId: number; actionType: string | null;
+    agentOnly?: boolean;
+    roleKeyOverride?: string;
+  },
 ): Promise<AssignOwnerResult> {
   try {
-    const roleKey = producerRoleForActionType(args.actionType);
-    const pick = await recommendTopAssignee(env, db, args.projectId, roleKey ? { roleKey } : {});
+    const roleKey = args.roleKeyOverride ?? producerRoleForActionType(args.actionType);
+    const pick = await recommendTopAssignee(env, db, args.projectId, {
+      ...(roleKey ? { roleKey } : {}),
+      agentOnly: args.agentOnly,
+    });
     if (!pick) return NOT_ASSIGNED;
 
     const set: Record<string, unknown> = {

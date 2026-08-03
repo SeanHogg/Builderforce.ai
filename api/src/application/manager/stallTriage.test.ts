@@ -145,7 +145,7 @@ describe('diagnoseStall — pull-request stalls', () => {
       status: 'in_review', readiness: 'complete', everRan: true,
       pr: { open: true, providerClosed: false, conflicted: true },
     }));
-    expect(d).toMatchObject({ cause: 'pr_conflict', remedy: 'resolve_conflict' });
+    expect(d).toMatchObject({ cause: 'pr_conflict', remedy: 'none' });
   });
 
   it('escalates a ready PR the manager is not permitted to merge', () => {
@@ -307,7 +307,7 @@ describe('diagnoseStall — a stage whose roles owe work, on ANY lane', () => {
     expect(diagnoseStall(base({
       autoRunReason: 'same_lane_reentry', everRan: true, stageSignoff: owed,
       pr: { open: true, providerClosed: false, conflicted: true },
-    })).remedy).toBe('resolve_conflict');
+    })).remedy).toBe('none');
     expect(diagnoseStall(base({
       autoRunReason: 'same_lane_reentry', everRan: false, stageSignoff: owed,
     })).remedy).toBe('dispatch');

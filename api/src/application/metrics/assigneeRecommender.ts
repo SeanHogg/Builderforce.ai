@@ -199,6 +199,8 @@ export async function recommendAssignee(env: Env, db: Db, input: RecommendInput)
 
 export interface TopAssigneeOptions {
   requiredSkills?: string[];
+  /** Autonomous recovery work cannot be parked on a person. */
+  agentOnly?: boolean;
   /** When set, restrict the pick to members ROLE-CAPABLE of this role. This is the
    *  #467 fix: a coding ticket must not be owned by a role-incapable teammate (a PM
    *  agent), no matter how available. Returns null when nobody capable is free — the
@@ -214,6 +216,7 @@ export async function recommendTopAssignee(env: Env, db: Db, projectId: number, 
   const roleKey = opts.roleKey?.trim();
 
   let pool = ranked;
+  if (opts.agentOnly) pool = pool.filter((r) => r.memberKind !== 'human');
   if (roleKey) {
     const [proj] = await db.select({ tenantId: projects.tenantId }).from(projects).where(eq(projects.id, projectId)).limit(1);
     if (proj) {

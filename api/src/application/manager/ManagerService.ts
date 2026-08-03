@@ -276,6 +276,9 @@ const MAX_DISPATCHES_PER_RUN = 12;
 const MAX_AUDITS_PER_RUN = 40;
 /** Coordinator ticks per pass — each can rewind a lane + start a run, so pace them. */
 const MAX_REMEDIATIONS_PER_RUN = 10;
+/** Time for a merged remediation to deploy and affect the next census before a still-live
+ * cohort is treated as failed verification and its objective is reopened. */
+const SYSTEMIC_VERIFICATION_GRACE_MS = 30 * 60_000;
 
 /** `manager_actions.action_type` for "PR is ready but merge authority is withheld"
  *  (0363). Its own type — not 'flag' — so the surface can say "waiting on a human to
@@ -386,7 +389,7 @@ export interface ManagerRunSummary {
    * failure); `worked` at the depth with `queued` at 0 means the window is finally
    * smaller than the queue and the backlog is nearly gone.
    */
-  prQueue?: { worked: number; queued: number; retired: number; running: number; depth: number };
+  prQueue?: { worked: number; queued: number; retired: number; running: number; cooling: number; depth: number };
 }
 
 
@@ -633,16 +636,13 @@ export async function createManagerCoachingTask(
      * Fire the lane trigger the moment the ticket is created. Default true — a human
      * coaching the manager ("go do this") means it now.
      *
-     * The SYSTEMIC-FINDINGS path passes false, deliberately. A platform-defect ticket is
-     * the output of one model call over a stall census: it names a defect, it does not
-     * specify work an agent should start unsupervised the instant it exists. Firing the
-     * trigger at creation is also what made the measured failure so loud — task 1032 was
-     * dispatched, refused and recorded as an error within two seconds of being filed.
-     * Skipping it does NOT make the ticket inert: it is a normal high-priority ticket, so
-     * the manager's ranked, budgeted dispatch stage (or a human) picks it up on the next
-     * pass, with all the backpressure that path applies.
+     * Systemic findings opt in: their measured remediation is an executable recovery
+     * objective, assigned to an agent below and verified by subsequent censuses.
      */
     autoDispatch?: boolean;
+    /** Force this work onto an executable agent. Used by systemic remediation, where
+     * assigning the fix back to a person would recreate the human dead end it diagnoses. */
+    autoAssignAgent?: boolean;
   },
 ): Promise<number | null> {
   const { tenantId, projectId } = args;
@@ -690,6 +690,12 @@ export async function createManagerCoachingTask(
       }
     }
     if (taskId == null) return null;
+
+    if (args.autoAssignAgent) {
+      await assignTicketOwner(env, db, {
+        projectId, taskId, actionType: 'code', agentOnly: true, roleKeyOverride: 'developer',
+      });
+    }
 
     // Immediacy: if the manager is an agent and the lane is staffed, start now — else the
     // manager's next pass (step 5 dispatch) picks up the assigned runnable ticket anyway.
@@ -1401,12 +1407,56 @@ export async function runManagerForProject(
           // Groups with the diagnostics engine's existing platform-gap tickets rather
           // than looking like ordinary feature work.
           taskType: 'gap',
-          // NEVER dispatched at creation — see `autoDispatch`. A platform-defect ticket
-          // is a diagnosis, not a work order, and the measured failure was exactly this
-          // ticket being dispatched, refused and recorded as an error on arrival.
-          autoDispatch: false,
+          // A systemic finding is an executable recovery objective. Assign it to a
+          // developer agent and start it now; the finding itself remains open until a
+          // later production census proves the cohort collapsed.
+          autoAssignAgent: true,
+          autoDispatch: true,
           submittedBy: `manager:systemic:${policy.managerRef ?? 'system'}`,
         }),
+        ensureTicket: async (taskId) => {
+          const [current] = await db.select({
+            status: tasks.status,
+            actionType: tasks.actionType,
+            assignedUserId: tasks.assignedUserId,
+            assignedAgentRef: tasks.assignedAgentRef,
+            assignedAgentHostId: tasks.assignedAgentHostId,
+            completedAt: tasks.completedAt,
+          }).from(tasks).where(and(eq(tasks.id, taskId), eq(tasks.projectId, projectId))).limit(1);
+          if (!current) return false;
+
+          // The implementation ticket reaching Done is not proof that production is
+          // fixed. If the cohort still exists in this census, re-open the objective and
+          // let the agent continue from the failed verification result.
+          let status = current.status;
+          if (!NON_TERMINAL_TASK_STATUSES.includes(status as never)) {
+            if (current.completedAt
+              && Date.now() - current.completedAt.getTime() < SYSTEMIC_VERIFICATION_GRACE_MS) {
+              return true;
+            }
+            status = TaskStatus.TODO;
+            await db.update(tasks).set({
+              status, completedAt: null, updatedAt: new Date(),
+            }).where(eq(tasks.id, taskId));
+          }
+
+          if (!current.assignedAgentRef && current.assignedAgentHostId == null) {
+            await assignTicketOwner(env, db, {
+              projectId, taskId, actionType: current.actionType,
+              agentOnly: true, roleKeyOverride: 'developer',
+            });
+          }
+
+          // Review is owned by the merge/deploy path. Runnable implementation states
+          // are idempotently re-evaluated here; live-run/cooldown/breaker gates remain.
+          if (status !== TaskStatus.IN_REVIEW) {
+            return maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+              tenantId, projectId, taskId, status,
+              submittedBy: `manager:systemic-verify:${policy.managerRef ?? 'system'}`,
+            }).catch(() => false);
+          }
+          return true;
+        },
       });
 
       summary.systemicFindings = systemic.findings.length;
@@ -2106,7 +2156,11 @@ async function coordinatePullRequests(
       syncs: sql<number>`count(*) filter (where ${managerActions.actionType} = 'sync_pr')::int`.as('syncs'),
       mergeFailures: sql<number>`count(*) filter (where ${managerActions.actionType} = ${MERGE_FAILED_ACTION})::int`.as('merge_failures'),
       conflicts: sql<number>`count(*) filter (where ${managerActions.actionType} = ${PR_CONFLICT_ACTION})::int`.as('conflicts'),
-      blockedReports: sql<number>`count(*) filter (where ${managerActions.actionType} = ${MERGE_BLOCKED_ACTION})::int`.as('blocked_reports'),
+      lastConflictAt: sql<Date | null>`max(${managerActions.createdAt}) filter (where ${managerActions.actionType} = ${PR_CONFLICT_ACTION})`.as('last_conflict_at'),
+      // A historical conflict_exhausted report is no longer terminal. Excluding it here
+      // revives the existing backlog after deploy while retaining true authority,
+      // provider-refusal and sync ceilings.
+      blockedReports: sql<number>`count(*) filter (where ${managerActions.actionType} = ${MERGE_BLOCKED_ACTION} and coalesce(${managerActions.detail}, '') not like '%"reason":"conflict_exhausted"%')::int`.as('blocked_reports'),
       // `last_acted_at` was dropped with the least-recently-worked rotation it ordered:
       // the queue is oldest-first and stable, so when the manager last touched a PR is
       // no longer an input to anything. Selecting a `max()` nothing reads is a grouped
@@ -2128,6 +2182,7 @@ async function coordinatePullRequests(
       syncs: prActivity.syncs,
       mergeFailures: prActivity.mergeFailures,
       conflicts: prActivity.conflicts,
+      lastConflictAt: prActivity.lastConflictAt,
       blockedReports: prActivity.blockedReports,
     })
     .from(pullRequests)
@@ -2154,8 +2209,7 @@ async function coordinatePullRequests(
         coalesce(${prActivity.blockedReports}, 0) > 0
         and greatest(
           coalesce(${prActivity.syncs}, 0),
-          coalesce(${prActivity.mergeFailures}, 0),
-          coalesce(${prActivity.conflicts}, 0)
+          coalesce(${prActivity.mergeFailures}, 0)
         ) >= ${MAX_REMEDY_ATTEMPTS}
       )`,
     ))
@@ -2304,23 +2358,11 @@ async function coordinatePullRequests(
         continue;
       }
 
-      // EXHAUSTED CONFLICT (0383). The branch has been found conflicting with its base
-      // MAX_REMEDY_ATTEMPTS times. Either the resolution run keeps failing to resolve it,
-      // or — the measured case — it never started because the ticket has no agent to hand
-      // the branch back to, so the loop was journalling the identical `pr_conflict` every
-      // five minutes with nothing able to count it. Retire it to a human on the same rule
-      // as the two ceilings above rather than re-detecting the same conflict forever.
-      if (disposition === 'conflict_exhausted') {
-        if (!alreadyReportedBlocked.has(pr.id)) {
-          await recordManagerAction(db, {
-            tenantId, projectId, taskId: pr.taskId, prId: pr.id, runTaskId, actionType: MERGE_BLOCKED_ACTION,
-            summary: `PR #${pr.number ?? '?'} has conflicted with its base ${pr.conflicts} times and the conflict is still there — stopping the resolution loop and handing it to a human. Resolve the conflict on the branch, or assign an agent to the ticket so the manager can hand it back.`,
-            detail: { reason: 'conflict_exhausted', conflictAttempts: pr.conflicts },
-          });
-          alreadyReportedBlocked.add(pr.id);
-        }
-        continue;
-      }
+      // A content conflict is recoverable work, not a permanent human terminal. Once
+      // repeated attempts spend the fast-retry allowance, the queue holds its single
+      // integration head for a bounded cooldown. It then retries autonomously; the
+      // branches behind it remain untouched so they cannot invalidate one another.
+      if (disposition === 'conflict_backoff') continue;
 
       // Always integrate the latest base first. This prevents a queue of agent PRs
       // from all being merged against the same stale main revision.

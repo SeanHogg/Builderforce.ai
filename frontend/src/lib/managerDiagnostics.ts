@@ -220,6 +220,18 @@ function tri(value: unknown): string {
   return String(value);
 }
 
+/** The workspace's STORED opinion, not its already-resolved policy. Older APIs did not
+ * send `tenantConfig`, so retain their resolved value as a compatibility fallback. */
+function workspaceTierValue(
+  tenantConfig: ManagerOverview['tenantConfig'],
+  tenantPolicy: ManagerPolicy,
+  key: keyof ManagerPolicy,
+): unknown {
+  if (tenantConfig === undefined) return tenantPolicy[key];
+  if (tenantConfig === null) return null;
+  return (tenantConfig as unknown as Record<string, unknown>)[key] ?? null;
+}
+
 /**
  * The EFFECTIVE column, which — unlike the two tier columns — can never legitimately say
  * "inherit": it IS the resolved fold, so an absent value there means the deployed API does
@@ -699,7 +711,9 @@ export function repeatedActions(actions: readonly ManagerAction[]): RepeatedActi
  */
 export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | null): ManagerFinding[] {
   const { overview, stalls } = input;
-  const { policy, config, tenantPolicy, stats, autonomy, runTasks, actions, directives } = overview;
+  const { policy, config, tenantPolicy, tenantConfig, stats, autonomy, runTasks, actions, directives } = overview;
+  const workspaceTier = (key: keyof ManagerPolicy): unknown =>
+    workspaceTierValue(tenantConfig, tenantPolicy, key);
   const critical: ManagerFinding[] = [];
   const warning: ManagerFinding[] = [];
   const info: ManagerFinding[] = [];
@@ -721,7 +735,7 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
     critical.push({
       severity: 'critical',
       code: 'manager_disabled',
-      text: `Managing is DISABLED for this project (effective policy). Nothing runs — cron passes skip it and "Run manager now" returns started=false. Project tier says ${tri(config?.enabled)}, workspace tier says ${tri(tenantPolicy.enabled)}.`,
+      text: `Managing is DISABLED for this project (effective policy). Nothing runs — cron passes skip it and "Run manager now" returns started=false. Project tier says ${tri(config?.enabled)}, workspace tier says ${tri(workspaceTier('enabled'))}.`,
     });
   }
   if (autonomy.tokenBlocked) {
@@ -821,7 +835,7 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
       warning.push({
         severity: 'warning',
         code: `policy_off_${cap.key}`,
-        text: `${share(deficit, stats.total)} open tickets are ${cap.deficitLabel} and ${cap.label} is OFF in the effective policy (project tier: ${tri(config?.[cap.key])} · workspace tier: ${tri(tenantPolicy[cap.key])}). The manager will never clear these — this is configuration, not a fault.`,
+        text: `${share(deficit, stats.total)} open tickets are ${cap.deficitLabel} and ${cap.label} is OFF in the effective policy (project tier: ${tri(config?.[cap.key])} · workspace tier: ${tri(workspaceTier(cap.key))}). The manager will never clear these — this is configuration, not a fault.`,
       });
       continue;
     }
@@ -1124,7 +1138,7 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
     warning.push({
       severity: 'warning',
       code: 'merge_withheld',
-      text: `${stats.openPullRequests} pull request${stats.openPullRequests === 1 ? ' is' : 's are'} open and unattended merge is NOT granted (project tier: ${tri(config?.allowAutoMerge)} · workspace tier: ${tri(tenantPolicy.allowAutoMerge)}). The manager can prepare a PR but cannot land it, so finished work accumulates unmerged.`,
+      text: `${stats.openPullRequests} pull request${stats.openPullRequests === 1 ? ' is' : 's are'} open and unattended merge is NOT granted (project tier: ${tri(config?.allowAutoMerge)} · workspace tier: ${tri(workspaceTier('allowAutoMerge'))}). The manager can prepare a PR but cannot land it, so finished work accumulates unmerged.`,
     });
   }
   const awaitingSignoff = stalls?.byCause.find((c) => c.cause === 'awaiting_signoff')?.count ?? 0;
@@ -1251,12 +1265,19 @@ const POLICY_KEYS: ReadonlyArray<keyof ManagerPolicy & keyof ManagerConfig> = [
   'allowAutoStaffLanes',
 ];
 
-function formatPolicy(policy: ManagerPolicy, config: ManagerConfig | null, tenantPolicy: ManagerPolicy): string[] {
+function formatPolicy(
+  policy: ManagerPolicy,
+  config: ManagerConfig | null,
+  tenantPolicy: ManagerPolicy,
+  tenantConfig: ManagerOverview['tenantConfig'],
+): string[] {
   return POLICY_KEYS.map((key) => line(
     key,
     // Effective first (what the manager may actually do), then the two tiers that
     // produced it — the whole point is to see WHICH tier turned something off.
-    `${effective(policy[key])}   [project: ${config ? tri(config[key]) : 'no row'} · workspace: ${tri(tenantPolicy[key])}]`,
+    `${effective(policy[key])}   [project: ${config ? tri(config[key]) : 'no row'} · workspace: ${
+      tri(workspaceTierValue(tenantConfig, tenantPolicy, key))
+    }]`,
   ));
 }
 
@@ -1596,7 +1617,7 @@ export function buildManagerDiagnosticsReport(
   ctx: DiagnosticsContext,
 ): string {
   const { overview, stalls } = input;
-  const { policy, config, tenantPolicy, stats, autonomy, runTasks, actions, directives } = overview;
+  const { policy, config, tenantPolicy, tenantConfig, stats, autonomy, runTasks, actions, directives } = overview;
   // ONE instant for the whole report, taken from the capture stamp so the builder stays
   // pure. An unparseable stamp degrades every age to "unknown" rather than to a lie.
   const parsed = Date.parse(ctx.capturedAt);
@@ -1629,7 +1650,7 @@ export function buildManagerDiagnosticsReport(
   out.push('Effective value first, then the tier values that produced it. "inherit" = the tier');
   out.push('expresses no opinion; the authority gates resolve MOST-RESTRICTIVE-wins, not');
   out.push('nearest-tier-wins, so an effective "no" can come from either tier.');
-  out.push(...formatPolicy(policy, config, tenantPolicy));
+  out.push(...formatPolicy(policy, config, tenantPolicy, tenantConfig));
   out.push('');
 
   out.push('-- Operating limits (as the passes themselves reported) --');

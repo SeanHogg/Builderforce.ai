@@ -2148,7 +2148,8 @@ export interface ManagerBlockedPr {
   businessValue: number | null;
   /** `done` here means the PR is a bulk-close candidate — its ticket finished elsewhere. */
   taskStatus: string | null;
-  /** Why the manager gave up: sync_exhausted | merge_failed_exhausted | conflict_exhausted. */
+  /** Why the manager gave up: sync_exhausted | merge_failed_exhausted. Conflicts are
+   *  recoverable and stay in the autonomous merge train. */
   reason: string | null;
   blockedAt: string | null;
 }
@@ -2163,6 +2164,9 @@ export interface ManagerStateDecision {
 export interface ManagerOverview {
   config: ManagerConfig | null;
   policy: ManagerPolicy;
+  /** Raw workspace-tier opinions. Optional for compatibility with older APIs; null or
+   * null-valued fields mean the built-in default applies, not an explicit workspace veto. */
+  tenantConfig?: ManagerTenantDefaults | null;
   /** Open PRs waiting on a person, highest-value ticket first. Optional — an older API
    *  omits it entirely, so always `?? []`. */
   blockedPrs?: ManagerBlockedPr[];

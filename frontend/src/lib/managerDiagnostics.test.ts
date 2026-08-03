@@ -190,6 +190,15 @@ describe('buildManagerDiagnosticsReport — content', () => {
     expect(report).toContain('allowAutoMerge: no   [project: inherit · workspace: no]');
   });
 
+  it('does not mislabel a built-in default as an explicit workspace veto', () => {
+    const withRawWorkspaceTier = buildManagerDiagnosticsReport({
+      ...input,
+      overview: { ...overview, tenantConfig: null },
+    }, ctx);
+    expect(withRawWorkspaceTier).toContain('allowAutoMerge: no   [project: inherit · workspace: inherit]');
+    expect(withRawWorkspaceTier).toContain('allowAutoStaffLanes: no   [project: inherit · workspace: inherit]');
+  });
+
   it('states backlog deficits as a SHARE of the backlog, not a bare count', () => {
     expect(report).toContain('unscored: 300 of 300 (100%)');
     expect(report).toContain('flagged (unmet role coverage): 40 of 300 (13%)');

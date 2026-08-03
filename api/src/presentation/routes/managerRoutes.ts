@@ -255,10 +255,10 @@ export function createManagerRoutes(
 
     // ── PULL REQUESTS THE MANAGER HAS RETIRED TO A HUMAN ────────────────────────────
     //
-    // The merge queue (0386) ends the conflict livelock by retiring a PR to a human once
-    // a ceiling is spent — 47 `merge_blocked` decisions on project 11 in the first day,
-    // against zero all-time before it. That is the correct outcome for branches racing
-    // one base, and it creates a pile: `merge_blocked` is an entry in a decision FEED,
+    // Structural sync/provider ceilings retire a PR to a human. Content conflicts do
+    // not: the single-head merge train now backs off and retries those autonomously.
+    // Historical conflict_exhausted rows therefore must not keep appearing in this pile.
+    // `merge_blocked` is an entry in a decision FEED,
     // ordered by time, with no way to tell the one PR worth opening from 300 that are
     // not. A queue nobody can rank is only marginally better than a livelock.
     //
@@ -290,11 +290,13 @@ export function createManagerRoutes(
         detailRaw: sql<string | null>`(
           select a.detail from manager_actions a
           where a.pr_id = ${pullRequests.id} and a.action_type = 'merge_blocked'
+            and coalesce(a.detail, '') not like '%"reason":"conflict_exhausted"%'
           order by a.created_at desc limit 1
         )`,
         blockedAt: sql<string | null>`(
           select max(a.created_at) from manager_actions a
           where a.pr_id = ${pullRequests.id} and a.action_type = 'merge_blocked'
+            and coalesce(a.detail, '') not like '%"reason":"conflict_exhausted"%'
         )`,
       })
       .from(pullRequests)
@@ -307,6 +309,7 @@ export function createManagerRoutes(
           select 1 from manager_actions a
           where a.tenant_id = ${tenantId} and a.project_id = ${projectId}
             and a.pr_id = ${pullRequests.id} and a.action_type = 'merge_blocked'
+            and coalesce(a.detail, '') not like '%"reason":"conflict_exhausted"%'
         )`,
       ))
       // Highest-value ticket first — the whole point. NULLS LAST so an unscored ticket
@@ -330,6 +333,7 @@ export function createManagerRoutes(
           select 1 from manager_actions a
           where a.tenant_id = ${tenantId} and a.project_id = ${projectId}
             and a.pr_id = ${pullRequests.id} and a.action_type = 'merge_blocked'
+            and coalesce(a.detail, '') not like '%"reason":"conflict_exhausted"%'
         )`,
       ))
       .catch(() => [{ n: 0 }]);
@@ -412,6 +416,9 @@ export function createManagerRoutes(
        * verified is the exact failure four diagnostics captures were spent on.
        */
       managed: isProjectManaged({ tenant: tenantDefaults, project: config ?? null }),
+      /** Raw workspace opinions. Keep NULL distinct from a resolved built-in `false` so
+       * diagnostics never present "the default is off" as "the workspace vetoed it". */
+      tenantConfig: tenantDefaults ?? null,
       /** What this project inherits when its own row says nothing (the workspace tier,
        *  resolved). NOT the same as `policy`, which already includes this project's row. */
       tenantPolicy: resolveTenantManagerDefaults(tenantDefaults),

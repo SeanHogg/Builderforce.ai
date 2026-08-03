@@ -17,7 +17,7 @@ import { swimlanes, swimlaneAgentAssignments, swimlaneRequirements, tasks } from
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getTenantTokenAvailability } from '../llm/tenantTokenAvailability';
-import { isInfrastructureEviction } from '../runtime/orphanReasons';
+import { classifyRunFailure, isPlatformFailure } from '../runtime/runFailureReasons';
 import { resolveArtifacts } from '../artifact/resolveArtifacts';
 import { isAgentRefRoleCapable } from '../kanban/roleCapability';
 import { resolveManagedProducer } from '../kanban/managedLaneRoles';
@@ -193,14 +193,13 @@ export interface RunOutcomeRow {
  * surface that does not route through `finalizeCloudRun`. Treating unknown as
  * unproductive would halt autonomy across every board on the deploy that shipped it.
  *
- * PLATFORM EVICTIONS ARE SKIPPED, not counted and not treated as a break: a run the
- * runtime killed because a deploy replaced its code says nothing about whether this
- * ticket can succeed ({@link isInfrastructureEviction}). Counting them meant three
- * deploys inside one window could halt autonomy on a healthy ticket — measured on
- * task 683, where 3 of 5 failures were one deploy's Durable Object resets. Skipping
- * rather than breaking is the conservative reading: a genuine failure either side of
- * a deploy still forms one streak, so the breaker keeps protecting against the retry
- * storms it exists for.
+ * PLATFORM FAILURES ARE SKIPPED, not counted and not treated as a break: deploy
+ * evictions, lost workers, provider capacity and scheduler failures say nothing about
+ * whether this ticket can succeed. The platform's shared failure taxonomy owns that
+ * distinction; keeping a second, narrower regex here is how a "new version rollout:
+ * 143" interrupted three healthy runs and parked their tickets behind a human breaker.
+ * Skipping rather than breaking is conservative: genuine no-op failures either side of
+ * an infrastructure interruption still form one streak.
  *
  * Pure — unit-tested directly.
  */
@@ -208,7 +207,7 @@ export function trailingUnproductiveStreak(execs: ReadonlyArray<RunOutcomeRow>):
   let n = 0;
   for (const e of execs) {
     if (e.status === ExecutionStatus.FAILED) {
-      if (isInfrastructureEviction(e.errorMessage)) continue;
+      if (isPlatformFailure(classifyRunFailure(e.errorMessage))) continue;
       n += 1;
       continue;
     }
@@ -259,12 +258,21 @@ export interface ExecTiming extends RunOutcomeRow {
   createdAt?: Date | null;
 }
 
-/** Did this row count toward the streak? The ONE predicate the streak walk and the
- *  cooldown's "which run do we back off from?" both read, so they cannot disagree
- *  about what an unproductive run is. */
-function countsAsUnproductive(e: RunOutcomeRow): boolean {
-  if (e.status === ExecutionStatus.FAILED) return !isInfrastructureEviction(e.errorMessage);
-  return e.status === ExecutionStatus.COMPLETED && e.produced === false;
+/** Retry backoff is broader than the ticket breaker. Infrastructure failures must not
+ * blame/park the ticket, but immediately hammering a rate-limited provider or restarting
+ * a lost worker every tick is still a retry storm. Count every failed run for cooldown
+ * strength while keeping {@link trailingUnproductiveStreak} ticket-fault-only. */
+function trailingRetryStreak(execs: ReadonlyArray<RunOutcomeRow>): number {
+  let n = 0;
+  for (const e of execs) {
+    if (e.status === ExecutionStatus.FAILED
+      || (e.status === ExecutionStatus.COMPLETED && e.produced === false)) {
+      n += 1;
+      continue;
+    }
+    break;
+  }
+  return n;
 }
 
 /**
@@ -274,12 +282,13 @@ function countsAsUnproductive(e: RunOutcomeRow): boolean {
  * trailing failure or the window has already elapsed.
  */
 export function autoRunCooldownRemainingMs(execs: ReadonlyArray<ExecTiming>, nowMs: number): number {
-  const streak = trailingUnproductiveStreak(execs);
+  const streak = trailingRetryStreak(execs);
   if (streak === 0) return 0;
-  // The newest run that actually COUNTED toward the streak — a platform eviction
-  // sitting on top of it is not a failure to back off from, so backing off from its
-  // timestamp would extend the wait for something the ticket did not do.
-  const lastFailure = execs.find(countsAsUnproductive);
+  // Back off from the newest retryable terminal event, including infrastructure
+  // failures. They do not spend breaker strikes, but their subsystem still needs time
+  // to recover before another run is useful.
+  const lastFailure = execs.find((e) => e.status === ExecutionStatus.FAILED
+    || (e.status === ExecutionStatus.COMPLETED && e.produced === false));
   const endedAt = lastFailure?.completedAt ?? lastFailure?.updatedAt ?? lastFailure?.createdAt ?? null;
   if (!endedAt) return 0; // untimestamped row — never block on missing data
   const elapsed = nowMs - endedAt.getTime();
