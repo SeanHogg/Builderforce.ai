@@ -275,7 +275,8 @@ function validateProperty(
   logRef: LogEntry[],
   logSink?: (entry: LogEntry) => void,
   contextId?: string,
-): void {
+): ValidationError[] {
+  const errors: ValidationError[] = [];
   const log = (partial: Omit<LogEntry, "timestamp">) => logFailure(logRef, logSink, { ...partial, contextId });
 
   const type = def.type as string | undefined;
@@ -307,7 +308,7 @@ function validateProperty(
         reason: `schema validation failed: expected ${type}, got ${typeof value}`,
         inputState: { value },
       });
-      return;
+      return errors;
     }
   }
   if (def.enum && Array.isArray(def.enum)) {
@@ -329,6 +330,7 @@ function validateProperty(
       errors.push(err);
     }
   }
+  return errors;
 }
 
 /** Schema validation. */
