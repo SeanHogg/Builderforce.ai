@@ -32,7 +32,7 @@ import {
 import {
   createLearningId,
   getExtractorVersion,
-  nowIso,
+  nowISO,
   computeDistribution,
   EXTRACTOR_VERSION,
 } from "./utils.js";
