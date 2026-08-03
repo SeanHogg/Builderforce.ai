@@ -3,6 +3,9 @@
  * File-backed storage with search capabilities
  */
 
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
 import type {
   MemoryEntry,
   PersistenceStrategy,
