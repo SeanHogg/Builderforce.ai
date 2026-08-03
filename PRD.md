@@ -1,125 +1,103 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #886
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document: Backlog Stale Item Identification
 
 ## Problem & Goal
+**Problem:** Backlog items that remain untouched for more than 90 days accumulate silently, leading to invisible technical debt, forgotten tasks, and degraded backlog hygiene. Currently, no mechanism exists to automatically detect, flag, or surface these stale items.
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+**Goal:** Implement an automated system that identifies items untouched for >90 days, persists a stale flag on each item, and exposes this flag in the UI so teams can triage aging backlog items proactively.
 
 ## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Product Managers:** Need visibility into neglected items to prioritize or deprecate them.
+- **Engineering Leads:** Use stale indicators to drive backlog grooming sessions.
+- **Scrum Masters / Agile Coaches:** Monitor backlog health metrics.
+- **Individual Contributors:** Require clear signals that an item may need re-evaluation before picking it up.
 
 ## Scope
-
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+This feature covers:
+- Definition of a configurable stale threshold (default 90 days).
+- A persistent `stale` boolean flag on backlog item records.
+- An automated background process that scans items daily and sets the flag when an item’s `last_updated` timestamp exceeds the threshold.
+- UI indicators to surface stale items in list views and item detail panels.
+- An admin setting to adjust the threshold value.
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+### FR-1: Configurable Stale Threshold
+The system shall support a configurable threshold value (in days) at the system or workspace level, defaulting to 90 days.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+### FR-2: Persistent Stale Flag
+Each backlog item record shall include a `stale` boolean field (default `false`). The flag shall be updated to `true` when the item’s age exceeds the threshold and reset to `false` when the item is modified.
 
----
+### FR-3: Automated Staleness Scan
+A background service (scheduled job or cron) shall execute at least once per day. It shall query all items where `last_updated` is older than `NOW() - threshold` and `stale = false`, then set `stale = true`. Conversely, when an item is updated (any field change), the `stale` flag shall be immediately recalculated and set to `false`.
 
-### FR-2 — Guided (Interactive) Mode
+### FR-4: UI Indicator – List View
+Backlog list views (board, table, or kanban) shall display a visual indicator (e.g., an icon, badge, or text label) next to any item where `stale = true`.
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+### FR-5: UI Indicator – Detail View
+The item detail panel shall display a prominent warning or tag when the item is stale, including the number of days since last update.
 
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+### FR-6: Threshold Administration
+An authorized administrator shall be able to configure the stale threshold via a settings interface. Changing the threshold shall trigger a one-time re-evaluation of all items within a reasonable time window (e.g., next scan cycle).
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+### AC-1: Stale Flag Applied Correctly
+- **Given** a backlog item with `last_updated` timestamp exactly 91 days ago and a stale threshold of 90 days  
+- **When** the daily stale scan executes  
+- **Then** the item’s `stale` field is set to `true`.
 
----
+### AC-2: Recent Activity Resets Flag
+- **Given** an item with `stale = true`  
+- **When** any update is made to the item (e.g., comment, status change, description edit)  
+- **Then** `stale` is immediately set to `false` and `last_updated` reflects the modification time.
+
+### AC-3: UI Indicator Visible in List
+- **Given** a backlog view containing at least one item with `stale = true`  
+- **When** a user loads the view  
+- **Then** each stale item displays a recognizable stale indicator (icon or badge).
+
+### AC-4: Detail Panel Warning
+- **Given** a user opens the detail panel for a stale item  
+- **When** the panel renders  
+- **Then** a visible message displays “This item has been inactive for X days” where X matches the elapsed time since `last_updated`.
+
+### AC-5: Threshold Configuration Persists
+- **Given** an admin changes the stale threshold from 90 to 60 days  
+- **When** the next scan cycle runs  
+- **Then** items untouched for >60 days are flagged, and items between 61-90 days (previously not stale) now become stale.
+
+### AC-6: No False Positives After Update
+- **Given** a stale item is modified, setting `stale = false`  
+- **When** the next scan runs before another 90 days pass  
+- **Then** the item remains `stale = false`.
 
 ## Out of Scope
+- Automatic archival or deletion of stale items beyond flagging.
+- Customizable workflows or automations triggered by the stale flag (e.g., auto-assigning for review).
+- Notification generation for stale items (email, Slack, etc.) — this may be addressed in a future notification feature.
+- Staleness reporting dashboards or analytics.
+- Per-project or per-team threshold overrides (initial release supports a single global or workspace-level threshold).
+- Staleness based on criteria other than `last_updated` (e.g., no comments, no linked PRs).
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+## Requirements
+
+_Owned by the business-analyst — to be authored._
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
