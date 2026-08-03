@@ -86,7 +86,23 @@ _Owned by the architect — to be authored._
 
 ## Implementation Notes
 
-_Owned by the developer — to be authored._
+### Completed Implementation
+
+**Migration:** `api/migrations/0396_enable_auto_staff_lanes_project_11.sql`
+
+The implementation consists of a single database migration that:
+
+1. **Ensures the `project_manager_configs` row exists** for Project 11 (INSERT if not exists)
+2. **Sets `allow_auto_staff_lanes` to `true`** for Project 11 (UPDATE if row exists)
+
+The migration uses idempotent SQL patterns:
+- `INSERT ... WHERE NOT EXISTS` to create the row if missing
+- `UPDATE ... WHERE project_id = 11 AND (allow_auto_staff_lanes IS NULL OR allow_auto_staff_lanes = false)` to update existing rows
+
+**Verification:**
+- After migration runs, query `SELECT * FROM project_manager_configs WHERE project_id = 11` should return a row with `allow_auto_staff_lanes = true`
+- The manager policy endpoint will return `allowAutoStaffLanes: true` for Project 11
+- Within one manager cycle (~15 min), the manager will begin auto-staffing unconfigured lanes
 
 ## Review
 
