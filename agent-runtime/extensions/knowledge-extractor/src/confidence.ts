@@ -7,8 +7,9 @@
 import type {
   LearningRecord,
   ExtractorConfig,
-  WEIGHTS as GlobalWeights,
 } from "./types.js";
+
+import { globalWeights } from "./types.js";
 
 /**
  * Computes a signal branch weight based on a score (exactly aligned with the weight allocation specified in PRD FR-6 and the INITIAL REVISION above).
