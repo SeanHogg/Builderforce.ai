@@ -41,7 +41,7 @@ import {
 } from '../../application/rehearsal/rehearsalService';
 import type { DbHandle } from '../../application/shared/dbHandle';
 import type { HonoEnv } from '../../env';
-import { getReconciliationDiagnostics, listReconciliationRuns, runPrTicketReconciliation } from '../../application/reconciliation/prReconciliationService';
+import { getReconciliationDiagnostics, listReconciliationRuns, reconciliationRequesterId, runPrTicketReconciliation } from '../../application/reconciliation/prReconciliationService';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 
 const json = (body: unknown, status = 200): Response =>
@@ -156,7 +156,7 @@ export function createAgentOpsRoutes(db: DbHandle) {
     try {
       const result = await runPrTicketReconciliation(c.env, db, {
         tenantId: c.get('tenantId'), repoId, mode, approvedPrNumbers,
-        requestedBy: c.get('userId') || null,
+        requestedBy: reconciliationRequesterId(c.get('userId'), c.get('machineActor')),
       });
       return json(result, 201);
     } catch (error) {

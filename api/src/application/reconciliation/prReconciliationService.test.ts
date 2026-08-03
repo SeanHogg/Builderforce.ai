@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fetchOpenPullRequests } from './prReconciliationService';
+import { fetchOpenPullRequests, reconciliationRequesterId } from './prReconciliationService';
 
 const prNode = (number: number, checkName: string, conclusion: string) => ({
   number, title: `Task #${number}: work`, body: '', url: `https://github.com/acme/app/pull/${number}`,
@@ -13,6 +13,12 @@ const prNode = (number: number, checkName: string, conclusion: string) => ({
 });
 
 describe('GitHub PR reconciliation collector', () => {
+  it('never writes a machine JWT subject into the human requested_by foreign key', () => {
+    expect(reconciliationRequesterId('agentHost:mcp', { kind: 'agent_host', agentHostId: null })).toBeNull();
+    expect(reconciliationRequesterId('user-123', undefined)).toBe('user-123');
+    expect(reconciliationRequesterId(undefined, undefined)).toBeNull();
+  });
+
   it('batches and paginates the complete open-PR inventory with check evidence', async () => {
     const fetchFn = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: { repository: { pullRequests: {

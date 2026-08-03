@@ -187,6 +187,18 @@ export interface RunReconciliationArgs {
   requestedBy?: string | null;
 }
 
+/**
+ * `requested_by` is a foreign key to users.id. Machine JWT subjects such as
+ * `agentHost:mcp` are deliberately not users, so they must remain audit-attributed
+ * through the request/error context rather than being written into this column.
+ */
+export function reconciliationRequesterId(
+  userId: string | null | undefined,
+  machineActor: unknown,
+): string | null {
+  return machineActor == null ? (userId || null) : null;
+}
+
 export interface ReconciliationRunResult {
   runId: string;
   status: 'completed' | 'completed_with_errors';
