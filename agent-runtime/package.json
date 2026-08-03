@@ -1,6 +1,6 @@
 {
   "name": "@seanhogg/builderforce-agents",
-  "version": "2026.7.11",
+  "version": "2026.7.12",
   "description": "BuilderForce Agents — distributed AI coding agent runtime with secure orchestration",
   "keywords": [
     "ai",
@@ -65,7 +65,7 @@
     "build": "pnpm canvas:a2ui:bundle && tsdown && pnpm build:plugin-sdk:dts && node --import tsx scripts/write-plugin-sdk-entry-dts.ts && node --import tsx scripts/canvas-a2ui-copy.ts && node --import tsx scripts/copy-hook-metadata.ts && node --import tsx scripts/copy-export-html-templates.ts && node --import tsx scripts/write-build-info.ts && node --import tsx scripts/write-cli-compat.ts",
     "build:clean": "node scripts/clean-dist.mjs && pnpm build",
     "build:plugin-sdk:dts": "tsc -p tsconfig.plugin-sdk.dts.json",
-    "build:windows": "set \"PATH=C:\\\\Program Files\\\\Git\\\\bin;%PATH%\" && pnpm build",
+    "build:windows": "set \"PATH=C:\\Program Files\\Git\\bin;%PATH%\" && pnpm build",
     "canvas:a2ui:bundle": "bash scripts/bundle-a2ui.sh",
     "check": "pnpm format:check && pnpm tsgo && pnpm lint",
     "check:docs": "node --import tsx scripts/check-docs.ts",
