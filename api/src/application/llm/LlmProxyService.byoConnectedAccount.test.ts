@@ -120,6 +120,30 @@ describe('connected account — a non-BYO caller model does NOT shadow the conne
 });
 
 describe('connected account — failure stays inside the BYO boundary', () => {
+  it('explicit gateway Auto may continue from a failed BYO account into the shared plan pool', async () => {
+    const seen: string[] = [];
+    const fetchSpy = vi.fn(async (input: string | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      seen.push(url);
+      if (url === ANTHROPIC_ENDPOINT) return new Response('upstream boom', { status: 500 });
+      if (url === OPENROUTER_ENDPOINT) return openaiOk('served by gateway fallback');
+      throw new Error(`unexpected endpoint: ${url}`);
+    });
+    (globalThis as { fetch: typeof fetch }).fetch = fetchSpy as unknown as typeof fetch;
+    const proxy = llmProxyForPlan(env, 'free', false, {
+      codingOnly: true,
+      backstopModels: CODING_BACKSTOP_MODELS,
+      anthropicOAuthToken: 'sk-ant-oat-test-token',
+      allowGatewayAuto: true,
+    });
+
+    const result = await proxy.complete(request);
+
+    expect(result.response.status).toBe(200);
+    expect(seen[0]).toBe(ANTHROPIC_ENDPOINT);
+    expect(seen).toContain(OPENROUTER_ENDPOINT);
+  });
+
   it('a 400 on the connected account carries the real status + detail and never calls the shared pool', async () => {
     const sharedCalls: string[] = [];
     const fetchSpy = vi.fn(async (input: string | URL) => {
