@@ -115,9 +115,9 @@ function MarkdownInner({ content, onInternalLink, onApplyCode, onCreateFile, lab
       const { className, children } = props;
       const raw = String(children ?? '');
       const text = raw.replace(/\n$/, '');
-      // react-markdown gives language fences a className and every fenced block
-      // (including an unlabeled one-line fence) a trailing newline.
-      const isBlock = className != null || raw.endsWith('\n');
+      // react-markdown gives language fences a className (e.g., language-typescript).
+      // Use className presence to reliably detect code blocks.
+      const isBlock = className != null;
       if (!isBlock) return <code className="bf-md__inline">{children}</code>;
       return <CodeBlock code={text} onApplyCode={onApplyCode} onCreateFile={onCreateFile} labels={lab} />;
     },
