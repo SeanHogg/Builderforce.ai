@@ -67,7 +67,49 @@ Provide clear visibility and actionable insights into GAP-G2 closure status when
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+### Business Analyst Assessment — Domain Mismatch Identified
+
+**Critical Finding:** This PRD describes a "Security Provisioning Dashboard" with GAP-G2 gap tracking for security/compliance gaps. The bound repository (seanhogg/builderforce.ai) is an AI dev-workforce platform that does **NOT** contain a Security Provisioning Dashboard or a GAP-G2 gap tracking system.
+
+#### What Exists in This Repository
+- **Cross-Project Health Dashboard**: Portfolio-level health tracking (BuilderForce.AI, Hired.Video, RumbleDating, BurnRateOS, pattysnob.com) with RAG status, completion metrics, and blocker identification
+- **Security Agent**: A SOC 2 audit agent (migration 0291) that runs audits across five Trust Service Criteria and creates SECURITY-typed task findings
+- **Security Infrastructure**: `api/src/application/security/` contains SecurityAuditService, SecurityReviewService, SecurityTicketAccessService, GitHub alerts integration, and web security scanning
+
+#### What Does NOT Exist in This Repository
+- **Security Provisioning Dashboard**: No dashboard exists for security/compliance provisioning
+- **GAP-G2 Gap Tracking System**: No system tracks "GAP-G2" as a gap closure item (GAP-G2 in specs/builderforce/09-prd-cloud-agent-validation.md refers to a cloud agent security validation gap, not a user-facing gap tracking system)
+- **Repository Mismatch Detection**: No mechanism to detect when tasks are assigned to the wrong repository in a security/compliance context
+
+#### Recommended Actions
+1. **Re-scope for this repository**: If GAP-G2 closure visibility is to be implemented here, it would need to leverage the existing Security Agent infrastructure and Cross-Project Health Dashboard as the foundation
+2. **Alternative**: Bind to the correct security/compliance platform repository where the Security Provisioning Dashboard actually exists
+
+### Functional Requirements (for context, subject to domain clarification)
+
+| ID | Requirement | Priority | Notes |
+|----|-------------|----------|-------|
+| REQ-01 | Repository mismatch detection for security tasks | P0 | Requires security task taxonomy + repo mapping |
+| REQ-02 | Dashboard integration showing closure status | P0 | Could extend Cross-Project Health Dashboard |
+| REQ-03 | Real-time notifications on mismatch | P1 | Leverage existing notification infrastructure |
+| REQ-04 | Reporting on mismatches and resolution | P2 | Weekly/monthly report generation |
+| REQ-05 | UI enhancements for visibility | P1 | Filter/sort by mismatch status |
+
+### Data Requirements
+- Security task entity with repository association
+- Repository mapping configuration
+- Mismatch detection rules/logic
+- Audit trail for mismatch notifications
+
+### Integration Points
+- Security Agent (api/src/application/security/)
+- Cross-Project Health Dashboard
+- Notification service
+- Existing task/board infrastructure
+
+---
+
+_Signed: business-analyst, task #1628_
 
 ## Design
 
