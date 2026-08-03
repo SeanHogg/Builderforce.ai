@@ -18,7 +18,8 @@ vi.mock('./tenantTokenAvailability', () => ({
 // Stub BYO credential/provider reads (no DB in tests). Default: nothing connected.
 const providerKeysMock = vi.fn();
 const credsMock = vi.fn();
-vi.mock('./tenantProviderKeyService', () => ({
+vi.mock('./tenantProviderKeyService', async (importActual) => ({
+  ...(await importActual<typeof import('./tenantProviderKeyService')>()),
   listTenantProviderKeys: (...a: unknown[]) => providerKeysMock(...a),
   resolveTenantLlmCredentials: (...a: unknown[]) => credsMock(...a),
 }));

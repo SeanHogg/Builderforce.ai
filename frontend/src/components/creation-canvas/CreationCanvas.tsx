@@ -52,7 +52,7 @@ import { useVoiceStudio } from '@/lib/voiceStudio';
 import { CopyButton } from '@/components/CopyButton';
 import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
 import { buildCreationCanvasDiagnosticsReport } from '@/lib/creationCanvasDiagnostics';
-import { arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions, type CanvasArrangement } from './creationCanvasLayout';
+import { arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions, nextCanvasObjectPosition, type CanvasArrangement } from './creationCanvasLayout';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useLlmModels } from '@/lib/useLlmModels';
@@ -1486,8 +1486,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const args = raw as { kind?: CreationObjectKind; title?: string; subtitle?: string; status?: string; fields?: unknown; x?: number; y?: number; width?: number; height?: number };
       const allowed = new Set(CREATION_OBJECT_REGISTRY.map((definition) => definition.kind));
       if (!args.kind || !allowed.has(args.kind)) return { error: 'Unsupported canvas object kind' };
-      const node = newNode(args.kind, { x: Number(args.x ?? 520), y: Number(args.y ?? 280) });
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
+      const node = newNode(args.kind, nextCanvasObjectPosition([...nodes, ...stagedNodes], args, narrowViewport));
       const authored = sanitizeCreationObjectPatch(args.kind, { ...((args.fields && typeof args.fields === 'object') ? args.fields : {}), title: args.title, subtitle: args.subtitle, status: args.status });
+      if (args.kind === 'drawing' && (!Array.isArray(authored.points) || authored.points.length < 2)) {
+        return { error: 'A generated drawing must include at least two renderable {x,y} points. Add authored points or use a chart with chartLabels and chartValues.' };
+      }
       node.data = { ...node.data, ...authored, title: typeof authored.title === 'string' && authored.title.trim() ? authored.title.slice(0, 160) : node.data.title };
       const width = Number(args.width); const height = Number(args.height);
       if (Number.isFinite(width) || Number.isFinite(height)) node.style = { width: Number.isFinite(width) ? Math.max(240, Math.min(width, 2_400)) : undefined, height: Number.isFinite(height) ? Math.max(130, Math.min(height, 1_800)) : undefined };
@@ -1531,9 +1536,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
       const args = raw as { objectIds?: unknown; arrangement?: CanvasArrangement; gap?: number; columns?: number };
       const requestedIds = Array.isArray(args.objectIds) ? new Set(args.objectIds.filter((id): id is string => typeof id === 'string')) : null;
-      const targets = canvasArrangementTargets(nodes, requestedIds);
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const targets = canvasArrangementTargets([...nodes, ...stagedNodes], requestedIds);
       if (targets.length < 2) return { error: 'At least two unlocked objects are required to arrange the canvas' };
-      const positions = arrangeCanvasNodes(targets, args.arrangement, Number(args.gap ?? 48), Number(args.columns));
+      const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
+      const arrangement = args.arrangement ?? (narrowViewport ? 'column' : undefined);
+      const positions = arrangeCanvasNodes(targets, arrangement, Number(args.gap ?? 48), Number(args.columns));
       let proposed = 0;
       for (const target of targets) {
         const position = positions.get(target.id);
@@ -1541,7 +1549,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.layout', label: `Arrange ${target.data.title}`, objectId: target.id, position });
         proposed += 1;
       }
-      return { ok: true, proposed: true, arrangedObjects: targets.length, proposedChanges: proposed, arrangement: args.arrangement || 'grid', gap: Math.max(16, Math.min(Number(args.gap ?? 48), 320)) };
+      return { ok: true, proposed: true, arrangedObjects: targets.length, proposedChanges: proposed, arrangement: arrangement || 'grid', gap: Math.max(16, Math.min(Number(args.gap ?? 48), 320)) };
     },
   }, {
     name: 'canvas_set_object_layout',
@@ -1664,6 +1672,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         conversation: timeline.map((message) => ({ role: message.messageRole, content: message.body })),
       }).then((answer) => {
         const changes = [...proposalBuffer.current];
+        const shouldAutoApply = changes.length > 0 && (autoApplyRef.current || canvasChangesCanAutoApply(changes));
         if (answer.trim()) {
           appendTimeline('assistant', answer.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds] }, `${requestMessageId}:assistant`);
           const chat = nodes.find((node) => node.data.kind === 'chat');
@@ -1683,10 +1692,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           // objects and the response attached to them) applies immediately. A
           // user should not have to approve the ordinary result of their own
           // prompt, and on mobile the review surface may not be visible yet.
-          setAutoApplyPending(autoApplyRef.current || canvasChangesCanAutoApply(changes));
+          setAutoApplyPending(shouldAutoApply);
         }
         setThinking(false);
-        setNotice(changes.length ? `${changes.length} Brain changes await review` : 'Brain finished evaluating the canvas');
+        setNotice(changes.length ? shouldAutoApply ? `Applying ${changes.length} Brain changes…` : `${changes.length} Brain changes await review` : 'Brain finished evaluating the canvas');
         trackActivity('creation_ai_evaluation_completed', { sessionId, metadata: { clientSurface: 'web', proposedChangeCount: changes.length, objectKinds: [...new Set(nodes.map((node) => node.data.kind))] } });
       }).catch((error) => {
         appendTimeline('system', error instanceof Error ? error.message : 'Brain could not complete this request', { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:error`);
