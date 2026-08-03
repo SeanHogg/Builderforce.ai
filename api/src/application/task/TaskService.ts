@@ -194,10 +194,16 @@ export class TaskService {
     // - If parentTaskId is a number, set it as parent
     // - If parentTaskId is null and explicitDetach is true, explicitly set as top-level (no parent)
     // - If parentTaskId is null and explicitDetach is false/undefined, same as above (default)
-    // The difference is semantic only for creation, but provides API consistency.
-    const parentTaskId = dto.parentTaskId !== undefined
-      ? (dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : (dto.explicitDetach === true ? null : undefined))
-      : undefined;
+    // The explicitDetach flag provides API consistency but new tasks start without parents anyway.
+    let parentTaskIdValue: number | null = null;
+    if (dto.parentTaskId !== undefined) {
+      if (dto.parentTaskId !== null) {
+        parentTaskIdValue = asTaskId(dto.parentTaskId);
+      } else if (dto.explicitDetach === true) {
+        parentTaskIdValue = null;
+      }
+      // else: default to null (top-level)
+    }
 
     const saved = await this.withKeyAllocation(asProjectId(dto.projectId), (lastKeySeq) =>
       this.tasks.save(Task.create({
@@ -211,7 +217,7 @@ export class TaskService {
         assignedAgentRef: dto.assignedAgentRef ?? null,
         assignedUserId: dto.assignedUserId ?? null,
         taskType: dto.taskType,
-        parentTaskId: parentTaskId !== undefined ? parentTaskId : (dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null),
+        parentTaskId: parentTaskIdValue,
         gapOriginTaskId: dto.gapOriginTaskId != null ? asTaskId(dto.gapOriginTaskId) : null,
         startDate: dto.startDate ? new Date(dto.startDate) : null,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
