@@ -73,16 +73,21 @@ export function Terminal({ onReady, onInput }: TerminalProps) {
         term!.write(data);
       });
 
-      const ro = new ResizeObserver(() => fitAddon.fit());
-      if (containerRef.current) ro.observe(containerRef.current);
-
+      // Debounce ResizeObserver callbacks to prevent "ResizeObserver loop completed
+      // with undelivered notifications" errors.
       let resizeTimer: ReturnType<typeof setTimeout> | null = null;
-      const onWindowResize = () => {
+      const scheduleFit = () => {
         if (resizeTimer) clearTimeout(resizeTimer);
         resizeTimer = setTimeout(() => {
           resizeTimer = null;
           fitAddon.fit();
         }, 50);
+      };
+      const ro = new ResizeObserver(scheduleFit);
+      if (containerRef.current) ro.observe(containerRef.current);
+
+      const onWindowResize = () => {
+        scheduleFit();
       };
       window.addEventListener('resize', onWindowResize);
 
