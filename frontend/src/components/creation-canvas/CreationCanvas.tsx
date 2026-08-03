@@ -1799,6 +1799,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     });
     if (materializedAdditions.length) setSelectedId(materializedAdditions[materializedAdditions.length - 1]!.node.id);
     else if (selectedId && deletedObjectIds.has(selectedId)) { setSelectedId(null); setSelectedIds([]); }
+    if (typeof window !== 'undefined' && window.innerWidth <= 760 && materializedAdditions.length) {
+      const brainId = nodes.find((node) => node.data.kind === 'chat')?.id;
+      const focusIds = [brainId, ...materializedAdditions.map((change) => change.node.id)].filter((id): id is string => !!id);
+      window.setTimeout(() => {
+        void flowRef.current?.fitView({ nodes: focusIds.map((id) => ({ id })), padding: .18, duration: 350 });
+      }, 0);
+    }
     if (actions.length) setPendingBrainActions((current) => [...current, ...actions.filter((change) => !deletedObjectIds.has(change.objectId)).map(({ objectId, action }) => ({ objectId, action }))]);
     setProposedChanges([]);
     setAcceptedProposalIds(new Set());
