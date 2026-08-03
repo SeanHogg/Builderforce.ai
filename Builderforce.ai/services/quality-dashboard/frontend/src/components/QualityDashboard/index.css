@@ -476,6 +476,10 @@
   cursor: default;
 }
 
+.legend-group.legend-hidden {
+  opacity: 0.4;
+}
+
 .legend-text {
   font-family: system-ui, -apple-system, sans-serif;
 }
