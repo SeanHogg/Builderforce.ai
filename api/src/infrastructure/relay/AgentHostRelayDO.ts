@@ -708,7 +708,20 @@ export class AgentHostRelayDO implements DurableObject {
     if (!frame) {
       return this.json({ ok: false, delivered: false, error: "agent_host_timeout" }, 504);
     }
-    return this.json({ ok: true, delivered: true, response: frame.response ?? null, error: frame.error ?? null }, 200);
+    // A frame carrying an error — a blocked destination, a network failure, or the
+    // synthetic one `failPendingEgress` raises on disconnect — is NOT a success with an
+    // empty payload. Reporting `ok: true` here would hand the vendor layer a null
+    // response to interpret, which is exactly how "the relay broke" gets misread as
+    // "the provider answered strangely".
+    const error = typeof frame.error === "string" ? frame.error : null;
+    if (error || !frame.response) {
+      const offline = error === "agent_host_offline";
+      return this.json(
+        { ok: false, delivered: !offline, error: error ?? "egress_failed" },
+        offline ? 409 : 502,
+      );
+    }
+    return this.json({ ok: true, delivered: true, response: frame.response }, 200);
   }
 
   /** Resolve a waiting {@link relayEgress} call. Returns true when the frame was an

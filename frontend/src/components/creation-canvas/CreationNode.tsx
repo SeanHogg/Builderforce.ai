@@ -241,11 +241,66 @@ function EvermindBody({ data }: { data: CreationNodeData }) {
   const version = typeof data.evermindVersion === 'number' ? data.evermindVersion : 0;
   const contributions = typeof data.contributions === 'number' ? data.contributions : 0;
   const loss = typeof data.trainingLoss === 'number' ? data.trainingLoss : null;
-  const stages = ['Dataset', 'Tokenize', 'Train', 'Evaluate', 'Publish'];
+  const pending = typeof data.pendingContributions === 'number' ? data.pendingContributions : 0;
+  const recent = Array.isArray(data.recentLearnings)
+    ? data.recentLearnings.flatMap((value, index) => {
+      if (!value || typeof value !== 'object') return [];
+      const item = value as Record<string, unknown>;
+      return [{
+        id: String(item.id ?? index),
+        kind: item.kind === 'delta' ? 'delta' : 'text',
+        version: typeof item.version === 'number' ? item.version : version,
+        prompt: textValue(item.prompt),
+        text: textValue(item.text),
+        teacher: textValue(item.teacherModel),
+        distilled: item.distilled === true,
+      }];
+    }).slice(0, 3)
+    : [];
+  const mapNodeCount = Math.min(12, Math.max(recent.length, contributions ? Math.min(contributions, 12) : 0));
+  const mapNodes = Array.from({ length: mapNodeCount }, (_, index) => ({
+    left: [25, 39, 55, 68, 32, 48, 62, 75, 42, 58, 70, 29][index]!,
+    top: [27, 18, 29, 22, 43, 46, 40, 51, 61, 64, 69, 72][index]!,
+    kind: recent[index]?.kind || (index % 3 === 0 ? 'delta' : 'text'),
+  }));
+  const connected = data.learningMode !== 'offline-frozen' && data.status !== 'Blueprint';
+  const inference = data.inferenceEnabled === true;
+  const lastLearned = typeof data.lastLearnedAt === 'string' && !Number.isNaN(Date.parse(data.lastLearnedAt))
+    ? new Date(data.lastLearnedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })
+    : 'Not yet';
   return <div className={styles.evermindBody}>
-    <div className={styles.evermindMetrics}><span><small>Version</small><b>{version ? `v${version}` : 'Draft'}</b></span><span><small>Learnings</small><b>{contributions}</b></span><span><small>Loss</small><b>{loss == null ? '—' : loss.toFixed(3)}</b></span></div>
-    <div className={styles.evermindStages}>{stages.map((stage, index) => <span key={stage} className={index <= (version ? 4 : 1) ? styles.evermindStageActive : ''}>{stage}</span>)}</div>
-    <p>{data.subtitle || 'A self-learning model blueprint. Attach project context to seed, teach, tune, evaluate, and deploy it.'}</p>
+    <div className={styles.evermindMetrics}>
+      <span><small>Model</small><b>{version ? `v${version}` : 'Blueprint'}</b></span>
+      <span><small>Learned</small><b>{contributions}</b></span>
+      <span><small>Queued</small><b>{pending}</b></span>
+      <span><small>Training loss</small><b>{loss == null ? '—' : loss.toFixed(3)}</b></span>
+    </div>
+    <div className={styles.evermindKnowledge}>
+      <section className={styles.evermindMap} aria-label={`Knowledge map with ${contributions} learned contributions`}>
+        <div className={styles.evermindMapHeading}><b>Knowledge map</b><span className={connected ? styles.evermindLearning : styles.evermindFrozen}>{connected ? '● Learning' : '○ Waiting'}</span></div>
+        <div className={styles.evermindBrain}>
+          <span className={styles.evermindRegionCortex}>Cortex<small>reasoning</small></span>
+          <span className={styles.evermindRegionMemory}>Hippocampus<small>knowledge</small></span>
+          <span className={styles.evermindRegionLimbic}>Limbic<small>response</small></span>
+          {mapNodes.map((node, index) => <i key={index} data-kind={node.kind} style={{ left: `${node.left}%`, top: `${node.top}%` }} />)}
+          {!mapNodes.length && <em>Learned knowledge will light up here</em>}
+        </div>
+        <div className={styles.evermindLegend}><span><i data-kind="text" /> Learned fact</span><span><i data-kind="delta" /> Model update</span></div>
+      </section>
+      <section className={styles.evermindRecent} aria-label="Recently learned">
+        <div className={styles.evermindMapHeading}><b>Recently learned</b><span>{recent.length ? `${recent.length} shown` : 'Empty'}</span></div>
+        {recent.length ? recent.map((item) => <article key={item.id}>
+          <i data-kind={item.kind} />
+          <div><b>{item.prompt || (item.kind === 'delta' ? 'Agent model update' : 'Untitled learning')}</b><p>{item.text || (item.kind === 'delta' ? 'Weights adapted from an agent run.' : 'No readable learning text was retained.')}</p></div>
+          <small>v{item.version}{item.distilled ? ` · ${item.teacher || 'teacher'}` : ' · self'}</small>
+        </article>) : <div className={styles.evermindEmpty}><span>◇</span><b>Nothing learned yet</b><p>Connect project work or teach an example. New knowledge appears here with its source.</p></div>}
+      </section>
+    </div>
+    <div className={styles.evermindSignals}>
+      <span><i className={connected ? styles.signalOn : styles.signalOff} /><small>Learning</small><b>{connected ? 'Connected' : 'Waiting'}</b></span>
+      <span><i className={inference ? styles.signalOn : styles.signalOff} /><small>Replies</small><b>{inference ? 'On Evermind' : 'Off'}</b></span>
+      <span><i className={lastLearned === 'Not yet' ? styles.signalOff : styles.signalOn} /><small>Last learned</small><b>{lastLearned}</b></span>
+    </div>
   </div>;
 }
 

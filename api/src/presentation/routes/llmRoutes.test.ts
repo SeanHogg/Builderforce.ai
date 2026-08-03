@@ -301,6 +301,9 @@ function mockDb(opts: {
    *  day+month scan (sumTenantTextTokensDayAndMonth) used when a monthly cap is
    *  active. */
   usageRow?:  { used?: bigint | number | null; day?: number; month?: number };
+  /** Rows for the local-egress host lookup, which chains `.orderBy().limit()`.
+   *  Default `[]` — no runtime connected, so vendors call out directly. */
+  agentHostRows?: Array<{ id: number; connectedAt: Date | null; lastSeenAt: Date | null }>;
 }) {
   // Drizzle-style chainable selects: each terminal `.limit(1)` resolves
   // with `[row]`. Two distinct lookups happen in the bfk_* path: the key
@@ -319,6 +322,9 @@ function mockDb(opts: {
       // carry the creator's superadmin flag, so the chain must support leftJoin.
       const where = () => ({
         limit: () => Promise.resolve(queue.shift() ?? []),
+        // The online-agent-host lookup (local egress) orders before limiting, and
+        // reads its own canned rows rather than the key/tenant queue.
+        orderBy: () => ({ limit: () => Promise.resolve(opts.agentHostRows ?? []) }),
         then:  (resolve: (v: unknown) => unknown) =>
           resolve(usageRow !== undefined ? [usageRow] : []),
       });
@@ -571,6 +577,49 @@ describe('POST /provider-keys/:provider/test', () => {
     // The evidence an operator attaches to the partnership submission.
     expect(body.diagnostic).toMatchObject({ ...diagnostic, model: 'direct/kimi-code/kimi-for-coding' });
     expect(body.diagnostic?.traceId).toMatch(/^llm-/);
+    // No runtime connected → the remedy is to connect one, since that is the route
+    // that actually works. Telling this operator to "use Kimi Code locally" is not an
+    // instruction about the product they are standing in.
+    expect(body.error).toContain('Connect a Builderforce runtime');
+  });
+
+  it('does NOT tell a tenant who already runs a runtime to connect one', async () => {
+    // Same edge 403, opposite remedy: the call was already made from their machine, so
+    // the problem is that machine's network — not a missing runtime and not the key.
+    mocks.resolveTenantLlmCredentials.mockResolvedValue({
+      anthropicOAuthToken: null, openaiCodexAuth: null, xaiOAuthToken: null,
+      vendorKeys: { kimi: 'sk-kimi-code' }, configuredProviders: ['kimi'],
+      unresolvedReasons: {}, vendorPriority: ['kimi'],
+    });
+    mocks.buildDatabase.mockReturnValue(mockDb({
+      keyRow: { id: 'kid', tenantId: 1, revokedAt: null, allowedOrigins: null },
+      tenantRow: { id: 1, plan: 'pro', billingStatus: 'active', tokenDailyLimitOverride: null },
+      agentHostRows: [{ id: 7, connectedAt: new Date(), lastSeenAt: new Date() }],
+    }));
+    mocks.llmProxyForPlan.mockReturnValue({
+      complete: vi.fn(async () => ({
+        response: new Response('<html>Forbidden</html>', { status: 403 }),
+        resolvedModel: 'direct/kimi-code/kimi-for-coding',
+        resolvedVendor: 'kimi-code',
+        failovers: [{
+          model: 'direct/kimi-code/kimi-for-coding', vendor: 'kimi-code', code: 403,
+          detail: 'auth 403: Forbidden',
+          diagnostic: {
+            endpoint: 'https://api.kimi.com/coding/v1/chat/completions', status: 403,
+            headers: {}, edgeBlocked: true, observedAt: '2026-08-02T10:00:00.000Z',
+          },
+        }],
+      })),
+    });
+
+    const req = new Request('http://test.local/provider-keys/kimi/test', {
+      method: 'POST', headers: { Authorization: 'Bearer bfk_test' },
+    });
+    const res = await buildApp().request(req, {}, baseEnv as Record<string, unknown>, fakeExecutionCtx);
+    const body = await res.json() as { error: string };
+
+    expect(body.error).toContain('your connected Builderforce runtime');
+    expect(body.error).not.toContain('Connect a Builderforce runtime');
   });
 });
 

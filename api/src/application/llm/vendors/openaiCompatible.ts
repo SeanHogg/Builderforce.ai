@@ -18,6 +18,7 @@
  *     caller opts in per-call by pinning the vendor-prefixed id.
  */
 
+import { pseudoStreamFromCall } from './pseudoStream';
 import {
   AUTH_STATUSES,
   buildOpenAIChatBody,
@@ -76,8 +77,21 @@ export interface OpenAICompatibleVendorOptions {
    *  — factory vendors are explicit-pin-only so they don't disturb the tuned
    *  curated pools. Pass `true` only for a vendor intended for the auto rotation. */
   autoRoute?: boolean;
-  /** Omit the streaming surface (a vendor without SSE support). Default: streaming on. */
+  /** Omit the streaming surface (a vendor without SSE support). Default: streaming on.
+   *  NOTE: a `noStream` vendor is SKIPPED entirely on a streaming dispatch — use
+   *  {@link OpenAICompatibleVendorOptions.pseudoStream} instead when the vendor should
+   *  still serve streamed requests, just not incrementally. */
   noStream?: boolean;
+  /**
+   * Serve streaming requests by replaying the completed non-streaming call as a
+   * one-shot SSE, via the shared {@link pseudoStreamFromCall} adapter.
+   *
+   * For a vendor whose transport genuinely cannot stream — Kimi Code runs over the
+   * request/response host relay, so an SSE body would arrive whole regardless. The
+   * alternative, `noStream`, would make streaming dispatch SKIP the vendor: a caller
+   * that streams would silently never reach the account they connected.
+   */
+  pseudoStream?: boolean;
   /** Per-vendor JSON-Schema strict-mode strip set (see `VendorModule.schemaDialect`). */
   schemaDialect?: { stripKeywords: readonly string[] };
   /** This upstream refuses the Worker's own egress — see `VendorModule.requiresLocalEgress`. */
@@ -187,6 +201,7 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
     transformExtra,
     autoRoute = false,
     noStream = false,
+    pseudoStream = false,
     schemaDialect,
     requiresLocalEgress = false,
   } = opts;
@@ -227,7 +242,13 @@ export function createOpenAICompatibleVendor(opts: OpenAICompatibleVendorOptions
     },
   };
 
-  if (!noStream) {
+  if (pseudoStream) {
+    // Still a streaming-capable vendor as far as the cascade is concerned — it just
+    // delivers the whole answer in one chunk. Rides the SAME adapter as the Responses
+    // vendors, so usage and resolved model survive into the stream.
+    mod.callStream = async (params: VendorCallParams): Promise<VendorStreamResult> =>
+      pseudoStreamFromCall(await mod.call(params), params);
+  } else if (!noStream) {
     mod.callStream = async (params: VendorCallParams): Promise<VendorStreamResult> =>
       resolveRegionalEndpoint(id, params.apiKey, baseUrl, altBaseUrl, (endpoint) =>
         executeChatCompletionStream({

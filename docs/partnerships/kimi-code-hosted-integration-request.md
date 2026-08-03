@@ -42,6 +42,16 @@ Kimi Code CLI, Claude Code, Codex, or another approved client. Requests from our
 hosted gateway currently receive an edge-generated HTTP 403 before the supplied
 user key appears to be validated.
 
+**What we shipped in the meantime.** Rather than work around that 403, we changed
+where the request comes from. When a user runs the Builderforce runtime on their own
+machine, Kimi Code calls are no longer made by our cloud at all: the request is
+carried to that machine over the runtime's existing authenticated connection and
+performed there, from the user's own network, by software running under their
+control. This is the personal interactive client model as we understand it, and it
+is our default whenever a runtime is available. We are asking below about the
+remaining case — users who want Builderforce's hosted agents to run without keeping
+a machine online.
+
 We understand that Moonshot Open Platform is the supported pay-as-you-go product
 for general hosted inference, and Builderforce already supports it as a separate
 provider. This request is specifically about an approved, user-delegated Kimi
@@ -154,6 +164,12 @@ review:
 - `frontend/src/components/ProviderKeysSettings.tsx` exposes separate Kimi Code
   and Moonshot Open Platform connections, and offers the redacted trace for
   download on any failed connection test (see below).
+- `api/src/application/llm/hostEgress.ts` + `agent-runtime/src/infra/host-egress.ts`
+  implement the user-machine execution path described above. The Kimi Code vendor is
+  the only one marked `requiresLocalEgress`, so no other provider's traffic is routed
+  through a user's machine. The runtime enforces its own destination allowlist
+  (`api.kimi.com` only), requires https, refuses redirects, and caps response size —
+  so the capability cannot be repurposed by us or by anyone who reaches the relay.
 
 ### How to produce the redacted 403 trace for this submission
 

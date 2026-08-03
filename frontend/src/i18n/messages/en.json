@@ -8955,7 +8955,7 @@
         "blurb": "Paste a Meta AI API key to run MUSE models (muse-spark-1.1) on your own Meta AI account."
       },
       "kimi": {
-        "blurb": "Kimi Code subscription keys are for personal interactive clients and may be blocked by hosted gateways. For cloud agents, connect a Moonshot Open Platform API key instead."
+        "blurb": "Kimi Code subscription keys are for personal interactive clients, so Kimi’s edge refuses our cloud gateway. Connect a Builderforce runtime and Kimi runs through your own machine; otherwise use a Moonshot Open Platform key."
       },
       "moonshot": {
         "blurb": "Paste a Moonshot Open Platform API key to run Moonshot models on your own account."
@@ -8989,6 +8989,10 @@
       "testCost": "Testing sends one small real request, billed to the account being tested.",
       "copyTrace": "Copy diagnostic trace",
       "copyTraceAria": "Copy a redacted diagnostic trace for this failure, to attach to a provider support ticket",
+      "traceHint": "HTTP {status} — includes the provider’s request IDs. No key, prompt or request body.",
+      "traceEdgeBlocked": "HTTP {status} — the provider’s edge refused the request before the key was checked. Include this when you contact them.",
+      "copyTrace": "Copy diagnostic trace",
+      "copyTraceAria": "Copy a redacted diagnostic trace for this failure, to attach to a provider support ticket",
       "traceHint": "HTTP {status} — includes the provider's request IDs. No key, prompt or request body.",
       "traceEdgeBlocked": "HTTP {status} — the provider's edge refused the request before the key was checked. Include this when you contact them.",
       "state": {
@@ -9015,7 +9019,7 @@
       "notEntitled": "This account signed in successfully, but the provider refused the request ({status}) because the plan does not cover it. Reconnect an account whose plan includes it, or upgrade the plan.",
       "xaiNotEntitled": "xAI accepted the sign-in but refused Grok API access ({status}). Check that this account has an eligible SuperGrok plan and remaining weekly usage, or connect an xAI API key.",
       "xaiCapacity": "Your weekly SuperGrok API allowance is depleted ({status}). Grok will resume when it resets; to continue now, buy Extra Usage Credits, enable Auto Top-Up, or upgrade to SuperGrok Heavy. Do not reconnect the account.",
-      "kimiNotEntitled": "Kimi refused the hosted request ({status}). If the connection test shows HTML, Kimi’s edge blocked this cloud gateway before validating the key. Use Kimi Code locally, or use Moonshot Open Platform for hosted agents.",
+      "kimiNotEntitled": "Kimi refused the hosted request ({status}) — its edge blocks this cloud gateway before the key is ever checked. Connect a Builderforce runtime and this key routes through your own machine instead, which is the client the subscription is licensed for. Moonshot Open Platform is the alternative.",
       "kimiCapacity": "Your Kimi Code subscription allowance is exhausted ({status}). Check the Kimi Code Console for the next reset time. The key is valid and does not need to be replaced.",
       "rejected": "The provider rejected this credential ({status}). It has probably expired, been revoked, or been rotated elsewhere — reconnect the account.",
       "capacity": "The credential works, but the account is out of budget ({status}) — a spend cap or empty credit balance. Top up or raise the limit; there is no need to reconnect.",

@@ -26,6 +26,8 @@
 
 import { and, desc, eq, isNotNull } from 'drizzle-orm';
 
+import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { isAgentHostOnline } from '../../domain/agentHost/onlineStatus';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { agentHosts } from '../../infrastructure/database/schema';
 import type { Env } from '../../env';
@@ -65,33 +67,52 @@ const ONLINE_HOST_TTL_SECONDS = 30;
 
 const onlineHostKey = (tenantId: number) => `llm:egress-host:${tenantId}`;
 
+/** Cheap SQL prefilter only — a host that never connected can never be a candidate.
+ *  Deliberately NOT the liveness rule: see {@link isAgentHostOnline}. */
+const MAX_HOST_CANDIDATES = 10;
+
 /**
  * The id of an online agent host for this tenant, or null.
  *
- * `connectedAt` is stamped when the host's upstream WebSocket attaches and cleared when
- * it drops, so it — not `lastSeenAt`, which a dead process leaves behind — is what
- * "online" means here. Most-recently-connected wins when a tenant runs several.
+ * Liveness is {@link isAgentHostOnline} and nothing else. `connectedAt` alone is a trap
+ * the codebase already learned about: the socket's close handler is best-effort, so a
+ * host that was killed or crashed leaves it stamped forever and would keep being chosen
+ * as the egress route — every Kimi call then hanging until the relay's 120s ceiling.
+ * The query narrows to plausible rows; the shared rule decides.
  */
 export async function onlineAgentHostId(env: Env, tenantId: number): Promise<number | null> {
-  return getOrSetCached(
-    env,
-    onlineHostKey(tenantId),
-    async () => {
-      const db = buildDatabase(env);
-      const [row] = await db
-        .select({ id: agentHosts.id })
-        .from(agentHosts)
-        .where(and(
-          eq(agentHosts.tenantId, tenantId),
-          eq(agentHosts.status, 'active'),
-          isNotNull(agentHosts.connectedAt),
-        ))
-        .orderBy(desc(agentHosts.connectedAt))
-        .limit(1);
-      return row?.id ?? null;
-    },
-    { kvTtlSeconds: ONLINE_HOST_TTL_SECONDS, l1TtlMs: ONLINE_HOST_TTL_SECONDS * 1000 },
-  );
+  try {
+    return await getOrSetCached(
+      env,
+      onlineHostKey(tenantId),
+      async () => {
+        const db = buildDatabase(env);
+        const rows = await db
+          .select({ id: agentHosts.id, connectedAt: agentHosts.connectedAt, lastSeenAt: agentHosts.lastSeenAt })
+          .from(agentHosts)
+          .where(and(
+            eq(agentHosts.tenantId, tenantId),
+            eq(agentHosts.status, 'active'),
+            isNotNull(agentHosts.connectedAt),
+          ))
+          .orderBy(desc(agentHosts.connectedAt))
+          .limit(MAX_HOST_CANDIDATES);
+        return rows.find((row) => isAgentHostOnline(row))?.id ?? null;
+      },
+      { kvTtlSeconds: ONLINE_HOST_TTL_SECONDS, l1TtlMs: ONLINE_HOST_TTL_SECONDS * 1000 },
+    );
+  } catch (error) {
+    // This read now sits on the hot path of EVERY completion. "I could not find out
+    // whether a runtime is online" must degrade to "route directly", never to a failed
+    // request — a Neon blip here would otherwise 500 chat for every tenant, including
+    // the overwhelming majority who have no Kimi connection at all.
+    reportCaughtError(error, {
+      source: 'application/llm/hostEgress.ts',
+      operation: 'onlineAgentHostId',
+      level: 'warning',
+    }, { env });
+    return null;
+  }
 }
 
 /** Drop the cached online-host answer — call when a host connects or disconnects so the

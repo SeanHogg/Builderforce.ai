@@ -42,6 +42,8 @@ interface VendorSpec {
   /** Extra static headers (rare). */
   headers?: Record<string, string>;
   noStream?: boolean;
+  /** Serve streamed callers by replaying the completed call as one SSE chunk. */
+  pseudoStream?: boolean;
   /** This upstream refuses the Worker's egress — run it from the tenant's connected
    *  runtime when one is online. See `VendorModule.requiresLocalEgress`. */
   requiresLocalEgress?: boolean;
@@ -121,10 +123,11 @@ const SPECS: ReadonlyArray<VendorSpec> = [
     // one is online: the personal interactive client the subscription is licensed
     // for. See `hostEgress.ts`; falls back to direct egress when nothing is online.
     requiresLocalEgress: true,
-    // The relay is request/response, so an SSE body would arrive whole anyway. Being
-    // honest about it here routes Kimi through the gateway's pseudo-stream instead of
-    // pretending to stream and delivering one giant frame.
-    noStream: true,
+    // The relay is request/response, so an SSE body arrives whole regardless. Serve
+    // streamed callers through the shared pseudo-stream adapter rather than marking the
+    // vendor `noStream` — that would make streaming dispatch SKIP Kimi entirely, and a
+    // caller who streams would silently never reach the account they connected.
+    pseudoStream: true,
     // Keep the all-members model first: credential health probes use the first
     // catalog entry, while K3/high-speed access depends on the subscription tier.
     models: ['kimi-for-coding', 'k3-256k', 'k3', 'kimi-for-coding-highspeed'],
@@ -261,6 +264,7 @@ export const openAICompatibleModules: ReadonlyArray<VendorModule> = SPECS.map((s
     ...(spec.maxTokensField ? { maxTokensField: spec.maxTokensField } : {}),
     ...(spec.headers ? { headers: spec.headers } : {}),
     ...(spec.noStream ? { noStream: spec.noStream } : {}),
+    ...(spec.pseudoStream ? { pseudoStream: spec.pseudoStream } : {}),
     ...(spec.requiresLocalEgress ? { requiresLocalEgress: spec.requiresLocalEgress } : {}),
   }),
 );

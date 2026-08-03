@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   addEdge,
   Background,
@@ -31,7 +31,7 @@ import '@seanhogg/builderforce-brain-ui/styles.css';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
 import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
 import { EvermindValidationProvider } from '@/components/ide/EvermindValidationContext';
-import { getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText } from '@/lib/projectEvermindApi';
+import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText } from '@/lib/projectEvermindApi';
 import { isAwaitingApprovalExecution } from '@/lib/builderforceApi';
 import { fetchProjects } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
@@ -58,6 +58,11 @@ import { useConfirm } from '@/components/ConfirmProvider';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
+const INSPECTOR_WIDTH_STORAGE_KEY = 'builderforce:create:inspector-width';
+const INSPECTOR_DEFAULT_WIDTH = 270;
+const INSPECTOR_MIN_WIDTH = 270;
+const INSPECTOR_WIDE_WIDTH = 520;
+const INSPECTOR_MAX_WIDTH = 720;
 const ACCOUNT_REQUIRED_OBJECT_ACTIONS = new Set(['publish', 'deliver', 'assign', 'authenticate', 'execute', 'record', 'generate', 'train', 'start', 'compare']);
 const PALETTE_GROUP_ICONS: Record<CreationObjectGroup, string> = {
   Build: '✦', Data: '▦', Knowledge: '▤', Insights: '↗', Work: '✓', People: '●', Agents: '✧', Models: '◉', Collaborate: '◇', Integrations: '⌘',
@@ -1211,8 +1216,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const projectId = Number(project.data.resourceId!.slice('project:'.length));
     updateSelected({ resourceId: `evermind:${projectId}`, projectId, status: 'Loading…' });
     setEdges((current) => current.some((edge) => edge.source === project.id && edge.target === selectedNode.id) ? current : [...current, { id: crypto.randomUUID(), source: project.id, target: selectedNode.id, label: 'owns model', type: 'smoothstep' }]);
-    void getProjectEvermindHead(projectId).then((head) => {
-      updateSelected({ title: head.name || selectedNode.data.title, status: head.seeded ? `v${head.version} · ${head.mode}` : 'Ready to seed', evermindVersion: head.version, contributions: head.contributions, inferenceEnabled: head.inferenceEnabled, teacherModel: head.teacherModel || undefined });
+    void Promise.all([getProjectEvermindHead(projectId), getProjectEvermindContributions(projectId)]).then(([head, activity]) => {
+      updateSelected({
+        title: head.name || selectedNode.data.title,
+        status: head.seeded ? `v${head.version} · ${head.mode}` : 'Ready to seed',
+        evermindVersion: head.version,
+        contributions: head.contributions,
+        pendingContributions: activity.pending,
+        recentLearnings: activity.recent,
+        trainingLoss: activity.training[0]?.loss,
+        learningMode: head.mode,
+        lastLearnedAt: head.lastLearnedAt,
+        inferenceEnabled: head.inferenceEnabled,
+        teacherModel: head.teacherModel || undefined,
+      });
       setNotice('Evermind attached to project');
     }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not load Evermind'));
   }, [nodes, selectedNode, setEdges, updateSelected]);
@@ -2077,6 +2094,49 @@ function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persis
   const [tab, setTab] = useState<'details' | 'activity'>('details');
   const [accessStatus, setAccessStatus] = useState('');
   const [actionStatus, setActionStatus] = useState('');
+  const [inspectorWidth, setInspectorWidth] = useState(() => {
+    if (typeof window === 'undefined') return INSPECTOR_DEFAULT_WIDTH;
+    const saved = Number(window.localStorage.getItem(INSPECTOR_WIDTH_STORAGE_KEY));
+    return Number.isFinite(saved) ? Math.min(INSPECTOR_MAX_WIDTH, Math.max(INSPECTOR_MIN_WIDTH, saved)) : INSPECTOR_DEFAULT_WIDTH;
+  });
+  const [expandedInspector, setExpandedInspector] = useState(false);
+  const inspectorRef = useRef<HTMLElement>(null);
+  const inspectorWidthRef = useRef(inspectorWidth);
+  const restoreInspectorWidth = useRef(INSPECTOR_DEFAULT_WIDTH);
+  const resizeStart = useRef({ pointerX: 0, width: INSPECTOR_DEFAULT_WIDTH });
+  const maxInspectorWidth = useCallback(() => {
+    const available = inspectorRef.current?.parentElement?.getBoundingClientRect().width;
+    return available && available > INSPECTOR_MIN_WIDTH
+      ? Math.max(INSPECTOR_MIN_WIDTH, Math.min(INSPECTOR_MAX_WIDTH, available - 40))
+      : INSPECTOR_MAX_WIDTH;
+  }, []);
+  const applyInspectorWidth = useCallback((width: number, persist = false) => {
+    const next = Math.round(Math.min(maxInspectorWidth(), Math.max(INSPECTOR_MIN_WIDTH, width)));
+    inspectorWidthRef.current = next;
+    setInspectorWidth(next);
+    if (persist) window.localStorage.setItem(INSPECTOR_WIDTH_STORAGE_KEY, String(next));
+  }, [maxInspectorWidth]);
+  const toggleInspectorWidth = () => {
+    if (expandedInspector) {
+      applyInspectorWidth(restoreInspectorWidth.current, true);
+      setExpandedInspector(false);
+      return;
+    }
+    restoreInspectorWidth.current = inspectorWidth;
+    applyInspectorWidth(INSPECTOR_WIDE_WIDTH, true);
+    setExpandedInspector(true);
+  };
+  const resizeInspectorWithKeyboard = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    let next: number | null = null;
+    if (event.key === 'ArrowLeft') next = inspectorWidth + (event.shiftKey ? 50 : 20);
+    if (event.key === 'ArrowRight') next = inspectorWidth - (event.shiftKey ? 50 : 20);
+    if (event.key === 'Home') next = INSPECTOR_MIN_WIDTH;
+    if (event.key === 'End') next = maxInspectorWidth();
+    if (next == null) return;
+    event.preventDefault();
+    setExpandedInspector(false);
+    applyInspectorWidth(next, true);
+  };
   const markdown = artifactMarkdown(node.data);
   const csv = artifactCsv(node.data);
   const taskId = kind === 'task' && /^task:\d+$/.test(node.data.resourceId || '') ? Number(node.data.resourceId!.slice(5)) : null;
@@ -2143,8 +2203,33 @@ function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persis
       setActionStatus(error instanceof Error ? error.message : 'Export failed');
     }
   };
-  return <aside className={styles.inspector}>
-    <header><div><span>{kind === 'agent' ? '✦' : kind === 'website' ? '◎' : kind === 'workflow' ? '⌘' : '◇'}</span><strong>{node.data.title}</strong><small>Live {kind}</small></div><button onClick={onClose} aria-label="Close inspector">×</button></header>
+  return <aside ref={inspectorRef} className={styles.inspector} aria-label="Details panel" style={{ '--inspector-width': `${inspectorWidth}px` } as CSSProperties}>
+    <div
+      className={styles.inspectorResizeHandle}
+      role="separator"
+      aria-label="Resize details panel"
+      aria-orientation="vertical"
+      aria-valuemin={INSPECTOR_MIN_WIDTH}
+      aria-valuemax={maxInspectorWidth()}
+      aria-valuenow={inspectorWidth}
+      tabIndex={0}
+      onKeyDown={resizeInspectorWithKeyboard}
+      onPointerDown={(event) => {
+        resizeStart.current = { pointerX: event.clientX, width: inspectorWidth };
+        event.currentTarget.setPointerCapture(event.pointerId);
+        setExpandedInspector(false);
+      }}
+      onPointerMove={(event) => {
+        if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+        applyInspectorWidth(resizeStart.current.width + resizeStart.current.pointerX - event.clientX);
+      }}
+      onPointerUp={(event) => {
+        if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+        event.currentTarget.releasePointerCapture(event.pointerId);
+        window.localStorage.setItem(INSPECTOR_WIDTH_STORAGE_KEY, String(inspectorWidthRef.current));
+      }}
+    />
+    <header><div className={styles.inspectorTitle}><span>{kind === 'agent' ? '✦' : kind === 'website' ? '◎' : kind === 'workflow' ? '⌘' : '◇'}</span><strong>{node.data.title}</strong><small>Live {kind}</small></div><div className={styles.inspectorHeaderActions}><button type="button" onClick={toggleInspectorWidth} aria-label={expandedInspector ? 'Restore details panel width' : 'Expand details panel'} title={expandedInspector ? 'Restore panel width' : 'Expand panel'}>{expandedInspector ? '⇥' : '↔'}</button><button type="button" onClick={onClose} aria-label="Close inspector">×</button></div></header>
     <div className={styles.inspectorTabs}><button className={tab === 'details' ? styles.activeTab : ''} onClick={() => setTab('details')}>Details</button><button className={tab === 'activity' ? styles.activeTab : ''} onClick={() => setTab('activity')}>Activity</button></div>
     <div className={styles.inspectorBody}>
       {tab === 'details' ? <fieldset className={styles.inspectorFields} disabled={!editable}>

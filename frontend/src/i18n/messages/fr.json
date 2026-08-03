@@ -8955,7 +8955,7 @@
         "blurb": "Collez une clé d'API Meta AI pour exécuter des modèles MUSE (muse-spark-1.1) sur votre propre compte Meta AI."
       },
       "kimi": {
-        "blurb": "Les clés d’abonnement Kimi Code sont destinées aux clients interactifs personnels et peuvent être bloquées par les passerelles hébergées. Pour les agents cloud, utilisez Moonshot Open Platform."
+        "blurb": "Les clés d’abonnement Kimi Code sont destinées aux clients interactifs personnels : la périphérie de Kimi refuse donc notre passerelle cloud. Connectez un runtime Builderforce et Kimi s’exécutera depuis votre propre machine ; sinon, utilisez une clé Moonshot Open Platform."
       },
       "moonshot": {
         "blurb": "Collez une clé API Moonshot Open Platform pour utiliser les modèles Moonshot."
@@ -8991,6 +8991,10 @@
       "copyTraceAria": "Copier une trace de diagnostic expurgée de cet échec, à joindre à un ticket d’assistance du fournisseur",
       "traceHint": "HTTP {status} — contient les identifiants de requête du fournisseur. Ni clé, ni prompt, ni corps de requête.",
       "traceEdgeBlocked": "HTTP {status} — la périphérie du fournisseur a refusé la requête avant toute vérification de la clé. Joignez-la lorsque vous les contactez.",
+      "copyTrace": "Copier la trace de diagnostic",
+      "copyTraceAria": "Copier une trace de diagnostic expurgée de cet échec, à joindre à un ticket d’assistance du fournisseur",
+      "traceHint": "HTTP {status} — contient les identifiants de requête du fournisseur. Ni clé, ni prompt, ni corps de requête.",
+      "traceEdgeBlocked": "HTTP {status} — la périphérie du fournisseur a refusé la requête avant toute vérification de la clé. Joignez-la lorsque vous les contactez.",
       "state": {
         "ready": "prête",
         "capacity": "quota épuisé",
@@ -9015,7 +9019,7 @@
       "notEntitled": "Ce compte s’est bien connecté, mais le fournisseur a refusé la requête ({status}) car l’offre ne la couvre pas. Reconnectez un compte dont l’offre l’inclut, ou passez à une offre supérieure.",
       "xaiNotEntitled": "xAI a accepté la connexion, mais a refusé l’accès à l’API Grok ({status}). Vérifiez que ce compte dispose d’une offre SuperGrok éligible et d’un quota hebdomadaire restant, ou connectez une clé API xAI.",
       "xaiCapacity": "Votre quota hebdomadaire d’API SuperGrok est épuisé ({status}). Grok reprendra après sa réinitialisation ; pour continuer maintenant, achetez des crédits d’utilisation supplémentaires, activez la recharge automatique ou passez à SuperGrok Heavy. Ne reconnectez pas le compte.",
-      "kimiNotEntitled": "Kimi a refusé la requête hébergée ({status}). Si le test affiche du HTML, la périphérie Kimi a bloqué la passerelle avant de valider la clé. Utilisez Kimi Code localement ou Moonshot Open Platform pour les agents hébergés.",
+      "kimiNotEntitled": "Kimi a refusé la requête hébergée ({status}) : sa périphérie bloque cette passerelle cloud avant même de vérifier la clé. Connectez un runtime Builderforce et la clé passera par votre propre machine, le client pour lequel l’abonnement est concédé. Moonshot Open Platform reste l’alternative.",
       "kimiCapacity": "Le quota de votre abonnement Kimi Code est épuisé ({status}). Consultez la console Kimi Code pour connaître la prochaine réinitialisation. La clé reste valide.",
       "rejected": "Le fournisseur a rejeté cet identifiant ({status}). Il a probablement expiré, été révoqué ou renouvelé ailleurs — reconnectez le compte.",
       "capacity": "L’identifiant fonctionne, mais le compte n’a plus de budget ({status}) — plafond de dépense atteint ou solde de crédits vide. Rechargez ou relevez la limite ; inutile de reconnecter.",

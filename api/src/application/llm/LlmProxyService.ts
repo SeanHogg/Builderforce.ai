@@ -1798,7 +1798,7 @@ export function llmProxyForPlan(
   env: ProxyEnv,
   effectivePlan: EffectivePlan,
   premiumOverride = false,
-  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[]; byoProviderPriorities?: readonly { vendor: string; priority: number | null }[]; openRouterConnections?: readonly OpenRouterConnection[]; openRouterModelKeys?: Readonly<Record<string, string>>; byoRequired?: boolean; byoDiagnostics?: ByoDiagnostics },
+  opts?: { backstopModels?: readonly string[]; disablePaidOverflow?: boolean; codingOnly?: boolean; anthropicOAuthToken?: string | null; openaiCodexAuth?: { accessToken: string; accountId: string } | null; xaiOAuthToken?: string | null; tenantVendorKeys?: TenantVendorKeys | null; hostEgress?: VendorEgress | null; vendorCallTimeoutMs?: number; byoVendorPriority?: readonly string[]; byoProviderPriorities?: readonly { vendor: string; priority: number | null }[]; openRouterConnections?: readonly OpenRouterConnection[]; openRouterModelKeys?: Readonly<Record<string, string>>; byoRequired?: boolean; byoDiagnostics?: ByoDiagnostics },
 ): LlmProxyService {
   const routing = resolveRouting(effectivePlan, premiumOverride);
   const { productName, modelPool } = routing;
@@ -1819,6 +1819,7 @@ export function llmProxyForPlan(
     ...(vendorCallTimeoutMs ? { vendorCallTimeoutMs } : {}),
     ...(opts?.backstopModels ? { backstopModels: opts.backstopModels } : {}),
     ...(opts?.disablePaidOverflow ? { disablePaidOverflow: true } : {}),
+    ...(opts?.hostEgress ? { hostEgress: opts.hostEgress } : {}),
     // A coding run walks the WHOLE free coding pool before any paid/metered coder
     // (cost over latency), so the funded direct-Anthropic floor is genuine last-resort.
     // A general (non-coding) run uses the PLAN-AWARE free budget: Free → 2 (latency),

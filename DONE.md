@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-08-02 — ✅ RESOLVED: Kimi Code works — the call is made from the user's own machine, not from our cloud (api 2026.7.204, ui 2026.7.154, agent-runtime 2026.7.12)
+
+Kimi's edge answers the Cloudflare Workers egress with an HTML 403 **before** the API reads the key; the byte-identical request from an ordinary machine gets a clean JSON reply. So the problem was never the credential or the headers — it was *where the packets come from*, and a source address is not something you can register or borrow: it is decided by where the request physically originates. The only honest fix is to originate it somewhere Kimi does not refuse.
+
+**Every tenant running a Builderforce runtime already has such a machine, holding a live WebSocket to `AgentHostRelayDO`.** Kimi Code calls now travel down that socket and are performed by the user's own runtime — which is exactly the personal interactive client the subscription is licensed for. No spoofing, no proxy in front of Kimi, no ToS grey area.
+
+```
+vendor module → VendorEgress → AGENT_HOST_RELAY DO → ws → agent-runtime → api.kimi.com
+```
+
+**The seam is one function.** `VendorEgress` is `fetch`-shaped and drops into `fetchWithVendorTimeout` — the single choke point both transports already share — so the deadline, external-abort handling, subrequest-cap sentinel, status ladder and error classification are all completely unaware of it. A relayed 403 produces the identical `edgeBlocked` diagnostic a direct one does, which is what the operator-facing remediation branches on.
+
+**Three independent fences stop this becoming a general proxy.** (1) `VendorModule.requiresLocalEgress` — the registry hands the transport ONLY to a declaring vendor, so connecting a runtime does not silently reroute a tenant's DeepSeek/OpenAI traffic through their laptop; `kimi-code` is the only declarer, and a test asserts it. (2) Only hosts belonging to that tenant are considered. (3) The runtime enforces its own destination allowlist (`api.kimi.com`), requires https so a relayed credential never rides the wire in the clear, refuses redirects (the obvious way to walk an allowlisted host elsewhere), and caps response size.
+
+**Correlation, because egress is the one REQUEST on a fire-and-forget relay.** The DO keeps the HTTP request open and matches `host.egress.response` by id. Egress replies are claimed *before* the broadcast — they carry the provider's body and have no business reaching browser clients. A disconnect fails every waiter at once rather than making each burn the 120s ceiling, and a frame carrying an error returns a failure instead of `ok: true` with a null payload, which would have left the vendor layer reading "the relay broke" as "the provider answered strangely".
+
+**Liveness reuses `isAgentHostOnline`, not `connectedAt`** — the codebase already learned that a killed host leaves `connectedAt` stamped forever, and choosing a dead host as the egress route would hang every Kimi call until the relay ceiling. The lookup is read-through cached (30s) because it now sits on the hot path of every completion, and **fails soft**: a Neon blip must degrade to "route directly", never 500 chat for every tenant, including the majority with no Kimi connection at all.
+
+Also closed: `kimi-code` joined `BYO_FRONTIER_FLAGSHIPS` — now that it genuinely routes, a Kimi-funded run must stop reporting as "degraded onto a non-coder backstop" (that map is also the source for `RECOGNIZED_CODER_MODELS`). The probe rides the same egress, so **Test connection** exercises the real path instead of testing a route nobody uses. Kimi is `noStream` — the relay is request/response, so pretending to stream and delivering one giant frame would be a lie; the gateway's pseudo-stream covers the UX. Operator copy now names the runtime as the remedy, and distinguishes "connect one" from "yours is connected and its network is also refused".
+
+Files: `api/src/application/llm/hostEgress.ts` (new), `agent-runtime/src/infra/host-egress.ts` (new), `api/src/infrastructure/relay/AgentHostRelayDO.ts`, `api/src/application/llm/vendors/{types,registry,openaiCompatible,openaiCompatibleVendors}.ts`, `api/src/application/llm/{LlmProxyService,modelPool,byoCredentialHealth}.ts`, `api/src/presentation/routes/llmRoutes.ts`, `agent-runtime/src/infra/builderforce-relay.ts`, all five i18n catalogs, the partnership doc. Tests: `host-egress.test.ts` (10 — allowlist, lookalike hosts, private/loopback, http refusal, redirect refusal, never-throws), `AgentHostRelayDO.egress.test.ts` (8 — correlation, no client leak, ordinary traffic still forwarded, offline 409, disconnect release, host-side failure ≠ empty success), `openaiCompatibleVendors.test.ts` (30, +5 — declarer set, tunnelled vs not, fallback, relayed-403 classification), `llmRoutes.test.ts` (38, +1 — remedy differs by whether a runtime is online). api 955 green; agent-runtime + frontend green; all three packages typecheck.
+
+Remaining: a tenant with NO runtime online still has no hosted route → [ROADMAP.md § 3](./ROADMAP.md#3--llm-gateway-routing--cost).
+
+---
+
 ## 2026-08-02 — ✅ RESOLVED: a failed provider test produced prose, never evidence — so the Kimi Code submission had nothing to attach (api 2026.7.203, ui 2026.7.153)
 
 The hosted-integration request at [kimi-code-hosted-integration-request.md](./docs/partnerships/kimi-code-hosted-integration-request.md) asks for a redacted 403 trace — timestamp, response headers, request ID, endpoint, model, Builderforce trace ID. None of it survived: the transport read `resp.text()`, threw a message string, and dropped the response headers on the floor. An operator escalating to a vendor had only our own prose about the failure.

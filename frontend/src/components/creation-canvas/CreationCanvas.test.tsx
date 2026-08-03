@@ -139,6 +139,26 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.queryByText('Maturity')).not.toBeInTheDocument();
   });
 
+  it('expands, restores, and keyboard-resizes the details panel', () => {
+    render(<CreationCanvas sessionId="inspector-resize-test" persistence="local" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Project' }));
+
+    const inspector = screen.getByRole('complementary', { name: 'Details panel' });
+    const resizeHandle = screen.getByRole('separator', { name: 'Resize details panel' });
+    expect(inspector).toHaveStyle({ '--inspector-width': '270px' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand details panel' }));
+    expect(inspector).toHaveStyle({ '--inspector-width': '520px' });
+    expect(localStorage.getItem('builderforce:create:inspector-width')).toBe('520');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore details panel width' }));
+    expect(inspector).toHaveStyle({ '--inspector-width': '270px' });
+
+    fireEvent.keyDown(resizeHandle, { key: 'ArrowLeft' });
+    expect(inspector).toHaveStyle({ '--inspector-width': '290px' });
+    expect(resizeHandle).toHaveAttribute('aria-valuenow', '290');
+  });
+
   it('renders agent model, instructions, tools, and autonomy changes live', () => {
     render(<CreationCanvas sessionId="agent-settings-test" persistence="local" />);
     fireEvent.click(screen.getAllByText('Campaign Strategist')[0]!);
@@ -407,6 +427,9 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     fireEvent.click(screen.getByRole('button', { name: 'Evermind' }));
 
     expect(screen.getByDisplayValue('Untitled Evermind')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Knowledge map with 0 learned contributions' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Recently learned' })).toHaveTextContent('Nothing learned yet');
+    expect(screen.getByText('Hippocampus')).toBeInTheDocument();
     expect(screen.getByText(/blueprint works without an account/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Add creation & training pipeline' }));
 

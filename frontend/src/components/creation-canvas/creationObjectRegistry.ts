@@ -132,7 +132,7 @@ const MUTABLE_FIELDS = {
   comment: ['content', 'resolved', 'mentions'],
   timer: ['content', 'duration', 'remaining', 'running'],
   mcp: ['content', 'toolName', 'operation', 'arguments'],
-  evermind: ['content', 'model', 'instructions', 'teacherModel', 'inferenceEnabled', 'evermindVersion', 'contributions', 'trainingLoss', 'stages', 'sources'],
+  evermind: ['content', 'model', 'instructions', 'teacherModel', 'inferenceEnabled', 'evermindVersion', 'contributions', 'pendingContributions', 'recentLearnings', 'trainingLoss', 'learningMode', 'lastLearnedAt', 'stages', 'sources'],
 } as const satisfies Record<CreationObjectKind, readonly string[]>;
 
 const COMMON_MUTABLE_FIELDS = ['title', 'subtitle', 'status'] as const;

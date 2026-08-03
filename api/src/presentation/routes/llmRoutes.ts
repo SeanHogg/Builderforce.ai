@@ -106,7 +106,7 @@ import {
 } from '../../application/llm/providerAuthAlerts';
 import { raiseProviderAuthAlertsFromFailovers } from '../../application/llm/byoCredentialAlerting';
 import { probeByoProvider, probeOpenRouterConnection } from '../../application/llm/byoCredentialHealth';
-import { buildHostEgress } from '../../application/llm/hostEgress';
+import { buildHostEgress, onlineAgentHostId } from '../../application/llm/hostEgress';
 import { byoModelsFor } from '../../application/llm/byoModelRouting';
 import {
   generatePkce,
@@ -1346,6 +1346,13 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     if (probe.ok) {
       return c.json({ ok: true, status: probe.status, model: probe.model, testedAt: probe.checkedAt });
     }
+    // Kimi's edge refuses our cloud egress, so the remedy depends on whether this tenant
+    // has a runtime that could have made the call from their own machine. Telling someone
+    // who is already running one to "use Kimi locally" is not an instruction they can act
+    // on — and telling someone who is not that the route exists is the whole point.
+    const kimiRuntimeOnline = provider === 'kimi' && probe.diagnostic?.edgeBlocked
+      ? (await onlineAgentHostId(c.env, access.tenantId)) != null
+      : false;
     return c.json({
       ok: false,
       status: probe.status,
@@ -1362,7 +1369,9 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           // string — the regex silently missed the case it existed for whenever the edge
           // page led with a comment, a BOM, or a long `<meta>` block.
           ? provider === 'kimi' && probe.diagnostic?.edgeBlocked
-            ? `Kimi's edge blocked the hosted Builderforce gateway before the API could validate this key. Kimi Code subscription keys are limited to personal interactive clients and cannot be used through this hosted reverse proxy. Use Kimi Code locally, or connect a Moonshot Open Platform API key for hosted Builderforce agents.`
+            ? kimiRuntimeOnline
+              ? `Kimi's edge refused this request even though it was made from your connected Builderforce runtime, not from our cloud. That points at the runtime machine's own network rather than at this key — check whether it can reach api.kimi.com directly. A Moonshot Open Platform key works from anywhere if you need a route now.`
+              : `Kimi's edge blocked the hosted Builderforce gateway before the API could validate this key — Kimi Code subscription keys are for personal interactive clients, not a hosted reverse proxy. Connect a Builderforce runtime (Settings ▸ Agent hosts) and this key routes through your OWN machine instead, which is exactly the client the subscription is licensed for. A Moonshot Open Platform key is the alternative if you would rather not run one.`
             : provider === 'xai'
             ? `xAI connection test failed: this account cannot use ${probe.model ?? 'the selected model'} (HTTP ${probe.alert.status}). Check the account's SuperGrok/API access, or use an xAI API key.`
             : provider === 'kimi'

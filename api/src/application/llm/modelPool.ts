@@ -276,6 +276,12 @@ const BYO_FRONTIER_FLAGSHIPS: Readonly<Record<string, { agentic: string; chat: s
   googleai:  { agentic: 'googleai/gemini-2.5-pro', chat: 'googleai/gemini-2.5-pro' },
   meta:      { agentic: 'direct/meta/muse-spark-1.1', chat: 'direct/meta/muse-spark-1.1' },
   moonshot:  { agentic: 'direct/moonshot/kimi-k2.5', chat: 'direct/moonshot/kimi-k2.5' },
+  // A Kimi Code subscription funds a real coder, so a run on it must not report as
+  // "degraded onto a non-coder backstop" — which is what its absence here meant, since
+  // this map is also the source for RECOGNIZED_CODER_MODELS. It leads auto-select only
+  // for a tenant who connected Kimi; when their runtime is offline the edge 403 is a
+  // `not_entitled` failover like any other and the cascade moves on.
+  'kimi-code': { agentic: 'direct/kimi-code/kimi-for-coding', chat: 'direct/kimi-code/kimi-for-coding' },
   qwen:      { agentic: 'direct/qwen/qwen3-coder-plus', chat: 'direct/qwen/qwen3-max' },
   minimax:   { agentic: 'direct/minimax/MiniMax-M1', chat: 'direct/minimax/MiniMax-Text-01' },
   xai:       { agentic: 'direct/xai/grok-4.5', chat: 'direct/xai/grok-4.5' },

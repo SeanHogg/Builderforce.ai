@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getAllVendorIds,
   getModule,
@@ -7,6 +7,7 @@ import {
   vendorAutoRoutes,
   autoRoutableModelsByTier,
   dispatchVendor,
+  dispatchVendorStream,
 } from './registry';
 import { CAPACITY_LIMIT_MARKER, VendorRetryableError, type UpstreamDiagnostic, type VendorEnv } from './types';
 import { createOpenAICompatibleVendor } from './openaiCompatible';
@@ -345,6 +346,127 @@ describe('upstream diagnostic capture', () => {
     } catch (error) {
       attempts = (error as { attempts: ReadonlyArray<{ diagnostic?: UpstreamDiagnostic }> }).attempts;
     }
+    expect(attempts[0]?.diagnostic).toMatchObject({ status: 403, edgeBlocked: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Local egress. Kimi Code's edge refuses the Worker itself — same request from an
+// ordinary machine gets a clean JSON answer — so that vendor runs from the tenant's
+// own connected runtime when one is online. The rules that matter: the transport
+// reaches the vendor that declared it needs it, and reaches NO other vendor (a
+// tenant's laptop must not become the route for all LLM traffic).
+// ---------------------------------------------------------------------------
+describe('local egress routing', () => {
+  /** A stand-in runtime: records what it was asked to fetch, answers 200. */
+  function recordingEgress() {
+    const calls: Array<{ endpoint: string; init: RequestInit }> = [];
+    const egress = vi.fn(async (endpoint: string, init: RequestInit) => {
+      calls.push({ endpoint, init });
+      return new Response(
+        JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' } }] }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    });
+    return { calls, egress };
+  }
+
+  beforeEach(() => {
+    // Direct fetch answers 200 too, so a test failing over to it looks like success —
+    // which is the point: the assertions are about WHICH path ran, not about status.
+    (globalThis as { fetch: typeof fetch }).fetch = vi.fn(async () => new Response(
+      JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'direct' } }] }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
+    )) as unknown as typeof fetch;
+  });
+
+  it('declares kimi-code as needing local egress, and no other factory vendor', () => {
+    const declaring = openAICompatibleModules.filter((m) => m.requiresLocalEgress).map((m) => m.id);
+    expect(declaring).toEqual(['kimi-code']);
+  });
+
+  it('routes a kimi-code call through the tenant runtime instead of the Worker', async () => {
+    const { calls, egress } = recordingEgress();
+    await dispatchVendor({
+      env: { KIMI_CODE_API_KEY: 'sk-kimi-code' } as VendorEnv,
+      modelChain: ['direct/kimi-code/kimi-for-coding'],
+      messages: [{ role: 'user', content: 'hi' }],
+      egress,
+    });
+
+    expect(calls.map((c) => c.endpoint)).toEqual(['https://api.kimi.com/coding/v1/chat/completions']);
+    // The credential rides the relayed request — it is the tenant's own key going to
+    // the tenant's own machine, which is what makes the call a licensed personal client.
+    expect((calls[0]!.init.headers as Record<string, string>).Authorization).toBe('Bearer sk-kimi-code');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('does NOT tunnel a vendor that never asked for it', async () => {
+    // A tenant connecting a runtime must not silently reroute their DeepSeek (or any
+    // other) traffic through their own laptop.
+    const { calls, egress } = recordingEgress();
+    await dispatchVendor({
+      env: { DEEPSEEK_API_KEY: 'sk-deepseek' } as VendorEnv,
+      modelChain: ['direct/deepseek/deepseek-chat'],
+      messages: [{ role: 'user', content: 'hi' }],
+      egress,
+    });
+
+    expect(calls).toEqual([]);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to direct egress when no runtime is online', async () => {
+    // Likely to fail against Kimi's edge — but refusing to try would strand any tenant
+    // whose network Kimi does not happen to block.
+    await dispatchVendor({
+      env: { KIMI_CODE_API_KEY: 'sk-kimi-code' } as VendorEnv,
+      modelChain: ['direct/kimi-code/kimi-for-coding'],
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('serves a STREAMED kimi request instead of skipping it', async () => {
+    // The relay is request/response, so Kimi cannot stream incrementally. Marking it
+    // `noStream` would have made `dispatchVendorStream` skip the vendor outright — a
+    // caller who streams would silently never reach the account they connected, which
+    // is the same "connected but unused" failure this whole effort exists to end.
+    const { calls, egress } = recordingEgress();
+    const result = await dispatchVendorStream({
+      env: { KIMI_CODE_API_KEY: 'sk-kimi-code' } as VendorEnv,
+      modelChain: ['direct/kimi-code/kimi-for-coding'],
+      messages: [{ role: 'user', content: 'hi' }],
+      egress,
+    });
+
+    expect(result.vendorUsed).toBe('kimi-code');
+    expect(calls).toHaveLength(1);
+    // The relayed call is the NON-streaming one — asking the provider to stream would
+    // just produce an SSE body the relay buffers whole anyway.
+    expect(JSON.parse(calls[0]!.init.body as string).stream).not.toBe(true);
+    const sse = await new Response(result.response.body).text();
+    expect(sse).toContain('data: ');
+    expect(sse).toContain('[DONE]');
+  });
+
+  it('classifies a relayed 403 exactly like a direct one', async () => {
+    // The relay must not change what a failure MEANS — the edge-block diagnostic is
+    // what the operator-facing remediation branches on.
+    const egress = vi.fn(async () => new Response('<html>Forbidden</html>', {
+      status: 403, headers: { 'content-type': 'text/html', 'cf-ray': 'ray-9' },
+    }));
+    let thrown: unknown;
+    try {
+      await dispatchVendor({
+        env: { KIMI_CODE_API_KEY: 'sk-kimi-code' } as VendorEnv,
+        modelChain: ['direct/kimi-code/kimi-for-coding'],
+        messages: [{ role: 'user', content: 'hi' }],
+        egress,
+      });
+    } catch (error) { thrown = error; }
+
+    const attempts = (thrown as { attempts: ReadonlyArray<{ diagnostic?: UpstreamDiagnostic }> }).attempts;
     expect(attempts[0]?.diagnostic).toMatchObject({ status: 403, edgeBlocked: true });
   });
 });
