@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { STATUS } from '@/types/status';
 
 /** GreenStatusIndicatorProps */
 export interface GreenStatusIndicatorProps {
