@@ -6,10 +6,24 @@
 ## 1. Problem & Goal
 
 ### Problem:
-The current repository `seanhogg/builderforce.ai` does not contain the necessary codebase to implement the changes required for task #615, specifically the PR gate for doc-only changes. This includes the task progress engine, state machine, task type taxonomy, and Validator/Manager doc-only gate. The absence of these components blocks the progress of task #615.
+Task #615 (PR #309) requires implementing a PR gate for doc-only changes. The prior analysis incorrectly stated the codebase lacked the necessary components.
+
+### Verified Finding:
+The repository `seanhogg/builderforce.ai` DOES contain the BuilderForce PMO board/API codebase:
+- **`api/src/domain/shared/types.ts`**: Contains `TaskStatus` enum (BACKLOG, TODO, READY, IN_PROGRESS, IN_REVIEW, DONE, BLOCKED) and `TaskType` enum (TASK, EPIC, GAP, SECURITY, INCIDENT)
+- **`api/src/domain/task/Task.ts`**: Contains the Task entity with status, priority, taskType, parentTaskId
+- **`api/src/application/kanban/`**: Contains progress tracking via participant states (pending, assigned, in_progress, completed)
+- **`api/src/application/validation/`**: Contains ValidationService for gap detection
+- **`api/src/application/manager/`**: Contains ManagerService for ticket lifecycle
+
+The current codebase is MISSING the specific features needed for task #615:
+- No `spec-ready` state in TaskStatus (needs to be added)
+- No doc-only PR detection logic
+- No progress capping for docs-only changes
+- No distinction between coding vs non-coding task types for completion
 
 ### Goal:
-Bind the correct repository that hosts the BuilderForce PMO board/API, which contains the necessary codebase for implementing the required changes for task #615. This will enable the implementation of the PR gate for doc-only changes and unblock task #615.
+Re-dispatch task #615 to a Coder for implementation now that the correct repository is confirmed.
 
 ## 2. Target Users / ICP Roles
 
@@ -20,48 +34,47 @@ Bind the correct repository that hosts the BuilderForce PMO board/API, which con
 ## 3. Scope
 
 ### In-Scope:
-- Identify and bind the correct repository that hosts the BuilderForce PMO board/API.
-- Ensure the repository contains the necessary codebase for:
-  - Task progress engine
-  - Task state machine with `spec-ready` state
-  - Task type taxonomy
+- Confirm the repository `seanhogg/builderforce.ai` hosts the BuilderForce PMO board/API
+- Re-dispatch task #615 to a developer for implementation
+- Verify implementation covers:
+  - Task progress engine modification to detect docs-only PRs
+  - Task state machine with new `spec-ready` state
+  - Task type taxonomy distinguishing coding vs non-coding tasks
   - Validator/Manager doc-only gate
-- Re-dispatch task #615 to a developer for implementation after binding the correct repository.
 
 ### Out-of-Scope:
-- Implementing the actual changes required for task #615 (PR gate for doc-only changes, task progress engine modifications, etc.).
-- Modifying any code in the current repository `seanhogg/builderforce.ai` as it does not contain the necessary codebase.
-- Creating new components or modules that are not already present in the correct repository.
+- Implementing the actual changes (this is task #615's scope)
+- Modifying the PMO board beyond what's required for #615
 
 ## 4. Functional Requirements
 
-1. **Repository Binding**:
-   - Identify the correct repository that hosts the BuilderForce PMO board/API.
-   - Bind the repository to the current project environment.
+1. **Repository Confirmation**:
+   - The repository `seanhogg/builderforce.ai` is confirmed to host the BuilderForce PMO board/API
+   - Located in `api/src/` directory with full application, domain, and infrastructure layers
 
 2. **Codebase Verification**:
-   - Verify the presence of the following components in the bound repository:
-     - Task progress engine
-     - Task state machine with `spec-ready` state
-     - Task type taxonomy
-     - Validator/Manager doc-only gate
+   - Task model: `api/src/domain/task/Task.ts` ✓
+   - Task types: `api/src/domain/shared/types.ts` ✓
+   - Kanban/progress: `api/src/application/kanban/` ✓
+   - Validation: `api/src/application/validation/` ✓
+   - Manager: `api/src/application/manager/` ✓
 
 3. **Task Redispatch**:
-   - Once the correct repository is bound, re-dispatch task #615 to a developer for implementation.
+   - Re-dispatch task #615 to a Coder agent for implementation
 
 ## 5. Acceptance Criteria
 
-- The correct repository hosting the BuilderForce PMO board/API is identified and bound.
-- The presence of the task progress engine, state machine, task type taxonomy, and Validator/Manager doc-only gate is confirmed in the bound repository.
-- Task #615 is re-dispatched to a developer for implementation after the repository binding is complete.
-- The PRD.md file is retained and reused in the bound repository.
+- ✓ Repository `seanhogg/builderforce.ai` confirmed to contain PMO board/API code
+- ✓ Required components identified in `api/src/`
+- ✓ Gap identified: need to add `spec-ready` state, doc-only PR detection, progress capping
+- ✓ Task #615 to be re-dispatched for implementation
+- ✓ PRD.md retained for traceability
 
 ## 6. Out of Scope
 
-- Implementing the actual changes for task #615.
-- Modifying any code in the current repository `seanhogg/builderforce.ai`.
-- Creating new components or modules that are not already present in the correct repository.
-- Addressing any issues or bugs unrelated to the repository binding and task re-dispatch.
+- Implementing the actual changes for task #615
+- Creating new components not required for #615
+- Addressing any issues unrelated to the doc-only PR gate
 
 ## Requirements
 
