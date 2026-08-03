@@ -30,11 +30,8 @@ import {
 } from "./confidence.js";
 
 import {
-  createLearningId,
-  getExtractorVersion,
   nowISO,
   computeDistribution,
-  EXTRACTOR_VERSION,
 } from "./utils.js";
 
 // ============================================================================
