@@ -15,11 +15,17 @@ import type {
 
 import {
   extractExplicit,
+} from "./explicit.js";
+import {
   extractImplicit,
+} from "./implicit.js";
+import {
   extractBehavioral,
+} from "./behavioral.js";
+import {
   calculateConfidence,
   evaluateRecord,
-} from "./index.js";
+} from "./confidence.js";
 
 import {
   createLearningId,
