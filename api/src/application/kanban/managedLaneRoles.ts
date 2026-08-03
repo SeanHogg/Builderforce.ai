@@ -179,10 +179,25 @@ export function decideManagedLaneAuthority(
     .filter((r) => (r.kind === 'role' || r.kind === 'review')
       && requirementApplies({ ticketType: r.ticketType, condition: r.condition }, task))
     .map((r) => r.ref);
-  const decision = decideLaneApprovers({ requirementRoleKeys, laneAgents: inputs.laneAgents });
+  // A project/workspace role pin is part of the capability oracle, but the bulk lane
+  // staffing loader only carries capabilities declared on `ide_agents`. That left the
+  // no-requirements tier with a selector/guard seam: an operator could staff Ada as
+  // Business Analyst and pin Ada to `business-analyst`, yet this selector still called
+  // her role-incapable because `ide_agents.role_keys` happened to be null.
+  //
+  // Enrich only the operator's DECLARED lane role, and only when the roster says this
+  // exact staffed agent owns it. This does not infer or widen authority: the lane row
+  // supplies the role and the existing capability oracle validates the agent.
+  const laneAgents = inputs.laneAgents.map((agent) => {
+    const declared = builtinRoleKeyFromText(agent.declaredRole);
+    if (!declared || agent.capableRoleKeys.includes(declared)
+      || !inputs.roster.candidates(declared).some((c) => c.ref === agent.agentRef)) return agent;
+    return { ...agent, capableRoleKeys: [...agent.capableRoleKeys, declared] };
+  });
+  const decision = decideLaneApprovers({ requirementRoleKeys, laneAgents });
   return {
     roleKeys: decision.approvers.map((a) => a.roleKey),
-    approvers: bindStaffedAgentsToRoles(decision.approvers, inputs.laneAgents, inputs.roster),
+    approvers: bindStaffedAgentsToRoles(decision.approvers, laneAgents, inputs.roster),
     tier: decision.tier,
   };
 }

@@ -176,6 +176,37 @@ describe('decideManagedLaneAuthority', () => {
     expect(a.approvers[0]?.agentRef).toBe('bob-dev');
   });
 
+  /**
+   * Captured on project 11 (2026-08-03): Ada was project-pinned to business-analyst
+   * and staffed on backlog with that declared role, but the staffing sweep rejected her
+   * because her agent row had no duplicate `role_keys` value. The execution guard accepts
+   * roster pins, so the lane selector must accept the same capability oracle.
+   */
+  it('accepts a staffed agent whose declared role is validated by a roster pin', () => {
+    const a = decideManagedLaneAuthority(inputs({
+      laneAgents: [agent({
+        agentRef: 'ada', declaredRole: 'Business Analyst', capableRoleKeys: [],
+      })],
+      roster: roster({ 'business-analyst': 'ada' }),
+    }), {});
+
+    expect(a.tier).toBe('lane_agents');
+    expect(a.roleKeys).toEqual(['business-analyst']);
+    expect(a.approvers[0]?.agentRef).toBe('ada');
+  });
+
+  it('does not trust a declared role when the roster pins it to somebody else', () => {
+    const a = decideManagedLaneAuthority(inputs({
+      laneAgents: [agent({
+        agentRef: 'ada', declaredRole: 'Business Analyst', capableRoleKeys: [],
+      })],
+      roster: roster({ 'business-analyst': 'someone-else' }),
+    }), {});
+
+    expect(a.tier).toBe('none');
+    expect(a.roleKeys).toEqual([]);
+  });
+
   it('authorises NOTHING when the lane is unstaffed and declares no requirement — fail closed', () => {
     const a = decideManagedLaneAuthority(inputs(), { taskType: 'task', actionType: null });
     expect(a.tier).toBe('none');
