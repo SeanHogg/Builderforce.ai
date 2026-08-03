@@ -31,22 +31,40 @@ export function PayloadDisplay({
   loading,
   lastValidPayload,
   reasonError,
+  validity = 'unknown',
+  agentOutput = null,
+  agentProcessing = false,
+  agentError = null,
 }: PayloadDisplayProps): JSX.Element | null {
   // Show last valid payload under loading (FR-3.2, FR-5)
   const currentPayload = loading ? lastValidPayload : snapshot;
   const payload = currentPayload || null;
 
-  // FR-1.3: Reject malformed payloads with structured error
-  if (payload && (payload.validity !== 'valid')) {
+  // FR-1.3 / FR-4.3: Reject malformed payloads with structured error
+  if (validity === 'invalid' && reasonError) {
     return (
-      <div className="p-4 border border-red-200 rounded bg-red-50" role="alert">
-        <h2 className="text-red-700 font-bold mb-1">Payload Validation Error</h2>
-        <p className="text-sm text-red-600">{reasonError || 'Payload is invalid or incomplete'}</p>
-        {reasonError && (
-          <p className="text-xs text-red-500 mt-1">
-            {reasonError}
-          </p>
+      <div className="p-4 border border-red-200 rounded bg-red-50" role="alert" aria-labelledby="payload-error-title">
+        <h2 id="payload-error-title" className="text-red-700 font-bold mb-1">Payload Validation Error</h2>
+        <p className="text-sm text-red-600">{reasonError}</p>
+        {payload && (
+          <div className="mt-3 pt-3 border-t border-red-200">
+            <p className="text-xs text-red-500 font-medium">Showing last valid payload:</p>
+            <PayloadContent payload={payload} />
+          </div>
         )}
+      </div>
+    );
+  }
+
+  // FR-4.3: Agent error display alongside last valid payload
+  if (agentError && payload) {
+    return (
+      <div className="space-y-3">
+        <div className="p-4 border border-red-200 rounded bg-red-50" role="alert" aria-labelledby="agent-error-title">
+          <h2 id="agent-error-title" className="text-red-700 font-bold mb-1">Agent Reasoning Error</h2>
+          <p className="text-sm text-red-600">{agentError}</p>
+        </div>
+        <PayloadContent payload={payload} />
       </div>
     );
   }
