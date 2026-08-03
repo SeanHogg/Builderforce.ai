@@ -190,6 +190,15 @@ export class TaskService {
     if (!project) throw new NotFoundError('Project', dto.projectId);
     if (project.tenantId !== callerTenantId) throw new ForbiddenError('Project belongs to a different workspace');
 
+    // For creation, explicitDetach only matters when parentTaskId is null:
+    // - If parentTaskId is a number, set it as parent
+    // - If parentTaskId is null and explicitDetach is true, explicitly set as top-level (no parent)
+    // - If parentTaskId is null and explicitDetach is false/undefined, same as above (default)
+    // The difference is semantic only for creation, but provides API consistency.
+    const parentTaskId = dto.parentTaskId !== undefined
+      ? (dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : (dto.explicitDetach === true ? null : undefined))
+      : undefined;
+
     const saved = await this.withKeyAllocation(asProjectId(dto.projectId), (lastKeySeq) =>
       this.tasks.save(Task.create({
         projectId: asProjectId(dto.projectId),
@@ -202,7 +211,7 @@ export class TaskService {
         assignedAgentRef: dto.assignedAgentRef ?? null,
         assignedUserId: dto.assignedUserId ?? null,
         taskType: dto.taskType,
-        parentTaskId: dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null,
+        parentTaskId: parentTaskId !== undefined ? parentTaskId : (dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null),
         gapOriginTaskId: dto.gapOriginTaskId != null ? asTaskId(dto.gapOriginTaskId) : null,
         startDate: dto.startDate ? new Date(dto.startDate) : null,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
