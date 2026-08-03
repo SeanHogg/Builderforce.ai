@@ -33,8 +33,7 @@ export function computeBranchWeight(): number {
  * Computes the preliminary confidence score for a learning record based on the inputs specified in PRD FR-6 and the INITIAL REVISION above.
  */
 function calculatePreliminaryScore(
-  record: LearningRecord,
-  weights: typeof globalWeights
+  record: LearningRecord
 ): number {
   let score = 0;
 
