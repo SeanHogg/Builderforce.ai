@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { associateBrainWithArtifacts, CreationCanvas, persistCanonicalProjectPrd, shouldAcquireCanvasObjectLock } from './CreationCanvas';
+import { associateBrainWithArtifacts, canvasChangesCanAutoApply, CreationCanvas, persistCanonicalProjectPrd, shouldAcquireCanvasObjectLock, type ProposedCanvasChange } from './CreationCanvas';
 import { CreationNode } from './CreationNode';
 import { specsApi } from '@/lib/builderforceApi';
 import type { CreationFlowNode } from './CreationNode';
@@ -48,6 +48,23 @@ vi.mock('@/components/workflow-builder/WorkflowBuilder', () => ({
 }));
 
 describe('CreationCanvas', { timeout: 15_000 }, () => {
+  it('auto-applies basic canvas output but keeps consequential changes in review', () => {
+    const visual = {
+      id: 'add-visual', type: 'object.add', label: 'Add astronomy visual',
+      node: { id: 'visual', type: 'creation', position: { x: 100, y: 100 }, data: { kind: 'mockup', title: 'Astronomy visual' } },
+    } satisfies ProposedCanvasChange;
+    const response = {
+      id: 'update-response', type: 'object.update', label: 'Update Brain response',
+      objectId: 'brain', patch: { aiResponse: 'A foundational explanation.' },
+    } satisfies ProposedCanvasChange;
+
+    expect(canvasChangesCanAutoApply([visual, response])).toBe(true);
+    expect(canvasChangesCanAutoApply([{ id: 'delete', type: 'object.delete', label: 'Delete', objectId: 'visual' }])).toBe(false);
+    expect(canvasChangesCanAutoApply([{
+      ...visual, id: 'canonical-prd', node: { ...visual.node, data: { ...visual.node.data, kind: 'prd', canonicalPrdPending: true } },
+    }])).toBe(false);
+  });
+
   beforeEach(() => {
     localStorage.clear();
   });

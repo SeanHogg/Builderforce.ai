@@ -69,7 +69,7 @@ const ACCOUNT_REQUIRED_OBJECT_ACTIONS = new Set(['publish', 'deliver', 'assign',
 const PALETTE_GROUP_ICONS: Record<CreationObjectGroup, string> = {
   Build: '✦', Data: '▦', Knowledge: '▤', Insights: '↗', Work: '✓', People: '●', Agents: '✧', Models: '◉', Collaborate: '◇', Integrations: '⌘',
 };
-type ProposedCanvasChange =
+export type ProposedCanvasChange =
   | { id: string; type: 'object.add'; label: string; node: CreationFlowNode }
   | { id: string; type: 'object.update'; label: string; objectId: string; patch: Partial<CreationNodeData> }
   | { id: string; type: 'object.delete'; label: string; objectId: string }
@@ -78,6 +78,22 @@ type ProposedCanvasChange =
   | { id: string; type: 'connection.add'; label: string; edge: Edge }
   | { id: string; type: 'connection.update'; label: string; connectionId: string; patch: { label?: string; kind?: CreationConnectionKind } }
   | { id: string; type: 'connection.delete'; label: string; connectionId: string };
+
+/**
+ * Canvas-local authoring is reversible and is the direct result the user asked
+ * Brain to create, so it must not stop behind a second approval step. Keep
+ * destructive operations, executable actions, and canonical PRD persistence in
+ * review. Those can remove data, trigger work, or write outside the canvas.
+ */
+export function canvasChangesCanAutoApply(changes: readonly ProposedCanvasChange[]): boolean {
+  return changes.length > 0 && changes.every((change) => {
+    if (change.type === 'object.add') return change.node.data.canonicalPrdPending !== true;
+    return change.type === 'object.update'
+      || change.type === 'object.layout'
+      || change.type === 'connection.add'
+      || change.type === 'connection.update';
+  });
+}
 type MergeItem = { key: string; source: CreationFlowNode; target: CreationFlowNode | null; choice: 'branch' | 'parent' };
 type MergeReview = { parentId: string; parentRevision: number; parentNodes: CreationFlowNode[]; parentEdges: Edge[]; items: MergeItem[] };
 type FramePreset = { id: string; name: string; data: CreationNodeData };
@@ -1663,7 +1679,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         if (changes.length) {
           setProposedChanges(changes);
           setAcceptedProposalIds(new Set(changes.map((change) => change.id)));
-          setAutoApplyPending(autoApplyRef.current);
+          // Basic, non-destructive canvas output (including authored visual/image
+          // objects and the response attached to them) applies immediately. A
+          // user should not have to approve the ordinary result of their own
+          // prompt, and on mobile the review surface may not be visible yet.
+          setAutoApplyPending(autoApplyRef.current || canvasChangesCanAutoApply(changes));
         }
         setThinking(false);
         setNotice(changes.length ? `${changes.length} Brain changes await review` : 'Brain finished evaluating the canvas');

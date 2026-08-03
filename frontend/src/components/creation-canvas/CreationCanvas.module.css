@@ -415,6 +415,8 @@
   .flowWrap :global(.react-flow__controls) { bottom:102px!important; left:10px!important; }
   .structuredGraph { right:10px; bottom:100px; left:54px; width:auto; max-height:min(36%,260px); box-sizing:border-box; }
   .historyPanel,.diagnosticsPanel { top:8px; right:8px; bottom:82px; left:8px; width:auto; }
+  .changeSetPanel { top:8px; right:8px; bottom:82px; left:8px; width:auto; max-height:none; display:flex; flex-direction:column; }
+  .changeSetPanel > div { flex:1; min-height:0; max-height:none; }
   .selectionToolbar { right:8px; left:8px; max-width:none; transform:none; overflow-x:auto; justify-content:flex-start; }
   .collaborators span:nth-child(2),.collaborators span:nth-child(3) { display:none; }
 }
