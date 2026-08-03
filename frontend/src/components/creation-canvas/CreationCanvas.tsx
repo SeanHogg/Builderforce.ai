@@ -25,13 +25,13 @@ import styles from './CreationCanvas.module.css';
 import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, workflowDefinitions, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import { creationGraphFromSnapshot, creationStorageKey, readLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
 import { runCreationCanvasAi } from '@/lib/creationCanvasAi';
-import type { BrainAction, BrainMessage } from '@seanhogg/builderforce-brain-embedded';
+import type { BrainAction, BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import { BrainTimeline } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
 import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
 import { EvermindValidationProvider } from '@/components/ide/EvermindValidationContext';
-import { getProjectEvermindHead } from '@/lib/projectEvermindApi';
+import { getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText } from '@/lib/projectEvermindApi';
 import { isAwaitingApprovalExecution } from '@/lib/builderforceApi';
 import { fetchProjects } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
@@ -263,6 +263,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<CreationSnapshotSummary[]>([]);
   const [timeline, setTimeline] = useState<CanvasTimelineMessage[]>([]);
+  const [brainTrace, setBrainTrace] = useState<BrainTraceEvent[]>([]);
+  const [memoryEnabled, setMemoryEnabled] = useState(true);
   const [conversationOpen, setConversationOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [proposedChanges, setProposedChanges] = useState<ProposedCanvasChange[]>([]);
@@ -322,6 +324,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setAutoApply(enabled);
     setBrainAutoApprove(enabled);
   }, []);
+
+  const memoryStorageKey = useMemo(() => {
+    const chat = nodes.find((node) => node.data.kind === 'chat');
+    const canonicalId = chat?.data.resourceId?.match(/^chat:(\d+)$/)?.[1];
+    return `brain.memoryEnabled:${canonicalId || `canvas:${sessionId}`}`;
+  }, [nodes, sessionId]);
+
+  useEffect(() => {
+    try { setMemoryEnabled(localStorage.getItem(memoryStorageKey) !== '0'); } catch { setMemoryEnabled(true); }
+  }, [memoryStorageKey]);
+
+  const setMemoryMode = useCallback((enabled: boolean) => {
+    setMemoryEnabled(enabled);
+    try { localStorage.setItem(memoryStorageKey, enabled ? '1' : '0'); } catch { /* storage may be unavailable */ }
+  }, [memoryStorageKey]);
 
   const openPalette = useCallback(() => {
     setPaletteOpen(true);
@@ -596,6 +613,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           : selectedNode ? `Selected: ${selectedNode.data.title}` : t('entireCanvas');
   const scopedNodes = useMemo(() => nodes.filter((node) => scopedNodeIds.has(node.id)), [nodes, scopedNodeIds]);
   const scopedEdges = useMemo(() => edges.filter((edge) => scopedNodeIds.has(edge.source) && scopedNodeIds.has(edge.target)), [edges, scopedNodeIds]);
+  const evermindProjectId = useMemo(() => {
+    const candidates = [...scopedNodes, ...nodes.filter((node) => !scopedNodeIds.has(node.id))];
+    for (const node of candidates) {
+      if (node.data.kind === 'project') {
+        const canonical = node.data.resourceId?.match(/^project:(\d+)$/)?.[1];
+        const numeric = canonical ? Number(canonical) : Number(node.data.projectId);
+        if (Number.isInteger(numeric) && numeric > 0) return numeric;
+      }
+      const source = Number(node.data.sourceProjectId);
+      if (Number.isInteger(source) && source > 0) return source;
+    }
+    return null;
+  }, [nodes, scopedNodeIds, scopedNodes]);
 
   const updateSelected = useCallback((patch: Partial<CreationNodeData>) => {
     if (!selectedId || !canEdit || lockBlocked) return;
@@ -634,8 +664,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   useEffect(() => {
     const messages = timeline.map((message) => ({ role: message.messageRole, content: message.body, createdAt: message.createdAt }));
-    setNodes((current) => current.map((node) => node.data.kind === 'chat' ? { ...node, data: { ...node.data, messages, aiResponse: [...timeline].reverse().find((message) => message.messageRole === 'assistant')?.body || node.data.aiResponse } } : node));
-  }, [setNodes, timeline]);
+    setNodes((current) => current.map((node) => node.data.kind === 'chat' ? { ...node, data: { ...node.data, messages, trace: brainTrace, aiResponse: [...timeline].reverse().find((message) => message.messageRole === 'assistant')?.body || node.data.aiResponse } } : node));
+  }, [brainTrace, setNodes, timeline]);
 
   useEffect(() => {
     if (!shouldAcquireCanvasObjectLock(persistence, selectedId, canEdit, persistedObjectIds)) { setLockBlocked(false); return; }
@@ -1466,6 +1496,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const requestMessageId = appendTimeline('user', requestText, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds] }, initialMessage?.clientMessageId);
     if (process.env.NODE_ENV !== 'test') {
       proposalBuffer.current = [];
+      setBrainTrace([]);
       setProposedChanges([]);
       const request = requestText;
       const snapshot = JSON.stringify({
@@ -1477,6 +1508,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       void runCreationCanvasAi({
         prompt: request, canvasSnapshot: snapshot, persistence, canvasActions,
         autoApprove: autoApplyRef.current,
+        ...(persistence === 'server' && memoryEnabled && evermindProjectId != null ? { evermind: {
+          recall: (query: string) => recallProjectEvermind(evermindProjectId, query).catch(() => null),
+          learn: (answer: string, question: string) => teachProjectEvermindFromText(evermindProjectId, answer, question),
+        } } : {}),
+        onTrace: (event) => setBrainTrace((current) => [...current, event]),
         conversation: timeline.map((message) => ({ role: message.messageRole, content: message.body })),
       }).then((answer) => {
         const changes = [...proposalBuffer.current];
@@ -1537,7 +1573,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setPrompt('');
       setNotice('Evaluation added to canvas');
     }, 850);
-  }, [appendTimeline, canvasActions, effectiveSelectedIds, edges, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, setEdges, setNodes, thinking, timeline]);
+  }, [appendTimeline, canvasActions, effectiveSelectedIds, edges, evermindProjectId, memoryEnabled, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, setEdges, setNodes, thinking, timeline]);
 
   useEffect(() => {
     if (!hydrated.current || initialPromptSubmitted.current || thinking) return;
@@ -1834,8 +1870,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             {branchParentId && <button onClick={() => { prepareMerge(); setMoreOpen(false); }}><span aria-hidden>⇄</span>{t('merge')}</button>}
             <label><span><i aria-hidden>⌁</i>{t('edge')}</span><select aria-label="Connection kind" value={connectionKind} onChange={(event) => setConnectionKind(event.target.value as CreationConnectionKind)}>{CREATION_CONNECTION_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label>
           </div>}
-          {shareOpen && <div className={styles.shareMenu}>
-            <strong>{persistence === 'local' ? 'Save to invite people' : 'Invite collaborators'}</strong>
+          {shareOpen && <div className={styles.shareMenu} role="dialog" aria-label={persistence === 'local' ? 'Save to invite people' : 'Invite collaborators'}>
+            <div className={styles.shareMenuHeader}>
+              <strong>{persistence === 'local' ? 'Save to invite people' : 'Invite collaborators'}</strong>
+              <button type="button" className={styles.shareMenuClose} aria-label="Close invitation panel" onClick={() => setShareOpen(false)}>×</button>
+            </div>
             <p>{persistence === 'local' ? 'Your work is safe on this device. Create a free account when you want live collaboration or delivery.' : 'Anyone invited can build with you and ask Brain questions.'}</p>
             {persistence === 'local' ? <button onClick={() => requireAccount('save', 'Create an account to save this session', 'Move this local session into a secure tenant workspace without losing its objects, conversation, or layout.')}>Create free account</button> : <>
               <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="name@company.com" /><select aria-label="Invitation role" value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">Viewer</option><option value="commenter">Commenter</option><option value="editor">Editor</option><option value="runner">Runner</option><option value="owner">Owner</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await copyTextToClipboard(`${window.location.origin}${result.acceptPath}`); setPendingInvitations((current) => [...current.filter((item) => item.id !== result.invitationId), { id: result.invitationId, email: result.email, role: result.role as CreationSessionSummary['role'], expiresAt: result.expiresAt, acceptedAt: null, revokedAt: null, createdAt: new Date().toISOString() }]); setNotice(result.emailSent ? 'Invitation emailed and backup link copied' : 'Invitation saved; backup link copied (email delivery is not configured)'); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice(result.emailSent ? 'Collaborator invited by email' : 'Collaborator invited in Builderforce'); } setInviteEmail(''); }).catch((error) => setNotice(error instanceof Error ? error.message : 'Invite failed')); }}>Invite</button></div>
@@ -1941,7 +1980,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           })}</div>
         </aside>}
 
-        {!presentMode && selectedNode && <Inspector node={selectedNode} nodes={nodes} edges={edges} timeline={timeline} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => setSelectedId(null)} onRun={runWorkflow} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}
+        {!presentMode && selectedNode && <Inspector node={selectedNode} nodes={nodes} edges={edges} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => setSelectedId(null)} onRun={runWorkflow} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}
 
         {workflowFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label="Workflow focus editor">
           <header><div><strong>Edit Workflow on Canvas</strong><small>Changes save to the canonical Workflow definition.</small></div><button type="button" onClick={() => setWorkflowFocus(null)} aria-label="Close workflow editor">×</button></header>
@@ -1957,7 +1996,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
         {!presentMode && <form ref={composerFormRef} className={styles.composer} onSubmit={evaluateCanvas}>
           <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} aria-label={t('askBrain')} placeholder={t('askBrain')} rows={1} />
-          <div className={styles.composerBottom}><button type="button" className={styles.iconButton} onClick={openPalette} aria-label={t('addToCanvas')}>＋</button><label className={styles.scopeChip}>⌁ <span className="sr-only">Brain scope</span><select aria-label="Brain scope" value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">Entire canvas</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects` : 'Selected object'}</option><option value="connected" disabled={!effectiveSelectedIds.length}>Connected objects</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>Current frame</option></select></label><button type="button" className={`${styles.autoApplyButton} ${autoApply ? styles.autoApplyButtonActive : ''}`} aria-pressed={autoApply} title="Automatically apply Brain actions without showing the review batch" onClick={() => setAutoApplyMode(!autoApply)}><span aria-hidden>⚡</span> Auto apply</button><span className={styles.composerSpacer} /><button type="button" className={styles.iconButton} aria-label="Use microphone" title="Use microphone" onClick={startVoiceInput}><svg className={styles.microphoneIcon} viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" /><path d="M6 11.5v.5a6 6 0 0 0 12 0v-.5M12 18v3M9 21h6" /></svg></button><button className={styles.sendButton} aria-label={t('sendBrain')} disabled={thinking || !prompt.trim()}>{thinking ? '•••' : '➤'}</button></div>
+          <div className={styles.composerBottom}><button type="button" className={styles.iconButton} onClick={openPalette} aria-label={t('addToCanvas')}>＋</button><label className={styles.scopeChip}>⌁ <span className="sr-only">Brain scope</span><select aria-label="Brain scope" value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">Entire canvas</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects` : 'Selected object'}</option><option value="connected" disabled={!effectiveSelectedIds.length}>Connected objects</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>Current frame</option></select></label><button type="button" className={`${styles.autoApplyButton} ${autoApply ? styles.autoApplyButtonActive : ''}`} aria-pressed={autoApply} title="Automatically apply Brain actions without showing the review batch" onClick={() => setAutoApplyMode(!autoApply)}><span aria-hidden>⚡</span> Auto apply</button><button type="button" className={`${styles.memoryButton} ${memoryEnabled ? styles.memoryButtonActive : ''}`} aria-pressed={memoryEnabled} disabled={evermindProjectId == null || persistence !== 'server'} title={evermindProjectId == null ? 'Add a saved Project to connect its Evermind' : memoryEnabled ? 'Evermind recall and learning are enabled' : 'Evermind is disabled for this canvas chat'} onClick={() => setMemoryMode(!memoryEnabled)}><span aria-hidden>🧠</span> Memory</button><span className={styles.composerSpacer} /><button type="button" className={styles.iconButton} aria-label="Use microphone" title="Use microphone" onClick={startVoiceInput}><svg className={styles.microphoneIcon} viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" /><path d="M6 11.5v.5a6 6 0 0 0 12 0v-.5M12 18v3M9 21h6" /></svg></button><button className={styles.sendButton} aria-label={t('sendBrain')} disabled={thinking || !prompt.trim()}>{thinking ? '•••' : '➤'}</button></div>
         </form>}
       </div>
     </div>
@@ -1973,7 +2012,7 @@ function RemoteCursors({ members, currentUserId, instance, container }: { member
   })}</div>;
 }
 
-function BrainObjectDetails({ node, nodes, edges, timeline }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; timeline: CanvasTimelineMessage[] }) {
+function BrainObjectDetails({ node, nodes, edges, timeline, trace }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; timeline: CanvasTimelineMessage[]; trace: BrainTraceEvent[] }) {
   const messages = timeline.length ? timeline : Array.isArray(node.data.messages) ? node.data.messages.flatMap((value) => {
     if (!value || typeof value !== 'object') return [];
     const message = value as Record<string, unknown>;
@@ -2006,7 +2045,7 @@ function BrainObjectDetails({ node, nodes, edges, timeline }: { node: CreationFl
     <section aria-labelledby="brain-conversation-heading">
       <div className={styles.brainSectionHeading}><h3 id="brain-conversation-heading">Conversation</h3><span>{messages.length}</span></div>
       <div className={styles.brainInspectorTimeline} role="log" aria-label="Full Brain activity" tabIndex={0}>
-        <BrainTimeline messages={timelineMessages} trace={[]} streamingText="" isRunning={false} assistantName="Brain" labels={{ you: 'You', assistant: 'Brain', empty: 'No conversation yet. Ask Brain from the canvas prompt to begin.' }} />
+        <BrainTimeline messages={timelineMessages} trace={trace} streamingText="" isRunning={false} assistantName="Brain" labels={{ you: 'You', assistant: 'Brain', empty: 'No conversation yet. Ask Brain from the canvas prompt to begin.' }} />
       </div>
     </section>
     {canonicalChatId ? <section aria-label="Brain chat associations" className={styles.brainCanonicalAssociations}>
@@ -2019,7 +2058,7 @@ function BrainObjectDetails({ node, nodes, edges, timeline }: { node: CreationFl
   </div>;
 }
 
-function Inspector({ node, nodes, edges, timeline, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onEditWorkflow, onSaveAgent, onSaveFramePreset, onExpandProject, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onAttachEvermindProject, onExpandEvermindPipeline, onStartStandup }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; timeline: CanvasTimelineMessage[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onEditWorkflow: () => void; onSaveAgent: () => void; onSaveFramePreset: () => void; onExpandProject: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onStartStandup: () => void }) {
+function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onEditWorkflow, onSaveAgent, onSaveFramePreset, onExpandProject, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onAttachEvermindProject, onExpandEvermindPipeline, onStartStandup }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onEditWorkflow: () => void; onSaveAgent: () => void; onSaveFramePreset: () => void; onExpandProject: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onStartStandup: () => void }) {
   const kind = node.data.kind;
   const [tab, setTab] = useState<'details' | 'activity'>('details');
   const [accessStatus, setAccessStatus] = useState('');
@@ -2089,7 +2128,7 @@ function Inspector({ node, nodes, edges, timeline, sessionId, persistence, role,
       {tab === 'details' ? <fieldset className={styles.inspectorFields} disabled={!editable}>
       {node.data.redacted === true && <><p className={styles.inspectorHint}>You can see this object’s position, but its source is no longer available to you.</p><button type="button" className={styles.fullButton} disabled={persistence !== 'server' || !!accessStatus} onClick={() => { setAccessStatus('Requesting…'); void creationSessionsApi.requestObjectAccess(sessionId, node.id).then(() => setAccessStatus('Access requested')).catch((error) => setAccessStatus(error instanceof Error ? error.message : 'Request failed')); }}>{accessStatus || 'Request access'}</button></>}
       <label>Name<input value={node.data.title} onChange={(event) => onChange({ title: event.target.value })} /></label>
-      {kind === 'chat' && <BrainObjectDetails node={node} nodes={nodes} edges={edges} timeline={timeline} />}
+      {kind === 'chat' && <BrainObjectDetails node={node} nodes={nodes} edges={edges} timeline={timeline} trace={brainTrace} />}
       {kind === 'agent' && <>
         <label>Model<select value={node.data.model || 'gpt-4o'} onChange={(event) => onChange({ model: event.target.value })}><option>gpt-4o</option><option>claude-3.5-sonnet</option><option>Evermind</option></select></label>
         <label>Instructions<textarea value={node.data.subtitle || ''} onChange={(event) => onChange({ subtitle: event.target.value })} rows={5} /></label>

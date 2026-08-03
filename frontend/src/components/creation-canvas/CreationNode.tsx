@@ -5,7 +5,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { BrainTimeline } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
-import type { BrainMessage } from '@seanhogg/builderforce-brain-embedded';
+import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import type { CreationNodeData } from './types';
 import styles from './CreationCanvas.module.css';
 import { creationObjectDefinition } from './creationObjectRegistry';
@@ -35,6 +35,11 @@ function brainTimelineMessages(data: CreationNodeData): BrainMessage[] {
     { role: 'assistant', content: typeof data.aiResponse === 'string' ? data.aiResponse : 'I added your starting objects to the canvas. Keep creating freely; connect an account only when you want to collaborate or deliver the work.' },
   ];
   return visible.map((message, index) => ({ id: index + 1, seq: index + 1, role: message.role, content: message.content, metadata: null, createdAt: message.createdAt || '' }));
+}
+
+function brainTimelineTrace(data: CreationNodeData): BrainTraceEvent[] {
+  if (!Array.isArray(data.trace)) return [];
+  return data.trace.filter((value): value is BrainTraceEvent => !!value && typeof value === 'object' && typeof (value as { ts?: unknown }).ts === 'string' && typeof (value as { category?: unknown }).category === 'string' && typeof (value as { label?: unknown }).label === 'string');
 }
 
 function authoredText(data: CreationNodeData): string | null {
@@ -73,6 +78,60 @@ function TaskBody({ data }: { data: CreationNodeData }) {
         : <p className={styles.taskEmpty}>No PRD linked</p>}
     </div>
     {acceptance && <div className={styles.taskContext}><small>Done when</small><p>{acceptance}</p></div>}
+  </div>;
+}
+
+type ProjectLens = 'everything' | 'delivery' | 'metrics' | 'customer-feedback';
+
+function projectLens(data: CreationNodeData): ProjectLens {
+  return data.projectLens === 'delivery' || data.projectLens === 'metrics' || data.projectLens === 'customer-feedback'
+    ? data.projectLens
+    : 'everything';
+}
+
+function ProjectBody({ data }: { data: CreationNodeData }) {
+  const lens = projectLens(data);
+  const status = textValue(data.status, 'Active');
+  const open = Number.isFinite(Number(data.open)) ? String(Number(data.open)) : '—';
+  const blocked = Number.isFinite(Number(data.blocked)) ? String(Number(data.blocked)) : '—';
+  const maturity = data.maturity == null ? '3.8 / 5' : String(data.maturity);
+  const velocity = data.velocity == null ? '42 pts' : `${String(data.velocity)}${typeof data.velocity === 'number' ? ' pts' : ''}`;
+  const health = textValue(data.health, textValue(data.healthTier, 'On track'));
+  const feedback = Array.isArray(data.feedback) ? data.feedback : Array.isArray(data.items) ? data.items : [];
+
+  if (lens === 'delivery') return <div className={styles.projectLensBody} data-project-lens={lens}>
+    <div className={styles.projectHealth}>
+      <div><small>Status</small><b>{status}</b></div>
+      <div><small>Open work</small><b>{open}</b></div>
+      <div><small>Blocked</small><b>{blocked}</b></div>
+    </div>
+    <p>{textValue(data.deliverySummary, data.subtitle || 'Expand this view to see project tasks, workflows, and assigned agents.')}</p>
+  </div>;
+
+  if (lens === 'metrics') return <div className={styles.projectLensBody} data-project-lens={lens}>
+    <div className={styles.projectHealth}>
+      <div><small>Maturity</small><b>{maturity}</b></div>
+      <div><small>Velocity</small><b>{velocity}</b></div>
+      <div><small>Health</small><b className={styles.healthy}>{health}</b></div>
+    </div>
+    <p>{textValue(data.metricsSummary, 'Live delivery and project-health metrics.')}</p>
+  </div>;
+
+  if (lens === 'customer-feedback') return <div className={styles.projectLensBody} data-project-lens={lens}>
+    <div className={styles.projectFeedback}>
+      <small>Customer feedback</small>
+      {feedback.length
+        ? feedback.slice(0, 4).map((item, index) => <span key={`${String(item)}-${index}`}>{typeof item === 'string' ? item : String((item as Record<string, unknown>)?.title || (item as Record<string, unknown>)?.name || `Feedback ${index + 1}`)}</span>)
+        : <p>{textValue(data.feedbackSummary, data.subtitle || 'Expand this view to see requested features and customer evidence.')}</p>}
+    </div>
+  </div>;
+
+  return <div className={styles.projectLensBody} data-project-lens={lens}>
+    <div className={styles.projectOverview}>
+      <span><small>Status</small><b>{status}</b></span>
+      <span><small>Project context</small><b>Everything</b></span>
+    </div>
+    <p>{data.subtitle || 'Optional project context. Expand to see related work.'}</p>
   </div>;
 }
 
@@ -208,6 +267,7 @@ export function CreationNode({ id, data, selected, width, height, canRun = true,
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || '#f8f6ff'), borderColor: String(data.frameBorder || '#9d8bea') } : undefined;
   const measuredStyle = { ...frameStyle, ...(typeof width === 'number' && width > 0 ? { width } : {}), ...(typeof height === 'number' && height > 0 ? { height } : {}) };
   const chatMessages = data.kind === 'chat' ? brainTimelineMessages(data) : [];
+  const chatTrace = data.kind === 'chat' ? brainTimelineTrace(data) : [];
   return (
     <article style={measuredStyle} data-viewport={data.viewport} className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
       <NodeResizer isVisible={selected} minWidth={240} minHeight={130} lineClassName={styles.resizeLine} handleClassName={styles.resizeHandle} />
@@ -233,13 +293,13 @@ export function CreationNode({ id, data, selected, width, height, canRun = true,
         {data.kind === 'agent' && <><div className={styles.personRow}><span className={styles.presence} /><b>{data.status || 'Online'}</b><span>{data.model || 'gpt-4o'}</span></div><p>{data.subtitle}</p><div className={styles.pills}><span>Audience Analyzer</span><span>Copy Optimizer</span><span>Autonomy: Medium</span></div></>}
         {data.kind === 'staff' && <><div className={styles.personRow}><span className={styles.avatar} style={{ background: data.accent }}>{data.title.slice(0, 1)}</span><b>{data.role}</b><span className={styles.presence} /></div><small>Current focus</small><p>{data.focus}</p></>}
         {data.kind === 'chat' && <div className={`${styles.chatHistory} nowheel nodrag`} role="log" aria-label="Brain chat history" tabIndex={0}>
-          <BrainTimeline messages={chatMessages} trace={[]} streamingText="" isRunning={false} assistantName="Brain" labels={{ you: 'You', assistant: 'Brain' }} />
+          <BrainTimeline messages={chatMessages} trace={chatTrace} streamingText="" isRunning={false} assistantName="Brain" labels={{ you: 'You', assistant: 'Brain' }} />
         </div>}
         {(data.kind === 'dataset' || data.kind === 'table' || data.kind === 'spreadsheet') && <DataGridBody data={data} />}
         {data.kind === 'kpi' && <KpiBody data={data} />}
         {data.kind === 'voice' && <><div className={styles.waveform}>▂▅▃▆▂▇▅▃▆▂▅▇▃▆▂▅</div><AuthoredContent data={data} fallback="Record or generate a voice note." /></>}
         {data.kind === 'note' && <AuthoredContent data={data} fallback="Double-click to add a thought." />}
-        {data.kind === 'project' && <><div className={styles.projectHealth}><div><small>Maturity</small><b>3.8 / 5</b></div><div><small>Velocity</small><b>42 pts</b></div><div><small>Health</small><b className={styles.healthy}>On track</b></div></div><p>{data.subtitle || 'Optional project context. Expand to see related work.'}</p></>}
+        {data.kind === 'project' && <ProjectBody data={data} />}
         {data.kind === 'roadmap' && <div className={styles.roadmap}>{(Array.isArray(data.items) && data.items.length ? data.items.slice(0, 12) : [{ title: 'Validate narrative', phase: 'Now' }, { title: 'Executive review', phase: 'Next' }, { title: 'Measure adoption', phase: 'Later' }]).map((raw, index) => { const item = asRecord(raw, { title: raw, phase: index < 2 ? 'Now' : 'Next' }); return <div key={`${String(item.title)}-${index}`}><b>{String(item.phase || item.status || `Phase ${index + 1}`)}</b><span>{String(item.title || item.name || `Item ${index + 1}`)}</span>{item.description ? <span>{String(item.description)}</span> : null}</div>; })}</div>}
         {data.kind === 'task' && <TaskBody data={data} />}
         {data.kind === 'mockup' && <><div className={styles.mockupGrid}><i /><i /><i /></div><p>{data.subtitle || 'High-fidelity interactive concept ready for review.'}</p><div className={styles.pills}><span>{data.status || 'Draft'}</span><span>Desktop + mobile</span></div></>}

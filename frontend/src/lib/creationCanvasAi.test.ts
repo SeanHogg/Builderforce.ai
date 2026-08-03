@@ -5,7 +5,8 @@ const mocks = vi.hoisted(() => ({
   ensureGuestToken: vi.fn(async () => true),
 }));
 
-vi.mock('@seanhogg/builderforce-brain-embedded', () => ({
+vi.mock('@seanhogg/builderforce-brain-embedded', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@seanhogg/builderforce-brain-embedded')>()),
   fetchMcpToolEntries: vi.fn(async () => []),
   mcpActionsFrom: vi.fn(() => []),
   streamChatCompletion: mocks.streamChatCompletion,
@@ -91,5 +92,25 @@ describe('runCreationCanvasAi', () => {
     expect(confirm).not.toHaveBeenCalled();
     expect(answer).toBe('Updated.');
     confirm.mockRestore();
+  });
+
+  it('grounds a project canvas turn with Evermind and reports recall and learning steps', async () => {
+    const answer = 'Use the established launch checklist and preserve the approved review gate for every release.';
+    const learn = vi.fn(async () => ({ ok: true, queued: 1 }));
+    const onTrace = vi.fn();
+    mocks.streamChatCompletion.mockResolvedValueOnce({ text: answer, toolCalls: [] });
+
+    await runCreationCanvasAi({
+      prompt: 'How should we release?', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [],
+      evermind: {
+        recall: async () => ({ seeded: true, version: 4, mode: 'connected', items: [{ id: 8, text: 'Use the established launch checklist and preserve the approved review gate', score: .92 }] }),
+        learn,
+      },
+      onTrace,
+    });
+
+    expect(mocks.streamChatCompletion.mock.calls[0][0].messages[0].content).toContain('[Evermind Memory');
+    expect(learn).toHaveBeenCalledWith(answer, 'How should we release?');
+    expect(onTrace.mock.calls.map(([event]) => event.category)).toEqual(['recall', 'learn', 'reconcile']);
   });
 });

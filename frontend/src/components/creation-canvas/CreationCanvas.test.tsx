@@ -102,6 +102,41 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByRole('article')).toHaveStyle({ width: '320px', height: '220px' });
   });
 
+  it('updates the project widget rendering when its project view changes', () => {
+    const props = {
+      id: 'project-node', type: 'creation' as const, selected: false, dragging: false, zIndex: 0,
+      selectable: true, deletable: true, draggable: true, isConnectable: true,
+      positionAbsoluteX: 0, positionAbsoluteY: 0,
+    };
+    const { rerender } = render(<CreationNode {...props} data={{ kind: 'project', title: 'BuilderForce.AI', status: 'active' }} />);
+    expect(screen.getByText('Project context')).toBeInTheDocument();
+
+    rerender(<CreationNode {...props} data={{ kind: 'project', title: 'BuilderForce.AI', projectLens: 'delivery', open: 12, blocked: 2 }} />);
+    expect(screen.getByText('Open work')).toBeInTheDocument();
+    expect(screen.getByText('Blocked')).toBeInTheDocument();
+
+    rerender(<CreationNode {...props} data={{ kind: 'project', title: 'BuilderForce.AI', projectLens: 'metrics', velocity: 48 }} />);
+    expect(screen.getByText('Maturity')).toBeInTheDocument();
+    expect(screen.getByText('48 pts')).toBeInTheDocument();
+
+    rerender(<CreationNode {...props} data={{ kind: 'project', title: 'BuilderForce.AI', projectLens: 'customer-feedback', feedback: ['Faster onboarding'] }} />);
+    expect(screen.getByText('Customer feedback')).toBeInTheDocument();
+    expect(screen.getByText('Faster onboarding')).toBeInTheDocument();
+  });
+
+  it('applies the inspector project view selection to the canvas widget', () => {
+    render(<CreationCanvas sessionId="project-view-test" persistence="local" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Project' }));
+
+    const projectView = screen.getByLabelText('Project view');
+    fireEvent.change(projectView, { target: { value: 'metrics' } });
+    expect(screen.getByText('Maturity')).toBeInTheDocument();
+
+    fireEvent.change(projectView, { target: { value: 'delivery' } });
+    expect(screen.getByText('Open work')).toBeInTheDocument();
+    expect(screen.queryByText('Maturity')).not.toBeInTheDocument();
+  });
+
   it('shows task ownership, priority, PRD context, and completion criteria on the widget', () => {
     render(<CreationNode
       id="task-node" type="creation" selected={false} dragging={false} zIndex={0} selectable deletable draggable isConnectable
@@ -178,6 +213,15 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Share/ }));
     expect(screen.getByRole('dialog', { name: 'Create an account to share this canvas' })).toBeInTheDocument();
+  });
+
+  it('closes the invitation panel from its dedicated close control', () => {
+    render(<CreationCanvas sessionId="close-invitation-panel-test" persistence="local" initialShareOpen />);
+
+    expect(screen.getByRole('dialog', { name: 'Save to invite people' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close invitation panel' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Save to invite people' })).not.toBeInTheDocument();
   });
 
   it('edits and runs a canonical workflow in an isolated Canvas focus editor', () => {
