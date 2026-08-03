@@ -130,7 +130,12 @@ export function planMergeQueue<T extends QueuedPr>(
       worked += 1;
       return at('running');
     }
-    if (opts.requireGreen && pr.buildStatus !== 'success') return at('ci_blocked');
+    // A FAILED build is work, not a reason to hide the PR from the only serial
+    // integration head that can start its repair.  The manager still refuses to
+    // merge it below (the live CI poll remains authoritative), but it must first
+    // reach the provider update/conflict path so its ticket agent can repair the
+    // existing branch.  Pending CI is genuinely transient and may wait.
+    if (opts.requireGreen && pr.buildStatus === 'pending') return at('ci_blocked');
     if (worked >= depth) return at('queued');
     worked += 1;
     if (isActionExhausted(pr.conflicts ?? 0)) {

@@ -28,10 +28,11 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * (dedupes on a live execution), so overlapping ticks never double-run a ticket.
  */
 import { and, asc, eq, exists, inArray, isNotNull, not, or, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import { buildRuntimeService } from '../../buildRuntimeService';
 import { createTickDispatchBudget, MAX_TENANT_DISPATCHES_PER_TICK, tenantDispatchReserver, type TickDispatchBudget } from './tickDispatchBudget';
-import { executions, tasks, projects, boards, swimlanes, swimlaneAgentAssignments } from '../../infrastructure/database/schema';
+import { executions, tasks, projects, boards, pullRequests, swimlanes, swimlaneAgentAssignments } from '../../infrastructure/database/schema';
 import { RuntimeService } from './RuntimeService';
 import { TaskStatus } from '../../domain/shared/types';
 import { getTenantTokenAvailability } from '../llm/tenantTokenAvailability';
@@ -144,6 +145,42 @@ export function autonomousCandidatesQuery(db: Db, limit: number) {
       )),
   );
 
+  // Open PR repairs are a SERIAL integration queue. Starting every failed PR's
+  // ticket in parallel guarantees that each branch is stale again as soon as the
+  // head lands; on the reference project it also produced thousands of retries a
+  // day while the merge count stayed at zero. A normal ticket remains eligible.
+  // A ticket with a failed open PR is eligible only when it owns the oldest failed
+  // PR for its tenant+project. The manager uses the same stable created-at/id order.
+  const candidatePr = alias(pullRequests, 'auto_exec_candidate_pr');
+  const earlierPr = alias(pullRequests, 'auto_exec_earlier_pr');
+  const hasFailedOpenPr = exists(
+    db.select({ one: sql`1` }).from(candidatePr).where(and(
+      eq(candidatePr.tenantId, projects.tenantId),
+      eq(candidatePr.projectId, tasks.projectId),
+      eq(candidatePr.taskId, tasks.id),
+      eq(candidatePr.status, 'open'),
+      eq(candidatePr.buildStatus, 'failure'),
+    )),
+  );
+  const ownsFailedPrHead = exists(
+    db.select({ one: sql`1` }).from(candidatePr).where(and(
+      eq(candidatePr.tenantId, projects.tenantId),
+      eq(candidatePr.projectId, tasks.projectId),
+      eq(candidatePr.taskId, tasks.id),
+      eq(candidatePr.status, 'open'),
+      eq(candidatePr.buildStatus, 'failure'),
+      not(exists(
+        db.select({ one: sql`1` }).from(earlierPr).where(and(
+          eq(earlierPr.tenantId, candidatePr.tenantId),
+          eq(earlierPr.projectId, candidatePr.projectId),
+          eq(earlierPr.status, 'open'),
+          eq(earlierPr.buildStatus, 'failure'),
+          sql`(${earlierPr.createdAt}, ${earlierPr.id}) < (${candidatePr.createdAt}, ${candidatePr.id})`,
+        )),
+      )),
+    )),
+  );
+
   return db
     .select({
       taskId: tasks.id,
@@ -161,6 +198,9 @@ export function autonomousCandidatesQuery(db: Db, limit: number) {
       or(isNotNull(tasks.assignedAgentRef), laneStaffed),
       // The window is a QUEUE, not a leaderboard — see MAX_CANDIDATES_PER_TICK.
       not(hasLiveRun),
+      // Failed open PRs share one moving base branch. Only its stable head may
+      // consume an agent run; the tail becomes eligible as the head leaves.
+      or(not(hasFailedOpenPr), ownsFailedPrHead),
     ))
     // Priority-first dispatch: the AI Manager's computed `manager_rank` (highest
     // value × urgency = rank 1) leads, then the raw priority tier, then oldest-waiting

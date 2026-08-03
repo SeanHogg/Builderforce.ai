@@ -269,14 +269,18 @@ export async function ensureDependencyReviewTask(
     tenantId: number; projectId: number; repoId: string; prNumber: number; prUrl: string;
     title: string; body: string; headBranch: string;
   },
-): Promise<{ id: number; status: string; completedAt: Date | null } | null> {
-  const [existing] = await db.select({ id: tasks.id, status: tasks.status, completedAt: tasks.completedAt })
+): Promise<{ id: number; status: string; completedAt: Date | null; description: string | null } | null> {
+  const [existing] = await db.select({
+    id: tasks.id, status: tasks.status, completedAt: tasks.completedAt, description: tasks.description,
+  })
     .from(tasks).where(and(eq(tasks.projectId, args.projectId), eq(tasks.githubPrNumber, args.prNumber))).limit(1);
   if (existing) {
     if (existing.status.toLowerCase() === TaskStatus.DONE) {
       const [reopened] = await db.update(tasks).set({
         status: TaskStatus.READY, completedAt: null, updatedAt: new Date(),
-      }).where(eq(tasks.id, existing.id)).returning({ id: tasks.id, status: tasks.status, completedAt: tasks.completedAt });
+      }).where(eq(tasks.id, existing.id)).returning({
+        id: tasks.id, status: tasks.status, completedAt: tasks.completedAt, description: tasks.description,
+      });
       return reopened ?? existing;
     }
     return existing;
@@ -302,7 +306,9 @@ export async function ensureDependencyReviewTask(
       source: 'pr_reconciler', githubPrUrl: args.prUrl, githubPrNumber: args.prNumber,
       gitBranch: args.headBranch, explicitRepoId: args.repoId,
       startDate: new Date(), updatedAt: new Date(),
-    }).returning({ id: tasks.id, status: tasks.status, completedAt: tasks.completedAt });
+    }).returning({
+      id: tasks.id, status: tasks.status, completedAt: tasks.completedAt, description: tasks.description,
+    });
     if (!created) throw new Error(`Could not create dependency review ticket for PR #${args.prNumber}`);
     return created;
   });
@@ -381,7 +387,9 @@ export async function runPrTicketReconciliation(
       extractedByPr.get(pr.number),
     ]).filter((id): id is number => id != null))];
     const taskIds = candidateTaskIds;
-    const taskRows = taskIds.length === 0 ? [] : await db.select({ id: tasks.id, status: tasks.status, completedAt: tasks.completedAt })
+    const taskRows = taskIds.length === 0 ? [] : await db.select({
+      id: tasks.id, status: tasks.status, completedAt: tasks.completedAt, description: tasks.description,
+    })
       .from(tasks).where(and(eq(tasks.projectId, repo.projectId), inArray(tasks.id, taskIds)));
     const taskById = new Map(taskRows.map((t) => [t.id, t]));
     const taskRefByPr = new Map<number, number | null>();
@@ -528,21 +536,31 @@ export async function runPrTicketReconciliation(
     }
 
     let applied = 0;
-    let routed = 0;
+    let queued = 0;
     let journaled = 0;
     let repairTicketsReopened = 0;
     if (mode === 'apply') {
-      const repairTaskIds = [...new Set(decisions
+      // Every PR targets the same moving base. Activating hundreds of repair
+      // tickets in parallel creates hundreds of soon-to-be-stale branches and an
+      // execution retry storm. Activate exactly one stable head; the next sweep
+      // advances naturally after that PR merges or closes.
+      const repairHead = decisions
         .filter(({ decision, taskId }) => decision.classification === 'repair' && taskId != null)
-        .map(({ taskId }) => taskId as number))];
-      if (repairTaskIds.length > 0) {
-        const reopened = await db.update(tasks).set({
-          status: TaskStatus.IN_PROGRESS, completedAt: null, updatedAt: new Date(),
-        }).where(and(
-          inArray(tasks.id, repairTaskIds),
-          inArray(tasks.status, [TaskStatus.READY, TaskStatus.IN_REVIEW, 'test', 'validation']),
-        )).returning({ id: tasks.id });
-        repairTicketsReopened = reopened.length;
+        .sort((a, b) => Date.parse(a.pr.createdAt) - Date.parse(b.pr.createdAt) || a.pr.number - b.pr.number)[0];
+      if (repairHead?.taskId != null) {
+        const ticket = taskById.get(repairHead.taskId);
+        const marker = `[PR reconciliation repair #${repairHead.pr.number}]`;
+        const repairNote = `${marker} Repair the existing pull request at ${repairHead.pr.url}. ${repairHead.decision.reasonCodes.join(', ')}. Sync the latest ${repairHead.pr.baseBranch}, fix the reported conflict/check failure, run the relevant checks, and push to the existing ${repairHead.pr.headBranch} branch; do not open a replacement PR.`;
+        const description = ticket && 'description' in ticket && typeof ticket.description === 'string'
+          ? ticket.description
+          : '';
+        const [activated] = await db.update(tasks).set({
+          status: TaskStatus.IN_PROGRESS,
+          completedAt: null,
+          description: description.includes(marker) ? description : `${description}\n\n${repairNote}`.trim(),
+          updatedAt: new Date(),
+        }).where(eq(tasks.id, repairHead.taskId)).returning({ id: tasks.id });
+        repairTicketsReopened = activated ? 1 : 0;
       }
 
       for (const item of decisions.filter(({ decision }) => decision.recommendedAction !== 'close')) {
@@ -570,10 +588,10 @@ export async function runPrTicketReconciliation(
             reasonCodes: item.decision.reasonCodes, taskStatus: item.ticket?.status ?? null,
           },
         });
-        routed++;
+        queued++;
         if (wrote) journaled++;
         await db.update(prReconciliationItems).set({
-          appliedAction: handoff.replace(/^queue_/, 'route_'), appliedAt: new Date(),
+          appliedAction: handoff, appliedAt: new Date(),
         }).where(and(
           eq(prReconciliationItems.tenantId, args.tenantId),
           eq(prReconciliationItems.runId, runId), eq(prReconciliationItems.prNumber, item.pr.number),
@@ -623,7 +641,7 @@ export async function runPrTicketReconciliation(
       policyVersion: PR_RECONCILIATION_POLICY_VERSION,
       total: decisions.length,
       applied,
-      routed,
+      queued,
       journaled,
       repairTicketsReopened,
       quarantined: decisions.filter(({ taskId, ticket }) => taskId == null || ticket == null).length,

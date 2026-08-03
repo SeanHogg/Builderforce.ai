@@ -26,15 +26,15 @@ describe('merge queue', () => {
     expect(dispositions(plan).slice(0, MERGE_QUEUE_DEPTH)).toEqual(Array(MERGE_QUEUE_DEPTH).fill('work'));
   });
 
-  it('does not let red or pending CI consume the integration head', () => {
+  it('lets failed CI reach the repair head while pending CI waits', () => {
     const plan = planMergeQueue([
       pr('1', { buildStatus: 'failure' }),
       pr('2', { buildStatus: 'pending' }),
       pr('3', { buildStatus: 'success' }),
       pr('4'),
     ], { hasActiveRun: never, requireGreen: true });
-    expect(dispositions(plan)).toEqual(['ci_blocked', 'ci_blocked', 'work', 'ci_blocked']);
-    expect(summarizeMergeQueue(plan)).toMatchObject({ ciBlocked: 3, worked: 1 });
+    expect(dispositions(plan)).toEqual(['work', 'ci_blocked', 'queued', 'queued']);
+    expect(summarizeMergeQueue(plan)).toMatchObject({ ciBlocked: 1, worked: 1, queued: 2 });
   });
 
   /**

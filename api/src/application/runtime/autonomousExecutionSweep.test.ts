@@ -107,6 +107,21 @@ describe('the autonomous executor\'s candidate window', () => {
     expect(candidateSql()).toMatch(/"executions"\."mode"\s*=/);
   });
 
+  it('serializes failed open-PR repairs behind one stable project head', () => {
+    const sql = candidateSql();
+    expect(sql).toContain('auto_exec_candidate_pr');
+    expect(sql).toContain('auto_exec_earlier_pr');
+    expect(sql).toMatch(/build_status/);
+    expect(sql).toMatch(/created_at.*id/);
+    const migration = readFileSync(
+      fileURLToPath(new URL('../../../migrations/0397_pr_repair_queue_head.sql', import.meta.url).href),
+      'utf8',
+    ).replace(/\s+/g, ' ');
+    expect(migration).toContain(
+      'ON pull_requests(tenant_id, project_id, created_at, id)',
+    );
+  });
+
   it('is backed by the index the correlated probe needs (0384)', () => {
     // The probe is evaluated per candidate row on a five-minute cron path, over a table
     // growing by thousands of rows a day, and `executions` had no index that serves it.
