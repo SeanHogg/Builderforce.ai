@@ -3252,6 +3252,9 @@ export interface ProviderKeySummary {
   priority: number | null;
   /** Present when this account was rejected on a recent call — see {@link ProviderAuthAlert}. */
   authAlert?: ProviderAuthAlert;
+  /** BuilderForce-attributed calls served by this provider credential. This is not the
+   * provider account's plan/quota meter; that remains authoritative in its own console. */
+  usage?: { periodDays: number; requests: number; tokens: number; lastUsedAt: string | null };
 }
 export interface ProviderDiagnostic {
   provider: LlmProvider;
@@ -3408,8 +3411,8 @@ export const openRouterConnectionsApi = {
 
 export const providerKeysApi = {
   /** Configured providers + how each authenticates (no secrets returned). */
-  list: (): Promise<{ providers: LlmProvider[]; details: ProviderKeySummary[] }> =>
-    request<{ providers: LlmProvider[]; details: ProviderKeySummary[] }>('/llm/provider-keys'),
+  list: (): Promise<{ providers: LlmProvider[]; details: ProviderKeySummary[]; usageWindowDays?: number }> =>
+    request<{ providers: LlmProvider[]; details: ProviderKeySummary[]; usageWindowDays?: number }>('/llm/provider-keys'),
 
   set: (provider: LlmProvider, apiKey: string): Promise<{ ok: true; provider: LlmProvider }> =>
     request<{ ok: true; provider: LlmProvider }>(`/llm/provider-keys/${provider}`, {

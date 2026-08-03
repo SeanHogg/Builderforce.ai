@@ -19,6 +19,7 @@ import { llmUsageLog } from '../../infrastructure/database/schema';
 import type { LlmUsage } from './LlmProxyService';
 import { getCatalogCached } from './modelCatalog';
 import { buildTransactionalDatabase } from '../../infrastructure/database/connection';
+import { clearProviderAuthAlertAfterByoSuccess } from './providerAuthAlerts';
 
 /** Cache-tier multipliers relative to the base input (prompt) price. cache_read
  *  is billed ~0.1x input, cache_creation ~1.25x — both are subsets of
@@ -317,6 +318,14 @@ export async function recordUsageRow(db: Db, env: Env, row: RecordUsageRow): Pro
       byoProvider:         row.byo ? (row.byoProvider ?? null) : null,
       surface:             row.surface ?? 'web',
     });
+
+    // A successful own-account completion is stronger health evidence than yesterday's
+    // capacity alert. This is what makes rolling/session limits recover automatically:
+    // cooldown opens a half-open retry, the provider serves it, and the stale warning is
+    // retired immediately instead of lingering until the daily probe or a manual Test.
+    if (row.byo && row.byoProvider) {
+      await clearProviderAuthAlertAfterByoSuccess(env, row.tenantId, row.byoProvider);
+    }
   } catch (error) { /* never let usage logging fail the request */ 
     reportCaughtError(error, { source: "application/llm/usageLedger.ts", operation: "recordUsageRow" });
   }

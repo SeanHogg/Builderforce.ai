@@ -15,6 +15,7 @@ import {
   authAlertsFromFailovers,
   loadProviderAuthAlert,
   clearProviderAuthAlert,
+  clearProviderAuthAlertAfterByoSuccess,
   providerForVendor,
   recordProviderAuthAlerts,
 } from './providerAuthAlerts';
@@ -131,6 +132,16 @@ describe('provider auth alerts', () => {
   it('writes nothing when a cascade had no auth failures', async () => {
     await recordProviderAuthAlerts(env, 7, [{ vendor: 'meta', code: 502 }]);
     expect(await loadProviderAuthAlert(env, 7, 'meta')).toBeNull();
+  });
+
+  it('clears a stale capacity alert as soon as that BYO vendor serves a request', async () => {
+    await recordProviderAuthAlerts(env, 7, [{
+      vendor: 'minimax', code: 429, detail: `${CAPACITY_LIMIT_MARKER}: usage limit reached`,
+    }]);
+    expect(await loadProviderAuthAlert(env, 7, 'minimax')).toMatchObject({ reason: 'capacity' });
+
+    await clearProviderAuthAlertAfterByoSuccess(env, 7, 'minimax');
+    expect(await loadProviderAuthAlert(env, 7, 'minimax')).toBeNull();
   });
 });
 

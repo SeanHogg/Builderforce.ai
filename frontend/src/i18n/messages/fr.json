@@ -8981,7 +8981,7 @@
       "testing": "Test en cours…",
       "verified": "Connexion vérifiée.",
       "verifiedWith": "Connexion vérifiée avec {model}.",
-      "usage": "{days} derniers jours : {requests} requêtes · {tokens} jetons",
+      "usage": "Utilisation attribuée par BuilderForce, {days} derniers jours : {requests} requêtes · {tokens} jetons",
       "lastUsed": " · Dernière utilisation {when}",
       "failedFallback": "Échec du test de connexion : {status}.",
       "failedGeneric": "Échec du test de connexion",
@@ -9013,6 +9013,7 @@
         "key_unresolved": "la clé enregistrée n'a pas pu être utilisée"
       },
       "tokensUsed": "Jetons IA utilisés",
+      "builderforceTokens": "Jetons BYO BuilderForce",
       "periodLabel": "Derniers {period}"
     },
     "authAlert": {
@@ -9023,7 +9024,8 @@
       "kimiNotEntitled": "Kimi a refusé la requête hébergée ({status}) : sa périphérie bloque cette passerelle cloud avant même de vérifier la clé. Connectez un runtime Builderforce et la clé passera par votre propre machine, le client pour lequel l’abonnement est concédé. Moonshot Open Platform reste l’alternative.",
       "kimiCapacity": "Le quota de votre abonnement Kimi Code est épuisé ({status}). Consultez la console Kimi Code pour connaître la prochaine réinitialisation. La clé reste valide.",
       "rejected": "Le fournisseur a rejeté cet identifiant ({status}). Il a probablement expiré, été révoqué ou renouvelé ailleurs — reconnectez le compte.",
-      "capacity": "L’identifiant fonctionne, mais le compte n’a plus de budget ({status}) — plafond de dépense atteint ou solde de crédits vide. Rechargez ou relevez la limite ; inutile de reconnecter.",
+      "capacity": "L’identifiant fonctionne, mais le fournisseur refuse temporairement l’utilisation ({status}) — limite de session, plafond de dépense ou solde épuisé. BuilderForce réessaie automatiquement après le délai ; consultez la console du fournisseur pour l’heure de réinitialisation. Inutile de reconnecter.",
+      "minimaxCapacity": "Votre fenêtre d’utilisation MiniMax est épuisée ({status}). BuilderForce réessaiera automatiquement après sa réinitialisation ; consultez la console MiniMax pour l’heure exacte. La clé reste valide.",
       "unresolved": "L’identifiant enregistré n’a pas pu être utilisé du tout : il a été révoqué, a expiré, ou a été enregistré dans un autre espace de travail. Reconnectez-le ici."
     }
   },

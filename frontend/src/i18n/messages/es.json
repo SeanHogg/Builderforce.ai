@@ -8981,7 +8981,7 @@
       "testing": "Probando…",
       "verified": "Conexión verificada.",
       "verifiedWith": "Conexión verificada con {model}.",
-      "usage": "Últimos {days} días: {requests} solicitudes · {tokens} tokens",
+      "usage": "Uso atribuido por BuilderForce, últimos {days} días: {requests} solicitudes · {tokens} tokens",
       "lastUsed": " · Último uso {when}",
       "failedFallback": "La prueba de conexión falló: {status}.",
       "failedGeneric": "La prueba de conexión falló",
@@ -9013,6 +9013,7 @@
         "key_unresolved": "no se pudo usar la clave guardada"
       },
       "tokensUsed": "Tokens de IA usados",
+      "builderforceTokens": "Tokens BYO de BuilderForce",
       "periodLabel": "Últimos {period}"
     },
     "authAlert": {
@@ -9023,7 +9024,8 @@
       "kimiNotEntitled": "Kimi rechazó la solicitud alojada ({status}): su perímetro bloquea esta pasarela en la nube antes de comprobar la clave. Conecta un runtime de Builderforce y la clave se enrutará por tu propia máquina, que es el cliente para el que está licenciada la suscripción. Moonshot Open Platform es la alternativa.",
       "kimiCapacity": "La asignación de tu suscripción a Kimi Code está agotada ({status}). Revisa en la consola de Kimi Code cuándo se restablece. La clave sigue siendo válida.",
       "rejected": "El proveedor rechazó esta credencial ({status}). Es probable que haya caducado, se haya revocado o se haya rotado en otro lugar: vuelve a conectar la cuenta.",
-      "capacity": "La credencial funciona, pero la cuenta se ha quedado sin saldo ({status}): un límite de gasto o un saldo de créditos vacío. Recarga o sube el límite; no hace falta reconectar.",
+      "capacity": "La credencial funciona, pero el proveedor ha rechazado temporalmente el uso ({status}): puede ser un límite de sesión, un tope de gasto o saldo agotado. BuilderForce reintenta automáticamente tras la espera; consulta la consola del proveedor para ver el reinicio. No hace falta reconectar.",
+      "minimaxCapacity": "Tu ventana de uso de MiniMax está agotada ({status}). BuilderForce reintentará la clave automáticamente cuando se reinicie; consulta la consola de MiniMax para ver la hora exacta. La clave sigue siendo válida.",
       "unresolved": "La credencial guardada no se pudo usar en absoluto: ha sido revocada, ha caducado o se guardó en otro espacio de trabajo. Vuelve a conectarla aquí."
     }
   },

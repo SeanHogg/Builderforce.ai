@@ -35,6 +35,7 @@ const alert = (over: Partial<ProviderAuthAlert> = {}): ProviderAuthAlert => ({
 
 function mockApi(details: Array<Parameters<typeof api.providerKeysApi.list> extends never ? never : {
   provider: api.LlmProvider; authType: api.ProviderAuthType; priority: number | null; authAlert?: ProviderAuthAlert;
+  usage?: { periodDays: number; requests: number; tokens: number; lastUsedAt: string | null };
 }>) {
   vi.spyOn(api.providerKeysApi, 'list').mockResolvedValue({
     providers: details.map((d) => d.provider),
@@ -82,6 +83,26 @@ describe('ProviderKeysSettings — rejected-account prompt', () => {
     render(<ProviderKeysSettings />);
     expect(await screen.findByText(/providerKeys.authAlert.capacity 429/)).toBeInTheDocument();
     expect(screen.queryByText(/providerKeys.authAlert.rejected/)).not.toBeInTheDocument();
+  });
+
+  it('explains MiniMax window depletion as automatically retryable', async () => {
+    mockApi([{
+      provider: 'minimax', authType: 'api_key', priority: 0,
+      authAlert: alert({ provider: 'minimax', reason: 'capacity', status: 429, vendor: 'minimax' }),
+    }]);
+    render(<ProviderKeysSettings />);
+    expect(await screen.findByText(/providerKeys\.authAlert\.minimaxCapacity 429/)).toBeInTheDocument();
+    expect(screen.queryByText(/providerKeys\.authAlert\.capacity 429/)).not.toBeInTheDocument();
+  });
+
+  it('renders provider-scoped BuilderForce usage from the provider list read', async () => {
+    mockApi([{
+      provider: 'minimax', authType: 'api_key', priority: 0,
+      usage: { periodDays: 30, requests: 9_041, tokens: 311_034_403, lastUsedAt: '2026-08-03T08:05:48Z' },
+    }]);
+    render(<ProviderKeysSettings />);
+    expect(await screen.findByText('311.0M')).toBeInTheDocument();
+    expect(screen.getByText('providerKeys.diagnostic.builderforceTokens')).toBeInTheDocument();
   });
 
   it('gives depleted SuperGrok usage its own reset/credits remediation', async () => {

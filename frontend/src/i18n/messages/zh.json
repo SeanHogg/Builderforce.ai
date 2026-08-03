@@ -8981,7 +8981,7 @@
       "testing": "测试中…",
       "verified": "连接验证成功。",
       "verifiedWith": "已通过 {model} 验证连接。",
-      "usage": "最近 {days} 天：{requests} 次请求 · {tokens} 个令牌",
+      "usage": "BuilderForce 归因用量，最近 {days} 天：{requests} 次请求 · {tokens} 个令牌",
       "lastUsed": " · 上次使用 {when}",
       "failedFallback": "连接测试失败：{status}。",
       "failedGeneric": "连接测试失败",
@@ -9013,6 +9013,7 @@
         "key_unresolved": "无法使用已保存的密钥"
       },
       "tokensUsed": "已使用的 AI 令牌",
+      "builderforceTokens": "BuilderForce BYO 令牌",
       "periodLabel": "最近 {period}"
     },
     "authAlert": {
@@ -9023,7 +9024,8 @@
       "kimiNotEntitled": "Kimi 拒绝了托管请求（{status}）——其边缘在校验密钥之前就拦截了本云网关。连接一个 Builderforce 运行时后，该密钥将改为通过您自己的机器发出，这正是该订阅所授权的客户端。另一种选择是 Moonshot 开放平台。",
       "kimiCapacity": "您的 Kimi Code 订阅额度已用尽（{status}）。请在 Kimi Code 控制台查看下次重置时间。密钥仍然有效，无需更换。",
       "rejected": "服务商拒绝了此凭据（{status}）。它可能已过期、被吊销，或已在别处轮换——请重新连接该账户。",
-      "capacity": "凭据本身有效，但账户额度已用尽（{status}）——可能是消费上限或余额为零。请充值或提高上限，无需重新连接。",
+      "capacity": "凭据有效，但提供商暂时拒绝使用（{status}）——可能是会话/滚动限额、消费上限或余额不足。BuilderForce 会在冷却后自动重试；请在提供商控制台查看重置时间。无需重新连接。",
+      "minimaxCapacity": "您的 MiniMax 使用窗口已耗尽（{status}）。窗口重置后 BuilderForce 会自动重试此密钥；确切时间请查看 MiniMax 控制台。密钥仍然有效，无需更换。",
       "unresolved": "存储的凭据完全无法使用——它已被吊销、已过期，或保存在其他工作区。请在此重新连接。"
     }
   },

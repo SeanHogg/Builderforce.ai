@@ -8981,7 +8981,7 @@
       "testing": "Wird getestet…",
       "verified": "Verbindung bestätigt.",
       "verifiedWith": "Verbindung mit {model} bestätigt.",
-      "usage": "Letzte {days} Tage: {requests} Anfragen · {tokens} Token",
+      "usage": "Von BuilderForce zugeordnete Nutzung, letzte {days} Tage: {requests} Anfragen · {tokens} Token",
       "lastUsed": " · Zuletzt verwendet {when}",
       "failedFallback": "Verbindungstest fehlgeschlagen: {status}.",
       "failedGeneric": "Verbindungstest fehlgeschlagen",
@@ -9013,6 +9013,7 @@
         "key_unresolved": "gespeicherter Schlüssel konnte nicht verwendet werden"
       },
       "tokensUsed": "Verbrauchte KI-Token",
+      "builderforceTokens": "BuilderForce-BYO-Token",
       "periodLabel": "Letzte {period}"
     },
     "authAlert": {
@@ -9023,7 +9024,8 @@
       "kimiNotEntitled": "Kimi hat die gehostete Anfrage abgelehnt ({status}) — die Edge blockiert dieses Cloud-Gateway, bevor der Schlüssel überhaupt geprüft wird. Verbinden Sie eine Builderforce-Runtime, dann läuft der Schlüssel über Ihre eigene Maschine, also genau den Client, für den das Abonnement lizenziert ist. Moonshot Open Platform ist die Alternative.",
       "kimiCapacity": "Ihr Kimi-Code-Abonnementkontingent ist aufgebraucht ({status}). Prüfen Sie die Kimi-Code-Konsole auf den nächsten Rücksetzzeitpunkt. Der Schlüssel ist weiterhin gültig.",
       "rejected": "Der Anbieter hat diese Zugangsdaten abgelehnt ({status}). Sie sind vermutlich abgelaufen, widerrufen oder anderswo rotiert worden — verbinden Sie das Konto erneut.",
-      "capacity": "Die Zugangsdaten funktionieren, aber das Konto hat kein Budget mehr ({status}) – Ausgabenlimit erreicht oder Guthaben aufgebraucht. Laden Sie auf oder erhöhen Sie das Limit; ein Neuverbinden ist nicht nötig.",
+      "capacity": "Die Zugangsdaten funktionieren, aber der Anbieter lehnt die Nutzung vorübergehend ab ({status}) – möglich sind ein Sitzungs-, Ausgaben- oder Guthabenlimit. BuilderForce versucht es nach der Abkühlzeit automatisch erneut; die Rücksetzzeit steht in der Anbieter-Konsole. Ein Neuverbinden ist nicht nötig.",
+      "minimaxCapacity": "Ihr MiniMax-Nutzungsfenster ist ausgeschöpft ({status}). BuilderForce versucht den Schlüssel nach dem Zurücksetzen automatisch erneut; die genaue Zeit steht in der MiniMax-Konsole. Der Schlüssel bleibt gültig.",
       "unresolved": "Die gespeicherten Zugangsdaten waren überhaupt nicht nutzbar – widerrufen, abgelaufen oder in einem anderen Workspace gespeichert. Bitte hier neu verbinden."
     }
   },

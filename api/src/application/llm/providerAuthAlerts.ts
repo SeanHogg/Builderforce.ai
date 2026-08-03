@@ -130,6 +130,27 @@ export function providerForVendor(vendorId: string): LlmProvider | null {
   return PROVIDER_BY_VENDOR.get(vendorId) ?? null;
 }
 
+/**
+ * Clear a stale provider warning after a real BYO completion succeeds.
+ *
+ * Capacity limits are normally temporary (MiniMax's rolling session allowance is a
+ * representative case). The cooldown store already opens a half-open retry window; once
+ * that retry succeeds, keeping the old "usage depleted" alert until tomorrow's health
+ * sweep would report the opposite of what routing just observed. Usage recording is the
+ * canonical successful-completion path, so it calls this helper with the resolved vendor.
+ * Unknown/operator vendors deliberately no-op.
+ */
+export async function clearProviderAuthAlertAfterByoSuccess(
+  env: ProviderAuthAlertEnv,
+  tenantId: number,
+  vendorId: string,
+): Promise<void> {
+  // The ledger normally passes its already-normalized `byoProvider` (for example
+  // `google`, not gateway vendor `googleai`); direct callers may pass either shape.
+  const provider = isSupportedProvider(vendorId) ? vendorId : providerForVendor(vendorId);
+  if (provider) await clearProviderAuthAlert(env, tenantId, provider);
+}
+
 /** Minimal shape this module reads off a `FailoverEvent` — declared structurally so
  *  the alert layer doesn't drag the whole proxy result type into route code. The
  *  normalised `kind` is deliberately NOT read: {@link providerAlertFromFailure} keys off

@@ -15,6 +15,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { recordActivity, resolveActorByRef } from '../activity/activityLog';
+import { bumpWorkforceMetricsVersion } from '../metrics/workforceMetrics';
 
 export type AssigneeKind = 'agent' | 'human' | 'hire';
 
@@ -98,6 +99,11 @@ export class RoleAssignmentService {
       createdAt: new Date(),
     });
     await invalidateCached(env, assignmentsKey(tenantId));
+    // Dispatch capability (`loadRoleRosterData`) is version-keyed separately from
+    // the roster UI cache. Without this bump a correct role pin remains invisible to
+    // lane authority for up to five minutes, so a freshly staffed stage still reports
+    // `lane_agents_not_role_capable` and refuses work.
+    await bumpWorkforceMetricsVersion(env, tenantId);
 
     // Unified audit stream: a roster staffing decision (who covers which role),
     // attributed to the manager who made it. Best-effort — never fail the assignment.
@@ -126,6 +132,7 @@ export class RoleAssignmentService {
       .delete(projectRoleAssignments)
       .where(and(eq(projectRoleAssignments.tenantId, tenantId), eq(projectRoleAssignments.id, id)));
     await invalidateCached(env, assignmentsKey(tenantId));
+    await bumpWorkforceMetricsVersion(env, tenantId);
   }
 
   private mapRow = (r: typeof projectRoleAssignments.$inferSelect): RoleAssignment => ({
