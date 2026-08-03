@@ -12,7 +12,63 @@ import { assertActiveToken, findActiveToken, lastSeenWrites } from '../../applic
 import { background } from './background';
 import { parseMachineSubject } from '../../infrastructure/auth/machineSubject';
 import type { TransitionActorInput } from '../../application/task/taskLifecycle';
-import { updateCaughtErrorContext } from '../../application/observability/caughtErrorReporter';
+import { updateCaughtErrorContext, reportCaughtError } from '../../application/observability/caughtErrorReporter';
+
+/**
+ * Target date for query string token deprecation — after this date, query string
+ * tokens will no longer be accepted regardless of the feature flag.
+ */
+const QUERY_STRING_TOKEN_DEPRECATION_DATE = '2025-12-31T00:00:00.000Z';
+
+/**
+ * Checks whether query string token authentication is deprecated (flag is ON).
+ */
+function isQueryStringTokenDeprecated(env: { AUTH_QUERY_STRING_DEPRECATED?: string }): boolean {
+  return env.AUTH_QUERY_STRING_DEPRECATED === 'true';
+}
+
+/**
+ * Logs a structured deprecation warning when query string tokens are used.
+ * Never logs the token value itself.
+ */
+function logQueryStringTokenDeprecationWarning(
+  c: Context<HonoEnv>,
+): void {
+  const userAgent = c.req.header('User-Agent') ?? 'unknown';
+  const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? 'unknown';
+  // Sanitize the path — remove any query string to avoid token leakage in logs
+  const sanitizedPath = c.req.path;
+
+  const warningPayload = {
+    message: 'JWT via query string is deprecated',
+    targetDate: QUERY_STRING_TOKEN_DEPRECATION_DATE,
+    clientInfo: {
+      userAgent,
+      ip,
+      route: sanitizedPath,
+    },
+  };
+
+  // Use reportCaughtError as a structured logger (best-effort, non-blocking)
+  // The "logMessage" prefix makes it identifiable in logs
+  reportCaughtError(
+    new Error('DEPRECATION_WARNING: JWT via query string is deprecated'),
+    {
+      source: 'presentation/middleware/authMiddleware.ts',
+      operation: 'logQueryStringTokenDeprecationWarning',
+      context: {
+        logMessage: JSON.stringify(warningPayload),
+        details: {
+          targetDate: QUERY_STRING_TOKEN_DEPRECATION_DATE,
+          userAgent,
+          ip,
+          route: sanitizedPath,
+        },
+      },
+    },
+    { env: c.env, waitUntil: (p: Promise<unknown>) => c.executionCtx?.waitUntil(p) },
+  );
+}
 
 /**
  * JWT authentication middleware.
