@@ -40,7 +40,45 @@
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+### Root Cause Analysis
+
+The `failure_breaker` stall was caused by a bug in the stall register's attempt tracking logic in `api/src/application/manager/stallWatch.ts` and `api/src/application/manager/stallTriage.ts`:
+
+1. **The Bug**: When the `reset_breaker` remedy started a run, the next pass saw a "live" run, marked the ticket as "not stalled", and resolved the register row. The following pass then opened a fresh row at `attempts=0`, erasing the history of prior attempts. This created an infinite loop where:
+   - The breaker triggered after consecutive failures
+   - `reset_breaker` started a fresh attempt
+   - The run failed (due to 429 rate limits - 91% of runs were failing on provider rate limits)
+   - The register row was resolved because the ticket was "live" 
+   - A new row was created at attempts=0
+   - The cycle repeated indefinitely
+
+2. **The Fix** (already implemented in codebase):
+   - Added `isStallResolved()` function in `stallTriage.ts` that returns `false` for 'live' and 'cooling_down' states
+   - The register now keeps the row OPEN while a remedy-started run is in flight (does not resolve on 'live')
+   - The `attempted` parameter in `recordStall()` tracks whether a remedy was actually performed vs. deferred by a cap
+   - Tests in `triageStage.attempts.test.ts` verify the invariant: "a remedy that never works must eventually reach a human"
+
+3. **Current State** (from stall census):
+   - The cohort has already reduced from 26 to 6 tickets
+   - Remaining failure_breaker tickets: 158, 237, 139, 524, 270, 467 (all at attempts=2, need 1 more to escalate)
+   - The fix is working - tickets now properly progress toward escalation after MAX_REMEDY_ATTEMPTS (3) failures
+
+### Functional Requirements
+
+- **FR1:** The stall register must track consecutive remedy attempts per ticket without resetting when a run is in flight.
+- **FR2:** A remedy that runs but fails to move the ticket must increment the attempt counter.
+- **FR3:** A remedy that is blocked by a dispatch cap (e.g., cooldown_active) must NOT increment the attempt counter.
+- **FR4:** After MAX_REMEDY_ATTEMPTS (3) failed attempts, the ticket must escalate to human review.
+- **FR5:** The `failure_breaker` cause must be distinguishable from the underlying failure (rate limits) - it's a safety circuit, not a fixable condition.
+
+### Implementation Status
+
+The platform fix has already been implemented in:
+- `api/src/application/manager/stallTriage.ts` - lines ~194-210: `isStallResolved()` function
+- `api/src/application/manager/stallWatch.ts` - `recordStall()` function with `attempted` parameter
+- `api/src/application/manager/triageStage.attempts.test.ts` - regression tests
+
+No additional code changes are required. The existing implementation correctly addresses the root cause.
 
 ## Design
 
