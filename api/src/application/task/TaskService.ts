@@ -46,6 +46,12 @@ export interface CreateTaskDto {
   startDate?: string | null;
   dueDate?: string | null;
   persona?: string | null;
+  /**
+   * Opt-in flag for creation: when true, parentTaskId: null explicitly creates a
+   * top-level task. When false/undefined (default), parentTaskId: null is treated
+   * as a no-op (since a new task starts without a parent anyway).
+   */
+  explicitDetach?: boolean;
 }
 
 export interface UpdateTaskDto {
