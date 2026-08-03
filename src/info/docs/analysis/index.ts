@@ -3,6 +3,7 @@
 import type {
   TaskInput,
   ParallelPlan,
+  ParallelPlanWithGraph,
   PlanOutput,
   PlanOutputFormat,
   PlanError,
@@ -28,6 +29,7 @@ export type { InferenceConfig as InferenceConfigType } from "./inference";
 export type {
   TaskInput,
   ParallelPlan,
+  ParallelPlanWithGraph,
   PlanOutput,
   PlanOutputFormat,
   PlanError,
@@ -36,6 +38,9 @@ export type {
   PlanMetadata,
   Summary,
 } from "./types";
+
+// Re-export parsing functions
+export { parseTasks } from "./ingestion";
 
 /**
  * Full options for planParallel.
