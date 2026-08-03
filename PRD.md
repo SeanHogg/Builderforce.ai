@@ -45,7 +45,40 @@ In Project 11, 193 tickets are stalled with the status `lane_unconfigured` becau
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+### Functional Requirements
+
+1. **Policy Update** – The authoritative manager configuration for Project 11 must be updated with `allowAutoStaffLanes: true`.
+   - Current state: `allowAutoStaffLanes: false`
+   - Target state: `allowAutoStaffLanes: true`
+   - The update must persist to the database table `projectManagerConfigs`.
+
+2. **Configuration Persistence** – The updated value must be stored in the `projectManagerConfigs` table and survive:
+   - Worker restarts
+   - Redeployments
+   - Configuration syncs
+
+3. **Manager Behavior** – On the next manager evaluation cycle (within 15 minutes), the manager must:
+   - Detect lanes with no declared required role and no staffed agent
+   - Automatically assign suitable agents from the available pool
+   - Transition tickets from `lane_unconfigured` to an active state
+
+### Non-Functional Requirements
+
+1. **Performance** – The policy update must complete within 1 second.
+2. **Auditability** – The change must be recorded in the activity log with the actor who made the change.
+3. **Validation** – The updated policy must be readable via `GET /api/manager/11` and show `allowAutoStaffLanes: true`.
+
+### Data Requirements
+
+1. The configuration is stored in the `projectManagerConfigs` table.
+2. The field `allow_auto_staff_lanes` must be set to `true` for `projectId = 11`.
+3. The three-tier policy resolution must return `true` for Project 11.
+
+### API Requirements
+
+1. **Endpoint**: `PUT /api/manager/11`
+2. **Request Body**: `{ "allowAutoStaffLanes": true }`
+3. **Response**: Must return the updated config, effective policy, and tenant policy.
 
 ## Design
 
