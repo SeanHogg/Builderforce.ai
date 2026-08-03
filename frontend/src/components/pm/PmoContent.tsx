@@ -117,6 +117,8 @@ export function PmoContent() {
         )}
       </div>
 
+      {tab === 'rollup' && <PortfolioSnapshot />}
+
       {tab === 'structure' && <PmoStructure tree={tree} onChange={reload} />}
       {tab === 'rollup' && (scope ? <PmoRollup scope={scope} /> : <PmEmpty message={t('emptyRollup')} />)}
       {tab === 'cost' && <PmoCostReconciliation />}
