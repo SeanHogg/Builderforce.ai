@@ -15,7 +15,8 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { PmCard } from '@/components/pm/pmShared';
+import { RoleGate } from '@/components/RoleGate';
+import { WorkspaceCanvas, type WorkspaceCanvasPanel } from '@/components/workspace-canvas/WorkspaceCanvas';
 import { aiImpactApi } from '@/lib/aiImpactApi';
 import { usePmData } from '@/lib/pm/usePmData';
 import { AiConsumptionHeader } from './AiConsumptionHeader';
@@ -73,29 +74,52 @@ export function AiInsightsDashboard() {
     return overview ? { overrideData: bundledSlice[id] } : { bundleLoading: true };
   };
 
+  const panelLayout: Record<AiInsightPanelId, Pick<WorkspaceCanvasPanel, 'position' | 'width' | 'height'>> = {
+    'ai-impact': { position: { x: 36, y: 360 }, width: 720, height: 470 },
+    engineering: { position: { x: 780, y: 360 }, width: 560, height: 300 },
+    'llm-usage': { position: { x: 960, y: 36 }, width: 380, height: 300 },
+    recommendations: { position: { x: 780, y: 684 }, width: 560, height: 310 },
+  };
+
+  const panels: WorkspaceCanvasPanel[] = [
+    {
+      id: 'ai-consumption',
+      title: t('consumption.title'),
+      subtitle: t('consumption.thisMonth'),
+      icon: '↗',
+      position: { x: 36, y: 36 },
+      width: 900,
+      height: 300,
+      content: <AiConsumptionHeader />,
+    },
+    ...AI_INSIGHT_PANEL_IDS.map((id) => {
+      const def = AI_INSIGHT_PANELS[id];
+      const Summary = def.Summary;
+      return {
+        id: `ai-${id}`,
+        title: t(def.titleKey),
+        subtitle: t(def.descKey),
+        icon: def.icon,
+        ...panelLayout[id],
+        content: (
+          <RoleGate capability={def.capability} variant="block">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minHeight: '100%' }}>
+              <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0 }}>{t(def.descKey)}</p>
+              <Summary days={days} {...bundleProps(id)} />
+              <div style={{ marginTop: 'auto', display: 'flex', justifyContent: 'flex-end' }}>
+                <DrillButton label={t('viewReport')} onClick={() => open(id)} />
+              </div>
+            </div>
+          </RoleGate>
+        ),
+      } satisfies WorkspaceCanvasPanel;
+    }),
+  ];
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <DaysWindowSelect value={days} onChange={setDays} />
-      </div>
-
-      {/* Headline: total AI tokens consumed this month (all-members, always shown). */}
-      <AiConsumptionHeader />
-
-      {AI_INSIGHT_PANEL_IDS.map((id) => {
-        const def = AI_INSIGHT_PANELS[id];
-        const Summary = def.Summary;
-        return (
-          <PmCard
-            key={id}
-            title={`${def.icon} ${t(def.titleKey)}`}
-            action={<DrillButton label={t('viewReport')} onClick={() => open(id)} />}
-          >
-            <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: '-6px 0 14px' }}>{t(def.descKey)}</p>
-            <Summary days={days} {...bundleProps(id)} />
-          </PmCard>
-        );
-      })}
-    </div>
+    <WorkspaceCanvas
+      panels={panels}
+      toolbar={<DaysWindowSelect value={days} onChange={setDays} />}
+    />
   );
 }

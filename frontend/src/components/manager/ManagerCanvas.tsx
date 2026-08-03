@@ -1,25 +1,16 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import {
-  Background,
-  BackgroundVariant,
-  Controls,
-  Handle,
   MarkerType,
-  Position,
-  ReactFlow,
-  useEdgesState,
-  useNodesState,
   type Edge,
   type Node,
-  type NodeProps,
 } from '@xyflow/react';
-import '@xyflow/react/dist/style.css';
 import type { ManagerAction, ManagerOverview } from '@/lib/builderforceApi';
 import { managerActionIcon } from '@/lib/managerActions';
 import styles from './ManagerCanvas.module.css';
+import { WorkspaceCanvas, type WorkspaceCanvasPanel } from '@/components/workspace-canvas/WorkspaceCanvas';
 
 interface CanvasMetric { label: string; value: string | number; alert?: boolean }
 interface CanvasItem { icon: string; title: string; detail?: string | null; when?: string }
@@ -43,19 +34,10 @@ interface ManagerCanvasNodeData extends Record<string, unknown> {
 
 type ManagerMapNode = Node<ManagerCanvasNodeData, 'managerMap'>;
 
-function ManagerMapNode({ data }: NodeProps<ManagerMapNode>) {
+function ManagerArtifactBody({ data }: { data: ManagerCanvasNodeData }) {
   return (
-    <article className={styles.node} data-tone={data.tone}>
-      <Handle className={styles.handle} type="target" position={Position.Left} />
-      <div className={styles.head}>
-        <span className={styles.icon} aria-hidden>{data.icon}</span>
-        <div className={styles.titles}>
-          <span className={styles.eyebrow}>{data.eyebrow}</span>
-          <h3 className={styles.title}>{data.title}</h3>
-          <p className={styles.description}>{data.description}</p>
-        </div>
-        {data.badge && <span className={styles.badge}>{data.badge}</span>}
-      </div>
+    <div data-tone={data.tone}>
+      <div className={styles.artifactIntro}><p className={styles.description}>{data.description}</p>{data.badge && <span className={styles.badge}>{data.badge}</span>}</div>
       {data.metrics && data.metrics.length > 0 && (
         <div className={styles.metrics}>
           {data.metrics.map((metric) => (
@@ -93,12 +75,9 @@ function ManagerMapNode({ data }: NodeProps<ManagerMapNode>) {
           {data.href && <Link className={styles.open} href={data.href}>{data.openLabel ?? 'Open'} →</Link>}
         </footer>
       )}
-      <Handle className={styles.handle} type="source" position={Position.Right} />
-    </article>
+    </div>
   );
 }
-
-const nodeTypes = { managerMap: ManagerMapNode };
 
 export interface ManagerCanvasProps {
   overview: ManagerOverview;
@@ -178,37 +157,19 @@ export function buildManagerCanvasModel({ overview, managerName, managerType, la
 
 export function ManagerCanvas(props: ManagerCanvasProps) {
   const model = useMemo(() => buildManagerCanvasModel(props), [props]);
-  const [nodes, setNodes, onNodesChange] = useNodesState<ManagerMapNode>(model.nodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(model.edges);
-  // Polling refreshes the card contents without discarding a layout the operator has
-  // rearranged. New nodes take their authored position; existing nodes keep theirs.
-  useEffect(() => {
-    setNodes((current) => model.nodes.map((next) => {
-      const existing = current.find((node) => node.id === next.id);
-      return existing ? { ...next, position: existing.position } : next;
-    }));
-    setEdges(model.edges);
-  }, [model, setEdges, setNodes]);
-  return (
-    <section className={styles.shell} aria-label={props.labels.canvas}>
-      <div className={styles.legend}><span className={styles.liveDot} aria-hidden /><strong>{props.labels.canvas}</strong></div>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
-        nodeTypes={nodeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.14, minZoom: 0.65, maxZoom: 1.15 }}
-        minZoom={0.35}
-        maxZoom={1.5}
-        nodesConnectable={false}
-        nodesFocusable
-        proOptions={{ hideAttribution: true }}
-      >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="var(--border-subtle)" />
-        <Controls showInteractive={false} />
-      </ReactFlow>
-    </section>
-  );
+  const panels = useMemo(() => buildManagerWorkspacePanels(model.nodes), [model.nodes]);
+  return <WorkspaceCanvas panels={panels} className={styles.managerWorkspace} />;
+}
+
+export function buildManagerWorkspacePanels(nodes: ManagerMapNode[]): WorkspaceCanvasPanel[] {
+  return nodes.map((node) => ({
+    id: `manager-${node.id}`,
+    title: node.data.title,
+    subtitle: node.data.eyebrow,
+    icon: node.data.icon,
+    position: { x: node.position.x + 40, y: node.position.y + 40 },
+    width: node.data.tone === 'activity' ? 430 : node.data.tone === 'manager' ? 370 : 330,
+    height: node.data.items ? 330 : node.data.onRun ? 250 : 220,
+    content: <ManagerArtifactBody data={node.data} />,
+  }));
 }

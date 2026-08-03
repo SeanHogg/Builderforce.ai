@@ -116,6 +116,11 @@ export default function ProjectsTasksPage() {
 
   if (!isAuthenticated || !hasTenant) return null;
 
+  // Manager owns a component-level canvas. Rendering it inside the route-level
+  // React Flow canvas creates a nested viewport whose measured node can collapse
+  // to zero during the async overview load.
+  if (activeTab === 'manager') return <ManagerContent projectId={scopedProjectId} />;
+
   const taskIds = taskPanelIds.length ? taskPanelIds : (scopedProjectId ? [scopedProjectId] : []);
   const panelFor = (id: number, index: number): WorkspaceCanvasPanel => {
     const project = projects.find((candidate) => candidate.id === id);
@@ -137,8 +142,6 @@ export default function ProjectsTasksPage() {
     panels = taskIds.length
       ? taskIds.map(panelFor)
       : [{ id: 'tasks-all', title: 'All project tasks', subtitle: 'Task board', icon: '✓', content: <TaskMgmtContent compact />, width: 1480, height: 820 }];
-  } else if (activeTab === 'manager') {
-    panels = [{ id: 'manager', title: 'Manager', subtitle: currentProject?.name ?? 'All projects', icon: '◉', content: <ManagerContent projectId={scopedProjectId} />, width: 1320, height: 780 }];
   } else if (activeTab === 'pm') {
     panels = [{ id: 'planning', title: 'Planning', subtitle: currentProject?.name ?? 'All projects', icon: '↗', content: <PmScopeProvider projectId={scopedProjectId ?? null}><PmVisualizersContent /></PmScopeProvider>, width: 1380, height: 800 }];
   } else if (activeTab === 'portfolio') {

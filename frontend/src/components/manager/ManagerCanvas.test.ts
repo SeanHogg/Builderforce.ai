@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ManagerOverview } from '@/lib/builderforceApi';
-import { buildManagerCanvasModel, type ManagerCanvasProps } from './ManagerCanvas';
+import { buildManagerCanvasModel, buildManagerWorkspacePanels, type ManagerCanvasProps } from './ManagerCanvas';
 
 function props(): ManagerCanvasProps {
   const overview = {
@@ -41,6 +41,10 @@ describe('buildManagerCanvasModel', () => {
     expect(model.nodes.map((node) => node.id)).toEqual(['policy', 'backlog', 'stuck', 'manager', 'ask', 'today', 'activity']);
     expect(model.edges).toHaveLength(6);
     expect(model.edges.every((edge) => edge.source === 'manager' || edge.target === 'manager')).toBe(true);
+    expect(buildManagerWorkspacePanels(model.nodes).map((panel) => panel.id)).toEqual([
+      'manager-policy', 'manager-backlog', 'manager-stuck', 'manager-manager',
+      'manager-ask', 'manager-today', 'manager-activity',
+    ]);
   });
 
   it('visualizes live manager actions while keeping the full activity count', () => {

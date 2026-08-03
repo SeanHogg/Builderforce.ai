@@ -7,6 +7,8 @@
 const NATIVE_CANVAS_ROUTES = [
   '/dashboard',
   '/projects',
+  '/insights',
+  '/insights/ai',
   '/brainstorm',
   '/workflows/builder',
 ] as const;

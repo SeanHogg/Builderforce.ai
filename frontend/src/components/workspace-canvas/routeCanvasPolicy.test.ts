@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { isNativeCanvasRoute, shouldRenderRouteAsCanvasArtifact } from './routeCanvasPolicy';
 
 describe('route canvas policy', () => {
-  it.each(['/create', '/create/local-1', '/dashboard', '/projects', '/brainstorm', '/workflows/builder'])(
+  it.each(['/create', '/create/local-1', '/dashboard', '/projects', '/insights', '/insights/ai', '/brainstorm', '/workflows/builder'])(
     'does not nest the native canvas route %s',
     (pathname) => expect(isNativeCanvasRoute(pathname)).toBe(true),
   );

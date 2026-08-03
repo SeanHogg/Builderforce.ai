@@ -9,6 +9,10 @@
     var(--bg-base);
 }
 
+.managerWorkspace { height: 720px; min-height: 620px; border-radius: 16px; }
+.artifactIntro { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:12px; }
+.artifactIntro .description { margin:0; }
+
 .shell :global(.react-flow__pane) { cursor: grab; }
 .shell :global(.react-flow__pane:active) { cursor: grabbing; }
 .shell :global(.react-flow__edge-path) { stroke: var(--border-strong, #94a3b8); stroke-width: 1.5; }
@@ -98,6 +102,7 @@
 
 @media (max-width: 720px) {
   .shell { min-height: 610px; }
+  .managerWorkspace { height:auto; min-height:0; }
   .legend { max-width: calc(100% - 76px); }
 }
 
