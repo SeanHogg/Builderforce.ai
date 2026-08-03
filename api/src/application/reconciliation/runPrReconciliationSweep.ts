@@ -1,4 +1,4 @@
-/** Daily producer for the dedicated PR/Ticket Reconciler agent. */
+/** Incremental producer for the dedicated PR/Ticket Reconciler agent. */
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import type { Env } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
@@ -18,7 +18,9 @@ const MAX_REPOS_PER_DAILY_SWEEP = 10;
 
 export async function runPrReconciliationSweep(env: Env): Promise<PrReconciliationSweepResult> {
   const db = buildDatabase(env);
-  const cutoff = new Date(Date.now() - 23 * 60 * 60 * 1_000);
+  // The frequent cron is every five minutes. A four-minute lease prevents
+  // overlap while ensuring PRs opened just after a run wait at most one tick.
+  const cutoff = new Date(Date.now() - 4 * 60 * 1_000);
   const repos = await db.select({ id: projectRepositories.id, tenantId: projectRepositories.tenantId })
     .from(projectRepositories)
     .innerJoin(ideAgents, and(

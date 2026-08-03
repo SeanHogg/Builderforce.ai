@@ -8,11 +8,15 @@ import {
   prReconciliationItems,
   prReconciliationRuns,
   projectRepositories,
+  projects,
   pullRequests,
   tasks,
 } from '../../infrastructure/database/schema';
+import { TaskPriority, TaskStatus } from '../../domain/shared/types';
 import { isResolveError, resolveRepoCredential } from '../repos/resolveRepoCredential';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { recordManagerActionOnChange, stateFingerprint } from '../manager/managerActionJournal';
+import { withDirectTaskKey } from '../task/taskKeys';
 import {
   classifyPullRequest,
   extractTaskId,
@@ -24,7 +28,7 @@ import {
 type FetchLike = typeof fetch;
 
 /** Bump when scheduled apply semantics change so an old run cannot postpone rollout validation. */
-export const PR_RECONCILIATION_POLICY_VERSION = 2;
+export const PR_RECONCILIATION_POLICY_VERSION = 3;
 
 export interface GithubPrSnapshot extends ReconciliationPrInput {
   url: string;
@@ -41,7 +45,7 @@ interface GithubGraphqlResponse {
       pullRequests: {
         pageInfo: { hasNextPage: boolean; endCursor: string | null };
         nodes: Array<{
-          number: number; title: string; url: string; isDraft: boolean;
+          number: number; title: string; body: string; url: string; isDraft: boolean;
           headRefName: string; baseRefName: string; headRefOid: string;
           createdAt: string; updatedAt: string; mergeable: string; mergeStateStatus: string;
           changedFiles: number; additions: number; deletions: number;
@@ -63,7 +67,7 @@ query ReconcilePullRequests($owner: String!, $repo: String!, $cursor: String) {
     pullRequests(first: 25, after: $cursor, states: OPEN, orderBy: {field: UPDATED_AT, direction: DESC}) {
       pageInfo { hasNextPage endCursor }
       nodes {
-        number title url isDraft headRefName baseRefName headRefOid
+        number title body url isDraft headRefName baseRefName headRefOid
         createdAt updatedAt mergeable mergeStateStatus changedFiles additions deletions
         author { login }
         commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
@@ -136,7 +140,7 @@ export async function fetchOpenPullRequests(
         detailsUrl: c.__typename === 'CheckRun' ? c.detailsUrl : c.targetUrl,
       }));
       result.push({
-        number: node.number, title: node.title, body: '', url: node.url,
+        number: node.number, title: node.title, body: node.body, url: node.url,
         headBranch: node.headRefName, baseBranch: node.baseRefName, headOid: node.headRefOid, isDraft: node.isDraft,
         createdAt: node.createdAt, updatedAt: node.updatedAt, author: node.author?.login ?? null,
         changedFiles: node.changedFiles, additions: node.additions, deletions: node.deletions,
@@ -251,6 +255,59 @@ export function reconciliationQueueAction(
   }
 }
 
+export const isDependencyBot = (author: string | null | undefined): boolean =>
+  /^(?:app\/)?dependabot(?:\[bot\])?$/i.test(author ?? '');
+
+/**
+ * Dependabot PRs intentionally have no BuilderForce task reference. Give each one
+ * its own durable ticket so normal review/sign-off/merge policy can govern it; one
+ * shared ticket would be completed by the first merge and make every sibling stale.
+ */
+export async function ensureDependencyReviewTask(
+  db: Db,
+  args: {
+    tenantId: number; projectId: number; repoId: string; prNumber: number; prUrl: string;
+    title: string; body: string; headBranch: string;
+  },
+): Promise<{ id: number; status: string; completedAt: Date | null } | null> {
+  const [existing] = await db.select({ id: tasks.id, status: tasks.status, completedAt: tasks.completedAt })
+    .from(tasks).where(and(eq(tasks.projectId, args.projectId), eq(tasks.githubPrNumber, args.prNumber))).limit(1);
+  if (existing) {
+    if (existing.status.toLowerCase() === TaskStatus.DONE) {
+      const [reopened] = await db.update(tasks).set({
+        status: TaskStatus.READY, completedAt: null, updatedAt: new Date(),
+      }).where(eq(tasks.id, existing.id)).returning({ id: tasks.id, status: tasks.status, completedAt: tasks.completedAt });
+      return reopened ?? existing;
+    }
+    return existing;
+  }
+
+  const [project] = await db.select({ key: projects.key }).from(projects)
+    .where(scopedToTenant(projects, args.tenantId, eq(projects.id, args.projectId))).limit(1);
+  if (!project) return null;
+  const description = [
+    `Review automated dependency pull request #${args.prNumber}.`,
+    '',
+    `GitHub: ${args.prUrl}`,
+    `Branch: ${args.headBranch}`,
+    '',
+    'Validate compatibility and security impact, require the normal checks and sign-offs, then merge or close the PR.',
+    args.body.trim() ? `\nProvider summary:\n${args.body.trim().slice(0, 4_000)}` : '',
+  ].filter(Boolean).join('\n');
+  return withDirectTaskKey(db, args.projectId, project.key, async (key) => {
+    const [created] = await db.insert(tasks).values({
+      projectId: args.projectId, key,
+      title: `Dependency PR #${args.prNumber}: ${args.title}`.slice(0, 500),
+      description, status: TaskStatus.READY, priority: TaskPriority.HIGH,
+      source: 'pr_reconciler', githubPrUrl: args.prUrl, githubPrNumber: args.prNumber,
+      gitBranch: args.headBranch, explicitRepoId: args.repoId,
+      startDate: new Date(), updatedAt: new Date(),
+    }).returning({ id: tasks.id, status: tasks.status, completedAt: tasks.completedAt });
+    if (!created) throw new Error(`Could not create dependency review ticket for PR #${args.prNumber}`);
+    return created;
+  });
+}
+
 export interface ReconciliationRunResult {
   runId: string;
   status: 'completed' | 'completed_with_errors';
@@ -306,18 +363,59 @@ export async function runPrTicketReconciliation(
       throw error;
     }
 
-    const internalRows = await db.select({ id: pullRequests.id, number: pullRequests.number, taskId: pullRequests.taskId })
-      .from(pullRequests).where(and(eq(pullRequests.repoId, repo.id), eq(pullRequests.tenantId, args.tenantId)));
-    const internalByNumber = new Map(internalRows.filter((r) => r.number != null).map((r) => [r.number as number, r]));
-    const taskRefByPr = new Map<number, number | null>();
-    for (const pr of githubPrs) {
-      taskRefByPr.set(pr.number, internalByNumber.get(pr.number)?.taskId ?? extractTaskId(pr.title, pr.body, pr.headBranch));
+    const internalRows = await db.select({
+      id: pullRequests.id, number: pullRequests.number, taskId: pullRequests.taskId,
+      updatedAt: pullRequests.updatedAt,
+    }).from(pullRequests).where(and(
+      eq(pullRequests.repoId, repo.id), eq(pullRequests.tenantId, args.tenantId),
+    )).orderBy(desc(pullRequests.updatedAt), desc(pullRequests.id));
+    // First row wins after deterministic newest-first ordering. A pre-migration
+    // duplicate can no longer make association depend on database heap order.
+    const internalByNumber = new Map<number, (typeof internalRows)[number]>();
+    for (const row of internalRows) {
+      if (row.number != null && !internalByNumber.has(row.number)) internalByNumber.set(row.number, row);
     }
-
-    const taskIds = [...new Set([...taskRefByPr.values()].filter((id): id is number => id != null))];
+    const extractedByPr = new Map(githubPrs.map((pr) => [pr.number, extractTaskId(pr.title, pr.body, pr.headBranch)]));
+    const candidateTaskIds = [...new Set(githubPrs.flatMap((pr) => [
+      internalByNumber.get(pr.number)?.taskId,
+      extractedByPr.get(pr.number),
+    ]).filter((id): id is number => id != null))];
+    const taskIds = candidateTaskIds;
     const taskRows = taskIds.length === 0 ? [] : await db.select({ id: tasks.id, status: tasks.status, completedAt: tasks.completedAt })
       .from(tasks).where(and(eq(tasks.projectId, repo.projectId), inArray(tasks.id, taskIds)));
     const taskById = new Map(taskRows.map((t) => [t.id, t]));
+    const taskRefByPr = new Map<number, number | null>();
+    for (const pr of githubPrs) {
+      const stored = internalByNumber.get(pr.number)?.taskId ?? null;
+      const extracted = extractedByPr.get(pr.number) ?? null;
+      // A stale/cross-project stored link must not suppress a valid reference in
+      // the current GitHub title/body/branch.
+      const valid = stored != null && taskById.has(stored)
+        ? stored
+        : extracted != null && taskById.has(extracted) ? extracted : null;
+      taskRefByPr.set(pr.number, valid);
+    }
+
+    // Dependency bots do not know BuilderForce task syntax. Create one review
+    // ticket per PR before classification so they enter the same governed path.
+    if (mode === 'apply') {
+      for (const pr of githubPrs.filter((item) => isDependencyBot(item.author) && taskRefByPr.get(item.number) == null)) {
+        const ticket = await ensureDependencyReviewTask(db, {
+          tenantId: args.tenantId, projectId: repo.projectId, repoId: repo.id, prNumber: pr.number,
+          prUrl: pr.url, title: pr.title, body: pr.body, headBranch: pr.headBranch,
+        });
+        if (ticket) {
+          taskById.set(ticket.id, ticket);
+          taskRefByPr.set(pr.number, ticket.id);
+        } else {
+          errorCount++;
+          await recordError(db, {
+            runId, tenantId: args.tenantId, repoId: repo.id, prNumber: pr.number,
+            phase: 'action', code: 'DEPENDENCY_TICKET_FAILED',
+          }, new Error(`Could not create or recover a dependency review ticket for PR #${pr.number}`));
+        }
+      }
+    }
     const prsByTask = new Map<number, number[]>();
     for (const [prNumber, taskId] of taskRefByPr) {
       if (taskId == null) continue;
@@ -334,13 +432,11 @@ export async function runPrTicketReconciliation(
     });
 
     // Reconciliation is the inventory boundary; the manager is the policy boundary.
-    // Every linked GitHub PR must exist in the canonical pull_requests queue so the
-    // existing manager can poll it, repair conflicts, enforce sign-off/authority and
-    // merge it. Unlinked/invalid references remain quarantined in reconciliation_items:
-    // feeding an orphan into the merge queue could bypass a ticket's review gates.
+    // Persist EVERY GitHub PR. The manager merge query requires a valid task link, so
+    // unlinked rows are visible/auditable without becoming an orphan merge back door.
+    const canonicalByNumber = new Map(internalByNumber);
     if (mode === 'apply') {
-      const linked = decisions.filter((item) => item.taskId != null && item.ticket != null);
-      const missing = linked.filter((item) => !internalByNumber.has(item.pr.number));
+      const missing = decisions.filter((item) => !internalByNumber.has(item.pr.number));
       if (missing.length > 0) {
         const inserted = await db.insert(pullRequests).values(missing.map(({ pr, taskId, decision }) => {
           const build = canonicalBuildState(decision);
@@ -353,26 +449,42 @@ export async function runPrTicketReconciliation(
             buildStatus: build.buildStatus, buildError: build.buildError,
             createdAt: new Date(pr.createdAt), updatedAt: new Date(),
           };
-        })).returning({ id: pullRequests.id, number: pullRequests.number, taskId: pullRequests.taskId });
-        for (const row of inserted) if (row.number != null) internalByNumber.set(row.number, row);
+        })).onConflictDoNothing().returning({
+          id: pullRequests.id, number: pullRequests.number, taskId: pullRequests.taskId,
+          updatedAt: pullRequests.updatedAt,
+        });
+        for (const row of inserted) if (row.number != null) canonicalByNumber.set(row.number, row);
       }
 
-      // Existing rows can predate ticket extraction and CI ingestion. Update them in
-      // bounded parallel batches; this is intentionally before item persistence so a
+      // Existing rows can predate ticket extraction and CI ingestion. Update every
+      // provider-open row (including a concurrent insert ignored above) in bounded
+      // parallel batches; this is intentionally before item persistence so a
       // failed handoff is visible as a failed run, never a misleading "queued" item.
-      const existing = linked.filter((item) => !missing.some((candidate) => candidate.pr.number === item.pr.number));
-      for (let offset = 0; offset < existing.length; offset += 25) {
-        await Promise.all(existing.slice(offset, offset + 25).map(({ pr, taskId, decision }) => {
+      for (let offset = 0; offset < decisions.length; offset += 25) {
+        await Promise.all(decisions.slice(offset, offset + 25).map(({ pr, taskId, decision }) => {
           const build = canonicalBuildState(decision);
           return db.update(pullRequests).set({
             taskId, url: pr.url, branchName: pr.headBranch, baseBranch: pr.baseBranch,
             status: pr.isDraft ? 'draft' : 'open',
+            externalTicketRef: taskId == null
+              ? (isDependencyBot(pr.author) ? 'dependency-review-unlinked' : 'reconciliation-unlinked')
+              : null,
             buildStatus: build.buildStatus, buildError: build.buildError, updatedAt: new Date(),
           }).where(and(
             eq(pullRequests.tenantId, args.tenantId), eq(pullRequests.repoId, repo.id),
             eq(pullRequests.number, pr.number),
           ));
         }));
+      }
+      const refreshed = githubPrs.length === 0 ? [] : await db.select({
+        id: pullRequests.id, number: pullRequests.number, taskId: pullRequests.taskId,
+        updatedAt: pullRequests.updatedAt,
+      }).from(pullRequests).where(and(
+        eq(pullRequests.repoId, repo.id), eq(pullRequests.tenantId, args.tenantId),
+        inArray(pullRequests.number, githubPrs.map((pr) => pr.number)),
+      )).orderBy(desc(pullRequests.updatedAt), desc(pullRequests.id));
+      for (const row of refreshed) {
+        if (row.number != null && !canonicalByNumber.has(row.number)) canonicalByNumber.set(row.number, row);
       }
     }
 
@@ -401,12 +513,13 @@ export async function runPrTicketReconciliation(
         classification: decision.classification, recommendedAction: decision.recommendedAction,
         confidence: decision.confidence, reasonCodes: decision.reasonCodes,
         checkSummary: decision.checkSummary,
-        appliedAction: queueAction,
-        appliedAt: queueAction == null ? null : new Date(),
+        appliedAction: null,
+        appliedAt: null,
         evidence: {
           headOid: pr.headOid, author: pr.author, createdAt: pr.createdAt, updatedAt: pr.updatedAt,
           changedFiles: pr.changedFiles, additions: pr.additions, deletions: pr.deletions,
           mergeable: pr.mergeable, mergeStateStatus: pr.mergeStateStatus,
+          handoff: queueAction,
           ticketSource: internalByNumber.get(pr.number)?.taskId != null ? 'builderforce_pull_request' : (taskId != null ? 'github_text' : null),
         },
       });
@@ -414,10 +527,59 @@ export async function runPrTicketReconciliation(
       if (batch.length) await db.insert(prReconciliationItems).values(batch);
     }
 
-    let applied = mode === 'apply'
-      ? decisions.filter(({ decision }) => decision.recommendedAction !== 'close').length
-      : 0;
+    let applied = 0;
+    let routed = 0;
+    let journaled = 0;
+    let repairTicketsReopened = 0;
     if (mode === 'apply') {
+      const repairTaskIds = [...new Set(decisions
+        .filter(({ decision, taskId }) => decision.classification === 'repair' && taskId != null)
+        .map(({ taskId }) => taskId as number))];
+      if (repairTaskIds.length > 0) {
+        const reopened = await db.update(tasks).set({
+          status: TaskStatus.IN_PROGRESS, completedAt: null, updatedAt: new Date(),
+        }).where(and(
+          inArray(tasks.id, repairTaskIds),
+          inArray(tasks.status, [TaskStatus.READY, TaskStatus.IN_REVIEW, 'test', 'validation']),
+        )).returning({ id: tasks.id });
+        repairTicketsReopened = reopened.length;
+      }
+
+      for (const item of decisions.filter(({ decision }) => decision.recommendedAction !== 'close')) {
+        const canonical = canonicalByNumber.get(item.pr.number);
+        if (!canonical) {
+          errorCount++;
+          await recordError(db, {
+            runId, tenantId: args.tenantId, repoId: repo.id, prNumber: item.pr.number,
+            phase: 'persistence', code: 'CANONICAL_PR_MISSING',
+          }, new Error(`PR #${item.pr.number} could not be handed to the manager queue`));
+          continue;
+        }
+        const handoff = reconciliationQueueAction(item.decision, item.taskId != null && item.ticket != null) ?? 'queue_investigate';
+        const wrote = await recordManagerActionOnChange(db, {
+          tenantId: args.tenantId, projectId: repo.projectId,
+          taskId: item.taskId, prId: canonical.id, actionType: 'reconcile_pr',
+          stateKey: `pr-reconciliation:${repo.id}:${item.pr.number}`,
+          fingerprint: stateFingerprint([
+            item.pr.headOid, item.taskId, item.ticket?.status, item.decision.classification,
+            item.decision.checkSummary.failed, item.decision.checkSummary.pending,
+          ]),
+          summary: `PR #${item.pr.number} reconciled: ${handoff}.`,
+          detail: {
+            runId, handoff, classification: item.decision.classification,
+            reasonCodes: item.decision.reasonCodes, taskStatus: item.ticket?.status ?? null,
+          },
+        });
+        routed++;
+        if (wrote) journaled++;
+        await db.update(prReconciliationItems).set({
+          appliedAction: handoff.replace(/^queue_/, 'route_'), appliedAt: new Date(),
+        }).where(and(
+          eq(prReconciliationItems.tenantId, args.tenantId),
+          eq(prReconciliationItems.runId, runId), eq(prReconciliationItems.prNumber, item.pr.number),
+        ));
+      }
+
       const approvedSet = new Set(resolvedApproved);
       for (const item of decisions.filter((d) => approvedSet.has(d.pr.number))) {
         if (item.decision.classification !== 'close_candidate' || item.decision.confidence !== 'high') {
@@ -461,6 +623,10 @@ export async function runPrTicketReconciliation(
       policyVersion: PR_RECONCILIATION_POLICY_VERSION,
       total: decisions.length,
       applied,
+      routed,
+      journaled,
+      repairTicketsReopened,
+      quarantined: decisions.filter(({ taskId, ticket }) => taskId == null || ticket == null).length,
       policyApproved: policyApproved.length,
     };
     for (const { decision } of decisions) summary[decision.classification] = (summary[decision.classification] ?? 0) + 1;
@@ -499,6 +665,8 @@ export async function getReconciliationDiagnostics(db: Db, tenantId: number, run
       .orderBy(desc(prReconciliationErrors.createdAt)),
   ]);
   const persistedSummary = (run.summary ?? {}) as Record<string, number>;
+  const appliedItems = items.filter((item) => item.appliedAction === 'close');
+  const routedItems = items.filter((item) => item.appliedAction != null && item.appliedAction !== 'close');
   return {
     run, items, errors,
     verification: {
@@ -508,8 +676,14 @@ export async function getReconciliationDiagnostics(db: Db, tenantId: number, run
       persistedErrorCount: errors.length,
       summaryErrorCount: run.errorCount,
       errorCountMatches: errors.length === run.errorCount,
+      persistedAppliedCount: appliedItems.length,
+      summaryAppliedCount: Number(persistedSummary.applied ?? 0),
+      appliedCountMatches: appliedItems.length === Number(persistedSummary.applied ?? 0),
+      persistedRoutedCount: routedItems.length,
+      summaryRoutedCount: Number(persistedSummary.routed ?? 0),
+      routedCountMatches: routedItems.length === Number(persistedSummary.routed ?? 0),
       dryRunHadNoActions: run.mode !== 'dry_run' || items.every((item) => item.appliedAction == null),
-      allActionsWereExplicitlyApproved: items.filter((item) => item.appliedAction === 'close')
+      allActionsWereExplicitlyApproved: appliedItems
         .every((item) => (run.approvedPrNumbers as number[]).includes(item.prNumber)),
     },
   };

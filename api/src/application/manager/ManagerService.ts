@@ -29,7 +29,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * the pass, and each mutation is idempotent (re-scoring/re-ranking is a no-op-ish
  * overwrite; merge dedupes on an already-merged PR), so overlapping runs are safe.
  */
-import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import type { RuntimeService } from '../runtime/RuntimeService';
@@ -2198,6 +2198,9 @@ async function coordinatePullRequests(
       eq(pullRequests.tenantId, tenantId),
       eq(pullRequests.projectId, projectId),
       eq(pullRequests.status, 'open'),
+      // An unlinked provider PR is visible to reconciliation but cannot bypass
+      // ticket review/sign-off governance by entering the merge queue as an orphan.
+      isNotNull(pullRequests.taskId),
       // ── HOW A PR LEAVES THE QUEUE ───────────────────────────────────────────────
       // Retiring a PR to a human writes `merge_blocked`; it does NOT close the pull
       // request, which stays `open` on the provider until a person deals with it. Under
@@ -2227,7 +2230,12 @@ async function coordinatePullRequests(
     // nothing merges and nothing retires either (measured: `attempts=2` on row after row
     // of the stuck register after 16–28 days). A queue has to keep the same PR at its
     // head until that head reaches a conclusion. `id` breaks ties so the order is total.
-    .orderBy(asc(pullRequests.createdAt), asc(pullRequests.id))
+    // Green/unknown rows first. Explicitly red or pending rows are retained for
+    // CI remediation but cannot fill the bounded 20-row window ahead of ready work.
+    .orderBy(
+      sql`case when ${pullRequests.buildStatus} = 'success' then 0 when ${pullRequests.buildStatus} is null then 1 else 2 end`,
+      asc(pullRequests.createdAt), asc(pullRequests.id),
+    )
     .limit(MAX_PR_ACTIONS_PER_RUN);
   const activePrRuns = openPrs.some((pr) => pr.taskId != null)
     ? await runtimeService.listActiveByTasks(openPrs.flatMap((pr) => pr.taskId == null ? [] : [pr.taskId])).catch(() => [])
@@ -2274,6 +2282,7 @@ async function coordinatePullRequests(
   // `pr_id`), so there is no intermediate map that could reintroduce a ticket key.
   const queue = planMergeQueue(openPrs, {
     hasActiveRun: (pr) => pr.taskId != null && activePrTaskIds.has(pr.taskId),
+    requireGreen: policy.prMergePolicy === 'on_green',
   });
   summary.prQueue = summarizeMergeQueue(queue);
 
@@ -2329,6 +2338,10 @@ async function coordinatePullRequests(
       // does. This is the branch that gives the pass its budget back: it costs nothing,
       // and it is where 17 of the 20 PRs in a window now land.
       if (disposition === 'queued') continue;
+
+      // Red/pending CI is remediation work, not an integration head. Its ticket was
+      // reopened by reconciliation/CI handling; do not let it consume queue depth.
+      if (disposition === 'ci_blocked') continue;
 
       // Exhausted sync: this PR has been brought up to date with its base
       // MAX_REMEDY_ATTEMPTS times and still has not merged, so a further sync is not a

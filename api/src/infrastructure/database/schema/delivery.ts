@@ -562,7 +562,12 @@ export const pullRequests = pgTable('pull_requests', {
   buildError:        text('build_error'),                     // failing jobs/steps summary when build_status='failure' (0196)
   createdAt:         timestamp('created_at').notNull().defaultNow(),
   updatedAt:         timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => ({
+  /** Provider identity is one row, even when webhook/finalize/reconciliation race. */
+  byProviderNumber: uniqueIndex('uq_pull_requests_provider_number')
+    .on(t.tenantId, t.repoId, t.number)
+    .where(sql`${t.repoId} is not null and ${t.number} is not null`),
+}));
 
 /** One deterministic GitHub↔ticket audit by the dedicated reconciliation agent. */
 export const prReconciliationRuns = pgTable('pr_reconciliation_runs', {

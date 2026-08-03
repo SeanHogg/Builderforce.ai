@@ -114,17 +114,6 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     },
   },
   {
-    key: 'pr-ticket-reconciler',
-    cadence: 'daily',
-    description: 'Reconcile open GitHub PRs against BuilderForce tickets; automatically close only high-confidence stale PRs under the recorded policy allowlist.',
-    run: async ({ env }) => {
-      const r = await runPrReconciliationSweep(env);
-      return r.due > 0 || r.failed > 0
-        ? `due=${r.due} completed=${r.completed} failed=${r.failed} prs=${r.prs} findings=${r.findings}`
-        : null;
-    },
-  },
-  {
     key: 'validator',
     cadence: 'daily',
     description: "Re-review each tenant's Done items against the codebase; gaps become GAP tasks.",
@@ -193,6 +182,17 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
   // Frequent — the every-5-minute tick. KV work-gated in scheduled(); a forced
   // run bypasses that gate deliberately (see the admin route).
   // ---------------------------------------------------------------------------
+  {
+    key: 'pr-ticket-reconciler',
+    cadence: 'frequent',
+    description: 'Continuously reconcile open GitHub PRs against BuilderForce tickets; route active work and close only high-confidence stale PRs.',
+    run: async ({ env }) => {
+      const r = await runPrReconciliationSweep(env);
+      return r.due > 0 || r.failed > 0
+        ? `due=${r.due} completed=${r.completed} failed=${r.failed} prs=${r.prs} findings=${r.findings}`
+        : null;
+    },
+  },
   {
     key: 'wf-triggers',
     cadence: 'frequent',

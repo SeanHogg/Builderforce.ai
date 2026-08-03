@@ -18,4 +18,9 @@ describe('scheduled PR reconciliation policy wiring', () => {
     expect(source).toContain("recent.summary ->> 'policyVersion'");
     expect(source).toContain('PR_RECONCILIATION_POLICY_VERSION');
   });
+
+  it('uses a sub-tick overlap lease instead of suppressing a repository for a day', () => {
+    expect(source).toContain('4 * 60 * 1_000');
+    expect(source).not.toContain('23 * 60 * 60');
+  });
 });

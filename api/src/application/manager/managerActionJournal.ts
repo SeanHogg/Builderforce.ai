@@ -135,6 +135,12 @@ export async function recordManagerActionOnChange(
         eq(managerActions.projectId, a.projectId),
         eq(managerActions.actionType, a.actionType),
         a.taskId == null ? isNull(managerActions.taskId) : eq(managerActions.taskId, a.taskId),
+        // PR reconciliation can legitimately journal many unlinked PRs (task_id
+        // null). Scope state dedupe to the PR when the caller supplies one, or the
+        // latest orphan PR would make every sibling look like a changed state.
+        ...(a.prId !== undefined
+          ? [a.prId == null ? isNull(managerActions.prId) : eq(managerActions.prId, a.prId)]
+          : []),
       ))
       .orderBy(desc(managerActions.createdAt))
       .limit(1);

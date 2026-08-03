@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   canonicalBuildState,
   fetchOpenPullRequests,
+  isDependencyBot,
   policyApprovedCloseNumbers,
   reconciliationQueueAction,
   reconciliationRequesterId,
@@ -19,7 +20,7 @@ const decision = (patch: Partial<ReconciliationDecision> = {}): ReconciliationDe
 });
 
 const prNode = (number: number, checkName: string, conclusion: string) => ({
-  number, title: `Task #${number}: work`, body: '', url: `https://github.com/acme/app/pull/${number}`,
+  number, title: `Task #${number}: work`, body: `Details for task #${number}`, url: `https://github.com/acme/app/pull/${number}`,
   isDraft: false, headRefName: `builderforce/task-${number}`, baseRefName: 'main', headRefOid: `sha-${number}`,
   createdAt: '2026-08-01T00:00:00Z', updatedAt: '2026-08-02T00:00:00Z',
   mergeable: 'MERGEABLE', mergeStateStatus: 'CLEAN', changedFiles: 1, additions: 2, deletions: 1,
@@ -58,6 +59,12 @@ describe('GitHub PR reconciliation collector', () => {
     expect(reconciliationQueueAction(decision({ classification: 'close_candidate', recommendedAction: 'close' }), true)).toBeNull();
   });
 
+  it('recognizes GitHub dependency bot identities that require generated review tickets', () => {
+    expect(isDependencyBot('app/dependabot')).toBe(true);
+    expect(isDependencyBot('dependabot[bot]')).toBe(true);
+    expect(isDependencyBot('human-reviewer')).toBe(false);
+  });
+
   it('projects GitHub check evidence into the build state used by the manager', () => {
     expect(canonicalBuildState(decision())).toEqual({ buildStatus: 'success', buildError: null });
     expect(canonicalBuildState(decision({ checkSummary: {
@@ -78,10 +85,13 @@ describe('GitHub PR reconciliation collector', () => {
     const rows = await fetchOpenPullRequests('not-a-real-token', 'acme', 'app', 'github.com', fetchFn);
     expect(rows).toHaveLength(2);
     expect(rows[1]?.checks[0]).toMatchObject({ name: 'Workers Builds: builderforce-frontend', state: 'FAILURE' });
+    expect(rows[0]?.body).toBe('Details for task #1');
     expect(fetchFn).toHaveBeenCalledTimes(2);
     const firstRequest = JSON.parse(String(fetchFn.mock.calls[0]?.[1]?.body));
     expect(firstRequest.query).toContain('pullRequests(first: 25');
-    expect(firstRequest.query).not.toMatch(/\btitle\s+body\s+url\b/);
+    // Body is association evidence: tickets referenced only in the PR description
+    // must not be misclassified as unlinked.
+    expect(firstRequest.query).toMatch(/\btitle\s+body\s+url\b/);
     expect(JSON.parse(String(fetchFn.mock.calls[1]?.[1]?.body)).variables.cursor).toBe('page-2');
   });
 
