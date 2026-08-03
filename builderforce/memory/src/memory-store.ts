@@ -58,8 +58,8 @@ export class MemoryStore implements MemoryStoreAPI {
       updatedAt: now
     };
 
-    // Enforce max entries
-    const entriesToDelete = this.entries.size - this.options.maxEntries;
+    // Enforce max entries (account for the entry we are about to add)
+    const entriesToDelete = (this.entries.size + 1) - this.options.maxEntries;
     if (entriesToDelete > 0) {
       const sortedEntries = Array.from(this.entries.values()).sort(
         (a, b) => a.createdAt - b.createdAt
