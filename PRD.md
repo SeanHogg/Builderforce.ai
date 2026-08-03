@@ -1,125 +1,93 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #574
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Security Provisioning Dashboard: GAP-G1 Closed Reflection
 
 ## Problem & Goal
+**Problem:** The Security Provisioning dashboard currently lacks visibility into the closure state of critical access provisioning gaps. Stakeholders must manually query underlying systems to confirm whether GAP‑G1 (a high‑priority, cross‑platform provisioning deficiency) has been resolved. This leads to delayed risk acceptance decisions, redundant audit requests, and an inaccurate representation of the organization’s access security posture.
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+**Goal:** Automatically reflect the closure of GAP‑G1 on the Security Provisioning dashboard, so that security operations, IAM teams, and internal auditors have a single, trusted, near‑real‑time view of this gap’s status. The update must eliminate manual reporting, reduce mean‑time‑to‑awareness, and provide clear audit evidence.
 
 ## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Security Operations Center (SOC) Analysts** – monitor overall security posture and escalate unresolved gaps.
+- **IAM / Provisioning Administrators** – own the remediation lifecycle and need to confirm closure is recognized.
+- **Compliance & Internal Audit** – require reliable evidence that GAP‑G1 is closed during audits.
+- **CISO / Security Leadership** – view executive dashboards that aggregate risk metrics.
 
 ## Scope
+**In scope:**
+- Dashboard widget or tile dedicated to GAP‑G1 (or integration into an existing “Open Gaps” panel) that displays `OPEN` / `CLOSED` status.
+- Automated data feed that refreshes the dashboard when the authoritative source (IAM control plane or GRC tool) confirms closure.
+- Timestamp of closure, responsible party, and a link to supporting remediation evidence.
+- Historical trend indicator showing when GAP‑G1 was opened and subsequently closed (optional date‑range slider).
+- A basic notification or highlighting mechanism (color change, banner) when closure is recent (< 7 days).
 
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+**Out of scope:**
+- Redesign of the entire Security Provisioning dashboard.
+- Visualisation of other security gaps (GAP‑G2, GAP‑G3, etc.) – only GAP‑G1 is addressed.
+- Workflow to actually remediate GAP‑G1 (provisioning policy changes, access reviews, etc.) – the remediation process is owned elsewhere.
+- User‑facing alerting to external channels (email, Slack) – limited to in‑dashboard indicator.
+- Role‑based access control changes to the dashboard itself (existing permissions remain).
 
 ## Functional Requirements
+1. **GAP‑G1 Status Widget**  
+   The dashboard shall display a prominent widget labeled “GAP‑G1 Status” that shows the current state (Open / Closed) using a clearly distinguishable visual treatment (e.g., green shield for Closed, red warning for Open).
 
-### FR-1 — Mode Selection
+2. **Data Source Integration**  
+   The widget shall consume data from the authoritative source of truth (e.g., ServiceNow GRC, AWS IAM Access Analyzer, or a custom rules engine API). The integration must support a REST API endpoint that returns the latest status and metadata for GAP‑G1.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+3. **Automatic Refresh**  
+   The status shall update no more than 5 minutes after the source system records the closure. The dashboard shall display the timestamp of the last refresh.
 
----
+4. **Closure Evidence**  
+   When status is “Closed,” a hyperlink must be available that directs the user to the remediation evidence (change ticket, updated policy document, automated attestation report, etc.).
 
-### FR-2 — Guided (Interactive) Mode
+5. **Historical Context**  
+   The widget must include an unobtrusive historical trend line or text indicating the date GAP‑G1 was opened and the date it was closed (if applicable). Optionally, a “View History” link can show a timeline of status changes.
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+6. **Transition Highlight**  
+   For 7 calendar days after a transition to “Closed” (or when a previously closed gap re‑opens), the widget background or border shall show a highlighted animation (e.g., pulsing) to draw attention to the change.
 
----
+7. **Manual Override (Audit)**  
+   Dashboard administrators shall have the ability to manually set the status to Closed (with mandatory comment) for testing or exceptional audit scenarios. Manual overrides shall be clearly marked as “Manual – not system verified.”
 
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+8. **Error / Stale Data Handling**  
+   If the data source is unreachable or the status hasn’t been updated in > 15 minutes, the widget shall display a “Data stale” warning with the last known status and time.
 
 ## Acceptance Criteria
-
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
-
----
+1. When the authoritative source marks GAP‑G1 as “Closed,” the dashboard widget changes to “Closed” within ≤ 5 minutes.
+2. Clicking the evidence link opens the correct remediation record (no broken links).
+3. The widget clearly distinguishes between “Open” and “Closed” states per the design guidelines (color, icon, text).
+4. Historical data shows the correct open date (before closure) and the closure date once closed.
+5. The highlight animation appears for a freshly closed gap and disappears after 7 days (system clock).
+6. Manual override capability works: an admin can set status to Closed, the widget shows “Manual” annotation, and the change is recorded in an audit log.
+7. When the source endpoint returns an error or is unreachable, the widget displays “Data stale” and the previous status within 5 minutes of the failure.
+8. The feature does not negatively impact dashboard load time; the widget renders within 2 seconds of page load.
 
 ## Out of Scope
+- Any changes to the underlying provisioning control that remediated GAP‑G1.
+- Automated email or Slack alerts—observability limited to dashboard.
+- Mobile responsiveness or dedicated mobile app support for this widget.
+- Multi‑language localization (English only for v1).
+- Historical reporting beyond the simple trend line—no exportable PDFs or detailed trend reports in this phase.
+- Integration with SIEM/SOAR for automated ticket creation from the dashboard (read‑only status reflection).
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+## Requirements
+
+_Owned by the business-analyst — to be authored._
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
