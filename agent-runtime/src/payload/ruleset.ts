@@ -28,22 +28,38 @@ export function getBusinessRulesets(
     return cachedCatalogs.get(filePath)!;
   }
 
-  // Synchronously load and parse the JSON file. This works in runtime (Node, Edge, Deno).
+  // Synchronously load and parse the JSON file using Node's fs module.
+  // This works in Node.js and Edge runtimes that support the fetch/File System API.
   let parsed: RulesetCatalog;
+  let fileContent: string;
+
   try {
-    parsed = await import(/* @vite-ignore */ filePath).catch((err) => {
-      throw new Error(`Failed to import business-rules.json at ${filePath}: ${err}`);
-    });
+    // Try using dynamic import for JSON (works with Vite/bundlers)
+    const module = await import(/* @vite-ignore */ filePath + '?raw');
+    fileContent = module.default;
+  } catch {
+    // Fallback: try reading as a regular module (for testing or other bundlers)
+    try {
+      const module = await import(/* @vite-ignore */ filePath);
+      fileContent = JSON.stringify(module.default || module);
+    } catch (err) {
+      throw new Error(`Failed to load business-rules.json at ${filePath}: ${err}`);
+    }
+  }
+
+  try {
+    parsed = JSON.parse(fileContent) as RulesetCatalog;
   } catch (err) {
     throw new Error(`Failed to parse business-rules.json at ${filePath}: ${err}`);
   }
+
   if (!parsed) {
     throw new Error(`business-rules catalog not found at ${filePath}`);
   }
 
   // Basic sanity schema checks (top-level keys and basic object shape).
   const suspectKeys = ['nullable', 'coerce', 'transformations', 'schema'];
-  const str = (content[filePath] as string);
+  const str = fileContent;
   for (const reserved of suspectKeys) {
     if (str.toLowerCase().includes(reserved)) {
       throw new Error(`Root JSON contains stray reserved key '${reserved}'; validate schema`);
