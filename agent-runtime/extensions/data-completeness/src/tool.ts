@@ -115,7 +115,8 @@ export function createDataCompletenessTool() {
     const datasetReport = calculateDatasetReport(
       recordScores,
       fieldWeights,
-      thresholds
+      thresholds,
+      placeholderSet
     );
     return datasetReport;
   };
