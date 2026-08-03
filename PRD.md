@@ -1,125 +1,92 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #894
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# PRD: Bulk Archive/Delete for Flagged Items
 
 ## Problem & Goal
-
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+Currently, users can only archive or delete a single flagged item at a time. This is inefficient when managing a large volume of inappropriate or low-quality content, leading to repetitive manual actions and increased moderation time. The goal is to enable users to select multiple flagged items and archive or delete them in a single action, significantly improving moderation workflow speed and reducing operational toil.
 
 ## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Content Moderators** – responsible for reviewing and acting on flagged content; need to quickly clear obvious violations in bulk.
+- **Community Managers / Admins** – oversee overall content health and often perform clean-up operations on flagged queues.
+- **Workspace Owners** – may intervene during high-volume incidents (e.g., spam attacks) and require batch removal capabilities.
 
 ## Scope
-
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+This enhancement introduces a multi-select UI and corresponding backend endpoints that allow users to archive or delete multiple flagged items simultaneously. The feature must be accessible from any view where flagged items are listed (e.g., moderation queue, search results filtered by flag status). It covers:
+- Frontend multi-select controls and bulk action buttons.
+- Backend API for bulk archive and bulk delete.
+- Confirmation dialogs with impact summary.
+- Progress indication and eventual consistency handling.
+- Basic error handling (partial failures, permission checks).
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+- **FR-1: Multi-Select Toggle**
+  - The UI provides a “Select” mode (e.g., checkboxes on each item row, a “Select All” control).
+  - Selecting items counts the chosen items and activates bulk action buttons.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+- **FR-2: Bulk Archive Action**
+  - User can trigger “Archive” on selected flagged items via a button.
+  - A confirmation dialog shows the number of items to be archived and any irreversible consequences.
+  - Upon confirmation, a single API call is made to archive all selected items (respecting per-item permissions).
+  - Successful archival removes the items from the active flagged view (or marks them as archived).
 
----
+- **FR-3: Bulk Delete Action**
+  - User can trigger “Delete” on selected flagged items via a button.
+  - A confirmation dialog warns about permanent deletion and lists the count of items.
+  - Upon confirmation, a single API call is made to permanently delete the items.
+  - Deleted items are immediately removed from the UI; an optional “Undo” toast may be provided for a short time (if technically feasible).
 
-### FR-2 — Guided (Interactive) Mode
+- **FR-4: Bulk Endpoint**
+  - A new POST endpoint (`/api/v1/flagged-items/bulk-archive` and `/api/v1/flagged-items/bulk-delete`) accepts an array of item IDs.
+  - The endpoint validates user permissions for each item; any unauthorized items are excluded and reported in the response.
+  - For large batches, the operation is processed asynchronously and returns a job ID for status polling; for smaller batches (≤100), a synchronous response with summary is acceptable.
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+- **FR-5: Error & Edge Case Handling**
+  - If no items are selected, bulk actions are disabled.
+  - If the user lacks permission for all selected items, the action is prevented with an appropriate error message.
+  - Partial success: display how many items were successfully archived/deleted vs. failures (with reasons).
+  - Network interruption during bulk request: show error and allow retry.
 
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+- **FR-6: UI States**
+  - Loading state: button shows a spinner and becomes disabled during the request.
+  - Empty state: after all items in the current view are archived/deleted, an empty state message is displayed.
+  - A clear way to exit selection mode (e.g., “Cancel” button or pressing Escape) is provided.
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
-
----
+- **AC-1:** As a moderator, I can select multiple flagged items using checkboxes or “Select All” and the UI reflects the count of selected items.
+- **AC-2:** When I choose “Archive” for selected items, a confirmation dialog appears; upon confirming, the items are archived and disappear from the flagged queue.
+- **AC-3:** When I choose “Delete” for selected items, a confirmation dialog appears; upon confirming, the items are permanently deleted and removed from the UI.
+- **AC-4:** If I attempt a bulk action on items I do not have permission to modify, the operation is rejected or skips those items, and I am notified.
+- **AC-5:** For batches of 100 items or fewer, the operation completes synchronously within 3 seconds and the UI updates immediately.
+- **AC-6:** For batches larger than 100 items, the system returns a job ID and the UI shows a progress indicator; once complete, the view refreshes.
+- **AC-7:** Bulk actions are accessible from the main moderation queue and any saved filtered view of flagged items.
+- **AC-8:** The feature is keyboard navigable and meets WCAG 2.1 level AA accessibility standards for selection, buttons, and dialogs.
 
 ## Out of Scope
+- **Bulk restore** of archived items (archived items can be individually restored; batch restore will be addressed separately).
+- **Scheduling** bulk actions (e.g., “archive all flagged items older than 30 days”).
+- **Bulk actions across multiple workspaces** or across different item types (e.g., flagged posts + comments mixed).
+- **Customizable confirmation thresholds** (e.g., suppress confirmation for <5 items).
+- **Undo after delete** – the feature may offer a short-lived “Undo” toast as a nice-to-have, but permanent deletion guarantees are not required.
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+## Requirements
+
+_Owned by the business-analyst — to be authored._
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
