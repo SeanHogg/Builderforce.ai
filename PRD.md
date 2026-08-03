@@ -169,6 +169,3 @@ The PRD calls for a Postgres-backed `channel-registry` table with `gen_random_uu
 | Blocker resolution | Gap task #1218 — re-dispatch #353 once the `api/` package is present |
 
 **Recommendation:** The PRD is approved as the specification for this feature. Ticket #353 should be returned to the backlog (`ready`) and re-dispatched once gap task #1218 is resolved and the `api/` backend is available on the branch for implementation.
-
-
-
