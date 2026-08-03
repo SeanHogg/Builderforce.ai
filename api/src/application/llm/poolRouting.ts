@@ -240,7 +240,7 @@ const CODING_MODEL_SET: ReadonlySet<string> = RECOGNIZED_CODER_MODELS;
  * "pure permutation" + never-empty invariants hold), but a long multi-turn Brain
  * codebase-analysis loop served by one of them tends toward context exhaustion /
  * non-convergence (the chat #50 "LOOP EXHAUSTED" failure, where auto-select drove the
- * loop on deepseek-v4-flash / minimax-m2.7). The floor SOFT-demotes them behind the
+ * loop on deepseek-v4-flash / the retired minimax-m2.7). The floor SOFT-demotes them behind the
  * real coding drivers so a strong coder leads whenever the plan pool has one; a
  * degenerate pool whose only coders are these still reaches them (last-resort), so a
  * Free tenant is never left without a coder.
@@ -254,7 +254,6 @@ const CODING_MODEL_SET: ReadonlySet<string> = RECOGNIZED_CODER_MODELS;
  */
 export const WEAK_FLASH_CODERS: ReadonlySet<string> = new Set<string>([
   'deepseek/deepseek-v4-flash',                // "fast cheap coder" — cheapest paid coder
-  'minimaxai/minimax-m2.7',                    // free default, but flash-class on long loops
   'minimax/minimax-m2.5:free',                 // prior-gen MiniMax free failover
   '@cf/qwen/qwen3-30b-a3b-fp8',                // self-labelled "small/fast; first pass for SMALL tasks"
   '@cf/meta/llama-3.3-70b-instruct-fp8-fast',  // self-labelled "small/fast; first pass for SMALL tasks"

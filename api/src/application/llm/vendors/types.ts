@@ -556,13 +556,15 @@ export function isSubrequestCapMessage(msg: string): boolean {
 }
 
 /** Statuses that trigger cascade to the next model.
- *  413 (payload/context too large) is here so a model whose context window the
+ *  410 (model retired) is here so a stale upstream catalog entry cannot abort
+ *  the whole chain; the failed model is recorded and routing advances to a live
+ *  candidate. 413 (payload/context too large) is here so a model whose context window the
  *  request exceeds (e.g. a 97K coding context hitting a 32K Cloudflare model →
  *  "exceeded this model context window limit") FAILS OVER to a bigger-window model
  *  instead of hard-failing the run. The pool is ordered big-window-first, so the
  *  cascade lands on a model that fits. */
 export const CASCADE_STATUSES: ReadonlySet<number> = new Set<number>([
-  404, 408, 413, 429, 500, 502, 503, 504,
+  404, 408, 410, 413, 429, 500, 502, 503, 504,
 ]);
 
 export const AUTH_STATUSES: ReadonlySet<number> = new Set<number>([401, 403]);

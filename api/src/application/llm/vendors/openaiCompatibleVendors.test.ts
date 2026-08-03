@@ -94,6 +94,41 @@ describe('explicit direct/<vendor>/<id> prefix routing reaches the new vendors',
 });
 
 describe('a factory vendor builds a correct OpenAI-compatible request', () => {
+  it('records HTTP 410 for a retired model and advances to the next candidate', async () => {
+    const calledModels: string[] = [];
+    (globalThis as { fetch: typeof fetch }).fetch = vi.fn(async (_input: string | URL, init?: RequestInit) => {
+      const request = JSON.parse(String(init?.body)) as { model: string };
+      calledModels.push(request.model);
+      if (request.model === 'minimaxai/minimax-m3') {
+        return new Response(JSON.stringify({ detail: 'model has reached end of life' }), {
+          status: 410,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(
+        JSON.stringify({ choices: [{ message: { role: 'assistant', content: 'ok' } }] }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+    }) as unknown as typeof fetch;
+
+    const result = await dispatchVendor({
+      env: { NVIDIA_API_KEY: 'nvapi-test' } as VendorEnv,
+      modelChain: ['minimaxai/minimax-m3', 'mistralai/mistral-medium-3.5-128b'],
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+
+    expect(calledModels).toEqual(['minimaxai/minimax-m3', 'mistralai/mistral-medium-3.5-128b']);
+    expect(result.modelUsed).toBe('mistralai/mistral-medium-3.5-128b');
+    expect(result.attempts).toEqual([
+      expect.objectContaining({
+        model: 'minimaxai/minimax-m3',
+        vendor: 'nvidia',
+        status: 410,
+        kind: 'client_error',
+      }),
+    ]);
+  });
+
   it('routes Kimi Code subscription keys to api.kimi.com, not the Moonshot Open Platform', async () => {
     const calls: Array<{ url: string; init: RequestInit }> = [];
     (globalThis as { fetch: typeof fetch }).fetch = vi.fn(async (input: string | URL, init?: RequestInit) => {
