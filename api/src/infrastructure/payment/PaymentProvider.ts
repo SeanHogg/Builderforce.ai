@@ -1,7 +1,7 @@
 /**
  * Payment provider abstraction.
  *
- * All payment processors (Stripe, Helcim, etc.) implement this interface.
+ * All payment processors implement this interface.
  * The application layer (`TenantService`) depends only on this interface,
  * never on a concrete provider. To swap processors: implement this interface,
  * add the provider to the factory in `index.ts`, and set PAYMENT_PROVIDER env var.
