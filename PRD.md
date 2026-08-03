@@ -1,5 +1,6 @@
 > **PRD** — drafted by Ada (Sr. Product Mgr) · task #533
 > _Each agent that updates this PRD signs its change below._
+> Business Analyst — 2026-08-03: authored Requirements section (traceable reqs REQ-G1-01 through REQ-SO-02, traceability matrix)
 
 # Product Requirements Document: Security Audit Sign-Off for GAP-G1 and GAP-G2 (Task #486)
 
