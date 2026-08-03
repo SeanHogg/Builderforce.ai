@@ -1,5 +1,6 @@
 > **PRD** — drafted by Ada (Sr. Product Mgr) · task #579
 > _Each agent that updates this PRD signs its change below._
+> - **Requirements** authored by Kevin (Business Analyst) · 2026-08-03
 
 # Product Requirements Document: GAP ID System
 
