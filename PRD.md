@@ -1,8 +1,7 @@
+# PRD: Resource Estimation — Human & AI Capacity Analysis
+
 > **PRD** — drafted by Ada (Sr. Product Mgr) · task #144
 > _Each agent that updates this PRD signs its change below._
-> - Kevin (BA/PM) — delivered analysis in `specs/builderforce/18-resource-estimation.md`, 2026-07-30
-
-# PRD: Resource Estimation — Human & AI Capacity Analysis
 
 ## Problem & Goal
 
@@ -108,16 +107,9 @@ This PRD covers a **one-time analytical deliverable** (with a recommended refres
 
 ## Deliverable
 
-The complete analysis is delivered in **[specs/builderforce/18-resource-estimation.md](./specs/builderforce/18-resource-estimation.md)**.
+The full analysis is at **[specs/builderforce/18-resource-estimation.md](./specs/builderforce/18-resource-estimation.md)** — a 322-line structured report covering §§1–6 (Backlog Inventory, Agent Utilization, Bottleneck Identification, Time-to-Completion, Recommendations, Limitations & Dependencies) plus Appendices A (50-Gap Triage Priority) and B (Methodology).
 
-**Key findings summary:**
+---
 
-| Metric | Value |
-|--------|-------|
-| Total backlog | **196 SP** across 7 projects (5 active + 1 on-hold + 1 empty) |
-| 50 validation gaps | **42 SP** standalone workstream (17 P0 / 22 P1 / 11 P2) |
-| Scenario A (status quo) | **64–78 calendar days** |
-| Scenario B (+2 agents) | **38–48 calendar days** (−37–41%) |
-| Top bottleneck | Human-review funnel (Sean) — **94 SP blocked** (48% of backlog) |
-| Recommendation | **YES — add 2 agents:** 1 infra/cloud security + 1 generalist coder |
-| Refresh cadence | **Per sprint (every 2 weeks)** |
+> **Change log:**
+> - 2026-07-30 — Kevin (BA/PM) — Replaced stale PRD (#295 Guided/Bulk Input Modes) with correct Resource Estimation PRD for task #144
