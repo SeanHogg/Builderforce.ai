@@ -36,7 +36,7 @@ interface GithubGraphqlResponse {
       pullRequests: {
         pageInfo: { hasNextPage: boolean; endCursor: string | null };
         nodes: Array<{
-          number: number; title: string; body: string; url: string; isDraft: boolean;
+          number: number; title: string; url: string; isDraft: boolean;
           headRefName: string; baseRefName: string; headRefOid: string;
           createdAt: string; updatedAt: string; mergeable: string; mergeStateStatus: string;
           changedFiles: number; additions: number; deletions: number;
@@ -55,10 +55,10 @@ interface GithubGraphqlResponse {
 const GITHUB_QUERY = `
 query ReconcilePullRequests($owner: String!, $repo: String!, $cursor: String) {
   repository(owner: $owner, name: $repo) {
-    pullRequests(first: 100, after: $cursor, states: OPEN, orderBy: {field: UPDATED_AT, direction: DESC}) {
+    pullRequests(first: 25, after: $cursor, states: OPEN, orderBy: {field: UPDATED_AT, direction: DESC}) {
       pageInfo { hasNextPage endCursor }
       nodes {
-        number title body url isDraft headRefName baseRefName headRefOid
+        number title url isDraft headRefName baseRefName headRefOid
         createdAt updatedAt mergeable mergeStateStatus changedFiles additions deletions
         author { login }
         commits(last: 1) { nodes { commit { statusCheckRollup { contexts(first: 100) { nodes {
@@ -91,7 +91,10 @@ export async function fetchOpenPullRequests(
   const result: GithubPrSnapshot[] = [];
   let cursor: string | null = null;
 
-  for (let page = 1; page <= 20; page++) {
+  // 100 PRs × a full status rollup is large enough for GitHub's GraphQL edge to
+  // return HTTP 502 on the real 410-PR Builderforce repository. Twenty-five keeps
+  // responses bounded; forty pages still permits a deliberately capped 1,000 PRs.
+  for (let page = 1; page <= 40; page++) {
     const response = await fetchFn(endpoint, {
       method: 'POST',
       headers: {
@@ -128,7 +131,7 @@ export async function fetchOpenPullRequests(
         detailsUrl: c.__typename === 'CheckRun' ? c.detailsUrl : c.targetUrl,
       }));
       result.push({
-        number: node.number, title: node.title, body: node.body ?? '', url: node.url,
+        number: node.number, title: node.title, body: '', url: node.url,
         headBranch: node.headRefName, headOid: node.headRefOid, isDraft: node.isDraft,
         createdAt: node.createdAt, updatedAt: node.updatedAt, author: node.author?.login ?? null,
         changedFiles: node.changedFiles, additions: node.additions, deletions: node.deletions,
@@ -139,7 +142,7 @@ export async function fetchOpenPullRequests(
     if (!connection.pageInfo.endCursor) throw new ReconciliationError('GITHUB_PAGINATION_ERROR', 'GitHub reported another page without an end cursor');
     cursor = connection.pageInfo.endCursor;
   }
-  throw new ReconciliationError('GITHUB_PAGE_LIMIT', 'Open PR inventory exceeded the 2,000 PR safety limit');
+  throw new ReconciliationError('GITHUB_PAGE_LIMIT', 'Open PR inventory exceeded the 1,000 PR safety limit');
 }
 
 interface ErrorContext {

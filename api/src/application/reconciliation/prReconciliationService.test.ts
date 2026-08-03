@@ -26,6 +26,9 @@ describe('GitHub PR reconciliation collector', () => {
     expect(rows).toHaveLength(2);
     expect(rows[1]?.checks[0]).toMatchObject({ name: 'Workers Builds: builderforce-frontend', state: 'FAILURE' });
     expect(fetchFn).toHaveBeenCalledTimes(2);
+    const firstRequest = JSON.parse(String(fetchFn.mock.calls[0]?.[1]?.body));
+    expect(firstRequest.query).toContain('pullRequests(first: 25');
+    expect(firstRequest.query).not.toMatch(/\btitle\s+body\s+url\b/);
     expect(JSON.parse(String(fetchFn.mock.calls[1]?.[1]?.body)).variables.cursor).toBe('page-2');
   });
 
