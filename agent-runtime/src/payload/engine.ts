@@ -363,7 +363,10 @@ function validate(
 
   for (const [propName, value] of Object.entries(payload)) {
     const def = getSchemaProperty(schema, propName);
-    if (def) validateProperty(propName, def, value, logRef, logSink, contextId);
+    if (def) {
+      const propErrors = validateProperty(propName, def, value, logRef, logSink, contextId);
+      errors.push(...propErrors);
+    }
   }
 
   return errors;
