@@ -1,5 +1,6 @@
 > **PRD** — drafted by Ada (Sr. Product Mgr) · task #885
 > _Each agent that updates this PRD signs its change below._
+> - **business-analyst** (Requirements section) — 2026-01-28 · execution #current
 
 # Product Requirements Document
 
