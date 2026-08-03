@@ -167,6 +167,12 @@ describe('classifyRunFailure — crash wrappers carry the real cause inside', ()
     expect(isPlatformFailure(classifyRunFailure(wrapped))).toBe(true);
   });
 
+  it('recognises the container rollout exit emitted by the durable runtime as an eviction', () => {
+    const rollout = cloudCrashReason('Runtime signalled the container to exit due to a new version rollout: 143');
+    expect(classifyRunFailure(rollout)).toBe('infra_eviction');
+    expect(isPlatformFailure(classifyRunFailure(rollout))).toBe(true);
+  });
+
   it('keeps runtime_crash when the inner detail names nothing recognisable', () => {
     expect(classifyRunFailure(cloudCrashReason('ENOENT: no such file or directory'))).toBe('runtime_crash');
   });

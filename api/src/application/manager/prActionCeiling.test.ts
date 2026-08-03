@@ -119,9 +119,12 @@ describe('manager PR action ceiling + rotation', () => {
     // Conjoined with a spent ceiling — never on the report alone.
     expect(where).toMatch(/\band greatest\(/);
     expect(where).toMatch(/>= \$\{MAX_REMEDY_ATTEMPTS\}/);
-    for (const counter of ['syncs', 'mergeFailures', 'conflicts']) {
+    for (const counter of ['syncs', 'mergeFailures']) {
       expect(where, `${counter} must count toward the exit`).toContain(`prActivity.${counter}`);
     }
+    const exitCounters = where.slice(where.indexOf('and greatest('), where.indexOf(') >= ${MAX_REMEDY_ATTEMPTS}'));
+    expect(exitCounters, 'recoverable conflicts must not be permanently evicted from autonomy')
+      .not.toContain('prActivity.conflicts');
   });
 
   it('applies the SAME exhaustion rule the stall remedies use — no second ceiling', () => {

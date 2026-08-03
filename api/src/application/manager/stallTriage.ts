@@ -390,8 +390,8 @@ export function diagnoseStall(input: StallInput): StallDiagnosis {
 
   if (input.pr?.conflicted) {
     return stalled(
-      'pr_conflict', 'resolve_conflict',
-      `Stuck ${age}: the pull request conflicts with its base branch — dispatching an agent to resolve it.`,
+      'pr_conflict', 'none',
+      `Stuck ${age}: the pull request conflicts with its base branch — the manager's single-head merge train owns bounded recovery and will retry it after backoff.`,
     );
   }
   if (input.mergeWithheld) {

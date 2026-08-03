@@ -189,6 +189,23 @@ describe('trailingUnproductiveStreak', () => {
     expect(trailingUnproductiveStreak([evicted, evicted, evicted])).toBe(0);
   });
 
+  it('does not let platform capacity or lost-worker failures poison a ticket breaker', () => {
+    const platformFailures = [
+      { status: 'failed', errorMessage: '429 Too Many Requests' },
+      { status: 'failed', errorMessage: 'This cloud run went silent mid-run after running well past the startup wall.' },
+      { status: 'failed', errorMessage: "Runtime signalled the container to exit due to a new version rollout: 143" },
+    ];
+    expect(trailingUnproductiveStreak(platformFailures)).toBe(0);
+  });
+
+  it('skips platform failures without clearing genuine no-op failures around them', () => {
+    expect(trailingUnproductiveStreak([
+      { status: 'failed', errorMessage: 'agent returned an invalid patch' },
+      { status: 'failed', errorMessage: '429 Too Many Requests' },
+      { status: 'completed', produced: false },
+    ])).toBe(2);
+  });
+
   it('skips an eviction without BREAKING a genuine streak around it', () => {
     // Conservative on purpose: a deploy landing between two real failures must not
     // hand the ticket a clean slate, or the breaker stops catching retry storms.
@@ -210,16 +227,16 @@ describe('trailingUnproductiveStreak', () => {
     expect(remaining).toBeGreaterThan(0);
   });
 
-  it('backs off from the newest COUNTED failure, not from an eviction on top of it', () => {
+  it('backs off from a platform failure without spending a ticket-breaker strike', () => {
     const now = Date.UTC(2026, 6, 25, 12, 0, 0);
     const realFailedAt = new Date(now - 60_000);          // 1 min ago → still cooling
     const remaining = autoRunCooldownRemainingMs([
       { ...evicted, completedAt: new Date(now - 1_000) }, // a deploy 1s ago
       { status: 'failed', completedAt: realFailedAt },
     ], now);
-    // One counted failure → a 5-minute window measured from the REAL failure, so
-    // ~4 minutes are still owed. Measuring from the eviction would have said ~5.
-    expect(remaining).toBe(AUTORUN_COOLDOWN_BASE_MS - 60_000);
+    // Both terminal failures strengthen retry backoff, measured from the newest event;
+    // the eviction remains excluded from the ticket's breaker streak above.
+    expect(remaining).toBe(AUTORUN_COOLDOWN_BASE_MS * 2 - 1_000);
   });
 });
 

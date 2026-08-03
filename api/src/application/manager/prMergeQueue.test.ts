@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { planMergeQueue, summarizeMergeQueue, MERGE_QUEUE_DEPTH, type QueuedPr } from './prMergeQueue';
+import {
+  planMergeQueue, summarizeMergeQueue, MERGE_QUEUE_DEPTH, CONFLICT_RETRY_COOLDOWN_MS,
+  type QueuedPr,
+} from './prMergeQueue';
 import { MAX_REMEDY_ATTEMPTS } from './stallTriage';
 
 const pr = (id: string, over: Partial<QueuedPr> = {}): QueuedPr =>
@@ -41,21 +44,20 @@ describe('merge queue', () => {
    * steps, so a spent ceiling must both take the PR out of the queue AND cost nothing —
    * it is three comparisons and one journal write, no provider call.
    */
-  it('retires a PR whose ceiling is spent without consuming a head slot', () => {
+  it('retires structural ceilings while cooling a recoverable conflict at the head', () => {
     const spent = MAX_REMEDY_ATTEMPTS;
+    const nowMs = Date.parse('2026-08-03T12:00:00.000Z');
     const plan = planMergeQueue([
       pr('1', { syncs: spent }),
       pr('2', { mergeFailures: spent }),
-      pr('3', { conflicts: spent }),
+      pr('3', { conflicts: spent, lastConflictAt: new Date(nowMs - 1_000) }),
       pr('4'), pr('5'), pr('6'), pr('7'),
-    ], { hasActiveRun: never });
+    ], { hasActiveRun: never, nowMs });
     expect(dispositions(plan)).toEqual([
-      'sync_exhausted', 'merge_exhausted', 'conflict_exhausted',
-      'work', 'work', 'work', 'queued',
+      'sync_exhausted', 'merge_exhausted', 'conflict_backoff',
+      'queued', 'queued', 'queued', 'queued',
     ]);
-    // Three retirements did not eat the three work slots: the queue drains and advances
-    // in the SAME pass, which is what stops a window of dead PRs blocking live ones.
-    expect(summarizeMergeQueue(plan)).toMatchObject({ worked: 3, retired: 3, queued: 1 });
+    expect(summarizeMergeQueue(plan)).toMatchObject({ worked: 0, retired: 2, cooling: 1, queued: 4 });
   });
 
   /**
@@ -64,9 +66,22 @@ describe('merge queue', () => {
    * whose resolution run respawns every pass — permanently unretirable, which is the
    * exact shape of the 26-day `failure_breaker` cohort.
    */
-  it('retires an exhausted PR even while a run is still active against it', () => {
+  it('lets an active repair own an exhausted conflict instead of retiring it', () => {
     const plan = planMergeQueue([pr('1', { conflicts: MAX_REMEDY_ATTEMPTS })], { hasActiveRun: () => true });
-    expect(dispositions(plan)).toEqual(['conflict_exhausted']);
+    expect(dispositions(plan)).toEqual(['running']);
+  });
+
+  it('autonomously retries a conflicted head after the bounded cooldown', () => {
+    const nowMs = Date.parse('2026-08-03T12:00:00.000Z');
+    const plan = planMergeQueue([
+      pr('1', {
+        conflicts: MAX_REMEDY_ATTEMPTS,
+        lastConflictAt: new Date(nowMs - CONFLICT_RETRY_COOLDOWN_MS),
+      }),
+      pr('2'),
+    ], { hasActiveRun: never, nowMs });
+    expect(dispositions(plan)).toEqual(['work', 'queued']);
+    expect(plan[0]?.mayRecover).toBe(true);
   });
 
   /**
@@ -74,14 +89,13 @@ describe('merge queue', () => {
    * nothing and must not hold a slot — otherwise one slow run parks the whole queue for
    * as long as it lives.
    */
-  it('slides past a PR whose resolution is already running', () => {
+  it('holds the merge train behind its active integration head', () => {
     const plan = planMergeQueue(
       [pr('1'), pr('2'), pr('3'), pr('4'), pr('5')],
       { hasActiveRun: (p) => p.id === '1' },
     );
-    expect(dispositions(plan)).toEqual(['running', 'work', 'work', 'work', 'queued']);
-    // The recovery permission moves with the head, so a running PR does not strand it.
-    expect(plan[1]?.mayRecover).toBe(true);
+    expect(dispositions(plan)).toEqual(['running', 'queued', 'queued', 'queued', 'queued']);
+    expect(plan.some((entry) => entry.mayRecover)).toBe(false);
   });
 
   it('is total — every PR in the window gets a disposition', () => {
@@ -90,7 +104,7 @@ describe('merge queue', () => {
     expect(plan).toHaveLength(window.length);
     expect(plan.map((e) => e.pr.id)).toEqual(window.map((p) => p.id));
     const s = summarizeMergeQueue(plan);
-    expect(s.worked + s.queued + s.retired + s.running).toBe(window.length);
+    expect(s.worked + s.queued + s.retired + s.running + s.cooling).toBe(window.length);
   });
 
   /**

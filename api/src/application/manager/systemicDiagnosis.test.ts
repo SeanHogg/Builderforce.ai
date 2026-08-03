@@ -100,8 +100,9 @@ describe('raiseSystemicFindings — the bounds that stop an automated ticket-fil
   type Op = { kind: 'select' | 'update' | 'insert'; values?: Record<string, unknown> };
 
   /** Records what the pass wrote; `open` seeds the existing open findings. */
-  function stubDb(open: Array<{ id: string; cause: string }>) {
+  function stubDb(open: Array<{ id: string; cause: string; createdTaskId?: number | null }>) {
     const ops: Op[] = [];
+    const openRows = open.map((row) => ({ remediation: '', createdTaskId: 700, ...row }));
     const chain = (result: unknown): Record<string, unknown> => {
       const self: Record<string, unknown> = {};
       for (const m of ['from', 'where', 'set', 'values', 'onConflictDoUpdate', 'returning', 'limit']) {
@@ -117,7 +118,7 @@ describe('raiseSystemicFindings — the bounds that stop an automated ticket-fil
       return self;
     };
     const db = {
-      select: () => { ops.push({ kind: 'select' }); return chain(open); },
+      select: () => { ops.push({ kind: 'select' }); return chain(openRows); },
       update: () => { ops.push({ kind: 'update' }); return chain([]); },
       insert: () => { ops.push({ kind: 'insert' }); return chain([]); },
     } as unknown as Parameters<typeof raiseSystemicFindings>[1];
@@ -129,7 +130,7 @@ describe('raiseSystemicFindings — the bounds that stop an automated ticket-fil
 
   const run = async (
     cohorts: CensusCohort[],
-    open: Array<{ id: string; cause: string }> = [],
+    open: Array<{ id: string; cause: string; createdTaskId?: number | null }> = [],
   ) => {
     const { db, ops } = stubDb(open);
     const created: string[] = [];
@@ -158,6 +159,26 @@ describe('raiseSystemicFindings — the bounds that stop an automated ticket-fil
     expect(out.ticketsCreated).toBe(0);
     expect(ops.some((o) => o.kind === 'update')).toBe(true);
     expect(ops.some((o) => o.kind === 'insert')).toBe(false);
+  });
+
+  it('repairs a historical finding that diagnosed a cohort but created no executable ticket', async () => {
+    const { out, created } = await run(
+      [cohort({ cause: 'unassigned', count: 320 })],
+      [{ id: 'f1', cause: 'unassigned', createdTaskId: null }],
+    );
+    expect(created).toHaveLength(1);
+    expect(out.ticketsCreated).toBe(1);
+  });
+
+  it('re-arms the existing remediation ticket while the production cohort remains', async () => {
+    const { db } = stubDb([{ id: 'f1', cause: 'unassigned', createdTaskId: 812 }]);
+    const ensured: number[] = [];
+    await raiseSystemicFindings(env, db, runtime, {
+      tenantId: 1, projectId: 11, census: census([cohort({ cause: 'unassigned', count: 320 })]),
+      createTicket: async () => null,
+      ensureTicket: async (taskId) => { ensured.push(taskId); return true; },
+    });
+    expect(ensured).toEqual([812]);
   });
 
   it('never exceeds the per-pass ceiling, taking the LARGEST cohorts first', async () => {
