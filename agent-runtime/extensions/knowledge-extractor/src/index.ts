@@ -99,11 +99,11 @@ export function runExtraction(
     }
   }
 
-  // VERIFY: Detect missing baseline in behavioral mode.
-  // Note: extractBehavioral returns empty when no anticipated actions, but FH-1847夯案的 expectation is a warning.
-  // We skip explicit MISSING_BASELINE warning here (extractBehavioral already terminates early); 
-  // a future decision can extend runExtraction to surface it if callers need it.
-  // If callers want MISSING_BASELINE to bubble up, they can filter scored for BEHAVIORAL when count==0.
+  // FR-4.5: Detect missing baseline in behavioral mode.
+  // If anticipated_actions was empty, extractBehavioral returns empty but we need to emit the warning.
+  if (ctx.anticipated_actions.length === 0 && candidates.filter(r => r.signal_type === "BEHAVIORAL").length === 0) {
+    warnings.push("MISSING_BASELINE");
+  }
 
   // --- Stage 5: Build the report (FR-8.2) ---
   const report: ExtractionReport = {
