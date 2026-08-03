@@ -2,6 +2,7 @@
 > _Each agent that updates this PRD signs its change below._
 > - **Business Analyst** (2026-08-03): Authored Requirements section following codebase audit of `agent-runtime/` and `.github/`.
 > - **Product Manager** (2026-08-03): Reviewed and approved PRD. All sections owned by Product Manager (Problem & Goal, Target Users, Scope, Functional Requirements, Acceptance Criteria, Out of Scope) are complete. Remaining sections (Design, Implementation Notes, Review, Test Evidence) delegated to Architect, Developer, Code-Reviewer, and QA-Tester roles.
+- **Product Owner** (2026-08-03): Reviewed and approved PRD at lane 'ready'. The BA codebase audit (8 controls + 6 gaps, including Critical GAP-1: hardcoded base64 OAuth secrets) and 7 traceable remediation requirements satisfy the ticket intent. Implementation of REQ-1 through REQ-7 should be tracked as separate implementation tickets. platform note: `builtin_kanban_signoff` returned 401 (token expired) — a human should manually record the product-owner approval on the kanban accountability manifest.
 
 # PRD: Secrets Exposure Prevention in Artifacts
 
