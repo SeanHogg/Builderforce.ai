@@ -16,6 +16,14 @@ interface PayloadDisplayProps {
   lastValidPayload: EvermindPayloadSnapshot | null;
   /** Error message if payload failed validation or network request */
   reasonError: string | null;
+  /** Validity state from validation (valid | invalid | unknown) */
+  validity: 'valid' | 'invalid' | 'unknown';
+  /** Agent reasoning output to display (FR-4.1) */
+  agentOutput?: string | null;
+  /** Whether agent is currently processing (FR-4.2) */
+  agentProcessing?: boolean;
+  /** Error from agent reasoning (FR-4.3) */
+  agentError?: string | null;
 }
 
 export function PayloadDisplay({
