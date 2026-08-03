@@ -216,14 +216,23 @@ export class TaskService {
   async updateTask(id: number, dto: UpdateTaskDto): Promise<Task> {
     const task = await this.getTask(id);
     const wasAssignedToAgent = task.isAssignedToAgent;
+
+    // Determine if parentTaskId should be applied:
+    // - If explicitDetach is true, always apply parentTaskId (including null to detach)
+    // - If explicitDetach is false/undefined, only apply parentTaskId when it's NOT null
+    //   (i.e., re-parenting to a different task, but not detaching)
+    const shouldApplyParent = dto.explicitDetach === true || dto.parentTaskId !== null;
+    const parentTaskId = dto.parentTaskId !== undefined
+      ? (dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : (shouldApplyParent ? null : undefined))
+      : undefined;
+
     const updated = task.update({
       ...dto,
+      explicitDetach: undefined, // Not a domain field, consumed above
       assignedAgentHostId: dto.assignedAgentHostId !== undefined
         ? (dto.assignedAgentHostId != null ? asAgentHostId(dto.assignedAgentHostId) : null)
         : undefined,
-      parentTaskId: dto.parentTaskId !== undefined
-        ? (dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null)
-        : undefined,
+      parentTaskId,
       startDate: dto.startDate !== undefined ? (dto.startDate ? new Date(dto.startDate) : null) : undefined,
       dueDate: dto.dueDate !== undefined ? (dto.dueDate ? new Date(dto.dueDate) : null) : undefined,
     });
