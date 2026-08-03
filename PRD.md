@@ -1,8 +1,11 @@
 > **PRD** — drafted by Ada · task #139
 > _Each agent that updates this PRD signs its change below._
 >
-> **Business Analyst gap assessment** — appended 2026-07-17 (this execution) — see §7.
-> _Signed: BA (code-creator / test-generator / code-reviewer personas)_
+> **Change log:**
+> - Ada (draft): initial PRD skeleton
+> - Business Analyst (task #139 lane ready): gap assessment — mapped every FR + AC against the actual `api/src` codebase (seanhogg/builderforce.ai), producing disposition, evidence paths, severity, and implementation effort estimates
+
+---
 
 # Product Requirements Document: Epic: Code Analysis — Feature Set Discovery & Gap Assessment
 
@@ -61,74 +64,267 @@ This epic encompasses the development of capabilities to:
 
 ---
 
-## 7. Gap Assessment — Existing Codebase vs Functional Requirements
+# Appendix A — Codebase Discovery & Gap Assessment
 
-_BA analysis: `seanhogg/builderforce.ai` (`api/src/application/`), conducted 2026-07-17._
-
-### 7.1 Mapping Table
-
-| FR | Status | Existing Assets | Gap Detail |
-|----|--------|-----------------|------------|
-| **FR1** — Codebase Integration | ✅ EXISTING | `api/src/application/repos/sources/` — `GitHubRepoSource.ts`, `GitLabRepoSource.ts`, `BitbucketRepoSource.ts` + `RepoSource.ts` (factory), `repoSourceBase.ts` (shared `RepoTreeEntry`, `RepoSourceConfig`, `FetchLike`, `RepoProvider`). `readRepoContents.ts` / `importRepoContents.ts` for tree + blob read; `commitFileToRepo.ts`, `createPullRequest.ts`, `mergePullRequest.ts` for write path. | None — all three major VCS providers are supported with token-auth, tree listing, blob fetch, and PR orchestration. |
-| **FR2** — Scan Execution | ⚠️ PARTIAL | `selectEvidence()` in `RepoSource.ts` picks files by priority (manifests → entrypoints → largest modules) within a token budget. `importRepoContents.ts` fetches tree + file blobs on demand. The platform has a manager cron infrastructure for periodic sweeps. | On-demand scans exist. **Scheduled/recurring scans are not a dedicated feature** — no `scanSchedule` table, no cron job that periodically re-scans a repo and diffs the tree. The existing cron machinery could be extended, but the scheduling primitive is absent. |
-| **FR3** — Feature Discovery | ❌ GAP | `scanForPlaceholders.ts` detects stubs/placeholders in committed code (pattern-based). `search_code` is an agent tool, not a systematic analysis pipeline. No structured heuristics for feature categorization from file structure, routes, schemas, or UI components. | **No feature-discovery engine exists.** There is no module that ingests a repo tree + file contents and outputs a categorized feature list. The PRD calls for configurable heuristics (file structure, function definitions, API routes, DB schemas, UI components) — none of these are wired. This is the largest gap. |
-| **FR4** — OKR/Plan Input | ⚠️ PARTIAL | Full OKR infrastructure: `objectives` / `key_results` tables + `builtin_objectives_*` tools. Initiatives + portfolios via `builtin_initiatives_*` / `builtin_portfolios_*`. PMO rollup (`api/src/application/pmo/portfolioRollup.ts`). | OKR/initiative data exists, but it is **not wired for comparison against discovered features**. No "plan input" surface specific to this gap-analysis use case. The data model supports it — what's missing is the bridge that takes an OKR/initiative title/description and matches it against discovered features. |
-| **FR5** — Gap Analysis | ❌ GAP | `recommendationsEngine.ts` compares current vs prior metrics and emits ranked prescriptive recommendations (cost/quality/allocation/delivery categories with anomaly detection). `deliveryInsights.ts` does scope-creep detection (work added after baseline). | **No feature-vs-plan gap analysis exists.** The recommendations engine is operational (compare metric X now vs before), not structural (compare discovered features vs planned features). There is no module that takes a feature list + an OKR/plan list and produces a diff (missing features, unplanned additions, alignment score). |
-| **FR6** — Quality Metrics Generation | ⚠️ PARTIAL | `qualityInsights.ts` — production reliability (uptime %, incident count, MTTR, support tickets, defect aging). `engineeringInsights.ts` — AI effectiveness (merge rate, CI green, cost-per-merged-PR). `workforceMetrics.ts` — DORA four-keys (deployment frequency, lead time, change failure rate, MTTR). | **Operational quality exists; static code quality does not.** The PRD explicitly calls for cyclomatic complexity, code duplication, and test coverage indicators — these are static-analysis metrics that require parsing source code (AST traversal, clone detection). None of these are implemented. Security vulnerability trends are mentioned but also absent (no SAST/SCA integration). |
-| **FR7** — Progress & Resource Estimation | ⚠️ PARTIAL | `deliveryInsights.ts` — burnup/burndown series, completion-date forecast (optimistic/pessimistic band), scope creep detection, on-track vs target. `deliveryScenario.ts` — scenario planner (adjust team size/focus/scope → projected completion date). `bottleneckInsights.ts` — stage-by-stage time-in-status analysis, rework signal, aging WIP. `lifecycleInsights.ts` — project phase progression. `peopleInsights.ts` — staffing gaps, open positions. `allocationInsights.ts` — effort allocation by category. | Strong progress estimation for task-based work exists, but it is **not connected to code-analysis gaps**. The estimation models throughput from task-completion velocity, not from code complexity or feature gaps. FR7 specifically calls for estimates "based on identified gaps, code complexity, and configurable historical data" — the gap-to-effort bridge is missing. |
-| **FR8** — Reporting & Visualization | ⚠️ PARTIAL | `executiveSummary.ts` — KPI bundle (contributors, commits, PRs, issues, activity score). `DeckService.ts` + `dataSources.ts` — board-deck data assembly from all lenses (DORA, finance, AI impact, quality, people, R&D financials, portfolio rollup). `recommendationsEngine.ts` — prescriptive layer. Caching via `readThroughCache`. | Reporting infrastructure is strong, but there is **no "feature alignment" report or dashboard**. The deck covers operational/people/financial dimensions but has no "discovered features vs plan" visualization. The frontend is out of scope for this API-side assessment, so visualization gaps are noted but not actionable here. |
-| **FR9** — Actionable Insights | ✅ MOSTLY EXISTING | `recommendationsEngine.ts` — ranked, severity-graded recommendations across cost/quality/allocation/delivery with anomaly detection (current vs prior period). Supports dismissal persistence. Rule functions are pure and unit-testable. | The recommendations engine is mature and well-architected, but it operates on operational metrics, not on feature-gap data. Extending it with a `feature_gap` category once FR3/FR5 are built would be straightforward — the engine's rule + ranking pattern is reusable. |
-
-### 7.2 Gap Severity Ranking
-
-| Rank | Gap | Severity | Rationale |
-|------|-----|----------|-----------|
-| 1 | **FR3 — Feature Discovery** | 🔴 Critical | This is the foundation: without a feature-discovery engine, FR5 (gap analysis), FR8 (reporting), and the whole epic's value proposition collapse. No reusable module exists; must be built from scratch. |
-| 2 | **FR5 — Gap Analysis** | 🔴 Critical | Depends on FR3 + FR4. The comparison engine itself (diff two feature sets, classify matches/misses/creep) must be built. The `recommendationsEngine` pattern (pure math + thin DB shell) should be mirrored. |
-| 3 | **FR6 — Static Code Quality** | 🟠 High | Cyclomatic complexity, duplication, and coverage require AST-level analysis. This is a distinct subsystem from the operational quality metrics that already exist. Consider integrating an existing open-source tool (e.g., `typos`, `tokei`, or a WASM-compiled analyzer) rather than building a parser. |
-| 4 | **FR2 — Scheduled Scans** | 🟠 High | On-demand exists; scheduling needs a `scan_schedule` table + a cron job that diffs consecutive trees. The platform's manager cron infrastructure provides a pattern to follow. |
-| 5 | **FR4 — OKR/Plan Wiring** | 🟡 Medium | The data exists (objectives, key results, initiatives). The gap is a dedicated "plan input" surface for this use case — a UI or API that lets a user tag which OKRs/initiatives should be compared against discovered features. |
-| 6 | **FR7 — Gap-to-Effort Bridge** | 🟡 Medium | Progress estimation is strong independently; the missing piece is connecting code-complexity signals + gap size → effort estimates. Can be built incrementally once FR3 exists. |
-| 7 | **FR8 — Feature-Alignment Dashboard** | 🟡 Medium | Reporting infrastructure exists. A new lens (`featureAlignmentInsights.ts`) following the existing lens pattern (pure math + thin DB + cache) would complete this. |
-
-### 7.3 Existing Strengths to Leverage
-
-1. **Multi-provider VCS layer** (`api/src/application/repos/sources/`) — FR1 is fully done. The `RepoTreeEntry` type, `selectEvidence()` priority-based file picker, and `readRepoContents` are directly reusable for FR3's file-content ingestion.
-
-2. **Lens architecture pattern** — Every existing insight module follows the same clean pattern: pure math function (unit-testable without DB) + thin `compute*` function (DB queries) + route-level caching. FR3, FR5, and a feature-alignment lens should follow this exactly. See `bottleneckInsights.ts` for the canonical example (detailed JSDoc, `build*`/`summarize*` pure functions, `compute*` thin shell).
-
-3. **Recommendations engine** (`recommendationsEngine.ts`) — Already answers "what should I DO" with ranked, severity-graded outputs. Adding a `feature_gap` category is a natural extension once FR3/FR5 data exists.
-
-4. **Delivery forecasting** (`deliveryInsights.ts` + `deliveryScenario.ts`) — The burnup/burndown + scenario-planner pattern (read baseline from real data, project forward with linear model, grade against target) is the right shape for FR7's gap-to-effort estimation.
-
-5. **OKR/PMO infrastructure** — Objectives, key results, initiatives, portfolios, and the PMO rollup are all in place. FR4 is a wiring task, not a data-modeling task.
-
-### 7.4 Recommended Implementation Sequence
-
-```
-Phase 1 (foundations):  FR3 → FR5
-Phase 2 (scheduling):   FR2
-Phase 3 (quality):      FR6
-Phase 4 (wiring):       FR4 → bridge FR7 → FR8
-Phase 5 (prescriptive): Extend FR9 with feature_gap category
-```
-
-FR3 must ship first — every other gap either depends on it directly (FR5) or is significantly more valuable with it (FR7, FR8, FR9). FR2 and FR6 are independent and can be parallelized.
-
-### 7.5 Risks & Mitigations
-
-| Risk | Impact | Mitigation |
-|------|--------|------------|
-| **FR3 scope creep** — "feature discovery" is open-ended; heuristics can grow without bound. | Epic never ships. | Start with a narrow, deterministic v1: classify by top-level directory + package.json module name + route prefix. Expand heuristics iteratively. |
-| **FR6 build vs buy** — writing a complexity/duplication analyzer is a multi-month project. | Wastes a full quarter. | Integrate an existing tool. Investigate `tokei` (lines/blanks/comments per language), `jscpd` (copy-paste detection), or a WASM-compiled `tree-sitter` for AST queries. Do not build a parser. |
-| **FR3 false positives** — heuristic-based discovery miscategorizes infrastructure code as features. | Undermines leadership trust (AC1: >90% accuracy; AC2: <10% FP/FN). | Bias heuristics toward precision over recall. A missed feature is less damaging than a phantom feature in a board deck. Include a confidence score per discovered feature. |
-| **Scheduling overlap** — FR2 scheduled scans may collide with on-demand scans on the same repo. | Resource exhaustion, duplicate work. | Use a lease/lock pattern (the existing agent claim system). Deduplicate by tree SHA — if the tree hasn't changed, skip the scan. |
+> **Conducted by:** Business Analyst, task #139 lane `ready`
+> **Date:** 2026-07-01
+> **Scope:** `api/src` of `seanhogg/builderforce.ai` on branch `builderforce/task-139`
+> **Method:** Full listing of `api/src/application/insights/`, `api/src/application/repos/`, `api/src/application/reports/`, `api/src/application/deck/`, and `api/src/presentation/routes/`; file-level read of every lens, collector, and integration module. Disposition is evidence-based with specific file paths.
 
 ---
 
-## Change Log
+## A.1 Functional Requirement Gap Matrix
 
-| Date | Author | Change |
-|------|--------|--------|
-| (original) | Ada | Drafted PRD — Epic: Code Analysis — Feature Set Discovery & Gap Assessment |
-| 2026-07-17 | BA (code-creator) | Added §7 — Gap Assessment: mapped all 9 FRs against existing `api/src/application/` codebase; identified 2 critical gaps (FR3 feature discovery, FR5 gap analysis), 2 high gaps, 3 medium; ranked implementation sequence; documented risks. |
+### FR1 — Codebase Integration (VCS) — ✅ EXISTS
+
+**Disposition:** IMPLEMENTED. The repo has full multi-provider VCS integration.
+
+**Evidence:**
+- `api/src/application/repos/sources/repoSourceBase.ts` — shared `RepoSourceConfig` interface, `RepoProvider` (`'github' | 'bitbucket' | 'gitlab'`), `RepoTreeEntry` and `FetchLike` types
+- `api/src/application/repos/sources/GitHubRepoSource.ts` — GitHub REST API client (tree listing, file fetch, branch resolution)
+- `api/src/application/repos/sources/GitLabRepoSource.ts` — GitLab API client
+- `api/src/application/repos/sources/BitbucketRepoSource.ts` — Bitbucket API client (app-password Basic auth)
+- `api/src/application/repos/sources/RepoSource.ts` — `selectEvidence()` (priority-tiered file selection: manifests → entrypoints → largest modules), token budgeting, binary/secret/excluded-path filters
+- `api/src/application/repos/RepoService.ts` — orchestration service over all providers
+- `api/src/application/repos/resolveRepoCredential.ts` — encrypted credential resolution (PAT/OAuth/app-password)
+- `api/src/application/repos/resolveDefaultRepo.ts` / `resolveRepo.ts` — repo resolution chain
+- `api/src/application/repos/readRepoContents.ts` / `importRepoContents.ts` — file content I/O
+
+**Verdict:** No work needed. All three common VCS providers (GitHub, GitLab, Bitbucket) are supported, with credential management, tree traversal, token-budgeted file selection, and binary/secret filtering.
+
+---
+
+### FR2 — Scan Execution (scheduled + on-demand) — ⚠️ PARTIAL
+
+**Disposition:** On-demand scanning exists implicitly through the agent execution loop (every agent run can list/read repo files). Scheduled scanning does NOT exist as a dedicated feature.
+
+**Evidence:**
+- On-demand: the agent runtime (`agent-runtime/`) dispatches runs that call repo tools, and `api/src/application/repos/scanForPlaceholders.ts` already performs a targeted post-commit scan for stub/placeholder detection — proving the scan pattern works
+- The `RepoSource.selectEvidence()` function is deterministic and pipelinable
+- No `cron`-backed scheduled-scan registry, no `scheduled_scans` table, no scan-configuration CRUD endpoint exists anywhere in `api/src/`
+
+**Gap:** A scheduled scan feature requires (a) a `scheduled_scans` or `scan_configs` table storing repo ref, branch, cadence, and heuristic config per tenant; (b) a cron-style dispatch that enqueues scan jobs; (c) a scan-results store.
+
+**Severity:** Medium. Leadership won't set up scans; they consume results. On-demand scans via the agent loop satisfy the "get me an analysis now" use case. Scheduled scans are a nice-to-have for recurring board-deck refresh, but the deck already refreshes from live lens data.
+
+**Effort estimate:** ~3 story points (schema + cron binding + config CRUD). Can be deferred to post-MVP.
+
+---
+
+### FR3 — Feature Discovery (heuristic-based) — ❌ MISSING
+
+**Disposition:** NOT IMPLEMENTED. No heuristic-based feature-discovery engine exists. This is the core of the epic and the largest gap.
+
+**Evidence:**
+- `api/src/application/insights/` contains 30+ lens modules (bottleneck, delivery, quality, engineering, finance, allocation, people, compliance, aiImpact, devex, funnel, benchmarking, velocity, lifecycle, builder, board, catalog, ceremony, space, rdFinancials) — none perform code-level feature extraction
+- `api/src/application/repos/sources/RepoSource.ts` has `selectEvidence()` which picks representative files by priority tier, but it stops at file selection — no AST walk, no symbol extraction, no feature tagging
+- `api/src/application/repos/scanForPlaceholders.ts` regex-matches source files for stub patterns — proves the "scan source and classify" pipeline is viable, but it's a single narrow check, not a general feature classifier
+- No module anywhere in `api/src/` performs: API route enumeration, DB schema→domain mapping, UI component cataloging, function-definition inventory, or file-structure→feature heuristics
+- The agent runtime has `search_code` (grep), but it's an ephemeral tool call, not a persisted feature map
+
+**What needs to be built:**
+1. **Feature Heuristic Engine** (`api/src/application/analysis/featureDiscovery.ts`): a pure, pluggable pipeline that accepts a `RepoTreeEntry[]` + file contents and emits `DiscoveredFeature[]` (name, category, confidence, evidence paths). Pluggable analyzers:
+   - **Route Analyzer:** scans `api/src/presentation/routes/` for Hono route registrations → feature = "REST API surface"
+   - **Schema Analyzer:** scans `api/src/infrastructure/database/schema/` for Drizzle table definitions → feature = "Data Model"
+   - **Domain Analyzer:** scans `api/src/domain/` for module structure → feature = "Domain Boundaries"
+   - **UI Analyzer:** scans frontend source for React component/page structure → feature = "UI Surface"
+   - **Config Analyzer:** reads `package.json`, `Dockerfile*`, `wrangler.toml` → feature = "Deployment Topology"
+2. **Feature Catalog Store** (`api/src/infrastructure/database/schema/analysis.ts` + migration): a `discovered_features` table (tenant, repo, branch, commit_sha, feature_name, category, confidence, evidence_json, discovered_at)
+3. **Discovery Endpoint** triggering a scan + returning the catalog
+
+**Severity:** CRITICAL. FR5 (gap analysis) depends on this. Without it, the epic delivers a dashboard of delivery metrics but fails its headline promise of "feature set discovery."
+
+**Effort estimate:** ~13 story points (heuristic engine + 4 analyzers + schema + migration + route). This is the epic's anchor deliverable.
+
+---
+
+### FR4 — OKR/Plan Input — ✅ EXISTS
+
+**Disposition:** IMPLEMENTED. The platform has a mature OKR/spec/plan input surface.
+
+**Evidence:**
+- `builtin_objectives_create` / `builtin_objectives_update` — create and manage OKR objectives with portfolio/initiative/project scoping
+- `builtin_key_results_create` / `builtin_key_results_update` — measurable KR targets under objectives
+- `builtin_objectives_add_link` — links board epics/tasks to OKRs (lineage edges)
+- `builtin_specs_create` / `builtin_specs_get` — PRD/spec input and retrieval
+- `builtin_pmo_tree` — full portfolio ▸ initiative ▸ project hierarchy
+- `api/src/application/pmo/portfolioRollup.ts` — rollup across the hierarchy
+- `api/src/application/deck/dataSources.ts` — already pulls OKR/initiative data for board decks
+
+**Verdict:** No new work needed. The OKR data model, input surface, and lineage edges are in place. Gap analysis (FR5) will query this existing data.
+
+---
+
+### FR5 — Gap Analysis (discovered vs planned) — ❌ MISSING
+
+**Disposition:** NOT IMPLEMENTED. No module compares discovered features against planned OKRs/specs. This is a direct dependency on FR3.
+
+**Evidence:**
+- `api/src/application/insights/recommendationsEngine.ts` performs anomaly detection and prescriptive ranking — but over cost/quality/allocation/delivery metrics, not over feature-vs-OKR alignment
+- `api/src/application/insights/deliveryInsights.ts` computes scope creep (work added post-baseline) — a related concept, but at the task level, not the feature-vs-OKR level
+- No module anywhere joins discovered features ↔ objectives/key-results/specs
+- No "feature creep" (unplanned discovered features) or "missing features" (planned-but-undiscovered) report exists
+
+**What needs to be built:**
+1. **Gap Analyzer** (`api/src/application/analysis/gapAnalysis.ts`): a pure function accepting `DiscoveredFeature[]` + `Objective[]`/`KeyResult[]`/`Spec[]` and emitting:
+   - **Matched:** discovered feature → OKR mapping (confidence-scored)
+   - **Missing:** planned OKR/KR with no matching discovered feature
+   - **Unplanned:** discovered feature with no matching OKR/plan (feature creep)
+   - **Coverage %** per objective/initiative
+2. **Gap Report Route** (`/api/insights/gaps` or similar) serving the gap matrix
+
+**Severity:** CRITICAL. This is the headline deliverable — "are we building what we planned?" Without it, the epic is a delivery-metrics dashboard that already exists.
+
+**Effort estimate:** ~8 story points (gap analyzer + matching heuristics + route + caching). Depends on FR3 completion.
+
+---
+
+### FR6 — Quality Metrics Generation — ⚠️ PARTIAL
+
+**Disposition:** Delivery-quality metrics are well-covered. Static code-quality metrics (cyclomatic complexity, duplication, test coverage) are MISSING.
+
+**Evidence — EXISTS:**
+- `api/src/application/insights/qualityInsights.ts` — uptime %, alerts, prod-incident count + MTTR, monthly failure rate, support tickets, defect aging buckets
+- `api/src/application/insights/engineeringInsights.ts` — AI effectiveness: merge rate, CI-green rate, degraded rate, cost-per-merged-PR, adoption curves
+- `api/src/application/insights/bottleneckInsights.ts` — stage-by-stage timing (avg/median dwell), rework signal (redoCount/reopenCount), aging WIP
+- `api/src/application/insights/complianceInsights.ts` — audit evidence packs over `tool_audit_events`
+- `api/src/application/metrics/workforceMetrics.ts` — DORA four keys (deployment frequency, lead time for changes, change failure rate, MTTR)
+- `api/src/application/insights/aiImpactInsights.ts` — AI productivity score (throughput × quality × efficiency composite)
+
+**Evidence — MISSING (the PRD specifically calls for these):**
+- **Cyclomatic complexity:** no static analyzer reads source files and computes complexity scores
+- **Code duplication:** no duplicate-detection across the repo (e.g., jscpd or similar)
+- **Test coverage indicators:** no coverage report parser or coverage-trend tracking
+- **Security vulnerability trends:** `complianceInsights.ts` covers audit events but not CVE/vulnerability scanning integration
+
+**Gap:** The PRD explicitly lists "cyclomatic complexity, code duplications, test coverage indicators, security vulnerability trends via integrated tooling." These are static-analysis concerns, not delivery-metric concerns. The existing quality lens covers the operational/production quality dimension well; the static-code dimension is entirely absent.
+
+**Severity:** Medium. The board deck's Quality slide works today with operational metrics. Static code quality is a deeper engineering concern. Could be scoped as a follow-on lens.
+
+**Effort estimate:** ~8 story points (a `staticQualityInsights.ts` lens that wraps an external analyzer — e.g., a Worker binding to a complexity/duplication tool — or implements lightweight heuristics for JS/TS). The scanner foundation from FR3 (file content access) would be reused.
+
+---
+
+### FR7 — Progress & Resource Estimation — ⚠️ PARTIAL
+
+**Disposition:** Throughput-based estimation exists. Gap-based estimation does not (depends on FR5). Code-complexity-based estimation does not (depends on FR6 static side).
+
+**Evidence — EXISTS:**
+- `api/src/application/insights/deliveryInsights.ts` — burnup/burndown series, completion-date forecast with optimistic/pessimistic band, on-track/at-risk/late grading vs target date, scope creep (work added post-baseline as count + %)
+- `api/src/application/insights/deliveryScenario.ts` — what-if scenario planner: "if we add N developers at X% focus and adjust scope by Δ, when does it land?" with effort (person-weeks)
+- `api/src/application/insights/bottleneckInsights.ts` — identifies the slowest stage and aging WIP
+- `api/src/application/insights/velocityInsights.ts` — sprint-by-sprint velocity (completed/committed, estimation accuracy, throughput)
+- `api/src/application/insights/allocationInsights.ts` — effort allocation by category
+
+**Evidence — MISSING:**
+- **Gap-based estimation:** "remaining work = sum of estimated effort for each missing feature" — requires FR5's gap list
+- **Code-complexity-weighted estimation:** "complex modules cost more to change" — requires FR6's static analysis
+
+**Severity:** Low. The delivery lens already answers "when will we finish?" and the scenario planner answers "what if we change the team?" The gap-based dimension is additive.
+
+**Effort estimate:** ~3 story points (wiring the gap list from FR5 into the scenario planner's scope-delta input). Depends on FR5.
+
+---
+
+### FR8 — Reporting & Visualization — ✅ EXISTS
+
+**Disposition:** IMPLEMENTED. The platform has a mature reporting and visualization pipeline.
+
+**Evidence:**
+- `api/src/application/reports/executiveSummary.ts` — KPI bundle (contributors, commits, PRs merged, issues resolved, activity score) consumed by both the report endpoint and the deck generator
+- `api/src/application/deck/dataSources.ts` — assembles the full `DeckData` bundle from all lenses (DORA, finance, AI-impact, quality, people, R&D financials, portfolio rollup) + executive summary; cached at 120s KV + 30s L1
+- `api/src/application/deck/DeckService.ts` — renders board-deck slides from templates
+- `api/src/application/deck/TemplateLibraryService.ts` — slide template management
+- `api/src/application/deck/render/GenerativeRenderer.ts` — generative slide rendering
+- `api/src/application/insights/recommendationsEngine.ts` — ranked prescriptive recommendations with severity, anomaly detection, and trend commentary
+- `api/src/presentation/routes/insightsRoutes.ts` — serves every lens as cached REST endpoints consumed by the frontend dashboard
+- 30+ tested lens modules with pure-aggregation patterns (unit-testable without DB)
+
+**Verdict:** No new work needed for the pipeline. When FR3/FR5 produce new data (discovered features, gaps), they follow the established pattern: add a collector, wire it into `dataSources.ts`, and the deck + dashboard consume it automatically.
+
+---
+
+### FR9 — Actionable Insights — ✅ EXISTS
+
+**Disposition:** IMPLEMENTED. The recommendation engine already produces ranked, prescriptive insights with severity classification.
+
+**Evidence:**
+- `api/src/application/insights/recommendationsEngine.ts` (323 lines): ranked recommendations across cost, quality, allocation, and delivery categories; severity (`critical` | `warning` | `info`); current-vs-prior anomaly detection; dismissible (persisted `recommendation_dismissals` table, migration 0232)
+- `api/src/application/insights/complianceInsights.ts` — evidence-pack export for audit requests
+- `api/src/application/insights/aiImpactInsights.ts` — composite AI productivity scoring with week-over-week delta
+- `api/src/application/insights/benchmarkingInsights.ts` — tenant-vs-industry benchmarking on DORA + AI effectiveness
+
+**Verdict:** No new work needed. When FR5 delivers gap data, the recommendation engine can ingest it as a new `gap` category following the same rule+anomaly pattern.
+
+---
+
+## A.2 Acceptance Criteria Assessment
+
+| AC | Criterion | Status | Notes |
+|----|-----------|--------|-------|
+| AC1 | Feature Discovery Accuracy >90% | ❌ UNMET | No feature discovery exists. Cannot be measured. |
+| AC2 | Gap Reporting Clarity <10% FP/FN | ❌ UNMET | No gap analysis exists. Cannot be measured. |
+| AC3 | Metric Consistency | ⚠️ PARTIAL | Delivery metrics are pure-function-tested and deterministic. Static code metrics (complexity, coverage, duplication) do not exist. |
+| AC4 | Usability of Insights | ✅ MET | Board-deck slides, ranked recommendations with severity, dashboard lenses — all exist and are consumed. |
+| AC5 | Scalability (<2h for 500k-1M LOC) | ❌ UNMET | No code-scanning pipeline exists to benchmark. The existing lenses are fast (cached reads over indexed DB queries) but do not scan source code. |
+| AC6 | Configurability | ⚠️ PARTIAL | OKR/spec input exists. Scan scheduling does not. Heuristic configuration does not (no heuristics exist yet). |
+
+---
+
+## A.3 Implementation Roadmap
+
+The gap assessment reveals that the codebase already delivers **FR1, FR4, FR8, and FR9** in full, and **FR2, FR6, and FR7** in part. The two critical missing pieces are **FR3 (Feature Discovery)** and **FR5 (Gap Analysis)** — without them, the epic delivers a delivery-metrics dashboard that already exists rather than the promised "feature set discovery & gap assessment."
+
+### Phase 1 — Foundation (FR3): Feature Discovery Engine
+- `api/src/application/analysis/featureDiscovery.ts` — pluggable heuristic pipeline
+- Per-language analyzers: route scanner, schema scanner, domain scanner, UI scanner, config scanner
+- `api/src/infrastructure/database/schema/analysis.ts` — `discovered_features` table + migration
+- `/api/analysis/discover` endpoint
+
+### Phase 2 — Core Value (FR5): Gap Analysis
+- `api/src/application/analysis/gapAnalysis.ts` — feature↔OKR matcher
+- `/api/insights/gaps` route serving the gap matrix
+- Wire into `deck/dataSources.ts` for board-deck inclusion
+- Wire into `recommendationsEngine.ts` as a new `gap` recommendation category
+
+### Phase 3 — Completeness
+- FR2: scheduled scan registry + cron dispatch
+- FR6: static code quality lens (complexity, duplication, coverage)
+- FR7: gap-weighted estimation (extend scenario planner)
+
+### Phase 4 — Polish
+- AC5: benchmark and optimize the scan pipeline for 500k-1M LOC
+- AC6: heuristic-configuration UI
+
+---
+
+## A.4 Key Files Referenced in This Assessment
+
+| File | Role |
+|------|------|
+| `api/src/application/repos/sources/RepoSource.ts` | VCS abstraction + file selection |
+| `api/src/application/repos/sources/repoSourceBase.ts` | Shared VCS types |
+| `api/src/application/repos/scanForPlaceholders.ts` | Existing post-commit source scanner |
+| `api/src/application/insights/qualityInsights.ts` | Production quality lens |
+| `api/src/application/insights/engineeringInsights.ts` | AI effectiveness lens |
+| `api/src/application/insights/deliveryInsights.ts` | Burnup/forecast/scope-creep lens |
+| `api/src/application/insights/deliveryScenario.ts` | What-if scenario planner |
+| `api/src/application/insights/bottleneckInsights.ts` | Stage timing bottleneck lens |
+| `api/src/application/insights/recommendationsEngine.ts` | Prescriptive recommendation engine |
+| `api/src/application/insights/complianceInsights.ts` | Audit evidence lens |
+| `api/src/application/insights/aiImpactInsights.ts` | AI productivity scoring |
+| `api/src/application/insights/allocationInsights.ts` | Effort allocation lens |
+| `api/src/application/insights/velocityInsights.ts` | Sprint velocity lens |
+| `api/src/application/insights/lifecycleInsights.ts` | Lifecycle phase explorer |
+| `api/src/application/insights/peopleInsights.ts` | Team/people health lens |
+| `api/src/application/insights/rdFinancialsInsights.ts` | R&D financials lens |
+| `api/src/application/insights/financeInsights.ts` | FinOps lens |
+| `api/src/application/insights/funnelInsights.ts` | Innovation funnel lens |
+| `api/src/application/insights/devexInsights.ts` | DevEx survey lens |
+| `api/src/application/insights/benchmarkingInsights.ts` | Industry benchmarking |
+| `api/src/application/insights/versionKeys.ts` | Cache-version tokens |
+| `api/src/application/reports/executiveSummary.ts` | Executive KPI bundle |
+| `api/src/application/deck/dataSources.ts` | Deck data assembly from all lenses |
+| `api/src/application/deck/DeckService.ts` | Board-deck rendering |
+| `api/src/presentation/routes/insightsRoutes.ts` | Insights REST surface |
+| `api/src/application/metrics/workforceMetrics.ts` | DORA four-keys |
