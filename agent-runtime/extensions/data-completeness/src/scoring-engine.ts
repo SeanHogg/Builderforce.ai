@@ -119,7 +119,8 @@ export function calculateRecordScore(
 export function calculateDatasetReport(
   recordScores: RecordScoreData[],
   fieldWeights: FieldWeightConfig,
-  thresholds: ScoreThresholds
+  thresholds: ScoreThresholds,
+  placeholders: Set<string> = new Set<string>()
 ): DatasetReport {
   const scores = recordScores.map((s) => s.score);
 
