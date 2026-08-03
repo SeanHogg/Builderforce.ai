@@ -119,6 +119,8 @@ export interface ByoChoices {
  */
 export interface ModelChoices {
   models: string[];
+  /** Tenant-defined named LLM configurations (`tenant_model:<slug>`). */
+  configuredModels: Array<{ ref: string; name: string }>;
   canUsePremiumModels: boolean;
   premiumModels: string[];
   /** False ⇒ the tenant may not pin a model at all; offer only "auto". */
@@ -194,7 +196,10 @@ export async function getModels(
   // /v1/models — it comes from the cached public /v1/catalog. Only fetch it for an
   // entitled tenant; a failure degrades to "no premium" rather than breaking the picker.
   const canUsePremiumModels = json.canUsePremiumModels === true;
-  const premiumModels = canUsePremiumModels ? await getPremiumCatalog().catch(() => []) : [];
+  const [premiumModels, configuredModels] = await Promise.all([
+    canUsePremiumModels ? getPremiumCatalog().catch(() => []) : Promise.resolve([] as string[]),
+    getConfiguredModels(key).catch(() => []),
+  ]);
 
   // BYO + entitlement flags. Tolerant of an older gateway that omits them: no BYO,
   // and model choice defaults to whatever premium access says (the pre-existing
@@ -208,6 +213,7 @@ export async function getModels(
 
   const data: ModelChoices = {
     models,
+    configuredModels,
     canUsePremiumModels,
     premiumModels,
     canChooseModel,
@@ -238,9 +244,21 @@ export function isModelAllowed(choices: ModelChoices, model: string | undefined)
   // the premium/frontier gates and stays available on every tier.
   if (model.startsWith("project_evermind:")) return true;
   if (!choices.canChooseModel) return false;
+  if (choices.configuredModels.some((m) => m.ref === model)) return true;
   if (choices.byo.models.some((m) => m.id === model)) return true;
   if (choices.models.includes(model)) return true;
   return choices.canUsePremiumModels && choices.premiumModels.includes(model);
+}
+
+async function getConfiguredModels(key: string): Promise<Array<{ ref: string; name: string }>> {
+  const res = await fetch(`${getBaseUrl()}/api/llm/models`, {
+    headers: { authorization: `Bearer ${key}` },
+  });
+  if (!res.ok) throw new Error(`configured_models_failed_${res.status}`);
+  const json = (await res.json()) as { models?: Array<{ ref?: string; name?: string }> };
+  return (json.models ?? [])
+    .filter((model): model is { ref: string; name?: string } => typeof model.ref === 'string' && !!model.ref)
+    .map((model) => ({ ref: model.ref, name: model.name?.trim() || model.ref }));
 }
 
 /**

@@ -1056,7 +1056,7 @@ function byoProviderLabel(vendor: string): string {
 
 async function pickModel(context: vscode.ExtensionContext): Promise<void> {
   try {
-    const { models, canUsePremiumModels, premiumModels, canChooseModel, byo, premiumInfo } =
+    const { models, configuredModels, canUsePremiumModels, premiumModels, canChooseModel, byo, premiumInfo } =
       await getModels(context.secrets, true);
     const auto = "(auto — let the gateway choose)";
     const pool = "$(layers) Pool — use my BYO priority order";
@@ -1101,6 +1101,13 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
     // offer models the gateway will accept.
     const items: vscode.QuickPickItem[] = [{ label: auto, description: "Gateway chooses across entitled routes" }];
     if (byo.providers.length > 0) items.push({ label: pool, description: "Try your connected accounts in your configured order" });
+
+    if (configuredModels.length > 0) {
+      items.push(
+        { label: "Configured LLMs", kind: vscode.QuickPickItemKind.Separator },
+        ...configuredModels.map((model) => ({ label: model.ref, description: model.name, detail: "Saved workspace LLM configuration" })),
+      );
+    }
 
     // Group the BYO models by their serving provider, preserving catalog order.
     const byVendor = new Map<string, typeof byo.models>();
