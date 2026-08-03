@@ -189,15 +189,21 @@ function makeError(
 
 /**
  * Convenience: parse + plan from a raw text input.
- * See `parseTaskList` in ingestion.ts for supported formats.
+ * See `parseTasks` in ingestion.ts for supported formats.
  */
 export function planParallelFromText(
   input: string,
   options: PlanParallelOptions & { format_hint?: string } = {},
 ): PlanOutput {
-  const parseResult = parseTaskList(input, options.format_hint ?? "auto");
-  if (parseResult.error) {
-    return parseResult;
+  const parseResult = parseTasks(input, options.format_hint as "json" | "yaml" | "plain" | undefined);
+  if (Array.isArray(parseResult) && "error_code" in parseResult[0]) {
+    return { error: parseResult[0] as PlanError };
   }
-  return planParallel(parseResult.tasks!, options);
+  if (Array.isArray(parseResult)) {
+    return planParallel(parseResult, options);
+  }
+  if ("error_code" in parseResult) {
+    return { error: parseResult };
+  }
+  return { error: { error_code: "UNKNOWN", message: "Unexpected parsing result" } };
 }
