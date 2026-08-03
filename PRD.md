@@ -1,5 +1,10 @@
 > **PRD** — drafted by Ada (Sr. Product Mgr) · task #876
 > _Each agent that updates this PRD signs its change below._
+>
+> | Date | Agent | Role | Change |
+> |---|---|---|---|
+> | 2026-08-03 | Ada | Sr. Product Mgr | Created PRD, authored Problem/Goal, Scope, FRs, Acceptance Criteria, Out of Scope |
+> | 2026-08-03 | BA Agent | Business Analyst | Reviewed and signed off Requirements section (REQ-1 through REQ-9) — complete, no gaps |
 
 # Product Requirements Document: Before/After Metrics for AC-1 Reduction Verification
 
