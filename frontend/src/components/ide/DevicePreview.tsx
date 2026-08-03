@@ -52,19 +52,29 @@ export function DevicePreview({ url, onOpenDevicePanel }: DevicePreviewProps) {
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
+    // Debounce ResizeObserver callbacks to prevent "ResizeObserver loop completed
+    // with undelivered notifications" errors.
+    let rafId: number | null = null;
     const measure = () => {
-      const available = stage.getBoundingClientRect();
-      const next = Math.min(
-        1,
-        (available.width - STAGE_PADDING) / frameWidth,
-        (available.height - STAGE_PADDING) / frameHeight,
-      );
-      setScale(Number.isFinite(next) && next > 0 ? next : 1);
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        const available = stage.getBoundingClientRect();
+        const next = Math.min(
+          1,
+          (available.width - STAGE_PADDING) / frameWidth,
+          (available.height - STAGE_PADDING) / frameHeight,
+        );
+        setScale(Number.isFinite(next) && next > 0 ? next : 1);
+      });
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(stage);
-    return () => observer.disconnect();
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      observer.disconnect();
+    };
   }, [frameWidth, frameHeight]);
 
   const reload = useCallback(() => setReloadKey((k) => k + 1), []);
