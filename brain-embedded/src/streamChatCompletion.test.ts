@@ -69,6 +69,31 @@ describe('streamChatCompletion transport injection', () => {
     expect(body).not.toHaveProperty('model');
   });
 
+  it('sends a deliberate model choice as a strict pin', async () => {
+    const fetchMock = vi.fn(async () => sseResponse(['data: [DONE]\n']));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamChatCompletion({
+      messages: [], transport: baseTransport, model: 'direct/kimi-code/kimi-k2.5', modelStrict: true,
+    });
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body).toMatchObject({ model: 'direct/kimi-code/kimi-k2.5', strict: true });
+  });
+
+  it('distinguishes ordered BYO Pool from gateway Auto on the wire', async () => {
+    const fetchMock = vi.fn(async () => sseResponse(['data: [DONE]\n']));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await streamChatCompletion({ messages: [], transport: baseTransport, routingMode: 'byo_pool' });
+    let body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body).toMatchObject({ routingMode: 'byo_pool' });
+    expect(body).not.toHaveProperty('model');
+
+    await streamChatCompletion({ messages: [], transport: baseTransport, routingMode: 'auto' });
+    body = JSON.parse((fetchMock.mock.calls[1][1] as RequestInit).body as string);
+    expect(body).toMatchObject({ routingMode: 'auto' });
+  });
+
   it('preserves the gateway\'s structured entitlement fields on a 402', async () => {
     vi.stubGlobal(
       'fetch',

@@ -218,6 +218,8 @@ export function useBrainConversation(options: UseBrainConversationOptions): UseB
     extraSystem,
     systemPrompt,
     model,
+    modelStrict,
+    routingMode,
     pickFallbackModel,
     maxTokens,
     reasoning,
