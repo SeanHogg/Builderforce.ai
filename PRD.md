@@ -1,125 +1,94 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #556
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document: PagerDuty Webhook Lifecycle Processing
 
 ## Problem & Goal
+**Problem**: The existing PagerDuty v3 webhook integration verifies `X-PagerDuty-Signature` and routes incident-category events to `prod_incidents`, but does not parse or act upon individual lifecycle events (`triggered`, `acknowledged`, `resolved`, `escalated`). As a result, incident statuses are not updated in real time, leaving responders with stale information.
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+**Goal**: Wire handlers that parse incoming lifecycle webhooks and instantly update the corresponding internal incident record, ensuring that the incident’s status accurately reflects its current state in PagerDuty.
 
 ## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Primary users**: SRE, on-call engineers, incident commanders  
+- **Ideal customer profile (ICP) roles**: DevOps Engineer, SRE, Platform Engineer  
+*These roles rely on real-time incident status visibility to coordinate response and recovery.*
 
 ## Scope
-
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- **In scope**:
+  - Handling PagerDuty v3 webhooks for incident lifecycle events: `incident.triggered`, `incident.acknowledged`, `incident.resolved`, `incident.escalated`.
+  - Updating the status field of the corresponding incident record in the internal system upon receipt of these events.
+  - Reusing the existing signature verification and routing logic for `prod_incidents`.
+  - Ensuring idempotent processing for duplicate or out-of-order deliveries.
+- **Out of scope**:
+  - Processing non-lifecycle incident webhooks (e.g., `incident.annotated`, `incident.priority_updated`).
+  - Handling webhook v2 or other PagerDuty event types (e.g., service, alert).
+  - Creating new incidents from webhooks (only status updates on existing incidents).
+  - Modifications to the UI or notification systems.
+  - Integration with other monitoring/alerting tools.
 
 ## Functional Requirements
+1. **Event Parsing**  
+   The webhook handler must parse the `event_type` field from the PagerDuty v3 payload to identify lifecycle events:  
+   - `incident.triggered`
+   - `incident.acknowledged`
+   - `incident.resolved`
+   - `incident.escalated`
 
-### FR-1 — Mode Selection
+2. **Incident Identification**  
+   Extract the PagerDuty incident ID (`id` from the payload’s `incident` object) and map it to the internal incident record. If no matching incident exists, log a warning and discard the event.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+3. **Status Mapping**  
+   Map the lifecycle event to the corresponding internal status value (e.g., `Open` for triggered, `Acknowledged`, `Resolved`, `Escalated`). The mapping must be documented and deterministic.
 
----
+4. **Record Update**  
+   Update the internal incident record’s `status` (and optionally `updated_at` timestamp) atomically. The update must reflect the latest state based on PagerDuty’s timestamp (`occurred_at` or `log_entries.log_entry.notification_time`) to avoid out-of-order updates.
 
-### FR-2 — Guided (Interactive) Mode
+5. **Signature Verification**  
+   Continue to validate the `X-PagerDuty-Signature` header on every request before processing, as per existing implementation.
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+6. **Idempotency**  
+   Handle duplicate deliveries gracefully: if the incident already has the same status, do not re-apply the update, and log the repetition.
 
----
+7. **Error Handling**  
+   - Log malformed payloads and reject with `400 Bad Request`.
+   - Log failures to identify incident and respond with `200 OK` to acknowledge receipt, to prevent PagerDuty retries.
+   - Log database update failures; respond with `500 Internal Server Error` after maximum internal retries.
 
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+8. **Backward Compatibility**  
+   The processing logic must not break the existing routing to `prod_incidents`; all incident-category webhooks that are not lifecycle events should be silently accepted and ignored (or logged).
 
 ## Acceptance Criteria
-
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
-
----
+- **AC1**: When a valid `incident.triggered` webhook is received with a known incident ID, the internal incident’s status is updated to `triggered` within 5 seconds.
+- **AC2**: When `incident.acknowledged`, `incident.resolved`, or `incident.escalated` webhooks are received, the status is updated accordingly.
+- **AC3**: Signature verification passes before any processing; invalid signatures result in `401 Unauthorized`.
+- **AC4**: Duplicate events for the same status do not cause additional updates or side effects.
+- **AC5**: An event for an unknown incident ID is logged and returns `200 OK` without error.
+- **AC6**: A webhook with a non-lifecycle incident event_type (e.g., `incident.custom`) does not trigger an update and returns `200 OK`.
+- **AC7**: All acceptance tests (FR-2.5, AC-PD-3) pass, verifying end-to-end status sync.
 
 ## Out of Scope
+- Handling PagerDuty v2 webhooks.
+- Non-incident webhook events (services, alerts, heartbeat).
+- Creating or deleting incidents via webhooks.
+- Modifying the PagerDuty integration UI or configuration.
+- Cross-system incident correlation or enrichment.
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+## Requirements
+
+_Owned by the business-analyst — to be authored._
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
