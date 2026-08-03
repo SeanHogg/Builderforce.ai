@@ -76,7 +76,7 @@ export interface WebhookEvent {
 }
 
 export interface PaymentProvider {
-  /** Human-readable provider name (e.g. "manual", "stripe", "helcim") */
+  /** Human-readable provider name (e.g. "manual", "stripe") */
   readonly name: string;
 
   /**
