@@ -27,7 +27,6 @@ export function createWebhookRoutes(
     const rawBody = await c.req.text();
     const signatureHeader =
       c.req.header('Stripe-Signature') ??     // Stripe
-      c.req.header('X-Helcim-Signature') ??   // Helcim
       c.req.header('X-Signature') ??           // generic fallback
       '';
 
