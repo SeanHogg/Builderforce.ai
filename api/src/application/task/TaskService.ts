@@ -58,6 +58,12 @@ export interface UpdateTaskDto {
   taskType?: TaskType;
   /** Re-parent under an Epic (planning "drag into Epic"), or null to detach. */
   parentTaskId?: number | null;
+  /**
+   * Opt-in flag: when true, passing parentTaskId: null explicitly detaches the task
+   * from its parent. When false/undefined (default), parentTaskId: null is ignored
+   * and the existing parent is preserved. This prevents accidental detachment.
+   */
+  explicitDetach?: boolean;
   /** Schedule into / out of a sprint (planning "drag onto sprint"). null = unscheduled. */
   sprintId?: string | null;
   /** Link to / unlink from a product release (the delivery deliverable). null = unlinked. */
