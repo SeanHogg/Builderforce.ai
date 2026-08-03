@@ -7,15 +7,17 @@ import type {
   MemoryEntry,
   PersistenceStrategy,
   MemoryStoreAPI,
+  SearchQuery,
+  SearchResult,
   SearchStats
 } from './types.js';
 
 export class MemoryStore implements MemoryStoreAPI {
   private entries = new Map<string, MemoryEntry>();
-  private options: Required<PersistenceStrategy>;
+  options: Required<PersistenceStrategy>;
   private listeners = new Map<string, Set<Function>>();
   private storagePath: string;
-  private initialized = false;
+  initialized = false;
 
   constructor(options?: Partial<PersistenceStrategy>) {
     this.options = {
@@ -49,7 +51,7 @@ export class MemoryStore implements MemoryStoreAPI {
   async add(entry: Omit<MemoryEntry, 'id' | 'createdAt' | 'updatedAt'>): Promise<MemoryEntry> {
     const now = Date.now();
     const memoryEntry: MemoryEntry = {
-      id: entry.id || this.generateId(),
+      id: this.generateId(),
       content: entry.content,
       metadata: entry.metadata,
       createdAt: now,
@@ -105,7 +107,7 @@ export class MemoryStore implements MemoryStoreAPI {
     return this.entries.get(id) || null;
   }
 
-  async list(filters?: MemoryEntry['metadata'], limit?: number): Promise<MemoryEntry[]> {
+  async list(filters?: SearchQuery['filters'], limit?: number): Promise<MemoryEntry[]> {
     let entries = Array.from(this.entries.values());
 
     // Apply filters
@@ -150,9 +152,11 @@ export class MemoryStore implements MemoryStoreAPI {
     return entries;
   }
 
-  async search(query: any): Promise<any[]> {
-    // Placeholder - integrated with SearchEngine
-    return [];
+  async search(query: SearchQuery): Promise<SearchResult[]> {
+    // Integrated with SearchEngine — delegates to the engine
+    const { SearchEngine } = await import('./search-engine.js');
+    const engine = new SearchEngine(this);
+    return engine.search(query);
   }
 
   async searchTags(tags: string[]): Promise<MemoryEntry[]> {
@@ -182,6 +186,10 @@ export class MemoryStore implements MemoryStoreAPI {
     this.entries.clear();
   }
 
+  getAllEntries(): MemoryEntry[] {
+    return Array.from(this.entries.values());
+  }
+
   async getStats(): Promise<SearchStats> {
     const entries = Array.from(this.entries.values());
     const tags = new Set<string>();
@@ -205,8 +213,18 @@ export class MemoryStore implements MemoryStoreAPI {
   }
 
   async getUsage(): Promise<{ size: number; entries: number }> {
-    // Placeholder for actual usage tracking
-    
+    // Calculate approximate size in bytes
+    let size = 0;
+    this.entries.forEach(entry => {
+      size += JSON.stringify(entry).length;
+    });
+    return {
+      size,
+      entries: this.entries.size
+    };
+  }
+
+  on(event: string, callback: Function): () => void {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
@@ -230,6 +248,6 @@ export class MemoryStore implements MemoryStoreAPI {
   }
 
   private generateId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
   }
 }
