@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   Background,
   BackgroundVariant,
@@ -66,6 +66,19 @@ function WorkspacePanel({ data, selected }: NodeProps<WorkspacePanelNode>) {
   );
 }
 
+function MobileWorkspacePanel({ panel, onRemovePanel }: { panel: WorkspaceCanvasPanel; onRemovePanel?: (id: string) => void }) {
+  return <section className={`${styles.node} ${styles.mobileNode}`} aria-label={`${panel.title} canvas panel`}>
+    <header className={styles.header}>
+      <span className={styles.icon} aria-hidden>{panel.icon ?? '◇'}</span>
+      <strong className={styles.title}>{panel.title}</strong>
+      {panel.subtitle && <span className={styles.subtitle}>{panel.subtitle}</span>}
+      <span className={styles.spacer} />
+      {panel.removable && onRemovePanel && <button type="button" className={styles.close} aria-label={`Remove ${panel.title} from canvas`} onClick={() => onRemovePanel(panel.id)}>×</button>}
+    </header>
+    <div className={`${styles.body} ${styles.mobileBody}`}>{panel.content}</div>
+  </section>;
+}
+
 const NODE_TYPES: NodeTypes = { workspacePanel: WorkspacePanel };
 
 function panelNode(panel: WorkspaceCanvasPanel, index: number): WorkspacePanelNode {
@@ -92,7 +105,17 @@ export function WorkspaceCanvas({
 }) {
   const initialNodes = useMemo(() => panels.map(panelNode), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkspacePanelNode>(initialNodes);
+  const [mobile, setMobile] = useState(false);
   const panelIds = panels.map((panel) => panel.id).join('\u0000');
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== 'function') return;
+    const media = window.matchMedia('(max-width: 760px)');
+    const sync = () => setMobile(media.matches);
+    sync();
+    media.addEventListener('change', sync);
+    return () => media.removeEventListener('change', sync);
+  }, []);
 
   useEffect(() => {
     setNodes((current) => panels.map((panel, index) => {
@@ -103,8 +126,13 @@ export function WorkspaceCanvas({
     // when the set of reusable panels changes.
   }, [panelIds, setNodes]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (mobile) return <div className={`${styles.canvas} ${styles.mobileCanvas}${className ? ` ${className}` : ''}`} data-testid="workspace-canvas" data-layout="widgets">
+    {toolbar && <div className={styles.mobileToolbar}>{toolbar}</div>}
+    <div className={styles.mobileStack}>{panels.map((panel) => <MobileWorkspacePanel key={panel.id} panel={panel} onRemovePanel={onRemovePanel} />)}</div>
+  </div>;
+
   return (
-    <div className={`${styles.canvas}${className ? ` ${className}` : ''}`} data-testid="workspace-canvas">
+    <div className={`${styles.canvas}${className ? ` ${className}` : ''}`} data-testid="workspace-canvas" data-layout="spatial">
       <WorkspacePanelsContext.Provider value={{ panels, onRemovePanel }}>
         <ReactFlowProvider>
           <ReactFlow

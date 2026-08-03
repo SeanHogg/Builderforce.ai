@@ -5,6 +5,7 @@
  * rendered as a movable canvas artifact by the app shell.
  */
 const NATIVE_CANVAS_ROUTES = [
+  '/dashboard',
   '/projects',
   '/brainstorm',
   '/workflows/builder',

@@ -46,6 +46,7 @@
   border-color: color-mix(in srgb, var(--coral-bright) 70%, var(--border-subtle));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--coral-bright) 35%, transparent), 0 22px 56px rgba(0, 0, 0, .32);
 }
+.node:has(> .body:empty) { visibility:hidden; pointer-events:none; }
 
 .header {
   display: flex;
@@ -113,4 +114,12 @@
 @media (max-width: 760px) {
   .canvas { height: calc(100vh - 126px); min-height: 520px; }
   .toolbar { left: 10px; right: 10px; overflow-x: auto; }
+  .mobileCanvas { height:auto; min-height:calc(100vh - 126px); overflow:visible; padding:10px; background:var(--bg-deep); }
+  .mobileToolbar { display:flex; gap:8px; margin-bottom:10px; overflow-x:auto; }
+  .mobileStack { display:grid; gap:12px; width:100%; }
+  .mobileNode { height:auto; min-height:0; overflow:visible; border-radius:12px; box-shadow:0 8px 24px rgba(0,0,0,.2); }
+  .mobileNode:has(> .mobileBody:empty) { display:none; }
+  .mobileNode .header { min-height:40px; cursor:default; }
+  .mobileNode .subtitle { display:none; }
+  .mobileBody { overflow:visible; padding:12px; }
 }

@@ -47,6 +47,13 @@ describe('CODING_MODEL_POOL', () => {
     expect(CODING_MODEL_POOL).toContain(CODING_DEFAULT_MODEL);
   });
 
+  it('uses the current NVIDIA MiniMax generation and excludes retired M2.7', () => {
+    expect(CODING_DEFAULT_MODEL).toBe('minimaxai/minimax-m3');
+    expect(FREE_MODEL_POOL).toContain('minimaxai/minimax-m3');
+    expect(FREE_MODEL_POOL).not.toContain('minimaxai/minimax-m2.7');
+    expect(catalogEntry('minimaxai/minimax-m2.7')).toBeNull();
+  });
+
   it('isKnownModel accepts catalog ids and rejects garbage', () => {
     expect(isKnownModel(CODING_DEFAULT_MODEL)).toBe(true);
     expect(isKnownModel('totally/made-up-model')).toBe(false);

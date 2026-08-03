@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { WorkspaceCanvas } from './WorkspaceCanvas';
 
@@ -28,5 +28,30 @@ describe('WorkspaceCanvas', () => {
     fireEvent.click(screen.getByLabelText('Remove Alpha tasks from canvas'));
     expect(onRemove).toHaveBeenCalledWith('tasks-1');
     expect(screen.getByText('Beta')).toBeInTheDocument();
+  });
+
+  it('renders panels as full-width individual widgets on mobile', async () => {
+    vi.stubGlobal('matchMedia', vi.fn().mockReturnValue({
+      matches: true,
+      media: '(max-width: 760px)',
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+
+    render(<WorkspaceCanvas panels={[
+      { id: 'quality', title: 'Quality', content: <div>Quality score</div> },
+      { id: 'recommendations', title: 'Recommendations', content: <div>Fix CI first</div> },
+    ]} />);
+
+    await waitFor(() => expect(screen.getByTestId('workspace-canvas')).toHaveAttribute('data-layout', 'widgets'));
+    expect(screen.getByLabelText('Quality canvas panel')).toBeInTheDocument();
+    expect(screen.getByLabelText('Recommendations canvas panel')).toBeInTheDocument();
+    expect(screen.getByText('Quality score')).toBeVisible();
+    expect(screen.getByText('Fix CI first')).toBeVisible();
+    vi.unstubAllGlobals();
   });
 });

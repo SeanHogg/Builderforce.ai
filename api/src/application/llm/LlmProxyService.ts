@@ -254,7 +254,7 @@ export interface ProxyResult {
   /** The model chain the gateway actually walked for this request. */
   candidateChain?: string[];
   /** success | cascade_exhausted | all_cooldown | subrequest_exhausted |
-   *  strict_unavailable | schema_nonconforming | request_error |
+   *  strict_unavailable | model_unavailable | schema_nonconforming | request_error |
    *  byo_unavailable (BYO required but no connected provider can serve) |
    *  schema_too_complex (every candidate rejected the json_schema as too complex). */
   outcome?: string;
@@ -1420,6 +1420,14 @@ export class LlmProxyService {
       return this.requestErrorResponse(attempts, resolvedModel, resolvedVendor, failovers, schemaRetries);
     }
 
+    // A pool made entirely of removed/retired models is unavailable, not rate
+    // limited. Keep mixed exhaustion (for example one retired model followed by
+    // live models that 429) in the normal rate-limit envelope, but never tell a
+    // caller to back off when every upstream explicitly said the model is gone.
+    if (attempts && attempts.length > 0 && attempts.every((a) => isModelUnavailableStatus(a.status))) {
+      return this.modelsUnavailableResponse(attempts, resolvedModel, resolvedVendor, failovers, schemaRetries);
+    }
+
     // Failover breakdown lives under `error.details.failovers` — OpenAI-style
     // envelope so the SDK's existing `details` accessor on BuilderforceApiError
     // picks it up without a parser change. Top-level `vendor` + `model` give
@@ -1448,6 +1456,41 @@ export class LlmProxyService {
       failovers,
       outcome: 'cascade_exhausted',
       attempts: attempts ? [...attempts] : [],
+      ...(schemaRetries > 0 ? { schemaRetries } : {}),
+    };
+  }
+
+  /** Build a truthful aggregate when every dispatched model was removed upstream. */
+  private modelsUnavailableResponse(
+    attempts: ReadonlyArray<DispatchAttempt>,
+    resolvedModel: string,
+    resolvedVendor: VendorId,
+    failovers: FailoverEvent[],
+    schemaRetries: number,
+  ): ProxyResult {
+    const last = attempts[attempts.length - 1]!;
+    const body = JSON.stringify({
+      error: {
+        message: last.error || 'Every candidate model is unavailable or retired.',
+        code: 'model_unavailable',
+        type: 'service_unavailable',
+        reason: 'all_models_unavailable',
+        vendor: resolvedVendor,
+        model: resolvedModel,
+        details: { failovers },
+      },
+    });
+    return {
+      response: new Response(body, {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      }),
+      resolvedModel,
+      resolvedVendor,
+      retries: attempts.length,
+      failovers,
+      outcome: 'model_unavailable',
+      attempts: [...attempts],
       ...(schemaRetries > 0 ? { schemaRetries } : {}),
     };
   }
@@ -1668,6 +1711,11 @@ export class LlmProxyService {
  *  "caller's fault, not the model's" status set. */
 export function isRequestErrorStatus(status: number): boolean {
   return status === 400 || status === 422;
+}
+
+/** An upstream model id that no longer resolves (removed or explicitly gone). */
+export function isModelUnavailableStatus(status: number): boolean {
+  return status === 404 || status === 410;
 }
 
 /**
