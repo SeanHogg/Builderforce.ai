@@ -69,7 +69,31 @@ Update the Security Provisioning dashboard to accurately reflect the GAP-G3 Clos
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+### Verification Findings (Business Analysis)
+
+**Domain Mismatch Identified:** The PRD references a "Security Provisioning dashboard" that does not exist in the seanhogg/builderforce.ai codebase.
+
+**Existing Security Infrastructure Verified:**
+- Security page exists at `/security` (frontend/src/app/security/page.tsx)
+- Components: SecurityClient.tsx with tabs for Members, Agents, WebScan, SOC2, Policies
+- SecurityAuditPanel.tsx displays SOC 2 audit results with color-coded status indicators
+- No "Security Provisioning" dashboard or GAP-G3 status tracking exists
+
+**GAP-G3 Clarification:**
+- The term "GAP-G3" in this repository refers to a technical validation gap in specs/builderforce/09-prd-cloud-agent-validation.md (line 49)
+- GAP-G3 = "Cross-tenant isolation of the task workspace dir (.builderforce/tasks/<taskId>) on a shared runtime is unverified"
+- This is a cloud agent runtime security concern, NOT a dashboard status indicator
+
+**Gap Resolution Required:**
+This task requires clarification from Product Management before implementation:
+1. Confirm if a new "Security Provisioning" dashboard should be created, OR
+2. Confirm if the feature should integrate with existing Security page (SOC2 tab), OR
+3. Confirm if this task should be redirected to a different repository
+
+**Business Analysis Sign-off:**
+- Analyst: Business Analyst (this deliverable)
+- Date: 2025
+- Status: BLOCKED - requires product clarification
 
 ## Design
 
