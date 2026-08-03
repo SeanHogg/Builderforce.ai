@@ -1,125 +1,93 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #829
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document: Auto-resolve Owner Role from Epic Assignee
 
 ## Problem & Goal
+**Problem:** When an issue is created under an epic, the Owner role does not automatically inherit the epic’s assignee. This requires manual assignment, introduces human error, and causes ownership misalignment across the epic’s work breakdown.
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+**Goal:** Automatically resolve the `Owner` role for an issue to the epic’s assignee, ensuring consistent ownership propagation. The immediate verification target is epic assignee **Ada** (user ID `fdbbd9af-80eb-483e-a5d0-557dbfdd2cc6`).
 
 ## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Project Managers / Team Leads** who define epics and expect consistent ownership without manual per-issue assignment.
+- **Developers & Product Owners** who create, triage, or pick up issues and rely on accurate Owner metadata.
+- **System Administrators** who configure automation rules and audit role assignments.
 
 ## Scope
-
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- **In scope:**  
+  Automatic resolution of the `Owner` field on issue creation and epic-link changes, based solely on the parent epic’s current assignee.  
+  Verification that the rule correctly fires for Ada (`fdbbd9af-80eb-483e-a5d0-557dbfdd2cc6`).  
+  Handling of epic assignee updates (proactive re-resolution for all un-overridden child issues).  
+  Proper behaviour when the epic has no assignee.
 
 ## Functional Requirements
+1. **Issue creation / linkage**  
+   When an issue is associated with an epic that has an assignee, the issue’s `Owner` field must be set to that assignee without user intervention.
 
-### FR-1 — Mode Selection
+2. **Epic assignee change**  
+   If the epic’s assignee changes, all open issues belonging to that epic must have their `Owner` field updated to the new assignee, **unless** a user has manually overridden the `Owner` on an individual issue (explicit override preserves manual value).
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+3. **No-assignee fallback**  
+   If the parent epic has no assignee, the `Owner` field must remain blank (no fallback assignment).
 
----
+4. **Audit trail**  
+   Automatic `Owner` changes must be recorded as system-generated activity for traceability.
 
-### FR-2 — Guided (Interactive) Mode
+5. **Performance**  
+   Resolution must complete within **5 seconds** of the trigger event (issue creation, linkage, or epic assignee change).
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
-
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+6. **Specific user verification**  
+   The rule must be explicitly validated for user Ada (`fdbbd9af-80eb-483e-a5d0-557dbfdd2cc6`).
 
 ## Acceptance Criteria
+1. **AC1 – Creation with assigned epic**  
+   **Given** an epic with assignee Ada (`fdbbd9af-80eb-483e-a5d0-557dbfdd2cc6`)  
+   **When** a new issue is created and linked to that epic  
+   **Then** the issue’s `Owner` field is automatically set to Ada, visible immediately upon creation.
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+2. **AC2 – Epic assignee change propagates**  
+   **Given** an epic with assignee Ada and two open child issues (both have `Owner` = Ada, neither has a manual override)  
+   **When** the epic assignee is changed to another user (e.g., `Bob`)  
+   **Then** both child issues’ `Owner` fields are updated to `Bob` within 5 seconds.
 
----
+3. **AC3 – Manual override persists**  
+   **Given** a child issue whose `Owner` was manually set to `Charlie` (overriding the epic’s Ada)  
+   **When** the epic assignee changes from Ada to `Dana`  
+   **Then** the issue’s `Owner` remains `Charlie` and is **not** overwritten.
+
+4. **AC4 – No assignee on epic**  
+   **Given** an epic with **no** assignee  
+   **When** a new issue is created under that epic  
+   **Then** the issue’s `Owner` field remains blank.
+
+5. **AC5 – Audit log capture**  
+   **Given** any automatic `Owner` assignment or update  
+   **When** the change occurs  
+   **Then** the issue’s activity history contains a system entry describing the change (e.g., “Owner automatically set from epic assignee”).
 
 ## Out of Scope
+- Automation of roles other than `Owner` (e.g., Reviewer, Approver, QA).
+- Bulk backfill of `Owner` on existing issues that pre-date this automation.
+- Resolution across multi-level hierarchies (e.g., epic → story → sub-task); only direct epic-to-issue relationship is covered.
+- UI configuration or user preferences to opt out of auto-assignment (default behaviour applies globally).
+- Custom fallback assignment logic when an epic has no assignee (e.g., defaulting to the project lead).
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+## Requirements
+
+_Owned by the business-analyst — to be authored._
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
