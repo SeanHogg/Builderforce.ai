@@ -1,125 +1,123 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #144
 > _Each agent that updates this PRD signs its change below._
+> - Kevin (BA/PM) — delivered analysis in `specs/builderforce/18-resource-estimation.md`, 2026-07-30
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# PRD: Resource Estimation — Human & AI Capacity Analysis
 
 ## Problem & Goal
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+**Problem:** The team (1 human + 4 AI cloud agents) is operating against a multi-project backlog of unknown total effort. There is no current visibility into agent utilization rates, task queue depth per agent, or projected time-to-completion. The 50 identified cloud-agent validation gaps (many P0/P1) represent unquantified engineering risk that may exceed current capacity.
 
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
+**Goal:** Produce a structured capacity and resource estimate that maps remaining backlog effort to available human and AI resources, identifies bottlenecks and capability gaps, and yields an actionable recommendation on whether additional agents or human hours are required to hit delivery targets.
 
 ---
 
 ## Target Users / ICP Roles
 
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
+| Role | Need |
+|---|---|
+| Sean Hogg (Human Lead) | Understand where his review time is the binding constraint; decide whether to hire or spin up additional agents |
+| Kevin (BA/PM Agent) | Understand backlog sizing and prioritization inputs |
+| Mike (QA Agent) | Understand validation queue depth and P0/P1 defect load |
+| Bob / John (Developer / Coder Agents) | Understand task assignment balance and throughput expectations |
 
 ---
 
 ## Scope
 
-### In Scope
+This PRD covers a **one-time analytical deliverable** (with a recommended refresh cadence) that:
 
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
+1. Inventories all open tasks across every active project.
+2. Sizes effort per task using story points or t-shirt sizing (XS/S/M/L/XL).
+3. Maps tasks to agent roles and calculates current utilization.
+4. Factors in the 50 cloud-agent validation gaps as a discrete workstream.
+5. Outputs a per-project resource estimate and a team-level capacity recommendation.
 
 ---
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+### FR-1: Backlog Inventory & Effort Estimation
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+- FR-1.1 Pull all open tasks across every active project into a single consolidated list, tagged by project, priority (P0–P3), and current assignee.
+- FR-1.2 Assign a story-point estimate (1 / 2 / 3 / 5 / 8 / 13) or t-shirt size to every open task. Tasks with insufficient definition must be flagged as **needs refinement** and counted separately.
+- FR-1.3 Compute total estimated effort per project (sum of story points) and a grand total across all projects.
+- FR-1.4 Segregate the 50 cloud-agent validation gaps into their own sub-inventory; label each with priority (P0/P1/P2), owning agent role, and estimated effort. Sum to a standalone validation-gap effort total.
 
----
+### FR-2: Agent Utilization Analysis
 
-### FR-2 — Guided (Interactive) Mode
+- FR-2.1 For each of the 5 team members (1 human + 4 agents), list:
+  - Tasks currently **in-progress** or **assigned**.
+  - Tasks **blocked** (on human review, external input, or agent capability gap).
+  - Tasks **queued but unstarted**.
+- FR-2.2 Calculate a utilization percentage for each agent: `(active tasks × avg task duration) / available agent-hours per sprint`.
+- FR-2.3 Identify any agent whose queue is empty (idle risk) or whose queue exceeds a single-sprint capacity (overload risk).
+- FR-2.4 Estimate per-agent throughput in story points per day based on observed or assumed velocity; flag where no empirical data exists.
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+### FR-3: Bottleneck Identification
 
----
+- FR-3.1 Flag every task or task category that is **blocked on human (Sean) review**. Count total blocked story points and estimated human-hours to unblock.
+- FR-3.2 Identify task types that **no current agent role can handle** (capability gaps). List the missing capability and the number/effort of affected tasks.
+- FR-3.3 Identify **inter-agent handoff bottlenecks** (e.g., Bob/John coding → Mike QA → Kevin acceptance) and whether any stage is a throughput constraint.
+- FR-3.4 Produce a bottleneck severity rating (Critical / High / Medium / Low) for each identified bottleneck.
 
-### FR-3 — Bulk (Import) Mode
+### FR-4: Time-to-Completion Estimate
 
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
+- FR-4.1 Given per-agent throughput (FR-2.4) and total queued effort (FR-1.3), calculate **calendar days to backlog completion** under current resourcing, broken down per project.
+- FR-4.2 Produce a **human-days** estimate for Sean and an **agent-hours** estimate for each AI agent, per project and in aggregate.
+- FR-4.3 Model two scenarios:
+  - **Scenario A (Status Quo):** Current team, no additions.
+  - **Scenario B (Recommended):** Team with suggested additions (new agents or human hours), showing projected time-to-completion reduction.
+- FR-4.4 Highlight any project where completion date under Scenario A breaches a known deadline or SLA.
 
----
+### FR-5: Recommendations
 
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
+- FR-5.1 State explicitly whether additional agents are recommended, and if so: what role, how many, and which project/task type they should be assigned to first.
+- FR-5.2 State whether additional human hours (Sean) are required or whether human bottlenecks can be reduced by delegation/automation.
+- FR-5.3 Provide a prioritized **top-3 actions** the team should take in the next sprint to improve throughput, ordered by impact.
+- FR-5.4 Recommend a refresh cadence for this capacity analysis (suggested: weekly or per-sprint).
 
 ---
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
+| # | Criterion | Verification Method |
 |---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+| AC-1 | A consolidated backlog table exists with every open task tagged by project, priority, assignee, and story-point estimate. | Reviewer confirms no project is missing; all tasks have an estimate or a "needs refinement" flag. |
+| AC-2 | Each of the 50 cloud-agent validation gaps has a priority label (P0/P1/P2), owning agent, and effort estimate. | Count of rows in validation-gap table equals 50; no row missing priority or estimate. |
+| AC-3 | Utilization rate (%) is reported for each of the 5 team members. | Five utilization figures present; methodology documented inline. |
+| AC-4 | At least one bottleneck is identified per category: human-review blocks, capability gaps, inter-agent handoffs. | Each category has a named bottleneck with severity rating. |
+| AC-5 | Per-project resource estimate is present, showing human-days (Sean) and agent-hours (per agent) to close that project's backlog. | One row per active project in the estimate table; totals column present. |
+| AC-6 | Two scenarios (Status Quo vs. Recommended) are modeled with projected calendar completion dates. | Both scenarios present; delta in days is explicit. |
+| AC-7 | A concrete recommendation states yes/no on additional agents and/or human hours, with role and rationale. | Recommendation section is unambiguous; no conditional-only language without a default recommendation. |
+| AC-8 | Top-3 next-sprint actions are listed in priority order with expected impact stated. | Exactly 3 actions, each with impact statement. |
+| AC-9 | Refresh cadence is documented. | Single explicit statement of cadence. |
 
 ---
 
 ## Out of Scope
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+- **Hiring / contracting process:** This PRD covers the *need* for additional resources, not the recruitment or procurement workflow.
+- **Budget dollar amounts:** Cost modeling ($/hour for cloud agents or contractor rates) is excluded; this is a capacity-units analysis only.
+- **Roadmap re-prioritization:** This analysis informs prioritization decisions but does not itself reprioritize the backlog.
+- **Technical architecture of the agent platform:** How agents are provisioned, scaled, or billed is not covered here.
+- **Completed or cancelled tasks:** Historical velocity data may be referenced, but closed tasks are not re-estimated.
+- **Third-party dependency timelines:** External API readiness, vendor SLAs, or partner delivery dates are out of scope unless they directly create a blocking dependency captured in FR-3.2.
+
+---
+
+## Deliverable
+
+The complete analysis is delivered in **[specs/builderforce/18-resource-estimation.md](./specs/builderforce/18-resource-estimation.md)**.
+
+**Key findings summary:**
+
+| Metric | Value |
+|--------|-------|
+| Total backlog | **196 SP** across 7 projects (5 active + 1 on-hold + 1 empty) |
+| 50 validation gaps | **42 SP** standalone workstream (17 P0 / 22 P1 / 11 P2) |
+| Scenario A (status quo) | **64–78 calendar days** |
+| Scenario B (+2 agents) | **38–48 calendar days** (−37–41%) |
+| Top bottleneck | Human-review funnel (Sean) — **94 SP blocked** (48% of backlog) |
+| Recommendation | **YES — add 2 agents:** 1 infra/cloud security + 1 generalist coder |
+| Refresh cadence | **Per sprint (every 2 weeks)** |
