@@ -1,6 +1,6 @@
 'use client';
 /**
- * portfolioHealthData — pure, typed snapshot of portfolio health per PRD task #146.
+ * portfolioHealthData — pure, typed snapshot of portfolio health per PRD task #548.
  *
  * This module owns the point-in-time truth for all 5 projects — their status,
  * completion, blockers, and recommendations — and derives the portfolio summary
@@ -31,15 +31,27 @@ export interface ProjectHealth {
   status: ProjectStatus;
   /** Displayed as progress bar. Null means truly N/A (e.g. no tasks exist). */
   completionPct: number | null;
-  /** Human-readable (e.g. "13/19 done, 40 in backlog, 5 OKR epics active"). */
+  /**
+   * FR-1: Human-readable task summary.
+   * Format: "{completedTasks} of {totalTasks} tasks done ({completion%}%)"
+   * If no tasks exist: "No tasks created"
+   * If on hold: prepend "On hold – "
+   * If failing tests: append "+ {failingTestsCount} failing tests"
+   */
   taskSummary: string;
-  /** Single most critical impediment (FR-1). */
+  /**
+   * FR-3: RAG rationale — short text (max 140 chars) explaining why the RAG colour
+   * was assigned based on the dominant condition.
+   */
+  ragRationale: string;
+  /** FR-1: Single most critical impediment. "None" if none. */
   keyBlocker: string;
   riskLevel: RiskLevel;
+  /** FR-6: Risk rationale (≤100 chars). */
   riskRationale: string;
-  /** One concrete, actionable instruction (FR-1). */
+  /** FR-1: One concrete, actionable instruction. "No action needed" if none. */
   recommendedAction: string;
-  /** Optional extras for deep analysis (FR-2 context). */
+  /** FR-2 extras for deep analysis. */
   extras?: {
     okrEpicsActive?: number;
     failingTests?: number;
@@ -64,36 +76,42 @@ export interface PortfolioSummary {
 /* ── FR-3 — RAG Status Rules (pure, spec-faithful) ────────────────────────── */
 /**
  * Derive RAG status per FR-3 rules:
- *   🟢 Green  — Active, >50% complete, no build failures, no stalled tasks
- *   🟡 Amber  — Active with known blockers OR on hold with defined plan
- *              OR 25–50% complete with risks present
- *   🔴 Red    — Build broken, 0% complete with active status, no tasks defined,
- *              stalled with no DRI
+ *   🔴 Red    — Build broken (latest CI failed), 0% progress with tasks defined
+ *               or empty project (no tasks), stalled backlog (>10 tasks stuck
+ *               for >X days), on hold status.
+ *   🟡 Amber  — Completion 30–70% without passing all acceptance tests,
+ *               some failing tests but build passing, at risk due to incomplete
+ *               localization/blockers.
+ *   🟢 Green  — >70% completion and all critical checks passing.
  */
 export function deriveRagStatus(p: ProjectHealth): RAG {
   // Explicit manual overrides are respected if set.
   if (p.rag) return p.rag;
 
-  // 🔴 Red triggers (spec-ordered):
-  const isBrokenBuild = /build/.test(p.keyBlocker.toLowerCase()) && p.status === 'Active';
-  const isEmptyProject = p.completionPct === null || /no tasks|empty project|no tasks defined/.test(p.keyBlocker.toLowerCase());
-  const isActiveZero = p.status === 'Active' && p.completionPct === 0;
-  const isStalled = /no tasks have been started|no apparent ownership|stalled with no DRI/i.test(p.keyBlocker);
-  if (isBrokenBuild || isEmptyProject || isActiveZero || isStalled) return 'Red';
+  // 🔴 Red triggers (spec-ordered, FR-3):
+  const isBrokenBuild = /build broken|ci fail/i.test(p.ragRationale) && p.status === 'Active';
+  const isEmptyProject =
+    p.completionPct === null || /no tasks created|no tasks defined/i.test(p.ragRationale);
+  const isActiveZero =
+    p.status === 'Active' && p.completionPct === 0 && !isEmptyProject;
+
+  if (isBrokenBuild || isEmptyProject || isActiveZero) return 'Red';
 
   // 🟡 Amber triggers:
   if (p.status === 'On Hold') return 'Amber';
-  const hasBlocker = p.keyBlocker && p.keyBlocker.length > 10;
-  const isPartialComplete = p.completionPct !== null && p.completionPct >= 25 && p.completionPct <= 50;
-  const hasRisk = p.riskLevel === 'Medium';
-  if ((p.status === 'Active' && hasBlocker) || isPartialComplete || hasRisk) return 'Amber';
+  const hasFailingTests = /failing tests/i.test(p.ragRationale);
+  const isPartialComplete =
+    p.completionPct !== null && p.completionPct >= 30 && p.completionPct <= 70;
 
-  // 🟢 Green — default for active, >50%, no hard blockers.
-  if (p.status === 'Active' && (p.completionPct === null || p.completionPct > 50)) return 'Green';
+  if (hasFailingTests || isPartialComplete) return 'Amber';
+
+  // 🟢 Green — >70% completion and all critical checks passing.
+  if (p.status === 'Active' && p.completionPct !== null && p.completionPct > 70) return 'Green';
+
   return 'Amber'; // conservative fallback
 }
 
-/* ── Project Health Cards — task #146 + FR-2 (analysis preserved) ─────────── */
+/* ── Project Health Cards — task #548 AC-2 exact data ──────────────────────── */
 
 export const projects: ProjectHealth[] = [
   {
@@ -101,24 +119,26 @@ export const projects: ProjectHealth[] = [
     name: 'BuilderForce.AI',
     status: 'Active',
     completionPct: 68,
-    taskSummary: '13/19 done, 40 in backlog, 5 OKR epics active',
-    keyBlocker: '3 failing tests blocking clean merge/release',
+    taskSummary: '13 of 19 tasks done (68%) + 3 failing tests',
+    ragRationale: '3 failing tests',
+    keyBlocker: '3 failing tests',
     riskLevel: 'Medium',
-    riskRationale: 'Strong momentum but test failures risk delivery slip',
-    recommendedAction: 'Assign engineer(s) to resolve 3 failing tests this sprint; gate next release on green CI',
+    riskRationale: 'Acceptance tests failing',
+    recommendedAction: 'Fix 3 failing tests',
     extras: { doneTasks: 13, totalTasks: 19, tasksInBacklog: 40, okrEpicsActive: 5, failingTests: 3 },
-    rag: 'Amber', // Spec says Amber to foreground test failures; rules allow Green — intentionally Amber for leadership caution.
+    rag: 'Amber',
   },
   {
     id: 'hired-video',
     name: 'Hired.Video',
     status: 'Active',
     completionPct: 11,
-    taskSummary: '~11% complete — build issues blocking all development; French localization partially in progress',
-    keyBlocker: 'Build issues blocking all development progress; French localization partially in progress adds scope complexity',
+    taskSummary: '2 of 18 tasks done (11%)',
+    ragRationale: 'Build broken + incomplete localization',
+    keyBlocker: 'Build broken',
     riskLevel: 'High',
-    riskRationale: 'Early stage with a broken build is a critical path blocker',
-    recommendedAction: 'Freeze localization work; prioritize build fix as P0 this week before any feature work resumes',
+    riskRationale: 'Build broken + incomplete localization blocking progress',
+    recommendedAction: 'Restore CI build and complete FR localization',
     rag: 'Red',
   },
   {
@@ -126,11 +146,12 @@ export const projects: ProjectHealth[] = [
     name: 'RumbleDating',
     status: 'Active',
     completionPct: 0,
-    taskSummary: '40 tasks all in backlog — appears stalled despite active status',
-    keyBlocker: 'No tasks have been started — project appears stalled despite active status',
+    taskSummary: '0 of 40 tasks done (0%)',
+    ragRationale: '40 backlog items stalled',
+    keyBlocker: 'Stalled backlog',
     riskLevel: 'High',
-    riskRationale: 'Zero forward motion with no apparent ownership or sprint planning',
-    recommendedAction: 'Hold a kickoff/triage session within 48 hours; assign DRI, pull first sprint tasks out of backlog',
+    riskRationale: '40 items stalled with no forward progress',
+    recommendedAction: 'Close or reprioritize 40 stalled items',
     extras: { tasksInBacklog: 40, totalTasks: 40, doneTasks: 0 },
     rag: 'Red',
   },
@@ -139,11 +160,12 @@ export const projects: ProjectHealth[] = [
     name: 'BurnRateOS',
     status: 'On Hold',
     completionPct: 0,
-    taskSummary: '0% complete, intentionally on hold, 9 tasks in backlog',
-    keyBlocker: 'Deprioritized; no active work scheduled',
+    taskSummary: 'On hold – 0 of 9 tasks done (0%)',
+    ragRationale: 'Project on hold',
+    keyBlocker: 'On hold (no active work)',
     riskLevel: 'Medium',
-    riskRationale: 'On hold is an acceptable state but needs a defined re-engagement date to avoid indefinite drift',
-    recommendedAction: 'Set a formal review date (recommend 30 days); document the hold rationale and trigger conditions for reactivation',
+    riskRationale: 'Project on hold',
+    recommendedAction: 'Resume work and assign tasks',
     extras: { tasksInBacklog: 9, totalTasks: 9, doneTasks: 0 },
     rag: 'Amber',
   },
@@ -151,12 +173,13 @@ export const projects: ProjectHealth[] = [
     id: 'pattysnob',
     name: 'pattysnob.com',
     status: 'Active',
-    completionPct: null,
-    taskSummary: 'Project shell exists with no tasks, scope, or ownership defined',
-    keyBlocker: 'Project shell exists with no tasks, scope, or ownership defined',
+    completionPct: 0,
+    taskSummary: 'No tasks created',
+    ragRationale: 'No tasks created',
+    keyBlocker: 'No tasks defined',
     riskLevel: 'High',
-    riskRationale: 'Cannot measure, plan, or execute against an empty project',
-    recommendedAction: 'Within one week: define project scope, create initial task list, assign owner — or archive the project to reduce portfolio noise',
+    riskRationale: 'Empty project — no tasks, scope, or ownership',
+    recommendedAction: 'Define and assign initial tasks',
     rag: 'Red',
   },
 ];
@@ -164,7 +187,6 @@ export const projects: ProjectHealth[] = [
 /* ── Portfolio Summary (derived, FR-4) ────────────────────────────────────── */
 
 function computeOverall(green: number, amber: number, red: number): RAG {
-  // Overall is the worst denominator that exists — RED if any reds exist.
   if (red > 0) return 'Red';
   if (amber > 0) return 'Amber';
   return 'Green';
@@ -174,8 +196,6 @@ export function buildPortfolioSummary(
   projectList: ProjectHealth[],
   generatedAtIso?: string
 ): PortfolioSummary {
-  // Respect manual rag overrides stored in project health; derive counts from stored rag,
-  // not re-running rules to avoid double-counting or contradicting policy.
   const green = projectList.filter((d) => d.rag === 'Green').length;
   const amber = projectList.filter((d) => d.rag === 'Amber').length;
   const red = projectList.filter((d) => d.rag === 'Red').length;
@@ -187,9 +207,9 @@ export function buildPortfolioSummary(
     redCount: red,
     overall: computeOverall(green, amber, red),
     topPriorityActions: [
-      { rank: 1 as const, label: 'Fix Hired.Video build — blocks all progress' },
-      { rank: 2 as const, label: 'Kickoff RumbleDating — 40 tasks, zero started' },
-      { rank: 3 as const, label: 'Define or archive pattysnob.com' },
+      { rank: 1 as const, label: 'Restore Hired.Video CI build and complete FR localization' },
+      { rank: 2 as const, label: 'Close or reprioritize 40 stalled RumbleDating backlog items' },
+      { rank: 3 as const, label: 'Define initial tasks and assign team for pattysnob.com' },
     ],
   };
 }
