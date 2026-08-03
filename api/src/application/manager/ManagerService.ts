@@ -1450,10 +1450,17 @@ export async function runManagerForProject(
           // Review is owned by the merge/deploy path. Runnable implementation states
           // are idempotently re-evaluated here; live-run/cooldown/breaker gates remain.
           if (status !== TaskStatus.IN_REVIEW) {
-            return maybeAutoRunOnLaneEntry(env, db, runtimeService, {
-              tenantId, projectId, taskId, status,
-              submittedBy: `manager:systemic-verify:${policy.managerRef ?? 'system'}`,
-            }).catch(() => false);
+            // Systemic verification shares the same tenant-wide dispatch ceiling as
+            // every other manager stage. Reserve before invoking the canonical trigger;
+            // release the slot when its idempotency/gating checks decline to start.
+            const { refused, result: started } = await runs.spend(
+              () => maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+                tenantId, projectId, taskId, status,
+                submittedBy: `manager:systemic-verify:${policy.managerRef ?? 'system'}`,
+              }),
+              (value) => value === true,
+            ).catch(() => ({ refused: false, result: false }));
+            return !refused && started === true;
           }
           return true;
         },
