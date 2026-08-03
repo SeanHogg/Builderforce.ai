@@ -205,7 +205,28 @@ export async function maybeAutoRunOnLaneEntry(
       status:      args.status,
       submittedBy: args.submittedBy,
     });
-    if (gate.blocked) return false;
+    if (gate.blocked) {
+      // Lane requirement gate suppressed the run: a required reviewer/producer round-trip
+      // is owed, or a 'hard' gate requirement is unmet. Emit an event so this skip is
+      // visible in the timeline without calling /autorun-diagnostics.
+      const gateAgentRef = gate.dispatchedReviewers[0] ?? args.submittedBy;
+      await recordCloudToolEvent(db, {
+        tenantId:      args.tenantId,
+        cloudAgentRef: gateAgentRef,
+        executionId:   null,
+        sessionKey:    `task:${args.taskId}`,
+        toolName:      'auto_run_skipped',
+        category:      'planning',
+        detail:        {
+          taskId: args.taskId,
+          lane:   args.status,
+          reason: 'lane_requirement_gate',
+          ...(gate.dispatchedReviewers.length ? { dispatchedReviewers: gate.dispatchedReviewers } : {}),
+        },
+        result:        `Auto-run skipped: lane requirement gate blocked run for task ${args.taskId} on lane '${args.status}'.`.slice(0, 300),
+      }).catch(() => { /* best-effort telemetry — never block the trigger */ });
+      return false;
+    }
 
     // A lane whose every candidate agent lacks its required capabilities is a
     // configuration error, not a silent no-op. Emit a `capability_mismatch` warning
