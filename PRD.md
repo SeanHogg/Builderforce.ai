@@ -1,6 +1,7 @@
 > **PRD** — drafted by Ada (Sr. Product Mgr) · task #574
 > _Each agent that updates this PRD signs its change below._
 > - **Requirements** authored by Business Analyst · `builderforce/task-574`
+> - **Product Strategy & Success Metrics** authored by Product Manager · `builderforce/task-574`
 
 # Security Provisioning Dashboard: GAP-G1 Closed Reflection
 
