@@ -156,9 +156,9 @@ interface MemoryEntry {
     timestamp?: number;          // Creation timestamp
     agentId?: string;            // Associated agent ID
     sessionId?: string;          // Session identifier
-    category?: string;           | // Categorization
+    category?: string;           // Categorization
     importance?: number;         // Relevance/importance score (0-10)
-    source?: string;             | // Data source
+    source?: string;             // Data source
   };
   createdAt: number;             // Unix timestamp of creation
   updatedAt: number;             // Unix timestamp of last update
