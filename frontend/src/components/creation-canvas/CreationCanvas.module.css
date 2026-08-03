@@ -111,6 +111,8 @@
 .flowWrap :global(.react-flow__edge-text) { fill: #66768c; font-size: 10px; }
 .flowWrap :global(.react-flow__edge-textbg) { fill: #f7faff; }
 .flowWrap :global(.react-flow__controls), .flowWrap :global(.react-flow__minimap) { border: 1px solid #d8e1ed; box-shadow: 0 7px 20px rgba(33, 58, 91, .1); border-radius: 9px; overflow: hidden; }
+.minimapClose { position:absolute; z-index:13; right:20px; bottom:136px; display:grid; width:24px; height:24px; padding:0; place-items:center; color:var(--canvas-ink); background:color-mix(in srgb,var(--canvas-panel) 92%,transparent); border:1px solid var(--canvas-line); border-radius:6px; box-shadow:0 2px 8px rgba(20,35,55,.16); font-size:17px; line-height:1; cursor:pointer; }
+.minimapClose:hover { filter:brightness(.96); }
 .realtimeStatus { display:inline-flex; align-items:center; gap:5px; border:1px solid #d9e2ed; border-radius:999px; padding:3px 7px; color:#66778d; background:#fff; font-size:10px; white-space:nowrap; }
 .realtimeStatus::before { content:''; width:6px; height:6px; border-radius:50%; background:#f59e0b; }
 .realtimeStatus[data-state='online']::before { background:#10b981; }
@@ -411,7 +413,7 @@
   .autoApplyButton,.memoryButton { width:29px; height:29px; flex:none; justify-content:center; padding:0; }
   .composerActionLabel { display:none; }
   .composerSpacer { display:none; }
-  .flowWrap :global(.react-flow__minimap) { display:none; }
+  .flowWrap :global(.react-flow__minimap),.minimapClose { display:none; }
   .flowWrap :global(.react-flow__controls) { bottom:102px!important; left:10px!important; }
   .structuredGraph { right:10px; bottom:100px; left:54px; width:auto; max-height:min(36%,260px); box-sizing:border-box; }
   .historyPanel,.diagnosticsPanel { top:8px; right:8px; bottom:82px; left:8px; width:auto; }

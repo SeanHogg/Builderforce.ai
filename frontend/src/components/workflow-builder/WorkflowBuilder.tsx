@@ -9,6 +9,7 @@ import { useTranslations } from 'next-intl';
 import {
   ReactFlow,
   Background,
+  ControlButton,
   Controls,
   MiniMap,
   addEdge,
@@ -41,6 +42,13 @@ import {
   INTEGRATIONS, INTEGRATION_CATEGORIES, integrationAccent, integrationIcon, presetConfig,
   type Integration,
 } from './integrations';
+
+function MinimapIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="1.5" y="2" width="13" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M2 10.5 5.5 7l2.3 2.2L11 5.7l3 3" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+  </svg>;
+}
 
 /** dataTransfer MIME for palette → canvas drag-and-drop. */
 const DND_MIME = 'application/x-wf-node';
@@ -145,6 +153,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
   const [status, setStatus] = useState<string | null>(null);
   const [loading, setLoading] = useState(!!definitionId);
   const [buildOpen, setBuildOpen] = useState(false);
+  const [minimapOpen, setMinimapOpen] = useState(false);
 
   useEffect(() => { workflowDefinitions.runTargets().then(setRunTargets).catch(() => {}); }, []);
   // Projects power the binding selector — a workflow runs under a project, or is
@@ -582,8 +591,21 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
             proOptions={{ hideAttribution: true }}
           >
             <Background color="var(--border-subtle)" gap={18} />
-            <Controls />
-            <MiniMap pannable zoomable style={{ background: 'var(--bg-deep)' }} />
+            <Controls>
+              {!minimapOpen && <ControlButton onClick={() => setMinimapOpen(true)} aria-label="Open mini map" title="Open mini map">
+                <MinimapIcon />
+              </ControlButton>}
+            </Controls>
+            {minimapOpen && <>
+              <MiniMap pannable zoomable style={{ background: 'var(--bg-deep)' }} />
+              <button
+                type="button"
+                onClick={() => setMinimapOpen(false)}
+                aria-label="Close mini map"
+                title="Close mini map"
+                style={{ position: 'absolute', zIndex: 6, right: 20, bottom: 136, display: 'grid', width: 24, height: 24, padding: 0, placeItems: 'center', color: 'var(--text-primary)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 6, boxShadow: '0 2px 8px rgba(0,0,0,.2)', fontSize: 17, lineHeight: 1, cursor: 'pointer' }}
+              >×</button>
+            </>}
           </ReactFlow>
           {nodes.length === 0 && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>

@@ -28,14 +28,17 @@ vi.mock('@xyflow/react', async () => {
   const inert = () => null;
   return {
     ReactFlowProvider: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
-    ReactFlow: ({ nodes, edges = [], nodeTypes, onNodeClick }: { nodes: Array<{ id: string; type?: string; data: unknown; style?: { width?: number; height?: number } }>; edges?: Array<{ source: string; target: string }>; nodeTypes: Record<string, React.ComponentType<Record<string, unknown>>>; onNodeClick?: (event: unknown, node: unknown) => void }) => React.createElement('div', { 'data-testid': 'flow', 'data-edge-pairs': edges.map((edge) => `${edge.source}:${edge.target}`).join(',') }, nodes.map((node) => {
+    ReactFlow: ({ nodes, edges = [], nodeTypes, onNodeClick, children }: { nodes: Array<{ id: string; type?: string; data: unknown; style?: { width?: number; height?: number } }>; edges?: Array<{ source: string; target: string }>; nodeTypes: Record<string, React.ComponentType<Record<string, unknown>>>; onNodeClick?: (event: unknown, node: unknown) => void; children?: React.ReactNode }) => React.createElement('div', { 'data-testid': 'flow', 'data-edge-pairs': edges.map((edge) => `${edge.source}:${edge.target}`).join(',') }, children, nodes.map((node) => {
       const Component = nodeTypes[node.type || 'creation'];
       return Component ? React.createElement('div', { key: node.id, onClick: (event: React.MouseEvent<HTMLDivElement>) => onNodeClick?.(event, node) }, React.createElement(Component, { id: node.id, data: node.data, selected: false, width: node.style?.width, height: node.style?.height })) : null;
     })),
     useNodesState: (initial: unknown[]) => { const [nodes, setNodes] = React.useState(initial); return [nodes, setNodes, inert] as const; },
     useEdgesState: (initial: unknown[]) => { const [edges, setEdges] = React.useState(initial); return [edges, setEdges, inert] as const; },
     addEdge: (edge: unknown, edges: unknown[]) => [...edges, edge],
-    Background: inert, Controls: inert, MiniMap: inert, Handle: inert, NodeResizer: inert,
+    Background: inert,
+    Controls: ({ children }: { children?: React.ReactNode }) => React.createElement('div', null, children),
+    ControlButton: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => React.createElement('button', props, children),
+    MiniMap: inert, Handle: inert, NodeResizer: inert,
     BackgroundVariant: { Dots: 'dots' }, MarkerType: { ArrowClosed: 'arrowclosed' }, Position: { Left: 'left', Right: 'right' },
   };
 });
@@ -48,6 +51,15 @@ vi.mock('@/components/workflow-builder/WorkflowBuilder', () => ({
 }));
 
 describe('CreationCanvas', { timeout: 15_000 }, () => {
+  it('opens the mini map by default and lets it be closed and reopened from the canvas controls', () => {
+    render(<CreationCanvas sessionId="minimap-controls-test" persistence="local" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close mini map' }));
+    expect(screen.getByRole('button', { name: 'Open mini map' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Open mini map' }));
+    expect(screen.getByRole('button', { name: 'Close mini map' })).toBeInTheDocument();
+  });
+
   it('auto-applies basic canvas output but keeps consequential changes in review', () => {
     const visual = {
       id: 'add-visual', type: 'object.add', label: 'Add astronomy visual',

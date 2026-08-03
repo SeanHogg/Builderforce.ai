@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import {
   Background,
   BackgroundVariant,
+  ControlButton,
   Controls,
   MiniMap,
   NodeResizer,
@@ -81,6 +82,13 @@ function MobileWorkspacePanel({ panel, onRemovePanel }: { panel: WorkspaceCanvas
 
 const NODE_TYPES: NodeTypes = { workspacePanel: WorkspacePanel };
 
+function MinimapIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="1.5" y="2" width="13" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
+    <path d="M2 10.5 5.5 7l2.3 2.2L11 5.7l3 3" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+  </svg>;
+}
+
 function panelNode(panel: WorkspaceCanvasPanel, index: number): WorkspacePanelNode {
   return {
     id: panel.id,
@@ -106,6 +114,7 @@ export function WorkspaceCanvas({
   const initialNodes = useMemo(() => panels.map(panelNode), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkspacePanelNode>(initialNodes);
   const [mobile, setMobile] = useState(false);
+  const [minimapOpen, setMinimapOpen] = useState(false);
   const panelIds = panels.map((panel) => panel.id).join('\u0000');
 
   useEffect(() => {
@@ -151,8 +160,15 @@ export function WorkspaceCanvas({
             proOptions={{ hideAttribution: true }}
           >
             <Background variant={BackgroundVariant.Dots} gap={28} size={1.2} color="var(--border-subtle)" />
-            <Controls position="bottom-left" />
-            <MiniMap position="bottom-right" pannable zoomable nodeColor="var(--coral-bright)" maskColor="rgba(5, 10, 20, .72)" />
+            <Controls position="bottom-left">
+              {!minimapOpen && <ControlButton onClick={() => setMinimapOpen(true)} aria-label="Open mini map" title="Open mini map">
+                <MinimapIcon />
+              </ControlButton>}
+            </Controls>
+            {minimapOpen && <>
+              <MiniMap position="bottom-right" pannable zoomable nodeColor="var(--coral-bright)" maskColor="rgba(5, 10, 20, .72)" />
+              <button type="button" className={styles.minimapClose} onClick={() => setMinimapOpen(false)} aria-label="Close mini map" title="Close mini map">×</button>
+            </>}
           </ReactFlow>
         </ReactFlowProvider>
       </WorkspacePanelsContext.Provider>

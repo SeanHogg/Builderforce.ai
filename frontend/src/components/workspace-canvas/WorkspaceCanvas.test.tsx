@@ -3,6 +3,17 @@ import { describe, expect, it, vi } from 'vitest';
 import { WorkspaceCanvas } from './WorkspaceCanvas';
 
 describe('WorkspaceCanvas', () => {
+  it('keeps the mini map closed until it is opened from the canvas controls', () => {
+    render(<WorkspaceCanvas panels={[
+      { id: 'overview', title: 'Overview', content: <div>Overview panel</div> },
+    ]} />);
+
+    expect(screen.queryByRole('button', { name: 'Close mini map' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Open mini map' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close mini map' }));
+    expect(screen.getByRole('button', { name: 'Open mini map' })).toBeInTheDocument();
+  });
+
   it('renders reusable application components as canvas panels', () => {
     render(<WorkspaceCanvas panels={[
       { id: 'project-1', title: 'BuilderForce', content: <button type="button">Open project</button> },
