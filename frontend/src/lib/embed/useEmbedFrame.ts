@@ -125,18 +125,48 @@ export function useEmbedFrame(): EmbedFrameState {
   }, [postToHost, reportError]);
 
   // Auto-report content height so the host can size the iframe to fit.
+  // Uses throttling to prevent ResizeObserver loop errors ("loop completed with
+  // undelivered notifications") that occur when callbacks fire too rapidly.
   useEffect(() => {
     if (typeof ResizeObserver === 'undefined') return;
-    const report = () =>
+
+    let lastHeight = 0;
+    let rafId: number | null = null;
+    let lastReportTime = 0;
+    const MIN_REPORT_INTERVAL = 100; // ms between reports to prevent loop
+
+    const report = () => {
+      const now = performance.now();
+      if (now - lastReportTime < MIN_REPORT_INTERVAL) return;
+
+      const height = document.documentElement.scrollHeight;
+      if (height === lastHeight) return;
+      lastHeight = height;
+      lastReportTime = now;
+
       postToHost({
         source: BFEMBED_SOURCE,
         type: 'resize',
-        height: document.documentElement.scrollHeight,
+        height,
       });
-    const ro = new ResizeObserver(report);
+    };
+
+    const scheduleReport = () => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        report();
+      });
+    };
+
+    const ro = new ResizeObserver(scheduleReport);
     ro.observe(document.documentElement);
-    report();
-    return () => ro.disconnect();
+    report(); // Initial report
+
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      ro.disconnect();
+    };
   }, [postToHost]);
 
   return { ...state, navigate, reportError };
