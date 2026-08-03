@@ -80,4 +80,64 @@ Each risk record must include:
 
 ---
 
+---
+
+## Current Top 3 Risks (as of 2026-08-03)
+
+> Identified by Developer agent on task #290
+
+### Risk #1: PR Conflict Cascade — 36 Tickets Blocked
+
+| Field | Value |
+|-------|-------|
+| **Risk ID** | R-001 |
+| **Title** | PR Conflict Cascade — 36 Tickets Blocked |
+| **Description** | A significant number of pull requests (36 tickets) are in conflict with the base branch, blocking feature delivery and creating a backlog in the merge train. This affects critical OKR epics including Revenue, Quality, Analytics, Orchestration, and Security workstreams. |
+| **Impact** | 5 (Critical) |
+| **Likelihood** | 5 (Almost Certain) |
+| **Composite Score** | **25** 🚨 |
+| **Owner** | Engineering Lead / Platform Team |
+| **Mitigation Plan** | 1. Run `git fetch origin && git merge origin/main` on each affected branch; 2. Resolve conflicts manually preserving both intent; 3. Force-push resolved branch; 4. Re-run CI checks. **Due:** 2026-08-10 |
+| **Status** | Open |
+
+### Risk #2: Autonomous Agent Not Processing To Do Column Tasks
+
+| Field | Value |
+|-------|-------|
+| **Risk ID** | R-002 |
+| **Title** | Autonomous Agent Not Processing To Do Column Tasks |
+| **Description** | The autonomous agent "Kevin BA/PM/PO (Durable)" assigned to the To Do swimlane is not processing new tasks. This blocks the ticket lifecycle and prevents work from entering the delivery pipeline. Currently affecting the BuilderForce.AI board (ID: ad030733-9775-4faa-903f-d6e164a126b5). |
+| **Impact** | 4 (High) |
+| **Lifecycle** | 4 (Likely) |
+| **Composite Score** | **16** |
+| **Owner** | Platform Engineering / Agent Runtime Team |
+| **Mitigation Plan** | 1. Debug agent dispatch loop; 2. Verify board swimlane configuration; 3. Check for stale agent assignments. **Due:** 2026-08-07 |
+| **Status** | Open |
+
+### Risk #3: Database Driver Error — No Transactions Support
+
+| Field | Value |
+|-------|-------|
+| **Risk ID** | R-003 |
+| **Title** | Database Driver Error — No Transactions Support in neon-http Driver |
+| **Description** | The API endpoint `/api/boards` is returning a 500 Internal Server Error with message `{"error":"No transactions support in neon-http driver"}`. This prevents board creation and manipulation, blocking core platform functionality. The error occurs on POST requests to the boards API. |
+| **Impact** | 4 (High) |
+| **Likelihood** | 3 (Possible) |
+| **Composite Score** | **12** |
+| **Owner** | Backend Engineering / Infrastructure Team |
+| **Mitigation Plan** | 1. Investigate neon-http driver capabilities; 2. Implement transaction-compatible query layer or switch to supported driver; 3. Add integration tests for DB operations. **Due:** 2026-08-12 |
+| **Status** | Open |
+
+---
+
+## Top 3 Risks Summary (Markdown Table)
+
+| ID | Title | Impact | Likelihood | Score | Status | Escalation |
+|----|-------|--------|------------|-------|--------|------------|
+| R-001 | PR Conflict Cascade — 36 Tickets Blocked | 5 (Critical) | 5 (Almost Certain) | **25** 🚨 | Open | **EXECUTIVE ESCALATION REQUIRED** |
+| R-002 | Autonomous Agent Not Processing To Do Tasks | 4 (High) | 4 (Likely) | 16 | Open | — |
+| R-003 | Database Driver Error — No Transactions Support | 4 (High) | 3 (Possible) | 12 | Open | — |
+
+---
+
 *Document status: WIP — to be reviewed and updated each weekly risk sync.*
