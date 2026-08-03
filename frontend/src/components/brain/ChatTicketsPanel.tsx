@@ -27,7 +27,7 @@ import { usePermission } from '@/lib/rbac';
 export function ChatTicketsPanel({ chatId, projectId, chatList, onChanged }: {
   chatId: number;
   projectId: number | null;
-  chatList: BrainChat[];
+  chatList: Array<Pick<BrainChat, 'id' | 'title'>>;
   onChanged?: () => void;
 }) {
   const t = useTranslations('brain.tickets');

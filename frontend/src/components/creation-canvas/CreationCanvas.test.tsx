@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { CreationCanvas } from './CreationCanvas';
+import { associateBrainWithArtifacts, CreationCanvas, shouldAcquireCanvasObjectLock } from './CreationCanvas';
+import { CreationNode } from './CreationNode';
 
 vi.mock('next-intl', async (importOriginal) => {
   const actual = await importOriginal<typeof import('next-intl')>();
@@ -23,9 +24,9 @@ vi.mock('@xyflow/react', async () => {
   const inert = () => null;
   return {
     ReactFlowProvider: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
-    ReactFlow: ({ nodes, nodeTypes, onNodeClick }: { nodes: Array<{ id: string; type?: string; data: unknown }>; nodeTypes: Record<string, React.ComponentType<Record<string, unknown>>>; onNodeClick?: (event: unknown, node: unknown) => void }) => React.createElement('div', { 'data-testid': 'flow' }, nodes.map((node) => {
+    ReactFlow: ({ nodes, edges = [], nodeTypes, onNodeClick }: { nodes: Array<{ id: string; type?: string; data: unknown; style?: { width?: number; height?: number } }>; edges?: Array<{ source: string; target: string }>; nodeTypes: Record<string, React.ComponentType<Record<string, unknown>>>; onNodeClick?: (event: unknown, node: unknown) => void }) => React.createElement('div', { 'data-testid': 'flow', 'data-edge-pairs': edges.map((edge) => `${edge.source}:${edge.target}`).join(',') }, nodes.map((node) => {
       const Component = nodeTypes[node.type || 'creation'];
-      return Component ? React.createElement('div', { key: node.id, onClick: (event: React.MouseEvent<HTMLDivElement>) => onNodeClick?.(event, node) }, React.createElement(Component, { id: node.id, data: node.data, selected: false })) : null;
+      return Component ? React.createElement('div', { key: node.id, onClick: (event: React.MouseEvent<HTMLDivElement>) => onNodeClick?.(event, node) }, React.createElement(Component, { id: node.id, data: node.data, selected: false, width: node.style?.width, height: node.style?.height })) : null;
     })),
     useNodesState: (initial: unknown[]) => { const [nodes, setNodes] = React.useState(initial); return [nodes, setNodes, inert] as const; },
     useEdgesState: (initial: unknown[]) => { const [edges, setEdges] = React.useState(initial); return [edges, setEdges, inert] as const; },
@@ -47,6 +48,41 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     localStorage.clear();
   });
 
+  it('does not lock a newly created server object until autosave persists it', () => {
+    const objectId = 'a5d80af7-bb65-45cc-bd2b-d190616fc904';
+    expect(shouldAcquireCanvasObjectLock('server', objectId, true, new Set())).toBe(false);
+    expect(shouldAcquireCanvasObjectLock('server', objectId, true, new Set([objectId]))).toBe(true);
+  });
+
+  it('associates Brain with artifacts once without duplicating relationships', () => {
+    const once = associateBrainWithArtifacts([], 'brain', ['artifact']);
+    const twice = associateBrainWithArtifacts(once, 'brain', ['artifact']);
+    expect(once).toHaveLength(1);
+    expect(twice).toHaveLength(1);
+    expect(twice[0]).toMatchObject({ source: 'brain', target: 'artifact', label: 'Brain context', data: { connectionKind: 'reference' } });
+  });
+
+  it('fills the persisted project boundary with the visible project card', () => {
+    render(<CreationNode
+      id="project-node"
+      type="creation"
+      data={{ kind: 'project', title: 'BuilderForce.AI' }}
+      selected
+      width={320}
+      height={220}
+      dragging={false}
+      zIndex={0}
+      selectable
+      deletable
+      draggable
+      isConnectable
+      positionAbsoluteX={0}
+      positionAbsoluteY={0}
+    />);
+
+    expect(screen.getByRole('article')).toHaveStyle({ width: '320px', height: '220px' });
+  });
+
   it('renders live workflow, website, dashboard, collaborators, and agent controls', () => {
     render(<CreationCanvas sessionId="campaign-test" persistence="local" />);
 
@@ -57,6 +93,20 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByLabelText('Ask Brain about this canvas')).toHaveValue('');
     fireEvent.click(screen.getAllByText('Campaign Strategist')[0]!);
     expect(screen.getByDisplayValue('Campaign Strategist')).toBeInTheDocument();
+  });
+
+  it('renders a scrollable Brain transcript, rich chat details, and a recognizable microphone control', () => {
+    render(<CreationCanvas sessionId="brain-object-details-test" persistence="local" />);
+
+    expect(screen.getByRole('log', { name: 'Brain chat history' })).toHaveAttribute('tabindex', '0');
+    const microphone = screen.getByRole('button', { name: 'Use microphone' });
+    expect(microphone.querySelector('svg')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByText('Brain')[0]!);
+    expect(screen.getByRole('log', { name: 'Full Brain activity' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Agents' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Associated tickets' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Connected objects' })).toBeInTheDocument();
   });
 
   it('runs workflows from the workflow widget instead of the session header', () => {
@@ -168,6 +218,17 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     fireEvent.change(screen.getByLabelText('Call to action'), { target: { value: 'Start building' } });
     expect(screen.getByText('Build the future together')).toBeInTheDocument();
     expect(screen.getByText('Start building')).toBeInTheDocument();
+  });
+
+  it('resizes website viewport presets and renders supporting copy as Markdown', () => {
+    render(<CreationCanvas sessionId="website-responsive-test" persistence="local" />);
+    fireEvent.click(screen.getAllByText('Campaign landing page')[0]!);
+    fireEvent.change(screen.getByLabelText('Supporting copy'), { target: { value: '**Secure banking** with transparent pricing.' } });
+    expect(screen.getByText('Secure banking').tagName).toBe('STRONG');
+    fireEvent.change(screen.getByLabelText('Viewport'), { target: { value: 'mobile' } });
+    expect(screen.getByLabelText('Viewport')).toHaveValue('mobile');
+    const previewNode = document.querySelector('article[data-viewport="mobile"]');
+    expect(previewNode).toHaveStyle({ width: '340px', height: '620px' });
   });
 
   it('imports tabular data and creates a connected visualization', async () => {

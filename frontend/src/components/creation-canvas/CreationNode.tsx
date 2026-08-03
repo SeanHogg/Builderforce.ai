@@ -1,11 +1,41 @@
 'use client';
 
 import { Handle, NodeResizer, Position, type Node, type NodeProps } from '@xyflow/react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { BrainTimeline } from '@seanhogg/builderforce-brain-ui';
+import '@seanhogg/builderforce-brain-ui/styles.css';
+import type { BrainMessage } from '@seanhogg/builderforce-brain-embedded';
 import type { CreationNodeData } from './types';
 import styles from './CreationCanvas.module.css';
 import { creationObjectDefinition } from './creationObjectRegistry';
 
 export type CreationFlowNode = Node<CreationNodeData, 'creation'>;
+
+type CanvasChatMessage = { role: string; content: string; createdAt?: string };
+
+function canvasChatMessages(data: CreationNodeData): CanvasChatMessage[] {
+  if (!Array.isArray(data.messages)) return [];
+  return data.messages.flatMap((value) => {
+    if (!value || typeof value !== 'object') return [];
+    const message = value as Record<string, unknown>;
+    if (typeof message.content !== 'string' || !message.content.trim()) return [];
+    return [{
+      role: typeof message.role === 'string' ? message.role : 'assistant',
+      content: message.content,
+      ...(typeof message.createdAt === 'string' ? { createdAt: message.createdAt } : {}),
+    }];
+  });
+}
+
+function brainTimelineMessages(data: CreationNodeData): BrainMessage[] {
+  const messages = canvasChatMessages(data);
+  const visible = messages.length ? messages : [
+    { role: 'user', content: data.subtitle || 'What would you like to create?' },
+    { role: 'assistant', content: typeof data.aiResponse === 'string' ? data.aiResponse : 'I added your starting objects to the canvas. Keep creating freely; connect an account only when you want to collaborate or deliver the work.' },
+  ];
+  return visible.map((message, index) => ({ id: index + 1, seq: index + 1, role: message.role, content: message.content, metadata: null, createdAt: message.createdAt || '' }));
+}
 
 function authoredText(data: CreationNodeData): string | null {
   const value = [data.content, data.markdown, data.code, data.transcript, data.subtitle].find((candidate) => typeof candidate === 'string' && candidate.trim());
@@ -41,11 +71,12 @@ function WebsiteBody({ data }: { data: CreationNodeData }) {
   const description = typeof data.websiteBody === 'string' ? data.websiteBody : 'New arrivals for the season ahead.';
   const cta = typeof data.websiteCta === 'string' ? data.websiteCta : 'Shop the collection';
   const accent = typeof data.websiteAccent === 'string' ? data.websiteAccent : '#3978f6';
+  const viewport = data.viewport === 'mobile' || data.viewport === 'tablet' ? data.viewport : 'desktop';
   return (
-    <div className={styles.websitePreview}>
+    <div className={styles.websitePreview} data-viewport={viewport}>
       <div className={styles.siteNav}><strong>{data.title}</strong><span>Product&nbsp;&nbsp; Solutions&nbsp;&nbsp; About</span><button style={{ background: accent }}>Get started</button></div>
       <div className={styles.siteHero}>
-        <div><h3>{headline}</h3><p>{description}</p><button style={{ background: accent }}>{cta}</button></div>
+        <div><h3>{headline}</h3><div className={styles.websiteMarkdown}><ReactMarkdown remarkPlugins={[remarkGfm]}>{description}</ReactMarkdown></div><button style={{ background: accent }}>{cta}</button></div>
         <div className={styles.heroArt} style={{ color: accent }}>{data.title.slice(0, 2).toUpperCase()}</div>
       </div>
       <div className={styles.siteBenefits}><span>Free shipping</span><span>Easy returns</span><span>Secure checkout</span></div>
@@ -145,12 +176,14 @@ type CreationNodeProps = NodeProps<CreationFlowNode> & {
   onRun?: (nodeId: string) => void;
 };
 
-export function CreationNode({ id, data, selected, canRun = true, onRun }: CreationNodeProps) {
+export function CreationNode({ id, data, selected, width, height, canRun = true, onRun }: CreationNodeProps) {
   const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'report', 'evaluation', 'roadmap', 'slides', 'document', 'prd', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame'].includes(data.kind);
   const specialized = new Set(['workflow','website','prototype','dashboard','chart','report','evaluation','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame']);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || '#f8f6ff'), borderColor: String(data.frameBorder || '#9d8bea') } : undefined;
+  const measuredStyle = { ...frameStyle, ...(typeof width === 'number' && width > 0 ? { width } : {}), ...(typeof height === 'number' && height > 0 ? { height } : {}) };
+  const chatMessages = data.kind === 'chat' ? brainTimelineMessages(data) : [];
   return (
-    <article style={frameStyle} className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
+    <article style={measuredStyle} data-viewport={data.viewport} className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
       <NodeResizer isVisible={selected} minWidth={240} minHeight={130} lineClassName={styles.resizeLine} handleClassName={styles.resizeHandle} />
       <Handle type="target" position={Position.Left} className={styles.handle} />
       <header className={styles.nodeHeader}>
@@ -173,7 +206,9 @@ export function CreationNode({ id, data, selected, canRun = true, onRun }: Creat
         {data.kind === 'evaluation' && <EvaluationBody data={data} />}
         {data.kind === 'agent' && <><div className={styles.personRow}><span className={styles.presence} /><b>{data.status || 'Online'}</b><span>{data.model || 'gpt-4o'}</span></div><p>{data.subtitle}</p><div className={styles.pills}><span>Audience Analyzer</span><span>Copy Optimizer</span><span>Autonomy: Medium</span></div></>}
         {data.kind === 'staff' && <><div className={styles.personRow}><span className={styles.avatar} style={{ background: data.accent }}>{data.title.slice(0, 1)}</span><b>{data.role}</b><span className={styles.presence} /></div><small>Current focus</small><p>{data.focus}</p></>}
-        {data.kind === 'chat' && <><div className={styles.message}><b>You</b><p>{data.subtitle || 'What would you like to create?'}</p></div><div className={styles.aiMessage}><b>Brain</b><p>{typeof data.aiResponse === 'string' ? data.aiResponse : 'I added your starting objects to the canvas. Keep creating freely; connect an account only when you want to collaborate or deliver the work.'}</p></div></>}
+        {data.kind === 'chat' && <div className={`${styles.chatHistory} nowheel nodrag`} role="log" aria-label="Brain chat history" tabIndex={0}>
+          <BrainTimeline messages={chatMessages} trace={[]} streamingText="" isRunning={false} assistantName="Brain" labels={{ you: 'You', assistant: 'Brain' }} />
+        </div>}
         {(data.kind === 'dataset' || data.kind === 'table' || data.kind === 'spreadsheet') && <DataGridBody data={data} />}
         {data.kind === 'kpi' && <KpiBody data={data} />}
         {data.kind === 'voice' && <><div className={styles.waveform}>▂▅▃▆▂▇▅▃▆▂▅▇▃▆▂▅</div><AuthoredContent data={data} fallback="Record or generate a voice note." /></>}

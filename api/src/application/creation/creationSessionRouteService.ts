@@ -116,6 +116,18 @@ export function creationSessionSearchStatus(raw: unknown): 'active' | 'archived'
   return raw === 'archived' || raw === 'all' ? raw : 'active';
 }
 
+/** Expected loser of a concurrent revision or idempotency-key insert race. */
+export function isCreationEventWriteConflict(error: unknown): boolean {
+  const detail = error && typeof error === 'object'
+    ? error as { code?: unknown; constraint?: unknown; message?: unknown }
+    : null;
+  const text = [detail?.constraint, detail?.message, error instanceof Error ? error.message : String(error)]
+    .filter((value): value is string => typeof value === 'string')
+    .join(' ');
+  const isUniqueViolation = detail?.code === '23505' || /duplicate key|unique constraint|23505/i.test(text);
+  return isUniqueViolation && /(?:uq_creation_events_(?:revision|idempotency)|creation_session_events_session_id_(?:revision|idempotency_key)_key)/i.test(text);
+}
+
 function parseTemplateGraph(raw: unknown): { objects: GraphObjectInput[]; connections: GraphConnectionInput[]; viewport?: unknown } | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const graph = raw as { objects?: unknown; connections?: unknown; viewport?: unknown };
@@ -1472,7 +1484,27 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       db.insert(creationSessionSnapshots).values({ sessionId: access.session.id, revision: nextRevision, graph: { objects, connections }, viewport: personalViewport ?? access.session.viewport, createdBy: userId }),
     );
     if (personalViewport) statements.push(db.update(creationSessionMembers).set({ viewport: personalViewport }).where(and(eq(creationSessionMembers.sessionId, access.session.id), eq(creationSessionMembers.userId, userId))));
-    await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
+    try {
+      await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
+    } catch (error) {
+      // The If-Match check above is necessarily a read before this transaction.
+      // A concurrent writer can commit the same next revision (or idempotency key)
+      // between those operations. The event uniqueness constraints serialize the
+      // writes; translate the expected losing transaction instead of leaking a 500.
+      if (!isCreationEventWriteConflict(error)) throw error;
+      const [[replayed], [current]] = await Promise.all([
+        db.select({ payload: creationSessionEvents.payload }).from(creationSessionEvents).where(and(
+          eq(creationSessionEvents.sessionId, access.session.id), eq(creationSessionEvents.idempotencyKey, idempotencyKey),
+        )).limit(1),
+        db.select({ revision: creationSessions.canvasRevision }).from(creationSessions).where(and(
+          eq(creationSessions.id, access.session.id), eq(creationSessions.tenantId, access.session.tenantId),
+        )).limit(1),
+      ]);
+      if (replayed) return c.json((replayed.payload as { result?: unknown })?.result ?? { replayed: true });
+      return c.json({
+        error: 'Session changed', code: 'REVISION_CONFLICT', revision: current?.revision ?? access.session.canvasRevision,
+      }, 409);
+    }
     await pruneHistory(access.session.id, access.session.tenantId);
     c.executionCtx.waitUntil(broadcastRoom(
       c.env?.SESSION_ROOM,

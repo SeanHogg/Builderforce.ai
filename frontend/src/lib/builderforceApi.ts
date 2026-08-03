@@ -7960,7 +7960,7 @@ export const creationSessionsApi = {
   saveGraph: (id: string, graph: CreationGraphInput) =>
     request<{ revision: number; savedAt: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/graph`, { method: 'PUT', body: JSON.stringify(graph) }),
   applyCommands: (id: string, revision: number, idempotencyKey: string, commands: Array<Record<string, unknown>>, atomic = true) =>
-    request<CreationCommandResult>(`/api/creation-sessions/${encodeURIComponent(id)}/commands`, { method: 'POST', headers: { 'If-Match': String(revision), 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ commands, atomic }) }),
+    request<CreationCommandResult>(`/api/creation-sessions/${encodeURIComponent(id)}/commands`, { method: 'POST', headers: { 'If-Match': String(revision), 'Idempotency-Key': idempotencyKey }, body: JSON.stringify({ commands, atomic }), expectedErrors: [409] }),
   history: {
     list: (id: string) => request<{ snapshots: CreationSnapshotSummary[] }>(`/api/creation-sessions/${encodeURIComponent(id)}/history`),
     get: (id: string, revision: number) => request<CreationSnapshot>(`/api/creation-sessions/${encodeURIComponent(id)}/history/${revision}`),

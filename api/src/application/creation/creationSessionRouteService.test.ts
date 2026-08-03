@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { creationKindForModality, creationObjectSearchText, creationSessionSearchStatus, validCreationGraph } from './creationSessionRouteService';
+import {
+  creationKindForModality,
+  creationObjectSearchText,
+  creationSessionSearchStatus,
+  isCreationEventWriteConflict,
+  validCreationGraph,
+} from './creationSessionRouteService';
 
 describe('creationKindForModality', () => {
   it('loads every legacy IDE build into its matching Canvas object', () => {
@@ -40,6 +46,21 @@ describe('creationSessionSearchStatus', () => {
     expect(creationSessionSearchStatus('deleted')).toBe('active');
     expect(creationSessionSearchStatus('archived')).toBe('archived');
     expect(creationSessionSearchStatus('all')).toBe('all');
+  });
+});
+
+describe('isCreationEventWriteConflict', () => {
+  it('recognizes deployed and current revision constraint names', () => {
+    expect(isCreationEventWriteConflict(new Error(
+      'duplicate key value violates unique constraint "creation_session_events_session_id_revision_key"',
+    ))).toBe(true);
+    expect(isCreationEventWriteConflict({ code: '23505', constraint: 'uq_creation_events_revision' })).toBe(true);
+  });
+
+  it('recognizes an idempotency-key race but not unrelated unique failures', () => {
+    expect(isCreationEventWriteConflict({ code: '23505', constraint: 'uq_creation_events_idempotency' })).toBe(true);
+    expect(isCreationEventWriteConflict({ code: '23505', constraint: 'creation_session_objects_pkey' })).toBe(false);
+    expect(isCreationEventWriteConflict(new Error('connection reset'))).toBe(false);
   });
 });
 

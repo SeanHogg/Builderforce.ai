@@ -25,7 +25,10 @@ import styles from './CreationCanvas.module.css';
 import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, tasksApi, workflowDefinitions, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import { creationGraphFromSnapshot, creationStorageKey, readLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
 import { runCreationCanvasAi } from '@/lib/creationCanvasAi';
-import type { BrainAction } from '@seanhogg/builderforce-brain-embedded';
+import type { BrainAction, BrainMessage } from '@seanhogg/builderforce-brain-embedded';
+import { BrainTimeline } from '@seanhogg/builderforce-brain-ui';
+import '@seanhogg/builderforce-brain-ui/styles.css';
+import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
 import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
 import { EvermindValidationProvider } from '@/components/ide/EvermindValidationContext';
 import { getProjectEvermindHead } from '@/lib/projectEvermindApi';
@@ -72,8 +75,27 @@ type CanvasTimelineMessage = Pick<CreationTimelineMessage, 'clientMessageId' | '
 type BrowserSpeechRecognition = { lang: string; interimResults: boolean; onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void };
 type AccountGate = { title: string; description: string; action: string };
 
+export function shouldAcquireCanvasObjectLock(
+  persistence: 'local' | 'server',
+  selectedId: string | null,
+  canEdit: boolean,
+  persistedObjectIds: ReadonlySet<string>,
+): boolean {
+  return persistence === 'server' && !!selectedId && canEdit && persistedObjectIds.has(selectedId);
+}
+
 function newNode(kind: CreationObjectKind, position: { x: number; y: number }): CreationFlowNode {
   return { id: crypto.randomUUID(), type: 'creation', position, data: createDefaultCreationData(kind) };
+}
+
+export function associateBrainWithArtifacts(current: Edge[], brainId: string, artifactIds: Iterable<string>, label = 'Brain context'): Edge[] {
+  if (!brainId) return current;
+  const next = [...current];
+  for (const artifactId of artifactIds) {
+    if (!artifactId || artifactId === brainId || next.some((edge) => edge.source === brainId && edge.target === artifactId)) continue;
+    next.push({ id: crypto.randomUUID(), source: brainId, target: artifactId, type: 'smoothstep', label, data: { connectionKind: 'reference' } });
+  }
+  return next;
 }
 
 function safeDownloadName(value: string): string {
@@ -81,6 +103,16 @@ function safeDownloadName(value: string): string {
 }
 
 function artifactMarkdown(data: CreationNodeData): string {
+  if (data.kind === 'chat' && Array.isArray(data.messages)) {
+    const transcript = data.messages.flatMap((value) => {
+      if (!value || typeof value !== 'object') return [];
+      const message = value as Record<string, unknown>;
+      if (typeof message.content !== 'string' || !message.content.trim()) return [];
+      const speaker = message.role === 'user' ? 'You' : message.role === 'assistant' ? 'Brain' : 'System';
+      return [`## ${speaker}\n\n${message.content}`];
+    });
+    if (transcript.length) return `# ${data.title}\n\n${transcript.join('\n\n')}`;
+  }
   const authored = [data.markdown, data.aiResponse, data.content, data.subtitle].find((value) => typeof value === 'string' && value.trim());
   return typeof authored === 'string' ? authored : `# ${data.title}\n\n${data.status ? `Status: ${data.status}\n` : ''}`;
 }
@@ -540,6 +572,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNotice('Saving changes…');
   }, [canEdit, lockBlocked, selectedId, setNodes]);
 
+  const updateWebsiteViewport = useCallback((viewport: 'desktop' | 'tablet' | 'mobile') => {
+    if (!selectedId || !canEdit || lockBlocked) return;
+    const preset = viewport === 'mobile' ? { width: 340, height: 620 } : viewport === 'tablet' ? { width: 520, height: 560 } : { width: 720, height: 460 };
+    setNodes((current) => current.map((node) => node.id === selectedId ? { ...node, style: { ...node.style, ...preset }, data: { ...node.data, viewport } } : node));
+    setNotice(`Website viewport changed to ${viewport}`);
+  }, [canEdit, lockBlocked, selectedId, setNodes]);
+
   const appendTimeline = useCallback((role: 'user' | 'assistant' | 'system', body: string, metadata?: { scope?: string; objectIds?: string[]; model?: string; error?: boolean }, clientMessageId = crypto.randomUUID()) => {
     const message: CanvasTimelineMessage = { clientMessageId, messageRole: role, body, createdAt: new Date().toISOString() };
     setTimeline((current) => current.some((item) => item.clientMessageId === clientMessageId) ? current : [...current, message]);
@@ -568,11 +607,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [setNodes, timeline]);
 
   useEffect(() => {
-    if (persistence !== 'server' || !selectedId || !canEdit || !persistedObjectIds.has(selectedId)) { setLockBlocked(false); return; }
+    if (!shouldAcquireCanvasObjectLock(persistence, selectedId, canEdit, persistedObjectIds)) { setLockBlocked(false); return; }
+    const lockedObjectId = selectedId!;
     let stopped = false;
     const acquire = async (action: 'acquire' | 'renew') => {
       try {
-        await creationSessionsApi.lock(sessionId, selectedId, action);
+        await creationSessionsApi.lock(sessionId, lockedObjectId, action);
         if (!stopped) setLockBlocked(false);
       } catch (error) {
         if (!stopped) { setLockBlocked(true); setNotice(error instanceof Error ? error.message : 'This object is being edited by another collaborator'); }
@@ -583,7 +623,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     return () => {
       stopped = true;
       window.clearInterval(timer);
-      void creationSessionsApi.lock(sessionId, selectedId, 'release').catch(() => undefined);
+      void creationSessionsApi.lock(sessionId, lockedObjectId, 'release').catch(() => undefined);
     };
   }, [canEdit, persistedObjectIds, persistence, selectedId, sessionId]);
 
@@ -1316,16 +1356,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         prompt: request, canvasSnapshot: snapshot, persistence, canvasActions,
         conversation: timeline.map((message) => ({ role: message.messageRole, content: message.body })),
       }).then((answer) => {
+        const changes = [...proposalBuffer.current];
         if (answer.trim()) {
           appendTimeline('assistant', answer.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds] }, `${requestMessageId}:assistant`);
           const chat = nodes.find((node) => node.data.kind === 'chat');
+          const brainId = chat?.id ?? crypto.randomUUID();
           if (!chat) {
-            const responseNode = newNode('chat', { x: 120, y: 120 });
+            const responseNode = { ...newNode('chat', { x: 120, y: 120 }), id: brainId };
             responseNode.data = { ...responseNode.data, title: 'Brain', subtitle: request, aiResponse: answer.trim() };
             setNodes((current) => [...current, responseNode]);
-          }
+          } else setNodes((current) => current.map((node) => node.id === brainId ? { ...node, data: { ...node.data, subtitle: request, aiResponse: answer.trim() } } : node));
+          const promptTargets = effectiveSelectedIds.filter((id) => id !== brainId && nodes.some((node) => node.id === id && node.data.kind !== 'chat'));
+          if (promptTargets.length) setEdges((current) => associateBrainWithArtifacts(current, brainId, promptTargets));
         }
-        const changes = [...proposalBuffer.current];
         if (changes.length) {
           setProposedChanges(changes);
           setAcceptedProposalIds(new Set(changes.map((change) => change.id)));
@@ -1344,24 +1387,27 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const request = prompt.toLowerCase();
       if (request.includes('roadmap')) {
         const project = nodes.find((node) => node.data.kind === 'project');
+        const brain = nodes.find((node) => node.data.kind === 'chat');
         const roadmap: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 560, y: 315 }, data: { kind: 'roadmap', title: request.includes('executive') ? 'Executive team roadmap' : 'Sales presentation roadmap', status: 'AI generated' } };
         const slides: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1040, y: 315 }, data: { kind: 'slides', title: request.includes('executive') ? 'Executive team presentation' : 'Sales presentation', status: 'AI generated' } };
         setNodes((current) => [...current, roadmap, slides]);
-        setEdges((current) => [...current, ...(project ? [{ id: crypto.randomUUID(), source: project.id, target: roadmap.id, type: 'smoothstep' }] : []), { id: crypto.randomUUID(), source: roadmap.id, target: slides.id, type: 'smoothstep', label: 'presents', animated: true }]);
+        setEdges((current) => associateBrainWithArtifacts([...current, ...(project ? [{ id: crypto.randomUUID(), source: project.id, target: roadmap.id, type: 'smoothstep' as const }] : []), { id: crypto.randomUUID(), source: roadmap.id, target: slides.id, type: 'smoothstep', label: 'presents', animated: true }], brain?.id || '', [roadmap.id], 'Created with Brain'));
         setSelectedId(roadmap.id); setThinking(false); setPrompt(''); setNotice('Roadmap added to canvas'); return;
       }
       if (request.includes('top 10') || request.includes('requested features')) {
+        const brain = nodes.find((node) => node.data.kind === 'chat');
         const summary: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 500, y: 260 }, data: { kind: 'featureSummary', title: 'Top 10 requested features', status: 'Synthesized' } };
         const mockups: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1040, y: 300 }, data: { kind: 'mockupSet', title: 'Top 10 feature mockups', status: 'Ready for review', subtitle: 'Ten linked high-fidelity concepts generated from user feedback.', items: ['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration'], sources: [{ label: 'Customer feedback evidence', resource: '/api/feedback' }] } };
         setNodes((current) => [...current, summary, mockups]);
-        setEdges((current) => [...current, { id: crypto.randomUUID(), source: summary.id, target: mockups.id, type: 'smoothstep', animated: true }]);
+        setEdges((current) => associateBrainWithArtifacts([...current, { id: crypto.randomUUID(), source: summary.id, target: mockups.id, type: 'smoothstep', animated: true }], brain?.id || '', [summary.id], 'Created with Brain'));
         setSelectedId(mockups.id); setThinking(false); setPrompt(''); setNotice('Feature summary and mockups added'); return;
       }
       const evaluationId = crypto.randomUUID();
       setNodes((current) => [...current, { id: evaluationId, type: 'creation', position: { x: 560, y: 315 }, data: { kind: 'evaluation', title: 'Canvas evaluation', status: 'AI evaluation' } }]);
       const workflow = nodes.find((node) => node.data.kind === 'workflow');
       const website = nodes.find((node) => node.data.kind === 'website');
-      setEdges((current) => [...current, ...[workflow, website].filter((node): node is CreationFlowNode => !!node).map((node) => ({ id: crypto.randomUUID(), source: node.id, target: evaluationId, type: 'smoothstep', animated: true }))]);
+      const brain = nodes.find((node) => node.data.kind === 'chat');
+      setEdges((current) => associateBrainWithArtifacts([...current, ...[workflow, website].filter((node): node is CreationFlowNode => !!node).map((node) => ({ id: crypto.randomUUID(), source: node.id, target: evaluationId, type: 'smoothstep', animated: true }))], brain?.id || '', [evaluationId], 'Created with Brain'));
       setSelectedId(evaluationId);
       setThinking(false);
       setPrompt('');
@@ -1408,9 +1454,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           };
         }, node));
     });
-    setEdges((current) => [...current, ...connectionAdditions.map((change) => change.edge)]
-      .filter((edge) => !deletedConnectionIds.has(edge.id) && !deletedObjectIds.has(edge.source) && !deletedObjectIds.has(edge.target))
-      .map((edge) => connectionUpdates.reduce((value, change) => value.id === change.connectionId ? { ...value, ...(change.patch.label != null ? { label: change.patch.label } : {}), data: { ...value.data, ...(change.patch.kind ? { connectionKind: change.patch.kind } : {}) } } : value, edge)));
+    setEdges((current) => {
+      const reviewed = [...current, ...connectionAdditions.map((change) => change.edge)]
+        .filter((edge) => !deletedConnectionIds.has(edge.id) && !deletedObjectIds.has(edge.source) && !deletedObjectIds.has(edge.target))
+        .map((edge) => connectionUpdates.reduce((value, change) => value.id === change.connectionId ? { ...value, ...(change.patch.label != null ? { label: change.patch.label } : {}), data: { ...value.data, ...(change.patch.kind ? { connectionKind: change.patch.kind } : {}) } } : value, edge));
+      const brain = nodes.find((node) => node.data.kind === 'chat');
+      const changedArtifactIds = [...additions.map((change) => change.node.id), ...updates.map((change) => change.objectId), ...layouts.map((change) => change.objectId), ...actions.map((change) => change.objectId)];
+      return brain && changedArtifactIds.length ? associateBrainWithArtifacts(reviewed, brain.id, changedArtifactIds, 'Changed with Brain') : reviewed;
+    });
     if (additions.length) setSelectedId(additions[additions.length - 1]!.node.id);
     else if (selectedId && deletedObjectIds.has(selectedId)) { setSelectedId(null); setSelectedIds([]); }
     if (actions.length) setPendingBrainActions((current) => [...current, ...actions.filter((change) => !deletedObjectIds.has(change.objectId)).map(({ objectId, action }) => ({ objectId, action }))]);
@@ -1418,7 +1469,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setAcceptedProposalIds(new Set());
     setNotice(`${selected.length} reviewed Brain changes applied`);
     trackActivity('creation_change_set_applied', { sessionId, metadata: { clientSurface: 'web', commandCount: selected.length } });
-  }, [acceptedProposalIds, proposedChanges, selectedId, sessionId, setEdges, setNodes]);
+  }, [acceptedProposalIds, nodes, proposedChanges, selectedId, sessionId, setEdges, setNodes]);
 
   const rejectProposedChanges = useCallback(() => {
     setProposedChanges([]);
@@ -1740,7 +1791,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           })}</div>
         </aside>}
 
-        {!presentMode && selectedNode && <Inspector node={selectedNode} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onClose={() => setSelectedId(null)} onRun={runWorkflow} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}
+        {!presentMode && selectedNode && <Inspector node={selectedNode} nodes={nodes} edges={edges} timeline={timeline} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => setSelectedId(null)} onRun={runWorkflow} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}
 
         {workflowFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label="Workflow focus editor">
           <header><div><strong>Edit Workflow on Canvas</strong><small>Changes save to the canonical Workflow definition.</small></div><button type="button" onClick={() => setWorkflowFocus(null)} aria-label="Close workflow editor">×</button></header>
@@ -1756,7 +1807,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
         {!presentMode && <form ref={composerFormRef} className={styles.composer} onSubmit={evaluateCanvas}>
           <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} aria-label={t('askBrain')} placeholder={t('askBrain')} rows={1} />
-          <div className={styles.composerBottom}><button type="button" className={styles.iconButton} onClick={openPalette} aria-label={t('addToCanvas')}>＋</button><label className={styles.scopeChip}>⌁ <span className="sr-only">Brain scope</span><select aria-label="Brain scope" value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">Entire canvas</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects` : 'Selected object'}</option><option value="connected" disabled={!effectiveSelectedIds.length}>Connected objects</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>Current frame</option></select></label><span className={styles.composerSpacer} /><button type="button" className={styles.iconButton} aria-label="Use voice" onClick={startVoiceInput}>◖</button><button className={styles.sendButton} aria-label={t('sendBrain')} disabled={thinking || !prompt.trim()}>{thinking ? '•••' : '➤'}</button></div>
+          <div className={styles.composerBottom}><button type="button" className={styles.iconButton} onClick={openPalette} aria-label={t('addToCanvas')}>＋</button><label className={styles.scopeChip}>⌁ <span className="sr-only">Brain scope</span><select aria-label="Brain scope" value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">Entire canvas</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects` : 'Selected object'}</option><option value="connected" disabled={!effectiveSelectedIds.length}>Connected objects</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>Current frame</option></select></label><span className={styles.composerSpacer} /><button type="button" className={styles.iconButton} aria-label="Use microphone" title="Use microphone" onClick={startVoiceInput}><svg className={styles.microphoneIcon} viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" /><path d="M6 11.5v.5a6 6 0 0 0 12 0v-.5M12 18v3M9 21h6" /></svg></button><button className={styles.sendButton} aria-label={t('sendBrain')} disabled={thinking || !prompt.trim()}>{thinking ? '•••' : '➤'}</button></div>
         </form>}
       </div>
     </div>
@@ -1772,7 +1823,53 @@ function RemoteCursors({ members, currentUserId, instance, container }: { member
   })}</div>;
 }
 
-function Inspector({ node, sessionId, persistence, role, editable, members, onChange, onClose, onRun, onEditWorkflow, onSaveAgent, onSaveFramePreset, onExpandProject, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onAttachEvermindProject, onExpandEvermindPipeline, onStartStandup }: { node: CreationFlowNode; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onClose: () => void; onRun: () => void; onEditWorkflow: () => void; onSaveAgent: () => void; onSaveFramePreset: () => void; onExpandProject: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onStartStandup: () => void }) {
+function BrainObjectDetails({ node, nodes, edges, timeline }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; timeline: CanvasTimelineMessage[] }) {
+  const messages = timeline.length ? timeline : Array.isArray(node.data.messages) ? node.data.messages.flatMap((value) => {
+    if (!value || typeof value !== 'object') return [];
+    const message = value as Record<string, unknown>;
+    if (typeof message.content !== 'string') return [];
+    return [{
+      clientMessageId: `${message.createdAt || 'message'}:${message.role || 'assistant'}:${message.content}`,
+      messageRole: message.role === 'user' || message.role === 'system' ? message.role : 'assistant',
+      body: message.content,
+      createdAt: typeof message.createdAt === 'string' ? message.createdAt : '',
+    } satisfies CanvasTimelineMessage];
+  }) : [];
+  const connectedIds = new Set(edges.flatMap((edge) => edge.source === node.id ? [edge.target] : edge.target === node.id ? [edge.source] : []));
+  const connected = nodes.filter((candidate) => candidate.id !== node.id && connectedIds.has(candidate.id));
+  const agents = connected.filter((candidate) => candidate.data.kind === 'agent');
+  const tickets = connected.filter((candidate) => candidate.data.kind === 'task');
+  const related = connected.filter((candidate) => candidate.data.kind !== 'agent' && candidate.data.kind !== 'task');
+  const canonicalChatId = node.data.resourceId?.match(/^chat:(\d+)$/)?.[1];
+  const connectedProjectId = connected.find((candidate) => candidate.data.kind === 'project')?.data.resourceId?.match(/^project:(\d+)$/)?.[1];
+  const timelineMessages: BrainMessage[] = messages.map((message, index) => ({
+    id: index + 1,
+    seq: index + 1,
+    role: message.messageRole,
+    content: message.body,
+    metadata: null,
+    createdAt: message.createdAt,
+  }));
+  const roster = (items: CreationFlowNode[], empty: string) => items.length ? <div className={styles.brainAssociationList}>{items.map((item) => <div key={item.id}><span aria-hidden>{creationObjectDefinition(item.data.kind).icon}</span><p><b>{item.data.title}</b><small>{item.data.status || creationObjectDefinition(item.data.kind).label}</small></p></div>)}</div> : <p className={styles.brainEmpty}>{empty}</p>;
+
+  return <div className={styles.brainDetails}>
+    <section aria-labelledby="brain-conversation-heading">
+      <div className={styles.brainSectionHeading}><h3 id="brain-conversation-heading">Conversation</h3><span>{messages.length}</span></div>
+      <div className={styles.brainInspectorTimeline} role="log" aria-label="Full Brain activity" tabIndex={0}>
+        <BrainTimeline messages={timelineMessages} trace={[]} streamingText="" isRunning={false} assistantName="Brain" labels={{ you: 'You', assistant: 'Brain', empty: 'No conversation yet. Ask Brain from the canvas prompt to begin.' }} />
+      </div>
+    </section>
+    {canonicalChatId ? <section aria-label="Brain chat associations" className={styles.brainCanonicalAssociations}>
+      <ChatTicketsPanel chatId={Number(canonicalChatId)} projectId={connectedProjectId ? Number(connectedProjectId) : null} chatList={[{ id: Number(canonicalChatId), title: node.data.title }]} />
+    </section> : <>
+      <section aria-labelledby="brain-agents-heading"><div className={styles.brainSectionHeading}><h3 id="brain-agents-heading">Agents</h3><span>{agents.length}</span></div>{roster(agents, 'No agents associated with this chat.')}</section>
+      <section aria-labelledby="brain-tickets-heading"><div className={styles.brainSectionHeading}><h3 id="brain-tickets-heading">Associated tickets</h3><span>{tickets.length}</span></div>{roster(tickets, 'No tickets associated with this chat.')}</section>
+      <section aria-labelledby="brain-objects-heading"><div className={styles.brainSectionHeading}><h3 id="brain-objects-heading">Connected objects</h3><span>{related.length}</span></div>{roster(related, 'No other objects connected yet.')}</section>
+    </>}
+  </div>;
+}
+
+function Inspector({ node, nodes, edges, timeline, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onEditWorkflow, onSaveAgent, onSaveFramePreset, onExpandProject, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onAttachEvermindProject, onExpandEvermindPipeline, onStartStandup }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; timeline: CanvasTimelineMessage[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onEditWorkflow: () => void; onSaveAgent: () => void; onSaveFramePreset: () => void; onExpandProject: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onStartStandup: () => void }) {
   const kind = node.data.kind;
   const [tab, setTab] = useState<'details' | 'activity'>('details');
   const [accessStatus, setAccessStatus] = useState('');
@@ -1813,6 +1910,7 @@ function Inspector({ node, sessionId, persistence, role, editable, members, onCh
       {tab === 'details' ? <fieldset className={styles.inspectorFields} disabled={!editable}>
       {node.data.redacted === true && <><p className={styles.inspectorHint}>You can see this object’s position, but its source is no longer available to you.</p><button type="button" className={styles.fullButton} disabled={persistence !== 'server' || !!accessStatus} onClick={() => { setAccessStatus('Requesting…'); void creationSessionsApi.requestObjectAccess(sessionId, node.id).then(() => setAccessStatus('Access requested')).catch((error) => setAccessStatus(error instanceof Error ? error.message : 'Request failed')); }}>{accessStatus || 'Request access'}</button></>}
       <label>Name<input value={node.data.title} onChange={(event) => onChange({ title: event.target.value })} /></label>
+      {kind === 'chat' && <BrainObjectDetails node={node} nodes={nodes} edges={edges} timeline={timeline} />}
       {kind === 'agent' && <>
         <label>Model<select value={node.data.model || 'gpt-4o'} onChange={(event) => onChange({ model: event.target.value })}><option>gpt-4o</option><option>claude-3.5-sonnet</option><option>Evermind</option></select></label>
         <label>Instructions<textarea value={node.data.subtitle || ''} onChange={(event) => onChange({ subtitle: event.target.value })} rows={5} /></label>
@@ -1821,7 +1919,7 @@ function Inspector({ node, sessionId, persistence, role, editable, members, onCh
         <button type="button" className={styles.fullButton} onClick={onSaveAgent}>Save agent settings everywhere</button>
       </>}
       {kind === 'staff' && <><label>Role<input value={node.data.role || ''} onChange={(event) => onChange({ role: event.target.value })} /></label><label>Current focus<textarea value={node.data.focus || ''} onChange={(event) => onChange({ focus: event.target.value })} rows={4} /></label></>}
-      {(kind === 'website' || kind === 'prototype') && <><label>Headline<input value={typeof node.data.websiteHeadline === 'string' ? node.data.websiteHeadline : 'Fall in love with every look'} onChange={(event) => onChange({ websiteHeadline: event.target.value })} /></label><label>Supporting copy<textarea rows={3} value={typeof node.data.websiteBody === 'string' ? node.data.websiteBody : 'New arrivals for the season ahead.'} onChange={(event) => onChange({ websiteBody: event.target.value })} /></label><label>Call to action<input value={typeof node.data.websiteCta === 'string' ? node.data.websiteCta : 'Shop the collection'} onChange={(event) => onChange({ websiteCta: event.target.value })} /></label><label>Accent color<input type="color" value={typeof node.data.websiteAccent === 'string' ? node.data.websiteAccent : '#3978f6'} onChange={(event) => onChange({ websiteAccent: event.target.value })} /></label><label>Viewport<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onChange({ viewport: event.target.value })}><option value="desktop">Desktop · 1440</option><option value="tablet">Tablet · 768</option><option value="mobile">Mobile · 390</option></select></label><p className={styles.inspectorHint}>Changes render live in the interactive prototype on the canvas.</p></>}
+      {(kind === 'website' || kind === 'prototype') && <><label>Headline<input value={typeof node.data.websiteHeadline === 'string' ? node.data.websiteHeadline : 'Fall in love with every look'} onChange={(event) => onChange({ websiteHeadline: event.target.value })} /></label><label>Supporting copy<textarea rows={3} value={typeof node.data.websiteBody === 'string' ? node.data.websiteBody : 'New arrivals for the season ahead.'} onChange={(event) => onChange({ websiteBody: event.target.value })} /></label><label>Call to action<input value={typeof node.data.websiteCta === 'string' ? node.data.websiteCta : 'Shop the collection'} onChange={(event) => onChange({ websiteCta: event.target.value })} /></label><label>Accent color<input type="color" value={typeof node.data.websiteAccent === 'string' ? node.data.websiteAccent : '#3978f6'} onChange={(event) => onChange({ websiteAccent: event.target.value })} /></label><label>Viewport<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onWebsiteViewportChange(event.target.value as 'desktop' | 'tablet' | 'mobile')}><option value="desktop">Desktop · 1440</option><option value="tablet">Tablet · 768</option><option value="mobile">Mobile · 390</option></select></label><p className={styles.inspectorHint}>Changes render live in the interactive prototype on the canvas.</p></>}
       {kind === 'workflow' && <><label>Execution target<select><option>BuilderForce.AI</option><option>Campaign Strategist</option></select></label><label>Approval mode<select><option>Required before publish</option><option>Fully autonomous</option></select></label><button type="button" className={styles.fullButton} onClick={onEditWorkflow}>Edit Workflow on Canvas</button><button className={styles.fullButton} onClick={onRun}>▶ Run workflow</button></>}
       {kind === 'dashboard' && <><label>Date range<select><option>Last 30 days</option><option>Last 7 days</option><option>Quarter to date</option></select></label><button className={styles.fullButton}>Refresh live data</button></>}
       {kind === 'dataset' && <><label>Import CSV or TSV<input type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onImportDataset(file); }} /></label><p className={styles.inspectorHint}>A safe preview of up to 500 rows is stored with this session. Connect it to a dashboard or ask Brain to analyze it.</p><button className={styles.fullButton} onClick={onVisualizeDataset}>Create visualization</button></>}
@@ -1834,7 +1932,7 @@ function Inspector({ node, sessionId, persistence, role, editable, members, onCh
       {kind === 'standup' && <><p className={styles.inspectorHint}>Gather every Staff Member and Agent currently on the canvas. With a saved Project, this starts the canonical stand-up ceremony and keeps its resource link in the session.</p><button className={styles.fullButton} onClick={onStartStandup}>Gather and start stand-up</button></>}
       {kind === 'frame' && <><label>Purpose<input value={typeof node.data.framePurpose === 'string' ? node.data.framePurpose : 'Arrange related objects here'} onChange={(event) => onChange({ framePurpose: event.target.value })} /></label><label>Fill color<input type="color" value={typeof node.data.frameColor === 'string' ? node.data.frameColor : '#f8f6ff'} onChange={(event) => onChange({ frameColor: event.target.value })} /></label><label>Border color<input type="color" value={typeof node.data.frameBorder === 'string' ? node.data.frameBorder : '#9d8bea'} onChange={(event) => onChange({ frameBorder: event.target.value })} /></label><button className={styles.fullButton} onClick={onSaveFramePreset}>Save as reusable frame</button></>}
       {kind === 'drawing' && <><label>Stroke color<input type="color" value={typeof node.data.stroke === 'string' ? node.data.stroke : '#5b5ce2'} onChange={(event) => onChange({ stroke: event.target.value })} /></label><label>Stroke width<input type="range" min="1" max="12" value={typeof node.data.strokeWidth === 'number' ? node.data.strokeWidth : 3} onChange={(event) => onChange({ strokeWidth: Number(event.target.value) })} /></label><p className={styles.inspectorHint}>Resize, annotate, connect, or use this sketch as visual context for Brain.</p></>}
-      {!['agent', 'staff', 'website', 'prototype', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'mockup', 'evermind', 'standup', 'frame', 'drawing'].includes(kind) && <p className={styles.inspectorHint}>This object is live in the session. Connect it to other objects or ask Brain to transform or evaluate it.</p>}
+      {!['chat', 'agent', 'staff', 'website', 'prototype', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'mockup', 'evermind', 'standup', 'frame', 'drawing'].includes(kind) && <p className={styles.inspectorHint}>This object is live in the session. Connect it to other objects or ask Brain to transform or evaluate it.</p>}
       </fieldset> : <ActivityInspector sessionId={sessionId} objectId={node.id} persistence={persistence} role={role} members={members} />}
       {tab === 'details' && <section aria-label="Copy and download" style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
         <strong style={{ fontSize: 12 }}>Copy &amp; download</strong>
