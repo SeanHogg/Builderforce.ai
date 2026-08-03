@@ -160,7 +160,7 @@ export function planParallel(
 // ---------------------------------------------------------------------------
 
 function formatPlan(
-  plan: ParallelPlan,
+  plan: ParallelPlanWithGraph,
   format: PlanOutputFormat,
 ): PlanOutput {
   switch (format) {
