@@ -119,6 +119,7 @@ export interface ByoChoices {
  */
 export interface ModelChoices {
   models: string[];
+  freeModels: string[];
   /** Tenant-defined named LLM configurations (`tenant_model:<slug>`). */
   configuredModels: Array<{ ref: string; name: string }>;
   canUsePremiumModels: boolean;
@@ -157,6 +158,8 @@ export interface PremiumInfo {
 /** The subset of `GET /llm/v1/models` this client consumes. */
 interface ModelsResponse {
   data?: Array<{ id?: string }>;
+  models?: string[];
+  freeModels?: string[];
   canUsePremiumModels?: boolean;
   canChooseModel?: boolean;
   canUseFrontierModels?: boolean;
@@ -190,7 +193,7 @@ export async function getModels(
   });
   if (!res.ok) throw new Error(`models_failed_${res.status}`);
   const json = (await res.json()) as ModelsResponse;
-  const models = (json.data ?? []).map((m) => m.id).filter((id): id is string => !!id);
+  const models = json.models ?? (json.data ?? []).map((m) => m.id).filter((id): id is string => !!id);
 
   // Premium is the whole paid OpenRouter catalog, so it is NOT inlined into
   // /v1/models — it comes from the cached public /v1/catalog. Only fetch it for an
@@ -213,6 +216,7 @@ export async function getModels(
 
   const data: ModelChoices = {
     models,
+    freeModels: (json.freeModels ?? []).filter((id): id is string => typeof id === 'string'),
     configuredModels,
     canUsePremiumModels,
     premiumModels,

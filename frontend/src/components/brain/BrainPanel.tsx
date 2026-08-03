@@ -488,6 +488,7 @@ export function BrainPanel({
   const modelOptions = useMemo(() => ({
     configured: llmModels.tenantModels.map((model) => ({ id: model.ref, label: model.name })),
     byo: llmModels.fundingSurface.byo.models.map(({ id, vendor }) => ({ id, vendor })),
+    free: llmModels.freeModels,
     plan: llmModels.models,
     paid: llmModels.premiumModels.map((model) => model.id),
   }), [llmModels]);

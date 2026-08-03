@@ -2519,6 +2519,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // the list a cloud-agent run should pick from (free tenants see only the free
     // coding models, Pro tenants also see the premium ones).
     const codingModels = codingModelsForPlan(effectivePlan, premiumOverride);
+    // Stable funding category for searchable pickers. A paid tenant's `models`
+    // contains both free and plan-funded entries, so clients cannot infer FREE
+    // from the effective plan alone.
+    const freeModels = modelPoolForPlan('free', false);
 
     // BYO: the tenant's connected providers drive an additional pinnable model set
     // (their own account serves them, $0 to us). Connecting a provider ALSO unlocks
@@ -2609,6 +2613,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
         effectivePlan,
         ...(premiumOverride ? { premium: true } : {}),
         models: modelPoolForPlan(effectivePlan, premiumOverride),
+        freeModels,
         codingModels,
         teacherModels,
         canChooseModel,
@@ -2626,6 +2631,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       effectivePlan,
       ...(premiumOverride ? { premium: true } : {}),
       data: await service.status(),
+      freeModels,
       codingModels,
       teacherModels,
       canChooseModel,

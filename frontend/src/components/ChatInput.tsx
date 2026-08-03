@@ -6,6 +6,8 @@ import { useTranslations } from 'next-intl';
 import { useMentionAutocomplete } from '@seanhogg/builderforce-brain-ui';
 import type { DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import type { BrainEffort } from '@/lib/brain';
+import { ModelSelectionPicker, type ChatModelOptions, type ChatModelSelection } from './ModelSelectionPicker';
+export type { ChatModelOptions, ChatModelSelection } from './ModelSelectionPicker';
 
 /** Browser Web Speech API (not in all TS libs). */
 type SpeechRecognitionInstance = {
@@ -22,18 +24,6 @@ export interface ChatInputAttachment {
   key: string;
   name: string;
   type: string;
-}
-
-export type ChatModelSelection =
-  | { mode: 'auto' }
-  | { mode: 'byo_pool' }
-  | { mode: 'model'; model: string };
-
-export interface ChatModelOptions {
-  configured?: Array<{ id: string; label: string }>;
-  byo: Array<{ id: string; vendor: string }>;
-  plan: string[];
-  paid: string[];
 }
 
 export interface ChatInputProps {
@@ -380,10 +370,7 @@ export function ChatInput({
   // the experience matches across every modality.
   const active = focused || value.trim().length > 0;
   // The `/` options menu appears when the consumer wires any of its controls.
-  const hasOptionsMenu = !!(onEffortChange || onThinkingChange || onModelSelectionChange || accountSettingsHref);
-  const modelSelectValue = modelSelection?.mode === 'model'
-    ? `model:${modelSelection.model}`
-    : modelSelection?.mode ?? 'auto';
+  const hasOptionsMenu = !!(onEffortChange || onThinkingChange || accountSettingsHref);
 
   // The textarea always takes its own full-width row on top (so typed text is
   // never crushed into a sliver in a narrow side-panel), and the control buttons
@@ -625,40 +612,6 @@ export function ChatInput({
                     onClick={() => onThinkingChange(!thinking)}
                   />
                 )}
-                {onModelSelectionChange && modelOptions && (
-                  <>
-                    <div style={menuGroupStyle()}>Model</div>
-                    <label style={{ display: 'block', padding: '3px 8px 8px' }}>
-                      <span className="sr-only">Model routing</span>
-                      <select
-                        aria-label="Model routing"
-                        value={modelSelectValue}
-                        onChange={(event) => {
-                          const value = event.target.value;
-                          if (value === 'auto') onModelSelectionChange({ mode: 'auto' });
-                          else if (value === 'byo_pool') onModelSelectionChange({ mode: 'byo_pool' });
-                          else onModelSelectionChange({ mode: 'model', model: value.slice('model:'.length) });
-                        }}
-                        style={{ width: '100%', minWidth: 260, padding: '7px 8px', borderRadius: 7, border: '1px solid var(--chat-input-border)', background: 'var(--chat-input-bg)', color: 'var(--text-primary)' }}
-                      >
-                        <option value="auto">Auto — gateway chooses</option>
-                        {modelOptions.byo.length > 0 && <option value="byo_pool">Pool — your BYO priority order</option>}
-                        {!!modelOptions.configured?.length && <optgroup label="Configured LLMs">
-                          {modelOptions.configured.map((item) => <option key={`configured:${item.id}`} value={`model:${item.id}`}>{item.label}</option>)}
-                        </optgroup>}
-                        {modelOptions.byo.length > 0 && <optgroup label="Your connected accounts (BYO)">
-                          {modelOptions.byo.map((item) => <option key={`byo:${item.id}`} value={`model:${item.id}`}>{item.id} — {item.vendor}</option>)}
-                        </optgroup>}
-                        {modelOptions.plan.length > 0 && <optgroup label="Included in your plan">
-                          {modelOptions.plan.map((id) => <option key={`plan:${id}`} value={`model:${id}`}>{id}</option>)}
-                        </optgroup>}
-                        {modelOptions.paid.length > 0 && <optgroup label="Paid / metered">
-                          {modelOptions.paid.map((id) => <option key={`paid:${id}`} value={`model:${id}`}>{id}</option>)}
-                        </optgroup>}
-                      </select>
-                    </label>
-                  </>
-                )}
                 {accountSettingsHref && (
                   <MenuRow icon="⚙️" label={t('accountSettings')} href={accountSettingsHref} onClick={close} />
                 )}
@@ -691,6 +644,9 @@ export function ChatInput({
             <BoltIcon />
             <span>{t('autoMode')}</span>
           </button>
+        )}
+        {onModelSelectionChange && modelOptions && modelSelection && (
+          <ModelSelectionPicker selection={modelSelection} options={modelOptions} onChange={onModelSelectionChange} disabled={disabled} />
         )}
         <textarea
           ref={textareaRef}

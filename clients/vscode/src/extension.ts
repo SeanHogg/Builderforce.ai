@@ -1056,7 +1056,7 @@ function byoProviderLabel(vendor: string): string {
 
 async function pickModel(context: vscode.ExtensionContext): Promise<void> {
   try {
-    const { models, configuredModels, canUsePremiumModels, premiumModels, canChooseModel, byo, premiumInfo } =
+    const { models, freeModels, configuredModels, canUsePremiumModels, premiumModels, canChooseModel, byo, premiumInfo } =
       await getModels(context.secrets, true);
     const auto = "(auto — let the gateway choose)";
     const pool = "$(layers) Pool — use my BYO priority order";
@@ -1100,12 +1100,12 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
     // Groups the tenant isn't entitled to never render, so the picker can only ever
     // offer models the gateway will accept.
     const items: vscode.QuickPickItem[] = [{ label: auto, description: "Gateway chooses across entitled routes" }];
-    if (byo.providers.length > 0) items.push({ label: pool, description: "Try your connected accounts in your configured order" });
+    if (byo.providers.length > 0) items.push({ label: pool, description: "BYO · try connected accounts in configured order" });
 
     if (configuredModels.length > 0) {
       items.push(
         { label: "Configured LLMs", kind: vscode.QuickPickItemKind.Separator },
-        ...configuredModels.map((model) => ({ label: model.ref, description: model.name, detail: "Saved workspace LLM configuration" })),
+        ...configuredModels.map((model) => ({ label: model.ref, description: `Configured · ${model.name}`, detail: "Saved workspace LLM configuration" })),
       );
     }
 
@@ -1124,7 +1124,7 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
         },
         ...vendorModels.map((m) => ({
           label: m.id,
-          description: `your ${byoProviderLabel(vendor)} account · ${m.tier}`,
+          description: `BYO · your ${byoProviderLabel(vendor)} account · ${m.tier}`,
           detail:
             m.contextWindow != null
               ? `${m.contextWindow.toLocaleString()} token context · no platform charge`
@@ -1133,15 +1133,22 @@ async function pickModel(context: vscode.ExtensionContext): Promise<void> {
       );
     }
 
-    items.push(
+    const freeSet = new Set(freeModels);
+    const availableFree = models.filter((model) => freeSet.has(model));
+    const planOnly = models.filter((model) => !freeSet.has(model));
+    if (availableFree.length > 0) items.push(
+      { label: "FREE models", kind: vscode.QuickPickItemKind.Separator },
+      ...availableFree.map((model) => ({ label: model, description: "FREE · included" })),
+    );
+    if (planOnly.length > 0) items.push(
       { label: "Plan models — included in your plan", kind: vscode.QuickPickItemKind.Separator },
-      ...models.map((m) => ({ label: m, description: "included in your plan" })),
+      ...planOnly.map((model) => ({ label: model, description: "Plan · included in subscription" })),
     );
 
     if (canUsePremiumModels && premiumModels.length > 0) {
       items.push(
         { label: "Premium — any OpenRouter model (cost + 1¢/request)", kind: vscode.QuickPickItemKind.Separator },
-        ...premiumModels.map((m) => ({ label: m, description: "premium · metered at cost + 1¢/request" })),
+        ...premiumModels.map((m) => ({ label: m, description: "PAID · metered at cost + 1¢/request" })),
       );
     } else if (premiumUnlock) {
       // Premium is off — SAY SO, and name the step that turns it on. Silently

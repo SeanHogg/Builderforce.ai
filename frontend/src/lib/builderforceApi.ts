@@ -4274,8 +4274,8 @@ export interface PremiumModelInfo {
 }
 
 export type LlmModelsResponse =
-  | { configured: false; product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; models: string[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; canUsePremiumModels?: boolean; premiumInfo?: PremiumModelInfo; byo?: ByoModelInfo }
-  | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; object: 'list'; data: LlmModelStatus[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; canUsePremiumModels?: boolean; premiumInfo?: PremiumModelInfo; byo?: ByoModelInfo };
+  | { configured: false; product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; models: string[]; freeModels?: string[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; canUsePremiumModels?: boolean; premiumInfo?: PremiumModelInfo; byo?: ByoModelInfo }
+  | { configured: true;  product: string; effectivePlan: EffectivePlanLabel; premium?: boolean; object: 'list'; data: LlmModelStatus[]; freeModels?: string[]; codingModels?: string[]; teacherModels?: string[]; canChooseModel?: boolean; canUseFrontierModels?: boolean; canUsePremiumModels?: boolean; premiumInfo?: PremiumModelInfo; byo?: ByoModelInfo };
 
 /** Learned Model Routing (PRD 13) — closed action-type taxonomy. MIRRORS
  *  `api/src/application/llm/actionTypes.ts` (the api is the source of truth). */

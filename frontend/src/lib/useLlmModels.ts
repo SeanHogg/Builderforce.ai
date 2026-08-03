@@ -18,6 +18,9 @@ import { getStoredTenantToken } from './auth';
  */
 export interface LlmModelLists {
   models: string[];
+  /** Free subset of `models`, supplied by the gateway so paid-plan clients do
+   * not have to guess a model's funding tier from its id. */
+  freeModels: string[];
   codingModels: string[];
   /** Models eligible to be a FRONTIER TEACHER (distil into an Evermind): the tenant's
    *  OWN connected BYO frontier models FIRST (a BYO-Anthropic tenant teaches with
@@ -68,7 +71,7 @@ export interface LlmModelLists {
   premiumModels: ModelRecord[];
 }
 
-const EMPTY: LlmModelLists = { models: [], codingModels: [], teacherModels: [], tenantModels: [], isPaid: false, byoModels: [], byoProviders: [], fundingSurface: { data: [], byo: { models: [] } }, canChooseModel: false, canUseFrontierModels: false, canUsePremiumModels: false, premiumModels: [] };
+const EMPTY: LlmModelLists = { models: [], freeModels: [], codingModels: [], teacherModels: [], tenantModels: [], isPaid: false, byoModels: [], byoProviders: [], fundingSurface: { data: [], byo: { models: [] } }, canChooseModel: false, canUseFrontierModels: false, canUsePremiumModels: false, premiumModels: [] };
 
 let cache: LlmModelLists | null = null;
 let inflight: Promise<LlmModelLists> | null = null;
@@ -115,7 +118,7 @@ function load(): Promise<LlmModelLists> {
           ? await getPremiumModelCatalog().catch(() => [] as ModelRecord[])
           : [];
         cache = {
-          models: models ?? [], codingModels: res.codingModels ?? [], teacherModels, tenantModels,
+          models: models ?? [], freeModels: res.freeModels ?? (res.effectivePlan === 'free' ? models ?? [] : []), codingModels: res.codingModels ?? [], teacherModels, tenantModels,
           isPaid, byoModels, byoProviders, fundingSurface, canChooseModel, canUseFrontierModels,
           canUsePremiumModels,
           ...(res.premiumInfo ? { premiumInfo: res.premiumInfo } : {}),
