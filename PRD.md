@@ -99,7 +99,70 @@ Bind the correct Builderforce.ai repository that contains the API worker and fro
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+_Analysis completed by business-analyst (task #1226)_
+
+### Repository Status
+
+**VERIFIED: seanhogg/builderforce.ai IS the correct repository.**
+
+The bound repository contains all foundational payment infrastructure:
+
+| Component | Location | Status |
+|-----------|----------|--------|
+| Stripe Integration | `api/src/infrastructure/payment/StripeProvider.ts` | ✅ Present |
+| Payment Provider Interface | `api/src/infrastructure/payment/PaymentProvider.ts` | ✅ Present |
+| Freelancer Invoices Schema | `api/src/infrastructure/database/schema/billing.ts` | ✅ Present |
+| Cart Context | `frontend/src/lib/CartContext.tsx` | ✅ Present |
+| Shopping Cart UI | `frontend/src/components/ShoppingCart.tsx` | ✅ Present |
+| Marketplace Routes | `api/src/presentation/routes/marketplaceRoutes.ts` | ✅ Present |
+| Checkout Flow | `api/src/presentation/routes/tenantRoutes.ts` | ✅ Present |
+| Webhook Handlers | `api/src/presentation/routes/webhookRoutes.ts` | ✅ Present |
+
+### Gap Analysis: What Remains to Implement
+
+The PRD claims the repository lacks payment infrastructure — **this is incorrect**. The actual gaps are:
+
+1. **Escrow Functionality** (P0 per ROADMAP.md)
+   - No escrow model for holding funds during fixed-price contracts
+   - No milestone/escrow state machine
+   - ROADMAP explicitly notes: "Fixed-price contracts + milestones + escrow (P0)"
+
+2. **Stripe Connect for Freelancer Payouts**
+   - Current Stripe integration handles platform subscriptions (Pro/Teams)
+   - Missing: Stripe Connect for paying freelancers
+   - Need: Platform account connected to freelancer accounts
+
+3. **Milestone/Fixed-Price Contract Support**
+   - ROADMAP: "Only hourly exists; `job_postings` has no `job_type` (hourly|fixed)"
+   - Need: Job type enum + milestone table + escrow states
+
+### Implementation Requirements
+
+To satisfy the PRD acceptance criteria, the following must be implemented:
+
+1. **Escrow Data Model**
+   - Add `escrow_accounts` table (freelancer engagement + held amount + status)
+   - Add `escrow_milestones` table (engagement_id + amount + release conditions + status)
+   - Status flow: `funded` → `held` → `released` (or `disputed`)
+
+2. **Stripe Connect Integration**
+   - Register platform as Stripe Connect provider
+   - Onboard freelancer accounts (Standard/Express)
+   - Implement `createEscrowPayment` / `releaseEscrowPayment` / `disputeEscrow` endpoints
+
+3. **API Endpoints**
+   - `POST /api/engagements/:id/escrow/fund` — fund escrow from client
+   - `POST /api/engagements/:id/escrow/release` — release to freelancer
+   - `POST /api/engagements/:id/escrow/dispute` — initiate dispute
+   - Webhook handlers for Stripe Connect events
+
+4. **Frontend Components**
+   - Escrow status display in engagement details
+   - Milestone progress UI
+   - Fund/release/dispute actions
+
+5. **Database Migration**
+   - Migration for escrow tables (priority: after 0285)
 
 ## Design
 
