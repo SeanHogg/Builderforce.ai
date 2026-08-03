@@ -29,9 +29,9 @@ export interface TenantProps {
   billingPaymentBrand: string | null;
   billingPaymentLast4: string | null;
   billingUpdatedAt: Date | null;
-  /** Provider-assigned customer ID (e.g. Stripe cus_... or Helcim customerCode) */
+  /** Provider-assigned customer ID (e.g. Stripe cus_...) */
   externalCustomerId: string | null;
-  /** Provider-assigned subscription ID (e.g. Stripe sub_... or Helcim transactionId) */
+  /** Provider-assigned subscription ID (e.g. Stripe sub_...) */
   externalSubscriptionId: string | null;
   /** Number of paid seats for Teams plan; null for Free/Pro */
   seatCount: number | null;
