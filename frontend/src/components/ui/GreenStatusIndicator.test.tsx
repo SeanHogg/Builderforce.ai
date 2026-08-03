@@ -1,6 +1,6 @@
 /** GreenStatusIndicator spec and test suite. */
 import { render, screen } from '@testing-library/react';
-import 'jest-dom';
+import '@testing-library/jest-dom';
 import { GreenStatusIndicator } from './GreenStatusIndicator';
 
 describe('GreenStatusIndicator', () => {
