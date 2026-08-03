@@ -70,6 +70,51 @@ const segmentGroupStyle: CSSProperties = {
   border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 4, maxWidth: '100%',
 };
 
+/** Prominent kill-switch shared by the workspace and project policy headers. */
+export function ManagerKillSwitch({ checked, disabled, onChange }: {
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const t = useTranslations('manager');
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={t('policy.enabled.label')}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 10, minHeight: 42, padding: '7px 10px 7px 12px',
+        border: `1px solid ${checked ? 'var(--success, #22c55e)' : 'var(--coral-bright, #ef4444)'}`,
+        borderRadius: 12, background: 'var(--bg-elevated)', color: 'var(--text-primary)',
+        cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.65 : 1,
+      }}
+    >
+      <span style={{ display: 'grid', gap: 2, textAlign: 'left' }}>
+        <strong style={{ fontSize: 12 }}>{t('title')}</strong>
+        <small style={{ color: 'var(--text-muted)', fontSize: 10 }}>
+          {checked ? t('policy.tri.on') : t('policy.tri.off')}
+        </small>
+      </span>
+      <span
+        aria-hidden="true"
+        style={{
+          position: 'relative', display: 'inline-block', width: 38, height: 22, flex: '0 0 auto',
+          borderRadius: 999, background: checked ? 'var(--success, #22c55e)' : 'var(--text-muted)',
+          transition: 'background .15s ease',
+        }}
+      >
+        <span style={{
+          position: 'absolute', top: 3, left: checked ? 19 : 3, width: 16, height: 16,
+          borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.28)', transition: 'left .15s ease',
+        }} />
+      </span>
+    </button>
+  );
+}
+
 /** One segment of a segmented control. Theme-token colours only, wraps at narrow widths. */
 function Segment({ label, title, active, disabled, onClick }: {
   label: string; title?: string; active: boolean; disabled?: boolean; onClick: () => void;

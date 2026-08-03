@@ -24,7 +24,7 @@ import Link from 'next/link';
 import { RoleGate } from '@/components/RoleGate';
 import { usePermission } from '@/lib/rbac';
 import {
-  ManagerAutonomyControls, ManagerEffectiveSummary,
+  ManagerAutonomyControls, ManagerEffectiveSummary, ManagerKillSwitch,
   type ManagerAutonomyValue,
 } from '@/components/manager/ManagerAutonomyControls';
 import {
@@ -125,40 +125,11 @@ function ManagerDefaultsInner() {
           <div style={sectionTitle}>{t('managerDefaultsTitle')}</div>
           <p style={{ ...helpText, marginBottom: 0 }}>{t('managerDefaultsSubtitle')}</p>
         </div>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={data.policy.enabled}
-          aria-label={tm('policy.enabled.label')}
+        <ManagerKillSwitch
+          checked={data.policy.enabled}
           disabled={saving || !allowed}
-          onClick={() => void save({ enabled: !data.policy.enabled })}
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 10, minHeight: 42, padding: '7px 10px 7px 12px',
-            border: `1px solid ${data.policy.enabled ? 'var(--success, #22c55e)' : 'var(--coral-bright, #ef4444)'}`,
-            borderRadius: 12, background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-            cursor: saving || !allowed ? 'default' : 'pointer', opacity: saving || !allowed ? 0.65 : 1,
-          }}
-        >
-          <span style={{ display: 'grid', gap: 2, textAlign: 'left' }}>
-            <strong style={{ fontSize: 12 }}>{t('managerDefaults')}</strong>
-            <small style={{ color: 'var(--text-muted)', fontSize: 10 }}>
-              {data.policy.enabled ? tm('policy.effective.managingOn') : tm('policy.effective.managingOff')}
-            </small>
-          </span>
-          <span
-            aria-hidden="true"
-            style={{
-              position: 'relative', display: 'inline-block', width: 38, height: 22, flex: '0 0 auto',
-              borderRadius: 999, background: data.policy.enabled ? 'var(--success, #22c55e)' : 'var(--text-muted)',
-              transition: 'background .15s ease',
-            }}
-          >
-            <span style={{
-              position: 'absolute', top: 3, left: data.policy.enabled ? 19 : 3, width: 16, height: 16,
-              borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.28)', transition: 'left .15s ease',
-            }} />
-          </span>
-        </button>
+          onChange={(enabled) => void save({ enabled })}
+        />
       </div>
 
       {error && (

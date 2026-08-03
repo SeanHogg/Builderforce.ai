@@ -9,7 +9,7 @@ import { RoleGate } from '@/components/RoleGate';
 import PillTabs, { type PillTab } from '@/components/PillTabs';
 import { usePermission } from '@/lib/rbac';
 import {
-  ManagerAutonomyControls, ManagerEffectiveSummary,
+  ManagerAutonomyControls, ManagerEffectiveSummary, ManagerKillSwitch,
   type ManagerAutonomyValue,
 } from '@/components/manager/ManagerAutonomyControls';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
@@ -310,6 +310,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
 
   const { config, policy, tenantPolicy, stats, backlog, actions, runTasks, autonomy, managerTypes, directives } = data;
   const workspaceManagerDisabled = !tenantPolicy.enabled;
+  const projectManagerEnabled = config?.enabled === true;
   const managerRunDisabled = !policy.enabled || data.managed === false;
   const managerValue = policy.managerRef ?? '';
   const managerAssignee = parseAssigneeSelectValue(managerValue);
@@ -568,8 +569,17 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       {/* ── Policy panel ── */}
       <RoleGate capability="manager.manage" variant="block">
         <div style={panelStyle}>
-          <div style={{ ...sectionTitleStyle, marginBottom: 4 }}>{t('policy.title')}</div>
-          <div style={{ ...mutedStyle, marginBottom: 16 }}>{t('policy.subtitle')}</div>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
+            <div style={{ minWidth: 0, flex: '1 1 360px' }}>
+              <div style={{ ...sectionTitleStyle, marginBottom: 4 }}>{t('policy.title')}</div>
+              <div style={mutedStyle}>{t('policy.subtitle')}</div>
+            </div>
+            <ManagerKillSwitch
+              checked={projectManagerEnabled}
+              disabled={saving || workspaceManagerDisabled}
+              onChange={(enabled) => savePatch({ enabled })}
+            />
+          </div>
 
           {/* Designate the manager */}
           <div style={{ marginBottom: 20 }}>
@@ -646,6 +656,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
             effective={policy}
             inherited={tenantPolicy}
             disabled={saving || workspaceManagerDisabled}
+            showEnabled={false}
             onChange={(patch) => savePatch(autonomyPatchToConfigPatch(patch))}
           />
           <div style={{ ...mutedStyle, marginTop: 12, fontSize: '0.72rem' }}>
