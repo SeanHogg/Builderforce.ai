@@ -1,125 +1,90 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #1531
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document: Retroactive Kanban Signoff for Task #579
 
 ## Problem & Goal
+The Business Analyst (Kevin) authored and committed the "Requirements" section of the PRD for task #579, fulfilling the `business-analyst` role's deliverable. However, all attempts to record the corresponding kanban signoff (`roleKey: business-analyst`, `laneKey: backlog`, `verdict: approved`) failed with HTTP 401 ("Token has been revoked or expired"). The accountability slot remains officially unfulfilled despite the completed work, creating an integrity gap in the board's tracking and downstream automation that depends on signoff states.
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+**Goal:** Enable the system (or an authorized operator) to retroactively apply the missing signoff to task #579, restoring board integrity without requiring the original contributor to re-authenticate or re-submit artifacts that already exist.
 
 ## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Kanban board maintainers / DevOps leads** responsible for board state integrity and reprocessing stuck workflows.
+- **Automated governance services** that consume signoff verdicts to enforce Definition of Done (DoD) gates.
 
 ## Scope
-
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- Provide a mechanism to record a signoff on task #579 for `roleKey=business-analyst` in `laneKey=backlog` with `verdict=approved`.
+- Link the signoff to existing deliverable evidence (the committed Requirements section in `builderforce/task-579`).
+- Ensure the signoff is idempotent and does not disrupt subsequent lane transitions for the same role.
 
 ## Functional Requirements
+1. **Retroactive Signoff Endpoint / Operation**
+   - The system shall accept an authenticated request to apply a signoff to a specific task, role, and lane, bypassing the normal requirement that the original `contributor` token is still valid.
+   - The signoff record must include a reference to the already-committed deliverable (branch `builderforce/task-579`, commit sha).
 
-### FR-1 — Mode Selection
+2. **Authorization Model**
+   - Only users or service accounts with a `ROLE_BOARD_ADMIN` or equivalent elevated permission may execute a retroactive signoff.
+   - Approval workflow (manual validation by an admin that the deliverable exists and is acceptable) must be logged.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+3. **Audit Trail & Signoff Payload**
+   - The signoff event must be persisted with:
+     - `roleKey`: `business-analyst`
+     - `laneKey`: `backlog`
+     - `verdict`: `approved`
+     - `contributor`: Kevin (user ID)
+     - `signoff_timestamp`: current time of retroactive application
+     - `evidence`: link to the PRD Requirements commit
+     - `applied_by`: admin user ID
+     - `reason`: "Retroactive application due to auth failure during original attempt; deliverable verified in commit <sha>."
+   - The event must appear in the task’s history timeline with a distinct flag indicating it was applied retroactively.
 
----
-
-### FR-2 — Guided (Interactive) Mode
-
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
-
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+4. **Board State Consistency**
+   - After the retroactive signoff is applied, the kanban board state for task #579 must reflect the fulfilled accountability slot identically to a normally recorded signoff.
+   - Any downstream DoD checks or automation triggered by `business-analyst:approved in backlog` must be equivalently satisfied.
 
 ## Acceptance Criteria
+1. **Happy Path – Retroactive Signoff Applied**
+   - *Given* an admin user authenticated with `ROLE_BOARD_ADMIN` and the commit `abc123` on `builderforce/task-579` containing the completed Requirements section
+   - *When* the admin calls the retroactive-signoff operation for task #579 with `roleKey=business-analyst`, `laneKey=backlog`, `verdict=approved`, contributor=Kevin, evidence=commit `abc123`
+   - *Then* the system returns HTTP 201, the task’s business-analyst slot in backlog shows `approved`, the event is logged with retroactive metadata, and any gating rules for `business-analyst:approved` are evaluated.
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+2. **Idempotency**
+   - *Given* the above signoff already exists
+   - *When* the same retroactive request is repeated
+   - *Then* the system returns HTTP 200 (or 409 with a clear message) and does not create a duplicate signoff or alter existing state.
 
----
+3. **Authorization**
+   - *Given* a user without `ROLE_BOARD_ADMIN`
+   - *When* they attempt a retroactive signoff
+   - *Then* the system returns HTTP 403 Forbidden.
+
+4. **No Disruption**
+   - *Given* the task later transitions the business-analyst role to a subsequent lane (e.g., `in-progress` or `review`)
+   - *When* the new signoff is recorded
+   - *Then* the retroactively applied `backlog:approved` does not interfere, and the board enforces correct lane sequencing.
 
 ## Out of Scope
+- Fixing the root cause of the 401 token revocation for the original contributor (this PRD covers only the data repair for task #579).
+- Building a general-purpose "override any signoff" API without guardrails—scope is strictly limited to admins resolving verified false-negative auth failures where deliverables are already auditable in version control.
+- Altering signoff records for any role other than `business-analyst` or lanes other than `backlog` on this task.
+- Auto-detection of similar situations across other tasks.
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+## Requirements
+
+_Owned by the business-analyst — to be authored._
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
