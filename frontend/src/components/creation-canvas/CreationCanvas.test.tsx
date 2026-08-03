@@ -106,7 +106,7 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
   it('makes Add useful when the object palette is already open', async () => {
     render(<CreationCanvas sessionId="palette-add-test" persistence="local" />);
 
-    const add = screen.getByRole('button', { name: 'Add' });
+    const add = screen.getByRole('button', { name: '＋ Add' });
     expect(add).toHaveAttribute('aria-expanded', 'true');
     fireEvent.click(add);
 
