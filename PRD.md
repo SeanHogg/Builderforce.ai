@@ -91,7 +91,67 @@ The service must validate the input object and throw a descriptive error if requ
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+_Owned by the business-analyst — authored by the BA role on task #650._
+
+### RQ1: Module & Export Shape
+- The module SHALL reside at `api/src/application/diagnostics/diagnosticReport.ts`.
+- It MUST export a named function `generateDiagnosticReport`.
+- All types (interfaces) used in the public API (`DiagnosticInput`, `DiagnosticReport`, `DiagnosticMetrics`, `Section`, `Trend`) MUST also be exported so consumers can type their call sites.
+
+### RQ2: Input Contract (`DiagnosticInput`)
+- `projectId` (string, required, non-empty).
+- `metrics` (object, required) — a `DiagnosticMetrics` bag where every sub-field is optional. Consumers supply only the data they have.
+- `previousMetrics` (object, optional) — same shape as `metrics`. When present, trend is derived by comparing each section's current score against the previous score.
+
+### RQ3: Output Contract (`DiagnosticReport`)
+- The returned object MUST contain:
+  - `generatedAt`: ISO‑8601 timestamp string.
+  - `projectId`: echo of the input.
+  - `sections`: an object with exactly six keys — `timeline`, `budget`, `quality`, `risk`, `team`, `alignment`.
+- Each section value MUST be a `Section` with:
+  - `score`: integer 0–100.
+  - `trend`: `"improving"` | `"stable"` | `"declining"`.
+  - `summary`: a non‑empty, human‑readable string (1‑3 sentences).
+
+### RQ4: Scoring Algorithm (per dimension)
+| Dimension  | Primary inputs                                          | Algorithm summary |
+|------------|--------------------------------------------------------|-------------------|
+| Timeline   | `completionPct`, `elapsedDays`, `plannedDurationDays`   | Schedule Performance Index (SPI = completion% ÷ elapsed%); linear score clamped to [0,100]. |
+| Budget     | `totalBudget`, `spentToDate`, `completionPct`           | Cost Performance Index (CPI = progress% ÷ spent%); linear score clamped to [0,100]. Falls back to burn-rate heuristic when totalBudget is absent. |
+| Quality    | `defectDensity`, `openDefects`, `changeFailureRatePct`, `mttrHours`, `testCoveragePct` | Weighted average of inverted / direct metrics; all sub-components clamped to [0,100]. |
+| Risk       | `aggregateRiskScore`, `riskCount`, `highSeverityRiskCount`, `mitigatedRiskCount` | Prefers aggregate score if supplied; otherwise derives from high-severity ratio and mitigation coverage. |
+| Team       | `velocity`, `targetVelocity`, `activeContributors`, `openRoles`, `churnRatePct` | Velocity ratio double-weighted; penalised by unfilled roles and churn. All clamped to [0,100]. |
+| Alignment  | `stakeholderAlignmentPct`, `okrLinkedPct`, `scopeChangeCount`, `acceptedScopeChanges` | Weighted average of direct percentages; scope‑churn penalty applied when acceptance rate is low. |
+
+- When a section has NO relevant data, its score MUST be `0` and its summary MUST indicate "no data available".
+- All scoring functions MUST be deterministic and free of side effects.
+
+### RQ5: Trend Derivation
+- When `previousMetrics` is provided: compare each section's current score to its previous score.
+  - Δ > +5 → `"improving"`
+  - Δ < −5 → `"declining"`
+  - Otherwise → `"stable"`
+- When `previousMetrics` is absent: apply an absolute-score heuristic:
+  - Score ≥ 70 → `"improving"`
+  - Score ≤ 40 → `"declining"`
+  - Otherwise → `"stable"`
+  - The summary MUST note that no previous data was available for comparison.
+
+### RQ6: Summary Generation
+- Every section summary MUST be constructed dynamically from the input metric values — no hard‑coded, generic strings.
+- Each summary MUST include: the key metric highlights for that dimension, the trend label, and the numeric score.
+
+### RQ7: Input Validation
+- Missing or empty `projectId` → thrown `Error` with descriptive message.
+- `metrics` absent or not an object → thrown `Error`.
+- Any supplied numeric metric outside its documented range (e.g. percentages not in [0,100], fractions not in [0,1], negative counts) → thrown `Error`.
+- The validation error type is `ValidationError` extending `Error` (name `"ValidationError"`).
+
+### RQ8: Non‑Functional
+- Pure function — identical inputs produce identical outputs.
+- No network, file‑system, or database access.
+- No runtime globals beyond `Date` and standard library.
+- JSON‑serializable output (no circular references).
 
 ## Design
 
