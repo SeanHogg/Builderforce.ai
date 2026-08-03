@@ -1,5 +1,6 @@
 'use client';
 
+import { usePathname } from 'next/navigation';
 import MarketingHeader from './MarketingHeader';
 import MobileBottomNav from './MobileBottomNav';
 import AppFooter from './AppFooter';
@@ -15,12 +16,20 @@ import AppFooter from './AppFooter';
  * authenticated shells; the header hamburger opens the full menu drawer.
  */
 export default function MarketingShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname() || '';
+  // Anonymous Creation Sessions are full-screen application surfaces even though
+  // they use the logged-out header. Keeping the marketing footer in this flex
+  // column leaves `height: 100%` without a definite parent height on mobile, so
+  // React Flow collapses to zero height (most visibly after a quota fallback
+  // creates a local Session). Give the canvas the remaining viewport instead.
+  const fullHeight = pathname.startsWith('/create/local-');
+
   return (
-    <div className="marketing-frame">
+    <div className={`marketing-frame${fullHeight ? ' marketing-frame-full-height' : ''}`}>
       <MarketingHeader />
-      <main className="marketing-content">
+      <main className={`marketing-content${fullHeight ? ' marketing-content-full-height' : ''}`}>
         {children}
-        <AppFooter variant="full" />
+        {!fullHeight && <AppFooter variant="full" />}
       </main>
       <MobileBottomNav />
     </div>
