@@ -52,6 +52,10 @@
 }
 .primaryButton, .fullButton { background: var(--canvas-blue); color: #fff; border-color: var(--canvas-blue); }
 .secondaryButton { background: var(--bg-elevated, #fff); color: var(--text-primary, var(--canvas-ink)); }
+.undoRedoGroup { display:inline-flex; gap:0; overflow:hidden; border:1px solid var(--border,var(--canvas-line)); border-radius:8px; }
+.undoRedoGroup .secondaryButton { width:36px; height:34px; display:grid; place-items:center; padding:0; border:0; border-radius:0; }
+.undoRedoGroup .secondaryButton + .secondaryButton { border-left:1px solid var(--border,var(--canvas-line)); }
+.undoRedoGroup .secondaryButton:hover,.undoRedoGroup .secondaryButton:focus-visible { z-index:1; background:var(--canvas-hover); outline:none; }
 .saveButtonShort { display:none; }
 .shareMenu {
   position: absolute; right: 76px; top: 42px; width: 300px; padding: 15px; background: var(--bg-elevated, #fff);
@@ -389,6 +393,7 @@
 }
 @media (max-width: 760px) {
   .canvasShell { flex:1; height:100%; min-height:0; }
+  .undoRedoGroup { display:none; }
   .saved,.secondaryButton { display:none; }
   .sessionBar { height:50px; gap:7px; padding:0 8px; }.sessionActions { flex:none; gap:5px; }.titleBlock { flex:1; gap:3px; min-width:0; }.titleBlock input { width:100%; min-width:0; padding-inline:5px; font-size:13px; }.spark,.collaborators { display:none; }
   .flowWrap { height:calc(100% - 50px); }

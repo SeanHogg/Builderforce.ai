@@ -1980,8 +1980,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             {(persistence === 'local' ? [{ userId: 'local', displayName: 'You', role: 'owner' as const }] : members).slice(0, 4).map((member, index) => <button key={member.userId} type="button" aria-pressed={followingUserId === member.userId} title={`${member.displayName || 'Collaborator'} · ${member.role}${member.userId !== currentUserId ? ' · click to follow viewport' : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button>)}
             <button aria-label="Invite collaborator" onClick={() => persistence === 'local' ? requireAccount('invite', 'Create an account to invite collaborators', 'Your canvas will be saved securely so teammates can join the same live session with roles, comments, and presence.') : setShareOpen(true)}>+</button>
           </div>
-          <button className={styles.secondaryButton} onClick={undo} aria-label="Undo canvas change">↶</button>
-          <button className={styles.secondaryButton} onClick={redo} aria-label="Redo canvas change">↷</button>
+          <div className={styles.undoRedoGroup} role="group" aria-label="Canvas history">
+            <button className={styles.secondaryButton} onClick={undo} aria-label="Undo canvas change">↶</button>
+            <button className={styles.secondaryButton} onClick={redo} aria-label="Redo canvas change">↷</button>
+          </div>
           <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-label={t('openDiagnostics')} onClick={() => setDiagnosticsOpen((value) => !value)}>⚠ <span>{t('diagnostics')}</span></button>
           <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}>•••</button>
           <button className={styles.secondaryButton} onClick={() => { if (persistence === 'local') requireAccount('share', 'Create an account to share this canvas', 'Your work is already safe on this device. An account saves it to your tenant and enables live collaboration, invitations, and access controls.'); else setShareOpen((value) => !value); setMoreOpen(false); }}>{t('share')} ▾</button>

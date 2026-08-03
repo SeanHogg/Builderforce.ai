@@ -52,6 +52,13 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     localStorage.clear();
   });
 
+  it('groups canvas history controls without changing their accessible actions', () => {
+    render(<CreationCanvas sessionId="history-controls-test" persistence="local" />);
+    const group = screen.getByRole('group', { name: 'Canvas history' });
+    expect(group).toContainElement(screen.getByRole('button', { name: 'Undo canvas change' }));
+    expect(group).toContainElement(screen.getByRole('button', { name: 'Redo canvas change' }));
+  });
+
   it('does not lock a newly created server object until autosave persists it', () => {
     const objectId = 'a5d80af7-bb65-45cc-bd2b-d190616fc904';
     expect(shouldAcquireCanvasObjectLock('server', objectId, true, new Set())).toBe(false);
