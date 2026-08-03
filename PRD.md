@@ -90,7 +90,42 @@ _Implementation complete - August 2025_
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+### API Requirements
+
+1. **Task Creation (POST /api/tasks)**
+   - MUST accept an optional `explicitDetach` boolean field in the request body
+   - MUST treat `parentTaskId: null` without `explicitDetach: true` as a no-operation (task created without a parent by default)
+   - MUST only detach (set parent to null) when `explicitDetach: true` is explicitly passed with `parentTaskId: null`
+
+2. **Task Update (PATCH /api/tasks/:id)**
+   - MUST accept an optional `explicitDetach` boolean field in the request body
+   - MUST preserve the existing parent task when `parentTaskId: null` is passed WITHOUT `explicitDetach: true`
+   - MUST detach the task (remove parent) when `parentTaskId: null` is passed WITH `explicitDetach: true`
+   - MUST allow re-parenting to a different task when `parentTaskId` is a valid task ID (with or without explicitDetach)
+
+3. **Backward Compatibility**
+   - MUST NOT break existing integrations that rely on the implicit detachment behavior
+   - Existing API consumers who do not pass `explicitDetach` should see no change in behavior for new tasks
+   - For updates, the default behavior now preserves the parent (safer default)
+
+### Data Requirements
+
+1. **Task Schema**
+   - No changes required to the underlying database schema
+   - The `explicitDetach` flag is a transient API parameter, not stored
+
+### Validation Requirements
+
+1. **Input Validation**
+   - MUST reject invalid `explicitDetach` values (non-boolean)
+   - MUST validate that `parentTaskId` refers to an existing task when not null
+   - MUST reject attempts to set a task as its own parent
+
+### Error Handling
+
+1. **Error Responses**
+   - MUST return appropriate HTTP status codes (400 for validation errors, 404 for not found)
+   - MUST provide meaningful error messages for detachment failures
 
 ## Design
 
