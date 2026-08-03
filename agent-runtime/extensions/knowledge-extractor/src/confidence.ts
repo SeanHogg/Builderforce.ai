@@ -71,7 +71,7 @@ function calculatePreliminaryScore(
   score += weights.deltaMagnitude * deltaScore;
 
   // Cross-mode corroboration weight (deterministic placeholder).
-  score += weights.crossModeCorroboration * (determineCorroboration(record) ? 1 : 0);
+  score += globalWeights.crossModeCorroboration * (determineCorroboration(record) ? 1 : 0);
 
   return score;
 }
