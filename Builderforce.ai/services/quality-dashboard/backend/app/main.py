@@ -246,9 +246,10 @@ async def get_bug_count_summary(
         total_open = len(open_bugs)
         newly_opened = sum(1 for b in open_bugs if b.get("status") == "New")
         resolved = [b for b in bugs_in_window if b.get("status") == "Resolved"]
+        resolved_count = len(resolved)
 
-        # Use integers directly; net_change is already an int
-        net_change = len(newly_opened) - len(resolved)
+        # net_change = newly opened - resolved
+        net_change = newly_opened - resolved_count
 
         severity_breakdown = {}
         for severity in severity_order:
@@ -257,8 +258,8 @@ async def get_bug_count_summary(
 
         return BugCountSummary(
             total_open=total_open,
-            newly_opened=len(newly_opened),
-            resolved=len(resolved),
+            newly_opened=newly_opened,
+            resolved=resolved_count,
             net_change=net_change,
             severity_breakdown=severity_breakdown
         )
