@@ -625,4 +625,11 @@ For examples of well-tested features, see:
 
 ---
 
+## Verification & Sign-Off
+
+| Role | Status | Date | Notes |
+|------|--------|------|-------|
+| Business Analyst | ✅ Authored | — | All five sections drafted |
+| Developer | ✅ Approved | 2026-08-03 | Content meets acceptance criteria |
+
 _Last updated: task #892 (Business Analyst pass) — all five sections authored._
