@@ -138,6 +138,40 @@ This effort covers:
 
 ---
 
+## Business Analyst Sign-Off
+
+> **Reviewer:** BA (Business Analyst) · task #353 · lane `ready`  
+> **Date:** 2026-07-30
+
+### Assessment
+
+The PRD is **complete, well-scoped, and ready for implementation** — every functional requirement (FR-1 through FR-5) and acceptance criterion (AC-1 through AC-10) is concrete, testable, and unambiguous. The response contract, error semantics, and validation rules are specified clearly enough that the implementer does not need to guess.
+
+### BLOCKER: Repo Mismatch
+
+The requirements **cannot be implemented** on the currently bound repository (`seanhogg/builderforce.ai`, branch `builderforce/task-353`) because the branch contains only `agent-runtime/` (Swabble Swift CLI + chat-channel extensions) and root documentation — it does **not** include:
+
+- The `api/` backend package
+- `clawRoutes.ts` (the file ROADMAP.md cites as the stub location at line 1103)
+- Any database migration runner or migrations directory
+- Any PostgreSQL/ORM layer (Drizzle, Prisma, Knex, etc.)
+
+The PRD calls for a Postgres-backed `channel-registry` table with `gen_random_uuid()`, `JSONB`, triggers, and a Hono/Express route handler. None of that infrastructure exists on this branch. A prior developer pass verified this exhaustively and filed **gap task #1218** to bring the `api/` backend onto the branch.
+
+### Verdict
+
+| Aspect | Verdict |
+|---|---|
+| PRD completeness | ✅ Complete — all FRs, ACs, contract shapes, and error semantics defined |
+| Requirements clarity | ✅ No ambiguity — each FR and AC is independently verifiable |
+| Out-of-scope boundaries | ✅ Well-delineated — the implementer knows what NOT to build |
+| Implementability | ⛔ BLOCKED — repo mismatch; `api/` backend missing from branch |
+| Blocker resolution | Gap task #1218 — re-dispatch #353 once the `api/` package is present |
+
+**Recommendation:** The PRD is approved as the specification for this feature. Ticket #353 should be returned to the backlog (`ready`) and re-dispatched once gap task #1218 is resolved and the `api/` backend is available on the branch for implementation.
+
+---
+
 ## Business Analyst Assessment (2026-07-30)
 
 ### PRD Quality: ACCEPTED
