@@ -4,6 +4,20 @@
 
 ---
 
+## 2026-08-02 — ✅ RESOLVED: a green local type-check meant nothing about CI — two checkers, gated inconsistently (api 2026.7.205, ui 2026.7.155, brain-embedded 2026.7.59)
+
+CI failed on `byoCredentialHealth.ts(352,5) TS2353: 'hostEgress' does not exist in type …`. The immediate cause was a mid-work snapshot committed as `a3f6220b` (api 2026.7.203) while the local-egress wiring was half-applied: the call site existed, `llmProxyForPlan`'s own `opts` param type did not yet. HEAD (2026.7.204) already carried both — verified by counting the declaration at each commit (1 at `a3f6220b`, 2 at HEAD) and by running CI's exact `npm run type-check`, which passes.
+
+**The reason it wasn't caught locally is the part worth fixing.** Every package carried TWO type-check scripts against TWO different implementations — `type-check` → `tsc --noEmit` and `typecheck:native` → `tsgo --noEmit` — and CI gated them inconsistently: `api` and the matrix packages on `tsc`, `frontend` on **`tsgo` only**. They are separate implementations that can disagree, so "I ran the type-checker and it was green" was not a statement about whether CI would pass, and a developer following the repo's tsgo convention could ship a `tsc` error to main. That is precisely what happened.
+
+`type-check` now runs **both** in `api`, `frontend` and `brain-embedded` — `tsgo --noEmit && tsc --noEmit`, fast checker first so it short-circuits, `tsc` still the authoritative gate. Nothing is weakened; the frontend gains a `tsc` gate it never had (verified passing before wiring it up). `ci.yml`'s frontend job moves off `typecheck:native` onto `type-check`, so one script name means the same thing everywhere. `typecheck:native` stays as the seconds-long local pre-check.
+
+Verified: `npm run type-check` exit 0 in all three packages (api ~92s for both checkers).
+
+Files: `api/package.json`, `frontend/package.json`, `brain-embedded/package.json`, `.github/workflows/ci.yml`.
+
+---
+
 ## 2026-08-02 — ✅ RESOLVED: Kimi Code works — the call is made from the user's own machine, not from our cloud (api 2026.7.204, ui 2026.7.154, agent-runtime 2026.7.12)
 
 Kimi's edge answers the Cloudflare Workers egress with an HTML 403 **before** the API reads the key; the byte-identical request from an ordinary machine gets a clean JSON reply. So the problem was never the credential or the headers — it was *where the packets come from*, and a source address is not something you can register or borrow: it is decided by where the request physically originates. The only honest fix is to originate it somewhere Kimi does not refuse.

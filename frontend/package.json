@@ -1,6 +1,6 @@
 {
   "name": "builderforce-frontend",
-  "version": "2026.7.154",
+  "version": "2026.7.155",
   "private": true,
   "scripts": {
     "clean": "node -e \"const fs=require('fs');const p='.next';if(fs.existsSync(p)){fs.rmSync(p,{recursive:true});console.log('Removed .next');}else{console.log('.next not found');}\"",
@@ -13,7 +13,8 @@
     "check:api-transport": "node scripts/check-api-transport.mjs",
     "test": "npm run check:api-transport && vitest run",
     "test:watch": "vitest",
-    "typecheck:native": "tsgo --noEmit"
+    "typecheck:native": "tsgo --noEmit",
+    "type-check": "tsgo --noEmit && tsc --noEmit"
   },
   "dependencies": {
     "@cloudflare/next-on-pages": "^1.13.16",

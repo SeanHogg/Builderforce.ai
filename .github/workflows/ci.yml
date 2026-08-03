@@ -158,9 +158,13 @@ jobs:
       - name: Install
         working-directory: frontend
         run: pnpm install --frozen-lockfile
+      # `type-check`, not `typecheck:native`: every package now runs BOTH checkers
+      # behind that one name. The two are different implementations and can disagree,
+      # so a package gated on only one is a package where a developer's green local
+      # run means nothing about CI — which is exactly how a TS2353 reached main.
       - name: Type-check
         working-directory: frontend
-        run: pnpm run typecheck:native
+        run: pnpm run type-check
       - name: Unit tests
         working-directory: frontend
         run: pnpm test
