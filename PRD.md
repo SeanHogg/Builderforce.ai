@@ -146,6 +146,47 @@ Deliver a repeatable, tool-assisted workflow to:
 
 ---
 
+## **7. Gap Analysis Results (Cloud Agent Validation PRD)**
+
+This section demonstrates the tool's capability by analyzing the Cloud Agent Validation PRD (`specs/builderforce/09-prd-cloud-agent-validation.md`), which contains 50 documented gaps.
+
+### Analysis Summary
+| Metric | Value |
+|--------|-------|
+| **Total gaps documented** | 50 |
+| **Resolved gaps** | 0 |
+| **Open gaps** | 50 |
+| **Resolution percentage** | 0% |
+
+### Gap Breakdown by Category
+| Category | Gap IDs | Count | P0 | P1 | P2 |
+|----------|---------|-------|----|----|-----|
+| **A. Dispatch, engine selection & routing** | GAP-D1 to GAP-D8 | 8 | 3 | 4 | 1 |
+| **B. Workspace, git & PR lifecycle** | GAP-W1 to GAP-W12 | 12 | 5 | 6 | 1 |
+| **C. Engine behaviour & parity** | GAP-E1 to GAP-E8 | 8 | 2 | 5 | 1 |
+| **D. Steering & cancellation** | GAP-S1 to GAP-S7 | 7 | 3 | 3 | 1 |
+| **E. Observability & telemetry integrity** | GAP-O1 to GAP-O7 | 7 | 3 | 3 | 1 |
+| **F. Billing, limits & BYO keys** | GAP-B1 to GAP-B4 | 4 | 2 | 2 | 0 |
+| **G. Security & isolation** | GAP-G1 to GAP-G3 | 3 | 2 | 1 | 0 |
+| **H. Validation harness itself** | GAP-V1 | 1 | 1 | 0 | 0 |
+
+### Critical Findings
+- **23 P0 (Blocker) gaps** — These block GA and must be resolved first
+- **24 P1 (High) gaps** — Must-fix before broad rollout
+- **3 P2 (Medium/Low) gaps** — Hardening items
+
+### Gap Quantification Output
+```
+Total: 50 | Resolved: 0 | Open: 50 | % Resolved: 0%
+
+By Severity:
+- P0 (Blocker): 23 open
+- P1 (High): 24 open  
+- P2 (Medium/Low): 3 open
+```
+
+---
+
 ## **Appendices**
 ### **Appendix A: Pre-defined Gap Types**
 | Category          | Description                                                                       | Severity |
