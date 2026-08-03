@@ -148,7 +148,7 @@ export function calculateDatasetReport(
       fieldTotals[fieldName].total++;
       // Check if field is present in individual record
       const value = record[fieldName];
-      if (isValuePresent(value, new Set<string>())) {
+      if (isValuePresent(value, placeholders)) {
         fieldTotals[fieldName].completed++;
       }
     }
