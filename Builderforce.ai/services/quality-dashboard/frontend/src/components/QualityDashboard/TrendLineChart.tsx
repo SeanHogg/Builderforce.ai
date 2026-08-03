@@ -148,62 +148,66 @@ export function TrendLineChart({
               );
             })}
 
-            {/* Lines */}
-            {allData.map((series) => {
-              if (series.values.length === 0) return null;
+            {/* Lines - only render visible series (FR-3) */}
+            {allData
+              .filter((series) => series.visible)
+              .map((series) => {
+                if (series.values.length === 0) return null;
 
-              let points = "";
-              series.values.forEach((value, index) => {
-                const x = getXPosition(index, series.values.length);
-                const y = getYPosition(value);
+                let points = "";
+                series.values.forEach((value, index) => {
+                  const x = getXPosition(index, series.values.length);
+                  const y = getYPosition(value);
 
-                if (points === "") {
-                  points += `M ${x} ${y}`;
-                } else {
-                  points += ` L ${x} ${y}`;
-                }
-              });
+                  if (points === "") {
+                    points += `M ${x} ${y}`;
+                  } else {
+                    points += ` L ${x} ${y}`;
+                  }
+                });
 
-              return (
-                <path
-                  key={series.series}
-                  d={points}
-                  fill="none"
-                  stroke={series.color}
-                  strokeWidth="2"
-                  className="trend-line"
-                >
-                  <animate
-                    attributeName="stroke-dasharray"
-                    from="1000"
-                    to="0"
-                    dur="1s"
-                    fill="freeze"
+                return (
+                  <path
+                    key={series.series}
+                    d={points}
+                    fill="none"
+                    stroke={series.color}
+                    strokeWidth="2"
+                    className="trend-line"
+                  >
+                    <animate
+                      attributeName="stroke-dasharray"
+                      from="1000"
+                      to="0"
+                      dur="1s"
+                      fill="freeze"
+                    />
+                  </path>
+                );
+              })}
+
+            {/* Data points - only render visible series (FR-3) */}
+            {allData
+              .filter((series) => series.visible)
+              .map((series) => (
+                series.values.map((value, index) => (
+                  <circle
+                    key={`${series.series}-${index}`}
+                    cx={getXPosition(index, series.values.length)}
+                    cy={getYPosition(value)}
+                    r="4"
+                    fill={series.color}
+                    className="data-point"
                   />
-                </path>
-              );
-            })}
+                ))
+              ))}
 
-            {/* Data points */}
-            {allData.map((series) => (
-              series.values.map((value, index) => (
-                <circle
-                  key={`${series.series}-${index}`}
-                  cx={getXPosition(index, series.values.length)}
-                  cy={getYPosition(value)}
-                  r="4"
-                  fill={series.color}
-                  className="data-point"
-                />
-              ))
-            ))}
-
-            {/* Legend */}
+            {/* Legend - show all series with visibility indication (FR-3) */}
             {allData.map((series) => (
               <g
                 key={series.series}
                 transform="translate(10, 10)"
-                className="legend-group"
+                className={`legend-group ${series.visible ? "" : "legend-hidden"}`}
               >
                 <line
                   x1={0}
@@ -212,13 +216,21 @@ export function TrendLineChart({
                   y2={0}
                   stroke={series.color}
                   strokeWidth="2"
+                  strokeDasharray={series.visible ? "none" : "4,4"}
+                  opacity={series.visible ? 1 : 0.4}
                 />
-                <circle cx={5} cy={0} r="3" fill={series.color} />
+                <circle 
+                  cx={5} 
+                  cy={0} 
+                  r="3" 
+                  fill={series.color}
+                  opacity={series.visible ? 1 : 0.4}
+                />
                 <text
                   x={90}
                   y={4}
                   fontSize="11"
-                  fill="#374151"
+                  fill={series.visible ? "#374151" : "#9ca3af"}
                   className="legend-text"
                 >
                   {series.series}
