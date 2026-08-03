@@ -273,6 +273,14 @@ describe('canonicalModelId (superseded → live successor)', () => {
   });
 });
 
+describe('retired vendor models', () => {
+  it('does not advertise or route NVIDIA GLM 5.1 after its end of life', () => {
+    expect(catalogEntry('z-ai/glm-5.1')).toBeNull();
+    expect(FREE_MODEL_POOL).not.toContain('z-ai/glm-5.1');
+    expect(CODING_MODEL_POOL).not.toContain('z-ai/glm-5.1');
+  });
+});
+
 /**
  * `parseModel` is the single reader of an execution payload's pinned model, and an
  * execution payload is durable state written at dispatch and read back arbitrarily

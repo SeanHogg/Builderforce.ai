@@ -1,0 +1,116 @@
+.canvas {
+  position: relative;
+  width: 100%;
+  height: calc(100vh - 150px);
+  min-height: 640px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 30% 20%, color-mix(in srgb, var(--coral-bright) 7%, transparent), transparent 32%),
+    var(--bg-deep);
+}
+
+.canvas :global(.react-flow__pane) { cursor: grab; }
+.canvas :global(.react-flow__pane.dragging) { cursor: grabbing; }
+.canvas :global(.react-flow__controls) {
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .22);
+}
+.canvas :global(.react-flow__controls-button) {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  border-color: var(--border-subtle);
+}
+.canvas :global(.react-flow__minimap) {
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  background: var(--bg-elevated);
+}
+
+.node {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, .28);
+}
+
+.nodeSelected {
+  border-color: color-mix(in srgb, var(--coral-bright) 70%, var(--border-subtle));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--coral-bright) 35%, transparent), 0 22px 56px rgba(0, 0, 0, .32);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 43px;
+  padding: 0 12px;
+  flex: 0 0 auto;
+  background: color-mix(in srgb, var(--bg-surface) 88%, transparent);
+  border-bottom: 1px solid var(--border-subtle);
+  cursor: grab;
+  user-select: none;
+}
+
+.header:active { cursor: grabbing; }
+.icon { color: var(--coral-bright); font-size: 15px; }
+.title { font: 600 13px/1 var(--font-display); }
+.subtitle {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.spacer { flex: 1; }
+.close {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  color: var(--text-muted);
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+.close:hover { color: var(--text-primary); background: var(--bg-hover); }
+
+.body {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+  cursor: default;
+}
+
+.toolbar {
+  position: absolute;
+  z-index: 5;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  background: color-mix(in srgb, var(--bg-elevated) 92%, transparent);
+  border: 1px solid var(--border-subtle);
+  border-radius: 11px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .2);
+  backdrop-filter: blur(12px);
+}
+
+@media (max-width: 760px) {
+  .canvas { height: calc(100vh - 126px); min-height: 520px; }
+  .toolbar { left: 10px; right: 10px; overflow-x: auto; }
+}

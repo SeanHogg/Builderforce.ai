@@ -126,6 +126,75 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByText('Faster onboarding')).toBeInTheDocument();
   });
 
+  it('visualizes single-project quality diagnostics and recommendations', () => {
+    render(<CreationNode
+      id="quality-node" type="creation" selected={false} dragging={false} zIndex={0}
+      selectable deletable draggable isConnectable positionAbsoluteX={0} positionAbsoluteY={0}
+      data={{
+        kind: 'diagnostics', title: 'BuilderForce.AI quality', qualityScore: 72, qualityLabel: 'Needs attention',
+        qualityHeadline: 'Two checks found release risk', diagnosticCount: 2, gapCount: 3,
+        diagnostics: [
+          { toolId: 'code-quality', name: 'Code quality', icon: '◆', score: 84, scoreLabel: 'Healthy', headline: 'Core checks pass', gapCount: 1, recommendations: [{ title: 'Raise branch coverage', detail: 'Cover the error paths.' }] },
+          { toolId: 'delivery', name: 'Delivery readiness', icon: '△', score: 60, scoreLabel: 'At risk', headline: 'CI is unstable', gapCount: 2, recommendations: [{ title: 'Fix failing CI', detail: 'Resolve the release-blocking tests.' }] },
+        ],
+        recommendations: [{ title: 'Fix failing CI', detail: 'Resolve the release-blocking tests.', diagnostic: 'Delivery readiness' }],
+      }}
+    />);
+
+    expect(screen.getByRole('region', { name: 'Project quality' })).toHaveTextContent('72/100');
+    expect(screen.getByRole('region', { name: 'Diagnostics findings' })).toHaveTextContent('Delivery readiness');
+    expect(screen.getByRole('region', { name: 'Diagnostic next steps' })).toHaveTextContent('Fix failing CI');
+  });
+
+  it('compares quality across projects and prioritizes recommendations', () => {
+    render(<CreationNode
+      id="comparison-node" type="creation" selected={false} dragging={false} zIndex={0}
+      selectable deletable draggable isConnectable positionAbsoluteX={0} positionAbsoluteY={0}
+      data={{ kind: 'projectComparison', title: 'Portfolio quality', fetchedAt: '2026-08-02T12:00:00.000Z', projects: [
+        { name: 'Alpha', status: 'active', qualityScore: 88, qualityLabel: 'Healthy', diagnosticCount: 2, gapCount: 1, progress: 70, open: 4, blocked: 0, diagnostics: [{ toolId: 'quality', name: 'Code quality', score: 88, gapCount: 1 }], recommendations: [{ title: 'Add edge-case tests', detail: 'Close the remaining gap.', diagnostic: 'Code quality', score: 88 }] },
+        { name: 'Beta', status: 'active', qualityScore: 52, qualityLabel: 'At risk', diagnosticCount: 2, gapCount: 4, progress: 30, open: 9, blocked: 3, diagnostics: [{ toolId: 'delivery', name: 'Delivery readiness', score: 52, gapCount: 4 }], recommendations: [{ title: 'Stabilize CI first', detail: 'The build blocks delivery.', diagnostic: 'Delivery readiness', score: 52 }] },
+      ] }}
+    />);
+
+    expect(screen.getByRole('region', { name: 'Portfolio quality summary' })).toHaveTextContent('70/100');
+    expect(screen.getByRole('region', { name: 'Prioritized recommendations' })).toHaveTextContent('Stabilize CI first');
+    expect(screen.getByText('Lowest-scoring evidence first')).toBeInTheDocument();
+  });
+
+  it('visualizes every diagnostic with its result and next steps', () => {
+    render(<CreationNode
+      id="diagnostics-node"
+      type="creation"
+      data={{
+        kind: 'diagnostics', title: 'Build diagnostics', summary: 'Build completed with issues',
+        diagnostics: [
+          { id: 'ts-1', severity: 'error', message: 'Type mismatch', detail: 'Expected string but received number', path: 'src/app.ts', line: 42, result: 'Failed', recommendation: 'Correct the value type.' },
+          { id: 'lint-1', severity: 'warning', message: 'Unused import', result: 'Warning' },
+          { id: 'test-1', severity: 'passed', message: 'Unit tests', result: 'Passed' },
+        ],
+        results: ['18 checks ran', '1 check failed'],
+        nextSteps: ['Fix the failing type check', 'Run the suite again'],
+      }}
+      selected={false}
+      dragging={false}
+      zIndex={0}
+      selectable
+      deletable
+      draggable
+      isConnectable
+      positionAbsoluteX={0}
+      positionAbsoluteY={0}
+    />);
+
+    expect(screen.getByRole('region', { name: 'Diagnostics findings' })).toHaveTextContent('Type mismatch');
+    expect(screen.getByRole('region', { name: 'Diagnostics findings' })).toHaveTextContent('Unused import');
+    expect(screen.getByRole('region', { name: 'Diagnostics findings' })).toHaveTextContent('Unit tests');
+    expect(screen.getByRole('region', { name: 'Diagnostic results' })).toHaveTextContent('Build completed with issues');
+    expect(screen.getByRole('region', { name: 'Diagnostic results' })).toHaveTextContent('18 checks ran');
+    expect(screen.getByRole('region', { name: 'Diagnostic next steps' })).toHaveTextContent('Fix the failing type check');
+    expect(screen.getByRole('region', { name: 'Diagnostic next steps' })).toHaveTextContent('Correct the value type.');
+  });
+
   it('applies the inspector project view selection to the canvas widget', () => {
     render(<CreationCanvas sessionId="project-view-test" persistence="local" />);
     fireEvent.click(screen.getByRole('button', { name: 'Project' }));
@@ -431,13 +500,13 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByRole('region', { name: 'Recently learned' })).toHaveTextContent('Nothing learned yet');
     expect(screen.getByText('Hippocampus')).toBeInTheDocument();
     expect(screen.getByText(/blueprint works without an account/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Add creation & training pipeline' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Start guided setup' }));
 
-    expect(screen.getByText('Evermind creation and training pipeline added')).toBeInTheDocument();
-    expect(screen.getByText('Tokenizer build')).toBeInTheDocument();
-    expect(screen.getByText('Evermind tuning run')).toBeInTheDocument();
-    expect(screen.getByText('Model quality gate')).toBeInTheDocument();
-    expect(screen.getByText('Training telemetry')).toBeInTheDocument();
+    expect(screen.getByText(/Step 1 of 5.*choose a CSV or TSV/i)).toBeInTheDocument();
+    expect(screen.getByText('Tokenize examples')).toBeInTheDocument();
+    expect(screen.getByText('Distil & tune')).toBeInTheDocument();
+    expect(screen.getByText('Quality gate')).toBeInTheDocument();
+    expect(screen.getByText('Learning telemetry')).toBeInTheDocument();
   });
 
   it('keeps anonymous object comments unblocked as a save-later collaboration step', () => {

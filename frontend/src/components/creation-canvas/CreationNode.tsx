@@ -3,7 +3,7 @@
 import { Handle, NodeResizer, Position, type Node, type NodeProps } from '@xyflow/react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { BrainTimeline } from '@seanhogg/builderforce-brain-ui';
+import { BrainTimeline, evermindLearnedStatus, evermindNextAction } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import type { CreationNodeData } from './types';
@@ -98,8 +98,10 @@ function ProjectBody({ data }: { data: CreationNodeData }) {
   const velocity = data.velocity == null ? '42 pts' : `${String(data.velocity)}${typeof data.velocity === 'number' ? ' pts' : ''}`;
   const health = textValue(data.health, textValue(data.healthTier, 'On track'));
   const feedback = Array.isArray(data.feedback) ? data.feedback : Array.isArray(data.items) ? data.items : [];
+  const quality = <ProjectQualitySummary data={data} />;
 
   if (lens === 'delivery') return <div className={styles.projectLensBody} data-project-lens={lens}>
+    {quality}
     <div className={styles.projectHealth}>
       <div><small>Status</small><b>{status}</b></div>
       <div><small>Open work</small><b>{open}</b></div>
@@ -109,6 +111,7 @@ function ProjectBody({ data }: { data: CreationNodeData }) {
   </div>;
 
   if (lens === 'metrics') return <div className={styles.projectLensBody} data-project-lens={lens}>
+    {quality}
     <div className={styles.projectHealth}>
       <div><small>Maturity</small><b>{maturity}</b></div>
       <div><small>Velocity</small><b>{velocity}</b></div>
@@ -118,6 +121,7 @@ function ProjectBody({ data }: { data: CreationNodeData }) {
   </div>;
 
   if (lens === 'customer-feedback') return <div className={styles.projectLensBody} data-project-lens={lens}>
+    {quality}
     <div className={styles.projectFeedback}>
       <small>Customer feedback</small>
       {feedback.length
@@ -127,12 +131,36 @@ function ProjectBody({ data }: { data: CreationNodeData }) {
   </div>;
 
   return <div className={styles.projectLensBody} data-project-lens={lens}>
+    {quality}
     <div className={styles.projectOverview}>
       <span><small>Status</small><b>{status}</b></span>
       <span><small>Project context</small><b>Everything</b></span>
     </div>
     <p>{data.subtitle || 'Optional project context. Expand to see related work.'}</p>
   </div>;
+}
+
+function scoreTone(score: unknown): 'good' | 'watch' | 'risk' | 'empty' {
+  if (score == null || score === '') return 'empty';
+  const value = Number(score);
+  if (!Number.isFinite(value)) return 'empty';
+  if (value >= 80) return 'good';
+  if (value >= 60) return 'watch';
+  return 'risk';
+}
+
+function ProjectQualitySummary({ data }: { data: CreationNodeData }) {
+  const score = Number(data.qualityScore);
+  const hasScore = data.qualityScore != null && Number.isFinite(score);
+  const diagnosticCount = Number(data.diagnosticCount || (Array.isArray(data.diagnostics) ? data.diagnostics.length : 0));
+  const gapCount = Number(data.gapCount || 0);
+  return <section className={styles.projectQuality} data-tone={scoreTone(data.qualityScore)} aria-label="Project quality">
+    <div className={styles.qualityGauge} style={{ '--quality-score': hasScore ? Math.max(0, Math.min(100, score)) : 0 } as React.CSSProperties}>
+      <strong>{hasScore ? Math.round(score) : '—'}</strong><small>/100</small>
+    </div>
+    <div><small>Quality</small><b>{textValue(data.qualityLabel, hasScore ? (score >= 80 ? 'Healthy' : score >= 60 ? 'Needs attention' : 'At risk') : 'Not assessed')}</b><p>{textValue(data.qualityHeadline, diagnosticCount ? `${diagnosticCount} diagnostics analyzed` : 'Load diagnostics to establish quality.')}</p></div>
+    <span><b>{diagnosticCount}</b><small>diagnostics</small></span><span><b>{gapCount}</b><small>open gaps</small></span>
+  </section>;
 }
 
 function optionLabel(value: unknown, labels: Record<string, string>, fallback: string): string {
@@ -237,6 +265,103 @@ function EvaluationBody({ data }: { data: CreationNodeData }) {
   );
 }
 
+type CanvasDiagnostic = {
+  id: string;
+  title: string;
+  detail: string;
+  severity: string;
+  result: string;
+  nextStep: string;
+  location: string;
+};
+
+function diagnosticText(item: Record<string, unknown>, fields: string[]): string {
+  for (const field of fields) {
+    const value = item[field];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  }
+  return '';
+}
+
+function diagnosticItems(data: CreationNodeData): CanvasDiagnostic[] {
+  const source = [data.diagnostics, data.findings, data.checks, data.items]
+    .flatMap((value) => Array.isArray(value) ? value : []);
+  const normalized = source.map((value, index) => {
+    const item = asRecord(value, { message: typeof value === 'string' ? value : `Diagnostic ${index + 1}` });
+    const line = diagnosticText(item, ['line']);
+    const path = diagnosticText(item, ['path', 'file', 'source']);
+    return {
+      id: diagnosticText(item, ['id', 'checkId', 'code']) || String(index),
+      title: diagnosticText(item, ['title', 'message', 'issue', 'name', 'check', 'label']) || `Diagnostic ${index + 1}`,
+      detail: diagnosticText(item, ['detail', 'description', 'evidence', 'content']),
+      severity: diagnosticText(item, ['severity', 'level', 'type']) || 'info',
+      result: diagnosticText(item, ['result', 'outcome', 'status', 'actual']),
+      nextStep: diagnosticText(item, ['nextStep', 'recommendation', 'remediation', 'action', 'fix']),
+      location: [path, line ? `line ${line}` : ''].filter(Boolean).join(' · '),
+    };
+  });
+  return normalized.filter((item, index, all) => all.findIndex((candidate) => candidate.id === item.id && candidate.title === item.title && candidate.detail === item.detail) === index);
+}
+
+function diagnosticList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap((item) => {
+    if (typeof item === 'string' && item.trim()) return [item.trim()];
+    const record = asRecord(item, {});
+    const text = diagnosticText(record, ['title', 'message', 'step', 'action', 'recommendation', 'result', 'status']);
+    return text ? [text] : [];
+  });
+  return typeof value === 'string' && value.trim() ? [value.trim()] : [];
+}
+
+function DiagnosticsBody({ data }: { data: CreationNodeData }) {
+  const diagnostics = diagnosticItems(data);
+  const explicitResults = diagnosticList(data.results);
+  const topResult = textValue(data.result, textValue(data.summary, textValue(data.verdict, authoredText(data) || '')));
+  const results = [...(topResult ? [topResult] : []), ...explicitResults];
+  const nextSteps = [
+    ...diagnosticList(data.nextSteps),
+    ...diagnosticList(data.recommendations),
+    ...diagnosticList(data.actions),
+    ...diagnosticList(data.remediation),
+    ...diagnostics.map((item) => item.nextStep).filter(Boolean),
+    ...(Array.isArray(data.diagnostics) ? data.diagnostics.flatMap((value) => {
+      const item = asRecord(value, {});
+      return diagnosticList(item.recommendations);
+    }) : []),
+  ].filter((step, index, all) => all.indexOf(step) === index);
+  const issueCount = data.gapCount == null ? diagnostics.filter((item) => !/^(hint|info|information|passed|pass|success|ok)$/i.test(item.severity) && !/^(passed|pass|success|ok)$/i.test(item.result)).length : Number(data.gapCount);
+
+  return <div className={styles.canvasDiagnosticsBody}>
+    {data.qualityScore != null && <ProjectQualitySummary data={data} />}
+    <div className={styles.diagnosticOverview}>
+      <span><small>Checks</small><b>{diagnostics.length}</b></span>
+      <span><small>Issues</small><b>{issueCount}</b></span>
+      <span><small>Next steps</small><b>{nextSteps.length}</b></span>
+    </div>
+    <div className={styles.diagnosticColumns}>
+      <section aria-label="Diagnostics findings">
+        <h4>Diagnostics</h4>
+        <div className={styles.diagnosticList}>{diagnostics.length ? diagnostics.map((item) => <article key={item.id} data-severity={item.severity.toLowerCase()}>
+          <span aria-hidden>{/^(error|critical|high)$/i.test(item.severity) ? '×' : /^(warning|warn|medium)$/i.test(item.severity) ? '!' : /^(passed|pass|success|ok)$/i.test(item.severity) ? '✓' : 'i'}</span>
+          <div><b>{item.title}</b>{item.detail && <p>{item.detail}</p>}{item.location && <small>{item.location}</small>}</div>
+        </article>) : <p className={styles.diagnosticEmpty}>No individual diagnostics recorded.</p>}</div>
+      </section>
+      <section aria-label="Diagnostic results">
+        <h4>Results</h4>
+        <div className={styles.diagnosticList}>{results.length || diagnostics.some((item) => item.result) ? <>
+          {results.map((result, index) => <article key={`${result}-${index}`} data-severity="result"><span aria-hidden>✓</span><div><b>{result}</b></div></article>)}
+          {diagnostics.filter((item) => item.result).map((item) => <article key={`result-${item.id}`} data-severity="result"><span aria-hidden>→</span><div><b>{item.title}</b><p>{item.result}</p></div></article>)}
+        </> : <p className={styles.diagnosticEmpty}>Run the diagnostics to capture results.</p>}</div>
+      </section>
+      <section aria-label="Diagnostic next steps">
+        <h4>Next steps</h4>
+        <ol className={styles.diagnosticSteps}>{nextSteps.length ? nextSteps.map((step, index) => <li key={`${step}-${index}`}><span>{index + 1}</span><p>{step}</p></li>) : <li className={styles.diagnosticEmpty}>No follow-up action recorded.</li>}</ol>
+      </section>
+    </div>
+  </div>;
+}
+
 function EvermindBody({ data }: { data: CreationNodeData }) {
   const version = typeof data.evermindVersion === 'number' ? data.evermindVersion : 0;
   const contributions = typeof data.contributions === 'number' ? data.contributions : 0;
@@ -248,26 +373,39 @@ function EvermindBody({ data }: { data: CreationNodeData }) {
       const item = value as Record<string, unknown>;
       return [{
         id: String(item.id ?? index),
-        kind: item.kind === 'delta' ? 'delta' : 'text',
+        kind: item.kind === 'delta' ? 'delta' as const : 'text' as const,
         version: typeof item.version === 'number' ? item.version : version,
         prompt: textValue(item.prompt),
         text: textValue(item.text),
         teacher: textValue(item.teacherModel),
         distilled: item.distilled === true,
+        fitted: item.fitted !== false,
+        weight: typeof item.weight === 'number' ? item.weight : 1,
+        at: typeof item.at === 'number' ? item.at : 0,
+        skipReason: textValue(item.skipReason),
+        skipDetail: textValue(item.skipDetail),
+        attemptedTeacherModel: textValue(item.attemptedTeacherModel),
       }];
-    }).slice(0, 3)
+    }).slice(0, 12)
     : [];
-  const mapNodeCount = Math.min(12, Math.max(recent.length, contributions ? Math.min(contributions, 12) : 0));
-  const mapNodes = Array.from({ length: mapNodeCount }, (_, index) => ({
-    left: [25, 39, 55, 68, 32, 48, 62, 75, 42, 58, 70, 29][index]!,
-    top: [27, 18, 29, 22, 43, 46, 40, 51, 61, 64, 69, 72][index]!,
-    kind: recent[index]?.kind || (index % 3 === 0 ? 'delta' : 'text'),
-  }));
+  const textLearnings = recent.filter((item) => item.kind === 'text');
+  const fittedLearnings = recent.filter((item) => item.fitted);
+  const teacherModel = textValue(data.teacherModel);
   const connected = data.learningMode !== 'offline-frozen' && data.status !== 'Blueprint';
   const inference = data.inferenceEnabled === true;
   const lastLearned = typeof data.lastLearnedAt === 'string' && !Number.isNaN(Date.parse(data.lastLearnedAt))
     ? new Date(data.lastLearnedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })
     : 'Not yet';
+  const nextAction = evermindNextAction({
+    seeded: data.evermindSeeded === true || version > 0,
+    inferenceEnabled: inference,
+    mode: data.learningMode === 'offline-frozen' ? 'offline-frozen' : 'connected',
+    pending,
+    teacherModel: teacherModel || null,
+    quarantinedAt: textValue(data.quarantinedAt) || null,
+    recent,
+    eval: data.evalPoint && typeof data.evalPoint === 'object' && typeof (data.evalPoint as Record<string, unknown>).delta === 'number' ? { delta: Number((data.evalPoint as Record<string, unknown>).delta) } : null,
+  });
   return <div className={styles.evermindBody}>
     <div className={styles.evermindMetrics}>
       <span><small>Model</small><b>{version ? `v${version}` : 'Blueprint'}</b></span>
@@ -278,24 +416,40 @@ function EvermindBody({ data }: { data: CreationNodeData }) {
     <div className={styles.evermindKnowledge}>
       <section className={styles.evermindMap} aria-label={`Knowledge map with ${contributions} learned contributions`}>
         <div className={styles.evermindMapHeading}><b>Knowledge map</b><span className={connected ? styles.evermindLearning : styles.evermindFrozen}>{connected ? '● Learning' : '○ Waiting'}</span></div>
-        <div className={styles.evermindBrain}>
-          <span className={styles.evermindRegionCortex}>Cortex<small>reasoning</small></span>
-          <span className={styles.evermindRegionMemory}>Hippocampus<small>knowledge</small></span>
-          <span className={styles.evermindRegionLimbic}>Limbic<small>response</small></span>
-          {mapNodes.map((node, index) => <i key={index} data-kind={node.kind} style={{ left: `${node.left}%`, top: `${node.top}%` }} />)}
-          {!mapNodes.length && <em>Learned knowledge will light up here</em>}
-        </div>
-        <div className={styles.evermindLegend}><span><i data-kind="text" /> Learned fact</span><span><i data-kind="delta" /> Model update</span></div>
+        <svg className={styles.evermindBrain} viewBox="0 0 320 172" role="img" aria-label="Evermind cognitive regions and learned knowledge">
+          <g className={styles.evermindMapEdges}>
+            {[[160,28],[264,62],[54,73],[88,143],[155,148],[220,140],[272,112]].map(([x,y], index) => <line key={index} x1="160" y1="88" x2={x} y2={y} />)}
+            <line className={styles.evermindSetpointEdge} x1="54" y1="73" x2="88" y2="143" /><line className={styles.evermindSetpointEdge} x1="54" y1="73" x2="155" y2="148" /><line className={styles.evermindSetpointEdge} x1="54" y1="73" x2="220" y2="140" /><line className={styles.evermindSetpointEdge} x1="54" y1="73" x2="272" y2="112" />
+          </g>
+          {teacherModel && <g className={styles.evermindTeacherFlow}><rect x="222" y="3" width="91" height="18" rx="9" /><text x="267" y="15" textAnchor="middle">Teacher · {teacherModel.slice(0, 13)}</text><path d="M267 22 L265 36 L264 40" /><text x="285" y="35">distils</text></g>}
+          <EvermindRegion x={160} y={28} r={22} className={styles.regionNeocortex} label="Neocortex" count={fittedLearnings.length} />
+          <EvermindRegion x={264} y={62} r={21} className={styles.regionHippocampus} label="Hippocampus" count={textLearnings.length} />
+          <EvermindRegion x={54} y={73} r={18} className={styles.regionPersonality} label="Personality" />
+          <EvermindRegion x={88} y={143} r={13} className={styles.regionAmygdala} label="Amygdala" small />
+          <EvermindRegion x={155} y={148} r={13} className={styles.regionHypothalamus} label="Hypothalamus" small />
+          <EvermindRegion x={220} y={140} r={13} className={styles.regionThalamus} label="Thalamus" small />
+          <EvermindRegion x={272} y={112} r={13} className={styles.regionBasal} label="Basal ganglia" small />
+          <g className={styles.evermindCore}><circle cx="160" cy="88" r="25" /><circle cx="160" cy="88" r="19" /><text x="160" y="86" textAnchor="middle">🧠</text><text x="160" y="99" textAnchor="middle">Evermind</text></g>
+          {fittedLearnings.map((item, index) => <circle key={`neo-${item.id}`} className={styles.evermindKnowledgeNode} cx={122 + (index % 3) * 17} cy={18 + Math.floor(index / 3) * 12} r={3 + Math.min(item.weight, 3) / 2}><title>{item.kind === 'delta' ? 'Weight delta' : item.prompt || 'Fitted learning'}</title></circle>)}
+          {textLearnings.map((item, index) => <circle key={`hip-${item.id}`} className={styles.evermindMemoryNode} cx={280 + (index % 2) * 11} cy={43 + Math.floor(index / 2) * 13} r={3 + Math.min(item.weight, 3) / 2}><title>{item.prompt || item.text || 'Learned text'}</title></circle>)}
+          {!recent.length && <text className={styles.evermindDormantLabel} x="160" y="123" textAnchor="middle">Teach or run work to grow this map</text>}
+        </svg>
+        <div className={styles.evermindLegend}><span><i data-kind="delta" /> Reasoning weights</span><span><i data-kind="text" /> Learned text</span><span><i data-kind="affect" /> Live affect</span></div>
       </section>
       <section className={styles.evermindRecent} aria-label="Recently learned">
-        <div className={styles.evermindMapHeading}><b>Recently learned</b><span>{recent.length ? `${recent.length} shown` : 'Empty'}</span></div>
-        {recent.length ? recent.map((item) => <article key={item.id}>
-          <i data-kind={item.kind} />
-          <div><b>{item.prompt || (item.kind === 'delta' ? 'Agent model update' : 'Untitled learning')}</b><p>{item.text || (item.kind === 'delta' ? 'Weights adapted from an agent run.' : 'No readable learning text was retained.')}</p></div>
-          <small>v{item.version}{item.distilled ? ` · ${item.teacher || 'teacher'}` : ' · self'}</small>
-        </article>) : <div className={styles.evermindEmpty}><span>◇</span><b>Nothing learned yet</b><p>Connect project work or teach an example. New knowledge appears here with its source.</p></div>}
+        <div className={styles.evermindMapHeading}><b>Recently learned</b><span>{recent.length ? `${Math.min(recent.length, 3)} shown` : 'Empty'}</span></div>
+        {recent.length ? recent.slice(0, 3).map((item) => {
+          const learnedStatus = evermindLearnedStatus(item);
+          const faulted = learnedStatus.state === 'fault';
+          return <article key={item.id} data-learning-state={learnedStatus.state}>
+            <i data-kind={item.kind} />
+            <div><b>{item.prompt || (item.kind === 'delta' ? 'Agent model update' : 'Untitled learning')}</b><p>{faulted ? `Teacher produced no usable answer${learnedStatus.reason ? ` · ${learnedStatus.reason.replaceAll('_', ' ')}` : ''}` : item.text || (item.kind === 'delta' ? 'Weights adapted from an agent run.' : 'No readable learning text was retained.')}</p></div>
+            <small>v{item.version}<strong>{learnedStatus.state === 'distilled' ? `via ${learnedStatus.teacherModel || 'teacher'}` : learnedStatus.state === 'fault' ? 'Not distilled' : learnedStatus.state === 'self' ? 'Self-learned' : 'Weight delta'}</strong></small>
+          </article>;
+        }) : <div className={styles.evermindEmpty}><span>◇</span><b>Nothing learned yet</b><p>Teach an example or complete agent work. Each learning will show what changed and where it came from.</p></div>}
       </section>
     </div>
+    <section className={styles.evermindNextAction} data-tone={nextAction.tone} aria-label="Recommended next action"><span>Recommended next action</span><div><b>{nextAction.title}</b><p>{nextAction.detail}</p></div><strong>Open Details → {nextAction.destination}</strong></section>
     <div className={styles.evermindSignals}>
       <span><i className={connected ? styles.signalOn : styles.signalOff} /><small>Learning</small><b>{connected ? 'Connected' : 'Waiting'}</b></span>
       <span><i className={inference ? styles.signalOn : styles.signalOff} /><small>Replies</small><b>{inference ? 'On Evermind' : 'Off'}</b></span>
@@ -304,20 +458,38 @@ function EvermindBody({ data }: { data: CreationNodeData }) {
   </div>;
 }
 
+function EvermindRegion({ x, y, r, className, label, count, small = false }: { x: number; y: number; r: number; className: string; label: string; count?: number; small?: boolean }) {
+  return <g className={`${styles.evermindRegion} ${className}`}><circle cx={x} cy={y} r={r + 4} /><circle cx={x} cy={y} r={r} /><text x={x} y={y + (small ? 2 : 3)} textAnchor="middle">{label}</text>{count != null && count > 0 && <g className={styles.evermindRegionCount}><circle cx={x + r - 1} cy={y - r + 1} r="7" /><text x={x + r - 1} y={y - r + 3} textAnchor="middle">{count}</text></g>}</g>;
+}
+
 function ProjectComparisonBody({ data }: { data: CreationNodeData }) {
   const projects = Array.isArray(data.projects) ? data.projects as Array<Record<string, unknown>> : [];
+  const scored = projects.filter((project) => project.qualityScore != null && Number.isFinite(Number(project.qualityScore)));
+  const portfolioScore = scored.length ? Math.round(scored.reduce((sum, project) => sum + Number(project.qualityScore), 0) / scored.length) : null;
+  const totalGaps = projects.reduce((sum, project) => sum + Number(project.gapCount || 0), 0);
+  const recommendations: Array<Record<string, unknown> & { project: string }> = projects.flatMap((project) => Array.isArray(project.recommendations)
+    ? project.recommendations.map((item) => ({ project: String(project.name || 'Project'), ...asRecord(item, {}) }))
+    : []).sort((a, b) => Number((a as Record<string, unknown>).score ?? 101) - Number((b as Record<string, unknown>).score ?? 101)).slice(0, 5);
   return <div className={styles.comparisonBody}>
+    <section className={styles.portfolioQuality} data-tone={scoreTone(portfolioScore)} aria-label="Portfolio quality summary">
+      <div><small>Portfolio quality</small><strong>{portfolioScore == null ? '—' : portfolioScore}<em>/100</em></strong><span>{scored.length} of {projects.length} projects assessed</span></div>
+      <div><small>Quality coverage</small><strong>{projects.reduce((sum, project) => sum + Number(project.diagnosticCount || 0), 0)}</strong><span>diagnostic results</span></div>
+      <div><small>Attention needed</small><strong>{totalGaps}</strong><span>open quality gaps</span></div>
+    </section>
     <div className={styles.comparisonTable}>
-      <b>Project</b><b>Progress</b><b>Health</b><b>Velocity</b><b>Open / blocked</b>
+      <b>Project</b><b>Quality</b><b>Diagnostics</b><b>Delivery</b><b>Open / blocked</b>
       {projects.flatMap((project, index) => [
-        <strong key={`${index}-name`}>{String(project.name || `Project ${index + 1}`)}</strong>,
-        <span key={`${index}-progress`}>{Number(project.progress || 0)}%</span>,
-        <span key={`${index}-health`}>{project.health == null ? 'No data' : `${Number(project.health)}/100`}</span>,
-        <span key={`${index}-velocity`}>{project.velocity == null ? '—' : `${Number(project.velocity)} pts`}</span>,
+        <strong key={`${index}-name`}><i data-tone={scoreTone(project.qualityScore)} />{String(project.name || `Project ${index + 1}`)}<small>{String(project.status || 'active')}</small></strong>,
+        <span className={styles.comparisonScore} key={`${index}-quality`}><b>{project.qualityScore == null ? '—' : Math.round(Number(project.qualityScore))}</b><i><em style={{ width: `${Math.max(0, Math.min(100, Number(project.qualityScore || 0)))}%` }} /></i><small>{String(project.qualityLabel || 'Not assessed')}</small></span>,
+        <span key={`${index}-diagnostics`}><b>{Number(project.diagnosticCount || 0)} results</b><small>{Number(project.gapCount || 0)} gaps</small></span>,
+        <span key={`${index}-delivery`}><b>{Number(project.progress || 0)}%</b><small>{project.velocity == null ? 'No velocity' : `${Number(project.velocity)} pts velocity`}</small></span>,
         <span key={`${index}-work`}>{Number(project.open || 0)} / {Number(project.blocked || 0)}</span>,
       ])}
     </div>
-    {projects.map((project, index) => <p key={`${index}-features`}><b>{String(project.name)}:</b> {Array.isArray(project.features) && project.features.length ? project.features.map(String).join(' · ') : 'No feature/task evidence available'}</p>)}
+    <div className={styles.diagnosticMatrix}>
+      {projects.map((project, index) => <section key={`${index}-diagnostics`}><header><b>{String(project.name)}</b><span>{Number(project.gapCount || 0)} gaps</span></header>{Array.isArray(project.diagnostics) && project.diagnostics.length ? project.diagnostics.slice(0, 5).map((raw, diagnosticIndex) => { const diagnostic = asRecord(raw, {}); return <div key={`${String(diagnostic.toolId)}-${diagnosticIndex}`}><span>{String(diagnostic.icon || '◆')} {String(diagnostic.name || 'Diagnostic')}</span><b data-tone={scoreTone(diagnostic.score)}>{diagnostic.score == null ? '—' : Math.round(Number(diagnostic.score))}</b><small>{Number(diagnostic.gapCount || 0)} gaps</small></div>; }) : <p>No diagnostics run yet</p>}</section>)}
+    </div>
+    <section className={styles.qualityRecommendations} aria-label="Prioritized recommendations"><header><b>Recommended next actions</b><span>Lowest-scoring evidence first</span></header>{recommendations.length ? recommendations.map((recommendation, index) => <article key={`${recommendation.project}-${String(recommendation.title)}-${index}`}><i>{index + 1}</i><div><b>{String(recommendation.title || 'Review diagnostic finding')}</b><p>{String(recommendation.detail || recommendation.diagnostic || '')}</p></div><span>{recommendation.project}<small>{String(recommendation.diagnostic || '')}</small></span></article>) : <p>Run quality diagnostics on a project to generate evidence-backed recommendations.</p>}</section>
     <small>Freshness: {typeof data.fetchedAt === 'string' ? new Date(data.fetchedAt).toLocaleString() : 'Draft'} · Sources attached</small>
   </div>;
 }
@@ -351,8 +523,8 @@ type CreationNodeProps = NodeProps<CreationFlowNode> & {
 };
 
 export function CreationNode({ id, data, selected, width, height, canRun = true, onRun }: CreationNodeProps) {
-  const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'report', 'evaluation', 'roadmap', 'slides', 'document', 'prd', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame'].includes(data.kind);
-  const specialized = new Set(['workflow','website','prototype','dashboard','chart','report','evaluation','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame']);
+  const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'prd', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame'].includes(data.kind);
+  const specialized = new Set(['workflow','website','prototype','dashboard','chart','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame']);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || '#f8f6ff'), borderColor: String(data.frameBorder || '#9d8bea') } : undefined;
   const measuredStyle = { ...frameStyle, ...(typeof width === 'number' && width > 0 ? { width } : {}), ...(typeof height === 'number' && height > 0 ? { height } : {}) };
   const chatMessages = data.kind === 'chat' ? brainTimelineMessages(data) : [];
@@ -362,6 +534,7 @@ export function CreationNode({ id, data, selected, width, height, canRun = true,
       <NodeResizer isVisible={selected} minWidth={240} minHeight={130} lineClassName={styles.resizeLine} handleClassName={styles.resizeHandle} />
       <Handle type="target" position={Position.Left} className={styles.handle} />
       <header className={styles.nodeHeader}>
+        {typeof data.pipelineStep === 'number' && <span className={styles.pipelineStepBadge}>{data.pipelineStep}</span>}
         <span className={styles.nodeIcon}>{creationObjectDefinition(data.kind).icon}</span>
         <strong>{data.title}</strong>
         {data.status && <span className={styles.status}>{data.status}</span>}
@@ -375,10 +548,12 @@ export function CreationNode({ id, data, selected, width, height, canRun = true,
         <button className={styles.moreButton} aria-label={`More options for ${data.title}`}>•••</button>
       </header>
       <div className={styles.nodeBody}>
+        {typeof data.pipelineStep === 'number' && <div className={styles.pipelineNodeGuide} data-start={data.pipelineStart === true ? 'true' : 'false'}><b>{data.pipelineStart === true ? 'Start here' : `Step ${data.pipelineStep} of 5`}</b><span>{String(data.pipelineInstruction || 'Select this card to see the next action in Details.')}</span></div>}
         {data.kind === 'workflow' && <WorkflowBody data={data} />}
         {(data.kind === 'website' || data.kind === 'prototype') && <WebsiteBody data={data} />}
         {(data.kind === 'dashboard' || data.kind === 'chart' || data.kind === 'report') && <DashboardBody data={data} />}
         {data.kind === 'evaluation' && <EvaluationBody data={data} />}
+        {data.kind === 'diagnostics' && <DiagnosticsBody data={data} />}
         {data.kind === 'agent' && <AgentBody data={data} />}
         {data.kind === 'staff' && <><div className={styles.personRow}><span className={styles.avatar} style={{ background: data.accent }}>{data.title.slice(0, 1)}</span><b>{data.role}</b><span className={styles.presence} /></div><small>Current focus</small><p>{data.focus}</p></>}
         {data.kind === 'chat' && <div className={`${styles.chatHistory} nowheel nodrag`} role="log" aria-label="Brain chat history" tabIndex={0}>

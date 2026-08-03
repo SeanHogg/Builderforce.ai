@@ -7,7 +7,7 @@
     "migrate": "tsx scripts/migrate.ts",
     "predeploy": "npm run migrate",
     "deploy": "npx wrangler deploy",
-    "type-check": "tsc --noEmit",
+    "type-check": "tsgo --noEmit && tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck:native": "tsgo --noEmit"

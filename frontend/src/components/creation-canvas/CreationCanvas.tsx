@@ -22,7 +22,7 @@ import '@xyflow/react/dist/style.css';
 import { CreationNode, type CreationFlowNode } from './CreationNode';
 import type { CreationNodeData, CreationObjectKind } from './types';
 import styles from './CreationCanvas.module.css';
-import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, workflowDefinitions, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
+import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, toolsApi, workflowDefinitions, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import { creationGraphFromSnapshot, creationStorageKey, readLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
 import { runCreationCanvasAi } from '@/lib/creationCanvasAi';
 import type { BrainAction, BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
@@ -1108,15 +1108,26 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const projectId = Number(node.data.resourceId!.slice('project:'.length));
         const project = byId.get(projectId);
         if (!project) throw new Error(`Project ${projectId} is no longer accessible`);
-        const [velocity, tasks] = await Promise.all([
+        const [velocity, tasks, quality] = await Promise.all([
           agileMetricsApi.derivedVelocity(projectId).catch(() => null),
           tasksApi.list(projectId).catch(() => []),
+          toolsApi.projectScore(projectId).catch(() => null),
         ]);
         const health = computeProjectHealth(project);
+        const diagnostics = quality?.diagnostics.map((diagnostic) => ({
+          toolId: diagnostic.toolId, name: diagnostic.name, icon: diagnostic.icon,
+          score: diagnostic.score, scoreLabel: diagnostic.scoreLabel, headline: diagnostic.headline,
+          gapCount: diagnostic.gapCount, remediation: diagnostic.remediation,
+          recommendations: diagnostic.result.recommendations,
+        })) ?? [];
         return {
           projectId, name: project.name, status: project.status || 'active', progress: health.progressPct,
           health: health.healthScore, healthTier: health.tier, open: health.open, blocked: health.blocked,
           overdue: health.overdue, velocity: velocity?.averageVelocity ?? null,
+          qualityScore: quality?.result.score ?? null, qualityLabel: quality?.result.scoreLabel ?? null,
+          qualityHeadline: quality?.result.headline ?? 'No quality diagnostics have been run', diagnostics,
+          diagnosticCount: diagnostics.length, gapCount: diagnostics.reduce((total, diagnostic) => total + diagnostic.gapCount, 0),
+          recommendations: diagnostics.flatMap((diagnostic) => diagnostic.recommendations.map((recommendation) => ({ ...recommendation, diagnostic: diagnostic.name, score: diagnostic.score }))).slice(0, 6),
           features: tasks.filter((task) => !['done', 'closed', 'cancelled'].includes(task.status)).slice(0, 5).map((task) => task.title),
         };
       }));
@@ -1127,15 +1138,55 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           { label: `${project.name} project metrics`, resource: `/api/projects`, projectId: project.projectId },
           { label: `${project.name} velocity`, resource: `/api/agile/velocity/derived?projectId=${project.projectId}`, projectId: project.projectId },
           { label: `${project.name} feature/task evidence`, resource: `/api/tasks?projectId=${project.projectId}`, projectId: project.projectId },
+          { label: `${project.name} quality diagnostics`, resource: `/api/tools/projects/${project.projectId}/score`, projectId: project.projectId },
         ]),
       };
-      setNodes((current) => [...current, comparison]);
+      setNodes((current) => [...current.map((node) => {
+        const projectId = node.data.resourceId?.match(/^project:(\d+)$/)?.[1];
+        const project = projectId ? evidence.find((candidate) => candidate.projectId === Number(projectId)) : null;
+        return project ? { ...node, data: { ...node.data, ...project, qualityUpdatedAt: comparison.data.fetchedAt } } : node;
+      }), comparison]);
       setEdges((current) => [...current, ...projectNodes.map((project) => ({ id: crypto.randomUUID(), source: project.id, target: comparison.id, label: 'compared in', type: 'smoothstep', animated: true }))]);
       setSelectedId(comparison.id);
       setNotice('Evidence-backed project comparison added');
       trackActivity('creation_projects_compared', { sessionId, metadata: { clientSurface: 'web', projectCount: projectNodes.length } });
     }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not compare projects'));
   }, [nodes, persistence, requireAccount, setEdges, setNodes]);
+
+  const loadProjectQuality = useCallback(() => {
+    const project = selectedNode?.data.kind === 'project' ? selectedNode : null;
+    const projectId = project?.data.resourceId?.match(/^project:(\d+)$/)?.[1];
+    if (!project || !projectId) {
+      if (persistence === 'local') requireAccount('diagnostics', 'Create an account to load project quality', 'Quality diagnostics are saved against a canonical project and include current results, gaps, and remediation recommendations.');
+      else setNotice('Attach a saved project before loading quality diagnostics');
+      return;
+    }
+    setNotice('Loading project quality diagnostics…');
+    void toolsApi.projectScore(Number(projectId)).then((quality) => {
+      const diagnostics = quality.diagnostics.map((diagnostic) => ({
+        toolId: diagnostic.toolId, name: diagnostic.name, icon: diagnostic.icon,
+        score: diagnostic.score, scoreLabel: diagnostic.scoreLabel, headline: diagnostic.headline,
+        gapCount: diagnostic.gapCount, remediation: diagnostic.remediation,
+        recommendations: diagnostic.result.recommendations,
+      }));
+      const recommendations = diagnostics.flatMap((diagnostic) => diagnostic.recommendations.map((recommendation) => ({ ...recommendation, diagnostic: diagnostic.name, score: diagnostic.score }))).slice(0, 8);
+      const qualityData = {
+        qualityScore: quality.result.score, qualityLabel: quality.result.scoreLabel,
+        qualityHeadline: quality.result.headline, diagnosticCount: diagnostics.length,
+        gapCount: diagnostics.reduce((total, diagnostic) => total + diagnostic.gapCount, 0),
+        diagnostics, recommendations, qualityUpdatedAt: new Date().toISOString(),
+      };
+      const existing = nodes.find((node) => node.data.kind === 'diagnostics' && node.data.qualityProjectId === Number(projectId));
+      const qualityNode = existing ?? newNode('diagnostics', { x: project.position.x + 390, y: project.position.y });
+      qualityNode.data = { ...qualityNode.data, ...qualityData, qualityProjectId: Number(projectId), title: `${project.data.title} quality`, status: diagnostics.length ? 'Diagnostics current' : 'Not yet assessed', items: diagnostics };
+      setNodes((current) => existing
+        ? current.map((node) => node.id === project.id ? { ...node, data: { ...node.data, ...qualityData } } : node.id === existing.id ? { ...node, data: qualityNode.data } : node)
+        : [...current.map((node) => node.id === project.id ? { ...node, data: { ...node.data, ...qualityData } } : node), qualityNode]);
+      if (!existing) setEdges((current) => [...current, { id: crypto.randomUUID(), source: project.id, target: qualityNode.id, label: 'quality evidence', type: 'smoothstep', animated: true }]);
+      setSelectedId(qualityNode.id);
+      setNotice(diagnostics.length ? `${diagnostics.length} quality diagnostics added to the canvas` : 'Quality card added — run a diagnostic to establish a score');
+    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not load project quality'));
+  }, [nodes, persistence, requireAccount, selectedNode, setEdges, setNodes]);
 
   const deliverMockup = useCallback(() => {
     if (!selectedNode || (selectedNode.data.kind !== 'mockup' && selectedNode.data.kind !== 'mockupSet')) return;
@@ -1231,12 +1282,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         title: head.name || selectedNode.data.title,
         status: head.seeded ? `v${head.version} · ${head.mode}` : 'Ready to seed',
         evermindVersion: head.version,
+        evermindSeeded: head.seeded,
         contributions: head.contributions,
         pendingContributions: activity.pending,
         recentLearnings: activity.recent,
         trainingLoss: activity.training[0]?.loss,
         learningMode: head.mode,
         lastLearnedAt: head.lastLearnedAt,
+        quarantinedAt: head.quarantinedAt,
+        quarantineReason: head.quarantineReason,
+        evalPoint: activity.eval,
         inferenceEnabled: head.inferenceEnabled,
         teacherModel: head.teacherModel || undefined,
       });
@@ -1246,22 +1301,40 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   const expandEvermindPipeline = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'evermind') return;
-    const specs: Array<{ kind: CreationObjectKind; title: string; status: string; x: number; y: number; label: string }> = [
-      { kind: 'dataset', title: `${selectedNode.data.title} training corpus`, status: 'Add data', x: -430, y: -20, label: 'trains on' },
-      { kind: 'workflow', title: 'Tokenizer build', status: 'Ready', x: -20, y: 240, label: 'tokenizes' },
-      { kind: 'workflow', title: 'Evermind tuning run', status: 'Ready', x: 390, y: 240, label: 'tunes' },
-      { kind: 'evaluation', title: 'Model quality gate', status: 'Awaiting model', x: 800, y: 15, label: 'evaluates' },
-      { kind: 'dashboard', title: 'Training telemetry', status: 'Live', x: 800, y: 300, label: 'measures' },
+    const existing = nodes.filter((node) => node.data.modelPipelineFor === selectedNode.id);
+    if (existing.length) {
+      const start = existing.find((node) => node.data.pipelineStep === 1) ?? existing[0]!;
+      setSelectedId(start.id); setSelectedIds([start.id]);
+      window.setTimeout(() => void flowRef.current?.fitView({ nodes: [selectedNode, ...existing].map((node) => ({ id: node.id })), padding: .16, duration: 400 }), 0);
+      setNotice('Step 1 of 5 — choose a CSV or TSV in the Details panel');
+      return;
+    }
+    const specs: Array<{ kind: CreationObjectKind; title: string; status: string; x: number; y: number; step: number; instruction: string; detail?: Partial<CreationNodeData> }> = [
+      { kind: 'dataset', title: `${selectedNode.data.title} training corpus`, status: 'Start here', x: -430, y: -20, step: 1, instruction: 'Select this card, then import a CSV or TSV in Details.' },
+      { kind: 'workflow', title: 'Tokenize examples', status: 'Waiting for data', x: -430, y: 250, step: 2, instruction: 'Review the corpus, then run tokenization.', detail: { steps: [{ title: 'Inspect corpus', status: 'Waiting' }, { title: 'Build vocabulary', status: 'Waiting' }, { title: 'Verify tokens', status: 'Waiting' }] } },
+      { kind: 'workflow', title: 'Distil & tune', status: 'Waiting for tokens', x: -20, y: 250, step: 3, instruction: 'Choose self-learning or a teacher, then adapt the model.', detail: { steps: [{ title: 'Choose teacher', status: 'Waiting' }, { title: 'Create exemplars', status: 'Waiting' }, { title: 'Adapt weights', status: 'Waiting' }, { title: 'Save version', status: 'Waiting' }] } },
+      { kind: 'evaluation', title: 'Quality gate', status: 'Waiting for version', x: 800, y: 15, step: 4, instruction: 'Test learned answers before enabling replies.', detail: { verdict: 'Awaiting trained version', gaps: ['Run readiness prompts', 'Compare held-out loss', 'Approve the version'], recommendations: ['Complete distillation and tuning first.', 'Check regression against prior learnings.', 'Publish only after the model is coherent.'] } },
+      { kind: 'dashboard', title: 'Learning telemetry', status: 'Waiting for run', x: 800, y: 300, step: 5, instruction: 'Observe loss, weight movement, and learned examples.', detail: { kpis: [{ label: 'Loss', value: '—', trend: 'After first run' }, { label: 'Weights moved', value: '—', trend: 'After first run' }, { label: 'Examples learned', value: '0', trend: 'No run yet' }], chartLabels: ['No training runs yet'], chartValues: [0] } },
     ];
     const created = specs.map((spec) => {
       const node = newNode(spec.kind, { x: selectedNode.position.x + spec.x, y: selectedNode.position.y + spec.y });
-      node.data = { ...node.data, title: spec.title, status: spec.status, modelPipelineFor: selectedNode.id };
-      return { node, label: spec.label };
+      node.data = { ...node.data, ...spec.detail, title: spec.title, status: spec.status, modelPipelineFor: selectedNode.id, pipelineStep: spec.step, pipelineStart: spec.step === 1, pipelineInstruction: spec.instruction };
+      return node;
     });
-    setNodes((current) => [...current, ...created.map(({ node }) => node)]);
-    setEdges((current) => [...current, ...created.map(({ node, label }) => ({ id: crypto.randomUUID(), source: node.data.kind === 'dataset' ? node.id : selectedNode.id, target: node.data.kind === 'dataset' ? selectedNode.id : node.id, label, type: 'smoothstep', animated: true }))]);
-    setNotice('Evermind creation and training pipeline added');
-  }, [selectedNode, setEdges, setNodes]);
+    const [dataset, tokenizer, tuning, evaluation, telemetry] = created;
+    const sequence = [
+      { source: dataset!.id, target: tokenizer!.id, label: '1 · examples' },
+      { source: tokenizer!.id, target: tuning!.id, label: '2 · tokens' },
+      { source: tuning!.id, target: selectedNode.id, label: '3 · learned version' },
+      { source: selectedNode.id, target: evaluation!.id, label: '4 · test' },
+      { source: evaluation!.id, target: telemetry!.id, label: '5 · observe' },
+    ];
+    setNodes((current) => [...current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, pipelineExpanded: true } } : node), ...created]);
+    setEdges((current) => [...current, ...sequence.map((edge) => ({ ...edge, id: crypto.randomUUID(), type: 'smoothstep', animated: true, markerEnd: { type: MarkerType.ArrowClosed } }))]);
+    setSelectedId(dataset!.id); setSelectedIds([dataset!.id]);
+    window.setTimeout(() => void flowRef.current?.fitView({ nodes: [selectedNode, ...created].map((node) => ({ id: node.id })), padding: .16, duration: 400 }), 0);
+    setNotice('Step 1 of 5 — choose a CSV or TSV in the Details panel');
+  }, [nodes, selectedNode, setEdges, setNodes]);
 
   const startStandup = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'standup') return;
@@ -2022,7 +2095,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           })}</div>
         </aside>}
 
-        {!presentMode && selectedNode && <Inspector node={selectedNode} nodes={nodes} edges={edges} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => setSelectedId(null)} onRun={runWorkflow} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}
+        {!presentMode && selectedNode && <Inspector node={selectedNode} nodes={nodes} edges={edges} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => setSelectedId(null)} onRun={runWorkflow} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}
 
         {workflowFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label="Workflow focus editor">
           <header><div><strong>Edit Workflow on Canvas</strong><small>Changes save to the canonical Workflow definition.</small></div><button type="button" onClick={() => setWorkflowFocus(null)} aria-label="Close workflow editor">×</button></header>
@@ -2101,7 +2174,7 @@ function BrainObjectDetails({ node, nodes, edges, timeline, trace }: { node: Cre
   </div>;
 }
 
-function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onEditWorkflow, onSaveAgent, onSaveFramePreset, onExpandProject, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onAttachEvermindProject, onExpandEvermindPipeline, onStartStandup }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onEditWorkflow: () => void; onSaveAgent: () => void; onSaveFramePreset: () => void; onExpandProject: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onStartStandup: () => void }) {
+function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onEditWorkflow, onSaveAgent, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onAttachEvermindProject, onExpandEvermindPipeline, onStartStandup }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onEditWorkflow: () => void; onSaveAgent: () => void; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onStartStandup: () => void }) {
   const kind = node.data.kind;
   const [tab, setTab] = useState<'details' | 'activity'>('details');
   const [accessStatus, setAccessStatus] = useState('');
@@ -2247,6 +2320,7 @@ function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persis
       {tab === 'details' ? <fieldset className={styles.inspectorFields} disabled={!editable}>
       {node.data.redacted === true && <><p className={styles.inspectorHint}>You can see this object’s position, but its source is no longer available to you.</p><button type="button" className={styles.fullButton} disabled={persistence !== 'server' || !!accessStatus} onClick={() => { setAccessStatus('Requesting…'); void creationSessionsApi.requestObjectAccess(sessionId, node.id).then(() => setAccessStatus('Access requested')).catch((error) => setAccessStatus(error instanceof Error ? error.message : 'Request failed')); }}>{accessStatus || 'Request access'}</button></>}
       <label>Name<input value={node.data.title} onChange={(event) => onChange({ title: event.target.value })} /></label>
+      {typeof node.data.pipelineStep === 'number' && <section className={styles.pipelineInspectorGuide} aria-label={`Evermind setup step ${node.data.pipelineStep}`}><span>Evermind setup · {node.data.pipelineStep} of 5</span><strong>{node.data.pipelineStart === true ? 'Start here' : node.data.title}</strong><p>{String(node.data.pipelineInstruction || 'Complete this stage, then follow the numbered connection to the next card.')}</p>{node.data.pipelineStep === 1 && node.data.status !== 'Imported' && <small>Use the file picker directly below to begin.</small>}{node.data.pipelineStep === 1 && node.data.status === 'Imported' && <small>Data is ready. Follow “2 · examples” to Tokenize examples.</small>}</section>}
       {kind === 'chat' && <BrainObjectDetails node={node} nodes={nodes} edges={edges} timeline={timeline} trace={brainTrace} />}
       {kind === 'agent' && <>
         <label>Model<select value={node.data.model || 'gpt-4o'} onChange={(event) => onChange({ model: event.target.value })}><option>gpt-4o</option><option>claude-3.5-sonnet</option><option>Evermind</option></select></label>
@@ -2261,7 +2335,7 @@ function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persis
       {kind === 'dashboard' && <><label>Date range<select value={typeof node.data.dateRange === 'string' ? node.data.dateRange : '30d'} onChange={(event) => onChange({ dateRange: event.target.value })}><option value="30d">Last 30 days</option><option value="7d">Last 7 days</option><option value="qtd">Quarter to date</option></select></label><button type="button" className={styles.fullButton} onClick={() => onChange({ fetchedAt: new Date().toISOString(), status: 'Live' })}>Refresh live data</button></>}
       {kind === 'dataset' && <><label>Import CSV or TSV<input type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onImportDataset(file); }} /></label><p className={styles.inspectorHint}>A safe preview of up to 500 rows is stored with this session. Connect it to a dashboard or ask Brain to analyze it.</p><button className={styles.fullButton} onClick={onVisualizeDataset}>Create visualization</button></>}
       {kind === 'voice' && <CanvasVoiceInspector node={node} persistence={persistence} onChange={onChange} />}
-      {kind === 'project' && <><label>Project view<select value={typeof node.data.projectLens === 'string' ? node.data.projectLens : 'everything'} onChange={(event) => onChange({ projectLens: event.target.value })}><option value="everything">Everything</option><option value="delivery">Delivery</option><option value="metrics">Metrics</option><option value="customer-feedback">Customer feedback</option></select></label><p className={styles.inspectorHint}>Project context is optional. Add its related items to compare work visually or ground Brain in the complete project.</p><button className={styles.fullButton} onClick={onExpandProject}>Add all related items</button><button className={styles.fullButton} onClick={onCompareProjects}>Compare projects on canvas</button></>}
+      {kind === 'project' && <><label>Project view<select value={typeof node.data.projectLens === 'string' ? node.data.projectLens : 'everything'} onChange={(event) => onChange({ projectLens: event.target.value })}><option value="everything">Everything</option><option value="delivery">Delivery</option><option value="metrics">Metrics</option><option value="customer-feedback">Customer feedback</option></select></label><p className={styles.inspectorHint}>Project context is optional. Load its quality evidence, add related work, or compare it with every other project on the canvas.</p><button className={styles.fullButton} onClick={onLoadProjectQuality}>Visualize quality diagnostics</button><button className={styles.fullButton} onClick={onExpandProject}>Add all related items</button><button className={styles.fullButton} onClick={onCompareProjects}>Compare projects on canvas</button></>}
       {kind === 'task' && <>
         <div className={styles.taskInspectorGrid}>
           <label>Status<select value={String(node.data.status || 'ready')} onChange={(event) => void persistTaskPatch({ status: event.target.value }, { status: event.target.value })}>
@@ -2285,7 +2359,7 @@ function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persis
         </section>
         {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
       </>}
-      {kind === 'projectComparison' && <><p className={styles.inspectorHint}>This comparison retains the source endpoints and fetch timestamp used for every project. Refresh to compare current delivery, velocity, and feature evidence.</p><button className={styles.fullButton} onClick={onCompareProjects}>Refresh project comparison</button><SourceList sources={node.data.sources} /></>}
+      {kind === 'projectComparison' && <><p className={styles.inspectorHint}>This portfolio view combines project health with saved quality diagnostics, open gaps, remediation state, and prioritized recommendations.</p><button className={styles.fullButton} onClick={onCompareProjects}>Refresh quality comparison</button><SourceList sources={node.data.sources} /></>}
       {kind === 'mockup' && <><label>Delivery project<select value={mockupProjectValue} onChange={(event) => { const project = mockupProjects.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ deliveryProjectRef: event.target.value, deliveryProjectName: project?.data.title || (event.target.value === 'draft:builderforce-launch' ? 'BuilderForce launch' : 'No project') }); }}><option value="draft:builderforce-launch">BuilderForce launch</option>{mockupProjects.filter((project) => (project.data.resourceId || project.id) !== 'draft:builderforce-launch').map((project) => <option key={project.id} value={project.data.resourceId || project.id}>{project.data.title}</option>)}<option value="">No project</option></select></label><label>Assign agent<select value={mockupAgentValue} onChange={(event) => { const agent = mockupAgents.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ mockupAgentRef: event.target.value, mockupAgentName: agent?.data.title || (event.target.value === 'web-analyst' ? 'Web Analyst' : 'Unassigned') }); }}><option value="campaign-strategist">Campaign Strategist</option>{mockupAgents.filter((agent) => (agent.data.resourceId || agent.id) !== 'campaign-strategist').map((agent) => <option key={agent.id} value={agent.data.resourceId || agent.id}>{agent.data.title}</option>)}<option value="web-analyst">Web Analyst</option><option value="">Unassigned</option></select></label><button className={styles.fullButton} onClick={onDeliverMockup}>Add to project and assign</button></>}
       {kind === 'mockupSet' && <><p className={styles.inspectorHint}>Expand the set into individually reviewable mockups, or deliver the approved set as one project task.</p><button className={styles.fullButton} onClick={onExpandMockupSet}>Expand all mockups</button><button className={styles.fullButton} onClick={onDeliverMockup}>Add to project and assign</button><SourceList sources={node.data.sources} /></>}
       {kind === 'evermind' && <EvermindInspector node={node} persistence={persistence} onAttach={onAttachEvermindProject} onExpand={onExpandEvermindPipeline} />}
@@ -2387,8 +2461,8 @@ function EvermindInspector({ node, persistence, onAttach, onExpand }: { node: Cr
   const rawProjectId = node.data.resourceId?.startsWith('evermind:') ? node.data.resourceId.slice('evermind:'.length) : '';
   const projectId = /^\d+$/.test(rawProjectId) ? Number(rawProjectId) : null;
   return <>
-    <p className={styles.inspectorHint}>Evermind is now a canvas-native model object. Build its data and training flow visually, then operate the same production console here.</p>
-    <button className={styles.fullButton} onClick={onExpand}>Add creation & training pipeline</button>
+    <div className={styles.evermindStartGuide}><span>{node.data.pipelineExpanded === true ? 'Guided setup added' : 'New model'}</span><strong>{node.data.pipelineExpanded === true ? 'Continue from Step 1' : 'Start with training examples'}</strong><p>{node.data.pipelineExpanded === true ? 'The numbered cards show the complete learning path. This button returns you to the first unfinished action.' : 'We’ll add a five-step flow and open the training-data picker first. Each card explains the next action.'}</p></div>
+    <button className={styles.fullButton} onClick={onExpand}>{node.data.pipelineExpanded === true ? 'Go to Step 1 · Training data' : 'Start guided setup'}</button>
     {persistence === 'local' && <p className={styles.inspectorHint}>This blueprint works without an account. Save the session when you want to run training, store versions, or deploy inference.</p>}
     {persistence === 'server' && projectId == null && <button className={styles.fullButton} onClick={onAttach}>Use project on canvas</button>}
     {persistence === 'server' && projectId != null && <div className={styles.evermindConsoleHost}><EvermindValidationProvider><ProjectEvermindPanel projectId={projectId} /></EvermindValidationProvider></div>}

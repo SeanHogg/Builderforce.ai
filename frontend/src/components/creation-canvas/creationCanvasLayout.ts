@@ -6,6 +6,7 @@ const DEFAULT_WIDTH_BY_KIND: Partial<Record<CreationFlowNode['data']['kind'], nu
   agent: 285,
   chat: 280,
   evaluation: 650,
+  diagnostics: 720,
   staff: 245,
 };
 

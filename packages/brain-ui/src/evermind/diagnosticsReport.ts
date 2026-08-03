@@ -25,6 +25,8 @@ import type {
   EvermindProbeResult,
   EvermindTarget,
 } from './types';
+import { evermindLearnedStatus } from './learnedStatus';
+import { evermindNextAction } from './actionGuide';
 
 /** Caps — generous enough to keep the evidence, small enough to paste anywhere. */
 const MAX_OUTPUT_CHARS = 1200;
@@ -198,11 +200,12 @@ function recentSection(d: EvermindConsoleData): string[] {
   }
   for (const e of entries) {
     const when = new Date(e.at).toISOString();
-    const provenance = e.distilled
-      ? `distilled by ${e.teacherModel ?? 'a teacher'}`
-      : e.skipReason
-        ? `NOT distilled (${e.skipReason}${e.skipDetail ? `: ${e.skipDetail}` : ''})`
-        : 'raw';
+    const status = evermindLearnedStatus(e);
+    const provenance = status.state === 'distilled'
+      ? `distilled by ${status.teacherModel ?? 'a teacher'}`
+      : status.state === 'fault'
+        ? `NOT distilled (${status.reason}${status.detail ? `: ${status.detail}` : ''})`
+        : status.state === 'self' ? 'self-learned from run output' : 'weight delta';
     lines.push(`- v${e.version} ×${e.weight} ${when} [${e.kind}] ${provenance}`);
     if (e.prompt) lines.push(`  - task: ${clamp(e.prompt, 200)}`);
     if (e.text) lines.push(`  - learned: ${clamp(e.text, 300).replace(/\n/g, ' ')}`);
@@ -236,6 +239,18 @@ export function buildEvermindDiagnostics(input: EvermindDiagnosticsInput): strin
   }
 
   lines.push(...headSection(data), '');
+  const next = evermindNextAction({
+    seeded: data.seeded,
+    inferenceEnabled: data.inferenceEnabled,
+    mode: data.mode,
+    pending: data.pending,
+    teacherModel: data.teacherModel,
+    quarantinedAt: data.quarantinedAt,
+    recent: data.recent,
+    eval: data.eval,
+    probe,
+  });
+  lines.push('## Recommended next action', '', `- ${next.title}`, `- Why: ${next.detail}`, `- Go to: ${next.destination}`, '');
   if (targets && targets.length > 0) lines.push(...targetsSection(targets));
   if (probe) lines.push(...probeSection(probe));
   else lines.push('## Test bench', '', '_Not run in this session — run one before exporting to include what the model actually produces._', '');

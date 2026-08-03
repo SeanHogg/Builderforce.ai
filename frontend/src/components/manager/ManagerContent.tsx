@@ -18,6 +18,7 @@ import { ManagerStallCensus } from '@/components/manager/ManagerStallCensus';
 import { ManagerCopyDiagnostics } from '@/components/manager/ManagerCopyDiagnostics';
 import { ManagerTodayDigest } from '@/components/manager/ManagerTodayDigest';
 import { ManagerChatPanel } from '@/components/manager/ManagerChatPanel';
+import { ManagerCanvas } from '@/components/manager/ManagerCanvas';
 import { ticketHref } from '@/lib/ticketHref';
 import { managerActionIcon } from '@/lib/managerActions';
 import {
@@ -33,7 +34,7 @@ import {
   type AgentHost,
 } from '@/lib/builderforceApi';
 import type { CloudAgentTarget, TeamMember } from '@/lib/taskAssignee';
-import { assigneeName } from '@/lib/taskAssignee';
+import { assigneeName, parseAssigneeSelectValue } from '@/lib/taskAssignee';
 import { TASK_PRIORITIES_DESC, taskPriorityBadgeClass } from '@/lib/taskPriority';
 import {
   tableWrapStyle,
@@ -309,6 +310,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
 
   const { config, policy, tenantPolicy, stats, backlog, actions, runTasks, autonomy, managerTypes, directives } = data;
   const managerValue = policy.managerRef ?? '';
+  const managerAssignee = parseAssigneeSelectValue(managerValue);
 
   // The opinions stored at the PROJECT tier, as the shared control set reads them.
   //
@@ -472,13 +474,38 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
 
       {activeSub === '' && (
       <>
+      <ManagerCanvas
+        overview={data}
+        managerName={managerValue ? memberName(managerAssignee.assignedUserId, managerAssignee.assignedAgentRef, managerAssignee.assignedAgentHostId) : t('policy.manager.system')}
+        managerType={currentType ? typeLabel(currentType) : t('title')}
+        lastManaged={stats.lastRunAt ? t('lastManaged', { when: relative(stats.lastRunAt) }) : t('neverManaged')}
+        running={running}
+        canManage={canManage}
+        onRun={runNow}
+        relative={relative}
+        actionLabel={(action) => t(`action.${action.actionType}`)}
+        labels={{
+          canvas: t('title'), live: t('activity.working'), open: t('subnav.overview'),
+          run: t('runNow'), running: t('running'), policy: t('subnav.policy'),
+          policyDescription: t('policy.subtitle'), backlog: t('subnav.backlog'),
+          backlogDescription: t('backlog.title'), stuck: t('subnav.stuck'),
+          stuckDescription: t('stalls.caption', { maxAttempts: 3 }), ask: t('subnav.ask'),
+          askDescription: t('ask.caption'), today: t('today.title'), todayDescription: t('today.decisions.title'), activity: t('subnav.activity'),
+          activityDescription: t('activity.title'), total: t('stat.total'),
+          unscored: t('stat.unscored'), unowned: t('stat.unowned'), flagged: t('stat.flagged'),
+          runTasks: t('runTasks.title'), actions: t('activity.title'), directives: t('coaching.activeTitle'),
+          autoAssign: t('policy.autoAssign.label'), autoMerge: t('policy.allowAutoMerge.label'),
+          openPullRequests: t('stat.openPullRequests'), blockedPullRequests: t('stalls.cause.merge_withheld'),
+          enabled: t('policy.effective.managingOn'), paused: t('policy.effective.managingOff'), emptyActivity: t('activity.empty'),
+        }}
+      />
       {/* ── TODAY leads. ──
           The tiles below describe the board's standing STATE — 679 tickets, 373
           coverage gaps — which barely moves day to day and answers no question a
           person actually arrives with. Backlog health is a real question; it is the
           SECOND one, so it now sits underneath the day's accomplishments rather than
           in front of them. */}
-      <ManagerTodayDigest projectId={projectId} />
+      <div id="manager-today"><ManagerTodayDigest projectId={projectId} /></div>
 
       {/* The question those numbers provoke, one click from the numbers themselves.
           A starter navigates to the Ask view carrying the question, which the chat

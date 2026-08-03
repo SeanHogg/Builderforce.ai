@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { llmApi, tenantModelApi, type ByoModel, type PremiumModelInfo, type TenantModel } from './builderforceApi';
 import { getPremiumModelCatalog, type ModelRecord } from './modelCatalog';
+import { getStoredTenantToken } from './auth';
 
 /**
  * Shared loader for the gateway model list. `models` is the full plan pool;
@@ -74,6 +75,11 @@ let inflight: Promise<LlmModelLists> | null = null;
 
 function load(): Promise<LlmModelLists> {
   if (cache) return Promise.resolve(cache);
+  // The local Creation Canvas is intentionally usable by guests. It mounts this
+  // shared picker too, but tenant model/catalog endpoints require a workspace JWT.
+  // Do not manufacture noisy 401 support tickets for an expected guest session;
+  // guest inference chooses its model server-side.
+  if (!getStoredTenantToken()) return Promise.resolve(EMPTY);
   if (!inflight) {
     inflight = Promise.all([
       llmApi.models(),

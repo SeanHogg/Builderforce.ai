@@ -42,7 +42,7 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'browser', label: 'Browser preview', icon: '◎', group: 'Build', createData: () => ({ kind: 'browser', title: 'Live preview', status: 'Ready' }) },
   { kind: 'repository', label: 'Repository', icon: '⑂', group: 'Build', createData: () => ({ kind: 'repository', title: 'Source repository', status: 'Linked from VS Code' }) },
   { kind: 'selection', label: 'Editor selection', icon: '⌗', group: 'Build', createData: () => ({ kind: 'selection', title: 'Editor selection', status: 'Referenced from VS Code' }) },
-  { kind: 'diagnostics', label: 'Diagnostics', icon: '⚠', group: 'Build', createData: () => ({ kind: 'diagnostics', title: 'Editor diagnostics', status: 'Live editor context' }) },
+  { kind: 'diagnostics', label: 'Diagnostics', icon: '⚠', group: 'Build', createData: () => ({ kind: 'diagnostics', title: 'Editor diagnostics', status: 'Ready to run', diagnostics: [], results: [], nextSteps: [] }) },
   { kind: 'terminal', label: 'Terminal output', icon: '>_', group: 'Build', createData: () => ({ kind: 'terminal', title: 'Terminal output', status: 'Review for secrets' }) },
   { kind: 'service', label: 'Local service', icon: '◎', group: 'Build', createData: () => ({ kind: 'service', title: 'Local service', status: 'Preview from VS Code' }) },
   { kind: 'llm', label: 'LLM', icon: '◉', group: 'Models', createData: () => ({ kind: 'llm', title: 'Language model', status: 'Blueprint', model: 'gpt-4o' }) },
@@ -96,7 +96,7 @@ const MUTABLE_FIELDS = {
   dashboard: ['content', 'kpis', 'chartLabels', 'chartValues', 'sources', 'fetchedAt', 'dateRange'],
   report: ['content', 'markdown', 'chartLabels', 'chartValues', 'sources'],
   evaluation: ['content', 'verdict', 'gaps', 'recommendations', 'sources'],
-  projectComparison: ['content', 'projects', 'sources', 'fetchedAt'],
+  projectComparison: ['content', 'projects', 'sources', 'fetchedAt', 'recommendations'],
   roadmap: ['content', 'items', 'milestones', 'sources'],
   note: ['content', 'markdown'],
   prototype: ['content', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteAccent', 'viewport', 'pages'],
@@ -104,11 +104,11 @@ const MUTABLE_FIELDS = {
   browser: ['content', 'url', 'viewport'],
   repository: ['content', 'url', 'branch'],
   selection: ['content', 'code', 'language', 'path', 'range'],
-  diagnostics: ['content', 'items', 'severity'],
+  diagnostics: ['content', 'diagnostics', 'findings', 'checks', 'items', 'severity', 'result', 'results', 'summary', 'verdict', 'nextSteps', 'recommendations', 'actions', 'remediation', 'path', 'qualityScore', 'qualityLabel', 'qualityHeadline', 'diagnosticCount', 'gapCount'],
   terminal: ['content', 'exitCode'],
   service: ['content', 'url', 'port'],
   llm: ['content', 'model', 'instructions', 'parameters'],
-  project: ['content', 'projectLens', 'sources'],
+  project: ['content', 'projectLens', 'sources', 'qualityScore', 'qualityLabel', 'qualityHeadline', 'diagnosticCount', 'gapCount', 'diagnostics', 'recommendations', 'qualityUpdatedAt'],
   task: ['content', 'role', 'assignee', 'agentName', 'agentRef', 'priority', 'acceptanceCriteria', 'taskKey', 'prdTitle', 'prdStatus', 'prdSummary', 'prdCount'],
   prd: ['content', 'markdown', 'requirements', 'userStories'],
   release: ['content', 'items', 'milestones', 'releaseDate'],
@@ -132,7 +132,7 @@ const MUTABLE_FIELDS = {
   comment: ['content', 'resolved', 'mentions'],
   timer: ['content', 'duration', 'remaining', 'running'],
   mcp: ['content', 'toolName', 'operation', 'arguments'],
-  evermind: ['content', 'model', 'instructions', 'teacherModel', 'inferenceEnabled', 'evermindVersion', 'contributions', 'pendingContributions', 'recentLearnings', 'trainingLoss', 'learningMode', 'lastLearnedAt', 'stages', 'sources'],
+  evermind: ['content', 'model', 'instructions', 'teacherModel', 'inferenceEnabled', 'evermindVersion', 'evermindSeeded', 'contributions', 'pendingContributions', 'recentLearnings', 'trainingLoss', 'learningMode', 'lastLearnedAt', 'quarantinedAt', 'quarantineReason', 'evalPoint', 'stages', 'sources'],
 } as const satisfies Record<CreationObjectKind, readonly string[]>;
 
 const COMMON_MUTABLE_FIELDS = ['title', 'subtitle', 'status'] as const;
@@ -179,10 +179,12 @@ const CONTEXT_FIELDS = [
   'contributions', 'inferenceEnabled', 'teacherModel', 'viewport', 'content', 'markdown',
   'steps', 'websiteHeadline', 'websiteBody', 'websiteCta', 'pages', 'kpis', 'verdict',
   'gaps', 'recommendations', 'milestones', 'code', 'language', 'path', 'url', 'branch',
+  'diagnostics', 'findings', 'checks', 'results', 'result', 'nextSteps', 'actions', 'remediation',
   'instructions', 'parameters', 'assignee', 'agentName', 'agentRef', 'priority', 'acceptanceCriteria', 'taskKey',
   'prdTitle', 'prdStatus', 'prdSummary', 'prdCount', 'requirements',
   'userStories', 'responsibilities', 'tools', 'autonomy', 'transcript', 'stages',
   'approvalMode', 'runTarget', 'deliveryProjectRef', 'deliveryProjectName', 'mockupAgentRef', 'mockupAgentName',
+  'qualityScore', 'qualityLabel', 'qualityHeadline', 'diagnosticCount', 'gapCount', 'qualityUpdatedAt',
 ] as const;
 const SENSITIVE_CONTEXT_KEY = /(?:secret|token|password|credential|authorization|api.?key|cookie)/i;
 

@@ -245,9 +245,13 @@ jobs:
       - name: Install
         working-directory: clients/vscode
         run: pnpm install --frozen-lockfile
-      - name: Type-check (extension + webview)
+      # `type-check` everywhere — see the frontend job above. Covers all three
+      # tsconfigs (extension · webview · harness) under BOTH checkers; the old
+      # `typecheck:native` ran tsgo over the root project only, so webview and
+      # harness were each gated by exactly one implementation.
+      - name: Type-check (extension + webview + harness)
         working-directory: clients/vscode
-        run: pnpm run typecheck
+        run: pnpm run type-check
 
   # NOT a hard gate yet — deliberately.
   #

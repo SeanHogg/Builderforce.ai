@@ -2019,6 +2019,25 @@ function evermindLearnedStatus(entry) {
   return { state: "self" };
 }
 
+// src/evermind/actionGuide.ts
+function evermindNextAction(input) {
+  if (!input.seeded) return { id: "seed", tone: "attention", title: "Set up the model", detail: "Choose a known-good base before teaching or serving replies.", destination: "Setup", cta: "Choose base model" };
+  if (input.quarantinedAt) {
+    if (input.probe?.ready) return { id: "enable", tone: "good", title: "Readiness passed \u2014 enable replies", detail: "The current version passed the coherence gate and can be promoted back to serving.", destination: "Run on Evermind", cta: "Enable replies" };
+    if (input.probe && !input.probe.ready && !input.teacherModel) return { id: "teacher", tone: "danger", title: "Readiness failed \u2014 add a teacher", detail: "Pin a frontier teacher so future tasks become clean exemplars instead of raw run transcripts, then teach and test again.", destination: "Teach \u2192 Teacher model", cta: "Choose teacher" };
+    if (input.probe && !input.probe.ready) return { id: "check", tone: "danger", title: "Readiness failed \u2014 check learned knowledge", detail: "Audit recent learnings, repair bad memories, then rerun the readiness check.", destination: "Check", cta: "Check knowledge" };
+    return { id: "test", tone: "danger", title: "Quarantined \u2014 run readiness first", detail: "Replies are safely off. Test the current version before changing inference or replacing the model.", destination: "Test \u2192 Readiness check", cta: "Run readiness check" };
+  }
+  const recent = input.recent ?? [];
+  const teacherFaults = recent.filter((entry) => evermindLearnedStatus(entry).state === "fault").length;
+  if (teacherFaults > 0) return { id: "teacher", tone: "danger", title: "Fix failed distillation", detail: `${teacherFaults} recent learning${teacherFaults === 1 ? "" : "s"} received no usable teacher answer. Check the pinned teacher before teaching again.`, destination: "Teach \u2192 Teacher model", cta: "Check teacher" };
+  if ((input.pending ?? 0) > 0) return { id: "merge", tone: "attention", title: "Merge queued learning", detail: `${input.pending} contribution${input.pending === 1 ? " is" : "s are"} waiting to be folded into the next version.`, destination: "Teach \u2192 Learn now", cta: "Learn now" };
+  if ((input.eval?.delta ?? 0) < 0) return { id: "check", tone: "attention", title: "Review the latest regression", detail: "Held-out loss increased on the latest version. Audit what changed before serving it.", destination: "Check", cta: "Check knowledge" };
+  if (!input.inferenceEnabled) return { id: "test", tone: "attention", title: "Test before enabling replies", detail: "Run the readiness suite against the current version, then enable inference only if it passes.", destination: "Test \u2192 Readiness check", cta: "Run readiness check" };
+  if (input.mode === "offline-frozen") return { id: "learn", tone: "neutral", title: "Learning is frozen", detail: "Replies are live, but completed work is not updating this model.", destination: "Learning", cta: "Connect learning" };
+  return { id: "none", tone: "good", title: "No action required", detail: "Learning is connected and replies are enabled. Review recent learnings as new work lands.", destination: "Recently learned", cta: "Review learnings" };
+}
+
 // src/evermind/EvermindTestBench.tsx
 import { useCallback as useCallback3, useState as useState7 } from "react";
 
@@ -2797,7 +2816,8 @@ function recentSection(d) {
   }
   for (const e of entries) {
     const when = new Date(e.at).toISOString();
-    const provenance = e.distilled ? `distilled by ${e.teacherModel ?? "a teacher"}` : e.skipReason ? `NOT distilled (${e.skipReason}${e.skipDetail ? `: ${e.skipDetail}` : ""})` : "raw";
+    const status = evermindLearnedStatus(e);
+    const provenance = status.state === "distilled" ? `distilled by ${status.teacherModel ?? "a teacher"}` : status.state === "fault" ? `NOT distilled (${status.reason}${status.detail ? `: ${status.detail}` : ""})` : status.state === "self" ? "self-learned from run output" : "weight delta";
     lines.push(`- v${e.version} \xD7${e.weight} ${when} [${e.kind}] ${provenance}`);
     if (e.prompt) lines.push(`  - task: ${clamp(e.prompt, 200)}`);
     if (e.text) lines.push(`  - learned: ${clamp(e.text, 300).replace(/\n/g, " ")}`);
@@ -2822,6 +2842,18 @@ function buildEvermindDiagnostics(input) {
     return lines.join("\n");
   }
   lines.push(...headSection(data), "");
+  const next = evermindNextAction({
+    seeded: data.seeded,
+    inferenceEnabled: data.inferenceEnabled,
+    mode: data.mode,
+    pending: data.pending,
+    teacherModel: data.teacherModel,
+    quarantinedAt: data.quarantinedAt,
+    recent: data.recent,
+    eval: data.eval,
+    probe
+  });
+  lines.push("## Recommended next action", "", `- ${next.title}`, `- Why: ${next.detail}`, `- Go to: ${next.destination}`, "");
   if (targets && targets.length > 0) lines.push(...targetsSection(targets));
   if (probe) lines.push(...probeSection(probe));
   else lines.push("## Test bench", "", "_Not run in this session \u2014 run one before exporting to include what the model actually produces._", "");
@@ -2959,6 +2991,17 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
   const inherited = !!data?.inherited;
   const quarantined = !!data?.quarantinedAt;
   const quarantineReason = data?.quarantineReason?.trim() || "";
+  const nextAction = data ? evermindNextAction({
+    seeded: data.seeded,
+    inferenceEnabled: data.inferenceEnabled,
+    mode: data.mode,
+    pending: data.pending,
+    teacherModel: data.teacherModel,
+    quarantinedAt: data.quarantinedAt,
+    recent: data.recent,
+    eval: data.eval,
+    probe: probeResult
+  }) : null;
   const scopeName = projectName?.trim();
   const Header = /* @__PURE__ */ jsxs15("header", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
     /* @__PURE__ */ jsx15("span", { "aria-hidden": true, style: { fontSize: "1.05rem" }, children: "\u{1F9E0}" }),
@@ -3173,6 +3216,12 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       }
     ),
     quarantined && /* @__PURE__ */ jsx15("p", { style: warnBox, role: "alert", children: t.quarantinedHint(quarantineReason) }),
+    nextAction && /* @__PURE__ */ jsx15(NextActionCard, { action: nextAction, canAct: canManage && !busy && !inherited, onAction: () => {
+      if (nextAction.id === "test") setTab("test");
+      else if (nextAction.id === "teacher" || nextAction.id === "merge" || nextAction.id === "learn") setTab("teach");
+      else if (nextAction.id === "check") setTab("check");
+      else if (nextAction.id === "enable") void run(() => adapter.setInference(true));
+    } }),
     targets && /* @__PURE__ */ jsx15(TargetsList, { t, targets }),
     inherited ? (
       // INHERITED — read-only. This build has no `project_evermind` row of its own;
@@ -3234,6 +3283,22 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     ] }),
     notice && /* @__PURE__ */ jsx15("p", { style: { margin: 0, fontSize: "0.74rem", color: C.accent }, role: "status", children: notice }),
     error && /* @__PURE__ */ jsx15("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error })
+  ] });
+}
+function NextActionCard({ action, canAct, onAction }) {
+  const color = action.tone === "danger" ? C.danger : action.tone === "attention" ? C.warnText : action.tone === "good" ? C.accent : C.text2;
+  const actionable = !["seed", "none"].includes(action.id);
+  return /* @__PURE__ */ jsxs15("section", { "aria-label": "Recommended next action", style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: "6px 12px", alignItems: "center", padding: "11px 12px", border: `1px solid ${color}`, borderRadius: 10, background: C.surface2 }, children: [
+    /* @__PURE__ */ jsx15("span", { style: { gridColumn: "1 / -1", color, fontSize: "0.62rem", fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }, children: "Recommended next action" }),
+    /* @__PURE__ */ jsxs15("div", { style: { minWidth: 0 }, children: [
+      /* @__PURE__ */ jsx15("strong", { style: { display: "block", color: C.text, fontSize: "0.82rem" }, children: action.title }),
+      /* @__PURE__ */ jsx15("p", { style: { margin: "3px 0 0", color: C.text2, fontSize: "0.72rem", lineHeight: 1.45 }, children: action.detail }),
+      /* @__PURE__ */ jsxs15("small", { style: { display: "block", marginTop: 5, color, fontSize: "0.66rem", fontWeight: 700 }, children: [
+        "Go to: ",
+        action.destination
+      ] })
+    ] }),
+    actionable && /* @__PURE__ */ jsx15("button", { type: "button", disabled: !canAct, onClick: onAction, style: { border: `1px solid ${color}`, borderRadius: 8, padding: "7px 10px", background: "transparent", color, fontSize: "0.7rem", fontWeight: 800, cursor: canAct ? "pointer" : "not-allowed", opacity: canAct ? 1 : 0.55 }, children: action.cta })
   ] });
 }
 function RegressionChip({ t, evalPoint }) {
@@ -3979,6 +4044,7 @@ export {
   buildSettledTimeline,
   buildTimeline,
   evermindLearnedStatus,
+  evermindNextAction,
   formatDuration,
   formatPayload,
   healthRingColor,

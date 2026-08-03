@@ -28,6 +28,7 @@ import {
   type EvermindValidateResult,
 } from './types';
 import { evermindLearnedStatus } from './learnedStatus';
+import { evermindNextAction, type EvermindNextAction } from './actionGuide';
 import { EvermindTestBench } from './EvermindTestBench';
 import { EvermindMaintenance } from './EvermindMaintenance';
 import { EvermindAnalyzer } from './EvermindAnalyzer';
@@ -220,6 +221,17 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
   // it passes the coherence probe again. Surface a badge + reason so the disable is legible.
   const quarantined = !!data?.quarantinedAt;
   const quarantineReason = data?.quarantineReason?.trim() || '';
+  const nextAction = data ? evermindNextAction({
+    seeded: data.seeded,
+    inferenceEnabled: data.inferenceEnabled,
+    mode: data.mode,
+    pending: data.pending,
+    teacherModel: data.teacherModel,
+    quarantinedAt: data.quarantinedAt,
+    recent: data.recent,
+    eval: data.eval,
+    probe: probeResult,
+  }) : null;
 
   // The scoped project name — rendered next to the title so the panel always says WHICH
   // project's Evermind this is (the web tab and the VS Code sidebar can be on different
@@ -462,6 +474,12 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
         </p>
       )}
       {quarantined && <p style={warnBox} role="alert">{t.quarantinedHint(quarantineReason)}</p>}
+      {nextAction && <NextActionCard action={nextAction} canAct={canManage && !busy && !inherited} onAction={() => {
+        if (nextAction.id === 'test') setTab('test');
+        else if (nextAction.id === 'teacher' || nextAction.id === 'merge' || nextAction.id === 'learn') setTab('teach');
+        else if (nextAction.id === 'check') setTab('check');
+        else if (nextAction.id === 'enable') void run(() => adapter.setInference(true));
+      }} />}
 
       {/* Read-only "Everminds under this project" list — self + IDE builds. Self-gating:
           renders nothing until the host's optional loadTargets resolves. */}
@@ -521,6 +539,16 @@ export function EvermindConsole({ adapter, canManage, labels, refreshMs = 20_000
 }
 
 /* ── Sub-sections ─────────────────────────────────────────────────────────── */
+
+function NextActionCard({ action, canAct, onAction }: { action: EvermindNextAction; canAct: boolean; onAction: () => void }) {
+  const color = action.tone === 'danger' ? C.danger : action.tone === 'attention' ? C.warnText : action.tone === 'good' ? C.accent : C.text2;
+  const actionable = !['seed', 'none'].includes(action.id);
+  return <section aria-label="Recommended next action" style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: '6px 12px', alignItems: 'center', padding: '11px 12px', border: `1px solid ${color}`, borderRadius: 10, background: C.surface2 }}>
+    <span style={{ gridColumn: '1 / -1', color, fontSize: '0.62rem', fontWeight: 800, letterSpacing: '0.06em', textTransform: 'uppercase' }}>Recommended next action</span>
+    <div style={{ minWidth: 0 }}><strong style={{ display: 'block', color: C.text, fontSize: '0.82rem' }}>{action.title}</strong><p style={{ margin: '3px 0 0', color: C.text2, fontSize: '0.72rem', lineHeight: 1.45 }}>{action.detail}</p><small style={{ display: 'block', marginTop: 5, color, fontSize: '0.66rem', fontWeight: 700 }}>Go to: {action.destination}</small></div>
+    {actionable && <button type="button" disabled={!canAct} onClick={onAction} style={{ border: `1px solid ${color}`, borderRadius: 8, padding: '7px 10px', background: 'transparent', color, fontSize: '0.7rem', fontWeight: 800, cursor: canAct ? 'pointer' : 'not-allowed', opacity: canAct ? 1 : .55 }}>{action.cta}</button>}
+  </section>;
+}
 
 /**
  * The automatic pre/post regression chip beside the status pill: ▲ when the latest

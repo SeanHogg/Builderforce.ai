@@ -76,6 +76,8 @@ export type { EvermindConsoleProps } from './evermind/EvermindConsole';
 export { DEFAULT_EVERMIND_LABELS } from './evermind/types';
 export { evermindLearnedStatus } from './evermind/learnedStatus';
 export type { EvermindLearnedStatus, EvermindTeacherSkipReason, LearnedStatusInput } from './evermind/learnedStatus';
+export { evermindNextAction } from './evermind/actionGuide';
+export type { EvermindActionGuideInput, EvermindActionId, EvermindNextAction } from './evermind/actionGuide';
 export type {
   EvermindConsoleAdapter,
   EvermindConsoleLabels,

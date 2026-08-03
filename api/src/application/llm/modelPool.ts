@@ -143,7 +143,6 @@ export const CODING_MODEL_POOL: readonly string[] = [
   // so M2.5:free sits immediately after as the always-reachable failover.
   'minimaxai/minimax-m2.7',                   // SWE-bench-leading free coder (NVIDIA NIM) — standardized default
   'minimax/minimax-m2.5:free',                // prior-gen MiniMax (OpenRouter free) — always-reachable failover
-  'z-ai/glm-5.1',                             // strong agentic coder (NVIDIA NIM, free)
   'nex-agi/nex-n2-pro:free',                  // agentic MoE (Qwen3.5 arch), tool use
   'nvidia/nemotron-3-ultra-550b-a55b:free',   // Programming #6, 1M context
   'openrouter/owl-alpha',                     // agentic, Claude Code-compatible

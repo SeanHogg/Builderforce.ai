@@ -152,4 +152,14 @@ describe('buildEvermindDiagnostics', () => {
     expect(report).toContain('NOT distilled (teacher-error: HTTP 429)');
     expect(report).toContain('task: Tag each feature');
   });
+
+  it('reports unpinned raw-run learning as self-learning, not failed distillation', () => {
+    const report = buildEvermindDiagnostics({
+      data: head({ recent: [{ id: 2, kind: 'text', version: 1141, at: NOW, weight: 1, prompt: 'Ship it', text: 'Done', skipReason: 'not_pinned' }] }),
+      host: 'web', now: NOW,
+    });
+    expect(report).toContain('self-learned from run output');
+    expect(report).not.toContain('NOT distilled (not_pinned)');
+    expect(report).toContain('## Recommended next action');
+  });
 });

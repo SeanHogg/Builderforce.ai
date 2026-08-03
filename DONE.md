@@ -4,17 +4,26 @@
 
 ---
 
-## 2026-08-02 — ✅ RESOLVED: a green local type-check meant nothing about CI — two checkers, gated inconsistently (api 2026.7.205, ui 2026.7.155, brain-embedded 2026.7.59)
+## 2026-08-02 — ✅ RESOLVED: a green local type-check meant nothing about CI — two checkers, gated inconsistently (api 2026.7.205, ui 2026.7.155, brain-embedded 2026.7.59, vsix 2026.7.114)
 
 CI failed on `byoCredentialHealth.ts(352,5) TS2353: 'hostEgress' does not exist in type …`. The immediate cause was a mid-work snapshot committed as `a3f6220b` (api 2026.7.203) while the local-egress wiring was half-applied: the call site existed, `llmProxyForPlan`'s own `opts` param type did not yet. HEAD (2026.7.204) already carried both — verified by counting the declaration at each commit (1 at `a3f6220b`, 2 at HEAD) and by running CI's exact `npm run type-check`, which passes.
 
 **The reason it wasn't caught locally is the part worth fixing.** Every package carried TWO type-check scripts against TWO different implementations — `type-check` → `tsc --noEmit` and `typecheck:native` → `tsgo --noEmit` — and CI gated them inconsistently: `api` and the matrix packages on `tsc`, `frontend` on **`tsgo` only**. They are separate implementations that can disagree, so "I ran the type-checker and it was green" was not a statement about whether CI would pass, and a developer following the repo's tsgo convention could ship a `tsc` error to main. That is precisely what happened.
 
-`type-check` now runs **both** in `api`, `frontend` and `brain-embedded` — `tsgo --noEmit && tsc --noEmit`, fast checker first so it short-circuits, `tsc` still the authoritative gate. Nothing is weakened; the frontend gains a `tsc` gate it never had (verified passing before wiring it up). `ci.yml`'s frontend job moves off `typecheck:native` onto `type-check`, so one script name means the same thing everywhere. `typecheck:native` stays as the seconds-long local pre-check.
+`type-check` now runs **both** everywhere — `tsgo --noEmit && tsc --noEmit`, fast checker first so it short-circuits, `tsc` still the authoritative gate. Nothing is weakened; several packages gain a checker they never had. `typecheck:native` stays as the seconds-long local pre-check.
 
-Verified: `npm run type-check` exit 0 in all three packages (api ~92s for both checkers).
+**Applied across every package CI gates**, not just the one that failed — the trap was identical in all of them:
 
-Files: `api/package.json`, `frontend/package.json`, `brain-embedded/package.json`, `.github/workflows/ci.yml`.
+- `api`, `frontend`, `brain-embedded` — frontend's CI job also moves off `typecheck:native` onto `type-check`, so it gains a `tsc` gate it never had (verified passing standalone first).
+- The 8-package matrix (`worker`, `sdk`, `studio`, `studio-embedded`, `builderforce-embedded`, `voice` + brain-embedded) — six more carrying the same `type-check`=tsc / `typecheck:native`=tsgo pair. `tsgo` verified green in each *before* wiring, so no package was handed a gate it would fail.
+- `clients/vscode` — the worst case, and the one deliberately skipped in the first pass. Its `typecheck` covered **three** tsconfigs (extension · webview · harness) while `typecheck:native` ran tsgo over the **root only**, so webview and harness were each gated by exactly one implementation. Now both checkers across all three projects (12.5s), under the canonical `type-check` name, with `typecheck` kept as an alias so nothing referencing the old name breaks.
+- `browser-sdk` left as `tsc --noEmit`: it has no `@typescript/native-preview` dependency and no `typecheck:native` script, so there is no green-locally/red-in-CI trap to close — adding one would mean adding a dependency for no gate improvement.
+
+`release.yml` and `publish-npm-package.yml` both call `npm run type-check`, so the release gate tightened for free. No workflow invokes a single-implementation check any more.
+
+Verified: `npm run type-check` exit 0 in api, frontend, all 8 matrix packages, and clients/vscode. VSIX repackaged (`builderforce-ai-2026.7.114.vsix`). The six matrix packages are deliberately NOT version-bumped — a build-script change alters no published artifact or public surface.
+
+Files: `{api,frontend,brain-embedded,worker,sdk,studio,studio-embedded,builderforce-embedded,voice,clients/vscode}/package.json`, `.github/workflows/ci.yml`.
 
 ---
 
