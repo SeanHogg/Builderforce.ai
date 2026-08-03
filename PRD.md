@@ -87,7 +87,72 @@ To update the existing call log entry when a call is transferred to a different 
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+### Data Requirements
+
+1. **Call Log Entry Schema**
+   - Each call log entry MUST have a unique `call_id` (UUID) as the primary identifier.
+   - The `assigned_agent_id` field MUST be updatable without creating a new record.
+   - A `transfer_history` JSON array field MUST store transfer events with: `from_agent_id`, `to_agent_id`, `transfer_timestamp`, and optional `transfer_reason`.
+   - The `call_status` field MUST reflect the current state: `active`, `transferred`, `completed`, or `failed`.
+
+2. **Data Integrity**
+   - The system MUST enforce a unique constraint on `call_id` to prevent duplicate entries.
+   - All transfer operations MUST use database transactions to ensure atomicity.
+
+### Functional Requirements
+
+3. **Transfer Detection**
+   - The system MUST detect a call transfer event through the existing transfer API/handler.
+   - The transfer event MUST include: `call_id`, `from_agent_id`, `to_agent_id`, and `transfer_timestamp`.
+
+4. **Update Logic**
+   - Upon detecting a transfer, the system MUST locate the existing call log entry by `call_id`.
+   - The system MUST update only the `assigned_agent_id` field (and optionally `call_status` if transferred).
+   - The system MUST append a new entry to the `transfer_history` array rather than overwriting.
+
+5. **Audit Trail Requirements**
+   - Each transfer MUST record: timestamp (ISO 8601), source agent ID, destination agent ID.
+   - Transfer history MUST be queryable for reporting purposes.
+   - The original agent assignment MUST be preserved in the transfer history.
+
+### Non-Functional Requirements
+
+6. **Performance**
+   - Call transfer updates MUST complete within 500ms to avoid call disruption.
+   - The transfer history array SHOULD be capped at 10 entries to prevent unbounded growth.
+
+7. **Reliability**
+   - Transfer operations MUST be idempotent — re-sending the same transfer request MUST NOT create duplicate entries.
+   - Failed transfers MUST NOT leave the call log in an inconsistent state (partial update).
+
+8. **Notifications**
+   - The system MUST emit a `call.transferred` event to the notification service.
+   - The notification payload MUST include: `call_id`, `new_agent_id`, `transfer_history_summary`.
+
+### Error Handling Requirements
+
+9. **Failure Scenarios**
+   - If the call ID does not exist, the system MUST create a new entry and log a warning (fallback behavior).
+   - If the transfer to the same agent is attempted, the system MUST reject with an appropriate error.
+   - Database connection failures MUST trigger a retry with exponential backoff (max 3 attempts).
+
+10. **Logging**
+    - All transfer attempts (success and failure) MUST be logged with correlation IDs.
+    - Error logs MUST include: `call_id`, `from_agent_id`, `to_agent_id`, `error_code`, `timestamp`.
+
+### API Requirements
+
+11. **Transfer Endpoint Contract**
+    - The existing transfer endpoint MUST accept: `{ call_id, target_agent_id, reason? }`.
+    - Response MUST return the updated call log entry with transfer history.
+    - HTTP status codes: 200 (success), 404 (call not found), 409 (invalid transfer), 500 (server error).
+
+### Reporting & Analytics Integration
+
+12. **Metrics Calculation**
+    - The system MUST calculate `agent_handle_time` as the duration from agent assignment to transfer/completion.
+    - Transfer count per agent MUST be trackable via the `transfer_history` query.
+    - Reports MUST be able to reconstruct the call journey from the `transfer_history` array.
 
 ## Design
 
