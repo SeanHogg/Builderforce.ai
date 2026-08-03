@@ -119,5 +119,49 @@ Engineering and product leadership currently lack a consolidated, structured vie
 
 ---
 
+## Executive Summary
+
+> **For Exec Sponsor Review and Approval**
+> *This section provides a one-page overview as required by FR-8 and AC-7*
+
+### Program Overview
+
+| Attribute | Value |
+|---|---|
+| **Total Headcount** | TBD pending Engineering Lead inputs |
+| **Total Duration** | TBD pending timeline mapping |
+| **Total Estimated Cost (Base Case)** | TBD pending rate card confirmation |
+| **Planning Horizon** | [Insert Sprint/Milestone dates] |
+
+### Top 3 Risks
+
+1. **Risk TBD-1**: [Insert highest-impact resourcing risk] — Likelihood: [H/M/L], Impact: [H/M/L]
+2. **Risk TBD-2**: [Insert second-highest resourcing risk] — Likelihood: [H/M/L], Impact: [H/M/L]
+3. **Risk TBD-3**: [Insert third-highest resourcing risk] — Likelihood: [H/M/L], Impact: [H/M/L]
+
+### Cost Summary (Base Case)
+
+| Category | Estimated Cost |
+|---|---|
+| Labor (Total) | $TBD |
+| Non-Labor | $TBD |
+| **Total Program Cost** | **$TBD** |
+
+### Scenario Overview
+
+| Scenario | Effort Variance | Cost Impact |
+|---|---|---|
+| Optimistic | -15% | $-TBD |
+| Base Case | 0% | $TBD |
+| Pessimistic | +25% | $+TBD |
+
+### Sign-Off
+
+- [ ] **Exec Sponsor Approval**: _________________ Date: _________
+- [ ] **Finance Owner Sign-Off**: _________________ Date: _________
+- [ ] **Engineering Manager Sign-Off**: _________________ Date: _________
+
+---
+
 *Document status: WIP — Awaiting capacity data inputs from Engineering Leads and rate card confirmation from Finance.*
 *Last updated: derived from US-6 scope baseline.*
