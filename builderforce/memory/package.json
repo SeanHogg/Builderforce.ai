@@ -10,10 +10,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
-    },
-    "./types": {
-      "types": "./dist/types.d.ts",
-      "import": "./dist/types.js"
     }
   },
   "scripts": {
@@ -50,7 +46,6 @@
   },
   "files": [
     "dist/",
-    "*.d.ts",
     "README.md",
     "LICENSE"
   ],
@@ -61,7 +56,6 @@
     "typescript": "^5.9.3",
     "vitest": "^4.5.0"
   },
-  "engineStrict": true,
   "engines": {
     "node": ">=22.12.0"
   },
