@@ -66,7 +66,35 @@ The Stakeholder Alignment Diagnostic (#503) is missing its core domain logic. Wi
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+> **Author:** Business Analyst · 2026-07-12
+
+### 1. StakeholderMapService.ts — Conflict Detection
+- **REQ-1.1** `detectConflicts({ teamId, submissions, reviewWindowStart, reviewWindowEnd })` MUST return `{ hasConflict: boolean, conflicts: PriorityConflict[] }`.
+- **REQ-1.2** A conflict exists when ≥2 stakeholders submit distinct P0 values for the same team within the review window. Submissions outside the window are ignored.
+- **REQ-1.3** When a stakeholder submits multiple times, only the latest (by `submittedAt`) counts.
+- **REQ-1.4** `conflicts` MUST enumerate every pair of distinct P0 values, each listing the implicated stakeholder IDs and the two conflicting priorities.
+- **REQ-1.5** The service MUST operate purely on in-memory inputs; no database access.
+
+### 2. StakeholderMapService.ts — Sign-Off State Machine
+- **REQ-2.1** `createSignOff(mapId)` MUST return a `StakeholderSignOff` with initial state `Pending` and an empty audit trail.
+- **REQ-2.2** `StakeholderSignOff` MUST expose `approve()`, `approveWithComment(comment)`, and `block(reason?)` transition methods, plus a read-only `state`, `comment`, and `history`.
+- **REQ-2.3** Valid transitions:
+  - `Pending → Approved` (no escalation)
+  - `Pending → ApprovedWithComment` (comment required; no escalation)
+  - `Pending → Blocked` (returns `EscalationEvent`)
+- **REQ-2.4** Any transition from a non-`Pending` state MUST throw a `ValidationError`.
+- **REQ-2.5** The audit trail (`history`) MUST record `{ from, to, action, timestamp, actorId?, comment? }` for every transition.
+- **REQ-2.6** `applyAction(signOff, action, payload?)` MUST provide a unified invocation path for all actions.
+
+### 3. Export Contract
+- **REQ-3.1** The module MUST export `StakeholderMapService` (class), `StakeholderSignOff` (class), and all type/enum contracts (`SignOffState`, `SignOffAction`, `EscalationEvent`, `ConflictDetectionResult`, `PriorityConflict`, `StakeholderSubmission`, `SignOffTransition`).
+
+### 4. Test Coverage
+- **REQ-4.1** Unit tests (vitest) MUST cover every AC-3 and AC-4 scenario from the Acceptance Criteria above.
+- **REQ-4.2** Additional edge cases: multi-way (3+) stakeholder conflicts, late-submission supersedes earlier, scoping to team, out-of-window filtering, reconstitution from persistence.
+
+### 5. Migration Note
+- Migration `0340` is already occupied (`0340_llm_usage_byo_provider.sql`). The stakeholder maps DDL must use the next available number: **`0396_stakeholder_maps.sql`** or later (separate asset — out of scope for this deliverable).
 
 ## Design
 
