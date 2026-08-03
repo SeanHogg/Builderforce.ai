@@ -3,17 +3,26 @@
  * File-backed storage with search capabilities
  */
 
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, access } from 'node:fs/promises';
 import { join } from 'node:path';
-
 import type {
   MemoryEntry,
   PersistenceStrategy,
   MemoryStoreAPI,
   SearchQuery,
   SearchResult,
-  SearchStats
+  SearchStats,
+  MemoryEvent
 } from './types.js';
+
+/** Shape persisted to disk */
+interface PersistedData {
+  version: string;
+  entries: MemoryEntry[];
+  savedAt: number;
+}
+
+const DATA_FILE = 'memory-data.json';
 
 export class MemoryStore implements MemoryStoreAPI {
   private entries = new Map<string, MemoryEntry>();
@@ -36,10 +45,19 @@ export class MemoryStore implements MemoryStoreAPI {
   }
 
   async initialize(): Promise<void> {
-    // Check if storage path exists, create if needed
     try {
-      // In a real implementation, you would read from persistent storage
-      // For now, we just ensure the directory exists
+      // Ensure the storage directory exists
+      await mkdir(this.storagePath, { recursive: true });
+
+      // Attempt to load persisted data
+      const filePath = join(this.storagePath, DATA_FILE);
+      try {
+        await access(filePath);
+        await this.load();
+      } catch {
+        // No persisted data yet — that is fine for a fresh store
+      }
+
       this.initialized = true;
       this.emit({ type: 'storage_initialized', path: this.storagePath });
     } catch (error) {
@@ -73,6 +91,10 @@ export class MemoryStore implements MemoryStoreAPI {
     this.entries.set(memoryEntry.id, memoryEntry);
     this.emit({ type: 'entry_created', entry: memoryEntry });
 
+    if (this.options.autoSave) {
+      await this.save();
+    }
+
     return memoryEntry;
   }
 
@@ -88,6 +110,11 @@ export class MemoryStore implements MemoryStoreAPI {
 
     this.entries.set(id, updatedEntry);
     this.emit({ type: 'entry_updated', entry: updatedEntry });
+
+    if (this.options.autoSave) {
+      await this.save();
+    }
+
     return updatedEntry;
   }
 
@@ -98,7 +125,6 @@ export class MemoryStore implements MemoryStoreAPI {
     this.entries.delete(id);
     this.emit({ type: 'entry_deleted', entryId: id });
 
-    // Auto-save if enabled
     if (this.options.autoSave) {
       await this.save();
     }
@@ -175,13 +201,27 @@ export class MemoryStore implements MemoryStoreAPI {
   }
 
   async save(): Promise<void> {
-    // Placeholder for persistent storage
-    // In real implementation, write to disk
+    const data: PersistedData = {
+      version: this.options.version,
+      entries: Array.from(this.entries.values()),
+      savedAt: Date.now()
+    };
+
+    const filePath = join(this.storagePath, DATA_FILE);
+    const json = JSON.stringify(data, null, 2);
+    await writeFile(filePath, json, 'utf-8');
   }
 
   async load(): Promise<void> {
-    // Placeholder for persistent storage
-    // In real implementation, read from disk
+    const filePath = join(this.storagePath, DATA_FILE);
+    const raw = await readFile(filePath, 'utf-8');
+    const data: PersistedData = JSON.parse(raw);
+
+    this.entries.clear();
+    for (const entry of data.entries) {
+      this.entries.set(entry.id, entry);
+    }
+
     this.initialized = true;
   }
 
@@ -243,7 +283,7 @@ export class MemoryStore implements MemoryStoreAPI {
     this.listeners.get(event)?.delete(callback);
   }
 
-  async emit(event: any): Promise<void> {
+  async emit(event: MemoryEvent): Promise<void> {
     const callbacks = this.listeners.get(event.type);
     if (callbacks) {
       callbacks.forEach(cb => cb(event));
