@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MemoryStore } from './memory-store.js';
 
 describe('MemoryStore', () => {
@@ -61,11 +61,11 @@ describe('MemoryStore', () => {
         });
       }
 
-      // Should only keep newest 3
+      // Should only keep newest 3 (oldest evicted first)
       const allEntries = store.getAllEntries();
       expect(allEntries.length).toBe(3);
-      expect(allEntries[0].content).toBe('Memory 2'); // Newest
-      expect(allEntries[2].content).toBe('Memory 0'); // Oldest removed
+      expect(allEntries[0].content).toBe('Memory 2');
+      expect(allEntries[2].content).toBe('Memory 4');
     });
   });
 
@@ -299,12 +299,31 @@ describe('MemoryStore', () => {
 
       const usage = await store.getUsage();
       expect(usage.entries).toBe(1);
-      expect(usage.size).toBe(0); // Placeholder implementation
+      expect(usage.size).toBeGreaterThan(0);
+    });
+  });
+
+  describe('getAllEntries', () => {
+    it('should return all entries synchronously', async () => {
+      await store.initialize();
+
+      await store.add({
+        content: 'Entry 1',
+        metadata: { tags: ['test'] }
+      });
+
+      await store.add({
+        content: 'Entry 2',
+        metadata: { tags: ['test'] }
+      });
+
+      const all = store.getAllEntries();
+      expect(all.length).toBe(2);
     });
   });
 
   describe('events', () => {
-    it('should emit entries created', async () => {
+    it('should emit entry_created events', async () => {
       await store.initialize();
 
       const callback = vi.fn();
@@ -319,7 +338,7 @@ describe('MemoryStore', () => {
       unsubscribe();
     });
 
-    it('should emit entries updated', async () => {
+    it('should emit entry_updated events', async () => {
       await store.initialize();
 
       const entry = await store.add({
@@ -336,7 +355,7 @@ describe('MemoryStore', () => {
       unsubscribe();
     });
 
-    it('should emit entries deleted', async () => {
+    it('should emit entry_deleted events', async () => {
       await store.initialize();
 
       const entry = await store.add({
@@ -351,6 +370,21 @@ describe('MemoryStore', () => {
 
       expect(callback).toHaveBeenCalledTimes(1);
       unsubscribe();
+    });
+
+    it('should allow unsubscribing via off()', async () => {
+      await store.initialize();
+
+      const callback = vi.fn();
+      store.on('entry_created', callback);
+      store.off('entry_created', callback);
+
+      await store.add({
+        content: 'Test',
+        metadata: { tags: ['test'] }
+      });
+
+      expect(callback).not.toHaveBeenCalled();
     });
   });
 });
