@@ -26,7 +26,7 @@ export function computeSignalWeight(score: number): number {
  * Uses the signal branch weight as defined in PRD FR-6 and the INITIAL REVISION above.
  */
 export function computeBranchWeight(): number {
-  return GlobalWeights.signalType;
+  return globalWeights.signalType;
 }
 
 /**
