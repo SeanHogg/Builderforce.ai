@@ -101,8 +101,8 @@ export function creationGraphFromSnapshot(snapshot: Pick<LocalCreationSnapshot, 
         canvasData: {
           x: node.position.x,
           y: node.position.y,
-          ...(typeof node.width === 'number' ? { w: node.width } : typeof node.style?.width === 'number' ? { w: node.style.width } : {}),
-          ...(typeof node.height === 'number' ? { h: node.height } : typeof node.style?.height === 'number' ? { h: node.style.height } : {}),
+          ...(typeof node.measured?.width === 'number' ? { w: node.measured.width } : typeof node.width === 'number' ? { w: node.width } : typeof node.style?.width === 'number' ? { w: node.style.width } : {}),
+          ...(typeof node.measured?.height === 'number' ? { h: node.measured.height } : typeof node.height === 'number' ? { h: node.height } : typeof node.style?.height === 'number' ? { h: node.style.height } : {}),
         },
         content: { ...node.data },
       };

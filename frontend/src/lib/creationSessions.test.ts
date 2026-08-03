@@ -14,6 +14,19 @@ describe('creationGraphFromSnapshot', () => {
     }] });
     expect(graph.connections[0]).toMatchObject({ kind: 'data', metadata: { rendererType: 'smoothstep', animated: true } });
   });
+
+  it('persists the rendered footprint used by collision-free AI layout', () => {
+    const graph = creationGraphFromSnapshot({
+      nodes: [{
+        id: '00000000-0000-4000-8000-000000000004', type: 'creation', position: { x: 10, y: 20 },
+        width: 240, height: 130, measured: { width: 460, height: 315 },
+        data: { kind: 'task', title: 'Tall task' },
+      }],
+      edges: [],
+    });
+
+    expect(graph.objects[0]?.canvasData).toMatchObject({ x: 10, y: 20, w: 460, h: 315 });
+  });
 });
 
 describe('local Creation Session conversation', () => {

@@ -83,6 +83,29 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByRole('article')).toHaveStyle({ width: '320px', height: '220px' });
   });
 
+  it('shows task ownership, priority, PRD context, and completion criteria on the widget', () => {
+    render(<CreationNode
+      id="task-node" type="creation" selected={false} dragging={false} zIndex={0} selectable deletable draggable isConnectable
+      positionAbsoluteX={0} positionAbsoluteY={0}
+      data={{ kind: 'task', title: 'Ship task details', status: 'in_progress', assignee: 'Delivery Agent', priority: 'high', content: 'Close the information gaps.', prdTitle: 'Task widget parity', prdSummary: 'Show the context an agent needs.', acceptanceCriteria: 'Owner, state, and requirements are visible.' }}
+    />);
+
+    expect(screen.getByText('Delivery Agent')).toBeInTheDocument();
+    expect(screen.getByText('high')).toBeInTheDocument();
+    expect(screen.getByText('Task widget parity')).toBeInTheDocument();
+    expect(screen.getByText('Owner, state, and requirements are visible.')).toBeInTheDocument();
+  });
+
+  it('gives task widgets actionable status, agent, and PRD details', () => {
+    render(<CreationCanvas sessionId="task-details-test" persistence="local" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Task' }));
+
+    expect(screen.getByLabelText('Status')).toBeInTheDocument();
+    expect(screen.getByLabelText('Assigned agent')).toHaveDisplayValue(/Campaign Strategist/);
+    expect(screen.getByText('How to move this forward')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Task PRD' })).toHaveTextContent('No PRD linked');
+  });
+
   it('renders live workflow, website, dashboard, collaborators, and agent controls', () => {
     render(<CreationCanvas sessionId="campaign-test" persistence="local" />);
 

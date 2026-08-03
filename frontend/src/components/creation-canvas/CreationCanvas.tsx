@@ -551,8 +551,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       });
     }
     if (resolvedScopeMode === 'frame' && selectedNode?.data.kind === 'frame') {
-      const width = Number(selectedNode.width || selectedNode.style?.width || 640);
-      const height = Number(selectedNode.height || selectedNode.style?.height || 420);
+      const { width, height } = canvasNodeDimensions(selectedNode);
       nodes.forEach((node) => {
         if (node.id !== selectedNode.id && node.position.x >= selectedNode.position.x && node.position.y >= selectedNode.position.y && node.position.x <= selectedNode.position.x + width && node.position.y <= selectedNode.position.y + height) selected.add(node.id);
       });
@@ -733,8 +732,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!canEdit || chosen.length < 2) { setNotice('Select at least two objects to create a frame'); return; }
     const left = Math.min(...chosen.map((node) => node.position.x)) - 40;
     const top = Math.min(...chosen.map((node) => node.position.y)) - 70;
-    const right = Math.max(...chosen.map((node) => node.position.x + Number(node.width || node.style?.width || 300))) + 40;
-    const bottom = Math.max(...chosen.map((node) => node.position.y + Number(node.height || node.style?.height || 180))) + 40;
+    const right = Math.max(...chosen.map((node) => node.position.x + canvasNodeDimensions(node).width)) + 40;
+    const bottom = Math.max(...chosen.map((node) => node.position.y + canvasNodeDimensions(node).height)) + 40;
     const frame = newNode('frame', { x: left, y: top }); frame.style = { width: right - left, height: bottom - top }; frame.zIndex = -1;
     frame.data = { ...frame.data, title: 'Grouped objects', framePurpose: 'Organize this related work' };
     setNodes((current) => [frame, ...current.map((node) => ({ ...node, selected: false }))]); setSelectedIds([frame.id]); setSelectedId(frame.id); setScopeMode('frame'); setNotice(`${chosen.length} objects framed`);
@@ -966,12 +965,31 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const lens = ['delivery', 'metrics', 'customer-feedback'].includes(String(project.data.projectLens))
         ? project.data.projectLens as 'delivery' | 'metrics' | 'customer-feedback'
         : 'everything';
-      void creationSessionsApi.expandProject(sessionId, projectId, lens).then((expanded) => {
+      void creationSessionsApi.expandProject(sessionId, projectId, lens).then(async (expanded) => {
+        const taskDetails = new Map<string, CreationNodeData>();
+        await Promise.all(expanded.resources.filter((item) => item.kind === 'task' && item.resourceType === 'task').map(async (item) => {
+          const taskId = Number(item.resourceId);
+          if (!Number.isInteger(taskId) || taskId <= 0) return;
+          try {
+            const [task, specs] = await Promise.all([tasksApi.get(taskId), taskSpecsApi.list(taskId).catch(() => [])]);
+            const primaryPrd = specs.find((spec) => spec.isPrimary) ?? specs[0];
+            const agentNode = expanded.resources.find((resource) => resource.kind === 'agent' && String(resource.resourceId) === String(task.assignedAgentRef));
+            taskDetails.set(String(item.resourceId), {
+              kind: 'task', title: task.title, taskKey: task.key, status: task.status,
+              content: task.description || undefined, priority: task.priority,
+              agentRef: task.assignedAgentRef || undefined,
+              assignee: agentNode?.title || task.assignedAgentRef || (task.assignedUserId ? 'Assigned teammate' : undefined),
+              prdTitle: primaryPrd?.goal || undefined, prdStatus: primaryPrd?.status || undefined,
+              prdSummary: primaryPrd?.prd?.replace(/[#*_`>\[\]]/g, '').trim().slice(0, 240) || undefined,
+              prdCount: specs.length,
+            });
+          } catch { /* Keep the relationship card available when task detail is inaccessible. */ }
+        }));
         const related: CreationFlowNode[] = [
           ...expanded.resources.slice(0, 24).map((item, index): CreationFlowNode => ({
             id: crypto.randomUUID(), type: 'creation',
             position: { x: project.position.x + 390 + (index % 3) * 300, y: project.position.y - 180 + Math.floor(index / 3) * 190 },
-            data: { kind: item.kind as CreationObjectKind, title: item.title, status: item.status, subtitle: item.subtitle ?? undefined, resourceId: `${item.resourceType}:${item.resourceId}`, workflowExecutable: item.workflowExecutable, resourceSubtype: item.resourceSubtype },
+            data: { kind: item.kind as CreationObjectKind, title: item.title, status: item.status, subtitle: item.subtitle ?? undefined, ...(item.kind === 'task' ? taskDetails.get(String(item.resourceId)) : undefined), resourceId: `${item.resourceType}:${item.resourceId}`, workflowExecutable: item.workflowExecutable, resourceSubtype: item.resourceSubtype },
           })),
           ...expanded.generated.map((item, index): CreationFlowNode => ({
             id: crypto.randomUUID(), type: 'creation', position: { x: project.position.x + 390 + index * 370, y: project.position.y - 430 },
@@ -1047,11 +1065,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const project = nodes.find((node) => node.data.kind === 'project');
     const agent = nodes.find((node) => node.data.kind === 'agent');
     const projectId = project?.data.resourceId?.startsWith('project:') ? Number(project.data.resourceId.slice('project:'.length)) : NaN;
-    const addTaskNode = (resourceId: string, status: string) => {
+    const addTaskNode = (resourceId: string, status: string, detail: Partial<CreationNodeData> = {}) => {
       const taskId = crypto.randomUUID();
       const task: CreationFlowNode = {
         id: taskId, type: 'creation', position: { x: selectedNode.position.x + 330, y: selectedNode.position.y + 40 },
-        data: { kind: 'task', title: `Build ${selectedNode.data.title}`, status, role: agent?.data.title || 'Available agent', subtitle: project ? `Deliver to ${project.data.title}.` : 'Attach a project when ready.', resourceId },
+        data: { kind: 'task', title: `Build ${selectedNode.data.title}`, status, role: agent?.data.title || 'Available agent', assignee: agent?.data.title, agentRef: agent?.data.resourceId?.replace(/^agent:/, ''), priority: 'high', content: selectedNode.data.subtitle || 'Implement the approved canvas mockup.', subtitle: project ? `Deliver to ${project.data.title}.` : 'Attach a project when ready.', ...detail, resourceId },
       };
       setNodes((current) => [...current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status } } : node), task]);
       setEdges((current) => [...current, { id: crypto.randomUUID(), source: selectedNode.id, target: taskId, type: 'smoothstep', animated: true }]);
@@ -1068,7 +1086,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         priority: 'high',
         ...(agentRef ? { assignedAgentRef: agentRef } : {}),
       }).then(async (created) => {
-        const canvasTaskId = addTaskNode(`task:${created.id}`, agentRef ? 'Assigned' : 'Ready');
+        const canvasTaskId = addTaskNode(`task:${created.id}`, created.status || (agentRef ? 'Assigned' : 'Ready'), { taskKey: created.key, priority: created.priority, content: created.description || undefined, agentRef: created.assignedAgentRef || undefined });
         trackActivity('creation_artifact_delivered', { sessionId, metadata: { clientSurface: 'web', objectKinds: [selectedNode.data.kind], projectId } });
         if (agentRef) {
           trackActivity('creation_agent_assigned', { sessionId, metadata: { clientSurface: 'web', projectId } });
@@ -1898,6 +1916,35 @@ function Inspector({ node, nodes, edges, timeline, sessionId, persistence, role,
   const [actionStatus, setActionStatus] = useState('');
   const markdown = artifactMarkdown(node.data);
   const csv = artifactCsv(node.data);
+  const taskId = kind === 'task' && /^task:\d+$/.test(node.data.resourceId || '') ? Number(node.data.resourceId!.slice(5)) : null;
+  const taskAgents = nodes.filter((candidate) => candidate.data.kind === 'agent');
+  const selectedTaskAgent = taskAgents.find((agent) => agent.data.title === node.data.assignee || agent.data.title === node.data.role);
+  const taskAgentValue = typeof node.data.agentRef === 'string' ? node.data.agentRef : selectedTaskAgent ? (selectedTaskAgent.data.resourceId?.replace(/^agent:/, '') || selectedTaskAgent.id) : '';
+  const connectedPrd = kind === 'task' ? nodes.find((candidate) => candidate.data.kind === 'prd' && edges.some((edge) => (edge.source === node.id && edge.target === candidate.id) || (edge.target === node.id && edge.source === candidate.id))) : undefined;
+  const prdTitle = typeof connectedPrd?.data.title === 'string' ? connectedPrd.data.title : typeof node.data.prdTitle === 'string' ? node.data.prdTitle : '';
+  const prdStatus = typeof connectedPrd?.data.status === 'string' ? connectedPrd.data.status : typeof node.data.prdStatus === 'string' ? node.data.prdStatus : '';
+  const prdSummary = [connectedPrd?.data.markdown, connectedPrd?.data.content, connectedPrd?.data.subtitle, node.data.prdSummary].find((value) => typeof value === 'string' && value.trim()) as string | undefined;
+  const normalizedTaskStatus = String(node.data.status || 'ready').toLowerCase().replaceAll(' ', '_');
+  const statusGuidance: Record<string, string> = {
+    backlog: 'Add a clear description and PRD, set priority, and assign an agent to make this ready.',
+    todo: 'Confirm the PRD and acceptance criteria, then move the task to Ready.',
+    ready: 'The task is actionable. Start work by moving it to In progress or running its assigned agent.',
+    assigned: 'The owner is set. Move the task to In progress when execution begins.',
+    in_progress: 'Keep the description and acceptance criteria current; move to In review when evidence is ready.',
+    in_review: 'Validate the work against the PRD and acceptance criteria, then mark Done or return it to In progress.',
+    blocked: 'Record the blocker in the description, resolve its dependency, then return it to Ready or In progress.',
+    done: 'This task is complete. Reopen it only when the PRD or acceptance criteria are not satisfied.',
+  };
+  const persistTaskPatch = async (apiPatch: Parameters<typeof tasksApi.update>[1], canvasPatch: Partial<CreationNodeData>) => {
+    setActionStatus('Saving task…');
+    try {
+      if (taskId != null && persistence === 'server') await tasksApi.update(taskId, apiPatch);
+      onChange(canvasPatch);
+      setActionStatus(taskId != null && persistence === 'server' ? 'Task updated' : 'Task updated in this session');
+    } catch (error) {
+      setActionStatus(error instanceof Error ? error.message : 'Task update failed');
+    }
+  };
   const runArtifactAction = async (action: 'copy' | 'markdown' | 'csv' | 'docx' | 'pptx' | 'json') => {
     setActionStatus('Preparing…');
     try {
@@ -1947,6 +1994,29 @@ function Inspector({ node, nodes, edges, timeline, sessionId, persistence, role,
       {kind === 'dataset' && <><label>Import CSV or TSV<input type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onImportDataset(file); }} /></label><p className={styles.inspectorHint}>A safe preview of up to 500 rows is stored with this session. Connect it to a dashboard or ask Brain to analyze it.</p><button className={styles.fullButton} onClick={onVisualizeDataset}>Create visualization</button></>}
       {kind === 'voice' && <CanvasVoiceInspector node={node} persistence={persistence} onChange={onChange} />}
       {kind === 'project' && <><label>Project view<select value={typeof node.data.projectLens === 'string' ? node.data.projectLens : 'everything'} onChange={(event) => onChange({ projectLens: event.target.value })}><option value="everything">Everything</option><option value="delivery">Delivery</option><option value="metrics">Metrics</option><option value="customer-feedback">Customer feedback</option></select></label><p className={styles.inspectorHint}>Project context is optional. Add its related items to compare work visually or ground Brain in the complete project.</p><button className={styles.fullButton} onClick={onExpandProject}>Add all related items</button><button className={styles.fullButton} onClick={onCompareProjects}>Compare projects on canvas</button></>}
+      {kind === 'task' && <>
+        <div className={styles.taskInspectorGrid}>
+          <label>Status<select value={String(node.data.status || 'ready')} onChange={(event) => void persistTaskPatch({ status: event.target.value }, { status: event.target.value })}>
+            {!['backlog','todo','ready','assigned','in_progress','in_review','blocked','done'].includes(String(node.data.status || 'ready')) && <option value={String(node.data.status)}>{String(node.data.status)}</option>}
+            <option value="backlog">Backlog</option><option value="todo">To do</option><option value="ready">Ready</option><option value="assigned">Assigned</option><option value="in_progress">In progress</option><option value="in_review">In review</option><option value="blocked">Blocked</option><option value="done">Done</option>
+          </select></label>
+          <label>Priority<select value={typeof node.data.priority === 'string' ? node.data.priority : 'medium'} onChange={(event) => void persistTaskPatch({ priority: event.target.value as 'low' | 'medium' | 'high' | 'urgent' }, { priority: event.target.value })}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option></select></label>
+        </div>
+        <div className={styles.statusGuidance}><b>How to move this forward</b><p>{statusGuidance[normalizedTaskStatus] || 'Keep the owner, PRD, acceptance criteria, and current state accurate so the next action is clear.'}</p></div>
+        <label>Assigned agent<select value={taskAgentValue} onChange={(event) => {
+          const selected = taskAgents.find((agent) => (agent.data.resourceId?.replace(/^agent:/, '') || agent.id) === event.target.value);
+          const agentRef = selected?.data.resourceId?.startsWith('agent:') ? selected.data.resourceId.slice(6) : null;
+          if (taskId != null && persistence === 'server' && selected && !agentRef) { setActionStatus('Save this Agent before assigning it to a project task'); return; }
+          void persistTaskPatch({ assignedAgentRef: agentRef, assignedAgentHostId: null, assignedUserId: null }, { agentRef: event.target.value || undefined, assignee: selected?.data.title || undefined, role: selected?.data.title || undefined });
+        }}><option value="">Unassigned</option>{taskAgents.map((agent) => { const value = agent.data.resourceId?.replace(/^agent:/, '') || agent.id; return <option key={agent.id} value={value}>{agent.data.title}{agent.data.model ? ` · ${String(agent.data.model)}` : ''}</option>; })}</select></label>
+        <label>Description<textarea rows={5} value={typeof node.data.content === 'string' ? node.data.content : typeof node.data.subtitle === 'string' ? node.data.subtitle : ''} onChange={(event) => onChange({ content: event.target.value })} onBlur={(event) => { if (taskId != null && persistence === 'server') void persistTaskPatch({ description: event.target.value || null }, { content: event.target.value }); }} /></label>
+        <label>Acceptance criteria<textarea rows={4} value={typeof node.data.acceptanceCriteria === 'string' ? node.data.acceptanceCriteria : ''} placeholder="What must be true for this task to be done?" onChange={(event) => onChange({ acceptanceCriteria: event.target.value })} /></label>
+        <section className={styles.taskPrdSummary} aria-label="Task PRD">
+          <div><span>PRD</span>{prdStatus && <small>{prdStatus}</small>}</div>
+          {prdTitle ? <><strong>{prdTitle}</strong>{prdSummary && <p>{prdSummary.replace(/[#*_`>\[\]]/g, '').trim().slice(0, 360)}</p>}</> : <><strong>No PRD linked</strong><p>Connect a PRD object to this task or link one from the project task details. The PRD gives the agent the goal and handoff context.</p></>}
+        </section>
+        {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
+      </>}
       {kind === 'projectComparison' && <><p className={styles.inspectorHint}>This comparison retains the source endpoints and fetch timestamp used for every project. Refresh to compare current delivery, velocity, and feature evidence.</p><button className={styles.fullButton} onClick={onCompareProjects}>Refresh project comparison</button><SourceList sources={node.data.sources} /></>}
       {kind === 'mockup' && <><label>Delivery project<select><option>BuilderForce launch</option><option>No project</option></select></label><label>Assign agent<select><option>Campaign Strategist</option><option>Web Analyst</option></select></label><button className={styles.fullButton} onClick={onDeliverMockup}>Add to project and assign</button></>}
       {kind === 'mockupSet' && <><p className={styles.inspectorHint}>Expand the set into individually reviewable mockups, or deliver the approved set as one project task.</p><button className={styles.fullButton} onClick={onExpandMockupSet}>Expand all mockups</button><button className={styles.fullButton} onClick={onDeliverMockup}>Add to project and assign</button><SourceList sources={node.data.sources} /></>}
@@ -1954,7 +2024,7 @@ function Inspector({ node, nodes, edges, timeline, sessionId, persistence, role,
       {kind === 'standup' && <><p className={styles.inspectorHint}>Gather every Staff Member and Agent currently on the canvas. With a saved Project, this starts the canonical stand-up ceremony and keeps its resource link in the session.</p><button className={styles.fullButton} onClick={onStartStandup}>Gather and start stand-up</button></>}
       {kind === 'frame' && <><label>Purpose<input value={typeof node.data.framePurpose === 'string' ? node.data.framePurpose : 'Arrange related objects here'} onChange={(event) => onChange({ framePurpose: event.target.value })} /></label><label>Fill color<input type="color" value={typeof node.data.frameColor === 'string' ? node.data.frameColor : '#f8f6ff'} onChange={(event) => onChange({ frameColor: event.target.value })} /></label><label>Border color<input type="color" value={typeof node.data.frameBorder === 'string' ? node.data.frameBorder : '#9d8bea'} onChange={(event) => onChange({ frameBorder: event.target.value })} /></label><button className={styles.fullButton} onClick={onSaveFramePreset}>Save as reusable frame</button></>}
       {kind === 'drawing' && <><label>Stroke color<input type="color" value={typeof node.data.stroke === 'string' ? node.data.stroke : '#5b5ce2'} onChange={(event) => onChange({ stroke: event.target.value })} /></label><label>Stroke width<input type="range" min="1" max="12" value={typeof node.data.strokeWidth === 'number' ? node.data.strokeWidth : 3} onChange={(event) => onChange({ strokeWidth: Number(event.target.value) })} /></label><p className={styles.inspectorHint}>Resize, annotate, connect, or use this sketch as visual context for Brain.</p></>}
-      {!['chat', 'agent', 'staff', 'website', 'prototype', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'mockup', 'evermind', 'standup', 'frame', 'drawing'].includes(kind) && <p className={styles.inspectorHint}>This object is live in the session. Connect it to other objects or ask Brain to transform or evaluate it.</p>}
+      {!['chat', 'agent', 'staff', 'website', 'prototype', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'task', 'mockup', 'evermind', 'standup', 'frame', 'drawing'].includes(kind) && <p className={styles.inspectorHint}>This object is live in the session. Connect it to other objects or ask Brain to transform or evaluate it.</p>}
       </fieldset> : <ActivityInspector sessionId={sessionId} objectId={node.id} persistence={persistence} role={role} members={members} />}
       {tab === 'details' && <section aria-label="Copy and download" style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
         <strong style={{ fontSize: 12 }}>Copy &amp; download</strong>
@@ -1969,7 +2039,7 @@ function Inspector({ node, nodes, edges, timeline, sessionId, persistence, role,
         {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
       </section>}
     </div>
-    <footer><span>Resource · {role}</span><code>{node.data.resourceId || `session:${node.id}`}</code><button className={styles.fullButton} disabled={!editable} onClick={() => onChange({ status: 'Saved' })}>Save changes</button></footer>
+    <footer><span>Resource · {role}</span><code>{node.data.resourceId || `session:${node.id}`}</code><button className={styles.fullButton} disabled={!editable} onClick={() => kind === 'task' ? setActionStatus('Task details are saved') : onChange({ status: 'Saved' })}>{kind === 'task' ? 'Save task details' : 'Save changes'}</button></footer>
   </aside>;
 }
 
