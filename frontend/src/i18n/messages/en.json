@@ -7029,6 +7029,7 @@
         "never_started": "Never started",
         "unassigned": "Nobody assigned",
         "managed_no_role": "No role can execute this stage",
+        "lane_unconfigured": "Stage authorises no role",
         "capability_gap": "No capable agent",
         "human_gate": "Awaiting human approval",
         "failure_breaker": "Halted after repeated failures",

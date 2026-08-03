@@ -7029,6 +7029,7 @@
         "never_started": "Jamais démarré",
         "unassigned": "Personne d’assigné",
         "managed_no_role": "Aucun rôle ne peut exécuter cette étape",
+        "lane_unconfigured": "L’étape n’autorise aucun rôle",
         "capability_gap": "Aucun agent compétent",
         "human_gate": "En attente d’une approbation humaine",
         "failure_breaker": "Arrêté après des échecs répétés",

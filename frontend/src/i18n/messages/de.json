@@ -7029,6 +7029,7 @@
         "never_started": "Nie gestartet",
         "unassigned": "Niemand zugewiesen",
         "managed_no_role": "Keine Rolle kann diese Phase ausführen",
+        "lane_unconfigured": "Stufe autorisiert keine Rolle",
         "capability_gap": "Kein fähiger Agent",
         "human_gate": "Wartet auf menschliche Freigabe",
         "failure_breaker": "Nach wiederholten Fehlern gestoppt",

@@ -6,6 +6,7 @@ import es from './messages/es.json';
 import fr from './messages/fr.json';
 import de from './messages/de.json';
 import { LOCALES, DEFAULT_LOCALE, type Locale } from './config';
+import { STALL_CAUSES } from '@/lib/builderforceApi';
 
 /**
  * Catalog guard for the five message files.
@@ -83,11 +84,13 @@ describe('message catalogs', () => {
     expect(Object.keys(quickStart ?? {}).sort()).toEqual([...QUICK_START_KEYS].sort());
   });
 
-  it.each(LOCALES)('%s has the managed-no-role stall label in the manager namespace', (locale) => {
+  it.each(LOCALES)('%s labels every manager stall cause', (locale) => {
     const t = createTranslator({ locale, messages: CATALOGS[locale] });
-    expect(t('manager.stalls.cause.managed_no_role' as never)).not.toBe(
-      'manager.stalls.cause.managed_no_role',
-    );
+    const missing = STALL_CAUSES.filter((cause) => {
+      const key = `manager.stalls.cause.${cause}`;
+      return t(key as never) === key;
+    });
+    expect(missing).toEqual([]);
   });
 
   it.each(LOCALES.filter((l) => l !== DEFAULT_LOCALE))('%s has exactly the keys en has', (locale) => {

@@ -2447,17 +2447,23 @@ export interface ManagerDailyDigest {
   computedAt: string;
 }
 
-/** Why a ticket is not moving — mirrors the API's `StallCause`. */
-export type StallCause =
-  | 'live' | 'cooling_down' | 'moving' | 'never_started' | 'unassigned'
-  | 'managed_no_role'
+/** Why a ticket is not moving — mirrors the API's `StallCause`.
+ *
+ * This is a runtime registry, not only a union, so the message-catalog test can prove
+ * every cause the server may return has a `manager.stalls.cause.*` label. */
+export const STALL_CAUSES = [
+  'live', 'cooling_down', 'moving', 'never_started', 'unassigned',
+  'managed_no_role',
   /** The stage authorises NO role at all — nothing declared, nobody staffed. Distinct
-   *  from `managed_no_role` because there is no role to fill: the repair configures the
-   *  lane rather than staffing a name (0386). */
-  | 'lane_unconfigured'
-  | 'capability_gap' | 'human_gate' | 'failure_breaker' | 'missing_deliverable'
-  | 'build_failed' | 'awaiting_signoff' | 'pr_conflict' | 'pr_unreconciled'
-  | 'merge_withheld' | 'blocked' | 'unknown';
+   * from `managed_no_role` because there is no role to fill: the repair configures the
+   * lane rather than staffing a name (0386). */
+  'lane_unconfigured',
+  'capability_gap', 'human_gate', 'failure_breaker', 'missing_deliverable',
+  'build_failed', 'awaiting_signoff', 'pr_conflict', 'pr_unreconciled',
+  'merge_withheld', 'blocked', 'unknown',
+] as const;
+
+export type StallCause = (typeof STALL_CAUSES)[number];
 
 /** What the manager did (or handed over) about it — mirrors the API's `StallRemedy`. */
 export type StallRemedy =

@@ -7029,6 +7029,7 @@
         "never_started": "从未启动",
         "unassigned": "无人负责",
         "managed_no_role": "没有角色可执行此阶段",
+        "lane_unconfigured": "该阶段未授权任何角色",
         "capability_gap": "没有具备能力的智能体",
         "human_gate": "等待人工审批",
         "failure_breaker": "反复失败后已停止",
