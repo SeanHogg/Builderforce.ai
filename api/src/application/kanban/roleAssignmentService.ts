@@ -8,8 +8,13 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * Scope is carried by `projectId`:
  *   - null  → a workspace-default assignment (Workforce → Roles tab), every project.
  *   - <id>  → a project-specific assignment (the project's Recommended Roster card).
+ *
+ * SINGLE-ASSIGNEE semantics (task #775): assigning a new person to a role that
+ * already has a different assignee atomically REPLACES the previous one — delete
+ * old row + insert new row in one transaction so no caller ever sees two rows for
+ * the same (scope, roleKey). Re-assigning the same person is a no-op.
  */
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNull, or } from 'drizzle-orm';
 import { projectRoleAssignments } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -33,6 +38,13 @@ export interface RoleAssignmentWrite {
   assigneeRef: string;
   assigneeName?: string | null;
   projectId?: number | null;
+}
+
+/** Return value from create() — always contains the resulting assignment,
+ *  plus the previous assignment if one was replaced. */
+export interface CreateResult {
+  assignment: RoleAssignment;
+  replaced: RoleAssignment | null;
 }
 
 const ASSIGNEE_KINDS: readonly AssigneeKind[] = ['agent', 'human', 'hire'];
@@ -66,7 +78,23 @@ export class RoleAssignmentService {
     return all.filter((a) => (projectId == null ? a.projectId == null : a.projectId === projectId));
   }
 
-  async create(env: Env, tenantId: number, createdBy: string | null, body: RoleAssignmentWrite): Promise<RoleAssignment> {
+  /**
+   * Create or replace a role assignment.
+   *
+   * Single-assignee semantics (PRD task #775):
+   * 1. Idempotent no-op when the same (kind, ref) already holds the role.
+   * 2. When a DIFFERENT assignee already holds the role, atomically delete the
+   *    old row and insert the new one inside a transaction.
+   * 3. First-time assignment for the role is a plain insert.
+   *
+   * Returns the new assignment plus the replaced one (null on no-op / first-time).
+   */
+  async create(
+    env: Env,
+    tenantId: number,
+    createdBy: string | null,
+    body: RoleAssignmentWrite,
+  ): Promise<CreateResult> {
     const roleKey = body.roleKey?.trim();
     const assigneeRef = body.assigneeRef?.trim();
     if (!roleKey) throw new Error('roleKey is required');
@@ -74,50 +102,139 @@ export class RoleAssignmentService {
     if (!ASSIGNEE_KINDS.includes(body.assigneeKind)) throw new Error('assigneeKind must be agent, human or hire');
     const projectId = body.projectId ?? null;
 
-    // Idempotent: re-assigning the same person to the same role in the same scope is a no-op.
+    const scopeClause = projectId == null
+      ? isNull(projectRoleAssignments.projectId)
+      : eq(projectRoleAssignments.projectId, projectId);
+
+    // ----- Idempotent no-op: same person already holds the role -----
     const existing = await this.db
       .select()
       .from(projectRoleAssignments)
       .where(and(
         eq(projectRoleAssignments.tenantId, tenantId),
-        projectId == null ? isNull(projectRoleAssignments.projectId) : eq(projectRoleAssignments.projectId, projectId),
+        scopeClause,
         eq(projectRoleAssignments.roleKey, roleKey),
         eq(projectRoleAssignments.assigneeKind, body.assigneeKind),
         eq(projectRoleAssignments.assigneeRef, assigneeRef),
       ))
       .limit(1);
-    if (existing[0]) return this.mapRow(existing[0]);
+    if (existing[0]) {
+      return { assignment: this.mapRow(existing[0]), replaced: null };
+    }
 
-    const id = crypto.randomUUID();
-    await this.db.insert(projectRoleAssignments).values({
-      id, tenantId, projectId, roleKey,
+    // ----- Check for a conflicting assignment (different assignee, same role) -----
+    const conflict = await this.db
+      .select()
+      .from(projectRoleAssignments)
+      .where(and(
+        eq(projectRoleAssignments.tenantId, tenantId),
+        scopeClause,
+        eq(projectRoleAssignments.roleKey, roleKey),
+      ))
+      .limit(1);
+
+    let replaced: RoleAssignment | null = null;
+
+    if (conflict[0]) {
+      // Atomic replacement: delete old, insert new within a single transaction.
+      const replacedRow = conflict[0];
+      replaced = this.mapRow(replacedRow);
+
+      await this.db.transaction(async (tx) => {
+        await tx
+          .delete(projectRoleAssignments)
+          .where(eq(projectRoleAssignments.id, replacedRow.id));
+
+        const id = crypto.randomUUID();
+        await tx.insert(projectRoleAssignments).values({
+          id, tenantId, projectId, roleKey,
+          assigneeKind: body.assigneeKind,
+          assigneeRef,
+          assigneeName: body.assigneeName?.trim() || null,
+          createdBy,
+          createdAt: new Date(),
+        });
+      });
+    } else {
+      // First-time assignment for this role — plain insert.
+      const id = crypto.randomUUID();
+      await this.db.insert(projectRoleAssignments).values({
+        id, tenantId, projectId, roleKey,
+        assigneeKind: body.assigneeKind,
+        assigneeRef,
+        assigneeName: body.assigneeName?.trim() || null,
+        createdBy,
+        createdAt: new Date(),
+      });
+    }
+
+    const assignment: RoleAssignment = {
+      id: crypto.randomUUID(), // will be overwritten below — the transaction or insert already used a new id
+      roleKey,
       assigneeKind: body.assigneeKind,
       assigneeRef,
       assigneeName: body.assigneeName?.trim() || null,
-      createdBy,
-      createdAt: new Date(),
-    });
+      projectId,
+    };
+
+    // We need the actual id from the insert. Re-fetch it.
+    const inserted = await this.db
+      .select()
+      .from(projectRoleAssignments)
+      .where(and(
+        eq(projectRoleAssignments.tenantId, tenantId),
+        scopeClause,
+        eq(projectRoleAssignments.roleKey, roleKey),
+      ))
+      .limit(1);
+
+    const result = inserted[0] ? this.mapRow(inserted[0]) : assignment;
+
     await invalidateCached(env, assignmentsKey(tenantId));
 
-    // Unified audit stream: a roster staffing decision (who covers which role),
-    // attributed to the manager who made it. Best-effort — never fail the assignment.
+    // ----- Audit trail -----
     try {
       const actor = await resolveActorByRef(env, this.db, tenantId, createdBy);
-      await recordActivity(env, this.db, {
-        tenantId,
-        projectId,
-        actor,
-        verb: 'role.assigned',
-        targetType: 'role',
-        targetId: roleKey,
-        targetLabel: body.assigneeName?.trim() || assigneeRef,
-        summary: `Assigned ${body.assigneeName?.trim() || assigneeRef} to ${roleKey}`,
-        metadata: { assigneeKind: body.assigneeKind, assigneeRef, projectId },
-      });
-    } catch (error) { /* best-effort audit */ 
+      if (replaced) {
+        await recordActivity(env, this.db, {
+          tenantId,
+          projectId,
+          actor,
+          verb: 'role.replaced',
+          targetType: 'role',
+          targetId: roleKey,
+          targetLabel: body.assigneeName?.trim() || assigneeRef,
+          summary: `Replaced ${replaced.assigneeName || replaced.assigneeRef} with ${body.assigneeName?.trim() || assigneeRef} on ${roleKey}`,
+          metadata: {
+            assigneeKind: body.assigneeKind,
+            assigneeRef,
+            projectId,
+            replaced: {
+              id: replaced.id,
+              assigneeKind: replaced.assigneeKind,
+              assigneeRef: replaced.assigneeRef,
+              assigneeName: replaced.assigneeName,
+            },
+          },
+        });
+      } else {
+        await recordActivity(env, this.db, {
+          tenantId,
+          projectId,
+          actor,
+          verb: 'role.assigned',
+          targetType: 'role',
+          targetId: roleKey,
+          targetLabel: body.assigneeName?.trim() || assigneeRef,
+          summary: `Assigned ${body.assigneeName?.trim() || assigneeRef} to ${roleKey}`,
+          metadata: { assigneeKind: body.assigneeKind, assigneeRef, projectId },
+        });
+      }
+    } catch (error) { /* best-effort audit */
       reportCaughtError(error, { source: "application/kanban/roleAssignmentService.ts", operation: "create" });
     }
-    return { id, roleKey, assigneeKind: body.assigneeKind, assigneeRef, assigneeName: body.assigneeName?.trim() || null, projectId };
+
+    return { assignment: result, replaced };
   }
 
   /** Delete by id (scoped to tenant). Returns the removed row's projectId for cache work. */
