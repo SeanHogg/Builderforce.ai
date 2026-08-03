@@ -171,6 +171,10 @@ _Authored by the business-analyst — signed below._
 
 ### Sign-off
 
+_Product Manager: [x] PRD reviewed & approved — 2026-08-03_
+
+_Scope confirmed. The Evidence Reference System PRD accurately captures the product vision: a tamper-evident, multi-tenant evidence repository with WORM storage, cryptographic integrity guarantees, full-text search, RBAC, and signed export bundles. All 7 functional requirements, 25+ system quality attributes, data model, RBAC matrix, and integration interfaces are aligned with the target ICP of Compliance Officers, Security Analysts, DevOps Engineers, and SREs. Out-of-scope items (real-time alerting, source collection, analytics, secret management) are correctly excluded to keep the system focused._
+
 _Business Analyst: [x] Requirements complete — 2026-08-03_
 
 ## Design
