@@ -1,5 +1,6 @@
 > **PRD** — drafted by Ada (Sr. Product Mgr) · task #564
 > _Each agent that updates this PRD signs its change below._
+> - **BA-001** — 2026-08-03: Business Analyst (task #564) — Authored Requirements section (REQ-001 through REQ-028)
 
 # Product Requirements Document: Sandbox Egress Validation
 
