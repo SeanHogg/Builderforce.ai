@@ -68,7 +68,7 @@ function calculatePreliminaryScore(
   } else {
     deltaScore = 0.5;
   }
-  score += weights.deltaMagnitude * deltaScore;
+  score += globalWeights.deltaMagnitude * deltaScore;
 
   // Cross-mode corroboration weight (deterministic placeholder).
   score += globalWeights.crossModeCorroboration * (determineCorroboration(record) ? 1 : 0);
