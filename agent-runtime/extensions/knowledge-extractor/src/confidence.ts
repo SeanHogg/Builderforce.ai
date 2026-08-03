@@ -34,7 +34,7 @@ export function computeBranchWeight(): number {
  */
 function calculatePreliminaryScore(
   record: LearningRecord,
-  weights: typeof GlobalWeights
+  weights: typeof globalWeights
 ): number {
   let score = 0;
 
