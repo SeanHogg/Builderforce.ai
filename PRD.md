@@ -1,125 +1,90 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #1539
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# PRD: Reliable Kanban Sign-off Recording with Token Expiry Handling
 
 ## Problem & Goal
+Ada (Product Manager) completed the PRD sign-off for task #586 and committed the updated PRD.md to the branch. However, the `builtin_kanban_signoff` tool returned a `401 Unauthorized` error with the message “Token has been revoked or expired” on two consecutive attempts. As a result, the accountability manifest sign-off could not be recorded automatically, leaving the official sign-off incomplete despite the deliverable being ready.
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+**Goal:** Ensure that authenticated users can reliably record sign-off actions via `builtin_kanban_signoff` even when their session token has expired, so that accountability manifests are always updated upon task completion. The solution must transparently handle token refresh, and provide a durable fallback when refresh is not possible.
 
 ## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Product Managers** (e.g., Ada) who are responsible for PRD sign-offs and rely on automated sign-off recording.
+- **Any authenticated agent** with sign-off authority that executes `builtin_kanban_signoff` as part of a workflow.
+- **System administrators** who may need to manually resolve stuck sign-offs or review audit logs.
 
 ## Scope
-
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- Modify the `builtin_kanban_signoff` tool to gracefully handle `401` errors caused by expired/revoked tokens.
+- Introduce automatic token refresh using the agent’s stored refresh token.
+- Implement a durable queue for sign-off intents when token refresh is unavailable or fails.
+- Add a manual admin override capability with full audit trail.
+- Provide clear user-facing notifications when sign-off cannot be completed in real time.
+- Logging and monitoring of token refresh attempts and sign-off queue status.
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+- **FR1 – 401 Detection & Classification:**  
+  When `builtin_kanban_signoff` receives a `401` response with a payload indicating token expiry or revocation, the system must recognize it as a recoverable error distinct from invalid credentials.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+- **FR2 – Automatic Token Refresh:**  
+  The tool must attempt to refresh the user’s access token using the stored refresh token (if available) before failing the sign-off.  
+  The refresh request must be made to the identity provider’s token endpoint.
 
----
+- **FR3 – Retry on Successful Refresh:**  
+  If the token refresh succeeds, the tool must immediately retry the original sign-off request with the new access token.  
+  On success, the sign-off is recorded as if no error occurred.
 
-### FR-2 — Guided (Interactive) Mode
+- **FR4 – Durable Sign-off Intent Queue:**  
+  If token refresh fails (e.g., refresh token also expired, missing, or network error), the system must persist the sign-off intent (task ID, user ID, timestamp, and any supplemental metadata) in a durable queue.  
+  The user must receive a clear message: “Your session has expired and automatic refresh failed. Sign-off for task #586 has been queued. Please re-authenticate, and the sign-off will be applied automatically.”
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+- **FR5 – Automatic Processing of Queued Sign-offs:**  
+  Upon the user’s next successful authentication (or token refresh), the system must check for pending queued sign-offs and automatically execute them using the fresh token.  
+  Duplicate prevention must be enforced (if the sign-off was already manually recorded).
 
----
+- **FR6 – Manual Admin Override:**  
+  An authorized administrator must be able to manually mark a sign-off as complete in the accountability manifest via a secure endpoint (e.g., `admin/manual-signoff`).  
+  This action must be logged with the administrator’s identity, timestamp, reason, and original task ID.
 
-### FR-3 — Bulk (Import) Mode
+- **FR7 – Audit Logging:**  
+  All token refresh attempts (success/failure), queue insertions, automatic retries, and manual overrides must be logged with correlated identifiers (user, task, request ID) for traceability.
 
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+- **FR8 – Notifications:**  
+  The user must be informed immediately when a sign-off enters the queue, including a deep-link to re-authenticate.  
+  On successful automatic retry after refresh, a confirmation may be sent (optional).
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
-
----
+- **AC1:** Ada performs the sign-off for task #586 using the fixed tool. If her token has expired, the system automatically refreshes it and completes the sign-off without her manual intervention.
+- **AC2:** If automatic refresh fails, Ada sees a clear message that her sign-off is queued; after she re-authenticates, the queued sign-off is applied to the accountability manifest within 1 minute without further action.
+- **AC3:** A manual admin override for task #586 successfully marks the sign-off as complete, and the audit log records the override event with all required fields.
+- **AC4:** In a test scenario with an expired token, the system refreshes the token and records the sign-off within a total latency of ≤ 5 seconds beyond the normal sign-off duration.
+- **AC5:** No duplicate sign-off entries are created when a queued sign-off is processed after a manual override has already recorded the sign-off.
+- **AC6:** Audit logs capture: token refresh attempt outcome, queue insertion, automatic retry success, and manual override events, all searchable by task ID and user.
 
 ## Out of Scope
+- General redesign of the authentication or token management system.
+- Token refresh mechanisms for tools other than `builtin_kanban_signoff`.
+- UI changes beyond the notification/inline message regarding queued sign-offs.
+- Support for multi-step, multi-user sign-off workflows (e.g., sequential approvals).
+- Guaranteed delivery of queued sign-offs across system-wide outages – only local durable queue required.
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+## Requirements
+
+_Owned by the business-analyst — to be authored._
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
