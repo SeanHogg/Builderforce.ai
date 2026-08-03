@@ -170,27 +170,5 @@ The PRD calls for a Postgres-backed `channel-registry` table with `gen_random_uu
 
 **Recommendation:** The PRD is approved as the specification for this feature. Ticket #353 should be returned to the backlog (`ready`) and re-dispatched once gap task #1218 is resolved and the `api/` backend is available on the branch for implementation.
 
----
 
-## Business Analyst Assessment (2026-07-30)
 
-### PRD Quality: ACCEPTED
-
-The PRD is well-structured, complete, and actionable. Every functional requirement (FR-1 through FR-5) is explicit, testable, and free of ambiguity. The acceptance criteria (AC-1 through AC-10) cover happy paths, error paths, filtering, idempotency, and regression — a solid test plan. The out-of-scope section correctly bounds the iteration and defers non-trivial concerns (auth, multi-tenancy, pagination, encryption) to future work.
-
-### Implementation Blocker
-
-**The bound repository `seanhogg/builderforce.ai` on branch `builderforce/task-353` does not contain the API backend package.** The `api/` directory, `clawRoutes.ts` (the stub location cited in ROADMAP.md), SQL migration infrastructure, and database client/ORM layer are all absent from this branch. The branch holds `agent-runtime/` (Swabble Swift CLI + chat-channel extensions) and root documentation — a different subsystem.
-
-This means FR-1 through FR-5 and AC-1 through AC-10 **cannot be implemented** on the current branch. The PRD itself is sound; the delivery path is blocked by infrastructure.
-
-### Prerequisite
-
-Gap task #1218 ("`api/` backend package must be present on branch before channel-registry code can be written") must be resolved first. Once the `api/` package with its existing route handler (`clawRoutes.ts`), migration runner, and database layer is on the branch, this ticket can be re-dispatched and implemented directly against the PRD.
-
-### Recommendation
-
-- **Do not** close or re-scope this ticket. The requirements are correct and the PRD is ready.
-- **Resolve gap #1218** to bring the `api/` backend onto the branch.
-- **Re-dispatch #353** to a developer lane once the infrastructure is in place.
-- **No changes needed to the PRD itself** — it is implementation-ready.
