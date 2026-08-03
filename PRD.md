@@ -108,7 +108,7 @@ Each risk record must include:
 | **Title** | Autonomous Agent Not Processing To Do Column Tasks |
 | **Description** | The autonomous agent "Kevin BA/PM/PO (Durable)" assigned to the To Do swimlane is not processing new tasks. This blocks the ticket lifecycle and prevents work from entering the delivery pipeline. Currently affecting the BuilderForce.AI board (ID: ad030733-9775-4faa-903f-d6e164a126b5). |
 | **Impact** | 4 (High) |
-| **Lifecycle** | 4 (Likely) |
+| **Likelihood** | 4 (Likely) |
 | **Composite Score** | **16** |
 | **Owner** | Platform Engineering / Agent Runtime Team |
 | **Mitigation Plan** | 1. Debug agent dispatch loop; 2. Verify board swimlane configuration; 3. Check for stale agent assignments. **Due:** 2026-08-07 |
