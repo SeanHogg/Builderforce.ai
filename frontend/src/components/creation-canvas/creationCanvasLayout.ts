@@ -38,6 +38,28 @@ export function canvasArrangementTargets(nodes: CreationFlowNode[], requestedIds
   ));
 }
 
+/** Place an authored object below the current stack on narrow screens. */
+export function nextCanvasObjectPosition(
+  nodes: readonly CreationFlowNode[],
+  requested: { x?: number; y?: number },
+  narrow: boolean,
+): { x: number; y: number } {
+  const explicitX = Number.isFinite(requested.x);
+  const explicitY = Number.isFinite(requested.y);
+  if (!narrow || (explicitX && explicitY)) {
+    return { x: explicitX ? Number(requested.x) : 520, y: explicitY ? Number(requested.y) : 280 };
+  }
+  const visible = nodes.filter((node) => node.hidden !== true && node.data.placementHidden !== true);
+  const stackX = visible.length ? Math.min(...visible.map((node) => node.position.x)) : 80;
+  const stackBottom = visible.length
+    ? Math.max(...visible.map((node) => node.position.y + canvasNodeDimensions(node).height))
+    : 32;
+  return {
+    x: explicitX ? Number(requested.x) : stackX,
+    y: explicitY ? Number(requested.y) : stackBottom + 48,
+  };
+}
+
 /**
  * Lay out nodes from their real footprints. Row/column maxima make the returned
  * rectangles non-overlapping even when cards have very different dimensions.

@@ -70,6 +70,9 @@ export interface QueuedPr {
   /** Newest conflict observation. Required to turn the old permanent ceiling into a
    * bounded autonomous retry rather than an unbounded five-minute loop. */
   lastConflictAt?: Date | string | null;
+  /** Reconciler/webhook CI verdict. Red or pending work must not consume the one
+   * integration head and starve a green PR behind it. */
+  buildStatus?: string | null;
 }
 
 export type PrDisposition =
@@ -77,6 +80,7 @@ export type PrDisposition =
   | 'sync_exhausted'
   | 'merge_exhausted'
   | 'conflict_backoff'
+  | 'ci_blocked'
   /** A resolution run already owns this branch; touching it would race that run. */
   | 'running'
   /** In the head — may spend provider round-trips this pass. */
@@ -108,7 +112,7 @@ export interface PrPlanEntry<T> {
  */
 export function planMergeQueue<T extends QueuedPr>(
   prs: readonly T[],
-  opts: { hasActiveRun: (pr: T) => boolean; depth?: number; nowMs?: number },
+  opts: { hasActiveRun: (pr: T) => boolean; depth?: number; nowMs?: number; requireGreen?: boolean },
 ): PrPlanEntry<T>[] {
   const depth = opts.depth ?? MERGE_QUEUE_DEPTH;
   const nowMs = opts.nowMs ?? Date.now();
@@ -126,6 +130,7 @@ export function planMergeQueue<T extends QueuedPr>(
       worked += 1;
       return at('running');
     }
+    if (opts.requireGreen && pr.buildStatus !== 'success') return at('ci_blocked');
     if (worked >= depth) return at('queued');
     worked += 1;
     if (isActionExhausted(pr.conflicts ?? 0)) {
@@ -141,7 +146,7 @@ export function planMergeQueue<T extends QueuedPr>(
 /** Shape of a planned pass, for the closing journal — so the next capture can show
  *  whether the queue is draining without anyone having to infer it from decision counts. */
 export function summarizeMergeQueue<T>(plan: readonly PrPlanEntry<T>[]): {
-  worked: number; queued: number; retired: number; running: number; cooling: number; depth: number;
+  worked: number; queued: number; retired: number; running: number; cooling: number; ciBlocked: number; depth: number;
 } {
   const count = (d: PrDisposition) => plan.filter((e) => e.disposition === d).length;
   return {
@@ -150,6 +155,7 @@ export function summarizeMergeQueue<T>(plan: readonly PrPlanEntry<T>[]): {
     retired: count('sync_exhausted') + count('merge_exhausted'),
     running: count('running'),
     cooling: count('conflict_backoff'),
+    ciBlocked: count('ci_blocked'),
     depth: MERGE_QUEUE_DEPTH,
   };
 }

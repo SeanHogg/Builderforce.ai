@@ -1135,16 +1135,45 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     // Attach any "reconnect this account" alert to the LIST, not just the per-provider
     // status drawer — an operator who never opens the drawer would otherwise never learn
     // that a connected account has been silently rejected on every call. Bounded fan-out
-    // (one entry per CONNECTED provider, ≤8) and each lookup is read-through cached, so
+    // (one entry per CONNECTED provider, ≤9) and each lookup is read-through cached, so
     // this stays a single cheap read in the steady state.
-    const alerts = await Promise.all(
-      details.map((d) => loadProviderAuthAlert(c.env, access.tenantId, d.provider).catch(() => null)),
+    const db = buildTransactionalDatabase(c.env);
+    const [alerts, usageResult] = await Promise.all([
+      Promise.all(details.map((d) =>
+        loadProviderAuthAlert(c.env, access.tenantId, d.provider).catch(() => null))),
+      db.execute(sql`
+        SELECT byo_provider AS provider,
+               COUNT(*)::int AS requests,
+               COALESCE(SUM(total_tokens), 0)::bigint AS tokens,
+               MAX(created_at) AS last_used_at
+        FROM llm_usage_log
+        WHERE tenant_id = ${access.tenantId}
+          AND byo = true
+          AND byo_provider IS NOT NULL
+          AND created_at >= NOW() - (${USAGE_WINDOW_DAYS} || ' days')::interval
+        GROUP BY byo_provider
+      `).catch(() => ({ rows: [] })),
+    ]);
+    const usageByProvider = new Map(
+      (usageResult.rows as Array<Record<string, unknown>>).map((row) => [String(row.provider), {
+        periodDays: USAGE_WINDOW_DAYS,
+        requests: Number(row.requests ?? 0),
+        tokens: Number(row.tokens ?? 0),
+        lastUsedAt: row.last_used_at ?? null,
+      }]),
     );
     // `providers` (id array) kept for backward compatibility; `details` carries auth type
     // + tenant-set BYO precedence (ordered by `priority`, most-preferred first).
     return c.json({
       providers: details.map((d) => d.provider),
-      details: details.map((d, i) => (alerts[i] ? { ...d, authAlert: alerts[i] } : d)),
+      details: details.map((d, i) => ({
+        ...d,
+        ...(alerts[i] ? { authAlert: alerts[i] } : {}),
+        usage: usageByProvider.get(d.provider) ?? {
+          periodDays: USAGE_WINDOW_DAYS, requests: 0, tokens: 0, lastUsedAt: null,
+        },
+      })),
+      usageWindowDays: USAGE_WINDOW_DAYS,
     });
   });
 

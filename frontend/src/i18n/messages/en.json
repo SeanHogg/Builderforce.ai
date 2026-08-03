@@ -8981,7 +8981,7 @@
       "testing": "Testing…",
       "verified": "Connection verified.",
       "verifiedWith": "Connection verified with {model}.",
-      "usage": "Last {days} days: {requests} requests · {tokens} tokens",
+      "usage": "BuilderForce-attributed usage, last {days} days: {requests} requests · {tokens} tokens",
       "lastUsed": " · Last used {when}",
       "failedFallback": "Connection test failed: {status}.",
       "failedGeneric": "Connection test failed",
@@ -9013,6 +9013,7 @@
         "key_unresolved": "saved key could not be used"
       },
       "tokensUsed": "AI tokens used",
+      "builderforceTokens": "BuilderForce BYO tokens",
       "periodLabel": "Last {period}"
     },
     "authAlert": {
@@ -9023,7 +9024,8 @@
       "kimiNotEntitled": "Kimi refused the hosted request ({status}) — its edge blocks this cloud gateway before the key is ever checked. Connect a Builderforce runtime and this key routes through your own machine instead, which is the client the subscription is licensed for. Moonshot Open Platform is the alternative.",
       "kimiCapacity": "Your Kimi Code subscription allowance is exhausted ({status}). Check the Kimi Code Console for the next reset time. The key is valid and does not need to be replaced.",
       "rejected": "The provider rejected this credential ({status}). It has probably expired, been revoked, or been rotated elsewhere — reconnect the account.",
-      "capacity": "The credential works, but the account is out of budget ({status}) — a spend cap or empty credit balance. Top up or raise the limit; there is no need to reconnect.",
+      "capacity": "The credential works, but the provider has temporarily refused usage ({status}) — this may be a rolling/session limit, spend cap, or empty credit balance. BuilderForce retries automatically after the cooldown; check the provider console for its reset time. There is no need to reconnect.",
+      "minimaxCapacity": "Your MiniMax usage window is exhausted ({status}). BuilderForce will retry this key automatically as the window resets; check the MiniMax Console for the exact reset time. The key is valid and does not need to be replaced.",
       "unresolved": "The stored credential could not be used at all — it has been revoked, has expired, or was saved in a different workspace. Reconnect it here."
     }
   },

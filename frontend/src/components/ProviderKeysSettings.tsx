@@ -12,12 +12,10 @@ import { ConsumptionMeterCard } from '@/components/UsageMeter';
 import { CopyButton } from '@/components/CopyButton';
 import { useDragReorder } from '@/lib/useDragReorder';
 import {
-  llmApi,
   openRouterConnectionsApi,
   providerKeysApi,
   type ByoPrecedenceEntry,
   type ConnectionAuthAlert,
-  type LlmUsageStats,
   type OpenRouterCatalogModel,
   type OpenRouterConnection,
   type ProbeDiagnostic,
@@ -460,7 +458,9 @@ function ProbeCostNote({ t }: { t: TFn }) {
 type RenderableAuthAlert = Pick<ProviderAuthAlert, 'reason' | 'status' | 'vendor'>;
 
 function AuthAlertNotice({ alert, t }: { alert: RenderableAuthAlert; t: TFn }) {
-  const copyKey = alert.vendor === 'kimi-code'
+  const copyKey = alert.vendor === 'minimax' && alert.reason === 'capacity'
+    ? 'authAlert.minimaxCapacity'
+    : alert.vendor === 'kimi-code'
     ? alert.reason === 'not_entitled' ? 'authAlert.kimiNotEntitled'
       : alert.reason === 'capacity' ? 'authAlert.kimiCapacity'
       : ALERT_COPY_KEY[alert.reason]
@@ -1087,7 +1087,7 @@ export function ProviderKeysSettings({
   const [error, setError] = useState<string | null>(null);
   const [activeProvider, setActiveProvider] = useState<LlmProvider | null>(null);
   const [openRouterOpen, setOpenRouterOpen] = useState(false);
-  const [usage, setUsage] = useState<LlmUsageStats | null>(null);
+  const [usageByProvider, setUsageByProvider] = useState<Partial<Record<LlmProvider, { tokens: number }>>>({});
   const visibleProviders = PROVIDERS.filter((p) => !search.trim() || `${p.label} ${p.id}`.toLowerCase().includes(search.trim().toLowerCase()));
 
   // Rejected-account notices keyed by provider, from the LIST read — so an operator
@@ -1097,9 +1097,6 @@ export function ProviderKeysSettings({
   const [alertByProvider, setAlertByProvider] = useState<Partial<Record<LlmProvider, ProviderAuthAlert>>>({});
 
   const refresh = () => {
-    // Usage is an all-member read. Keep credential management available if that
-    // secondary read fails, while loading both together to avoid flashing zeroes.
-    const usageRead = llmApi.usage().catch(() => null);
     return providerKeysApi.list()
       .then(async (r) => {
         // The OpenRouter reads are enrichments. Keep the established provider
@@ -1121,6 +1118,10 @@ export function ProviderKeysSettings({
           map[d.provider] = d.authType;
           if (d.authAlert) alerts[d.provider] = d.authAlert;
         }
+        setUsageByProvider(Object.fromEntries(
+          r.details.map((d) => [d.provider, { tokens: d.usage?.tokens ?? 0 }]),
+        ));
+        if (r.usageWindowDays) setUsageWindowDays(r.usageWindowDays);
         setAuthByProvider(map);
         setAlertByProvider(alerts);
         setOpenRouterConnections(connectionResult.connections);
@@ -1129,9 +1130,7 @@ export function ProviderKeysSettings({
         const refs = precedenceResult.entries.map((entry) => entry.ref);
         setOrder(refs);
         onLeaderChange?.(precedenceLeaderLabel(precedenceResult.entries, refs));
-        return usageRead;
       })
-      .then(setUsage)
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
   };
@@ -1256,17 +1255,17 @@ export function ProviderKeysSettings({
                         an operator who never opens the drawer would never find out. */}
                     {alertByProvider[p.id] && <AuthAlertNotice alert={alertByProvider[p.id]!} t={t} />}
                   </div>
-                  {usage && (
+                  {usageByProvider[p.id] && (
                     <ConsumptionMeterCard
                       meter={{
                         key: 'ai_tokens', unit: 'tokens',
-                        used: usage.byCredential.find((c) => c.type === 'integration' && c.id === p.id)?.tokens ?? 0,
+                        used: usageByProvider[p.id]?.tokens ?? 0,
                         limit: -1, unlimited: true, remaining: -1, percentUsed: 0,
                       }}
                       isFree={false}
-                      title={t('diagnostic.tokensUsed')}
+                      title={t('diagnostic.builderforceTokens')}
                       usageOnly
-                      periodLabel={t('diagnostic.periodLabel', { period: usage.period })}
+                      periodLabel={t('diagnostic.periodLabel', { period: `${usageWindowDays} days` })}
                     />
                   )}
                 </div>

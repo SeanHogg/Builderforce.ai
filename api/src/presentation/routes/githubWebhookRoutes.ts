@@ -47,6 +47,7 @@ import { ciOutcomeDeps } from './ciOutcomeDeps';
 import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { ingestForRepo, type IngestEvent } from '../../application/contributors/activityIngest';
 import { ALERT_EVENTS, ingestAlertWebhook } from '../../application/security/githubAlerts';
+import { signalPendingWork } from '../../application/runtime/cronWorkSignal';
 
 /** Labels that trigger auto-dispatch. Lower-cased for comparison. */
 const DISPATCH_LABELS = new Set(['coderclaw', 'ai-task', 'host', 'ai']);
@@ -302,6 +303,9 @@ export function createGitHubWebhookRoutes(db: Db, runtimeService: RuntimeService
       if (!out) {
         return c.json({ received: true, processed: false, reason: `no project linked to repo '${full}'` });
       }
+      // A PR lifecycle change is work for the frequent reconciler. Signal the
+      // shared cron gate so a newly opened PR cannot wait for the 30-minute floor.
+      if (event === 'pull_request') c.executionCtx.waitUntil(signalPendingWork(c.env as Env));
       return c.json({ received: true, processed: true, inserted: out.inserted, skipped: out.skipped });
     }
 

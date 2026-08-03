@@ -90,7 +90,8 @@ describe('manager PR action ceiling + rotation', () => {
    * conclusion — see `prMergeQueue.ts`.
    */
   it('orders the open-PR window oldest-first and STABLE, and bounds it', () => {
-    expect(source).toMatch(/\.orderBy\(asc\(pullRequests\.createdAt\), asc\(pullRequests\.id\)\)/);
+    expect(source).toContain('asc(pullRequests.createdAt), asc(pullRequests.id)');
+    expect(source).toContain("pullRequests.buildStatus} = 'success'");
     expect(source).toMatch(/\.limit\(MAX_PR_ACTIONS_PER_RUN\)/);
     // The rotation must not come back: re-sorting the window by when the manager last
     // touched each PR is precisely what dilutes the attempts below the ceiling.
@@ -113,7 +114,7 @@ describe('manager PR action ceiling + rotation', () => {
    * evict a PR in the same pass that is supposed to report it.
    */
   it('lets a retired PR leave the window WITHOUT stranding an authority-blocked one', () => {
-    const where = source.slice(source.indexOf('const openPrs = await db'), source.indexOf('.orderBy(asc(pullRequests.createdAt)'));
+    const where = source.slice(source.indexOf('const openPrs = await db'), source.indexOf('.orderBy(', source.indexOf('const openPrs = await db')));
     expect(where, 'the queue must exclude PRs it has already retired, or it deadlocks')
       .toMatch(/coalesce\(\$\{prActivity\.blockedReports\}, 0\) > 0/);
     // Conjoined with a spent ceiling — never on the report alone.

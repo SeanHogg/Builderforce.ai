@@ -58,6 +58,7 @@ describe('runCreationCanvasAi', () => {
     expect(firstRequest.messages[0].content).toContain('Then call canvas_create_project_prd');
     expect(firstRequest.messages[0].content).toContain('regardless of the current canvas selection');
     expect(firstRequest.messages[0].content).toContain('Never emit tool_code');
+    expect(firstRequest.messages[0].content).toContain('Never create a blank drawing or visual placeholder');
   });
 
   it('does not claim changes were applied when the bounded tool loop is exhausted', async () => {
@@ -73,7 +74,7 @@ describe('runCreationCanvasAi', () => {
     });
 
     expect(run).toHaveBeenCalledTimes(3);
-    expect(answer).toBe('I prepared the canvas changes for review.');
+    expect(answer).toBe('I added the requested content to the canvas.');
   });
 
   it('reports a rejected layout operation instead of claiming that changes exist', async () => {

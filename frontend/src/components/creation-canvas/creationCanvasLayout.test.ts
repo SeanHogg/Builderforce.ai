@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { CreationFlowNode } from './CreationNode';
-import { arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions } from './creationCanvasLayout';
+import { arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions, nextCanvasObjectPosition } from './creationCanvasLayout';
 
 function node(id: string, x: number, y: number, width: number, height: number): CreationFlowNode {
   return { id, type: 'creation', position: { x, y }, measured: { width, height }, data: { kind: 'task', title: id } };
@@ -33,5 +33,13 @@ describe('creation canvas layout', () => {
     expect(selectedScope).toHaveLength(1);
     expect(canvasArrangementTargets(all).map((item) => item.id)).toEqual(['brain', 'task-1', 'task-2']);
     expect(canvasArrangementTargets(all, new Set(['task-1', 'task-2'])).map((item) => item.id)).toEqual(['task-1', 'task-2']);
+  });
+
+  it('stacks new mobile output below existing objects while preserving desktop defaults', () => {
+    const existing = [node('brain', 80, 40, 280, 300), node('lesson', 80, 388, 320, 220)];
+
+    expect(nextCanvasObjectPosition(existing, {}, true)).toEqual({ x: 80, y: 656 });
+    expect(nextCanvasObjectPosition(existing, {}, false)).toEqual({ x: 520, y: 280 });
+    expect(nextCanvasObjectPosition(existing, { x: 900, y: 120 }, true)).toEqual({ x: 900, y: 120 });
   });
 });

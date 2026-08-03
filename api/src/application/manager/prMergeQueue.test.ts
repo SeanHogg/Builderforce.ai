@@ -26,6 +26,17 @@ describe('merge queue', () => {
     expect(dispositions(plan).slice(0, MERGE_QUEUE_DEPTH)).toEqual(Array(MERGE_QUEUE_DEPTH).fill('work'));
   });
 
+  it('does not let red or pending CI consume the integration head', () => {
+    const plan = planMergeQueue([
+      pr('1', { buildStatus: 'failure' }),
+      pr('2', { buildStatus: 'pending' }),
+      pr('3', { buildStatus: 'success' }),
+      pr('4'),
+    ], { hasActiveRun: never, requireGreen: true });
+    expect(dispositions(plan)).toEqual(['ci_blocked', 'ci_blocked', 'work', 'ci_blocked']);
+    expect(summarizeMergeQueue(plan)).toMatchObject({ ciBlocked: 3, worked: 1 });
+  });
+
   /**
    * Only one resolution can survive: the second is invalidated the instant the head
    * merges, and finding that out costs a billable cloud run (measured at 16.4s, against a
@@ -104,7 +115,7 @@ describe('merge queue', () => {
     expect(plan).toHaveLength(window.length);
     expect(plan.map((e) => e.pr.id)).toEqual(window.map((p) => p.id));
     const s = summarizeMergeQueue(plan);
-    expect(s.worked + s.queued + s.retired + s.running + s.cooling).toBe(window.length);
+    expect(s.worked + s.queued + s.retired + s.running + s.cooling + s.ciBlocked).toBe(window.length);
   });
 
   /**

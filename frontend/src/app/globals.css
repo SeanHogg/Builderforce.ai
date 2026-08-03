@@ -2875,6 +2875,24 @@ textarea.input { resize: vertical; line-height: 1.5; }
   flex: 1 1 auto;
   width: 100%;
 }
+.marketing-frame-full-height {
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+.marketing-content-full-height {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+@media (max-width: 767px) {
+  .marketing-content-full-height {
+    box-sizing: border-box;
+    padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  }
+}
 
 /* Top header */
 .mh {
