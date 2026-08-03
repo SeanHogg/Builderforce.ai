@@ -110,7 +110,7 @@ export function planParallel(
   if ("error_code" in dagResult) {
     return { error: dagResult };
   }
-  const graph = dagResult.graph!;
+  const graph = dagResult; // buildDAG returns DependencyGraph directly
 
   // ---- Step 3: Compute waves (FR-3.1, FR-3.2) ----
   const waves = computeWaves(graph, enriched);
