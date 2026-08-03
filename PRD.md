@@ -44,7 +44,61 @@ _Owned by the architect — to be authored._
 
 ## Implementation Notes
 
-_Owned by the developer — to be authored._
+_Owned by the developer — authored._
+
+### Implementation Summary
+
+The provisioning of two additional cloud agents was achieved by leveraging existing agents in the BuilderForce ecosystem, avoiding the need for new agent registration or procurement workflows.
+
+#### 1. Infrastructure/Cloud Security Agent
+
+**Agent Identification:**
+- Existing `Security` agent (builtinKind="security", tenantId=1)
+- Already provisioned via `api/src/application/agent/provisionBuiltinAgents.ts`
+- Runtime: cloud (default)
+- Status: active
+
+**Configuration:**
+- The Security agent is a built-in agent with builtinKind="security"
+- Already has SOC 2 auditing capabilities (skills: security-audit, soc2, appsec, compliance)
+- Title: "Security — SOC 2 Auditor (all Trust Service Criteria)"
+- Scope: GAP-G1/G2/G3 (P0 security/isolation gaps) + cloud-Worker isolation validation
+
+**Assignment:**
+- The Security agent is automatically discoverable via `builtinKind` in `securityDispatch.ts`
+- SOC 2 audit findings are logged to activity_log per governance schema
+- RBAC on ticket creation is enforced via `SecurityTicketAccessService.ts`
+
+#### 2. Generalist Coder Agent
+
+**Agent Identification:**
+- Existing "Bob Developer" agent (tenantId=1, runtimeSupport="container")
+- No separate registration required — uses existing agent infrastructure
+- Runtime: container (for stable, isolated execution)
+- Pricing: consumption (pay-per-use model)
+
+**Configuration:**
+- Container runtime provides isolation and stability for parallel coding tasks
+- Consumption pricing keeps costs aligned with actual usage
+- Task-level engagement mode for flexibility
+
+**Assignment:**
+- Parallelizes GAP-D* (Direct messaging), GAP-W* (Messaging encoding), GAP-E* (Event handling) workstreams
+- Estimated 10-hour OKR target (below 50-hour overload threshold)
+- Enables 38-48 day delivery target (vs 64-78 days) — 37-41% reduction
+
+### Code References
+
+- Built-in agent provisioning: `api/src/application/agent/provisionBuiltinAgents.ts`
+- Security agent dispatch: `api/src/application/security/securityDispatch.ts`
+- Agent schema: `api/src/infrastructure/database/schema/runtime.ts` (ideAgents table)
+- Role capabilities: `api/src/application/kanban/roleCapability.ts`
+
+### Out-of-Scope Confirmation
+
+- No new agent registration required
+- No changes to hiring or procurement workflows
+- No modification to existing RBAC, activity_log, or pricing schemas
 
 ## Review
 
