@@ -465,9 +465,12 @@ export async function computeRecommendations(db: Db, tenantId: number, days: num
 
   const dismissedKeys = new Set(dismissed.map((r) => r.recKey));
   const all = deriveRecommendations({ finance, priorFinance, engineering, allocation, dora });
+  const filteredRecs = all.filter((r) => !dismissedKeys.has(r.key));
+  const aggregate = computeTimeSavingsAggregate(filteredRecs);
   return {
     windowDays: days,
-    recommendations: all.filter((r) => !dismissedKeys.has(r.key)),
+    recommendations: filteredRecs,
+    timeSavingsAggregate: aggregate,
   };
 }
 
