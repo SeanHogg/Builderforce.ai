@@ -13,4 +13,9 @@ describe('scheduled PR reconciliation policy wiring', () => {
   it('does not let a recent diagnostic dry run postpone the first cleanup run', () => {
     expect(source).toContain("recent.mode = 'apply'");
   });
+
+  it('does not let a run from an older reconciliation policy postpone rollout', () => {
+    expect(source).toContain("recent.summary ->> 'policyVersion'");
+    expect(source).toContain('PR_RECONCILIATION_POLICY_VERSION');
+  });
 });

@@ -637,6 +637,29 @@ describe('managerFindings — sign-off ownership and untried remedies', () => {
     expect(found).not.toContain('remedy_never_attempted');
   });
 
+  /**
+   * Captured on project 11 (2026-08-03): ticket #351 reported `attempts=0` but also
+   * `lastAttempt=2026-07-28T08:06:32.937Z`. A remedy/status transition can reset the
+   * consecutive-attempt budget while an older API row still retains its attempt stamp.
+   * Whatever produced that legacy contradiction, the report cannot truthfully call a
+   * non-null attempt timestamp "NEVER attempted".
+   */
+  it('does NOT call a row NEVER attempted when it carries an attempt timestamp', () => {
+    const found = managerFindings({
+      ...input,
+      stalls: {
+        ...stalls,
+        rows: [stallRow({
+          taskId: 351, attempts: 0, remedy: 'dispatch', escalatedAt: null,
+          idleMs: 8 * DAY,
+          firstSeenAt: iso(6 * DAY), lastSeenAt: iso(HOUR),
+          lastAttemptAt: iso(5 * DAY),
+        })],
+      },
+    }, now).map((x) => x.code);
+    expect(found).not.toContain('remedy_never_attempted');
+  });
+
   it('reports the WATCHED span, not the ticket idle age, so the number backs the claim', () => {
     const f = managerFindings({
       ...input,

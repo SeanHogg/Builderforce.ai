@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { priorAttemptsFor, gradeStall, summarizeRegister, type OpenStall, type StallWatchRow } from './stallWatch';
+import { priorAttemptsFor, gradeStall, nextLastAttemptAt, summarizeRegister, type OpenStall, type StallWatchRow } from './stallWatch';
 import { diagnoseStall, MAX_REMEDY_ATTEMPTS, type StallDiagnosis } from './stallTriage';
 
 const DAY = 86_400_000;
@@ -55,6 +55,22 @@ describe('gradeStall — attempts turn into escalation', () => {
     const { verdict, priorAttempts } = gradeStall(open({ attempts: 99 }), 'in_progress', unassigned);
     expect(priorAttempts).toBe(0);
     expect(verdict.escalated).toBe(false);
+  });
+});
+
+describe('nextLastAttemptAt — timestamp belongs to the current attempt budget', () => {
+  const now = new Date('2026-08-03T04:31:22Z');
+
+  it('stamps an attempt that ran', () => {
+    expect(nextLastAttemptAt(true, 0, now)).toBe(now);
+  });
+
+  it('clears a stale timestamp when the consecutive-attempt budget reset', () => {
+    expect(nextLastAttemptAt(false, 0, now)).toBeNull();
+  });
+
+  it('preserves the timestamp when re-observing an existing attempted remedy', () => {
+    expect(nextLastAttemptAt(false, 2, now)).toBeUndefined();
   });
 });
 

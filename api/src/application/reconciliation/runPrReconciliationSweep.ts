@@ -4,7 +4,7 @@ import type { Env } from '../../env';
 import { buildDatabase } from '../../infrastructure/database/connection';
 import { ideAgents, prReconciliationRuns, projectRepositories } from '../../infrastructure/database/schema';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
-import { runPrTicketReconciliation } from './prReconciliationService';
+import { PR_RECONCILIATION_POLICY_VERSION, runPrTicketReconciliation } from './prReconciliationService';
 
 export interface PrReconciliationSweepResult {
   due: number;
@@ -33,6 +33,7 @@ export async function runPrReconciliationSweep(env: Env): Promise<PrReconciliati
         SELECT 1 FROM ${prReconciliationRuns} recent
         WHERE recent.repo_id = ${projectRepositories.id}
           AND recent.mode = 'apply'
+          AND recent.summary ->> 'policyVersion' = ${String(PR_RECONCILIATION_POLICY_VERSION)}
           AND recent.started_at >= ${cutoff}
       )`,
     ))

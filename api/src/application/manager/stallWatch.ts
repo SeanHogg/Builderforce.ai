@@ -136,6 +136,24 @@ export function gradeStall(
 }
 
 /**
+ * Value to write for `last_attempt_at` while recording a stall.
+ *
+ * `undefined` means preserve the existing stamp. A zero consecutive-attempt budget means
+ * either a fresh stall or a changed status/remedy; in both cases an old stamp describes a
+ * different budget and must be cleared. Keeping it produced contradictory register rows
+ * such as `attempts=0` alongside a non-null `lastAttemptAt`.
+ */
+export function nextLastAttemptAt(
+  attempted: boolean,
+  priorAttempts: number,
+  now: Date,
+): Date | null | undefined {
+  if (attempted) return now;
+  if (priorAttempts === 0) return null;
+  return undefined;
+}
+
+/**
  * Open or update the ticket's register row.
  *
  * `attempted` is whether the manager actually PERFORMED the remedy this pass — only then
@@ -166,6 +184,7 @@ export async function recordStall(
 ): Promise<void> {
   const now = new Date();
   const attempts = args.attempted ? args.priorAttempts + 1 : args.priorAttempts;
+  const lastAttemptAt = nextLastAttemptAt(args.attempted, args.priorAttempts, now);
   const escalatedAt = args.verdict.escalated ? now : null;
 
   try {
@@ -183,7 +202,7 @@ export async function recordStall(
         idleMs: Math.max(0, Math.round(args.idleMs)),
         firstSeenAt: now,
         lastSeenAt: now,
-        lastAttemptAt: args.attempted ? now : null,
+        lastAttemptAt: lastAttemptAt ?? null,
         escalatedAt,
       })
       // The partial-unique index is on (task_id) WHERE resolved_at IS NULL, so this
@@ -200,8 +219,9 @@ export async function recordStall(
           attempts,
           idleMs: Math.max(0, Math.round(args.idleMs)),
           lastSeenAt: now,
-          // Preserve the ORIGINAL attempt timestamp on an observe-only pass.
-          ...(args.attempted ? { lastAttemptAt: now } : {}),
+          // Preserve the original timestamp only while it belongs to this attempt
+          // budget. A status/remedy change resets both the count and its timestamp.
+          ...(lastAttemptAt !== undefined ? { lastAttemptAt } : {}),
           // Escalation is sticky: once handed to a human it stays stamped until the
           // ticket actually moves and the row is resolved.
           ...(escalatedAt ? { escalatedAt } : {}),

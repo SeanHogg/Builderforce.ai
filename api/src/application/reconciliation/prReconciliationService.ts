@@ -23,6 +23,9 @@ import {
 
 type FetchLike = typeof fetch;
 
+/** Bump when scheduled apply semantics change so an old run cannot postpone rollout validation. */
+export const PR_RECONCILIATION_POLICY_VERSION = 2;
+
 export interface GithubPrSnapshot extends ReconciliationPrInput {
   url: string;
   baseBranch: string;
@@ -454,7 +457,12 @@ export async function runPrTicketReconciliation(
       }
     }
 
-    const summary: Record<string, number> = { total: decisions.length, applied, policyApproved: policyApproved.length };
+    const summary: Record<string, number> = {
+      policyVersion: PR_RECONCILIATION_POLICY_VERSION,
+      total: decisions.length,
+      applied,
+      policyApproved: policyApproved.length,
+    };
     for (const { decision } of decisions) summary[decision.classification] = (summary[decision.classification] ?? 0) + 1;
     const status = errorCount > 0 ? 'completed_with_errors' : 'completed';
     await db.update(prReconciliationRuns).set({ status, summary, errorCount, finishedAt: new Date() })

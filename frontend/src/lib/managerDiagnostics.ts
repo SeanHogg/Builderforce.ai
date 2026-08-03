@@ -901,7 +901,7 @@ export function managerFindings(input: ManagerDiagnosticsInput, nowMs: number | 
     // minute on a ticket idle for a month is the manager working correctly, and reporting
     // it as a critical sends a person to look at nothing.
     const neverAttempted = stalls.rows.filter(
-      (r) => r.attempts === 0 && !r.escalatedAt
+      (r) => r.attempts === 0 && !r.lastAttemptAt && !r.escalatedAt
         && RUN_STARTING_REMEDIES.has(r.remedy) && watchedMs(r) > NEVER_ATTEMPTED_AFTER_MS,
     );
     if (neverAttempted.length > 0) {
