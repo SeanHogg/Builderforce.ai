@@ -350,6 +350,12 @@ interface StreamChatOptions {
     tools?: BrainToolSpec[];
     tool_choice?: 'auto' | 'none';
     model?: string;
+    /** Hard-pin {@link model}. Used by an explicit user pick so validation cannot
+     * silently succeed on a gateway substitute. */
+    modelStrict?: boolean;
+    /** `auto` lets the gateway choose across every entitled route; `byo_pool`
+     * constrains the turn to the tenant's ordered connected-account cascade. */
+    routingMode?: 'auto' | 'byo_pool';
     temperature?: number;
     maxTokens?: number;
     /**
@@ -1473,6 +1479,10 @@ interface UseBrainConversationOptions {
     systemPrompt?: string;
     /** Override the model (e.g. run the Brain as a specific assigned agent). */
     model?: string;
+    /** True when `model` came from a deliberate user pick. */
+    modelStrict?: boolean;
+    /** Gateway-owned routing or the tenant's ordered BYO pool. */
+    routingMode?: 'auto' | 'byo_pool';
     /**
      * Pick the next model when the current one burns its stall budget without emitting
      * a tool call. Hosts pass `(tried) => nextFallbackModel(surface, tried)` using the
@@ -1673,6 +1683,10 @@ interface BrainRunRequest {
     resolvedSystemPrompt: string;
     tools?: BrainToolSpec[];
     model?: string;
+    /** Hard-pin a deliberate user-selected model. */
+    modelStrict?: boolean;
+    /** Explicit routing choice when no model is pinned. */
+    routingMode?: 'auto' | 'byo_pool';
     /**
      * Pick the next model to try when the current one has burned its whole stall budget
      * without emitting a single tool call — i.e. re-prompting it is spent and only a

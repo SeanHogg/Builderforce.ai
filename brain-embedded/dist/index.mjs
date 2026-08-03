@@ -214,6 +214,8 @@ async function streamChatCompletion(opts, handlers = {}) {
   };
   const model = opts.model ?? transport.defaultModel;
   if (model) body.model = model;
+  if (model && opts.modelStrict) body.strict = true;
+  if (opts.routingMode) body.routingMode = opts.routingMode;
   if (opts.tools && opts.tools.length > 0) {
     body.tools = opts.tools;
     body.tool_choice = opts.tool_choice ?? "auto";
@@ -2097,7 +2099,7 @@ function chatWorkLinkingDirective(chatId) {
   return `You are working inside Brain chat #${chatId}. Tie the work of this conversation back to it:
 \u2022 When your investigation concludes that something needs to be DONE \u2014 a bug to fix, a missing capability, a follow-up, or a gap you identified \u2014 do not merely describe it. First use builtin_tasks_assignees to select the ticket's accountable Coordinator/Manager, then create the work item (builtin_tasks_create with exactly one assignee and taskType "task", "epic", or "gap"; or the matching builtin_*_create for an objective, spec, or roadmap item) AND link it with builtin_chats_link_ticket (chatId=${chatId}, linkType="created"). The ticket assignee COORDINATES delivery; do not assume that person/agent performs every specialist contribution.
 \u2022 Every created ticket must be resource-scoped before you report success: inspect its template manifest with builtin_kanban_participants; infer all additional roles required by its description and acceptance criteria; add each with builtin_kanban_assess_resource; then call builtin_kanban_accountability and explicitly report any unstaffed resource gaps. For an epic or multi-role ticket, call builtin_kanban_materialize_work_items so each required resource has an assigned child work item. Call builtin_kanban_coordinate when work should begin now. Never treat 0 required roles / 0 sign-offs as complete.
-\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide") so the change becomes a ticket linked to this chat that completes when it ships.
+\u2022 When your turn ADDS or CHANGES code, record it with builtin_tickets_from_delta (chatId=${chatId}, the current projectId, the files you touched, kind improvement|fix|bug, modality "ide"). If builtin_chats_list_tickets shows a ticket already tracking this work, pass its numeric ref as taskId so the delta attaches to it instead of creating a duplicate; otherwise the delta creates a linked ticket that completes when it ships.
 \u2022 Keep the board honest about STATUS. The MOMENT you start actively working an existing linked task/epic/gap \u2014 investigating its fix, editing code for it, or driving it \u2014 move it out of the backlog with builtin_tasks_update (id=<the ticket's ref>, status="in_progress"). When the work is finished and shipped, advance it to "in_review" (or "done" if it needs no review). Never leave a ticket you are actively working sitting in backlog.
 \u2022 Call builtin_chats_list_tickets (chatId=${chatId}) to see what is already linked \u2014 both to AVOID creating a duplicate and to know which linked tickets need their status advanced. Never end a turn having identified actionable work or changed code without it being a ticket linked to this chat whose status reflects the work you did.`;
 }
@@ -2589,7 +2591,7 @@ async function autoLinkCreatedItem(chatId, c, persistence, runTool, toolName, ou
   });
 }
 async function runLoop(chatId, c, req) {
-  const { resolvedSystemPrompt, tools: toolSpecs, model, pickFallbackModel, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
+  const { resolvedSystemPrompt, tools: toolSpecs, model, modelStrict, routingMode, pickFallbackModel, runTool, needsConfirm, stream, persistence, onActivity, evermind, maxTokens, reasoning } = req;
   const convo = c.transcript;
   const allTools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
   const usedTools = /* @__PURE__ */ new Set();
@@ -2759,7 +2761,7 @@ ${chatWorkLinkingDirective(chatId)}`;
     }
     try {
       result = await stream(
-        { messages: working, tools, tool_choice: tools ? "auto" : void 0, model: activeModel, maxTokens, reasoning, metadata, signal: c.abort?.signal },
+        { messages: working, tools, tool_choice: tools ? "auto" : void 0, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         { onTextDelta: (d) => {
           if (firstTokenAt === void 0) firstTokenAt = nowMs2();
           c.streamingText += d;
@@ -3031,7 +3033,7 @@ ${chatWorkLinkingDirective(chatId)}`;
       let closeFirstTokenAt;
       const closing = await stream(
         // No `tools` → the model can't call another tool and must produce text.
-        { messages: working, model: activeModel, maxTokens, reasoning, metadata, signal: c.abort?.signal },
+        { messages: working, model: activeModel, modelStrict: !!activeModel && modelStrict, routingMode, maxTokens, reasoning, metadata, signal: c.abort?.signal },
         { onTextDelta: (d) => {
           if (closeFirstTokenAt === void 0) closeFirstTokenAt = nowMs2();
           c.streamingText += d;
@@ -3091,6 +3093,8 @@ function useBrainConversation(options) {
     extraSystem,
     systemPrompt,
     model,
+    modelStrict,
+    routingMode,
     pickFallbackModel,
     maxTokens,
     reasoning,
@@ -3185,6 +3189,8 @@ ${extraSystem}` : resolvedSystemPrompt;
       resolvedSystemPrompt: fullSystemPrompt,
       tools: toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0,
       model,
+      modelStrict,
+      routingMode,
       pickFallbackModel,
       maxTokens,
       reasoning,
@@ -3199,7 +3205,7 @@ ${extraSystem}` : resolvedSystemPrompt;
       userTurn,
       projectId
     }),
-    [fullSystemPrompt, toolSpecs, model, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId]
+    [fullSystemPrompt, toolSpecs, model, modelStrict, routingMode, pickFallbackModel, maxTokens, reasoning, runTool, needsConfirm, stream, persistence, onActivity, evermind, augmentSystemPrompt, projectId]
   );
   const send = useCallback4(
     async (text, opts) => {
