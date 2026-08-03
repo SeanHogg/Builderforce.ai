@@ -6,7 +6,6 @@
  */
 
 import React, { useState } from "react";
-import { TrendData } from "../../types/quality";
 import "./TrendLineChart.css";
 
 interface TrendLineChartProps {
