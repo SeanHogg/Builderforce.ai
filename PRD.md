@@ -71,7 +71,62 @@
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+_Owned by the business-analyst — authored._
+
+### Data Model Requirements
+
+| Requirement ID | Category | Description |
+|----------------|----------|-------------|
+| REQ-001 | Data Fields | The task schema MUST support a **component** field (VARCHAR, max 120 chars) to categorize items by system component or module |
+| REQ-002 | Data Fields | The task schema MUST support a **feature** field (VARCHAR, max 120 chars) to categorize items by feature or capability |
+| REQ-003 | Data Fields | The task schema MUST support a **theme** field (VARCHAR, max 120 chars) to categorize items by broad theme or objective |
+| REQ-004 | Data Fields | Existing **epic** support via `taskType = 'epic'` and `parentTaskId` MUST remain functional |
+| REQ-005 | Data Fields | The categorization fields (component, feature, theme) MUST be nullable to support gradual adoption |
+
+### API Requirements
+
+| Requirement ID | Category | Description |
+|----------------|----------|-------------|
+| REQ-010 | API | The task creation endpoint MUST accept `component`, `feature`, and `theme` as optional fields |
+| REQ-011 | API | The task update endpoint MUST allow modifying `component`, `feature`, and `theme` fields |
+| REQ-012 | API | The task read/list endpoint MUST return `component`, `feature`, and `theme` values when present |
+| REQ-013 | API | The task filtering API MUST support filtering by `component`, `feature`, and `theme` independently |
+
+### Visualization Requirements
+
+| Requirement ID | Category | Description |
+|----------------|----------|-------------|
+| REQ-020 | UI | The board view MUST display categorization badges/chips for component, feature, and theme when populated |
+| REQ-021 | UI | The board filter UI MUST include dropdowns or multi-select for filtering by component, feature, and theme |
+| REQ-022 | UI | The task detail drawer MUST show all categorization fields in a dedicated "Categorization" section |
+
+### Integration Requirements
+
+| Requirement ID | Category | Description |
+|----------------|----------|-------------|
+| REQ-030 | Sync | External board sync (Jira, GitHub) MUST map external component/feature/theme labels to the corresponding task fields when configured |
+| REQ-031 | Export | Task export (CSV/JSON) MUST include component, feature, and theme columns when populated |
+
+### Validation Requirements
+
+| Requirement ID | Category | Description |
+|----------------|----------|-------------|
+| REQ-040 | Validation | The system SHOULD support a predefined list of allowed values per project for component, feature, and theme |
+| REQ-041 | Validation | New categorization values not in the predefined list MAY be allowed (open vocabulary) with a warning |
+
+### Non-Functional Requirements
+
+| Requirement ID | Category | Description |
+|----------------|----------|-------------|
+| REQ-050 | Performance | Filtering by categorization fields MUST complete within 2 seconds for projects with up to 10,000 active tasks |
+| REQ-051 | Migration | Existing tasks without categorization values MUST NOT be affected by the new fields (backward compatible) |
+
+### Documentation Requirements
+
+| Requirement ID | Category | Description |
+|----------------|----------|-------------|
+| REQ-060 | Docs | The team MUST document the categorization taxonomy (what constitutes a component vs feature vs theme) |
+| REQ-061 | Docs | A usage guide MUST be created explaining how to assign and manage categorizations on the board |
 
 ## Design
 
