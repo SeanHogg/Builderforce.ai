@@ -159,6 +159,30 @@ export interface AddParticipantInput {
   assignee?: ExplicitAssignee | null;
 }
 
+/**
+ * Staff an ALREADY-EXISTING manifest slot (see `assignParticipant`).
+ *
+ * Identifies the slot the way an operator does — "the Engineer role on this ticket" —
+ * rather than by the full five-column unique index, because the caller staffing a role
+ * generally knows the role, not which `source` derived it.
+ */
+export interface AssignParticipantInput {
+  /** Which role's slot to staff, e.g. `engineer`. */
+  roleKey: string;
+  /** The resource to pin. `kind` is `agent` | `human` (mirrors `assigneeKind`). */
+  assignee: ExplicitAssignee;
+  /**
+   * Narrow to one lane's slot. Omit to staff EVERY slot the role holds on the ticket —
+   * the right default for a role that appears once, and an explicit, auditable choice
+   * for one that appears in several lanes.
+   */
+  stageKey?: string | null;
+  /** Narrow to one responsibility when the role is carried as both owner and reviewer. */
+  responsibility?: Responsibility | null;
+  /** Optional free-text provenance for the staffing decision. */
+  note?: string | null;
+}
+
 /** Port for creating a child work-item task — injected from the route (TaskService). */
 export type CreateChildTask = (input: {
   title: string;
