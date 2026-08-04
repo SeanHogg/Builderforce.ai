@@ -54,13 +54,12 @@ Ensure that the system effectively identifies and removes duplicate entries, mai
 
 ## Acceptance Criteria
 
-- **Detection**: System correctly identifies duplicates based on specified criteria with a 99% accuracy rate.
-- **Notification**: Notifications are sent within 5 minutes of duplicate detection.
-- **Removal**: 
-  - Automatic removal processes complete within 1 hour.
-  - Manual removal actions are completed by users without errors.
-- **Prevention**: No new duplicates are created after implementation, verified through testing.
-- **Reporting**: Reports are generated accurately and are accessible through the admin dashboard.
+The acceptance criteria for this verification task are defined in the **Requirements** section above, specifically in **§3 Verification Criteria**. The verification confirms:
+
+1. The duplicate participant row is absent from the database
+2. The manifest read reflects the deletion (post cache bump)
+3. The surviving Engineer slot remains covered
+4. The removal is idempotent and not resurrected by re-derivation
 
 ## Out of Scope
 
