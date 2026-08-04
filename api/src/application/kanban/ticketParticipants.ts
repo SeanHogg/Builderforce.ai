@@ -23,11 +23,10 @@ import type { Env } from '../../env';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import {
   boards, swimlaneRequirements, swimlanes, tasks, ticketParticipants, ticketRoleSignoffs,
-  users,
 } from '../../infrastructure/database/schema';
-import { agentProfiles } from '../../infrastructure/database/schema/identity';
 import { roleDisplayName } from './roleCatalog';
-import { resolveRoleCapableAgents } from './roleCapability';
+import { resolveRoleCapableAgents, resolveMemberDisplayName } from './roleCapability';
+import { decideSlotAssignee, type SlotAssignee, type TicketAssignee } from './slotAssignee';
 import { projectRoleAssignments } from '../../infrastructure/database/schema';
 import { requirementApplies, type Responsibility } from './types';
 import { ADVANCEABLE_PARTICIPANT_STATES, blocksCompletion, isParticipantSatisfied } from './participantStates';
