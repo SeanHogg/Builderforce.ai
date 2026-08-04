@@ -25,7 +25,6 @@ import {
   boards, swimlaneRequirements, swimlanes, tasks, ticketParticipants, ticketRoleSignoffs,
 } from '../../infrastructure/database/schema';
 import { roleDisplayName } from './roleCatalog';
-import { resolveRoleCapableAgents } from './roleCapability';
 import { projectRoleAssignments } from '../../infrastructure/database/schema';
 import { requirementApplies, type Responsibility } from './types';
 import { ADVANCEABLE_PARTICIPANT_STATES, blocksCompletion, isParticipantSatisfied } from './participantStates';
