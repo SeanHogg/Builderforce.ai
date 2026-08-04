@@ -1,125 +1,95 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #825
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Assign Engineer to John Coder - Product Requirements Document (PRD)
 
 ## Problem & Goal
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+### Problem
+- **Inefficient Resource Allocation**: Currently, the process of assigning engineers to specific tasks or projects is manual and time-consuming, leading to potential delays and suboptimal resource utilization.
+- **Lack of Visibility**: Managers lack a clear overview of engineer availability, skills, and current workload, making it difficult to make informed assignment decisions.
+- **Misalignment of Skills**: Engineers are sometimes assigned to tasks that do not align with their expertise, leading to decreased productivity and job satisfaction.
 
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+### Goal
+- **Automate and Streamline Assignment**: Develop a system that automates the process of assigning engineers to tasks/projects, ensuring optimal resource allocation and reducing manual effort.
+- **Enhance Visibility**: Provide managers with a comprehensive view of engineer availability, skills, and workload to facilitate informed decision-making.
+- **Match Skills to Tasks**: Ensure that engineers are assigned to tasks that best match their skills and expertise, improving productivity and job satisfaction.
 
 ## Target Users / ICP Roles
 
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Engineering Managers**: Responsible for assigning engineers to projects and ensuring optimal resource utilization.
+- **Project Managers**: Need to understand resource availability and skill sets for project planning and execution.
+- **Engineers**: Benefit from assignments that match their skills and provide opportunities for growth and development.
 
 ## Scope
 
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- **Assignment Automation**: Develop algorithms to automatically assign engineers to tasks/projects based on availability, skills, and workload.
+- **Dashboard for Managers**: Create a dashboard for managers to view engineer availability, skills, current workload, and make manual adjustments if necessary.
+- **Skill Matching**: Implement a feature to match engineer skills with task requirements, ensuring optimal assignment.
+- **Notification System**: Develop a notification system to alert engineers and managers of new assignments and changes.
+- **Integration with Existing Tools**: Ensure the system integrates with existing project management and HR tools.
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+1. **User Authentication and Authorization**
+   - Secure login for managers and engineers with role-based access control.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+2. **Engineer Profile Management**
+   - Ability for engineers to update their skills, availability, and preferences.
+   - Managers can view and edit engineer profiles.
 
----
+3. **Task/Project Management**
+   - Create, update, and delete tasks/projects with detailed descriptions and requirements.
+   - Assign priority levels and deadlines to tasks/projects.
 
-### FR-2 — Guided (Interactive) Mode
+4. **Assignment Algorithm**
+   - Automatically assign engineers to tasks/projects based on availability, skills, and workload.
+   - Allow managers to override automatic assignments if necessary.
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+5. **Dashboard and Reporting**
+   - Real-time dashboard for managers to view engineer availability, current assignments, and workload.
+   - Generate reports on resource utilization, project progress, and engineer performance.
 
----
+6. **Notification System**
+   - Send notifications to engineers and managers upon new assignments, changes, and task completions.
+   - Allow users to set preferences for notification types and frequency.
 
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+7. **Integration with Existing Tools**
+   - API integration with project management tools (e.g., Jira, Trello) and HR systems.
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
-
----
+- **Automated Assignments**: The system must accurately assign engineers to tasks/projects based on the defined criteria.
+- **Dashboard Functionality**: Managers must be able to view and manage engineer assignments and workload in real-time.
+- **Skill Matching Accuracy**: The system must correctly match engineer skills with task requirements.
+- **Notification Delivery**: Notifications must be sent promptly and accurately to all relevant users.
+- **Integration Success**: The system must successfully integrate with existing tools without disrupting current workflows.
+- **User Feedback**: Users must be able to provide feedback on assignments and the system must allow for adjustments based on this feedback.
 
 ## Out of Scope
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+- **Complex Project Scheduling**: The system will not handle advanced project scheduling or dependency management.
+- **Performance Analytics**: While basic reporting is included, detailed performance analytics and predictive modeling are out of scope.
+- **Multi-Location Support**: The initial implementation will not support multi-location or global resource allocation.
+- **Advanced AI Features**: Features such as machine learning-based predictions and recommendations are not included in this release.
+- **Mobile Application**: Development of a mobile application for the system is not part of the current scope.
+
+## Requirements
+
+_Owned by the business-analyst — to be authored._
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
