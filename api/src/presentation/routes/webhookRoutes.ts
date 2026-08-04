@@ -15,6 +15,8 @@ import {
   markCardValidatedByCustomer,
   markCardValidationFailedByCustomer,
 } from '../../application/tenant/cardValidationService';
+import { markDiscountRedeemed } from '../../application/tenant/discountCodeService';
+import { buildDatabase } from '../../infrastructure/database/connection';
 
 export function createWebhookRoutes(
   tenantService: TenantService,
@@ -96,6 +98,9 @@ export function createWebhookRoutes(
 
     try {
       await tenantService.handleWebhookEvent(event);
+      if (event.type === 'subscription.activated' && event.discountRedemptionId) {
+        await markDiscountRedeemed(buildDatabase(c.env as Env), event.discountRedemptionId);
+      }
     } catch (err) {
       reportCaughtError(err, { source: "presentation/routes/webhookRoutes.ts", operation: "createWebhookRoutes", context: { logMessage: '[webhook] handleWebhookEvent failed:', details: err } });
       // Return 500 so the provider retries

@@ -218,6 +218,13 @@ export class TenantService {
       seats?: number;
       successUrl: string;
       cancelUrl: string;
+      discount?: {
+        id: string;
+        code: string;
+        percentOff: number;
+        durationYears: number;
+        redemptionId: string;
+      };
     },
   ): Promise<{ checkoutUrl: string; sessionId: string }> {
     const targetPlan = input.targetPlan ?? TenantPlan.PRO;
@@ -244,6 +251,7 @@ export class TenantService {
       seats: targetPlan === TenantPlan.TEAMS ? seats : 1,
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,
+      discount: input.discount,
     });
 
     // Store the customer id now so the activation webhook can correlate back to us.

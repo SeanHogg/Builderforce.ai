@@ -16,6 +16,7 @@ import MarketingVisual from '@/components/account/MarketingVisual';
 import AccountTypeChooser from '@/components/account/AccountTypeChooser';
 import EmailVerificationStep from '@/components/account/EmailVerificationStep';
 import { safeRedirectPath } from '@/lib/safeRedirect';
+import { getRetainedDiscountCode, retainDiscountCode } from '@/lib/discountCode';
 
 export default function RegisterPageClient() {
   const router = useRouter();
@@ -28,6 +29,7 @@ export default function RegisterPageClient() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreeToTerms, setAgreeToTerms] = useState(false);
+  const [discountCode, setDiscountCode] = useState('');
   const [accountType, setAccountType] = useState<'standard' | 'freelancer'>('standard');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +48,14 @@ export default function RegisterPageClient() {
   useEffect(() => {
     if (isAuthenticated) router.replace(destination);
   }, [destination, isAuthenticated, router]);
+
+  useEffect(() => {
+    const captured = searchParams.get('discountcode') ?? getRetainedDiscountCode();
+    if (captured) {
+      setDiscountCode(captured.toUpperCase());
+      retainDiscountCode(captured);
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -209,6 +219,14 @@ export default function RegisterPageClient() {
                   placeholder="you@example.com" style={inputStyle}
                   required onFocus={focusIn} onBlur={focusOut}
                 />
+              </div>
+              <div>
+                <label htmlFor="discountCode" style={labelStyle}>Discount code <span style={{ color: 'var(--text-muted)', fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>(optional)</span></label>
+                <input id="discountCode" type="text" autoComplete="off"
+                  value={discountCode} onChange={e => { setDiscountCode(e.target.value.toUpperCase()); retainDiscountCode(e.target.value); }}
+                  placeholder="ANNUAL50" style={inputStyle} onFocus={focusIn} onBlur={focusOut}
+                />
+                {discountCode && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--coral-bright)' }}>Saved for checkout after signup.</div>}
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div>

@@ -86,6 +86,15 @@ export class StripeProvider implements PaymentProvider {
       'subscription_data[metadata][seats]': String(seats),
     });
 
+    if (opts.discount) {
+      const couponId = await this.ensureDiscountCoupon(opts.discount);
+      params.set('discounts[0][coupon]', couponId);
+      params.set('metadata[discountRedemptionId]', opts.discount.redemptionId);
+      params.set('metadata[discountCode]', opts.discount.code);
+      params.set('subscription_data[metadata][discountRedemptionId]', opts.discount.redemptionId);
+      params.set('subscription_data[metadata][discountCode]', opts.discount.code);
+    }
+
     const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
       headers: {
@@ -112,6 +121,34 @@ export class StripeProvider implements PaymentProvider {
       externalCustomerId: session.customer ?? null,
       externalSubscriptionId: null, // arrives via webhook after payment
     };
+  }
+
+  private async ensureDiscountCoupon(discount: NonNullable<CheckoutSessionOpts['discount']>): Promise<string> {
+    const couponId = `bf_${discount.id.replace(/-/g, '')}_${discount.percentOff}_${discount.durationYears * 12}`;
+    const params = new URLSearchParams({
+      id: couponId,
+      name: `${discount.code} — ${discount.percentOff}% off`,
+      percent_off: String(discount.percentOff),
+      duration: 'repeating',
+      duration_in_months: String(discount.durationYears * 12),
+      'metadata[discountCodeId]': discount.id,
+    });
+    const res = await fetch('https://api.stripe.com/v1/coupons', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.config.secretKey}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Idempotency-Key': `builderforce-discount-${couponId}`,
+      },
+      body: params.toString(),
+    });
+    if (!res.ok) {
+      const err = await res.json() as { error?: { code?: string; message?: string } };
+      if (err.error?.code !== 'resource_already_exists') {
+        throw new Error(`Stripe coupon error: ${err.error?.message ?? res.status}`);
+      }
+    }
+    return couponId;
   }
 
   async createCardValidationSession(opts: CardValidationSessionOpts): Promise<CardValidationSessionResult> {
@@ -281,6 +318,7 @@ export class StripeProvider implements PaymentProvider {
 
         return {
           type: 'subscription.activated',
+          ...(meta['discountRedemptionId'] ? { discountRedemptionId: meta['discountRedemptionId'] } : {}),
           externalCustomerId: customer,
           externalSubscriptionId: sub ?? '',
           billingCycle: (meta['billingCycle'] as TenantBillingCycle) ?? TenantBillingCycle.MONTHLY,

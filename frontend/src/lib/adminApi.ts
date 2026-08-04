@@ -30,8 +30,8 @@ export interface AdminTenant {
   name: string;
   slug: string;
   status: string;
-  plan: 'free' | 'pro';
-  effectivePlan: 'free' | 'pro';
+  plan: 'free' | 'pro' | 'teams';
+  effectivePlan: 'free' | 'pro' | 'teams';
   billingStatus: string;
   billingEmail: string | null;
   billingUpdatedAt: string | null;
@@ -66,6 +66,25 @@ export interface AdminTenant {
    *  premium model pool (top PREMIUM-tier models) and the extended per-vendor
    *  timeout regardless of plan/billingStatus. */
   premiumOverride: boolean;
+  discountCode: string | null;
+  discountPercentOff: number | null;
+  discountDurationYears: number | null;
+  discountStatus: 'pending' | 'redeemed' | null;
+  discountAppliedAt: string | null;
+}
+
+export interface AdminDiscountCode {
+  id: string;
+  code: string;
+  percentOff: number;
+  applicablePlan: 'pro' | 'teams';
+  billingCycle: 'monthly' | 'yearly';
+  durationYears: number;
+  isActive: boolean;
+  redemptionCount: number;
+  redeemedCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface AdminHealth {
@@ -934,6 +953,25 @@ export const adminApi = {
   /** Scheduled sweeps + the live KV work-gate decision. */
   async cronState(): Promise<AdminCronState> {
     return adminRequest<AdminCronState>('/api/admin/cron');
+  },
+
+  async discountCodes(): Promise<AdminDiscountCode[]> {
+    const res = await adminRequest<{ discountCodes: AdminDiscountCode[] }>('/api/admin/discount-codes');
+    return res.discountCodes ?? [];
+  },
+
+  async createDiscountCode(input: Omit<AdminDiscountCode, 'id' | 'redemptionCount' | 'redeemedCount' | 'createdAt' | 'updatedAt'>): Promise<AdminDiscountCode> {
+    const res = await adminRequest<{ discountCode: AdminDiscountCode }>('/api/admin/discount-codes', {
+      method: 'POST', body: JSON.stringify(input),
+    });
+    return res.discountCode;
+  },
+
+  async updateDiscountCode(id: string, input: Partial<Pick<AdminDiscountCode, 'code' | 'percentOff' | 'applicablePlan' | 'billingCycle' | 'durationYears' | 'isActive'>>): Promise<AdminDiscountCode> {
+    const res = await adminRequest<{ discountCode: AdminDiscountCode }>(`/api/admin/discount-codes/${id}`, {
+      method: 'PATCH', body: JSON.stringify(input),
+    });
+    return res.discountCode;
   },
 
   /** Enable or pause one registered sweep platform-wide. */

@@ -90,6 +90,45 @@ describe('buildPaymentProvider — unconfigured', () => {
   });
 });
 
+describe('createCheckoutSession — discount', () => {
+  it('creates a duration-limited coupon and attaches signed redemption metadata', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: string | URL | Request) => {
+      const url = String(input);
+      if (url.endsWith('/coupons')) return new Response(JSON.stringify({ id: 'coupon' }), { status: 200 });
+      return new Response(JSON.stringify({ id: 'cs_discount', url: 'https://checkout.stripe.test/discount', customer: null }), { status: 200 });
+    }));
+
+    await makeProvider().createCheckoutSession({
+      tenantId: 7,
+      targetPlan: 'pro' as never,
+      billingCycle: 'yearly' as never,
+      billingEmail: 'billing@example.com',
+      successUrl: 'https://builderforce.ai/pricing?success=1',
+      cancelUrl: 'https://builderforce.ai/pricing?cancelled=1',
+      discount: {
+        id: '11111111-2222-3333-4444-555555555555',
+        code: 'ANNUAL50',
+        percentOff: 50,
+        durationYears: 1,
+        redemptionId: 'redemption-1',
+      },
+    });
+
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const [, couponInit] = vi.mocked(fetch).mock.calls[0]!;
+    const coupon = new URLSearchParams(String(couponInit?.body));
+    expect(coupon.get('percent_off')).toBe('50');
+    expect(coupon.get('duration')).toBe('repeating');
+    expect(coupon.get('duration_in_months')).toBe('12');
+
+    const [, checkoutInit] = vi.mocked(fetch).mock.calls[1]!;
+    const checkout = new URLSearchParams(String(checkoutInit?.body));
+    expect(checkout.get('discounts[0][coupon]')).toBe('bf_11111111222233334444555555555555_50_12');
+    expect(checkout.get('metadata[discountRedemptionId]')).toBe('redemption-1');
+    expect(checkout.get('subscription_data[metadata][discountCode]')).toBe('ANNUAL50');
+  });
+});
+
 describe('createCardValidationSession — billing profile collection', () => {
   afterEach(() => vi.unstubAllGlobals());
 

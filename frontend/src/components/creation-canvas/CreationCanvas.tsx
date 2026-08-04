@@ -1692,12 +1692,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     },
   }], [canEdit, edges, effectiveSelectedIds, nodes, persistence, prompt, requireAccount, resolvedScopeMode, scopedEdges, scopedNodes, sessionId]);
 
-  const evaluateCanvas = useCallback(() => {
-    if (!prompt.trim() || thinking) return;
+  const evaluateCanvas = useCallback((promptOverride?: string) => {
+    const requestText = (promptOverride ?? prompt).trim();
+    if (!requestText || thinking) return;
     trackActivity('creation_prompt_submitted', { sessionId, metadata: { clientSurface: 'web', scope: resolvedScopeMode, objectKinds: [...new Set(scopedNodes.map((node) => node.data.kind))] } });
     setThinking(true);
     setNotice('Brain is evaluating connected objects…');
-    const requestText = prompt.trim();
     const initialMessage = initialPromptSubmitted.current ? timeline.find((message) => (message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:')) && message.body === requestText) : undefined;
     const requestMessageId = appendTimeline('user', requestText, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds] }, initialMessage?.clientMessageId);
     // A composer submission is a chat interaction, so reveal its Brain object
@@ -1770,7 +1770,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return;
     }
     window.setTimeout(() => {
-      const request = prompt.toLowerCase();
+      const request = requestText.toLowerCase();
       if (request.includes('roadmap')) {
         const project = nodes.find((node) => node.data.kind === 'project');
         const brain = nodes.find((node) => node.data.kind === 'chat');
@@ -1807,7 +1807,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!initial || timeline.some((message) => message.messageRole === 'assistant')) return;
     initialPromptSubmitted.current = true;
     setPrompt(initial.body);
-    window.setTimeout(() => evaluateCanvas(), 0);
+    evaluateCanvas(initial.body);
   }, [thinking, timeline, evaluateCanvas]);
 
   const applyProposedChanges = useCallback(async () => {

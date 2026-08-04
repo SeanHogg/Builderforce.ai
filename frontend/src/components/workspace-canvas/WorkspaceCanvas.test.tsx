@@ -8,6 +8,7 @@ describe('WorkspaceCanvas', () => {
       { id: 'overview', title: 'Overview', content: <div>Overview panel</div> },
     ]} />);
 
+    expect(screen.getByRole('button', { name: 'Clean up canvas layout' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Close mini map' }));
     expect(screen.getByRole('button', { name: 'Open mini map' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Open mini map' }));

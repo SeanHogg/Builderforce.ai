@@ -45,6 +45,14 @@ export interface CheckoutSessionOpts {
   successUrl: string;
   /** Absolute URL provider redirects to on cancel */
   cancelUrl: string;
+  /** Validated server-side offer. Never accept these values directly from a client. */
+  discount?: {
+    id: string;
+    code: string;
+    percentOff: number;
+    durationYears: number;
+    redemptionId: string;
+  };
 }
 
 export interface CheckoutSessionResult {
@@ -115,6 +123,8 @@ export interface WebhookEvent {
    *  removal/replace can detach exactly this card instead of sweeping the
    *  customer — see migration 0346. */
   paymentMethodId?: string;
+  /** Signed Checkout metadata used to finalize a reserved one-time discount. */
+  discountRedemptionId?: string;
 
   /** Raw provider-specific data for logging/debugging */
   raw: unknown;

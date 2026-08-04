@@ -44,6 +44,11 @@ import { provisionBuiltinAgents } from '../../application/agent/provisionBuiltin
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
 import { tenantHasSuperadminMember } from '../../application/llm/tenantTokenAvailability';
 import { getTeamSpendOverview, invalidateTeamSpendCaches, usdToMillicents } from '../../application/consumption/memberSpend';
+import {
+  attachDiscountCheckout,
+  releaseDiscountReservation,
+  reserveDiscount,
+} from '../../application/tenant/discountCodeService';
 
 /** Best-effort audit emit for a membership mutation (invite / add), attributed to
  *  the acting manager. Off the response path; never throws. */
@@ -402,6 +407,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       billingEmail: string;
       successUrl?: string;
       cancelUrl?: string;
+      discountCode?: string;
     }>();
 
     if (!body.billingCycle || !body.billingEmail) {
@@ -415,14 +421,37 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     }
 
     const appUrl = c.env.APP_URL ?? 'https://builderforce.ai';
-    const result = await tenantService.createCheckoutSession(tenantId, {
-      targetPlan,
-      seats: body.seats,
-      billingCycle: body.billingCycle,
-      billingEmail: body.billingEmail,
-      successUrl: body.successUrl ?? `${appUrl}/pricing?success=1`,
-      cancelUrl: body.cancelUrl ?? `${appUrl}/pricing?cancelled=1`,
-    });
+    const discount = body.discountCode
+      ? await reserveDiscount(db, {
+          tenantId,
+          rawCode: body.discountCode,
+          targetPlan,
+          billingCycle: body.billingCycle,
+        })
+      : undefined;
+
+    let result: { checkoutUrl: string; sessionId: string };
+    try {
+      result = await tenantService.createCheckoutSession(tenantId, {
+        targetPlan,
+        seats: body.seats,
+        billingCycle: body.billingCycle,
+        billingEmail: body.billingEmail,
+        successUrl: body.successUrl ?? `${appUrl}/pricing?success=1`,
+        cancelUrl: body.cancelUrl ?? `${appUrl}/pricing?cancelled=1`,
+        discount: discount ? {
+          id: discount.discountId,
+          code: discount.code,
+          percentOff: discount.percentOff,
+          durationYears: discount.durationYears,
+          redemptionId: discount.redemptionId,
+        } : undefined,
+      });
+    } catch (error) {
+      if (discount) await releaseDiscountReservation(db, discount.redemptionId);
+      throw error;
+    }
+    if (discount) await attachDiscountCheckout(db, discount.redemptionId, result.sessionId);
 
     return c.json(result);
   });

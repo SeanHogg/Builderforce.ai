@@ -35,6 +35,38 @@ import { segments, tenants, users } from './identity';
 import { initiatives } from './pmo';
 import { projects } from './work';
 
+/** Signup/checkout offers authored by platform operators. Codes are normalized
+ * to uppercase at the API boundary; the database uniqueness constraint is the
+ * final guard against two operators creating the same offer concurrently. */
+export const discountCodes = pgTable('discount_codes', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  code:           varchar('code', { length: 64 }).notNull().unique(),
+  percentOff:     integer('percent_off').notNull(),
+  applicablePlan: varchar('applicable_plan', { length: 16 }).notNull().default('pro').$type<'pro' | 'teams'>(),
+  billingCycle:   varchar('billing_cycle', { length: 16 }).notNull().default('yearly').$type<'monthly' | 'yearly'>(),
+  durationYears:  integer('duration_years').notNull().default(1),
+  isActive:       boolean('is_active').notNull().default(true),
+  createdByUserId: varchar('created_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:      timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One reservation/redemption per workspace and code. Reserving before the
+ * external Checkout call closes the double-click/concurrent-session race. */
+export const discountRedemptions = pgTable('discount_redemptions', {
+  id:                uuid('id').primaryKey().defaultRandom(),
+  discountCodeId:    uuid('discount_code_id').notNull().references(() => discountCodes.id, { onDelete: 'restrict' }),
+  tenantId:          integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  checkoutSessionId: varchar('checkout_session_id', { length: 255 }),
+  status:            varchar('status', { length: 16 }).notNull().default('pending').$type<'pending' | 'redeemed'>(),
+  appliedAt:         timestamp('applied_at', { withTimezone: true }).notNull().defaultNow(),
+  redeemedAt:        timestamp('redeemed_at', { withTimezone: true }),
+}, (t) => [
+  unique('uq_discount_redemption_tenant_code').on(t.tenantId, t.discountCodeId),
+  uniqueIndex('uq_discount_redemption_checkout').on(t.checkoutSessionId),
+  index('idx_discount_redemptions_tenant').on(t.tenantId, t.appliedAt),
+]);
+
 
 export const reportSubscriptions = pgTable('report_subscriptions', {
   id:            serial('id').primaryKey(),

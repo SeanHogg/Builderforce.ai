@@ -56,7 +56,9 @@ import {
   userMfaRecoveryCodes,
   projects,
   platformPersonas,
+  discountCodes,
 } from '../../infrastructure/database/schema';
+import { normalizeDiscountCode } from '../../application/tenant/discountCodeService';
 import { signJwt, signEmulationJwt } from '../../infrastructure/auth/JwtService';
 import {
   adminImpersonationSessions,
@@ -1377,6 +1379,87 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   // -------------------------------------------------------------------------
+  // Discount codes — SuperAdmin-authored signup/checkout offers.
+  // -------------------------------------------------------------------------
+  router.get('/discount-codes', async (c) => {
+    const db = buildDatabase(c.env);
+    const rows = await db.execute(sql`
+      SELECT dc.id, dc.code, dc.percent_off AS "percentOff",
+             dc.applicable_plan AS "applicablePlan", dc.billing_cycle AS "billingCycle",
+             dc.duration_years AS "durationYears", dc.is_active AS "isActive",
+             dc.created_at AS "createdAt", dc.updated_at AS "updatedAt",
+             COUNT(dr.id)::int AS "redemptionCount",
+             COUNT(dr.id) FILTER (WHERE dr.status = 'redeemed')::int AS "redeemedCount"
+      FROM discount_codes dc
+      LEFT JOIN discount_redemptions dr ON dr.discount_code_id = dc.id
+      GROUP BY dc.id
+      ORDER BY dc.created_at DESC
+    `);
+    return c.json({ discountCodes: rows.rows });
+  });
+
+  router.post('/discount-codes', async (c) => {
+    type DiscountBody = {
+      code?: string; percentOff?: number; applicablePlan?: 'pro' | 'teams';
+      billingCycle?: 'monthly' | 'yearly'; durationYears?: number; isActive?: boolean;
+    };
+    const body = await c.req.json<DiscountBody>().catch(() => ({} as DiscountBody));
+    const code = normalizeDiscountCode(body.code ?? '');
+    const percentOff = Number(body.percentOff);
+    const durationYears = Number(body.durationYears);
+    if (!/^[A-Z0-9_-]{3,64}$/.test(code)) return c.json({ error: 'Code must be 3–64 letters, numbers, _ or -' }, 400);
+    if (!Number.isInteger(percentOff) || percentOff < 1 || percentOff > 100) return c.json({ error: 'percentOff must be an integer from 1 to 100' }, 400);
+    if (!Number.isInteger(durationYears) || durationYears < 1 || durationYears > 20) return c.json({ error: 'durationYears must be an integer from 1 to 20' }, 400);
+    const applicablePlan = body.applicablePlan === 'teams' ? 'teams' : 'pro';
+    const billingCycle = body.billingCycle === 'monthly' ? 'monthly' : 'yearly';
+    const db = buildDatabase(c.env);
+    const [existing] = await db.select({ id: discountCodes.id }).from(discountCodes).where(eq(discountCodes.code, code)).limit(1);
+    if (existing) return c.json({ error: 'Discount code already exists' }, 409);
+    const [created] = await db.insert(discountCodes).values({
+      code, percentOff, durationYears, applicablePlan, billingCycle,
+      isActive: body.isActive ?? true,
+      createdByUserId: c.get('userId') as string,
+    }).returning();
+    if (!created) return c.json({ error: 'Failed to create discount code' }, 500);
+    await writeAdminAudit(db, 'DISCOUNT_CODE_CREATED', c.get('userId') as string, {
+      metadata: { discountCodeId: created.id, code },
+    });
+    return c.json({ discountCode: created }, 201);
+  });
+
+  router.patch('/discount-codes/:id', async (c) => {
+    type DiscountBody = {
+      code?: string; percentOff?: number; applicablePlan?: 'pro' | 'teams';
+      billingCycle?: 'monthly' | 'yearly'; durationYears?: number; isActive?: boolean;
+    };
+    const body = await c.req.json<DiscountBody>().catch(() => ({} as DiscountBody));
+    const updates: Partial<typeof discountCodes.$inferInsert> = { updatedAt: new Date() };
+    if (body.code !== undefined) {
+      const code = normalizeDiscountCode(body.code);
+      if (!/^[A-Z0-9_-]{3,64}$/.test(code)) return c.json({ error: 'Code must be 3–64 letters, numbers, _ or -' }, 400);
+      updates.code = code;
+    }
+    if (body.percentOff !== undefined) {
+      if (!Number.isInteger(body.percentOff) || body.percentOff < 1 || body.percentOff > 100) return c.json({ error: 'percentOff must be an integer from 1 to 100' }, 400);
+      updates.percentOff = body.percentOff;
+    }
+    if (body.durationYears !== undefined) {
+      if (!Number.isInteger(body.durationYears) || body.durationYears < 1 || body.durationYears > 20) return c.json({ error: 'durationYears must be an integer from 1 to 20' }, 400);
+      updates.durationYears = body.durationYears;
+    }
+    if (body.applicablePlan !== undefined) updates.applicablePlan = body.applicablePlan;
+    if (body.billingCycle !== undefined) updates.billingCycle = body.billingCycle;
+    if (body.isActive !== undefined) updates.isActive = body.isActive;
+    const db = buildDatabase(c.env);
+    const [updated] = await db.update(discountCodes).set(updates).where(eq(discountCodes.id, c.req.param('id'))).returning();
+    if (!updated) return c.json({ error: 'Discount code not found' }, 404);
+    await writeAdminAudit(db, 'DISCOUNT_CODE_UPDATED', c.get('userId') as string, {
+      metadata: { discountCodeId: updated.id, code: updated.code },
+    });
+    return c.json({ discountCode: updated });
+  });
+
+  // -------------------------------------------------------------------------
   // GET /api/admin/tenants
   // -------------------------------------------------------------------------
   router.get('/tenants', async (c) => {
@@ -1398,6 +1481,11 @@ export function createAdminRoutes(): Hono<HonoEnv> {
         t.paid_overflow_daily_cap AS "paidOverflowDailyCap",
         t.image_credits_daily_limit AS "imageCreditsDailyLimit",
         t.premium_override AS "premiumOverride",
+        d.code AS "discountCode",
+        d.percent_off AS "discountPercentOff",
+        d.duration_years AS "discountDurationYears",
+        d.status AS "discountStatus",
+        d.applied_at AS "discountAppliedAt",
         CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' AND t.is_demo = false THEN true ELSE false END AS "isPaid",
         CASE WHEN t.plan = 'pro' AND t.billing_status = 'active' THEN 'pro' ELSE 'free' END AS "effectivePlan",
         t.created_at AS "createdAt",
@@ -1406,7 +1494,15 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       FROM tenants t
       LEFT JOIN tenant_members tm ON tm.tenant_id = t.id AND tm.is_active = true
       LEFT JOIN agent_hosts ci ON ci.tenant_id = t.id
-      GROUP BY t.id, t.name, t.slug, t.status, t.plan, t.billing_status, t.billing_email, t.billing_updated_at, t.external_customer_id, t.external_subscription_id, t.token_daily_limit_override, t.paid_overflow_daily_cap, t.image_credits_daily_limit, t.premium_override, t.created_at
+      LEFT JOIN LATERAL (
+        SELECT dc.code, dc.percent_off, dc.duration_years, dr.status, dr.applied_at
+        FROM discount_redemptions dr
+        JOIN discount_codes dc ON dc.id = dr.discount_code_id
+        WHERE dr.tenant_id = t.id
+        ORDER BY dr.applied_at DESC
+        LIMIT 1
+      ) d ON true
+      GROUP BY t.id, t.name, t.slug, t.status, t.plan, t.billing_status, t.billing_email, t.billing_updated_at, t.external_customer_id, t.external_subscription_id, t.token_daily_limit_override, t.paid_overflow_daily_cap, t.image_credits_daily_limit, t.premium_override, t.created_at, d.code, d.percent_off, d.duration_years, d.status, d.applied_at
       ORDER BY t.created_at DESC
       LIMIT 500
     `);

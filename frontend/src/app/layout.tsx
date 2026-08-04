@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import Script from 'next/script';
 import { JetBrains_Mono } from 'next/font/google';
 import { LocaleProvider } from './LocaleProvider';
@@ -29,6 +30,7 @@ import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 import { ChunkErrorRecovery } from '@/components/ChunkErrorRecovery';
 import { EMBED_ERROR_REPORTER } from '@/lib/embed/embedErrorReporter';
 import { AUTH_API_URL } from '@/lib/auth';
+import { DiscountCodeCapture } from '@/components/DiscountCodeCapture';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://builderforce.ai';
 
@@ -159,6 +161,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             level; per-page schemas are injected in individual page components */}
       </head>
       <body>
+        <Suspense fallback={null}><DiscountCodeCapture /></Suspense>
         {/* Google Tag Manager (noscript) */}
         <noscript>
           <iframe

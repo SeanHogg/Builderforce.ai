@@ -5,6 +5,7 @@ import { CreationNode } from './CreationNode';
 import { specsApi } from '@/lib/builderforceApi';
 import type { CreationFlowNode } from './CreationNode';
 import type { ProjectEvermindContributions, ProjectEvermindHead } from '@/lib/projectEvermindApi';
+import { createLocalCreationSession } from '@/lib/creationSessions';
 
 vi.mock('next-intl', async (importOriginal) => {
   const actual = await importOriginal<typeof import('next-intl')>();
@@ -55,6 +56,7 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
   it('opens the mini map by default and lets it be closed and reopened from the canvas controls', () => {
     render(<CreationCanvas sessionId="minimap-controls-test" persistence="local" />);
 
+    expect(screen.getByRole('button', { name: 'Clean up canvas layout' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Close mini map' }));
     expect(screen.getByRole('button', { name: 'Open mini map' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Open mini map' }));
@@ -80,6 +82,14 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
 
   beforeEach(() => {
     localStorage.clear();
+  });
+
+  it('automatically executes the prompt carried from the homepage', async () => {
+    const sessionId = createLocalCreationSession('Create a roadmap for the launch');
+
+    render(<CreationCanvas sessionId={sessionId} persistence="local" />);
+
+    await waitFor(() => expect(screen.getAllByText('Sales presentation roadmap').length).toBeGreaterThan(0), { timeout: 2_000 });
   });
 
   it('groups canvas history controls without changing their accessible actions', () => {

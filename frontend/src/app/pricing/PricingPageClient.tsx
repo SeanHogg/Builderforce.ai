@@ -13,6 +13,7 @@ import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { PremiumModelUnlock } from '@/components/llm/PremiumModelUnlock';
 import { CardOnFile } from '@/components/llm/CardOnFile';
 import { pricingSchema } from '@/lib/structured-data';
+import { getRetainedDiscountCode, retainDiscountCode } from '@/lib/discountCode';
 
 type Plan = 'free' | 'pro' | 'teams';
 
@@ -131,6 +132,7 @@ export default function PricingPageClient() {
   const t = useTranslations('pricing');
   const confirm = useConfirm();
   const { tenant } = useAuth();
+  const searchParams = useSearchParams();
   const tenantId = tenant?.id != null ? Number(tenant.id) : null;
 
   const [sub, setSub] = useState<Subscription | null>(null);
@@ -140,6 +142,7 @@ export default function PricingPageClient() {
   const [upgradeTarget, setUpgradeTarget] = useState<'pro' | 'teams' | null>(null);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [billingEmail, setBillingEmail] = useState('');
+  const [discountCode, setDiscountCode] = useState('');
   const [seats, setSeats] = useState(5); // ≥ Teams volume minimum (server: PRICING.teams.minimumSeats)
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
@@ -167,10 +170,18 @@ export default function PricingPageClient() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchSub(); }, [tenantId]);
 
+  useEffect(() => {
+    const captured = searchParams?.get('discountcode') ?? getRetainedDiscountCode();
+    if (captured) {
+      setDiscountCode(captured.toUpperCase());
+      setBillingCycle('yearly');
+      retainDiscountCode(captured);
+    }
+  }, [searchParams]);
+
   // Deep link: /pricing?upgrade=pro|teams pre-opens the upgrade form for a
   // signed-in tenant; an anonymous visitor is sent to register first (the
   // checkout is tenant-scoped, so there's nothing to open without a tenant).
-  const searchParams = useSearchParams();
   useEffect(() => {
     const target = searchParams?.get('upgrade');
     if (target !== 'pro' && target !== 'teams') return;
@@ -232,6 +243,7 @@ export default function PricingPageClient() {
           targetPlan: upgradeTarget,
           billingCycle,
           billingEmail: billingEmail.trim(),
+          ...(discountCode.trim() && { discountCode: discountCode.trim() }),
           ...(upgradeTarget === 'teams' && { seats }),
         }),
       });
@@ -427,6 +439,15 @@ export default function PricingPageClient() {
                   <input type="email" required value={billingEmail} onChange={(e) => setBillingEmail(e.target.value)}
                     placeholder={t('placeholderBillingEmail')}
                     style={{ width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, boxSizing: 'border-box' }} />
+                </div>
+
+                <div>
+                  <label htmlFor="checkout-discount-code" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Discount code</label>
+                  <input id="checkout-discount-code" type="text" value={discountCode}
+                    onChange={(e) => { setDiscountCode(e.target.value.toUpperCase()); retainDiscountCode(e.target.value); }}
+                    placeholder="Optional"
+                    style={{ width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, boxSizing: 'border-box' }} />
+                  {discountCode && <div style={{ fontSize: 11, color: 'var(--coral-bright)', marginTop: 6 }}>The discount will be verified before payment.</div>}
                 </div>
 
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 12px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
