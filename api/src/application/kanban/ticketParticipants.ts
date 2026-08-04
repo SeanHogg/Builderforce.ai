@@ -451,6 +451,62 @@ export class TicketParticipantsService {
   }
 
   /**
+   * Staff an ALREADY-EXISTING manifest slot.
+   *
+   * Unlike `addParticipant` (which creates a new row), this updates the slot that
+   * already exists on the ticket — the template-derived Engineer slot that is currently
+   * `unstaffed`. Useful when a manager knows exactly which role to staff and does not
+   * want to create a duplicate row.
+   *
+   * Idempotent: re-staffing the same person to the same slot is a no-op.
+   */
+  async assignParticipant(env: Env, tenantId: number, taskId: number, input: AssignParticipantInput): Promise<ManifestParticipant | null> {
+    const ctx = await this.taskContext(taskId);
+    if (!ctx) return null;
+    const responsibility = input.responsibility ?? 'owner';
+
+    // Build the query to find the slot: match task, tenant, role, and optionally stage + responsibility.
+    const conditions = [
+      eq(ticketParticipants.tenantId, tenantId),
+      eq(ticketParticipants.taskId, taskId),
+      eq(ticketParticipants.roleKey, input.roleKey),
+    ];
+    if (input.stageKey !== undefined) {
+      conditions.push(input.stageKey == null ? isNull(ticketParticipants.stageKey) : eq(ticketParticipants.stageKey, input.stageKey));
+    }
+    if (input.responsibility !== undefined) {
+      conditions.push(input.responsibility == null ? isNull(ticketParticipants.responsibility) : eq(ticketParticipants.responsibility, input.responsibility));
+    }
+
+    const [existing] = await this.db.select().from(ticketParticipants).where(and(...conditions)).limit(1);
+    if (!existing) return null;
+
+    // No-op if already staffed with the same person.
+    if (existing.assigneeRef === input.assignee.ref && existing.assigneeKind === input.assignee.kind) {
+      return this.mapRow(existing);
+    }
+
+    const now = new Date();
+    const newState = existing.state === 'unstaffed' ? 'assigned' : existing.state;
+    const [updated] = await this.db
+      .update(ticketParticipants)
+      .set({
+        assigneeKind: input.assignee.kind,
+        assigneeRef: input.assignee.ref,
+        assigneeName: input.assignee.name,
+        state: newState,
+        note: input.note ?? existing.note,
+        updatedAt: now,
+      })
+      .where(eq(ticketParticipants.id, existing.id))
+      .returning();
+
+    await this.syncStates(env, tenantId, taskId);
+    await this.bump(env, taskId);
+    return updated ? this.mapRow(updated) : null;
+  }
+
+  /**
    * Materialize child work-item tasks for every not-yet-materialized participant that
    * has a resolved assignee — one child task per resource, linked back via childTaskId,
    * so the parent ticket's %-complete rolls up from real board tasks.
