@@ -337,10 +337,36 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
     return c.json({ participant });
   });
 
+  // Validate a participant exists and is associated with the given task (PRD requirement).
+  router.get('/validate-participant', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const taskId = Number(c.req.query('taskId'));
+    const participantId = c.req.query('participantId');
+    if (!taskId || !participantId) return c.json({ error: 'taskId and participantId are required' }, 400);
+    try {
+      const participant = await participantsService.validateParticipant(env(c), tenantId, taskId, participantId);
+      return c.json({ valid: true, participant });
+    } catch (e) {
+      const err = e as { name?: string; message?: string };
+      if (err.name === 'ValidationError' || err.name === 'NotFoundError') {
+        return c.json({ valid: false, error: err.message }, 400);
+      }
+      return c.json({ error: (e as Error).message }, 400);
+    }
+  });
+
   router.delete('/tasks/:taskId/participants/:participantId', async (c) => {
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
-    await participantsService.removeParticipant(env(c), c.get('tenantId') as number, Number(c.req.param('taskId')), c.req.param('participantId'));
-    return c.json({ ok: true });
+    try {
+      await participantsService.removeParticipant(env(c), c.get('tenantId') as number, Number(c.req.param('taskId')), c.req.param('participantId'));
+      return c.json({ ok: true });
+    } catch (e) {
+      const err = e as { name?: string; message?: string };
+      if (err.name === 'ValidationError' || err.name === 'NotFoundError') {
+        return c.json({ error: err.message }, 400);
+      }
+      return c.json({ error: (e as Error).message }, 400);
+    }
   });
 
   // Materialize a child work-item task per resolved participant (the %-complete rollup).
