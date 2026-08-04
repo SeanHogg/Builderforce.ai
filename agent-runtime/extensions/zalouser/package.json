@@ -4,7 +4,7 @@
   "description": "BuilderForceAgents Zalo Personal Account plugin via zca-cli",
   "type": "module",
   "dependencies": {
-    "@sinclair/typebox": "0.34.48"
+    "@sinclair/typebox": "0.34.52"
   },
   "devDependencies": {
     "@seanhogg/builderforce-agents": "workspace:*"
