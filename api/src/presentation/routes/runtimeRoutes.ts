@@ -1429,7 +1429,8 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   });
 
   router.put('/execution-control', requireRole(TenantRole.MANAGER) as never, async (c) => {
-    const body = await c.req.json<{ enabled?: unknown }>().catch(() => ({}));
+    const body = await c.req.json<{ enabled?: unknown }>()
+      .catch(() => ({ enabled: undefined } as { enabled?: unknown }));
     if (typeof body.enabled !== 'boolean') return c.json({ error: 'enabled must be a boolean' }, 400);
 
     const tenantId = c.get('tenantId');
