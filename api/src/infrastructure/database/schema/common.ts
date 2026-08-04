@@ -64,6 +64,9 @@ export const taskTypeEnum = pgEnum('task_type', [
   // Product-Manager agent authors + publishes for a fixed-bid build, and a UI/UX
   // design (or design-review) gig. Both are publishable to the Gig Marketplace.
   'product', 'design',
+  // Decision task type: non-coding tasks completed through written decisions
+  // (analysis, provisioning, architectural decisions). These complete without a PR.
+  'decision',
 ]);
 
 
