@@ -72,22 +72,27 @@ Ensure that the system effectively identifies and removes duplicate entries, mai
 
 ## Requirements
 
-### 1. Remove-Participant Tool Specification
+### 1. Removal Capability — As-Built
 
-**Tool Name:** `kanban_remove_participant`
+`TicketParticipantsService.removeParticipant(env, tenantId, taskId, participantId)` already exists in
+`api/src/application/kanban/ticketParticipants.ts`. It deletes from `ticket_participants` matching
+**all** of `tenantId`, `taskId`, `id = participantId`, **and `source IN ('assessment','manual')`**,
+then bumps the manifest cache version.
 
-**Inputs:**
-- `taskId` (number, required) — the epic/task whose manifest to modify.
-- `participantId` (string, required) — the UUID of the specific participant to remove.
+**BA finding — two constraints that determine whether verification can pass:**
 
-**Validation:**
-- The participant must exist and belong to the given `taskId`.
-- The removal must not violate the `uidx_ticket_participants_slot` unique constraint: removing one instance of a (taskId, stageKey, roleKey, responsibility, source) slot is permitted; removing the only instance of a required role is allowed but must surface as a resource gap.
+- **F-1 — `template`-sourced rows cannot be removed.** The `inArray(source, ['assessment','manual'])`
+  predicate means a duplicate whose provenance is `template` (or `lane_agent`) matches zero rows.
+  Re-deriving the manifest re-inserts template slots idempotently, so a template duplicate is
+  *by design* not removable — it must be corrected at the `swimlane_requirements` template instead.
+- **F-2 — the delete is silent.** It returns `void` and does not report the affected row count, so a
+  no-op delete is indistinguishable from a successful one by the caller. Verification therefore
+  **must not** trust the call's return; it must re-read the manifest (§3).
 
-**Behavior:**
-- Deletes the row from `ticket_participants` table where `id = participantId`.
-- Invalidates the task's participation manifest cache (`participants:task:{taskId}`).
-- Returns the updated manifest.
+**Requirement:** removal is considered *specified* by the as-built method. No new tool is required for
+an `assessment`/`manual` duplicate. If Epic #709's participant `0d6423f1-…` is `template`-sourced,
+this ticket's verification will legitimately FAIL and the fix belongs in the board template — that
+outcome is a valid, reportable result, not a defect in this verification.
 
 ### 2. Duplicate Detection Criteria
 
