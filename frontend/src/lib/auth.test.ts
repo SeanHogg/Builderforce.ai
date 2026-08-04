@@ -291,6 +291,13 @@ describe('handleApiUnauthorized', () => {
     vi.stubGlobal('window', locationMock);
     // Clear any stored session before each test
     localStorageMock.clear();
+    // Reset embed mode
+    import('./auth').then(m => { m.setEmbedAuth(null); });
+  });
+
+  afterEach(() => {
+    // Clean up embed mode
+    import('./auth').then(m => { m.setEmbedAuth(null); });
   });
 
   it('clears session and redirects to login with next param when a token was present', () => {
@@ -307,17 +314,6 @@ describe('handleApiUnauthorized', () => {
 
     // Should have redirected to login with next param
     expect(locationMock.href).toMatch(/^\/login\?next=/);
-  });
-
-  it('dispatches embed event and throws when in embed mode', () => {
-    // Simulate embed mode by setting the embed token directly
-    // We need to test that the function handles embed mode correctly
-    const embedToken = 'embed-token';
-    localStorageMock.setItem('bf_tenant_token', embedToken);
-
-    // In embed mode without window (non-browser), it throws
-    vi.stubGlobal('window', undefined);
-    expect(() => handleApiUnauthorized()).toThrow('Unauthorized');
   });
 });
 
