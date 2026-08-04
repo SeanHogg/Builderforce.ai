@@ -291,13 +291,6 @@ describe('handleApiUnauthorized', () => {
     vi.stubGlobal('window', locationMock);
     // Clear any stored session before each test
     localStorageMock.clear();
-    // Reset embed mode
-    import('./auth').then(m => { m.setEmbedAuth(null); });
-  });
-
-  afterEach(() => {
-    // Clean up embed mode
-    import('./auth').then(m => { m.setEmbedAuth(null); });
   });
 
   it('clears session and redirects to login with next param when a token was present', () => {
@@ -314,6 +307,14 @@ describe('handleApiUnauthorized', () => {
 
     // Should have redirected to login with next param
     expect(locationMock.href).toMatch(/^\/login\?next=/);
+  });
+
+  it('throws without redirect when called outside browser context', () => {
+    // Remove window to simulate server-side
+    vi.stubGlobal('window', undefined);
+
+    // Should throw without attempting redirect
+    expect(() => handleApiUnauthorized()).toThrow('Unauthorized');
   });
 });
 
