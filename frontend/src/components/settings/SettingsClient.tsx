@@ -38,6 +38,7 @@ import AccountSecurityPanel from '@/components/security/AccountSecurityPanel';
 import TeamSpendLimits from '@/components/settings/TeamSpendLimits';
 import ManagerDefaults from '@/components/settings/ManagerDefaults';
 import SettingsLogs from '@/components/settings/SettingsLogs';
+import AgentExecutionControl from '@/components/settings/AgentExecutionControl';
 import type { PsychometricProfile } from '@/lib/psychometric';
 import { clearPersonalityBlockCache } from '@/lib/usePersonalityBlock';
 
@@ -322,6 +323,7 @@ export default function SettingsClient() {
   const renderWorkspace = () => {
     if (!tenant) return null;
     return (
+      <>
       <div style={cardStyle}>
         <div style={sectionTitle}>{t('workspace')}</div>
         <div style={{ display: 'grid', gap: 10 }}>
@@ -360,6 +362,8 @@ export default function SettingsClient() {
           <ApiKeysSettingsLink label={t('apiKeysLink')} />
         </div>
       </div>
+      <AgentExecutionControl />
+      </>
     );
   };
 

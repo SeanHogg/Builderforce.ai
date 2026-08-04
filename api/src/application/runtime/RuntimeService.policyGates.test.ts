@@ -42,12 +42,15 @@ type Scope = { tenantId: number; projectId: number | null; agentRef: string | nu
 function makeService(
   resolver?: (s: Scope) => Promise<PolicyGate[]>,
   registrationResolver?: (id: string, tenantId: number) => Promise<{ active: boolean } | null>,
+  executionEnabled?: (tenantId: number) => Promise<boolean>,
 ) {
   let savedPayload: string | null = null;
+  let saveCount = 0;
   const scopes: Scope[] = [];
 
   const executions = {
     save: async (e: Execution) => {
+      saveCount += 1;
       savedPayload = (e as unknown as { payload: string | null }).payload;
       return e;
     },
@@ -65,14 +68,34 @@ function makeService(
     undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
     wrapped,
     registrationResolver,
+    executionEnabled,
   );
-  return { svc, getPayload: () => savedPayload, scopes };
+  return { svc, getPayload: () => savedPayload, getSaveCount: () => saveCount, scopes };
 }
 
 const submit = (svc: RuntimeService, payload?: string) =>
   svc.submit({ taskId: 7, tenantId: 1, submittedBy: 'system:lane-auto', payload });
 
 describe('RuntimeService.submit — governance gate stamping', () => {
+  it('refuses every submission while the workspace execution kill switch is disabled', async () => {
+    const { svc, getSaveCount } = makeService(undefined, undefined, async () => false);
+
+    await expect(submit(svc)).rejects.toThrow(/disabled for this workspace/i);
+    expect(getSaveCount()).toBe(0);
+  });
+
+  it('submits normally while workspace execution is enabled', async () => {
+    const seen: number[] = [];
+    const { svc, getSaveCount } = makeService(undefined, undefined, async (tenantId) => {
+      seen.push(tenantId);
+      return true;
+    });
+
+    await expect(submit(svc)).resolves.toBeDefined();
+    expect(seen).toEqual([1]);
+    expect(getSaveCount()).toBe(1);
+  });
+
   it('stamps the resolved gates onto the payload so the engine enforces them', async () => {
     const gate: PolicyGate = { id: 'no-shell', tool: 'run_command', effect: 'block', reason: 'prod safety' };
     const { svc, getPayload } = makeService(async () => [gate]);

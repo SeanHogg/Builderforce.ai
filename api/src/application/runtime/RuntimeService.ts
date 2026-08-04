@@ -194,6 +194,9 @@ export class RuntimeService {
       id: string,
       tenantId: number,
     ) => Promise<{ active: boolean } | null>,
+    /** Authoritative workspace kill switch. Appended to preserve constructor
+     * compatibility; production always wires it at the composition root. */
+    private readonly isAgentExecutionEnabled?: (tenantId: number) => Promise<boolean>,
   ) {}
 
   /**
@@ -342,6 +345,12 @@ export class RuntimeService {
   }
 
   async submit(dto: SubmitTaskDto): Promise<Execution> {
+    if (this.isAgentExecutionEnabled && !(await this.isAgentExecutionEnabled(dto.tenantId))) {
+      throw new ForbiddenError(
+        'Agent execution is disabled for this workspace. A manager must re-enable it in Settings.',
+      );
+    }
+
     const task = await this.tasks.findById(asTaskId(dto.taskId));
     if (!task) throw new NotFoundError('Task', dto.taskId);
 

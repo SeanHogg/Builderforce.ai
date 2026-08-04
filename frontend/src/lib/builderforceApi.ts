@@ -2732,6 +2732,11 @@ export interface AttentionResponse {
   manager: AttentionManager;
 }
 
+export interface ExecutionControlResponse {
+  enabled: boolean;
+  stopped?: { requested: number; cancelled: number; failed: number[] };
+}
+
 export const runtimeApi = {
   /** Submit a task for execution. Dispatches to assigned agentHost or all connected agentHosts. */
   submitExecution: (body: {
@@ -2803,6 +2808,16 @@ export const runtimeApi = {
     request<{ requested: number; cancelled: number; failed: number[] }>(
       '/api/runtime/executions/cancel-all', { method: 'POST' },
     ),
+
+  /** Authoritative workspace kill switch. Disabling also cancels every current
+   * non-terminal run; all future RuntimeService submissions are refused. */
+  executionControl: (): Promise<ExecutionControlResponse> =>
+    request<ExecutionControlResponse>('/api/runtime/execution-control'),
+
+  setExecutionControl: (enabled: boolean): Promise<ExecutionControlResponse> =>
+    request<ExecutionControlResponse>('/api/runtime/execution-control', {
+      method: 'PUT', body: JSON.stringify({ enabled }),
+    }),
 
   /**
    * Revert a finished run: close the PR it opened and delete the ticket branch it

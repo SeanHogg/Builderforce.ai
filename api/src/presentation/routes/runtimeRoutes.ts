@@ -42,7 +42,7 @@ import type { Execution } from '../../domain/execution/Execution';
 import type { Env, HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
-import { agentHosts, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
+import { agentHosts, executions, projectInsightEvents, projectRepositories, projects, specs, tasks, tenants, toolAuditEvents, usageSnapshots } from '../../infrastructure/database/schema';
 import { approvals, chatTicketLinks, projectManagerConfigs } from '../../infrastructure/database/schema';
 import { agentPurchases, ideAgents, llmUsageLog, taskFileChanges } from '../../infrastructure/database/schema';
 import type { AgentHostRelayDO } from '../../infrastructure/relay/AgentHostRelayDO';
@@ -967,6 +967,66 @@ async function loadOwnedExecution(
   return execution.toPlain().tenantId === c.get('tenantId') ? execution : null;
 }
 
+interface CancelTenantExecutionsResult {
+  requested: number;
+  cancelled: number;
+  failed: number[];
+}
+
+/** Cancel the tenant's live set through the canonical lifecycle and notify every
+ * executor. The emergency switch includes paused runs so an old approval cannot
+ * resume work while execution is disabled. */
+async function cancelTenantExecutions(
+  c: Context<RuntimeHonoEnv>,
+  db: Db,
+  runtimeService: RuntimeService,
+  includePaused: boolean,
+): Promise<CancelTenantExecutionsResult> {
+  const tenantId = c.get('tenantId');
+  const statuses = includePaused
+    ? ['pending', 'submitted', 'running', 'paused'] as const
+    : ['pending', 'submitted', 'running'] as const;
+  const rows = await db
+    .select({ id: executions.id, agentHostId: executions.agentHostId })
+    .from(executions)
+    .where(and(
+      eq(executions.tenantId, tenantId),
+      inArray(executions.status, [...statuses]),
+      liveExecution(),
+    ));
+
+  const failed: number[] = [];
+  let cancelled = 0;
+  await Promise.all(rows.map(async (row) => {
+    try {
+      const execution = await runtimeService.cancel(row.id, c.get('userId'));
+      await releasePendingSteers(db, row.id);
+
+      if (row.agentHostId != null) {
+        const stub = c.env.AGENT_HOST_RELAY?.get(
+          c.env.AGENT_HOST_RELAY.idFromName(String(row.agentHostId)),
+        );
+        await stub?.fetch('https://relay.internal/execution-cancel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ executionId: row.id }),
+        }).catch((error) => reportCaughtError(error, { source: 'presentation/routes/runtimeRoutes.ts', operation: 'cancelTenantExecutions', context: { logMessage: '[runtime-cancel-all] host relay cancellation failed after status transition', details: { tenantId, executionId: row.id, error } } }));
+      }
+
+      notifyExecutionSubscribers(execution.id, {
+        type: 'done', executionId: execution.id, status: execution.status,
+        execution: execution.toPlain(), ts: new Date().toISOString(),
+      });
+      cancelled += 1;
+    } catch (error) {
+      failed.push(row.id);
+      reportCaughtError(error, { source: 'presentation/routes/runtimeRoutes.ts', operation: 'cancelTenantExecutions', context: { logMessage: '[runtime-cancel-all] execution cancellation failed', details: { tenantId, executionId: row.id, error } } });
+    }
+  }));
+
+  return { requested: rows.length, cancelled, failed };
+}
+
 export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hono<RuntimeHonoEnv> {
   const router = new Hono<RuntimeHonoEnv>();
 
@@ -1355,49 +1415,42 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     return c.json({ active, runningCloudRefs: [...new Set(active.filter((a) => a.kind === 'cloud').map((a) => a.cloudAgentRef))] });
   });
 
+  // Persisted workspace execution override. This is deliberately separate from
+  // manager autonomy: disabling it blocks manual Run-now, scheduled/cron work,
+  // lane chaining, integrations, and every other RuntimeService.submit caller.
+  router.get('/execution-control', async (c) => {
+    const tenantId = c.get('tenantId');
+    const [row] = await db.select({ enabled: tenants.agentExecutionEnabled })
+      .from(tenants)
+      .where(eq(tenants.id, tenantId))
+      .limit(1);
+    if (!row) return c.json({ error: 'Workspace not found' }, 404);
+    return c.json({ enabled: row.enabled });
+  });
+
+  router.put('/execution-control', requireRole(TenantRole.MANAGER) as never, async (c) => {
+    const body = await c.req.json<{ enabled?: unknown }>().catch(() => ({}));
+    if (typeof body.enabled !== 'boolean') return c.json({ error: 'enabled must be a boolean' }, 400);
+
+    const tenantId = c.get('tenantId');
+    const [row] = await db.update(tenants)
+      .set({ agentExecutionEnabled: body.enabled, updatedAt: new Date() })
+      .where(eq(tenants.id, tenantId))
+      .returning({ enabled: tenants.agentExecutionEnabled });
+    if (!row) return c.json({ error: 'Workspace not found' }, 404);
+
+    // Disable first, then drain. RuntimeService.submit observes FALSE while this
+    // snapshot is being cancelled, so schedulers cannot refill the fleet.
+    const stopped = body.enabled
+      ? { requested: 0, cancelled: 0, failed: [] as number[] }
+      : await cancelTenantExecutions(c, db, runtimeService, true);
+    return c.json({ enabled: row.enabled, stopped });
+  });
+
   // Master fleet stop. Resolve the tenant-scoped live set on the server and
   // cancel every run through the same lifecycle used by an individual cancel.
   router.post('/executions/cancel-all', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
-    const tenantId = c.get('tenantId');
-    const rows = await db
-      .select({ id: executions.id, agentHostId: executions.agentHostId })
-      .from(executions)
-      .where(and(
-        eq(executions.tenantId, tenantId),
-        inArray(executions.status, ['pending', 'submitted', 'running']),
-        liveExecution(),
-      ));
-
-    const failed: number[] = [];
-    let cancelled = 0;
-    await Promise.all(rows.map(async (row) => {
-      try {
-        const execution = await runtimeService.cancel(row.id, c.get('userId'));
-        await releasePendingSteers(db, row.id);
-
-        if (row.agentHostId != null) {
-          const stub = c.env.AGENT_HOST_RELAY?.get(
-            c.env.AGENT_HOST_RELAY.idFromName(String(row.agentHostId)),
-          );
-          await stub?.fetch('https://relay.internal/execution-cancel', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ executionId: row.id }),
-          }).catch((error) => reportCaughtError(error, { source: 'presentation/routes/runtimeRoutes.ts', operation: 'cancelAllExecutions', context: { logMessage: '[runtime-cancel-all] host relay cancellation failed after status transition', details: { tenantId, executionId: row.id, error } } }));
-        }
-
-        notifyExecutionSubscribers(execution.id, {
-          type: 'done', executionId: execution.id, status: execution.status,
-          execution: execution.toPlain(), ts: new Date().toISOString(),
-        });
-        cancelled += 1;
-      } catch (error) {
-        failed.push(row.id);
-        reportCaughtError(error, { source: 'presentation/routes/runtimeRoutes.ts', operation: 'cancelAllExecutions', context: { logMessage: '[runtime-cancel-all] execution cancellation failed', details: { tenantId, executionId: row.id, error } } });
-      }
-    }));
-
-    return c.json({ requested: rows.length, cancelled, failed });
+    return c.json(await cancelTenantExecutions(c, db, runtimeService, false));
   });
 
   // GET /api/runtime/attention  — the ONE cross-surface "what's live / what needs me"

@@ -366,6 +366,9 @@ export const tenants = pgTable('tenants', {
    *  most one tenant per persona. See application/demo/demoSeedService.ts. */
   isDemo:                 boolean('is_demo').notNull().default(false),
   demoPersona:            varchar('demo_persona', { length: 32 }),
+  /** Workspace emergency stop. RuntimeService.submit checks this canonical flag
+   *  before creating any manual, scheduled, autonomous, or integration run. */
+  agentExecutionEnabled:  boolean('agent_execution_enabled').notNull().default(true),
   settings:               text('settings'),   // JSON-as-text (jsonb avoided per existing convention)
   createdAt:              timestamp('created_at').notNull().defaultNow(),
   updatedAt:              timestamp('updated_at').notNull().defaultNow(),
