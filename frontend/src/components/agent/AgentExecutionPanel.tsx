@@ -850,7 +850,7 @@ export function AgentExecutionPanel({ task, agentHosts, onTaskChanged }: { task:
               {selected?.agentHostId != null && (
                 <div style={{ marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
                   {t('minimalView')}{' '}
-                  <Link href="/workforce?tab=logs" style={{ color: 'var(--coral-bright)' }}>
+                  <Link href="/settings?sub=logs" style={{ color: 'var(--coral-bright)' }}>
                     {t('openWorkforceLogs')}
                   </Link>
                 </div>

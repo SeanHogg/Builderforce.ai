@@ -37,6 +37,7 @@ import EmailPreferencesCard from '@/components/account/EmailPreferencesCard';
 import AccountSecurityPanel from '@/components/security/AccountSecurityPanel';
 import TeamSpendLimits from '@/components/settings/TeamSpendLimits';
 import ManagerDefaults from '@/components/settings/ManagerDefaults';
+import SettingsLogs from '@/components/settings/SettingsLogs';
 import type { PsychometricProfile } from '@/lib/psychometric';
 import { clearPersonalityBlockCache } from '@/lib/usePersonalityBlock';
 
@@ -172,6 +173,7 @@ export default function SettingsClient() {
       // project inherits (0363). Role-gated inside the panel, not hidden from the bar.
       { id: 'manager', label: t('managerDefaults'), icon: '🧭', href: '/settings?sub=manager' },
       { id: 'spend', label: t('spendLimits'), icon: '💳', href: '/settings?sub=spend' },
+      { id: 'logs', label: 'Logs', icon: '📜', href: '/settings?sub=logs' },
     ] : []),
   ];
 
@@ -362,7 +364,7 @@ export default function SettingsClient() {
   };
 
   return (
-    <PageContainer width="readable" style={{ padding: '32px 40px' }}>
+    <PageContainer width={sub === 'logs' ? 'full' : 'readable'} style={{ padding: '32px 40px' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 20 }}>{t('title')}</h1>
 
       <PillTabs tabs={subTabs} activeId={sub} ariaLabel={t('subnavLabel')} />
@@ -379,6 +381,8 @@ export default function SettingsClient() {
                 ? <ManagerDefaults />
                 : sub === 'spend'
                   ? <TeamSpendLimits />
+                  : sub === 'logs'
+                    ? <SettingsLogs />
                   : renderAccount()}
     </PageContainer>
   );

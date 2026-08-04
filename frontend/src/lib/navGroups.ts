@@ -86,7 +86,7 @@ export const NAV_GROUPS: NavGroup[] = [
     // standups, planning, retros, ad-hoc and direct calls; connect Google/Microsoft
     // calendars. `/meetings` redirects into ?tab=meetings.
     id: 'workforce', labelKey: 'group.workforce', icon: '👥', href: '/workforce',
-    match: ['/workforce', '/hires', '/meetings'],
+    match: ['/workforce', '/hires', '/meetings', '/agent-ops'],
     tabKind: 'query', basePath: '/workforce',
     tabs: [
       { id: '', labelKey: 'tab.workforce', icon: '👥' },
@@ -99,8 +99,10 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: 'plan', labelKey: 'tab.plan', icon: '🧮' },
       { id: 'chats', labelKey: 'tab.chats', icon: '💬' },
       { id: 'approvals', labelKey: 'tab.approvals', icon: '✅' },
-      { id: 'logs', labelKey: 'tab.logs', icon: '📜' },
       { id: 'qa', labelKey: 'tab.qa', icon: '🧪' },
+      { id: 'coordination', labelKey: 'tab.coordination', icon: '🔗' },
+      { id: 'memory', labelKey: 'tab.memory', icon: '🧠' },
+      { id: 'rehearsal', labelKey: 'tab.rehearsal', icon: '🎬' },
     ],
   },
   {
@@ -144,22 +146,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { id: '/alerts', labelKey: 'tab.alerts', icon: '🔔' },
       // Periodic lens review snapshots (monthly/quarterly/annual cadence).
       { id: '/insights/snapshots', labelKey: 'tab.snapshots', icon: '🗓' },
-    ],
-  },
-  {
-    // Agent Ops: the three things you do to a FLEET rather than to one agent —
-    // watch concurrent agents contend for files (Coordination), govern what they
-    // remember and for how long (Memory), and test an agent against a ticket with
-    // every effect suppressed before it touches real work (Rehearsal). Kept out of
-    // Workforce deliberately: that destination is the roster (who exists), this one
-    // is the operating posture (what they are doing to each other right now).
-    id: 'agentops', labelKey: 'group.agentOps', icon: '🧬', href: '/agent-ops',
-    match: ['/agent-ops'],
-    tabKind: 'query', basePath: '/agent-ops',
-    tabs: [
-      { id: '', labelKey: 'tab.coordination', icon: '🔗' },
-      { id: 'memory', labelKey: 'tab.memory', icon: '🧠' },
-      { id: 'rehearsal', labelKey: 'tab.rehearsal', icon: '🎬' },
     ],
   },
   {

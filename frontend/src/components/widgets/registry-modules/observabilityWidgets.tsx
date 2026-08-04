@@ -389,7 +389,7 @@ function CeremonyBalanceCard({ days }: WidgetCardProps) {
 
 const ALERTS_DRILL: WidgetDrill = { kind: 'route', href: '/alerts' };
 const CEREMONIES_DRILL: WidgetDrill = { kind: 'route', href: '/projects?tab=ceremonies' };
-const LOGS_DRILL: WidgetDrill = { kind: 'route', href: '/logs' };
+const LOGS_DRILL: WidgetDrill = { kind: 'route', href: '/settings?sub=logs&log=audit' };
 const QUALITY_DRILL: WidgetDrill = { kind: 'route', href: '/quality' };
 const INTEGRATIONS_DRILL: WidgetDrill = { kind: 'route', href: '/integrations' };
 const CONTENT_DRILL: WidgetDrill = { kind: 'route', href: '/content-manager' };

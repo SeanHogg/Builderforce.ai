@@ -112,16 +112,18 @@ export function middleware(request: NextRequest) {
     return res;
   }
 
-  // Observability moved onto the Workforce page as tabs; redirect the old route
-  // and its legacy aliases (/logs, /timeline) to the Workforce Logs tab.
+  // Workspace logging is consolidated in Settings. Preserve old observability,
+  // timeline, and audit-log deep links while sending each to the matching view.
   if (
     pathname === '/observability' || pathname.startsWith('/observability/') ||
     pathname === '/logs' || pathname.startsWith('/logs/') ||
     pathname === '/timeline' || pathname.startsWith('/timeline/')
   ) {
     const url = request.nextUrl.clone();
-    url.pathname = '/workforce';
-    url.search = '?tab=logs';
+    url.pathname = '/settings';
+    url.search = pathname === '/logs' || pathname.startsWith('/logs/')
+      ? '?sub=logs&log=audit'
+      : '?sub=logs';
     return NextResponse.redirect(url);
   }
 

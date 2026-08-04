@@ -53,7 +53,7 @@ function EventTypeBadge({ type }: { type: string }) {
   );
 }
 
-export default function LogsPage() {
+export default function AuditLogsContent({ embedded = false }: { embedded?: boolean }) {
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -80,7 +80,7 @@ export default function LogsPage() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <PageContainer style={{ padding: '32px 40px' }}>
+    <PageContainer style={{ padding: embedded ? 0 : '32px 40px' }}>
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
           <h1 style={{ fontSize: '1.4rem', fontWeight: 700, marginBottom: 4, color: 'var(--text-primary)' }}>

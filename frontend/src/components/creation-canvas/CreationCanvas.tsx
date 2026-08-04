@@ -32,7 +32,7 @@ import '@seanhogg/builderforce-brain-ui/styles.css';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
 import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
 import { EvermindValidationProvider } from '@/components/ide/EvermindValidationContext';
-import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText } from '@/lib/projectEvermindApi';
+import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
 import { isAwaitingApprovalExecution } from '@/lib/builderforceApi';
 import { fetchProjects } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
@@ -244,11 +244,36 @@ function flowFromSnapshotGraph(graph: { objects: Array<{ id: string; kind: strin
   return { nodes, edges };
 }
 
+/** Canonical project state rendered over an attached Evermind node. Kept outside the
+ * persisted canvas graph so a 20-second live refresh never creates canvas revisions. */
+export function projectEvermindNodePatch(head: ProjectEvermindHead, activity: ProjectEvermindContributions): Partial<CreationNodeData> {
+  const measuredLoss = activity.training.find((point) => point.loss > 0)?.loss;
+  return {
+    title: head.name || 'Project Evermind',
+    status: head.seeded ? `${head.mode === 'connected' ? 'Learning' : 'Frozen'} · v${head.version}` : 'Ready to seed',
+    evermindVersion: head.version,
+    evermindSeeded: head.seeded,
+    contributions: activity.contributions,
+    pendingContributions: activity.pending,
+    recentLearnings: activity.recent,
+    trainingLoss: measuredLoss,
+    learningMode: activity.mode,
+    lastLearnedAt: activity.lastLearnedAt,
+    quarantinedAt: activity.quarantinedAt ?? head.quarantinedAt,
+    quarantineReason: activity.quarantineReason ?? head.quarantineReason,
+    evalPoint: activity.eval,
+    inferenceEnabled: activity.inferenceEnabled,
+    teacherModel: activity.teacherModel || undefined,
+    evermindLoading: false,
+  };
+}
+
 function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialPresent = false }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialPresent?: boolean }) {
   const t = useTranslations('creationCanvas');
   const confirm = useConfirm();
   const storageKey = creationStorageKey(sessionId);
   const [nodes, setNodes, onNodesChange] = useNodesState<CreationFlowNode>(persistence === 'local' ? INITIAL_NODES : []);
+  const [evermindLiveByNodeId, setEvermindLiveByNodeId] = useState<Record<string, Partial<CreationNodeData>>>({});
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(persistence === 'local' ? INITIAL_EDGES : []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);

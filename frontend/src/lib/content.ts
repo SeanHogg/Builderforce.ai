@@ -410,7 +410,7 @@ export const AGENT_CAPABILITIES: AgentCapability[] = [
   { href: '/agents/workflow-builder', iconKey: 'flow', title: 'Agentic Workflow Builder', description: 'Drag-and-drop, IPAAS-style canvas for composing your own LLM logic — memory, knowledge-base and training nodes — wired to your agents and run on your agentHosts.' },
   { href: '/docs/agents-workflows', iconKey: 'activity', title: 'Multi-Agent Workflows', description: 'Built-in patterns for planning, feature dev, bug fixes, refactors and adversarial reviews keep work moving.' },
   { href: '/security', iconKey: 'shield', title: 'Security & RBAC', description: 'Role-based access control, device trust, and complete audit trails. HMAC-signed inter-AgentHost dispatch with Bearer authentication.' },
-  { href: '/workforce?tab=logs', iconKey: 'bars', title: 'Workflow Telemetry', description: 'Every task and workflow emits structured JSONL spans locally and forwards to the Builderforce.ai portal timeline in real time.' },
+  { href: '/settings?sub=logs', iconKey: 'bars', title: 'Workflow Telemetry', description: 'Every task and workflow emits structured JSONL spans locally and forwards to the Builderforce.ai portal timeline in real time.' },
   { href: '/docs/agents-workflows', iconKey: 'swimlane', title: 'Autonomous Swimlane Execution', description: 'Assign any agent — Cloud or On-Premise — to a kanban swimlane. Tickets are dispatched automatically and the board advances on its own as agents finish, stopping only at the approval gates you choose.' },
   { href: '/docs/getting-started', iconKey: 'git', title: 'Agents That Ship Code', description: 'A Cloud agent clones the bound repo through a secure server-side git proxy (your Git token never leaves the server), writes the change, pushes a branch and opens a pull request — headless, no browser open. On-Premise agents do the same on your own machine.' },
   { href: 'https://github.com/seanhogg/agents', iconKey: 'globe', title: 'Self-Hosted & Open Source', description: 'Run on your infrastructure under the MIT license — no vendor lock-in or subscription ceilings.' },
@@ -1422,7 +1422,7 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
     surfaces: [
       { icon: '✅', title: 'Approvals', desc: 'Human-in-the-loop approval gates on every sensitive action your agents take.', href: '/workforce?tab=approvals' },
       { icon: '🔒', title: 'Security', desc: 'Per-tenant isolation and AES-256-GCM encrypted credentials for every integration.', href: '/security' },
-      { icon: '📊', title: 'Observability', desc: 'Full telemetry and an audit trail of every agent action, token, and tool call.', href: '/workforce?tab=logs' },
+      { icon: '📊', title: 'Observability', desc: 'Full telemetry and an audit trail of every agent action, token, and tool call.', href: '/settings?sub=logs' },
       { icon: '🐞', title: 'Quality & Error Tracking', desc: 'Ingest errors from a browser SDK, OpenTelemetry, Sentry, PostHog, or LogRocket; group them by fingerprint; then turn any group into a fix task an agent ships as a pull request — crash to PR on one surface.', href: '/quality' },
       { icon: '📈', title: 'Maturity Diagnostic', desc: 'Rate every practice (Dev, QA, DevOps, PMO, governance) on a CMMI/COBIT-style 1–5 scale — free to self-assess, or scored objectively from your real delivery data with a prioritized plan to mature and innovate.', href: '/diagnostics' },
       { icon: '🏢', title: 'Tenants & Workspaces', desc: 'Multi-tenant workspaces with per-seat roles, members, and cost controls.', href: '/tenants' },
