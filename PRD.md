@@ -97,7 +97,68 @@ Develop a new backend API endpoint and internal function that provides a reliabl
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+### Root Cause Analysis
+
+**This PRD contains a traceability defect.** The title and body were generated from a decontextualized fragment ("This is a new backend API endpoint / internal function") that was mistakenly decomposed from parent task #794's Technical Notes. The described feature — "user data synchronization" across a microservices architecture — does not exist in this codebase (BuilderForce.ai is a Hono/Cloudflare Workers monolith with no separate user/notification/analytics services).
+
+The actual requirement traces to parent task #794: **remove a participant from the participation manifest** to clean up duplicate or stale role entries.
+
+### Functional Requirements
+
+#### 1. Participant Removal (traced from parent #794)
+
+**1.1** An internal function `removeParticipant(env, tenantId, taskId, participantId)` already exists in `api/src/application/kanban/ticketParticipants.ts` — it deletes participants sourced from `'assessment'` or `'manual'` entries.
+
+**1.2** The HTTP route `DELETE /api/kanban/tasks/:taskId/participants/:participantId` exists in `api/src/presentation/routes/kanbanRoutes.ts` (line ~340), guarded by `isManager(c)`.
+
+**1.3** The implementation MUST validate that:
+- The participant exists and belongs to the given task (current WHERE clause does this implicitly).
+- Participants sourced from `'template'` cannot be removed directly (current filter enforces this).
+- **Gap**: There is no guard against removing "the only instance of that role" — parent #794's acceptance criteria requires this protection.
+
+#### 2. MCP Tool Wrapper (traced from parent #794 AC#1)
+
+**2.1** A platform tool `kanban_remove_participant` does NOT exist — agents cannot invoke the participant removal capability.
+
+**2.2** The tool MUST accept:
+- `taskId` (number, required) — the ticket whose manifest to update
+- `participantId` (string, optional) — specific participant UUID to remove  
+- `roleKey` (string, optional) — role key to remove (e.g. `"engineer"`) — **not currently supported by the HTTP layer**
+
+**2.3** When both `participantId` and `roleKey` are provided, `participantId` takes precedence.
+
+#### 3. Error Handling
+
+**3.1** Return HTTP 404 if the participant does not exist or does not belong to the task.
+
+**3.2** Return HTTP 400 if neither `participantId` nor `roleKey` is provided.
+
+**3.3** Return HTTP 409 (Conflict) if removing the participant would leave zero instances of its role AND that role is required on the ticket.
+
+#### 4. Logging
+
+**4.1** Log participant removal events to the activity ledger with verb `ticket.participant.removed`, including the removed role and assignee.
+
+### Traceability
+
+| Requirement | Parent Task | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| 1.1 | #794 | Internal function exists |
+| 1.2 | #794 | HTTP endpoint exists |
+| 1.3 | #794 | "Only instance" protection missing |
+| 2.1 | #794 AC#1 | Platform tool missing |
+| 2.2 | #794 AC#1 | Tool inputs not implemented |
+| 3.x | #794 Tech Notes | Error handling incomplete |
+| 4.1 | #794 | Logging incomplete |
+
+### Verification
+
+- Verify via `DELETE /api/kanban/tasks/709/participants/0d6423f1-ff54-40fc-9e0a-082956af913f` (the duplicate Engineer on Epic #709)
+- Confirm the role is removed from the manifest via `GET /api/kanban/tasks/709/participants`
+
+---
+
+_Signed: business-analyst (task #819)_
 
 ## Design
 
