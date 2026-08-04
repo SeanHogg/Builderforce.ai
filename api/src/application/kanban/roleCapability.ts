@@ -86,6 +86,9 @@ export const BUILTIN_KIND_ROLE_KEYS: Readonly<Record<string, string[]>> = {
  * Which producer role a ticket's technical action-type implies — used to derive an
  * assignment/dispatch role constraint when there is no explicit stage requirement
  * (e.g. Epic children created before they hit a lane). `undefined` = no constraint.
+ *
+ * Note: 'decision' action type returns undefined because decision-type tasks complete
+ * through written decisions rather than code production.
  */
 export function producerRoleForActionType(actionType: ActionType | string | null | undefined): string | undefined {
   switch (actionType) {
@@ -102,6 +105,10 @@ export function producerRoleForActionType(actionType: ActionType | string | null
       return 'tech-writer';
     case 'devops_ci':
       return 'devops';
+    // 'decision' action type: non-coding tasks completed through written decisions
+    // (analysis, provisioning, architectural decisions) - no code producer role
+    case 'decision':
+      return undefined;
     default:
       return undefined;
   }
