@@ -72,7 +72,59 @@ To streamline the role assignment process within epics by ensuring that each rol
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+### Data Model Requirements
+
+| ID | Requirement | Implementation Note |
+|----|-------------|---------------------|
+| REQ-1 | The `ticketParticipants` table must enforce uniqueness at the (taskId, stageKey, roleKey, responsibility, source) composite level to prevent duplicate role entries | Database-level constraint or application-level validation in addParticipant() |
+| REQ-2 | The TicketParticipantsService.addParticipant() method must validate that a participant with the same (taskId, stageKey, roleKey, responsibility, source) does not already exist before inserting | Query existing participants and throw error if duplicate detected |
+
+### API Endpoint Requirements
+
+| ID | Requirement | Endpoint |
+|----|-------------|----------|
+| REQ-3 | The system must provide an API endpoint to retrieve all participants for a given epic/task | GET /api/kanban/tasks/:taskId/participants |
+| REQ-4 | The system must provide an API endpoint to add a participant to an epic with duplicate validation | POST /api/kanban/tasks/:taskId/participants (with validation) |
+| REQ-5 | The system must provide an API endpoint to remove a participant from an epic | DELETE /api/kanban/tasks/:taskId/participants/:participantId |
+| REQ-6 | The system must return appropriate error responses when duplicate role assignment is attempted | 409 Conflict status with descriptive message |
+
+### UI Requirements
+
+| ID | Requirement | Description |
+|----|-------------|-------------|
+| REQ-7 | The epic manifest view must display all assigned roles with clear role names and responsibility types | List view showing roleKey, roleName, responsibility, assignee |
+| REQ-8 | The role assignment form must show existing roles to prevent accidental duplicates | Pre-populated dropdown or list showing current assignments |
+| REQ-9 | Duplicate role warnings must be displayed before submission when user attempts to add an existing role | Inline validation message: "Role [X] with responsibility [Y] already exists in this epic" |
+| REQ-10 | The UI must allow removal of duplicate roles through a delete/remove action | Remove button per participant row |
+
+### Validation Logic Requirements
+
+| ID | Requirement | Description |
+|----|-------------|-------------|
+| REQ-11 | Duplicate detection must consider the full slot identity: taskId + stageKey + roleKey + responsibility + source | Same role in different stages or with different responsibilities is NOT a duplicate |
+| REQ-12 | The validation must work for all participant sources: template-derived, assessment-added, and manually-added | Apply to source values: 'template', 'assessment', 'manual', 'lane_agent' |
+
+### Logging & Notification Requirements
+
+| ID | Requirement | Description |
+|----|-------------|-------------|
+| REQ-13 | All participant add/remove operations must be logged to the activity ledger | Include action type, user/agent, timestamp, participant details |
+| REQ-14 | Duplicate role attempt rejections must be logged as warning events | Include attempted participant details and requesting user |
+| REQ-15 | Notifications to relevant stakeholders are sent when roles are added/removed | Utilize existing notification infrastructure (email/in-app) |
+
+### Epic #709 Specific Requirements
+
+| ID | Requirement | Description |
+|----|-------------|-------------|
+| REQ-16 | The duplicate "Engineer—development" role (0d6423f1) must be removed from Epic #709's participant manifest | Execute removal via TicketParticipantsService.removeParticipant() |
+| REQ-17 | Post-removal verification must confirm only one "Engineer—development" role remains in Epic #709 | Query and validate manifest state after removal |
+
+### Non-Functional Requirements
+
+| ID | Requirement | Description |
+|----|-------------|-------------|
+| REQ-18 | Duplicate validation must complete within 200ms to maintain UX responsiveness | Performance requirement for addParticipant validation |
+| REQ-19 | The duplicate check must be atomic to prevent race conditions | Use database transaction or locking mechanism |
 
 ## Design
 
