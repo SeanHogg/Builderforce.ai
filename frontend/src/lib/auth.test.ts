@@ -319,17 +319,11 @@ describe('handleApiUnauthorized', () => {
 
 describe('checkUnauthorizedAndRedirect', () => {
   let locationMock: { href: string };
-  let clearSessionSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     locationMock = { href: '' };
     vi.stubGlobal('window', locationMock);
     localStorageMock.clear();
-    clearSessionSpy = vi.spyOn({ clearSession }, 'clearSession');
-  });
-
-  afterEach(() => {
-    clearSessionSpy.mockRestore();
   });
 
   it('does nothing when response is 401 but no token was sent', () => {
