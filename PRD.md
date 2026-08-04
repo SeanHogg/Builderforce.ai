@@ -177,3 +177,13 @@ _Owned by the code-reviewer — to be authored._
 ## Test Evidence
 
 _Owned by the qa-tester — to be authored._
+
+---
+
+## Change Log
+
+| Date | Author | Role | Change |
+|------|--------|------|--------|
+| 2024-01-15 | Business Analyst | business-analyst | Authored Requirements section (Sections 1-7) |
+
+**Sign-off**: business-analyst approved on backlog lane
