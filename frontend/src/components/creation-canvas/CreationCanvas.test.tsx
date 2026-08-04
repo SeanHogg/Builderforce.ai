@@ -360,7 +360,11 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getAllByText('Campaign landing page').length).toBeGreaterThan(0);
     expect(screen.getByText('Campaign forecast')).toBeInTheDocument();
     expect(screen.getByLabelText('Active collaborators')).toBeInTheDocument();
-    expect(screen.getByLabelText('Ask Brain about this canvas')).toHaveValue('');
+    const canvasPrompt = screen.getByLabelText('Ask Brain about this canvas');
+    expect(canvasPrompt).toHaveValue('');
+    // ChatInput must not override the Canvas dock's bounded CSS width inline.
+    // An inline 100% made the composer span the entire viewport.
+    expect(canvasPrompt.closest('form')?.style.width).toBe('');
     fireEvent.click(screen.getAllByText('Campaign Strategist')[0]!);
     expect(screen.getByDisplayValue('Campaign Strategist')).toBeInTheDocument();
   });

@@ -595,6 +595,9 @@
   --prompt-panel-border:var(--canvas-line);
   --chat-input-text:var(--canvas-ink);
   --chat-input-icon:var(--canvas-muted);
+  --chat-input-bg:var(--canvas-panel-muted);
+  --chat-input-border:var(--canvas-line);
+  --chat-input-disabled-send-bg:var(--canvas-hover);
   backdrop-filter:blur(14px);
 }
 

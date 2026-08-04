@@ -515,7 +515,7 @@ export function ChatInput({
   }, []);
 
   return (
-    <form onSubmit={handleSubmit} className={className} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--chat-ctl-gap, 6px)', width: '100%' }}>
+    <form onSubmit={handleSubmit} className={className} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--chat-ctl-gap, 6px)' }}>
       <PromptPanel
         active={active}
         onDrop={onAttach ? handleDrop : undefined}
