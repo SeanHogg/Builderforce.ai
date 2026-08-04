@@ -72,7 +72,64 @@ Ensure that the system effectively identifies and removes duplicate entries, mai
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+### 1. Remove-Participant Tool Specification
+
+**Tool Name:** `kanban_remove_participant`
+
+**Inputs:**
+- `taskId` (number, required) — the epic/task whose manifest to modify.
+- `participantId` (string, required) — the UUID of the specific participant to remove.
+
+**Validation:**
+- The participant must exist and belong to the given `taskId`.
+- The removal must not violate the `uidx_ticket_participants_slot` unique constraint: removing one instance of a (taskId, stageKey, roleKey, responsibility, source) slot is permitted; removing the only instance of a required role is allowed but must surface as a resource gap.
+
+**Behavior:**
+- Deletes the row from `ticket_participants` table where `id = participantId`.
+- Invalidates the task's participation manifest cache (`participants:task:{taskId}`).
+- Returns the updated manifest.
+
+### 2. Duplicate Detection Criteria
+
+A **duplicate participant** is defined as:
+- Two or more rows in `ticket_participants` sharing identical values for:
+  - `taskId`
+  - `stageKey` (nullable, treated as NULL match)
+  - `roleKey`
+  - `responsibility` (owner | reviewer | contributor)
+  - `source` (template | assessment | assignment)
+
+This is enforced by the unique index `uidx_ticket_participants_slot` on `(task_id, stage_key, role_key, responsibility, source)`.
+
+**Example from Epic #709:**
+- Row A: `roleKey='engineer'`, `stageKey='development'`, `source='assessment'` (participantId: `0d6423f1-ff54-40fc-9e0a-082956af913f`)
+- Row B: `roleKey='engineer'`, `stageKey=NULL`, `source='template'`
+- Rows A and B are NOT duplicates (different stageKey + source), but two rows with identical `(stageKey, roleKey, responsibility, source)` are.
+
+### 3. Verification Criteria
+
+**"The duplicate entry is gone" is verified when:**
+
+1. **Query:** `SELECT * FROM ticket_participants WHERE task_id = 709 AND id = '0d6423f1-ff54-40fc-9e0a-082956af913f'` returns **no rows**.
+
+2. **Manifest consistency:** GET `/api/kanban/tasks/709/participants` does **not include** a participant with `id = 0d6423f1-ff54-40fc-9e0a-082956af913f`.
+
+3. **No orphan gaps introduced:** The manifest still contains the required roles (Owner, Engineer, Designer, Security) — removing the duplicate `engineer—development` slot does not leave an unstaffed gap because the generic `engineer` role (sourced from the template) remains.
+
+### 4. Traceability
+
+| Requirement ID | Description | Verification |
+|---------------|-------------|--------------|
+| REQ-824-1 | Remove participant tool deletes row by participantId | SELECT returns no row |
+| REQ-824-2 | Manifest cache invalidated after removal | API reflects removal |
+| REQ-824-3 | Duplicate defined by unique slot (taskId, stageKey, roleKey, responsibility, source) | Unique index enforces |
+| REQ-824-4 | Epic #709 duplicate removed | participantId 0d6423f1... absent |
+
+---
+
+**Authored by:** Business Analyst (this ticket)  
+**PRD owner:** Ada (Sr. Product Mgr)  
+**Last updated:** 2026-08-04
 
 ## Design
 
