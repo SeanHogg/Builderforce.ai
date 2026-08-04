@@ -127,7 +127,40 @@ _Owned by the architect — to be authored._
 
 ## Implementation Notes
 
-_Owned by the developer — to be authored._
+### Implemented Features
+
+| Feature | Status | Location |
+|---------|--------|----------|
+| DELETE API endpoint `/api/kanban/tasks/:taskId/participants/:participantId` | ✅ Implemented | `api/src/presentation/routes/kanbanRoutes.ts` (lines 345-349) |
+| `removeParticipant` service method | ✅ Implemented | `api/src/application/kanban/ticketParticipants.ts` (lines 360-365) |
+| MANAGER role authorization | ✅ Implemented | Via `isManager` middleware in route handler |
+| Cache invalidation after removal | ✅ Implemented | Via `bump()` method in `removeParticipant` |
+| Template-derived participant protection | ✅ Implemented | Only removes participants with source='assessment' or 'manual' |
+
+### Identified Gaps (Out of Scope for Initial Release)
+
+| Gap | Priority | Notes |
+|-----|----------|-------|
+| MCP tool `kanban_remove_participant` | Should Have | Not implemented - requires separate work item |
+| 404 response for non-existent participant | Should Have | Currently silent on missing participant |
+| Audit logging for removal actions | Could Have | Currently only sign-offs are audited |
+| Last-instance-of-required-role guard | Could Have | Would prevent removing last required role |
+
+### API Contract
+
+**Endpoint**: `DELETE /api/kanban/tasks/:taskId/participants/:participantId`
+
+**Authentication**: Requires MANAGER role
+
+**Response**:
+- `200 OK`: `{ "ok": true }`
+- `403 Forbidden`: `{ "error": "manager role required" }`
+
+**Behavior**:
+- Removes a participant from a task's participation manifest
+- Only participants added via Resource Assessment ('assessment' source) or manually ('manual' source) can be removed
+- Template-derived participants are protected to preserve board template integrity
+- Cache is automatically invalidated after successful removal
 
 ## Review
 
