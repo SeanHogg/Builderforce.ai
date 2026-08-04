@@ -6974,6 +6974,7 @@
       "merge_blocked": "Fusión denegada",
       "merge_failed": "Fusión rechazada",
       "pr_conflict": "PR en conflicto",
+      "reconcile_pr": "PR conciliada",
       "triage": "Triado",
       "escalate": "Escalado",
       "systemic": "Hallazgo de plataforma"

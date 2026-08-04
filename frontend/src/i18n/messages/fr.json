@@ -6974,6 +6974,7 @@
       "merge_blocked": "Fusion refusée",
       "merge_failed": "Fusion rejetée",
       "pr_conflict": "PR en conflit",
+      "reconcile_pr": "PR rapprochée",
       "triage": "Trié",
       "escalate": "Escaladé",
       "systemic": "Constat plateforme"

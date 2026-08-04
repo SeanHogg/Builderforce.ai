@@ -1916,6 +1916,8 @@ export type ManagerActionType =
    *  only record that the PR loop worked a conflicting PR, and the manager's
    *  least-recently-worked rotation orders by exactly that. */
   | 'pr_conflict'
+  /** Reconciled provider PR state and handed any follow-up work to the manager queue. */
+  | 'reconcile_pr'
   /** A stalled ticket was diagnosed and its remedy applied (0367 stall triage). */
   | 'triage'
   /** The manager's own remedy stopped working, so the ticket went to a human (0367). */

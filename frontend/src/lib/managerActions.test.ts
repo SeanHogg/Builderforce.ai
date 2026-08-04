@@ -29,9 +29,10 @@ describe('manager action registry', () => {
 
   it('knows at least the types the manager writes today', () => {
     // A sanity floor: if this ever reads as empty the loops below pass vacuously.
-    expect(types.length).toBeGreaterThanOrEqual(15);
+    expect(types.length).toBeGreaterThanOrEqual(16);
     expect(types).toContain('merge_failed');
     expect(types).toContain('pr_conflict');
+    expect(types).toContain('reconcile_pr');
   });
 
   for (const [locale, messages] of Object.entries(CATALOGS)) {

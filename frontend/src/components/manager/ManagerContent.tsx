@@ -20,7 +20,7 @@ import { ManagerTodayDigest } from '@/components/manager/ManagerTodayDigest';
 import { ManagerChatPanel } from '@/components/manager/ManagerChatPanel';
 import { ManagerCanvas } from '@/components/manager/ManagerCanvas';
 import { ticketHref } from '@/lib/ticketHref';
-import { managerActionIcon } from '@/lib/managerActions';
+import { isManagerActionType, managerActionIcon } from '@/lib/managerActions';
 import {
   managerApi,
   agentHosts,
@@ -487,7 +487,9 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
         canManage={canManage && !managerRunDisabled}
         onRun={runNow}
         relative={relative}
-        actionLabel={(action) => t(`action.${action.actionType}`)}
+        actionLabel={(action) => isManagerActionType(action.actionType)
+          ? t(`action.${action.actionType}`)
+          : action.actionType}
         labels={{
           canvas: t('title'), live: t('activity.working'), open: t('subnav.overview'),
           run: t('runNow'), running: t('running'), policy: t('subnav.policy'),

@@ -6974,6 +6974,7 @@
       "merge_blocked": "合并被阻止",
       "merge_failed": "合并被拒绝",
       "pr_conflict": "PR 存在冲突",
+      "reconcile_pr": "PR 已对账",
       "triage": "已分诊",
       "escalate": "已升级",
       "systemic": "平台问题"

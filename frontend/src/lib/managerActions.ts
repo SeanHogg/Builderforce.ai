@@ -26,6 +26,7 @@ export const MANAGER_ACTION_ICON: Record<ManagerActionType, string> = {
   merge_blocked: '✋',
   merge_failed: '⛔',
   pr_conflict: '⚔️',
+  reconcile_pr: '🧭',
   triage: '🚧',
   escalate: '🔔',
   systemic: '🧩',
