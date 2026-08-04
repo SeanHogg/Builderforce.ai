@@ -20,7 +20,18 @@ import { addCorsToResponse } from './cors';
 export async function errorHandler(err: Error, c: Context): Promise<Response> {
   let res: Response;
   if (err instanceof ValidationError)  res = c.json({ error: err.message }, 400);
-  else if (err instanceof UnauthorizedError) res = c.json({ error: err.message }, 401);
+  else if (err instanceof UnauthorizedError) {
+    // Carry the machine-readable cause AND whether refreshing is worth trying, so
+    // a client can silently refresh an expired token instead of string-matching
+    // the prose (or, for a revoked one, stop retrying immediately).
+    res = c.json(
+      { error: err.message, ...(err.code ? { code: err.code, refreshable: err.refreshable } : {}) },
+      401,
+      // RFC 6750 §3: an auth failure on a bearer resource advertises the scheme +
+      // an `error` param. Clients and proxies already understand this header.
+      err.code ? { 'WWW-Authenticate': `Bearer error="${err.code}"` } : undefined,
+    );
+  }
   else if (err instanceof ForbiddenError)   res = c.json({ error: err.message }, 403);
   else if (err instanceof NotFoundError)    res = c.json({ error: err.message }, 404);
   else if (err instanceof ConflictError)    res = c.json({ error: err.message }, 409);
