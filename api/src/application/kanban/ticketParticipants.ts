@@ -17,9 +17,10 @@
  * sign-offs with no linked contribution, audited waivers). The sign-off ledger is
  * append-only, so this record is immutable history.
  */
-import { and, asc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { NotFoundError, ValidationError } from '../../domain/shared/errors';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import {
   boards, swimlaneRequirements, swimlanes, tasks, ticketParticipants, ticketRoleSignoffs,
