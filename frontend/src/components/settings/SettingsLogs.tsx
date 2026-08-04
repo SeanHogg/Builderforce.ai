@@ -23,7 +23,7 @@ export default function SettingsLogs() {
       <PillTabs tabs={LOG_TABS} activeId={view} ariaLabel="Log sections" />
 
       {view === 'audit' ? (
-        <AuditLogsContent embedded />
+        <AuditLogsContent />
       ) : (
         <>
           <div style={{ marginBottom: 24 }}>

@@ -491,6 +491,46 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     } catch { hydrated.current = true; }
   }, [persistence, sessionId, setEdges, setNodes]);
 
+  const evermindBindingKey = useMemo(() => JSON.stringify(nodes.flatMap((node) => {
+    const match = node.data.kind === 'evermind' && typeof node.data.resourceId === 'string'
+      ? /^evermind:(\d+)$/.exec(node.data.resourceId)
+      : null;
+    return match ? [{ nodeId: node.id, projectId: Number(match[1]) }] : [];
+  }).sort((a, b) => a.nodeId.localeCompare(b.nodeId))), [nodes]);
+
+  useEffect(() => {
+    if (persistence !== 'server' || evermindBindingKey === '[]') {
+      setEvermindLiveByNodeId({});
+      return;
+    }
+    let stopped = false;
+    const bindings = JSON.parse(evermindBindingKey) as Array<{ nodeId: string; projectId: number }>;
+    const sync = async () => {
+      const byProject = new Map<number, Promise<[ProjectEvermindHead, ProjectEvermindContributions]>>();
+      for (const binding of bindings) {
+        if (!byProject.has(binding.projectId)) byProject.set(binding.projectId, Promise.all([getProjectEvermindHead(binding.projectId), getProjectEvermindContributions(binding.projectId)]));
+      }
+      const settled = await Promise.all(bindings.map(async (binding) => {
+        try {
+          const [head, activity] = await byProject.get(binding.projectId)!;
+          return [binding.nodeId, projectEvermindNodePatch(head, activity)] as const;
+        } catch { return null; }
+      }));
+      if (stopped) return;
+      const activeNodeIds = new Set(bindings.map((binding) => binding.nodeId));
+      setEvermindLiveByNodeId((current) => {
+        const next = Object.fromEntries(Object.entries(current).filter(([nodeId]) => activeNodeIds.has(nodeId)));
+        for (const entry of settled) {
+          if (entry) next[entry[0]] = entry[1];
+        }
+        return JSON.stringify(current) === JSON.stringify(next) ? current : next;
+      });
+    };
+    void sync();
+    const interval = window.setInterval(() => void sync(), 20_000);
+    return () => { stopped = true; window.clearInterval(interval); };
+  }, [evermindBindingKey, persistence]);
+
   useEffect(() => { currentGraph.current = JSON.stringify({ nodes, edges }); }, [edges, nodes]);
 
   // A persisted viewport is expressed in screen pixels, so restoring a camera
@@ -1337,32 +1377,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   const attachEvermindProject = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'evermind') return;
+    const evermindNodeId = selectedNode.id;
     const project = nodes.find((node) => node.data.kind === 'project' && /^project:\d+$/.test(node.data.resourceId || ''));
     if (!project) { setNotice('Add a saved project to the canvas first'); return; }
     const projectId = Number(project.data.resourceId!.slice('project:'.length));
-    updateSelected({ resourceId: `evermind:${projectId}`, projectId, status: 'Loading…' });
+    setNodes((current) => current.map((node) => node.id === evermindNodeId ? { ...node, data: { ...node.data, resourceId: `evermind:${projectId}`, projectId, status: 'Syncing project…' } } : node));
     setEdges((current) => current.some((edge) => edge.source === project.id && edge.target === selectedNode.id) ? current : [...current, { id: crypto.randomUUID(), source: project.id, target: selectedNode.id, label: 'owns model', type: 'smoothstep' }]);
     void Promise.all([getProjectEvermindHead(projectId), getProjectEvermindContributions(projectId)]).then(([head, activity]) => {
-      updateSelected({
-        title: head.name || selectedNode.data.title,
-        status: head.seeded ? `v${head.version} · ${head.mode}` : 'Ready to seed',
-        evermindVersion: head.version,
-        evermindSeeded: head.seeded,
-        contributions: head.contributions,
-        pendingContributions: activity.pending,
-        recentLearnings: activity.recent,
-        trainingLoss: activity.training[0]?.loss,
-        learningMode: head.mode,
-        lastLearnedAt: head.lastLearnedAt,
-        quarantinedAt: head.quarantinedAt,
-        quarantineReason: head.quarantineReason,
-        evalPoint: activity.eval,
-        inferenceEnabled: head.inferenceEnabled,
-        teacherModel: head.teacherModel || undefined,
-      });
+      setEvermindLiveByNodeId((current) => ({ ...current, [evermindNodeId]: projectEvermindNodePatch(head, activity) }));
       setNotice('Evermind attached to project');
     }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not load Evermind'));
-  }, [nodes, selectedNode, setEdges, updateSelected]);
+  }, [nodes, selectedNode, setEdges, setNodes]);
 
   const expandEvermindPipeline = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'evermind') return;
@@ -2021,7 +2046,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const colors: Partial<Record<CreationObjectKind, string>> = { workflow: '#7357ed', website: '#3978f6', dashboard: '#08b59d', agent: '#8a5cf5', staff: '#f09a3e', evaluation: '#6941d7', evermind: '#df4fa5', projectComparison: '#0d8f82' };
     return colors[node.data.kind] ?? '#9aa8bd';
   }, []);
-  const renderedNodes = useMemo(() => nodes.map((node) => node.data.placementHidden === true ? { ...node, hidden: !showHidden, style: showHidden ? { ...node.style, opacity: .42 } : node.style } : node), [nodes, showHidden]);
+  const renderedNodes = useMemo(() => nodes.map((node) => {
+    const attachedEvermind = node.data.kind === 'evermind' && typeof node.data.resourceId === 'string' && /^evermind:\d+$/.test(node.data.resourceId);
+    const live = evermindLiveByNodeId[node.id];
+    const withLiveData = attachedEvermind ? { ...node, data: { ...node.data, ...(live ?? { evermindLoading: true, status: 'Syncing project…' }) } } : node;
+    return withLiveData.data.placementHidden === true ? { ...withLiveData, hidden: !showHidden, style: showHidden ? { ...withLiveData.style, opacity: .42 } : withLiveData.style } : withLiveData;
+  }), [evermindLiveByNodeId, nodes, showHidden]);
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
     creation: (props) => <CreationNode {...props} canRun={canRun} onRun={(nodeId) => runWorkflow(nodeId)} />,
   }), [canRun, runWorkflow]);

@@ -367,6 +367,7 @@ function EvermindBody({ data }: { data: CreationNodeData }) {
   const contributions = typeof data.contributions === 'number' ? data.contributions : 0;
   const loss = typeof data.trainingLoss === 'number' ? data.trainingLoss : null;
   const pending = typeof data.pendingContributions === 'number' ? data.pendingContributions : 0;
+  if (data.evermindLoading === true) return <div className={styles.evermindSyncing} role="status"><span>◌</span><b>Syncing active project Evermind…</b><p>Loading the current version, learning activity, readiness, and recent contributions.</p></div>;
   const recent = Array.isArray(data.recentLearnings)
     ? data.recentLearnings.flatMap((value, index) => {
       if (!value || typeof value !== 'object') return [];

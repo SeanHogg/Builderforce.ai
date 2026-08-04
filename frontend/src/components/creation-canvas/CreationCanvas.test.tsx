@@ -1,9 +1,10 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { associateBrainWithArtifacts, canvasChangesCanAutoApply, CreationCanvas, persistCanonicalProjectPrd, shouldAcquireCanvasObjectLock, type ProposedCanvasChange } from './CreationCanvas';
+import { associateBrainWithArtifacts, canvasChangesCanAutoApply, CreationCanvas, persistCanonicalProjectPrd, projectEvermindNodePatch, shouldAcquireCanvasObjectLock, type ProposedCanvasChange } from './CreationCanvas';
 import { CreationNode } from './CreationNode';
 import { specsApi } from '@/lib/builderforceApi';
 import type { CreationFlowNode } from './CreationNode';
+import type { ProjectEvermindContributions, ProjectEvermindHead } from '@/lib/projectEvermindApi';
 
 vi.mock('next-intl', async (importOriginal) => {
   const actual = await importOriginal<typeof import('next-intl')>();
@@ -543,6 +544,26 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByText('Distil & tune')).toBeInTheDocument();
     expect(screen.getByText('Quality gate')).toBeInTheDocument();
     expect(screen.getByText('Learning telemetry')).toBeInTheDocument();
+  });
+
+  it('projects canonical active-project Evermind state onto a persisted canvas node', () => {
+    const head: ProjectEvermindHead = { version: 9722, ref: 'evermind/project/30/v9722', mode: 'connected', name: 'Project Evermind', contributions: 17_112, inferenceEnabled: false, teacherModel: null, lastLearnedAt: '2026-08-03T02:33:51.127Z', seeded: true, quarantinedAt: '2026-07-26T16:10:30.453Z', quarantineReason: 'coherence probe failed' };
+    const activity = {
+      version: 9722, seeded: true, mode: 'connected', contributions: 17_112, inferenceEnabled: false, teacherModel: null,
+      lastLearnedAt: head.lastLearnedAt, pending: 0, recent: [{ id: 1, kind: 'text' as const, version: 9722, at: Date.now(), weight: 0.4, prompt: 'Active project task', text: 'Learned result', skipReason: 'not_pinned' }],
+      training: [{ version: 9722, at: Date.now(), loss: 3.2246, seqs: 10, moved: 42, deltaNorm: .2, merged: 1 }],
+      eval: { version: 9722, at: Date.now(), baseLoss: 3.3164, newLoss: 3.2246, delta: .0918, evalSize: 6 },
+      affect: { state: { valence: 0, arousal: 0, driveCuriosity: 0, driveCaution: 0, driveEffort: 0, driveSocial: 0, attention: 0, exploration: 0 }, setpoints: { valence: 0, arousal: 0, driveCuriosity: 0, driveCaution: 0, driveEffort: 0, driveSocial: 0, attention: 0, exploration: 0 }, attentionGain: 0, exploreBias: 0 },
+      quarantinedAt: head.quarantinedAt, quarantineReason: head.quarantineReason,
+    } satisfies ProjectEvermindContributions;
+
+    const patch = projectEvermindNodePatch(head, activity);
+    expect(patch).toMatchObject({ evermindVersion: 9722, contributions: 17_112, learningMode: 'connected', inferenceEnabled: false, trainingLoss: 3.2246, quarantinedAt: head.quarantinedAt });
+    render(<CreationNode id="live-evermind" type="creation" data={{ kind: 'evermind', title: 'EverMind', ...patch }} selected={false} dragging={false} zIndex={0} selectable deletable draggable isConnectable positionAbsoluteX={0} positionAbsoluteY={0} />);
+    expect(screen.getAllByText('v9722').length).toBeGreaterThan(0);
+    expect(screen.getByText('17112')).toBeInTheDocument();
+    expect(screen.getAllByText('Active project task').length).toBeGreaterThan(0);
+    expect(screen.getByText('Quarantined — run readiness first')).toBeInTheDocument();
   });
 
   it('keeps anonymous object comments unblocked as a save-later collaboration step', () => {

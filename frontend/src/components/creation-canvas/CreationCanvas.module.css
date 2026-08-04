@@ -268,6 +268,7 @@
 .node_evermind { width:560px; border-color:#c8a2e8; background:linear-gradient(145deg,#fff 0%,#fff9fd 55%,#f8f5ff 100%); }
 .node_evermind .nodeIcon { color:#b22c86; background:#fde9f6; }
 .evermindBody { display:grid; gap:9px; }
+.evermindSyncing { display:grid; place-items:center; align-content:center; min-height:210px; padding:24px; color:var(--canvas-muted); text-align:center; }.evermindSyncing span { color:#df4fa5; font-size:26px; animation:evermindSpin 1.1s linear infinite; }.evermindSyncing b { margin-top:8px; color:var(--canvas-ink); font-size:12px; }.evermindSyncing p { max-width:280px; margin:5px 0 0; font-size:8px; line-height:1.5; }@keyframes evermindSpin { to { transform:rotate(360deg); } }@media (prefers-reduced-motion:reduce) { .evermindSyncing span { animation:none; } }
 .evermindMetrics { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
 .evermindMetrics span { display:grid; gap:3px; padding:8px; border:1px solid #edd8e7; border-radius:8px; background:#fff; }
 .evermindMetrics small { color:#8a7084; font-size:8px; text-transform:uppercase; letter-spacing:.06em; }
