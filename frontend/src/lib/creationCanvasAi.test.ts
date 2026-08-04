@@ -61,6 +61,66 @@ describe('runCreationCanvasAi', () => {
     expect(firstRequest.messages[0].content).toContain('Never create a blank drawing or visual placeholder');
   });
 
+  it('does not claim that a large document stub satisfies the requested page count', async () => {
+    const run = vi.fn(() => ({ ok: true, proposed: true }));
+    mocks.streamChatCompletion
+      .mockResolvedValueOnce({
+        text: '',
+        toolCalls: [{ id: 'call-document', name: 'canvas_add_object', args: JSON.stringify({
+          kind: 'document', title: 'Comprehensive Astronomy',
+          fields: { content: 'A short astronomy overview that describes the intended scope.' },
+        }) }],
+      })
+      .mockResolvedValueOnce({ text: 'I created the complete 400-page Word document.', toolCalls: [] });
+
+    const answer = await runCreationCanvasAi({
+      prompt: 'create a 400 page word doc on astronomy', canvasSnapshot: '{"objects":[]}', persistence: 'local',
+      canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run }],
+    });
+
+    expect(run).toHaveBeenCalledOnce();
+    expect(answer).toContain('not the requested 400 pages');
+    expect(answer).toContain('I have not marked it complete');
+    expect(answer).not.toContain('complete 400-page');
+  });
+
+  it('preserves the model answer when the document meets a small requested length', async () => {
+    const run = vi.fn(() => ({ ok: true, proposed: true }));
+    mocks.streamChatCompletion
+      .mockResolvedValueOnce({
+        text: '',
+        toolCalls: [{ id: 'call-document', name: 'canvas_add_object', args: JSON.stringify({
+          kind: 'document', fields: { markdown: Array.from({ length: 310 }, (_, index) => `word${index}`).join(' ') },
+        }) }],
+      })
+      .mockResolvedValueOnce({ text: 'I created the requested one-page document.', toolCalls: [] });
+
+    const answer = await runCreationCanvasAi({
+      prompt: 'write a 1 page document', canvasSnapshot: '{"objects":[]}', persistence: 'local',
+      canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run }],
+    });
+
+    expect(answer).toBe('I created the requested one-page document.');
+  });
+
+  it('corrects a false completion claim on a follow-up status question', async () => {
+    mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'Yes, I am creating it now. I added the 400-page document.', toolCalls: [] });
+
+    const answer = await runCreationCanvasAi({
+      prompt: 'are you creating the document?',
+      canvasSnapshot: JSON.stringify({ objects: [{ kind: 'document', title: 'Astronomy', content: 'Only a short scope description.' }] }),
+      persistence: 'local', canvasActions: [],
+      conversation: [
+        { role: 'user', content: 'create a 400 page word doc on astronomy' },
+        { role: 'assistant', content: 'I will create it.' },
+      ],
+    });
+
+    expect(answer).toContain('does not verify the requested 400 pages');
+    expect(answer).toContain('it is not complete');
+    expect(answer).not.toContain('400-page document');
+  });
+
   it('does not claim changes were applied when the bounded tool loop is exhausted', async () => {
     const run = vi.fn(() => ({ ok: true, proposed: true }));
     mocks.streamChatCompletion.mockResolvedValue({

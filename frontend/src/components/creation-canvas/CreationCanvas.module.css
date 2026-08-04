@@ -377,10 +377,8 @@
 .sourceList > div { display:flex; gap:7px; align-items:flex-start; }.sourceList > div > span { display:grid; place-items:center; width:18px; height:18px; flex:none; border-radius:50%; background:#e7f9f6; color:#087d71; font-size:8px; font-weight:700; }
 .sourceList p { display:grid; gap:2px; margin:0; min-width:0; }.sourceList b { font-size:9px; }.sourceList code { overflow:hidden; color:#77869b; font-size:7px; text-overflow:ellipsis; }
 
-.composer { position:absolute; z-index:10; left:50%; bottom:20px; transform:translateX(-50%); width:min(720px,calc(100% - 620px)); min-width:430px; padding:10px 12px; border:1px solid #cfd9e6; border-radius:14px; background:rgba(255,255,255,.97); box-shadow:0 12px 35px rgba(27,53,86,.16); }
-.composer textarea { box-sizing:border-box; width:100%; border:0; outline:0; resize:none; padding:1px 3px 9px; background:transparent; color:#26364b; font-family:inherit; font-size:12px; line-height:1.45; }
-.composerBottom { display:flex; min-width:0; align-items:center; gap:8px; }.composerSpacer { min-width:0; flex:1 1 12px; }.iconButton,.sendButton { width:29px; height:29px; display:grid; flex:none; place-items:center; border:1px solid #d6dfeb; border-radius:8px; background:#fff; color:#53657b; cursor:pointer; }.microphoneIcon { width:17px; height:17px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }.sendButton { border-color:var(--canvas-blue); background:var(--canvas-blue); color:#fff; }.sendButton:disabled { opacity:.45; cursor:default; }.scopeChip { display:inline-flex; min-width:76px; max-width:240px; flex:1 1 140px; align-items:center; gap:3px; overflow:hidden; padding:4px 7px; border:1px solid #dce4ee; border-radius:7px; color:#52647b; background:#fafcff; font-size:9px; white-space:nowrap; }.scopeChip select { width:100%; min-width:0; max-width:none; border:0; outline:0; background:transparent; color:inherit; font:inherit; text-overflow:ellipsis; }
-.autoApplyButton { display:inline-flex; flex:none; align-items:center; gap:4px; padding:5px 7px; border:1px solid #dce4ee; border-radius:7px; background:#fafcff; color:#65758b; font:600 9px var(--font-sans); white-space:nowrap; cursor:pointer; }.autoApplyButtonActive { border-color:#8a72e8; background:#f0ecff; color:#5d43c6; }.autoApplyButton:focus-visible { outline:2px solid var(--canvas-blue); outline-offset:2px; }
+.composer { position:absolute; z-index:10; left:50%; bottom:20px; transform:translateX(-50%); width:min(720px,calc(100% - 620px)); min-width:430px; --prompt-panel-bg:rgba(255,255,255,.97); --prompt-panel-border:#cfd9e6; --prompt-panel-shadow:0 12px 35px rgba(27,53,86,.16); --chat-input-text:#26364b; --chat-input-icon:#53657b; --chat-input-bg:#fff; --chat-input-border:#d6dfeb; }
+.iconButton { width:29px; height:29px; display:grid; flex:none; place-items:center; border:1px solid #d6dfeb; border-radius:8px; background:#fff; color:#53657b; cursor:pointer; }.scopeChip { display:inline-flex; min-width:76px; max-width:240px; flex:1 1 140px; align-items:center; gap:3px; overflow:hidden; padding:4px 7px; border:1px solid #dce4ee; border-radius:7px; color:#52647b; background:#fafcff; font-size:9px; white-space:nowrap; }.scopeChip select { width:100%; min-width:0; max-width:none; border:0; outline:0; background:transparent; color:inherit; font:inherit; text-overflow:ellipsis; }
 .memoryButton { display:inline-flex; flex:none; align-items:center; gap:4px; padding:5px 7px; border:1px solid #dce4ee; border-radius:7px; background:#fafcff; color:#65758b; font:600 9px var(--font-sans); white-space:nowrap; cursor:pointer; }.memoryButtonActive { border-color:#d493c1; background:#fff0f9; color:#9b276e; }.memoryButton:disabled { opacity:.45; cursor:not-allowed; }.memoryButton:focus-visible { outline:2px solid var(--canvas-blue); outline-offset:2px; }
 .structuredGraph { position: absolute; z-index: 12; left: 62px; bottom: 16px; width: 250px; max-height: 45%; overflow: auto; padding: 8px 10px; border: 1px solid var(--border-subtle); border-radius: 9px; background: var(--bg-elevated, white); color: var(--text-secondary); font-size: 12px; }
 .structuredGraph summary { cursor: pointer; font-weight: 700; color: var(--text-primary); }
@@ -408,12 +406,10 @@
   .inspectorResizeHandle,.inspectorHeaderActions button:first-child { display:none; }
   .composer { box-sizing:border-box; width:calc(100% - 20px); min-width:0; bottom:8px; padding:8px 9px; }
   .composer textarea { padding-bottom:7px; font-size:11px; }
-  .composerBottom { gap:5px; min-width:0; }
   .scopeChip { min-width:0; max-width:none; flex:1 1 70px; padding:4px 5px; overflow:hidden; }
   .scopeChip select { width:100%; max-width:none; }
-  .autoApplyButton,.memoryButton { width:29px; height:29px; flex:none; justify-content:center; padding:0; }
+  .memoryButton { width:29px; height:29px; flex:none; justify-content:center; padding:0; }
   .composerActionLabel { display:none; }
-  .composerSpacer { display:none; }
   .flowWrap :global(.react-flow__minimap),.minimapClose { display:none; }
   .flowWrap :global(.react-flow__controls) { bottom:102px!important; left:10px!important; }
   .structuredGraph { right:10px; bottom:100px; left:54px; width:auto; max-height:min(36%,260px); box-sizing:border-box; }
@@ -594,9 +590,16 @@
   border-color:rgba(103,156,255,.5);
 }
 :global(html:not([data-theme='light'])) .composer {
-  background:rgba(17,29,47,.96);
+  background:transparent!important;
+  --prompt-panel-bg:rgba(17,29,47,.96);
+  --prompt-panel-border:var(--canvas-line);
+  --chat-input-text:var(--canvas-ink);
+  --chat-input-icon:var(--canvas-muted);
   backdrop-filter:blur(14px);
 }
+
+/* The reusable PromptPanel owns the visible surface; this class only docks it. */
+.composer { background:transparent!important; border:0!important; box-shadow:none!important; padding:0!important; }
 :global(html:not([data-theme='light'])) .message {
   background:#172b49;
 }

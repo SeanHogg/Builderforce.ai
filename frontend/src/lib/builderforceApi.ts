@@ -2682,8 +2682,11 @@ export interface ActiveRun {
   status: 'pending' | 'submitted' | 'running';
   taskId: number;
   taskTitle: string;
+  projectId: number;
+  projectName: string;
   agentHostId: number | null;
   cloudAgentRef: string | null;
+  agentName: string | null;
   submittedBy: string;
   startedAt: string | null;
   createdAt: string;
@@ -2794,6 +2797,12 @@ export const runtimeApi = {
   /** Cancel a running/queued execution. */
   cancel: (id: number): Promise<Execution> =>
     request<Execution>(`/api/runtime/executions/${id}/cancel`, { method: 'POST' }),
+
+  /** Emergency tenant-wide stop for every queued or running agent execution. */
+  cancelAll: (): Promise<{ requested: number; cancelled: number; failed: number[] }> =>
+    request<{ requested: number; cancelled: number; failed: number[] }>(
+      '/api/runtime/executions/cancel-all', { method: 'POST' },
+    ),
 
   /**
    * Revert a finished run: close the PR it opened and delete the ticket branch it

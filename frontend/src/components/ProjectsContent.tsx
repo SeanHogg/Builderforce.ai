@@ -24,6 +24,7 @@ import { ScheduleCalendar } from '@/components/ScheduleCalendar';
 import { ScheduleGantt } from '@/components/ScheduleGantt';
 import { isPlanLimitError, type PlanLimitError } from '@/lib/planLimitError';
 import { computeProjectHealth } from '@/lib/projectHealth';
+import { ActiveRunsPanel } from '@/components/ActiveRunsPanel';
 
 type ProjectsView = 'card' | 'table' | 'calendar' | 'gantt';
 
@@ -274,6 +275,10 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
           {error}
         </div>
       )}
+
+      {/* Keep the live fleet and its master stop visible on the full Projects page.
+          Dashboard previews of this reusable component stay compact. */}
+      {limit == null && <ActiveRunsPanel />}
 
       {/* The project count lives on the surrounding tab (see TabCountBadge), so
           this row only holds the controls, right-aligned. */}

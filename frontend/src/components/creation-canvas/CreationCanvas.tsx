@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import {
   addEdge,
   Background,
@@ -57,7 +57,7 @@ import { arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions, nex
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useLlmModels } from '@/lib/useLlmModels';
-import { ModelSelectionPicker, type ChatModelOptions, type ChatModelSelection } from '@/components/ModelSelectionPicker';
+import { ChatInput, type ChatModelOptions, type ChatModelSelection } from '@/components/ChatInput';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
@@ -376,7 +376,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const historyApplying = useRef(false);
   const drawingPoints = useRef<Array<{ x: number; y: number }>>([]);
   const canvasClipboard = useRef<{ nodes: CreationFlowNode[]; edges: Edge[] } | null>(null);
-  const composerFormRef = useRef<HTMLFormElement | null>(null);
   const initialPromptSubmitted = useRef(false);
   const autoApplyRef = useRef(false);
   const mobileViewportFitted = useRef(false);
@@ -770,19 +769,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }).catch((error) => setNotice(error instanceof Error ? `Conversation save failed: ${error.message}` : 'Conversation save failed'));
     return clientMessageId;
   }, [persistence, sessionId]);
-
-  const startVoiceInput = useCallback(() => {
-    const browserWindow = window as unknown as { SpeechRecognition?: new () => BrowserSpeechRecognition; webkitSpeechRecognition?: new () => BrowserSpeechRecognition };
-    const Recognition = browserWindow.SpeechRecognition ?? browserWindow.webkitSpeechRecognition;
-    if (!Recognition) { setNotice('Voice input is not supported by this browser'); return; }
-    const recognition = new Recognition();
-    recognition.lang = navigator.language || 'en-US'; recognition.interimResults = false;
-    setNotice('Listening…');
-    recognition.onresult = (event) => { const transcript = event.results[0]?.[0]?.transcript?.trim(); if (transcript) setPrompt((current) => current ? `${current} ${transcript}` : transcript); };
-    recognition.onerror = () => setNotice('Voice input could not be captured');
-    recognition.onend = () => setNotice('Voice input ready');
-    recognition.start();
-  }, []);
 
   useEffect(() => {
     const messages = timeline.map((message) => ({ role: message.messageRole, content: message.body, createdAt: message.createdAt }));
@@ -1691,8 +1677,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     },
   }], [canEdit, edges, nodes, persistence, requireAccount, resolvedScopeMode, scopedEdges, scopedNodes, sessionId]);
 
-  const evaluateCanvas = useCallback((event: FormEvent) => {
-    event.preventDefault();
+  const evaluateCanvas = useCallback(() => {
     if (!prompt.trim() || thinking) return;
     trackActivity('creation_prompt_submitted', { sessionId, metadata: { clientSurface: 'web', scope: resolvedScopeMode, objectKinds: [...new Set(scopedNodes.map((node) => node.data.kind))] } });
     setThinking(true);
@@ -1807,8 +1792,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!initial || timeline.some((message) => message.messageRole === 'assistant')) return;
     initialPromptSubmitted.current = true;
     setPrompt(initial.body);
-    window.setTimeout(() => composerFormRef.current?.requestSubmit(), 0);
-  }, [thinking, timeline]);
+    window.setTimeout(() => evaluateCanvas(), 0);
+  }, [thinking, timeline, evaluateCanvas]);
 
   const applyProposedChanges = useCallback(async () => {
     const selected = proposedChanges.filter((change) => acceptedProposalIds.has(change.id));
@@ -2240,17 +2225,30 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         {!!proposedChanges.length && <aside className={styles.changeSetPanel}><header><div><strong>Review Brain changes</strong><small>Select exactly what should change</small></div><button onClick={rejectProposedChanges} aria-label="Close change set">×</button></header><div>{proposedChanges.map((change) => <label key={change.id}><input type="checkbox" checked={acceptedProposalIds.has(change.id)} onChange={() => setAcceptedProposalIds((current) => { const next = new Set(current); if (next.has(change.id)) next.delete(change.id); else next.add(change.id); return next; })} /><span><b>{change.label}</b><small>{change.type.replace('.', ' ')}</small></span></label>)}</div><footer><button className={styles.secondaryButton} onClick={rejectProposedChanges}>Reject all</button><button className={styles.secondaryButton} disabled={!acceptedProposalIds.size} onClick={applyAndEnableAutoApply} title="Apply this batch and automatically apply following Brain actions">Apply &amp; auto-apply</button><button className={styles.primaryButton} disabled={!acceptedProposalIds.size} onClick={applyProposedChanges}>Apply {acceptedProposalIds.size} selected</button></footer></aside>}
         {mergeReview && <aside className={styles.mergePanel}><header><div><strong>Merge branch into parent</strong><p>Resolve each object explicitly. Parent-only objects are preserved.</p></div><button onClick={() => setMergeReview(null)} aria-label="Close merge review">×</button></header>{mergeReview.items.map((item) => <label key={item.key}><b>{item.source.data.title}</b><small>{item.target ? `Both sessions contain this ${item.source.data.kind}.` : `New ${item.source.data.kind} from this branch.`}</small>{item.target && <span><select aria-label={`Merge choice for ${item.source.data.title}`} value={item.choice} onChange={(event) => setMergeReview((current) => current ? { ...current, items: current.items.map((candidate) => candidate.key === item.key ? { ...candidate, choice: event.target.value as 'branch' | 'parent' } : candidate) } : current)}><option value="branch">Use branch version</option><option value="parent">Keep parent version</option></select></span>}</label>)}<button className={styles.primaryButton} onClick={applyMerge}>Apply reviewed merge</button></aside>}
 
-        {!presentMode && <form ref={composerFormRef} className={styles.composer} onSubmit={evaluateCanvas}>
-          <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} aria-label={t('askBrain')} placeholder={t('askBrain')} rows={1} />
-          <div className={styles.composerBottom}>
+        {!presentMode && <ChatInput
+          className={styles.composer}
+          value={prompt}
+          onChange={setPrompt}
+          onSubmit={evaluateCanvas}
+          placeholder={t('askBrain')}
+          submitLabel={t('sendBrain')}
+          disabled={thinking}
+          rows={2}
+          submitOnEnter
+          contextControls={<>
             <button type="button" className={styles.iconButton} onClick={openPalette} aria-label={t('addToCanvas')}>＋</button>
             <label className={styles.scopeChip}>⌁ <span className="sr-only">Brain scope</span><select aria-label="Brain scope" value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">Entire canvas</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects` : 'Selected object'}</option><option value="connected" disabled={!effectiveSelectedIds.length}>Connected objects</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>Current frame</option></select></label>
-            <ModelSelectionPicker selection={modelSelection} options={canvasModelOptions} onChange={setModelSelection} ariaLabel="Choose Canvas chat model" />
-            <button type="button" className={`${styles.autoApplyButton} ${autoApply ? styles.autoApplyButtonActive : ''}`} aria-pressed={autoApply} aria-label="Auto apply" title="Automatically apply Brain actions without showing the review batch" onClick={() => setAutoApplyMode(!autoApply)}><span aria-hidden>⚡</span><span className={styles.composerActionLabel}>Auto apply</span></button>
+          </>}
+          autoMode={autoApply}
+          onAutoModeChange={setAutoApplyMode}
+          modelSelection={modelSelection}
+          modelOptions={canvasModelOptions}
+          onModelSelectionChange={setModelSelection}
+          modeControls={
             <button type="button" className={`${styles.memoryButton} ${memoryEnabled ? styles.memoryButtonActive : ''}`} aria-pressed={memoryEnabled} aria-label="Memory" disabled={evermindProjectId == null || persistence !== 'server'} title={evermindProjectId == null ? 'Add a saved Project to connect its Evermind' : memoryEnabled ? 'Evermind recall and learning are enabled' : 'Evermind is disabled for this canvas chat'} onClick={() => setMemoryMode(!memoryEnabled)}><span aria-hidden>🧠</span><span className={styles.composerActionLabel}>Memory</span></button>
-            <span className={styles.composerSpacer} /><button type="button" className={styles.iconButton} aria-label="Use microphone" title="Use microphone" onClick={startVoiceInput}><svg className={styles.microphoneIcon} viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z" /><path d="M6 11.5v.5a6 6 0 0 0 12 0v-.5M12 18v3M9 21h6" /></svg></button><button className={styles.sendButton} aria-label={t('sendBrain')} disabled={thinking || !prompt.trim()}>{thinking ? '•••' : '➤'}</button>
-          </div>
-        </form>}
+          }
+          showVoice
+        />}
       </div>
     </div>
   );

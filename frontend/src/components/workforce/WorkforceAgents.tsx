@@ -54,6 +54,7 @@ import { WorkforceMetricsProvider } from './WorkforceMetricsContext';
 import { MemberConsolidationPanel } from '@/components/contributors/MemberConsolidationPanel';
 import { AgentOwnerActions } from './AgentOwnerActions';
 import { AgentTypePill } from '@/components/AgentTypePill';
+import { ActiveRunsPanel } from '@/components/ActiveRunsPanel';
 import { BuiltinKindBadge } from '@/components/BuiltinKindBadge';
 import { StatusBadge } from '@/components/StatusBadge';
 import { formatAgentPrice } from '@/lib/agentPresentation';
@@ -446,6 +447,10 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
       <p style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
         {tWf('intro')}
       </p>
+
+      <div style={{ marginBottom: 16 }}>
+        <ActiveRunsPanel />
+      </div>
 
       {error && !dialogOpen && (
         <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--error-text)' }}>{error}</div>

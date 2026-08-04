@@ -53,6 +53,63 @@ function mutates(action: BrainAction, args: unknown): boolean {
   return !!action.mutates;
 }
 
+const WORDS_PER_DRAFT_PAGE = 300;
+
+function requestedDocumentPages(prompt: string): number | null {
+  if (!/\b(?:create|generate|make|write|author|draft)\b/i.test(prompt)) return null;
+  if (!/\b(?:document|doc|manuscript|book|report)\b/i.test(prompt)) return null;
+  const match = prompt.match(/\b(\d[\d,]*)\s*(?:-|\s)?pages?\b/i);
+  if (!match) return null;
+  const pages = Number(match[1]!.replaceAll(',', ''));
+  return Number.isInteger(pages) && pages > 0 ? pages : null;
+}
+
+function authoredDocumentWords(args: unknown): number | null {
+  if (!args || typeof args !== 'object') return null;
+  const input = args as { kind?: unknown; fields?: unknown };
+  if (input.kind !== 'document' || !input.fields || typeof input.fields !== 'object') return null;
+  const fields = input.fields as { markdown?: unknown; content?: unknown };
+  const authored = [fields.markdown, fields.content].find((value) => typeof value === 'string' && value.trim()) as string | undefined;
+  return authored ? (authored.match(/\S+/g) || []).length : 0;
+}
+
+function documentWordsInSnapshot(snapshot: string): number | null {
+  try {
+    const parsed = JSON.parse(snapshot) as { objects?: unknown };
+    if (!Array.isArray(parsed.objects)) return null;
+    const counts = parsed.objects.flatMap((value) => {
+      if (!value || typeof value !== 'object') return [];
+      const object = value as { kind?: unknown; markdown?: unknown; content?: unknown };
+      if (object.kind !== 'document') return [];
+      const authored = [object.markdown, object.content].find((item) => typeof item === 'string' && item.trim()) as string | undefined;
+      return [(authored?.match(/\S+/g) || []).length];
+    });
+    return counts.length ? Math.max(...counts) : null;
+  } catch {
+    return null;
+  }
+}
+
+function requestedPagesForTurn(options: CanvasAiOptions): number | null {
+  const direct = requestedDocumentPages(options.prompt);
+  if (direct != null) return direct;
+  if (!/\b(?:creating|created|done|finished|complete|status|progress|working)\b/i.test(options.prompt)) return null;
+  for (const message of [...(options.conversation || [])].reverse()) {
+    if (message.role !== 'user') continue;
+    const pages = requestedDocumentPages(message.content);
+    if (pages != null) return pages;
+  }
+  return null;
+}
+
+function incompleteDocumentAnswer(requestedPages: number, authoredWords: number, exact: boolean): string {
+  if (!exact) {
+    return `The canvas contains a document draft, but its authored content does not verify the requested ${requestedPages.toLocaleString('en-US')} pages. A manuscript that large cannot be authored in one bounded Brain turn, so it is not complete. Build and review it in sections before treating it as finished or exporting it.`;
+  }
+  const estimatedPages = Math.max(1, Math.ceil(authoredWords / WORDS_PER_DRAFT_PAGE));
+  return `I created a document draft on the canvas with ${authoredWords.toLocaleString('en-US')} words (about ${estimatedPages.toLocaleString('en-US')} page${estimatedPages === 1 ? '' : 's'}), not the requested ${requestedPages.toLocaleString('en-US')} pages. A manuscript that large cannot be authored in one bounded Brain turn, so I have not marked it complete. Build and review it in sections before treating it as finished or exporting it.`;
+}
+
 /** Run a small, bounded agent loop over the active canvas and shared MCP catalog. */
 export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<string> {
   if (options.persistence === 'local' && !(await ensureGuestToken())) {
@@ -109,6 +166,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   let finalText = '';
   let proposedCanvasMutation = false;
   let lastToolError = '';
+  const requestedPages = requestedPagesForTurn(options);
+  let documentWords: number | null = requestedPages == null ? null : documentWordsInSnapshot(options.canvasSnapshot);
+  let documentWordCountExact = false;
   for (let turn = 0; turn < 3; turn += 1) {
     const result = await streamChatCompletion({
       transport,
@@ -121,7 +181,12 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       modelStrict: options.modelStrict,
       routingMode: options.routingMode,
     }, { onTextDelta: (delta) => { finalText += delta; options.onText?.(finalText); } });
-    if (!result.toolCalls.length) return finish(result.text || finalText);
+    if (!result.toolCalls.length) {
+      if (requestedPages != null && documentWords != null && documentWords < requestedPages * WORDS_PER_DRAFT_PAGE) {
+        return finish(incompleteDocumentAnswer(requestedPages, documentWords, documentWordCountExact));
+      }
+      return finish(result.text || finalText);
+    }
     messages.push({
       role: 'assistant', content: result.text,
       tool_calls: result.toolCalls.map((call) => ({ id: call.id, type: 'function', function: { name: call.name, arguments: call.args } })),
@@ -130,6 +195,11 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       const action = byName.get(call.name);
       let args: unknown = {};
       try { args = JSON.parse(call.args || '{}'); } catch { args = {}; }
+      const words = call.name === 'canvas_add_object' ? authoredDocumentWords(args) : null;
+      if (words != null) {
+        documentWords = Math.max(documentWords ?? 0, words);
+        documentWordCountExact = true;
+      }
       let outcome: unknown;
       if (!action) {
         outcome = { error: `Unknown tool: ${call.name}` };
@@ -151,6 +221,9 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(outcome) });
     }
     finalText = '';
+  }
+  if (requestedPages != null && documentWords != null && documentWords < requestedPages * WORDS_PER_DRAFT_PAGE) {
+    return finish(incompleteDocumentAnswer(requestedPages, documentWords, documentWordCountExact));
   }
   if (finalText.trim()) return finish(finalText);
   if (proposedCanvasMutation) return finish('I added the requested content to the canvas.');

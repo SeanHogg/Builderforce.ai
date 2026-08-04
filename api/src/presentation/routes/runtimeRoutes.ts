@@ -58,6 +58,7 @@ import { authorizeManagedTaskExecution } from '../../application/kanban/managedE
  * GET    /api/runtime/sessions/:sessionId/executions – full execution timeline for a session
  * GET    /api/runtime/executions/:id         – get execution state
  * POST   /api/runtime/executions/:id/cancel  – cancel an execution
+ * POST   /api/runtime/executions/cancel-all  – stop every live tenant execution
  * PATCH  /api/runtime/executions/:id/state   – agent callback: update state
  * GET    /api/runtime/tasks/:taskId/executions – history for a task
  * GET    /api/runtime/agents/:ref/tool-audit  – tool-audit timeline for one cloud agent
@@ -1322,14 +1323,20 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
         status: executions.status,
         taskId: executions.taskId,
         taskTitle: tasks.title,
+        projectId: projects.id,
+        projectName: projects.name,
         agentHostId: executions.agentHostId,
         cloudAgentRef: tasks.assignedAgentRef,
+        agentName: sql<string | null>`coalesce(${agentHosts.name}, ${ideAgents.name})`,
         submittedBy: executions.submittedBy,
         startedAt: executions.startedAt,
         createdAt: executions.createdAt,
       })
       .from(executions)
       .innerJoin(tasks, eq(tasks.id, executions.taskId))
+      .innerJoin(projects, eq(projects.id, tasks.projectId))
+      .leftJoin(agentHosts, eq(agentHosts.id, executions.agentHostId))
+      .leftJoin(ideAgents, eq(ideAgents.id, tasks.assignedAgentRef))
       .where(and(eq(executions.tenantId, tenantId), inArray(executions.status, ['pending', 'submitted', 'running']), liveExecution()))
       .orderBy(desc(executions.createdAt))
       .limit(limit);
@@ -1346,6 +1353,51 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       };
     });
     return c.json({ active, runningCloudRefs: [...new Set(active.filter((a) => a.kind === 'cloud').map((a) => a.cloudAgentRef))] });
+  });
+
+  // Master fleet stop. Resolve the tenant-scoped live set on the server and
+  // cancel every run through the same lifecycle used by an individual cancel.
+  router.post('/executions/cancel-all', requireRole(TenantRole.DEVELOPER) as never, async (c) => {
+    const tenantId = c.get('tenantId');
+    const rows = await db
+      .select({ id: executions.id, agentHostId: executions.agentHostId })
+      .from(executions)
+      .where(and(
+        eq(executions.tenantId, tenantId),
+        inArray(executions.status, ['pending', 'submitted', 'running']),
+        liveExecution(),
+      ));
+
+    const failed: number[] = [];
+    let cancelled = 0;
+    await Promise.all(rows.map(async (row) => {
+      try {
+        const execution = await runtimeService.cancel(row.id, c.get('userId'));
+        await releasePendingSteers(db, row.id);
+
+        if (row.agentHostId != null) {
+          const stub = c.env.AGENT_HOST_RELAY?.get(
+            c.env.AGENT_HOST_RELAY.idFromName(String(row.agentHostId)),
+          );
+          await stub?.fetch('https://relay.internal/execution-cancel', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ executionId: row.id }),
+          }).catch((error) => reportCaughtError(error, { source: 'presentation/routes/runtimeRoutes.ts', operation: 'cancelAllExecutions', context: { logMessage: '[runtime-cancel-all] host relay cancellation failed after status transition', details: { tenantId, executionId: row.id, error } } }));
+        }
+
+        notifyExecutionSubscribers(execution.id, {
+          type: 'done', executionId: execution.id, status: execution.status,
+          execution: execution.toPlain(), ts: new Date().toISOString(),
+        });
+        cancelled += 1;
+      } catch (error) {
+        failed.push(row.id);
+        reportCaughtError(error, { source: 'presentation/routes/runtimeRoutes.ts', operation: 'cancelAllExecutions', context: { logMessage: '[runtime-cancel-all] execution cancellation failed', details: { tenantId, executionId: row.id, error } } });
+      }
+    }));
+
+    return c.json({ requested: rows.length, cancelled, failed });
   });
 
   // GET /api/runtime/attention  — the ONE cross-surface "what's live / what needs me"

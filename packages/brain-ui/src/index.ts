@@ -36,6 +36,9 @@ export type { ChatErrorBannerProps, ChatErrorBannerLabels } from './ChatErrorBan
 export { ConsolidateForkControl, DEFAULT_CONSOLIDATE_FORK_LABELS } from './ConsolidateForkControl';
 export type { ConsolidateForkControlProps, ConsolidateForkLabels } from './ConsolidateForkControl';
 
+export { PromptPanel } from './PromptPanel';
+export type { PromptPanelProps } from './PromptPanel';
+
 export { Avatar, ParticipantBadge, initialsOf, avatarColor } from './ParticipantBadge';
 export type { AvatarProps } from './ParticipantBadge';
 

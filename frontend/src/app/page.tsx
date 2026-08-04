@@ -13,6 +13,7 @@ import { ArticleCardGrid } from '@/components/blog/ArticleCard';
 import QuickStart from '@/components/QuickStart';
 import BrainBackdrop from '@/components/BrainBackdrop';
 import { DemoShowcase } from '@/components/demo/DemoShowcase';
+import { ChatInput } from '@/components/ChatInput';
 
 // Visible copy is sourced from the `home`, `features`, `compare` and `evermind`
 // catalog namespaces (localized in all 5 locales). `content.ts` (EVERMIND,
@@ -34,8 +35,7 @@ export default function LandingPage() {
   const [nlEmail, setNlEmail] = useState('');
   const [nlStatus, setNlStatus] = useState<'idle'|'sending'|'ok'|'error'>('idle');
 
-  function handlePromptSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function handlePromptSubmit() {
     const text = prompt.trim();
     if (!text) return;
     // Creation starts without an account. The complete browser draft is claimed
@@ -232,52 +232,11 @@ export default function LandingPage() {
         .lp-prompt {
           width: 100%;
           max-width: 640px;
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          padding: 14px;
-          border-radius: 18px;
-          border: 1px solid var(--border-accent);
-          background: var(--surface-card);
-          backdrop-filter: blur(12px);
-          box-shadow: 0 12px 40px var(--shadow-coral-soft), inset 0 1px 0 var(--surface-inset-highlight);
           animation: fadeInUp 0.9s ease-out 0.45s both;
+          --prompt-panel-bg: var(--surface-card);
+          --prompt-panel-border: var(--border-accent);
+          --prompt-panel-shadow: 0 12px 40px var(--shadow-coral-soft), inset 0 1px 0 var(--surface-inset-highlight);
         }
-        .lp-prompt-input {
-          width: 100%;
-          resize: vertical;
-          min-height: 64px;
-          border: none;
-          background: transparent;
-          color: var(--text-primary);
-          font-family: inherit;
-          font-size: 1rem;
-          line-height: 1.6;
-          outline: none;
-        }
-        .lp-prompt-input::placeholder { color: var(--text-muted); }
-        .lp-prompt-send {
-          align-self: flex-end;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 12px 26px;
-          border: none;
-          border-radius: 12px;
-          background: linear-gradient(135deg, var(--coral-bright) 0%, var(--coral-dark) 100%);
-          color: #fff;
-          font-family: var(--font-display);
-          font-weight: 600;
-          font-size: 0.95rem;
-          cursor: pointer;
-          box-shadow: 0 6px 22px var(--shadow-coral-mid);
-          transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .lp-prompt-send:hover:not(:disabled) {
-          transform: translateY(-2px);
-          box-shadow: 0 12px 32px var(--shadow-coral-strong);
-        }
-        .lp-prompt-send:disabled { opacity: 0.5; cursor: not-allowed; }
         .lp-prompt-examples {
           display: flex;
           flex-wrap: wrap;
@@ -640,22 +599,18 @@ export default function LandingPage() {
 
           <div className="lp-prompt-row">
             <div className="lp-prompt-col">
-              <form onSubmit={handlePromptSubmit} className="lp-prompt">
-                <textarea
-                  className="lp-prompt-input"
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handlePromptSubmit(e); }
-                  }}
-                  placeholder={t('home.heroPromptPlaceholder')}
-                  rows={3}
-                  aria-label={t('home.heroPromptAria')}
-                />
-                <button type="submit" className="lp-prompt-send" disabled={!prompt.trim()}>
-                  {t('home.heroGetStarted')} →
-                </button>
-              </form>
+              <ChatInput
+                className="lp-prompt"
+                value={prompt}
+                onChange={setPrompt}
+                onSubmit={handlePromptSubmit}
+                placeholder={t('home.heroPromptPlaceholder')}
+                ariaLabel={t('home.heroPromptAria')}
+                submitLabel={t('home.heroGetStarted')}
+                rows={3}
+                submitOnEnter
+                showVoice
+              />
               <div className="lp-prompt-examples">
                 {(t.raw('home.heroExamples') as string[]).map((ex) => (
                   <button key={ex} type="button" className="lp-chip" onClick={() => setPrompt(ex)}>

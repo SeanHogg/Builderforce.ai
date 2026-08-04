@@ -3,7 +3,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { useMentionAutocomplete } from '@seanhogg/builderforce-brain-ui';
+import { PromptPanel, useMentionAutocomplete } from '@seanhogg/builderforce-brain-ui';
 import type { DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import type { BrainEffort } from '@/lib/brain';
 import { ModelSelectionPicker, type ChatModelOptions, type ChatModelSelection } from './ModelSelectionPicker';
@@ -31,6 +31,8 @@ export interface ChatInputProps {
   onChange: (value: string) => void;
   onSubmit: () => void;
   placeholder?: string;
+  /** Accessible name when it should differ from the visible placeholder. */
+  ariaLabel?: string;
   disabled?: boolean;
   /** Send button label/title. */
   submitLabel?: string;
@@ -91,6 +93,10 @@ export interface ChatInputProps {
   mentionables?: DirectedRecipient[];
   /** Called when a participant is picked from the @-mention typeahead. */
   onMention?: (recipient: DirectedRecipient) => void;
+  /** Context selectors rendered first in the canonical action row. */
+  contextControls?: React.ReactNode;
+  /** Host-specific modes rendered after the shared mode/model controls. */
+  modeControls?: React.ReactNode;
   className?: string;
   /**
    * Change this to any new value to focus the composer and put the caret at the
@@ -314,6 +320,7 @@ export function ChatInput({
   onChange,
   onSubmit,
   placeholder = 'Message…',
+  ariaLabel,
   disabled = false,
   submitLabel = 'Send',
   running = false,
@@ -342,6 +349,8 @@ export function ChatInput({
   secondaryContent,
   mentionables,
   onMention,
+  contextControls,
+  modeControls,
   className,
   focusToken,
 }: ChatInputProps) {
@@ -507,57 +516,43 @@ export function ChatInput({
 
   return (
     <form onSubmit={handleSubmit} className={className} style={{ display: 'flex', flexDirection: 'column', gap: 'var(--chat-ctl-gap, 6px)', width: '100%' }}>
-      {pendingAttachments.length > 0 && onRemoveAttachment && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {pendingAttachments.map((a) => (
-            <span
-              key={a.key}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                padding: '4px 8px',
-                borderRadius: 8,
-                background: 'var(--surface-coral-soft)',
-                fontSize: 12,
-                color: 'var(--text-primary)',
-              }}
-            >
-              📎 {a.name}
-              <button
-                type="button"
-                onClick={() => onRemoveAttachment(a.key)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, padding: 0 }}
-                aria-label={t('removeAttachment')}
-              >
-                ×
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      <div
+      <PromptPanel
+        active={active}
         onDrop={onAttach ? handleDrop : undefined}
         onDragOver={onAttach ? (e) => e.preventDefault() : undefined}
-        style={{
-          position: 'relative',
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'flex-end',
-          gap: 'var(--chat-ctl-gap, 6px)',
-          rowGap: 'var(--chat-ctl-pad-y, 6px)',
-          width: '100%',
-          padding: 'var(--chat-ctl-pad-y, 6px) var(--chat-ctl-pad-x, 8px)',
-          borderRadius: 18,
-          border: `1px solid ${active ? 'var(--chat-input-active-border)' : 'var(--chat-input-border)'}`,
-          background: 'var(--chat-input-bg)',
-          boxShadow: active ? 'var(--chat-input-active-ring), var(--chat-input-shadow)' : 'var(--chat-input-shadow)',
-          transition: 'border-color 120ms ease, box-shadow 120ms ease',
-        }}
-      >
-        {mention.popup}
-        {onAttach && (
+        overlay={mention.popup}
+        status={pendingAttachments.length > 0 && onRemoveAttachment ? (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {pendingAttachments.map((a) => (
+              <span key={a.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 8, background: 'var(--surface-coral-soft)', fontSize: 12, color: 'var(--text-primary)' }}>
+                📎 {a.name}
+                <button type="button" onClick={() => onRemoveAttachment(a.key)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 14, padding: 0 }} aria-label={t('removeAttachment')}>×</button>
+              </span>
+            ))}
+          </div>
+        ) : undefined}
+        input={(
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onSelect={mention.onSelect}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            onPaste={onAttach ? handlePaste : undefined}
+            placeholder={placeholder}
+            aria-label={ariaLabel ?? placeholder}
+            disabled={disabled}
+            rows={rows}
+            style={{ ...inputStyle, flexBasis: '100%', minWidth: '100%' }}
+          />
+        )}
+        actions={(
           <>
+            {contextControls}
+            {onAttach && (
+              <>
             <input
               ref={fileInputRef}
               type="file"
@@ -583,9 +578,9 @@ export function ChatInput({
                 </>
               )}
             </ComposerMenu>
-          </>
-        )}
-        {hasOptionsMenu && (
+              </>
+            )}
+            {hasOptionsMenu && (
           <ComposerMenu title={t('options')} disabled={disabled} trigger={<SlashIcon />}>
             {(close) => (
               <>
@@ -618,8 +613,8 @@ export function ChatInput({
               </>
             )}
           </ComposerMenu>
-        )}
-        {onAutoModeChange && (
+            )}
+            {onAutoModeChange && (
           <button
             type="button"
             onClick={() => onAutoModeChange(!autoMode)}
@@ -644,25 +639,12 @@ export function ChatInput({
             <BoltIcon />
             <span>{t('autoMode')}</span>
           </button>
-        )}
-        {onModelSelectionChange && modelOptions && modelSelection && (
+            )}
+            {onModelSelectionChange && modelOptions && modelSelection && (
           <ModelSelectionPicker selection={modelSelection} options={modelOptions} onChange={onModelSelectionChange} disabled={disabled} />
-        )}
-        <textarea
-          ref={textareaRef}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onSelect={mention.onSelect}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-          onPaste={onAttach ? handlePaste : undefined}
-          placeholder={placeholder}
-          disabled={disabled}
-          rows={rows}
-          style={{ ...inputStyle, order: -1, flexBasis: '100%', minWidth: '100%' }}
-        />
-        {showBrainIcon && (
+            )}
+            {modeControls}
+            {showBrainIcon && (
           <Link
             href="/brainstorm"
             style={brainAnchored ? { ...iconButtonStyle(false), ...trailingShift } : iconButtonStyle(false)}
@@ -670,8 +652,8 @@ export function ChatInput({
           >
             <SpeechBubbleIcon />
           </Link>
-        )}
-        {showVoice && (
+            )}
+            {showVoice && (
           <button
             type="button"
             onClick={recording ? stopVoice : startVoice}
@@ -681,8 +663,8 @@ export function ChatInput({
           >
             <MicIcon />
           </button>
-        )}
-        {running && onStop && !canSubmit ? (
+            )}
+            {running && onStop && !canSubmit ? (
           // Streaming with an empty composer → the button interrupts the run.
           // When the composer HAS submittable text (e.g. the queue-while-thinking
           // path where the host keeps the input editable), the Send button below
@@ -696,7 +678,7 @@ export function ChatInput({
           >
             <StopSquareIcon />
           </button>
-        ) : (
+            ) : (
           <button
             type="submit"
             disabled={!canSubmit}
@@ -705,8 +687,10 @@ export function ChatInput({
           >
             <SendArrowIcon />
           </button>
+            )}
+          </>
         )}
-      </div>
+      />
       {secondaryContent && (
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
           {secondaryContent}

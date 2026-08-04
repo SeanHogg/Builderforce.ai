@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { runtimeApi, type ActiveRun } from '@/lib/builderforceApi';
 import { RoleGate } from '@/components/RoleGate';
+import { useConfirm } from '@/components/ConfirmProvider';
 
 /**
  * Fleet "what's running right now": every non-terminal execution across the
@@ -34,8 +35,11 @@ const KIND_PILL: Record<ActiveRun['kind'], { label: string; bg: string; fg: stri
 };
 
 export function ActiveRunsPanel() {
+  const confirm = useConfirm();
   const [runs, setRuns] = useState<ActiveRun[] | null>(null);
   const [cancelling, setCancelling] = useState<Set<number>>(new Set());
+  const [stoppingAll, setStoppingAll] = useState(false);
+  const [error, setError] = useState('');
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
@@ -65,6 +69,28 @@ export function ActiveRunsPanel() {
     }
   }, [load]);
 
+  const stopAll = useCallback(async () => {
+    if (!runs?.length || !(await confirm({
+      title: 'Stop all agents?',
+      message: `This will immediately cancel all ${runs.length} queued or running agent ${runs.length === 1 ? 'job' : 'jobs'} in this workspace.`,
+      confirmLabel: 'Stop all agents',
+      destructive: true,
+    }))) return;
+    setStoppingAll(true);
+    setError('');
+    try {
+      const result = await runtimeApi.cancelAll();
+      if (result.failed.length > 0) {
+        setError(`${result.failed.length} run${result.failed.length === 1 ? '' : 's'} could not be stopped. Try again.`);
+      }
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not stop all agents.');
+    } finally {
+      setStoppingAll(false);
+    }
+  }, [confirm, load, runs]);
+
   // Idle fleet (or first load) → render nothing; this component owns its visibility.
   if (!runs || runs.length === 0) return null;
 
@@ -77,14 +103,35 @@ export function ActiveRunsPanel() {
         padding: 16,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <span
-          style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--coral-bright, #f4726e)', boxShadow: '0 0 0 3px rgba(244,114,94,0.2)' }}
-        />
-        <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
-          Active runs <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({runs.length})</span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span
+            style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--coral-bright, #f4726e)', boxShadow: '0 0 0 3px rgba(244,114,94,0.2)' }}
+          />
+          <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
+            Agents working now <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({runs.length})</span>
+          </div>
         </div>
+        <RoleGate capability="runtime.execute">
+          <button
+            type="button"
+            onClick={() => void stopAll()}
+            disabled={stoppingAll}
+            aria-label="Stop all running agents"
+            style={{
+              minHeight: 36, padding: '7px 12px', borderRadius: 8,
+              border: '1px solid var(--coral-bright, #f4726e)',
+              background: 'rgba(244,114,94,0.1)', color: 'var(--coral-bright, #f4726e)',
+              fontSize: 12, fontWeight: 700, cursor: stoppingAll ? 'default' : 'pointer',
+              opacity: stoppingAll ? 0.6 : 1,
+            }}
+          >
+            {stoppingAll ? 'Stopping all…' : '■ Stop all agents'}
+          </button>
+        </RoleGate>
       </div>
+
+      {error && <div role="alert" style={{ color: 'var(--error-text)', fontSize: 12, marginBottom: 10 }}>{error}</div>}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {runs.map((r) => {
@@ -109,11 +156,16 @@ export function ActiveRunsPanel() {
               >
                 {pill.label}
               </span>
-              <span
-                style={{ flex: 1, fontSize: 12, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                title={r.taskTitle}
-              >
-                {r.taskTitle}
+              <span style={{ flex: 1, minWidth: 0, display: 'grid', gap: 2 }}>
+                <span
+                  style={{ fontSize: 12, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  title={r.taskTitle}
+                >
+                  {r.taskTitle}
+                </span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {r.agentName ?? (r.kind === 'on-prem' ? `AgentHost ${r.agentHostId}` : r.cloudAgentRef ?? 'Cloud agent')} · {r.projectName}
+                </span>
               </span>
               <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{r.status}</span>
               <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>

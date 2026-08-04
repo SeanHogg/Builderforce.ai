@@ -1213,6 +1213,97 @@ export function BrainPanel({
     </>
   );
 
+  // One composer instance for both the pre-chat and active-chat states. Sending
+  // from the empty state creates the chat through conv.ensureChatId; selecting a
+  // capability can still seed and focus this same input.
+  const promptComposer = (
+    <ChatInput
+      value={input}
+      onChange={setInput}
+      onSubmit={handleSend}
+      placeholder={recipient ? tBrain('messageParticipant', { name: recipient.name }) : tBrain('messagePlaceholder')}
+      disabled={false}
+      running={conv.sending}
+      onStop={conv.stop}
+      stopLabel={tTimeline('stop')}
+      rows={2}
+      submitOnEnter={false}
+      onAttach={conv.attach}
+      onAddContext={onAddContext}
+      webBrowsing={webBrowsing}
+      onWebBrowsingChange={setWebBrowsing}
+      effort={effort}
+      onEffortChange={setEffort}
+      thinking={thinking}
+      onThinkingChange={setThinking}
+      accountSettingsHref="/settings"
+      modelSelection={modelSelection}
+      modelOptions={modelOptions}
+      onModelSelectionChange={setModelSelection}
+      autoMode={autoApprove}
+      onAutoModeChange={setAutoApproveMode}
+      showVoice
+      pendingAttachments={conv.pendingAttachments}
+      onRemoveAttachment={conv.removeAttachment}
+      mentionables={participants}
+      onMention={setRecipientChoice}
+      focusToken={composerFocusToken}
+      contextControls={<>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{tBrain('actingAs')}</span>
+        <Select
+          value={personaSel}
+          onChange={(e) => choosePersona(e.target.value)}
+          aria-label={tBrain('personaAria')}
+          style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+        >
+          <option value="default">{tBrain('defaultBrain')}</option>
+          <optgroup label={tBrain('personas')}>
+            {localizedModalities.map((m) => <option key={m.id} value={`modality:${m.id}`}>{m.label}</option>)}
+          </optgroup>
+          {brainAgents.length > 0 && (
+            <optgroup label={tBrain('assignedAgents')}>
+              {brainAgents.map((a) => <option key={a.id} value={`agent:${a.agentKind}:${a.agentRef}`}>{agentName(a)}</option>)}
+            </optgroup>
+          )}
+        </Select>
+        {chats.activeChatId != null && <BrainCapabilityPicker surface={capabilitySurface} value={capabilityId} onSelect={selectCapability} layout="compact" disabled={conv.sending} />}
+        {participants.length > 0 && <>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{tBrain('to')}</span>
+          {recipient && <Avatar name={recipient.name} kind={recipient.kind} size={18} />}
+          <Select
+            value={recipient ? recipient.ref : 'brain'}
+            onChange={(e) => setRecipientChoice(e.target.value === 'brain' ? 'brain' : (participants.find((p) => p.ref === e.target.value) ?? 'brain'))}
+            aria-label={tBrain('recipientPickerTitle')}
+            style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
+          >
+            <option value="brain">{tBrain('brainRecipient')}</option>
+            {participants.map((p) => <option key={p.ref} value={p.ref}>{p.name}</option>)}
+          </Select>
+        </>}
+      </>}
+      modeControls={chats.activeChatId != null ? <>
+        <ConsolidateForkControl
+          canConsolidate={canConsolidate}
+          consolidating={consolidating}
+          forking={forking}
+          onConsolidate={consolidate}
+          onFork={fork}
+          labels={{ consolidate: tBrain('consolidate'), consolidating: tBrain('consolidating'), fork: tBrain('fork'), forking: tBrain('forking') }}
+        />
+        <button
+          type="button"
+          onClick={() => toggleMemory(!memoryEnabled)}
+          aria-pressed={memoryEnabled}
+          title={memoryEnabled ? tBrain('memoryOnTooltip') : tBrain('memoryOffTooltip')}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 'var(--chat-ctl-size, 32px)', padding: '0 9px', borderRadius: 999, border: '1px solid var(--border-subtle)', background: memoryEnabled ? 'var(--bg-elevated)' : 'var(--bg-base)', color: memoryEnabled ? 'var(--text-secondary)' : 'var(--text-muted)', cursor: 'pointer' }}
+        >
+          <span aria-hidden>{memoryEnabled ? '🧠' : '🚫'}</span><span>{tBrain('memoryToggleLabel')}</span>
+        </button>
+        <span><EvermindStatusBadge projectId={ctxProjectId} /></span>
+      </> : undefined}
+    />
+  );
+
   const conversation = (
     <>
       {/* The message AND the fix: a 402/429 gets an Upgrade / Add-a-card action from
@@ -1265,6 +1356,7 @@ export function BrainPanel({
               ✨ {tBrain('onboardMe')}
             </button>
           </div>
+          <div style={{ width: '100%', maxWidth: 720, marginTop: 12 }}>{promptComposer}</div>
           {/* …or start from what you want to make. Picking one opens a chat
               already in that mode. */}
           <BrainCapabilityPicker
@@ -1333,134 +1425,7 @@ export function BrainPanel({
               8px stack gaps ate most of the width. */}
           <div className="bs-input-area" style={{ flexShrink: 0, padding: isPage ? undefined : 'var(--chat-ctl-pad-y, 6px) var(--chat-ctl-pad-x, 8px)', borderTop: isPage ? undefined : '1px solid var(--border-subtle)' }}>
             {pendingConfirm && <ToolConfirmBar req={pendingConfirm} onDecide={resolveConfirm} onApproveAll={approveAll} />}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--chat-ctl-gap, 6px)', marginBottom: 'var(--chat-ctl-pad-y, 6px)', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{tBrain('actingAs')}</span>
-              <Select
-                value={personaSel}
-                onChange={(e) => choosePersona(e.target.value)}
-                aria-label={tBrain('personaAria')}
-                style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
-              >
-                <option value="default">{tBrain('defaultBrain')}</option>
-                <optgroup label={tBrain('personas')}>
-                  {localizedModalities.map((m) => (
-                    <option key={m.id} value={`modality:${m.id}`}>{m.label}</option>
-                  ))}
-                </optgroup>
-                {brainAgents.length > 0 && (
-                  <optgroup label={tBrain('assignedAgents')}>
-                    {brainAgents.map((a) => (
-                      <option key={a.id} value={`agent:${a.agentKind}:${a.agentRef}`}>{agentName(a)}</option>
-                    ))}
-                  </optgroup>
-                )}
-              </Select>
-              {/* What this chat is making — same registry as the empty-state tiles,
-                  changeable (or clearable) mid-chat. */}
-              <BrainCapabilityPicker
-                surface={capabilitySurface}
-                value={capabilityId}
-                onSelect={selectCapability}
-                layout="compact"
-                disabled={conv.sending}
-              />
-              {/* Recipient selector — only once the chat is multi-party. Routes the
-                  next message to the BRAIN (executes) or a participant (talked to). */}
-              {participants.length > 0 && (
-                <>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 4 }}>{tBrain('to')}</span>
-                  {recipient && <Avatar name={recipient.name} kind={recipient.kind} size={18} />}
-                  <Select
-                    value={recipient ? recipient.ref : 'brain'}
-                    onChange={(e) => setRecipientChoice(e.target.value === 'brain' ? 'brain' : (participants.find((p) => p.ref === e.target.value) ?? 'brain'))}
-                    aria-label={tBrain('recipientPickerTitle')}
-                    style={{ fontSize: 12, padding: '3px 8px', borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
-                  >
-                    <option value="brain">{tBrain('brainRecipient')}</option>
-                    {participants.map((p) => (
-                      <option key={p.ref} value={p.ref}>{p.name}</option>
-                    ))}
-                  </Select>
-                </>
-              )}
-              {/* Compress a long chat into a summary marker (Consolidate) or branch
-                  that summary into a fresh chat (Fork). Shared presentational control;
-                  the summarize + marker-append logic lives here (web brain client). */}
-              <ConsolidateForkControl
-                canConsolidate={canConsolidate}
-                consolidating={consolidating}
-                forking={forking}
-                onConsolidate={consolidate}
-                onFork={fork}
-                labels={{
-                  consolidate: tBrain('consolidate'),
-                  consolidating: tBrain('consolidating'),
-                  fork: tBrain('fork'),
-                  forking: tBrain('forking'),
-                }}
-              />
-              {/* Per-chat memory switch: gate whether this chat recalls/learns from
-                  the project's Evermind. Default ON; persisted per chat. */}
-              <button
-                type="button"
-                onClick={() => toggleMemory(!memoryEnabled)}
-                aria-pressed={memoryEnabled}
-                title={memoryEnabled ? tBrain('memoryOnTooltip') : tBrain('memoryOffTooltip')}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  fontSize: 12,
-                  padding: '3px 8px',
-                  borderRadius: 6,
-                  border: '1px solid var(--border-subtle)',
-                  background: memoryEnabled ? 'var(--bg-elevated)' : 'var(--bg-base)',
-                  color: memoryEnabled ? 'var(--text-secondary)' : 'var(--text-muted)',
-                  cursor: 'pointer',
-                }}
-              >
-                <span aria-hidden>{memoryEnabled ? '🧠' : '🚫'}</span>
-                <span>{tBrain('memoryToggleLabel')}</span>
-              </button>
-              {/* Honest Evermind posture: this planning chat doesn't train the model —
-                  agent runs do. Self-gates to nothing until the project's Evermind exists. */}
-              <span style={{ marginLeft: 'auto' }}><EvermindStatusBadge projectId={ctxProjectId} /></span>
-            </div>
-            <ChatInput
-              value={input}
-              onChange={setInput}
-              onSubmit={handleSend}
-              placeholder={recipient ? tBrain('messageParticipant', { name: recipient.name }) : tBrain('messagePlaceholder')}
-              // Stay editable while a run streams so the user can keep typing and
-              // queue follow-up turns (flushed one at a time as runs complete).
-              disabled={false}
-              running={conv.sending}
-              onStop={conv.stop}
-              stopLabel={tTimeline('stop')}
-              rows={2}
-              submitOnEnter={false}
-              onAttach={conv.attach}
-              onAddContext={onAddContext}
-              webBrowsing={webBrowsing}
-              onWebBrowsingChange={setWebBrowsing}
-              effort={effort}
-              onEffortChange={setEffort}
-              thinking={thinking}
-              onThinkingChange={setThinking}
-              accountSettingsHref="/settings"
-              modelSelection={modelSelection}
-              modelOptions={modelOptions}
-              onModelSelectionChange={setModelSelection}
-              autoMode={autoApprove}
-              onAutoModeChange={setAutoApproveMode}
-              showBrainIcon={false}
-              showVoice
-              pendingAttachments={conv.pendingAttachments}
-              onRemoveAttachment={conv.removeAttachment}
-              mentionables={participants}
-              onMention={setRecipientChoice}
-              focusToken={composerFocusToken}
-            />
+            {promptComposer}
             {conv.uploading && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{tBrain('uploading')}</div>}
             {queuedMessages.length > 0 && (
               <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>

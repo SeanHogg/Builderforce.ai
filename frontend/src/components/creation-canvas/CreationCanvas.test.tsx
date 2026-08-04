@@ -369,9 +369,9 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     render(<CreationCanvas sessionId="brain-object-details-test" persistence="local" />);
 
     expect(screen.getByRole('log', { name: 'Brain chat history' })).toHaveAttribute('tabindex', '0');
-    const microphone = screen.getByRole('button', { name: 'Use microphone' });
+    const microphone = screen.getByRole('button', { name: 'Dictate' });
     expect(microphone.querySelector('svg')).toBeInTheDocument();
-    const autoApply = screen.getByRole('button', { name: 'Auto apply' });
+    const autoApply = screen.getByRole('button', { name: 'Auto mode' });
     expect(autoApply).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(autoApply);
     expect(autoApply).toHaveAttribute('aria-pressed', 'true');

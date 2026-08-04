@@ -37,6 +37,7 @@ import { authedFetch } from './authedFetch';
 import {
   BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, Avatar, useChatParticipants,
   useMentionAutocomplete, ChatErrorBanner,
+  PromptPanel,
   PendingQuestionBanner, selectPendingAskUser, askUserAnchorId,
   type BrainTimelineLabels,
 } from '@seanhogg/builderforce-brain-ui';
@@ -1664,14 +1665,15 @@ function Chat({ init }: { init: InitData }) {
         />
       )}
 
-      <div
-        className={`bf-composer${dragOver ? ' bf-composer--drag' : ''}${(inputFocused || input.trim().length > 0) ? ' bf-composer--active' : ''}`}
-        style={{ position: 'relative' }}
+      <PromptPanel
+        className="bf-composer"
+        active={inputFocused || input.trim().length > 0}
+        dragging={dragOver}
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={(e) => { e.preventDefault(); setDragOver(false); attachFiles(e.dataTransfer.files); }}
-      >
-        {mention.popup}
+        overlay={mention.popup}
+        status={(conv.pendingAttachments.length > 0 || messageQueue.length > 0) ? <>
         {conv.pendingAttachments.length > 0 && (
           <div className="bf-attachments">
             {conv.pendingAttachments.map((a) => (
@@ -1697,7 +1699,8 @@ function Chat({ init }: { init: InitData }) {
             ))}
           </div>
         )}
-        <textarea
+        </> : undefined}
+        input={<textarea
           ref={inputRef}
           className="bf-input"
           rows={2}
@@ -1715,8 +1718,8 @@ function Chat({ init }: { init: InitData }) {
             if (mention.onKeyDown(e)) return;
             if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
           }}
-        />
-        <div className="bf-composer__actions">
+        />}
+        actions={<div className="bf-composer__actions">
           <input
             ref={fileInputRef}
             type="file"
@@ -1982,8 +1985,8 @@ function Chat({ init }: { init: InitData }) {
               <IconSend />
             </button>
           )}
-        </div>
-      </div>
+        </div>}
+      />
     </div>
   );
 }
