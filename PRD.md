@@ -82,7 +82,71 @@
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+### Core System Requirements
+
+1. **Unified Dashboard Module**
+   - MUST provide a single-page view combining project status, task lists, and progress indicators
+   - MUST support filtering by assignee, due date, priority, and status
+   - MUST support sorting by date, priority, and alphabetical order
+   - MUST display real-time updates without requiring page refresh
+
+2. **Communication Module**
+   - MUST support real-time chat between team members within project context
+   - MUST support comment threads attached to tasks and feedback items
+   - MUST persist chat history for project archival
+   - MUST support @mentions for user notification
+
+3. **Feedback Management Module**
+   - MUST accept feedback submissions from any authenticated user
+   - MUST support categorization (e.g., Bug, Feature Request, Improvement, Question)
+   - MUST support prioritization (Critical, High, Medium, Low)
+   - MUST track feedback status (Submitted, In Review, Planned, In Progress, Completed, Declined)
+   - MUST allow feedback owners to respond to submissions
+
+4. **Task Assignment and Tracking Module**
+   - MUST allow task creation with title, description, assignee, due date, and priority
+   - MUST support task status workflow (To Do, In Progress, In Review, Done)
+   - MUST send notifications for task assignments, updates, and approaching deadlines
+   - MUST support task dependencies and blocking relationships
+
+5. **Notifications Module**
+   - MUST deliver real-time notifications for task updates, feedback, and milestones
+   - MUST allow users to configure notification preferences (email, in-app, or both)
+   - MUST support notification categories with granular enable/disable controls
+
+6. **Reporting and Analytics Module**
+   - MUST generate project performance reports (completion rate, velocity, bottlenecks)
+   - MUST provide visual analytics dashboards with charts and graphs
+   - MUST support date range filtering for reports
+   - MUST export reports in PDF and CSV formats
+
+### Role Isolation Requirements
+
+7. **Owner Role Isolation**
+   - MUST NOT modify any Owner role permissions or capabilities
+   - MUST NOT add or remove features accessible to the Owner role
+   - Existing Owner role functionality remains unchanged
+
+8. **Designer Role Isolation**
+   - MUST NOT modify any Designer role permissions or capabilities
+   - MUST NOT add or remove features accessible to the Designer role
+   - Existing Designer role functionality remains unchanged
+
+9. **Security Role Isolation**
+   - MUST NOT modify any Security role permissions or capabilities
+   - MUST NOT add or remove features accessible to the Security role
+   - Existing Security role functionality remains unchanged
+
+### Integration Requirements
+
+10. **Data Isolation**
+    - Collaboration data (chat, feedback, tasks) MUST be stored separately from role configurations
+    - New modules MUST use existing authentication and authorization systems
+
+11. **API Requirements**
+    - RESTful APIs MUST be provided for all collaboration features
+    - APIs MUST support pagination for list endpoints
+    - Webhook support MUST be provided for task and feedback events
 
 ## Design
 
