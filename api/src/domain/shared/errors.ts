@@ -38,10 +38,46 @@ export class ForbiddenError extends DomainError {
   }
 }
 
+/**
+ * Machine-readable reason a 401 was raised.
+ *
+ * A bare `401 {error: "..."}` forces every client to string-match the prose to
+ * decide what to do next, and the two outcomes are opposites: an EXPIRED token
+ * should be silently refreshed and the request retried, while a REVOKED one must
+ * send the user back through sign-in. Clients branch on this code instead.
+ *
+ * - `token_expired`   — credential aged out; refreshing is expected to succeed.
+ * - `token_revoked`   — credential (or its session) was deliberately killed; do NOT retry.
+ * - `token_invalid`   — malformed/unverifiable signature; do NOT retry.
+ * - `token_missing`   — no credential presented at all.
+ * - `session_invalid` — force-logout bumped `session_version`; re-authenticate.
+ */
+export type AuthErrorCode =
+  | 'token_expired'
+  | 'token_revoked'
+  | 'token_invalid'
+  | 'token_missing'
+  | 'session_invalid';
+
+/** Auth codes for which a client SHOULD attempt a refresh and retry once. */
+const REFRESHABLE_AUTH_CODES: ReadonlySet<AuthErrorCode> = new Set<AuthErrorCode>(['token_expired']);
+
 /** Thrown when a request lacks valid credentials. */
 export class UnauthorizedError extends DomainError {
-  constructor(message = 'Unauthorized') {
+  /** Machine-readable cause, surfaced to clients as `code` on the 401 body. */
+  readonly code?: AuthErrorCode;
+
+  constructor(message = 'Unauthorized', code?: AuthErrorCode) {
     super(message);
     this.name = 'UnauthorizedError';
+    this.code = code;
+  }
+
+  /**
+   * Whether a client holding a refresh credential should try to refresh and
+   * replay the request rather than bouncing the user to sign-in.
+   */
+  get refreshable(): boolean {
+    return this.code !== undefined && REFRESHABLE_AUTH_CODES.has(this.code);
   }
 }
