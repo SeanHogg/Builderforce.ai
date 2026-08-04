@@ -36,13 +36,14 @@ export async function reserveDiscount(
   }
 
   const redemptionId = crypto.randomUUID();
-  try {
-    await db.insert(discountRedemptions).values({
-      id: redemptionId,
-      discountCodeId: discount.id,
-      tenantId: input.tenantId,
-    });
-  } catch {
+  const [reserved] = await db.insert(discountRedemptions).values({
+    id: redemptionId,
+    discountCodeId: discount.id,
+    tenantId: input.tenantId,
+  }).onConflictDoNothing({
+    target: [discountRedemptions.tenantId, discountRedemptions.discountCodeId],
+  }).returning({ id: discountRedemptions.id });
+  if (!reserved) {
     throw new ValidationError('This discount code has already been applied to this account');
   }
   return {

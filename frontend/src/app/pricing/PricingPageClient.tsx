@@ -171,6 +171,11 @@ export default function PricingPageClient() {
   useEffect(() => { fetchSub(); }, [tenantId]);
 
   useEffect(() => {
+    if (searchParams?.get('success') === '1') {
+      setDiscountCode('');
+      retainDiscountCode('');
+      return;
+    }
     const captured = searchParams?.get('discountcode') ?? getRetainedDiscountCode();
     if (captured) {
       setDiscountCode(captured.toUpperCase());
@@ -367,7 +372,7 @@ export default function PricingPageClient() {
                 </div>
               )}
             </div>
-            {effectivePlan === 'free' ? (
+            {effectivePlan === 'free' || sub?.billingStatus !== 'active' ? (
               <button type="button" onClick={() => openUpgrade('pro')}
                 style={{ padding: '9px 18px', fontSize: 13, fontWeight: 700, background: 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
                 {t('upgradePlan')}
@@ -396,7 +401,7 @@ export default function PricingPageClient() {
               app convention only terminal/destructive confirms use a centered modal;
               everything else, this checkout included, uses SlideOutPanel. */}
           <SlideOutPanel
-            open={upgradeTarget != null && effectivePlan !== upgradeTarget}
+            open={upgradeTarget != null && !(sub?.billingStatus === 'active' && sub.plan === upgradeTarget)}
             onClose={() => { setUpgradeTarget(null); setUpgradeError(null); }}
             title={t('modalUpgradeTo', { plan: upgradeTarget === 'teams' ? 'Teams' : 'Pro' })}
             width="min(560px, 96vw)"

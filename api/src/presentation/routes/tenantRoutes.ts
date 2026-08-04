@@ -392,6 +392,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
    *   seats               number                 required when targetPlan="teams"
    *   billingCycle        "monthly" | "yearly"   required
    *   billingEmail        string                 required
+   *   discountCode       string                 optional; retained signup offer
    *   successUrl          string                 optional (defaults to /pricing?success=1)
    *   cancelUrl           string                 optional (defaults to /pricing?cancelled=1)
    */
@@ -448,10 +449,18 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         } : undefined,
       });
     } catch (error) {
-      if (discount) await releaseDiscountReservation(db, discount.redemptionId);
+      if (discount) {
+        await releaseDiscountReservation(db, discount.redemptionId).catch((releaseError) => {
+          reportCaughtError(releaseError, { source: 'presentation/routes/tenantRoutes.ts', operation: 'releaseDiscountReservation' });
+        });
+      }
       throw error;
     }
-    if (discount) await attachDiscountCheckout(db, discount.redemptionId, result.sessionId);
+    if (discount) {
+      await attachDiscountCheckout(db, discount.redemptionId, result.sessionId).catch((error) => {
+        reportCaughtError(error, { source: 'presentation/routes/tenantRoutes.ts', operation: 'attachDiscountCheckout' });
+      });
+    }
 
     return c.json(result);
   });

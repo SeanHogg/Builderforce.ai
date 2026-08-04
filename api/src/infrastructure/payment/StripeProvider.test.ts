@@ -260,7 +260,7 @@ describe('checkout.session.completed', () => {
         customer: 'cus_123',
         subscription: 'sub_123',
         customer_email: 'billing@example.com',
-        metadata: { tenantId: '7', billingCycle: 'yearly', targetPlan: 'teams', seats: '5' },
+        metadata: { tenantId: '7', billingCycle: 'yearly', targetPlan: 'teams', seats: '5', discountRedemptionId: 'redemption-1' },
       },
     },
   });
@@ -309,6 +309,7 @@ describe('checkout.session.completed', () => {
       targetPlan: 'teams',
       seats: 5,
       billingEmail: 'billing@example.com',
+      discountRedemptionId: 'redemption-1',
     });
   });
 
