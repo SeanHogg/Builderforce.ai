@@ -73,8 +73,8 @@ jobs:
           publish_package studio-embedded @seanhogg/builderforce-studio-embedded
           publish_package voice @seanhogg/builderforce-voice
 
-  deploy:
-    name: Deploy
+  deploy-api:
+    name: Deploy API
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -120,6 +120,23 @@ jobs:
               || echo "::warning::Demo account reseed failed."
           fi
 
+  deploy-frontend:
+    name: Deploy frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Wrangler
+        run: npm install --global wrangler
+
       - name: Build frontend dependencies
         run: |
           for package_dir in sdk studio studio-embedded brain-embedded packages/brain-ui; do
@@ -139,6 +156,19 @@ jobs:
           pnpm install --frozen-lockfile || pnpm install
           npm run cf-build
           wrangler deploy --no-bundle
+
+  deploy-help:
+    name: Deploy help
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Wrangler
+        run: npm install --global wrangler
 
       - name: Build and deploy docs
         working-directory: docs-site

@@ -571,7 +571,7 @@ cd api && npm run secrets:from-env && npm run deploy
 
 **Required secrets:** `CF_API_TOKEN`, `CF_ACCOUNT_ID`, `NEON_DATABASE_URL`, `JWT_SECRET`, `OPENROUTER_API_KEY`. (SDK publishing uses npm Trusted Publishing OIDC — no `NPM_TOKEN` secret needed; see below.)
 
-**npm publishing:** the [release.yml](.github/workflows/release.yml) `package-npm` job builds, tests, and version-gates all public packages in one runner, in parallel with the independent `deploy` job. Each package is published with provenance only when its `package.json` version is absent from npm, making re-runs idempotent. Auth uses npm Trusted Publishing OIDC (with `NPM_TOKEN` as an optional bootstrap fallback). Configure each package's trusted publisher for Organization `SeanHogg`, Repository `Builderforce.ai`, and Workflow `release.yml`.
+**Releases:** [release.yml](.github/workflows/release.yml) runs four independent jobs in parallel: npm packaging, API deployment, frontend deployment, and help-site deployment. The `package-npm` job builds, tests, and publishes each public package only when its `package.json` version is absent from npm, making re-runs idempotent. Auth uses npm Trusted Publishing OIDC (with `NPM_TOKEN` as an optional bootstrap fallback). Configure each package's trusted publisher for Organization `SeanHogg`, Repository `Builderforce.ai`, and Workflow `release.yml`.
 
 **Optional OAuth secrets** (add only the providers you want):
 `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET`, `MICROSOFT_CLIENT_ID`, `MICROSOFT_CLIENT_SECRET`
