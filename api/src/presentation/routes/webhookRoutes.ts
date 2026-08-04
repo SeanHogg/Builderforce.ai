@@ -99,7 +99,8 @@ export function createWebhookRoutes(
     try {
       await tenantService.handleWebhookEvent(event);
       if (event.type === 'subscription.activated' && event.discountRedemptionId) {
-        await markDiscountRedeemed(buildDatabase(c.env as Env), event.discountRedemptionId);
+        if (!event.tenantId) throw new Error('Discount activation webhook is missing signed tenant metadata');
+        await markDiscountRedeemed(buildDatabase(c.env as Env), event.tenantId, event.discountRedemptionId);
       }
     } catch (err) {
       reportCaughtError(err, { source: "presentation/routes/webhookRoutes.ts", operation: "createWebhookRoutes", context: { logMessage: '[webhook] handleWebhookEvent failed:', details: err } });

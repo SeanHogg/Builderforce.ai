@@ -303,6 +303,7 @@ describe('checkout.session.completed', () => {
 
     expect(event).toMatchObject({
       type: 'subscription.activated',
+      tenantId: 7,
       externalCustomerId: 'cus_123',
       externalSubscriptionId: 'sub_123',
       billingCycle: 'yearly',

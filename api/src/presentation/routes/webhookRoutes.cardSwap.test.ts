@@ -175,6 +175,7 @@ describe('subscription.activated — discount redemption', () => {
       type: 'subscription.activated',
       externalCustomerId: 'cus_1',
       externalSubscriptionId: 'sub_1',
+      tenantId: 7,
       discountRedemptionId: 'redemption-1',
       raw: {},
     });
@@ -183,6 +184,6 @@ describe('subscription.activated — discount redemption', () => {
 
     expect(res.status).toBe(200);
     expect(tenantService.handleWebhookEvent).toHaveBeenCalled();
-    expect(mocks.markDiscountRedeemed).toHaveBeenCalledWith(expect.anything(), 'redemption-1');
+    expect(mocks.markDiscountRedeemed).toHaveBeenCalledWith(expect.anything(), 7, 'redemption-1');
   });
 });

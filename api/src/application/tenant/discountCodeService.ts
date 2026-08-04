@@ -3,6 +3,7 @@ import { ValidationError } from '../../domain/shared/errors';
 import type { TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
 import type { Db } from '../../infrastructure/database/connection';
 import { discountCodes, discountRedemptions } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 
 export const normalizeDiscountCode = (value: string): string => value.trim().toUpperCase();
 
@@ -55,20 +56,27 @@ export async function reserveDiscount(
   };
 }
 
-export async function attachDiscountCheckout(db: Db, redemptionId: string, sessionId: string): Promise<void> {
+export async function attachDiscountCheckout(db: Db, tenantId: number, redemptionId: string, sessionId: string): Promise<void> {
   await db.update(discountRedemptions).set({ checkoutSessionId: sessionId })
-    .where(eq(discountRedemptions.id, redemptionId));
+    .where(scopedToTenant(discountRedemptions, tenantId, eq(discountRedemptions.id, redemptionId)));
 }
 
-export async function releaseDiscountReservation(db: Db, redemptionId: string): Promise<void> {
-  await db.delete(discountRedemptions).where(and(
+export async function releaseDiscountReservation(db: Db, tenantId: number, redemptionId: string): Promise<void> {
+  await db.delete(discountRedemptions).where(scopedToTenant(
+    discountRedemptions,
+    tenantId,
     eq(discountRedemptions.id, redemptionId),
     eq(discountRedemptions.status, 'pending'),
   ));
 }
 
-export async function markDiscountRedeemed(db: Db, redemptionId: string): Promise<void> {
+export async function markDiscountRedeemed(db: Db, tenantId: number, redemptionId: string): Promise<void> {
   await db.update(discountRedemptions)
     .set({ status: 'redeemed', redeemedAt: new Date() })
-    .where(and(eq(discountRedemptions.id, redemptionId), eq(discountRedemptions.status, 'pending')));
+    .where(scopedToTenant(
+      discountRedemptions,
+      tenantId,
+      eq(discountRedemptions.id, redemptionId),
+      eq(discountRedemptions.status, 'pending'),
+    ));
 }

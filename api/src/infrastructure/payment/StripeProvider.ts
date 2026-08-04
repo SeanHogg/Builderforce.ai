@@ -277,13 +277,13 @@ export class StripeProvider implements PaymentProvider {
         const meta = (obj['metadata'] ?? {}) as Record<string, string>;
         const sub = obj['subscription'] as string | null;
         const customer = obj['customer'] as string;
+        const rawTenantId = Number(meta['tenantId']);
 
         // `setup` mode = the explicit CARD-VALIDATION flow (a $0 SetupIntent), not a
         // subscription purchase. Stripe reuses checkout.session.completed for both, so
         // branch on mode BEFORE the subscription mapping below (a setup session has no
         // subscription and would otherwise activate a plan the tenant never bought).
         if (obj['mode'] === 'setup') {
-          const rawTenantId = Number(meta['tenantId']);
           const setupIntentId = obj['setup_intent'] as string | null;
           const card = setupIntentId
             ? await this.fetchCard(`https://api.stripe.com/v1/setup_intents/${setupIntentId}?expand[]=payment_method`)
@@ -318,6 +318,7 @@ export class StripeProvider implements PaymentProvider {
 
         return {
           type: 'subscription.activated',
+          ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}),
           ...(meta['discountRedemptionId'] ? { discountRedemptionId: meta['discountRedemptionId'] } : {}),
           externalCustomerId: customer,
           externalSubscriptionId: sub ?? '',
