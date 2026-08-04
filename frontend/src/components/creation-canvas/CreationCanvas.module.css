@@ -598,6 +598,12 @@
   --chat-input-bg:var(--canvas-panel-muted);
   --chat-input-border:var(--canvas-line);
   --chat-input-disabled-send-bg:var(--canvas-hover);
+  --text-primary:var(--canvas-ink);
+  --text-secondary:var(--canvas-muted);
+  --text-muted:var(--canvas-muted);
+  --bg-elevated:var(--canvas-panel);
+  --bg-base:var(--canvas-panel-muted);
+  --border-subtle:var(--canvas-line);
   backdrop-filter:blur(14px);
 }
 
