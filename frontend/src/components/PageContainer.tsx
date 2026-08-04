@@ -1,9 +1,12 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { usePathname } from 'next/navigation';
+import { useState, useEffect } from 'react';
 
 /** Max line-length tiers for capped pages — all kept LEFT-aligned, never centered. */
 const READABLE_MAX = 1100;
 const NARROW_MAX = 720;
+
+/** Mobile breakpoint from tailwind (default 768px) */
+const MOBILE_BREAKPOINT = 768;
 
 type PageContainerProps = {
   /**
