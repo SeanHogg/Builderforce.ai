@@ -118,13 +118,29 @@ being silently assumed away.
 
 ### 3. Verification Criteria
 
-**"The duplicate entry is gone" is verified when:**
+"The duplicate entry is gone" is verified when **all** of the following hold. Each check is stated so
+it fails loudly rather than passing by default — a silent no-op delete (F-2) must not read as success.
 
-1. **Query:** `SELECT * FROM ticket_participants WHERE task_id = 709 AND id = '0d6423f1-ff54-40fc-9e0a-082956af913f'` returns **no rows**.
+1. **Row absent.** `SELECT id FROM ticket_participants WHERE task_id = 709 AND id =
+   '0d6423f1-ff54-40fc-9e0a-082956af913f'` returns **zero rows**.
 
-2. **Manifest consistency:** GET `/api/kanban/tasks/709/participants` does **not include** a participant with `id = 0d6423f1-ff54-40fc-9e0a-082956af913f`.
+2. **Manifest absent.** Re-reading the manifest for task 709 (`kanban.participants`, served by
+   `TicketParticipantsService.listParticipants`) returns no participant with that `id`. This read must
+   happen **after** the cache-version bump; the manifest is cached under `participants:task:709`, so a
+   read taken from a stale cache version is not evidence.
 
-3. **No orphan gaps introduced:** The manifest still contains the required roles (Owner, Engineer, Designer, Security) — removing the duplicate `engineer—development` slot does not leave an unstaffed gap because the generic `engineer` role (sourced from the template) remains.
+3. **Surviving Engineer slot.** Exactly one `roleKey='engineer'` slot remains for task 709, and it is
+   **not** `unstaffed` — i.e. removing the duplicate did not delete the coverage along with it.
+
+4. **Idempotence / no resurrection (guards F-3).** After running `deriveManifest` once more, check 1
+   still holds and no new `roleKey='engineer'` row has appeared with `stage_key IS NULL`. If the
+   duplicate reappears, the verification FAILS and F-3 is confirmed as the root cause.
+
+**Pre-condition on the evidence.** Checks 1–4 must be executed against the live workspace. During this
+run both `kanban.participants` and `kanban.accountability` for task 709 returned
+`401 Token has been revoked or expired`, so the verification could **not** be executed here. The
+criteria above are therefore delivered as the *specification* of the check; the execution is tracked
+separately (see Traceability) and this ticket must not be reported as "verified" on their basis alone.
 
 ### 4. Traceability
 
