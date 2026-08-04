@@ -80,7 +80,49 @@ _Owned by the architect — to be authored._
 
 ## Implementation Notes
 
-_Owned by the developer — to be authored._
+### Implemented Solution
+
+The solution introduces a new **TaskType** called `decision` to explicitly distinguish non-coding tasks completed through written decisions from coding tasks.
+
+#### Changes Made
+
+1. **TaskType Enum** (`api/src/domain/shared/types.ts`)
+   - Added `TaskType.DECISION = 'decision'` to the TaskType enum
+   - Documented as: "Non-coding task completed through a written decision — e.g. analysis, provisioning, or architectural decisions. These tasks complete without a PR and are tracked by their written deliverable."
+
+2. **Database Schema** (`api/src/infrastructure/database/schema/common.ts`)
+   - Added `'decision'` to the `taskTypeEnum` PostgreSQL enum
+   - This enables the new task type to be persisted in the database
+
+3. **Code Deliverable Detection** (`api/src/application/manager/evaluateTicketReadiness.ts`)
+   - Updated `expectsCodeDeliverable()` function to return `false` for `taskType === 'decision'`
+   - Decision-type tasks are recognized as not expecting a code deliverable
+   - The manager will complete these tasks without requiring a PR
+
+4. **Role Capability** (`api/src/application/kanban/roleCapability.ts`)
+   - Added `'decision'` case to `producerRoleForActionType()` returning `undefined`
+   - Decision tasks have no code-producing role, reinforcing they don't expect code
+
+#### How It Works
+
+- When a task is created with `taskType = 'decision'`, the system recognizes it as a non-coding task
+- The manager's `expectsCodeDeliverable()` check returns `false` for decision tasks
+- These tasks can complete in the Done lane without a PR — the "written decision" is the deliverable
+- Tasks can be filtered/searched by `taskType = 'decision'` for reporting and analytics
+
+#### Usage
+
+To create a non-coding decision task:
+```
+POST /api/tasks
+{
+  "title": "Decision: Choose database provider",
+  "taskType": "decision",
+  ...
+}
+```
+
+The task will complete without requiring a PR, and the completion will be recorded as `completion: 'no_deliverable'`.
 
 ## Review
 
