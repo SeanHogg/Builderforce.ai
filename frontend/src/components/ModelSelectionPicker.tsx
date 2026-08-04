@@ -9,10 +9,10 @@ export type ChatModelSelection =
 
 export interface ChatModelOptions {
   configured?: Array<{ id: string; label: string }>;
-  byo: Array<{ id: string; vendor: string }>;
-  free: string[];
-  plan: string[];
-  paid: string[];
+  byo: Array<{ id: string; vendor: string; cost?: string }>;
+  free: Array<string | { id: string; cost?: string }>;
+  plan: Array<string | { id: string; cost?: string }>;
+  paid: Array<string | { id: string; cost?: string }>;
 }
 
 type Category = 'auto' | 'byo' | 'free' | 'plan' | 'paid' | 'configured';
@@ -24,19 +24,22 @@ const CATEGORY_LABEL: Record<Category, string> = {
 
 function buildItems(options: ChatModelOptions): Item[] {
   const items: Item[] = [{ key: 'auto', label: 'Auto', detail: 'Gateway chooses', category: 'auto', selection: { mode: 'auto' } }];
-  if (options.byo.length) items.push({ key: 'byo_pool', label: 'Pool', detail: 'Your BYO priority order', category: 'byo', selection: { mode: 'byo_pool' } });
+  const normalized = (value: string | { id: string; cost?: string }) => typeof value === 'string' ? { id: value } : value;
   const seen = new Set<string>();
   const add = (id: string, label: string, detail: string, category: Category) => {
     if (!id || seen.has(id)) return;
     seen.add(id);
     items.push({ key: `model:${id}`, label, detail, category, selection: { mode: 'model', model: id } });
   };
+  // BuilderForce collections lead by default. Within BYO, the server supplies the
+  // exact mixed provider/connection priority order configured in Settings.
+  for (const value of options.free) { const model = normalized(value); add(model.id, model.id, model.cost ?? 'Free · included with BuilderForce', 'free'); }
+  const free = new Set(options.free.map((value) => normalized(value).id));
+  for (const value of options.plan) { const model = normalized(value); if (!free.has(model.id)) add(model.id, model.id, model.cost ?? 'Included with your BuilderForce plan', 'plan'); }
+  for (const value of options.paid) { const model = normalized(value); add(model.id, model.id, model.cost ?? 'Metered usage', 'paid'); }
+  if (options.byo.length) items.push({ key: 'byo_pool', label: 'BYO pool', detail: 'Auto-selects in your provider priority order', category: 'byo', selection: { mode: 'byo_pool' } });
+  for (const model of options.byo) add(model.id, model.id, model.cost ?? `Billed by ${model.vendor}`, 'byo');
   for (const model of options.configured ?? []) add(model.id, model.label, model.id, 'configured');
-  for (const model of options.byo) add(model.id, model.id, model.vendor, 'byo');
-  for (const id of options.free) add(id, id, 'Included free model', 'free');
-  const free = new Set(options.free);
-  for (const id of options.plan) if (!free.has(id)) add(id, id, 'Included with your plan', 'plan');
-  for (const id of options.paid) add(id, id, 'Metered usage', 'paid');
   return items;
 }
 

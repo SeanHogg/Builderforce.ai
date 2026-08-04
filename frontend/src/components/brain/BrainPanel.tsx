@@ -490,7 +490,10 @@ export function BrainPanel({
     byo: llmModels.fundingSurface.byo.models.map(({ id, vendor }) => ({ id, vendor })),
     free: llmModels.freeModels,
     plan: llmModels.models,
-    paid: llmModels.premiumModels.map((model) => model.id),
+    paid: llmModels.premiumModels.map((model) => ({
+      id: model.id,
+      cost: `$${(model.pricing.prompt * 1_000_000).toFixed(2)} input / $${(model.pricing.completion * 1_000_000).toFixed(2)} output per 1M tokens + $0.01/request`,
+    })),
   }), [llmModels]);
   const selectedModel = modelSelection.mode === 'model' ? modelSelection.model : undefined;
   // Tool-call failover: the SHARED selector over that surface, so "which model next"

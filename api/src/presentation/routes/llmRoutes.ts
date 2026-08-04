@@ -74,6 +74,7 @@ import {
   listTenantProviderKeys,
   deleteTenantProviderKey,
   isSupportedProvider,
+  byoVendorIdFor,
   byoVendorIdsFromCredentials,
   providersFromCredentials,
   formatByoUnresolvedHeader,
@@ -1284,7 +1285,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const probe = await probeOpenRouterConnection(c.env, access.tenantId, id);
     if (probe.status === 'not_found') return c.json({ error: 'not_found', code: 'not_found' }, 404);
     if (probe.ok) {
-      return c.json({ ok: true, status: probe.status, model: probe.model, ownKey: probe.ownKey, testedAt: probe.checkedAt });
+      return c.json({
+        ok: true, status: probe.status, model: probe.model, ownKey: probe.ownKey,
+        ...(probe.limitedModels?.length ? { limitedModels: probe.limitedModels } : {}),
+        testedAt: probe.checkedAt,
+      });
     }
     // An upstream 5xx means the OPPOSITE of a broken registration: the key was accepted and
     // the model provider then errored. Reporting that as "test failed" sends an owner to
@@ -1303,6 +1308,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           : `OpenRouter connection test could not run: ${probe.status.replaceAll('_', ' ')}.`,
       code: 'openrouter_connection_test_failed',
       testedAt: probe.checkedAt,
+      ...(probe.limitedModels?.length ? { limitedModels: probe.limitedModels } : {}),
       // Echo the alert the probe just persisted so the card repaints from THIS response
       // instead of waiting for the list read's cache window to lapse.
       ...(probe.alert ? { authAlert: probe.alert } : {}),
@@ -2566,14 +2572,30 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           listOpenRouterConnections(c.env, access.tenantId),
         ])
       : [[] as ProviderKeySummary[], []];
-    const byoModels = [
-      ...byoModelsFor(byoProviderRows),
-      ...connectionModelRefs(openRouterConnections).map((id) => ({
-        id,
-        vendor: 'openrouter',
-        tier: 'REGISTERED',
+    // Preserve the ONE mixed provider/connection precedence in the picker payload.
+    // Appending every OpenRouter registration after every direct provider made the
+    // prompt order disagree with the priority drawer whenever a connection was #1.
+    const providerModels = byoModelsFor(byoProviderRows);
+    const groups = [
+      ...byoProviderRows.map((row) => ({
+        priority: row.priority,
+        tie: `provider:${row.provider}`,
+        models: providerModels.filter((model) => {
+          const vendor = byoVendorIdFor(row.provider, row.authType);
+          return model.vendor === vendor;
+        }),
       })),
-    ];
+      ...openRouterConnections.map((connection) => ({
+        priority: connection.priority,
+        tie: `openrouter:${connection.id}`,
+        models: connectionModelRefs([connection]).map((id) => ({ id, vendor: 'openrouter', tier: 'REGISTERED' })),
+      })),
+    ].sort((a, b) => {
+      const ar = a.priority ?? Number.POSITIVE_INFINITY;
+      const br = b.priority ?? Number.POSITIVE_INFINITY;
+      return ar === br ? a.tie.localeCompare(b.tie) : ar - br;
+    });
+    const byoModels = groups.flatMap((group) => group.models);
     // The wire shape stays a plain provider-id list (what every client reads).
     const byoProviders: string[] = [
       ...byoProviderRows.map((d) => d.provider),

@@ -171,6 +171,54 @@ describe('probeOpenRouterConnection', () => {
     expect(result).toMatchObject({ ok: true, status: 'ready' });
   });
 
+  it('marks one limited model and verifies the connection with the next selected model', async () => {
+    connections.push({
+      id: 24, label: 'Fallback coders',
+      models: ['deepseek/deepseek-v4-pro', 'moonshotai/kimi-k3'],
+      hasKey: true, priority: 0,
+    });
+    resolvedKeys['deepseek/deepseek-v4-pro'] = 'sk-or-tenant';
+    resolvedKeys['moonshotai/kimi-k3'] = 'sk-or-tenant';
+    upstream = { status: 403, body: 'Key limit exceeded (weekly limit)' };
+    onDispatch = (n) => { if (n === 2) upstream = { status: 200, body: '{"ok":true}' }; };
+
+    const result = await probeOpenRouterConnection(env, 7, 24);
+
+    expect(dispatched).toEqual([
+      'openrouter/deepseek/deepseek-v4-pro',
+      'openrouter/moonshotai/kimi-k3',
+    ]);
+    expect(result).toMatchObject({
+      ok: true, status: 'ready', model: 'moonshotai/kimi-k3',
+      limitedModels: ['deepseek/deepseek-v4-pro'],
+    });
+    // A per-model limiter must not become the connection-wide disabled alert.
+    expect(result.alert).toBeUndefined();
+    await expect(loadConnectionAuthAlert(env, 7, 24)).resolves.toBeNull();
+  });
+
+  it('flags the connection only when every selected model is limited', async () => {
+    connections.push({
+      id: 25, label: 'All limited',
+      models: ['deepseek/deepseek-v4-pro', 'moonshotai/kimi-k3'],
+      hasKey: false, priority: 0,
+    });
+    upstream = { status: 403, body: 'Key limit exceeded (weekly limit)' };
+
+    const result = await probeOpenRouterConnection(env, 7, 25);
+
+    expect(dispatched).toEqual([
+      'openrouter/deepseek/deepseek-v4-pro',
+      'openrouter/moonshotai/kimi-k3',
+    ]);
+    expect(result).toMatchObject({
+      ok: false, status: 'failed',
+      limitedModels: ['deepseek/deepseek-v4-pro', 'moonshotai/kimi-k3'],
+      alert: { connectionId: 25, reason: 'capacity' },
+    });
+    await expect(loadConnectionAuthAlert(env, 7, 25)).resolves.toMatchObject({ reason: 'capacity' });
+  });
+
   it('calls a persistent 502 an UPSTREAM error, not a failed connection', async () => {
     connections.push({ id: 22, label: 'Down', models: ['moonshotai/kimi-k3'], hasKey: true, priority: null });
     resolvedKeys['moonshotai/kimi-k3'] = 'sk-or-tenant';

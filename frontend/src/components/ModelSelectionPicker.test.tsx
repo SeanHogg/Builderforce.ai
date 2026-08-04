@@ -7,7 +7,7 @@ const options: ChatModelOptions = {
   byo: [{ id: 'direct/kimi-code/kimi-k2.5', vendor: 'Kimi Code' }],
   free: ['free/qwen'],
   plan: ['free/qwen', 'plan/sonnet'],
-  paid: ['openrouter/paid-opus'],
+  paid: [{ id: 'openrouter/paid-opus', cost: '$15.00 input / $75.00 output per 1M tokens + $0.01/request' }],
 };
 
 describe('ModelSelectionPicker', () => {
@@ -18,7 +18,7 @@ describe('ModelSelectionPicker', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Choose model' }));
     fireEvent.click(screen.getByRole('button', { name: 'BYO' }));
     const list = screen.getByRole('listbox');
-    expect(within(list).getByText('Pool')).toBeTruthy();
+    expect(within(list).getByText('BYO pool')).toBeTruthy();
     expect(within(list).getByText('direct/kimi-code/kimi-k2.5')).toBeTruthy();
     expect(within(list).queryByText('free/qwen')).toBeNull();
 
@@ -34,5 +34,28 @@ describe('ModelSelectionPicker', () => {
     for (const label of ['Free', 'Plan', 'Paid', 'BYO', 'Configured']) {
       expect(within(filters).getByRole('button', { name: label })).toBeTruthy();
     }
+  });
+
+  it('puts BuilderForce collections first, preserves BYO order, and displays paid cost', () => {
+    render(<ModelSelectionPicker selection={{ mode: 'auto' }} options={{
+      ...options,
+      byo: [
+        { id: 'direct/meta/llama', vendor: 'Meta' },
+        { id: 'claude-opus', vendor: 'Anthropic' },
+      ],
+    }} onChange={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Choose model' }));
+    const choices = within(screen.getByRole('listbox')).getAllByRole('option');
+    expect(choices.map((choice) => choice.textContent)).toEqual([
+      expect.stringContaining('Auto'),
+      expect.stringContaining('free/qwen'),
+      expect.stringContaining('plan/sonnet'),
+      expect.stringContaining('openrouter/paid-opus'),
+      expect.stringContaining('BYO pool'),
+      expect.stringContaining('direct/meta/llama'),
+      expect.stringContaining('claude-opus'),
+      expect.stringContaining('Review specialist'),
+    ]);
+    expect(screen.getByText('$15.00 input / $75.00 output per 1M tokens + $0.01/request')).toBeTruthy();
   });
 });

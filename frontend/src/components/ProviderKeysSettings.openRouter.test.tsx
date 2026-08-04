@@ -5,7 +5,7 @@ import * as api from '@/lib/builderforceApi';
 import type { ConnectionAuthAlert, OpenRouterConnection } from '@/lib/builderforceApi';
 
 vi.mock('@/components/ConfirmProvider', () => ({ useConfirm: () => vi.fn() }));
-vi.mock('@/components/ToastProvider', () => ({ useToast: () => ({ error: vi.fn(), success: vi.fn() }) }));
+vi.mock('@/components/ToastProvider', () => ({ useToast: () => ({ error: vi.fn(), warning: vi.fn(), success: vi.fn() }) }));
 
 /**
  * OpenRouter registrations are rankable BYO accounts with no provider card, and for a long
@@ -70,6 +70,25 @@ describe('ProviderKeysSettings — OpenRouter connection health', () => {
 
     await waitFor(() => expect(test).toHaveBeenCalledWith(1));
     expect(await screen.findByText(/providerKeys\.diagnostic\.verifiedWith/)).toBeInTheDocument();
+  });
+
+  it('shows a model limiter without disabling a connection that has a working fallback', async () => {
+    mockApi([connection({ models: ['deepseek/deepseek-v4-pro', 'moonshotai/kimi-k3'] })]);
+    vi.spyOn(api.openRouterConnectionsApi, 'test').mockResolvedValue({
+      ok: true,
+      status: 'ready',
+      model: 'moonshotai/kimi-k3',
+      ownKey: true,
+      limitedModels: ['deepseek/deepseek-v4-pro'],
+    });
+    render(<ProviderKeysSettings />);
+    await openDrawer();
+
+    fireEvent.click(await screen.findByText('providerKeys.diagnostic.test'));
+
+    expect(await screen.findByText(/diagnostic\.verifiedWithLimited.*deepseek\/deepseek-v4-pro/)).toBeInTheDocument();
+    expect(screen.queryByText(/providerKeys\.status\.needsAttention/)).not.toBeInTheDocument();
+    expect(screen.getByText(/providerKeys\.openRouter\.connectedCount/)).toBeInTheDocument();
   });
 
   it('surfaces the probe failure rather than a bare red state', async () => {

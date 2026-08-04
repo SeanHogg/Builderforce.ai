@@ -5,21 +5,20 @@ import {
   addEdge,
   Background,
   BackgroundVariant,
-  ControlButton,
-  Controls,
   MarkerType,
-  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   useEdgesState,
   useNodesState,
   type Connection,
   type Edge,
+  type Node,
   type NodeMouseHandler,
   type NodeTypes,
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { CanvasCommands, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
 import { CreationNode, type CreationFlowNode } from './CreationNode';
 import type { CreationNodeData, CreationObjectKind } from './types';
 import styles from './CreationCanvas.module.css';
@@ -70,12 +69,6 @@ const ACCOUNT_REQUIRED_OBJECT_ACTIONS = new Set(['publish', 'deliver', 'assign',
 const PALETTE_GROUP_ICONS: Record<CreationObjectGroup, string> = {
   Build: '✦', Data: '▦', Knowledge: '▤', Insights: '↗', Work: '✓', People: '●', Agents: '✧', Models: '◉', Collaborate: '◇', Integrations: '⌘',
 };
-function MinimapIcon() {
-  return <svg viewBox="0 0 16 16" aria-hidden="true">
-    <rect x="1.5" y="2" width="13" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-    <path d="M2 10.5 5.5 7l2.3 2.2L11 5.7l3 3" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
-  </svg>;
-}
 export type ProposedCanvasChange =
   | { id: string; type: 'object.add'; label: string; node: CreationFlowNode }
   | { id: string; type: 'object.update'; label: string; objectId: string; patch: Partial<CreationNodeData> }
@@ -334,7 +327,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     byo: llmModels.fundingSurface.byo.models.map(({ id, vendor }) => ({ id, vendor })),
     free: llmModels.freeModels,
     plan: llmModels.models,
-    paid: llmModels.premiumModels.map((model) => model.id),
+    paid: llmModels.premiumModels.map((model) => ({
+      id: model.id,
+      cost: `$${(model.pricing.prompt * 1_000_000).toFixed(2)} input / $${(model.pricing.completion * 1_000_000).toFixed(2)} output per 1M tokens + $0.01/request`,
+    })),
   }), [llmModels]);
   const [tourStep, setTourStep] = useState(0);
   const [notice, setNotice] = useState('Session saved');
@@ -2057,6 +2053,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const colors: Partial<Record<CreationObjectKind, string>> = { workflow: '#7357ed', website: '#3978f6', dashboard: '#08b59d', agent: '#8a5cf5', staff: '#f09a3e', evaluation: '#6941d7', evermind: '#df4fa5', projectComparison: '#0d8f82' };
     return colors[node.data.kind] ?? '#9aa8bd';
   }, []);
+  const cleanLayout = useCallback(() => {
+    setNodes((current) => cleanCanvasLayout(current, edges));
+    window.setTimeout(() => void flowRef.current?.fitView({ padding: .16, maxZoom: .9, duration: 320 }), 0);
+  }, [edges, setNodes]);
   const renderedNodes = useMemo(() => nodes.map((node) => {
     const attachedEvermind = node.data.kind === 'evermind' && typeof node.data.resourceId === 'string' && /^evermind:\d+$/.test(node.data.resourceId);
     const live = evermindLiveByNodeId[node.id];
@@ -2207,15 +2207,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onlyRenderVisibleElements
         >
           <Background variant={BackgroundVariant.Dots} gap={24} size={1.2} color="var(--creation-dot, #c9d8ea)" />
-          <Controls position="bottom-left" showInteractive={false}>
-            {!minimapOpen && <ControlButton onClick={() => setMinimapOpen(true)} aria-label="Open mini map" title="Open mini map">
-              <MinimapIcon />
-            </ControlButton>}
-          </Controls>
-          {minimapOpen && <>
-            <MiniMap position="bottom-right" nodeColor={minimapColor} maskColor="var(--creation-minimap-mask, rgba(244,248,253,.72))" pannable zoomable />
-            <button type="button" className={styles.minimapClose} onClick={() => setMinimapOpen(false)} aria-label="Close mini map" title="Close mini map">×</button>
-          </>}
+          <CanvasCommands
+            minimapOpen={minimapOpen}
+            setMinimapOpen={setMinimapOpen}
+            onCleanLayout={cleanLayout}
+            showInteractive={false}
+            minimapNodeColor={minimapColor as (node: Node) => string}
+            minimapMaskColor="var(--creation-minimap-mask, rgba(244,248,253,.72))"
+          />
         </ReactFlow>
 
         <RemoteCursors members={members} currentUserId={currentUserId} instance={flowRef.current} container={flowWrapRef.current} />

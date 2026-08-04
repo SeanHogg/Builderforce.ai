@@ -8986,6 +8986,7 @@
       "testing": "Probando…",
       "verified": "Conexión verificada.",
       "verifiedWith": "Conexión verificada con {model}.",
+      "verifiedWithLimited": "La conexión se puede usar con {model}. Los modelos limitados se omiten por ahora: {limited}.",
       "usage": "Uso atribuido por BuilderForce, últimos {days} días: {requests} solicitudes · {tokens} tokens",
       "lastUsed": " · Último uso {when}",
       "failedFallback": "La prueba de conexión falló: {status}.",

@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
-  ReactFlow, Background, Controls, MarkerType,
-  useNodesState, useEdgesState, type Node, type Edge,
+  ReactFlow, Background, MarkerType,
+  useNodesState, useEdgesState, type Node, type Edge, type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { CanvasCommands, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
 import { pmoApi, type ValueStream, type ValueStreamInitiative, type ValueStreamEdge } from '@/lib/builderforceApi';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError } from '@/components/pm/pmShared';
@@ -63,6 +64,8 @@ export function ValueStreamGraph() {
   const { data, error } = usePmData<ValueStream>(() => pmoApi.valueStream(), []);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [minimapOpen, setMinimapOpen] = useState(true);
+  const flowRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
 
   const built = useMemo(() => {
     if (!data || data.nodes.length === 0) return null;
@@ -97,6 +100,11 @@ export function ValueStreamGraph() {
     if (built) { setNodes(built.flowNodes); setEdges(built.flowEdges); }
   }, [built, setNodes, setEdges]);
 
+  const cleanLayout = useCallback(() => {
+    setNodes((current) => cleanCanvasLayout(current, edges));
+    window.setTimeout(() => void flowRef.current?.fitView({ padding: .18, maxZoom: 1, duration: 320 }), 0);
+  }, [edges, setNodes]);
+
   if (error) return <PmError message={error} />;
   if (!data) return null;
   if (data.nodes.length === 0) return null; // no initiatives → nothing to stream
@@ -112,9 +120,16 @@ export function ValueStreamGraph() {
         <PmEmpty message={t('deliv.valueStream.noDeps')} />
       ) : (
         <div style={{ height: 420, border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
-          <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} fitView proOptions={{ hideAttribution: true }}>
+          <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onInit={(instance) => { flowRef.current = instance; }} fitView proOptions={{ hideAttribution: true }}>
             <Background color="var(--border-subtle)" gap={18} />
-            <Controls showInteractive={false} />
+            <CanvasCommands
+              minimapOpen={minimapOpen}
+              setMinimapOpen={setMinimapOpen}
+              onCleanLayout={cleanLayout}
+              showInteractive={false}
+              minimapNodeColor="var(--coral-bright)"
+              minimapMaskColor="rgba(5, 10, 20, .72)"
+            />
           </ReactFlow>
         </div>
       )}

@@ -111,6 +111,17 @@ describe('byoModelsFor', () => {
     expect(grok.length).toBeGreaterThan(0);
     expect(grok.every((m) => m.id.startsWith('xai-oauth/'))).toBe(true);
   });
+
+  it('groups models in tenant provider-priority order', () => {
+    const models = byoModelsFor([
+      { ...connected('meta'), priority: 0 },
+      { ...connected('anthropic'), priority: 1 },
+    ]);
+    const firstAnthropic = models.findIndex((model) => model.vendor === 'anthropic');
+    const lastMeta = models.map((model) => model.vendor).lastIndexOf('meta');
+    expect(lastMeta).toBeGreaterThanOrEqual(0);
+    expect(firstAnthropic).toBeGreaterThan(lastMeta);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -8986,6 +8986,7 @@
       "testing": "测试中…",
       "verified": "连接验证成功。",
       "verifiedWith": "已通过 {model} 验证连接。",
+      "verifiedWithLimited": "连接可通过 {model} 使用。暂时跳过受限模型：{limited}。",
       "usage": "BuilderForce 归因用量，最近 {days} 天：{requests} 次请求 · {tokens} 个令牌",
       "lastUsed": " · 上次使用 {when}",
       "failedFallback": "连接测试失败：{status}。",

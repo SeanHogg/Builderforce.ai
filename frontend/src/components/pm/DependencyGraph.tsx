@@ -1,18 +1,19 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   ReactFlow,
   Background,
-  Controls,
   MarkerType,
   useNodesState,
   useEdgesState,
   type Node,
   type Edge,
+  type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { CanvasCommands, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
 import { tasksApi, type Task, type DependencyEdge, type DepType } from '@/lib/builderforceApi';
 import { usePmScope } from '@/lib/pm/scope';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
@@ -115,6 +116,8 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
   const [depType, setDepType] = useState<DepType>('finish_to_start');
   const [formError, setFormError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [minimapOpen, setMinimapOpen] = useState(true);
+  const flowRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
 
   const tasks = tasksQ.data;
   const deps = depsQ.data;
@@ -167,6 +170,11 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
   useEffect(() => {
     if (built) { setNodes(built.flowNodes); setEdges(built.edges); }
   }, [built, setNodes, setEdges]);
+
+  const cleanLayout = useCallback(() => {
+    setNodes((current) => cleanCanvasLayout(current, edges));
+    window.setTimeout(() => void flowRef.current?.fitView({ padding: .18, maxZoom: 1, duration: 320 }), 0);
+  }, [edges, setNodes]);
 
   if (tasksQ.error || depsQ.error) return <PmError message={tasksQ.error ?? depsQ.error ?? 'error'} />;
   if (!tasks || !deps) return <PmEmpty message={t('depLoading')} />;
@@ -238,11 +246,18 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
           onNodesChange={onNodesChange}
           onEdgesChange={onEdgesChange}
           onEdgeClick={onEdgeClick}
+          onInit={(instance) => { flowRef.current = instance; }}
           fitView
           proOptions={{ hideAttribution: true }}
         >
           <Background color="var(--border-subtle)" gap={18} />
-          <Controls />
+          <CanvasCommands
+            minimapOpen={minimapOpen}
+            setMinimapOpen={setMinimapOpen}
+            onCleanLayout={cleanLayout}
+            minimapNodeColor="var(--coral-bright)"
+            minimapMaskColor="rgba(5, 10, 20, .72)"
+          />
         </ReactFlow>
       </div>
       {!readOnly && (

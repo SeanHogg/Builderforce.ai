@@ -349,12 +349,16 @@ function formatDiagnosticTrace(d: ProbeDiagnostic): string {
  */
 function probeVerdict(
   t: TFn,
-  result: { ok: boolean; status: string; model?: string; error?: string; diagnostic?: ProbeDiagnostic },
+  result: { ok: boolean; status: string; model?: string; limitedModels?: string[]; error?: string; diagnostic?: ProbeDiagnostic },
 ): ProbeVerdict {
   if (result.ok) {
     return {
-      tone: 'ok',
-      message: result.model ? t('diagnostic.verifiedWith', { model: result.model }) : t('diagnostic.verified'),
+      // Amber communicates that routing is working but some of the selected cascade is
+      // temporarily unavailable. Crucially this is not the red, connection-disabled state.
+      tone: result.limitedModels?.length ? 'warn' : 'ok',
+      message: result.limitedModels?.length
+        ? t('diagnostic.verifiedWithLimited', { model: result.model ?? '', limited: result.limitedModels.join(', ') })
+        : result.model ? t('diagnostic.verifiedWith', { model: result.model }) : t('diagnostic.verified'),
     };
   }
   return {

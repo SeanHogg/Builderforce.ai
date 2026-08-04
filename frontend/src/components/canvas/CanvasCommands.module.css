@@ -1,0 +1,25 @@
+.minimapClose {
+  position: absolute;
+  z-index: 13;
+  right: 20px;
+  bottom: 136px;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  place-items: center;
+  color: var(--text-primary, currentColor);
+  background: color-mix(in srgb, var(--bg-elevated, white) 92%, transparent);
+  border: 1px solid var(--border-subtle, #d8e1ed);
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .2);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.minimapClose:hover { filter: brightness(.96); }
+
+@media (max-width: 760px) {
+  .minimapClose { display: none; }
+}

@@ -3383,6 +3383,9 @@ export interface OpenRouterConnectionTestResult {
   status: 'ready' | 'not_found' | 'no_test_model' | 'key_unresolved' | 'upstream_error' | 'failed';
   /** The bare OpenRouter id the probe pinned. */
   model?: string;
+  /** Selected ids skipped because OpenRouter reported a model/account limiter. The
+   *  connection remains usable when at least one other selected model succeeds. */
+  limitedModels?: string[];
   /** True when the dispatch rode the tenant's OWN OpenRouter key rather than the managed one. */
   ownKey: boolean;
   testedAt?: string;

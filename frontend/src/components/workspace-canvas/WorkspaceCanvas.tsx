@@ -1,12 +1,9 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
   Background,
   BackgroundVariant,
-  ControlButton,
-  Controls,
-  MiniMap,
   NodeResizer,
   ReactFlow,
   ReactFlowProvider,
@@ -14,8 +11,10 @@ import {
   type Node,
   type NodeProps,
   type NodeTypes,
+  type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import { CanvasCommands, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
 import styles from './WorkspaceCanvas.module.css';
 
 export interface WorkspaceCanvasPanel {
@@ -82,13 +81,6 @@ function MobileWorkspacePanel({ panel, onRemovePanel }: { panel: WorkspaceCanvas
 
 const NODE_TYPES: NodeTypes = { workspacePanel: WorkspacePanel };
 
-function MinimapIcon() {
-  return <svg viewBox="0 0 16 16" aria-hidden="true">
-    <rect x="1.5" y="2" width="13" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
-    <path d="M2 10.5 5.5 7l2.3 2.2L11 5.7l3 3" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
-  </svg>;
-}
-
 function panelNode(panel: WorkspaceCanvasPanel, index: number): WorkspacePanelNode {
   return {
     id: panel.id,
@@ -114,7 +106,8 @@ export function WorkspaceCanvas({
   const initialNodes = useMemo(() => panels.map(panelNode), []); // eslint-disable-line react-hooks/exhaustive-deps
   const [nodes, setNodes, onNodesChange] = useNodesState<WorkspacePanelNode>(initialNodes);
   const [mobile, setMobile] = useState(false);
-  const [minimapOpen, setMinimapOpen] = useState(false);
+  const [minimapOpen, setMinimapOpen] = useState(true);
+  const flowRef = useRef<ReactFlowInstance<WorkspacePanelNode, never> | null>(null);
   const panelIds = panels.map((panel) => panel.id).join('\u0000');
 
   useEffect(() => {
@@ -135,6 +128,11 @@ export function WorkspaceCanvas({
     // when the set of reusable panels changes.
   }, [panelIds, setNodes]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const cleanLayout = useCallback(() => {
+    setNodes((current) => cleanCanvasLayout(current, []));
+    window.setTimeout(() => void flowRef.current?.fitView({ padding: .12, maxZoom: 1, duration: 320 }), 0);
+  }, [setNodes]);
+
   if (mobile) return <div className={`${styles.canvas} ${styles.mobileCanvas}${className ? ` ${className}` : ''}`} data-testid="workspace-canvas" data-layout="widgets">
     {toolbar && <div className={styles.mobileToolbar}>{toolbar}</div>}
     <div className={styles.mobileStack}>{panels.map((panel) => <MobileWorkspacePanel key={panel.id} panel={panel} onRemovePanel={onRemovePanel} />)}</div>
@@ -149,6 +147,7 @@ export function WorkspaceCanvas({
             edges={[]}
             nodeTypes={NODE_TYPES}
             onNodesChange={onNodesChange}
+            onInit={(instance) => { flowRef.current = instance; }}
             fitView
             fitViewOptions={{ padding: 0.1, maxZoom: 1 }}
             minZoom={0.2}
@@ -160,15 +159,13 @@ export function WorkspaceCanvas({
             proOptions={{ hideAttribution: true }}
           >
             <Background variant={BackgroundVariant.Dots} gap={28} size={1.2} color="var(--border-subtle)" />
-            <Controls position="bottom-left">
-              {!minimapOpen && <ControlButton onClick={() => setMinimapOpen(true)} aria-label="Open mini map" title="Open mini map">
-                <MinimapIcon />
-              </ControlButton>}
-            </Controls>
-            {minimapOpen && <>
-              <MiniMap position="bottom-right" pannable zoomable nodeColor="var(--coral-bright)" maskColor="rgba(5, 10, 20, .72)" />
-              <button type="button" className={styles.minimapClose} onClick={() => setMinimapOpen(false)} aria-label="Close mini map" title="Close mini map">×</button>
-            </>}
+            <CanvasCommands
+              minimapOpen={minimapOpen}
+              setMinimapOpen={setMinimapOpen}
+              onCleanLayout={cleanLayout}
+              minimapNodeColor="var(--coral-bright)"
+              minimapMaskColor="rgba(5, 10, 20, .72)"
+            />
           </ReactFlow>
         </ReactFlowProvider>
       </WorkspacePanelsContext.Provider>

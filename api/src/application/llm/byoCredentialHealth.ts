@@ -397,6 +397,10 @@ export interface OpenRouterConnectionProbeResult {
   status: 'ready' | 'not_found' | 'no_test_model' | 'key_unresolved' | 'upstream_error' | 'failed';
   /** The bare OpenRouter id the probe pinned (absent when it never got that far). */
   model?: string;
+  /** Models OpenRouter refused for a model/account usage limit while another selected
+   *  model remained usable. These are model-level routing failures; they must not turn the
+   *  whole connection into a disabled account unless every selected model appears here. */
+  limitedModels?: string[];
   /** True when the dispatch rode the tenant's OWN OpenRouter key rather than ours. */
   ownKey: boolean;
   upstreamStatus?: number;
@@ -466,30 +470,74 @@ export async function probeOpenRouterConnection(
     }
   }
 
-  // Lead with a model this connection's own key actually serves, so a keyed connection is
-  // never quietly verified on the managed key.
-  const bare = connection.models.find((m) => modelKeys[m]) ?? connection.models[0]!;
-  const ownKey = !!modelKeys[bare];
+  // A keyed connection may have models shadowed by a higher-priority registration. Test only
+  // ids that THIS connection's key really serves; falling through to a shadowed id would
+  // silently verify it on Builderforce's managed key.
+  const candidates = connection.hasKey
+    ? connection.models.filter((model) => !!modelKeys[model])
+    : connection.models;
+  const ownKey = connection.hasKey;
   const service = llmProxyForPlan(env, 'free', false, {
     disablePaidOverflow: true,
     openRouterConnections: [connection],
     ...(Object.keys(modelKeys).length ? { openRouterModelKeys: modelKeys } : {}),
   });
-  const outcome = await dispatchProbe(service, connectionModelRef(bare), (vendor, status, detail) =>
-    connectionAlertFromFailure(connectionId, vendor, status, detail, now));
+  const limitedModels: string[] = [];
+  let lastFailure: { bare: string; outcome: ProbeDispatch<ConnectionAuthAlert> } | null = null;
 
-  if (outcome.ok) {
-    await clearConnectionAuthAlert(env, tenantId, connectionId);
-    return { connectionId, ok: true, status: 'ready', model: bare, ownKey, upstreamStatus: outcome.upstreamStatus, checkedAt };
+  for (const bare of candidates) {
+    const outcome = await dispatchProbe(service, connectionModelRef(bare), (vendor, status, detail) =>
+      connectionAlertFromFailure(connectionId, vendor, status, detail, now));
+
+    if (outcome.ok) {
+      // One usable model means the CONNECTION is usable. Keep the limited ids in the
+      // verdict so the operator can see why routing skipped them, but clear the old
+      // connection-wide alert and leave the remaining models available to the cascade.
+      await clearConnectionAuthAlert(env, tenantId, connectionId);
+      return {
+        connectionId, ok: true, status: 'ready', model: bare, ownKey,
+        upstreamStatus: outcome.upstreamStatus,
+        ...(limitedModels.length ? { limitedModels } : {}),
+        checkedAt,
+      };
+    }
+
+    lastFailure = { bare, outcome };
+    if (outcome.alert?.reason === 'capacity') {
+      limitedModels.push(bare);
+      continue;
+    }
+
+    // Rejected/unentitled credentials are connection-wide, not model limiters. Stop after
+    // one request; trying every selected model would spend money to repeat the same answer.
+    if (outcome.alert) {
+      await raise(outcome.alert, outcome.error ?? '');
+      return {
+        connectionId, ok: false, status: 'failed', model: bare, ownKey,
+        upstreamStatus: outcome.upstreamStatus,
+        ...(outcome.error ? { error: outcome.error } : {}),
+        alert: outcome.alert,
+        ...(outcome.diagnostic ? { diagnostic: outcome.diagnostic } : {}),
+        checkedAt,
+      };
+    }
+    // A model-provider outage can also be bypassed by the next configured model. Continue
+    // walking; if none work, report the last transient without disabling the connection.
   }
 
-  if (outcome.alert) await raise(outcome.alert, outcome.error ?? '');
+  const failed = lastFailure!;
+  const allModelsLimited = limitedModels.length === candidates.length;
+  if (allModelsLimited && failed.outcome.alert) {
+    await raise(failed.outcome.alert, failed.outcome.error ?? '');
+  }
   return {
-    connectionId, ok: false, status: outcome.retryable ? 'upstream_error' : 'failed',
-    model: bare, ownKey, upstreamStatus: outcome.upstreamStatus,
-    ...(outcome.error ? { error: outcome.error } : {}),
-    ...(outcome.alert ? { alert: outcome.alert } : {}),
-    ...(outcome.diagnostic ? { diagnostic: outcome.diagnostic } : {}),
+    connectionId, ok: false,
+    status: allModelsLimited ? 'failed' : 'upstream_error',
+    model: failed.bare, ownKey, upstreamStatus: failed.outcome.upstreamStatus,
+    ...(limitedModels.length ? { limitedModels } : {}),
+    ...(failed.outcome.error ? { error: failed.outcome.error } : {}),
+    ...(allModelsLimited && failed.outcome.alert ? { alert: failed.outcome.alert } : {}),
+    ...(failed.outcome.diagnostic ? { diagnostic: failed.outcome.diagnostic } : {}),
     checkedAt,
   };
 }
