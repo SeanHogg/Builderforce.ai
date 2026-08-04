@@ -13,6 +13,8 @@ import {
   getStoredTenantToken,
   getStoredUser,
   getStoredTenant,
+  checkUnauthorizedAndRedirect,
+  handleApiUnauthorized,
 } from './auth';
 import type { AuthUser, Tenant } from './types';
 
