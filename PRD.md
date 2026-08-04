@@ -1,5 +1,6 @@
 > **PRD** — drafted by Ada (Sr. Product Mgr) · task #819
 > _Each agent that updates this PRD signs its change below._
+> - 2026-08-04: business-analyst authored Requirements section (traceability correction)
 
 # Product Requirements Document (PRD)
 
