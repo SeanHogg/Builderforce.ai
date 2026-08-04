@@ -81,7 +81,26 @@ To enhance project management transparency and efficiency by clearly indicating 
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+### R1: Owner Slot Resolution Source
+The Owner role slot in the participation manifest MUST resolve from the epic's direct assignee (`tasks.assignedUserId`, `tasks.assignedAgentRef`, or `tasks.assignedAgentHostId`), NOT from project-level role pins or the roster fallback used by `resolveAssignee`. If the epic has an assignee, the Owner slot's `assigneeKind`, `assigneeRef`, and `assigneeName` fields MUST reflect that assignee. If the epic has no assignee, the Owner slot's `assigneeRef` MUST be null.
+
+### R2: Unstaffed State for Unassigned Epics
+When an epic has no assignee (all three of `assignedUserId`, `assignedAgentRef`, and `assignedAgentHostId` are null), the Owner slot's `state` MUST be `unstaffed`. The system MUST NOT fall back to the first role-capable agent in the tenant, the first explicit project pin, or any auto-hired agent.
+
+### R3: State Recomputation on Assignee Removal
+When an epic's assignee is removed (any of the three assignee fields becomes null), the `syncStates` method MUST recompute the Owner slot's state to `unstaffed` if it was `assigned`, regardless of prior `in_progress` state (unless a sign-off verdict exists). This ensures the Owner slot reflects the epic's current staffing.
+
+### R4: Manager Auto-Staff Exclusion
+The AI Manager's auto-staff sweep (`staffUnfilledRole` in `api/src/application/manager/staffUnfilledRole.ts`) MUST NOT attempt to fill the Owner slot for a ticket whose epic assignee is null. The Owner slot is resolved from the ticket, not from project-level staffing, and auto-staffing it would violate R2. The manager may staff other roles (reviewer, contributor, etc.) but must leave the Owner slot as `unstaffed` when the epic itself is unassigned.
+
+### R5: UI Indicator for Unstaffed Owner
+The frontend Accountability Tab (`frontend/src/components/task/AccountabilityTab.tsx`) MUST display the Owner slot with the existing unstaffed styling (red/danger chip) when its state is `unstaffed`. The board card and ticket header SHOULD display an unstaffed badge or count, matching the pattern used for other unstaffed role gaps in the system.
+
+### R6: API Response
+The API endpoints `GET /api/kanban/tasks/:taskId/participants` and `GET /api/kanban/tasks/:taskId/accountability` MUST include the Owner participant row with `state: "unstaffed"` and `assigneeRef: null` when the epic has no assignee.
+
+### R7: Idempotent Derivation
+Calling `deriveManifest` or `listParticipants` multiple times on an unassigned epic MUST produce the same Owner slot state (`unstaffed`) each time. The derivation is idempotent and does not create duplicate Owner slots.
 
 ## Design
 
