@@ -1700,6 +1700,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const requestText = prompt.trim();
     const initialMessage = initialPromptSubmitted.current ? timeline.find((message) => (message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:')) && message.body === requestText) : undefined;
     const requestMessageId = appendTimeline('user', requestText, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds] }, initialMessage?.clientMessageId);
+    // A composer submission is a chat interaction, so reveal its Brain object
+    // immediately. Waiting for the vendor request to succeed left a blank canvas
+    // (and hid useful streaming/failure state) whenever the provider cascade
+    // rejected the turn.
+    const existingChat = nodes.find((node) => node.data.kind === 'chat');
+    const brainId = existingChat?.id ?? crypto.randomUUID();
+    if (!existingChat) {
+      const brain = { ...newNode('chat', { x: 120, y: 120 }), id: brainId };
+      brain.data = { ...brain.data, title: 'Brain', subtitle: requestText };
+      setNodes((current) => current.some((node) => node.data.kind === 'chat') ? current : [...current, brain]);
+    }
+    setSelectedId(brainId);
+    setSelectedIds([brainId]);
     if (process.env.NODE_ENV !== 'test') {
       proposalBuffer.current = [];
       setBrainTrace([]);
@@ -1733,13 +1746,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const shouldAutoApply = changes.length > 0 && (autoApplyRef.current || canvasChangesCanAutoApply(changes));
         if (answer.trim()) {
           appendTimeline('assistant', answer.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds] }, `${requestMessageId}:assistant`);
-          const chat = nodes.find((node) => node.data.kind === 'chat');
-          const brainId = chat?.id ?? crypto.randomUUID();
-          if (!chat) {
-            const responseNode = { ...newNode('chat', { x: 120, y: 120 }), id: brainId };
-            responseNode.data = { ...responseNode.data, title: 'Brain', subtitle: request, aiResponse: answer.trim() };
-            setNodes((current) => [...current, responseNode]);
-          } else setNodes((current) => current.map((node) => node.id === brainId ? { ...node, data: { ...node.data, subtitle: request, aiResponse: answer.trim() } } : node));
+          setNodes((current) => current.map((node) => node.id === brainId ? { ...node, data: { ...node.data, subtitle: request, aiResponse: answer.trim() } } : node));
           const promptTargets = effectiveSelectedIds.filter((id) => id !== brainId && nodes.some((node) => node.id === id && node.data.kind !== 'chat'));
           if (promptTargets.length) setEdges((current) => associateBrainWithArtifacts(current, brainId, promptTargets));
         }

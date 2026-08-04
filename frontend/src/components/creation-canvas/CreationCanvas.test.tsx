@@ -384,6 +384,16 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByRole('heading', { name: 'Connected objects' })).toBeInTheDocument();
   });
 
+  it('opens the Brain chat as soon as a footer prompt is submitted', () => {
+    render(<CreationCanvas sessionId="composer-opens-brain-test" persistence="local" />);
+
+    fireEvent.change(screen.getByLabelText('Ask Brain about this canvas'), { target: { value: 'Show which agents are active' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send to Brain' }));
+
+    expect(screen.getByRole('log', { name: 'Full Brain activity' })).toBeInTheDocument();
+    expect(screen.getAllByText('Show which agents are active').length).toBeGreaterThan(0);
+  });
+
   it('runs workflows from the workflow widget instead of the session header', () => {
     render(<CreationCanvas sessionId="workflow-widget-run-test" persistence="local" />);
 
