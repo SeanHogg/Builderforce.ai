@@ -339,7 +339,31 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
 
   router.delete('/tasks/:taskId/participants/:participantId', async (c) => {
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
-    await participantsService.removeParticipant(env(c), c.get('tenantId') as number, Number(c.req.param('taskId')), c.req.param('participantId'));
+    const tenantId = c.get('tenantId') as number;
+    const taskId = Number(c.req.param('taskId'));
+    const participantId = c.req.param('participantId');
+
+    // Check if participant exists before attempting removal
+    const exists = await participantsService.participantExists(env(c), tenantId, taskId, participantId);
+    if (!exists) {
+      const errorMessage = `Participant ID ${participantId} does not exist. Please verify the ID and try again.`;
+      // Log the error event for administrative and debugging purposes
+      const [task] = await db.select({ title: tasks.title }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+      await recordActivity(env(c), db, {
+        tenantId,
+        projectId: task?.projectId ?? null,
+        actor: await resolveHumanActor(env(c), db, tenantId, (c.get('userId') as string) ?? ''),
+        verb: 'ticket.participant.error',
+        targetType: 'task',
+        targetId: String(taskId),
+        targetLabel: task ? `#${taskId}: ${task.title}` : `#${taskId}`,
+        summary: errorMessage,
+        metadata: { participantId, errorType: 'participant_not_found' },
+      });
+      return c.json({ error: errorMessage }, 404);
+    }
+
+    await participantsService.removeParticipant(env(c), tenantId, taskId, participantId);
     return c.json({ ok: true });
   });
 
