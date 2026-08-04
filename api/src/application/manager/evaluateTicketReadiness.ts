@@ -93,7 +93,7 @@ export type CompletionShape =
   | 'branch_unopened';
 
 export interface ReadinessInput {
-  /** 'task' | 'epic' | 'gap' | 'security' | 'incident' … */
+  /** 'task' | 'epic' | 'gap' | 'security' | 'incident' | 'decision' … */
   taskType: string | null;
   /** Learned/derived technical shape ('backend_api', 'frontend_ui', 'docs', …). */
   actionType: string | null;
