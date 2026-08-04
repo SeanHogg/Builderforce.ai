@@ -70,7 +70,36 @@ Automate the assignment of the Owner role in the manifest based on the epic's as
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+### FR-O-001: Epic Parent Resolution
+The system MUST resolve the epic ancestor of a task by traversing the `parentTaskId` chain until a task with `taskType = 'epic'` is found. If no epic exists in the ancestry chain, the system MUST log a debug-level message and proceed to the fallback resolution.
+
+### FR-O-002: Owner Assignment Precedence
+When resolving an Owner (`responsibility = 'owner'`) slot in the manifest, the system MUST check the epic's assignees in the following order:
+1. **Epic assigned user** — if `epic.assignedUserId` is present, use it.
+2. **Epic assigned agent** — if `epic.assignedAgentRef` is present, use it as fallback.
+
+### FR-O-003: Assignee Validation
+Before persisting an epic assignee as the Owner, the system MUST validate that the assignee exists in the participant roster:
+- For a **user**: the user ID must exist in the `users` table.
+- For an **agent**: the agent ref must exist in the `ide_agents` table.
+
+If validation fails, the system MUST log a warning and fall back to the standard pin → role-capable agent resolution.
+
+### FR-O-004: Fallback Resolution
+If the epic has no assignee, the epic chain does not exist, or validation fails, the system MUST fall back to the existing `resolveAssignee` logic (project pin → role-capable agent → null).
+
+### FR-O-005: Logging & Audit Trail
+All owner-resolution decisions MUST be logged at appropriate levels:
+- `debug`: "Resolving owner for task {id}, epic={epicId}"
+- `info`: "Epic assignee {kind}:{ref} validated and assigned to owner role for task {id}"
+- `warn`: "Epic has no assignee for task {id}, falling back to role resolution"
+- `warn`: "Epic assignee validation failed for {kind}:{ref}, falling back to role resolution"
+
+### FR-O-006: Idempotent Derivation
+The owner assignment MUST be recomputed on every `deriveManifest` call. If the epic's assignee changes, the manifest MUST reflect the new owner on the next refresh without manual intervention.
+
+### FR-N-001: Notification (Deferred)
+Notifications to the assigned owner are **out of scope** for this initial implementation and SHOULD be handled in a follow-up task.
 
 ## Design
 
