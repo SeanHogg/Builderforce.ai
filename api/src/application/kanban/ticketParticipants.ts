@@ -463,9 +463,8 @@ export class TicketParticipantsService {
   async assignParticipant(env: Env, tenantId: number, taskId: number, input: AssignParticipantInput): Promise<ManifestParticipant | null> {
     const ctx = await this.taskContext(taskId);
     if (!ctx) return null;
-    const responsibility = input.responsibility ?? 'owner';
 
-    // Build the query to find the slot: match task, tenant, role, and optionally stage + responsibility.
+    // Build the query to find the slot(s): match task, tenant, role, and optionally stage + responsibility.
     const conditions = [
       eq(ticketParticipants.tenantId, tenantId),
       eq(ticketParticipants.taskId, taskId),
@@ -478,32 +477,38 @@ export class TicketParticipantsService {
       conditions.push(input.responsibility == null ? isNull(ticketParticipants.responsibility) : eq(ticketParticipants.responsibility, input.responsibility));
     }
 
-    const [existing] = await this.db.select().from(ticketParticipants).where(and(...conditions)).limit(1);
-    if (!existing) return null;
-
-    // No-op if already staffed with the same person.
-    if (existing.assigneeRef === input.assignee.ref && existing.assigneeKind === input.assignee.kind) {
-      return this.mapRow(existing);
-    }
+    // Find all matching slots — when stageKey is omitted, this may return multiple rows.
+    const existingRows = await this.db.select().from(ticketParticipants).where(and(...conditions));
+    if (!existingRows.length) return null;
 
     const now = new Date();
-    const newState = existing.state === 'unstaffed' ? 'assigned' : existing.state;
-    const [updated] = await this.db
-      .update(ticketParticipants)
-      .set({
-        assigneeKind: input.assignee.kind,
-        assigneeRef: input.assignee.ref,
-        assigneeName: input.assignee.name,
-        state: newState,
-        note: input.note ?? existing.note,
-        updatedAt: now,
-      })
-      .where(eq(ticketParticipants.id, existing.id))
-      .returning();
+    const nowDate = new Date(now);
+    const nowIso = now.toISOString();
+
+    // Check if ALL are already staffed with the same person → no-op returning the first.
+    const allMatch = existingRows.every((r) => r.assigneeRef === input.assignee.ref && r.assigneeKind === input.assignee.kind);
+    if (allMatch) return this.mapRow(existingRows[0]);
+
+    // Update every matching slot with the new assignee.
+    const newState = 'assigned';
+    const note = input.note ?? null;
+    for (const existing of existingRows) {
+      await this.db
+        .update(ticketParticipants)
+        .set({
+          assigneeKind: input.assignee.kind,
+          assigneeRef: input.assignee.ref,
+          assigneeName: input.assignee.name,
+          state: newState,
+          note: note ?? existing.note,
+          updatedAt: nowDate,
+        })
+        .where(eq(ticketParticipants.id, existing.id));
+    }
 
     await this.syncStates(env, tenantId, taskId);
     await this.bump(env, taskId);
-    return updated ? this.mapRow(updated) : null;
+    return this.mapRow(existingRows[0]);
   }
 
   /**
