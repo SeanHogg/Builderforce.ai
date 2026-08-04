@@ -97,7 +97,7 @@ A **duplicate participant** is defined as:
   - `stageKey` (nullable, treated as NULL match)
   - `roleKey`
   - `responsibility` (owner | reviewer | contributor)
-  - `source` (template | assessment | assignment)
+  - `source` (`template` | `assessment` | `manual` | `lane_agent`)
 
 This is enforced by the unique index `uidx_ticket_participants_slot` on `(task_id, stage_key, role_key, responsibility, source)`.
 
