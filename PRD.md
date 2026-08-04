@@ -144,18 +144,28 @@ separately (see Traceability) and this ticket must not be reported as "verified"
 
 ### 4. Traceability
 
-| Requirement ID | Description | Verification |
-|---------------|-------------|--------------|
-| REQ-824-1 | Remove participant tool deletes row by participantId | SELECT returns no row |
-| REQ-824-2 | Manifest cache invalidated after removal | API reflects removal |
-| REQ-824-3 | Duplicate defined by unique slot (taskId, stageKey, roleKey, responsibility, source) | Unique index enforces |
-| REQ-824-4 | Epic #709 duplicate removed | participantId 0d6423f1... absent |
+| ID | Requirement | Verification | Status |
+|----|-------------|--------------|--------|
+| REQ-824-1 | Removal deletes the row identified by `participantId` | §3 check 1 | Specified — not executed (401) |
+| REQ-824-2 | Manifest read after removal reflects the deletion (post cache bump) | §3 check 2 | Specified — not executed (401) |
+| REQ-824-3 | Duplicate is defined by the slot tuple `(taskId, stageKey, roleKey, responsibility, source)` | Conflict target in `deriveManifest` / `addParticipant` | Confirmed in code |
+| REQ-824-4 | Removing the duplicate leaves Engineer covered and not `unstaffed` | §3 check 3 | Specified — not executed (401) |
+| REQ-824-5 | Removal is durable across a re-derive | §3 check 4 | Specified — blocked by F-3 |
+| F-1 | `template`/`lane_agent` rows are not removable by `removeParticipant` | Code: `inArray(source, ['assessment','manual'])` | Confirmed in code |
+| F-2 | Removal returns `void`; a no-op delete is indistinguishable from success | Code: `removeParticipant` signature | Confirmed in code |
+| F-3 | NULL `stageKey` means duplicate slots do not conflict in Postgres | Nullable `stage_key` in unique tuple | Confirmed in code — follow-up filed |
+
+### Open items for the executing role
+
+1. Re-run §3 checks 1–4 with valid credentials; record actual results as Test Evidence.
+2. Determine the `source` of participant `0d6423f1-…`. If `template`, this ticket cannot pass as
+   scoped (F-1) and the fix moves to the board's `swimlane_requirements`.
+3. Resolve F-3 before treating any removal as permanent.
 
 ---
 
-**Authored by:** Business Analyst (this ticket)  
-**PRD owner:** Ada (Sr. Product Mgr)  
-**Last updated:** 2026-08-04
+**Authored by:** Business Analyst (task #824)  
+**PRD owner:** Ada (Sr. Product Mgr)
 
 ## Design
 
