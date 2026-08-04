@@ -96,15 +96,20 @@ outcome is a valid, reportable result, not a defect in this verification.
 
 ### 2. Duplicate Detection Criteria
 
-A **duplicate participant** is defined as:
-- Two or more rows in `ticket_participants` sharing identical values for:
-  - `taskId`
-  - `stageKey` (nullable, treated as NULL match)
-  - `roleKey`
-  - `responsibility` (owner | reviewer | contributor)
-  - `source` (`template` | `assessment` | `manual` | `lane_agent`)
+A **duplicate participant** is defined as two or more rows in `ticket_participants` sharing
+identical values for the slot tuple: `(taskId, stageKey, roleKey, responsibility, source)`.
 
-This is enforced by the unique index `uidx_ticket_participants_slot` on `(task_id, stage_key, role_key, responsibility, source)`.
+This tuple is the conflict target used by both `deriveManifest` and `addParticipant`
+(`onConflictDoUpdate`), which is why repeated derivation is idempotent.
+
+**BA finding F-3 — NULL `stageKey` defeats the uniqueness guarantee.** `stageKey` is nullable, and in
+Postgres `NULL` is never equal to `NULL` under a plain unique index. Two rows that both have
+`stage_key IS NULL` and are otherwise identical therefore do **not** conflict, and `ON CONFLICT` does
+not fire — so the very duplicate this epic is trying to clean up can be inserted repeatedly. Unless
+the index is declared `NULLS NOT DISTINCT` (PG15+) or backed by a partial/`COALESCE` expression index,
+"the duplicate is gone" is **not a stable state**: a later `addParticipant`/`deriveManifest` can
+recreate it. This is the root cause worth fixing and is captured as a follow-up ticket rather than
+being silently assumed away.
 
 **Example from Epic #709:**
 - Row A: `roleKey='engineer'`, `stageKey='development'`, `source='assessment'` (participantId: `0d6423f1-ff54-40fc-9e0a-082956af913f`)
