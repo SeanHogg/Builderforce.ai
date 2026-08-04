@@ -83,7 +83,43 @@
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+### Functional Requirements
+
+| ID | Requirement | Priority | Notes |
+|----|-------------|----------|-------|
+| REQ-1 | The system MUST provide a DELETE API endpoint at `/api/kanban/tasks/:taskId/participants/:participantId` to remove a specific participant from a task's participation manifest | Must Have | Already implemented |
+| REQ-2 | The system MUST provide a DELETE API endpoint at `/api/kanban/tasks/:taskId/participants` accepting `roleKey` and optional `stageKey` to remove all matching participants | Should Have | Not yet implemented - allows removal by role |
+| REQ-3 | The system MUST require MANAGER role to execute participant removal operations | Must Have | Already implemented via `isManager` middleware |
+| REQ-4 | The system MUST verify the participant exists before attempting removal and return 404 if not found | Should Have | Currently silent on non-existent participant |
+| REQ-5 | The system MUST prevent removal of template-derived participants (source='template') to preserve board template integrity | Must Have | Already implemented via source filter |
+| REQ-6 | The system MUST prevent removal of the last participant of a required role when that role is mandated by the board template, unless a waiver reason is provided | Could Have | Not implemented - gap |
+| REQ-7 | The system MUST record an audit log entry for each removal action containing: actor (user/agent), timestamp, task ID, participant ID, roleKey, and action | Must Have | Currently only sign-offs are audited, not removals - gap |
+| REQ-8 | The system MUST invalidate the task's participation manifest cache after successful removal | Must Have | Already implemented via `bump()` |
+| REQ-9 | The system MUST return appropriate HTTP status codes: 200 (success), 400 (bad request), 403 (forbidden), 404 (not found), 500 (server error) | Must Have | Currently returns only 200 or 403 |
+| REQ-10 | The system MUST provide an MCP tool named `kanban_remove_participant` to allow AI agents to remove participants programmatically | Should Have | Not implemented - gap |
+| REQ-11 | The MCP tool MUST accept taskId, participantId (or roleKey for bulk), and optional reason parameter | Should Have | Supports automation workflows |
+
+### Non-Functional Requirements
+
+| ID | Requirement | Priority | Notes |
+|----|-------------|----------|-------|
+| NFR-1 | The removal operation MUST complete within 500ms for 95th percentile requests | Should Have | |
+| NFR-2 | The system MUST maintain data integrity by using database transactions for removal + cache invalidation | Must Have | |
+| NFR-3 | The API MUST be documented with OpenAPI/Swagger specification | Should Have | |
+
+### Data Requirements
+
+| ID | Requirement | Priority | Notes |
+|----|-------------|----------|-------|
+| DR-1 | The participant removal record MUST contain: id, taskId, tenantId, roleKey, stageKey, responsibility, removedAt, removedBy | Must Have | New audit table or extension of existing activity log |
+| DR-2 | The removal audit log MUST be queryable by taskId, tenantId, date range, and actor | Should Have | Supports compliance reporting |
+
+### Integration Requirements
+
+| ID | Requirement | Priority | Notes |
+|----|-------------|----------|-------|
+| IR-1 | The MCP tool MUST integrate with the existing kanban sign-off workflow to re-evaluate gate conditions after removal | Must Have | Already happens via `syncStates()` |
+| IR-2 | The removal action SHOULD trigger a Coordinator tick to dispatch next required role if applicable | Could Have | Currently requires manual coordinator trigger |
 
 ## Design
 
