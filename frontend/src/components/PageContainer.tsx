@@ -33,9 +33,26 @@ type PageContainerProps = {
  * their own layout and intentionally do NOT use this.
  */
 export default function PageContainer({ width = 'full', style, className, children }: PageContainerProps) {
-  // Mobile-safe bottom padding: accounts for the fixed footer nav (56px) + safe area
-  const mobileBottomPadding = process.env.TARGET === 'mobile'
-    ? { padding: `0 16px calc(56px + env(safe-area-inset-bottom, 0px)) 16px` }
+  // Runtime check for mobile viewport to add safe bottom padding
+  // This accounts for the fixed footer nav (72px) + safe area on mobile devices
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    };
+    
+    // Check on mount
+    checkMobile();
+    
+    // Listen for resize
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Mobile-safe bottom padding: accounts for the fixed footer nav (72px) + safe area
+  const mobileBottomPadding = isMobile
+    ? { paddingBottom: 'calc(72px + env(safe-area-inset-bottom, 20px))' }
     : {};
 
   const safeStyle: CSSProperties = {
