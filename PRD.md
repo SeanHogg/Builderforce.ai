@@ -72,7 +72,22 @@ Create a system to explicitly distinguish non-coding tasks that are completed th
 
 ## Requirements
 
-_Owned by the business-analyst — to be authored._
+### Business Requirements (Implemented)
+
+1. **Task Type Distinction**: A new `decision` task type allows explicit tagging of non-coding tasks completed through written decisions.
+
+2. **No PR Requirement**: Decision-type tasks complete without requiring a pull request — the written decision/document serves as the deliverable.
+
+3. **Filterable/Searchable**: The `taskType` field enables filtering decision tasks in the task management system for reporting.
+
+4. **Integration**: The solution integrates with existing kanban board workflows — decision tasks flow through lanes but complete without code.
+
+### Technical Requirements (Implemented)
+
+- TaskType enum extended with `decision` value
+- Database migration for task_type enum (handled via schema)
+- `expectsCodeDeliverable()` updated to recognize decision tasks
+- Role capability system updated to not assign code-producing roles to decision tasks
 
 ## Design
 
