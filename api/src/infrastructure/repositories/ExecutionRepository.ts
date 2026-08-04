@@ -75,6 +75,7 @@ export class ExecutionRepository implements IExecutionRepository {
         sessionId:   plain.sessionId ?? undefined,
         status:      plain.status,
         payload:     plain.payload ?? undefined,
+        source:      plain.source,
       })
       .returning();
     if (!inserted) throw new Error('Execution insert returned no rows');
@@ -122,6 +123,7 @@ function toDomain(row: typeof executionsTable.$inferSelect): Execution {
     sessionId:    row.sessionId ?? null,
     status:       row.status as ExecutionStatus,
     payload:      row.payload ?? null,
+    source:       (row.source === 'vscode' || row.source === 'brain') ? row.source : 'agent',
     cloudAgentRef: row.cloudAgentRef ?? null,
     result:       row.result ?? null,
     errorMessage: row.errorMessage ?? null,

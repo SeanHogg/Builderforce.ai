@@ -91,7 +91,7 @@ const MUTABLE_FIELDS = {
   dataset: ['content', 'columns', 'rows', 'sampleRows', 'rowCount'],
   table: ['content', 'columns', 'rows'],
   spreadsheet: ['content', 'columns', 'rows', 'formulas'],
-  chart: ['content', 'chartType', 'chartLabels', 'chartValues', 'sources'],
+  chart: ['content', 'chartType', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'chartLabels', 'chartValues', 'kpis', 'sources'],
   kpi: ['content', 'value', 'target', 'unit', 'trend', 'sources'],
   dashboard: ['content', 'kpis', 'chartLabels', 'chartValues', 'sources', 'fetchedAt', 'dateRange'],
   report: ['content', 'markdown', 'chartLabels', 'chartValues', 'sources'],
@@ -174,7 +174,7 @@ export function sanitizeCreationObjectPatch(kind: CreationObjectKind, value: unk
  */
 const CONTEXT_FIELDS = [
   'kind', 'title', 'subtitle', 'status', 'resourceId', 'model', 'role', 'focus',
-  'fetchedAt', 'dateRange', 'projectLens', 'columns', 'rowCount', 'sampleRows', 'chartLabels', 'chartValues',
+  'fetchedAt', 'dateRange', 'projectLens', 'columns', 'rowCount', 'sampleRows', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'chartLabels', 'chartValues',
   'projects', 'sources', 'items', 'summary', 'participants', 'evermindVersion',
   'contributions', 'inferenceEnabled', 'teacherModel', 'viewport', 'content', 'markdown',
   'steps', 'websiteHeadline', 'websiteBody', 'websiteCta', 'pages', 'kpis', 'verdict',

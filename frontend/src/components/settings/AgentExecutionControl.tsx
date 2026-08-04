@@ -26,7 +26,7 @@ export default function AgentExecutionControl() {
   const change = useCallback(async (next: boolean) => {
     if (!next && !(await confirm({
       title: 'Disable all agent execution?',
-      message: 'This immediately cancels every queued, running, or paused agent in this workspace and blocks manual, scheduled, and autonomous runs until a manager enables execution again.',
+      message: 'This immediately cancels queued, running, or paused tenant agents and blocks manual, scheduled, and autonomous platform runs until a manager enables execution again. VS Code and Brain chats, Canvas/Create, and page MCP tools remain available.',
       confirmLabel: 'Disable and stop all agents',
       destructive: true,
     }))) return;
@@ -66,8 +66,8 @@ export default function AgentExecutionControl() {
           </div>
           <p style={{ margin: 0, fontSize: 12, lineHeight: 1.6, color: 'var(--text-muted)' }}>
             {disabled
-              ? 'All agent execution is blocked for this workspace. No manual, scheduled, integration, or autonomous run can start.'
-              : 'Emergency workspace override. Disabling stops current agents and prevents every execution path from starting new work.'}
+              ? 'Tenant agent execution is blocked. VS Code and Brain chats, Canvas/Create, and page MCP tools remain available.'
+              : 'Emergency workspace override. Disabling stops tenant agents and blocks manual, scheduled, integration, and autonomous platform runs; interactive VS Code and Brain work remains available.'}
           </p>
         </div>
         <RoleGate capability="runtime.control">

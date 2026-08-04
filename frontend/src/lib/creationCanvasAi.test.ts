@@ -59,6 +59,9 @@ describe('runCreationCanvasAi', () => {
     expect(firstRequest.messages[0].content).toContain('regardless of the current canvas selection');
     expect(firstRequest.messages[0].content).toContain('Never emit tool_code');
     expect(firstRequest.messages[0].content).toContain('Never create a blank drawing or visual placeholder');
+    expect(firstRequest.messages[0].content).toContain('A correction, complaint, question about a displayed value');
+    expect(firstRequest.messages[0].content).toContain('Never create a replacement or duplicate');
+    expect(firstRequest.messages[0].content).toContain('Never claim an object was updated unless canvas_update_object succeeded');
   });
 
   it('does not claim that a large document stub satisfies the requested page count', async () => {

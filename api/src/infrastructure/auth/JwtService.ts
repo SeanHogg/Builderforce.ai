@@ -29,6 +29,9 @@ export interface JwtPayload {
    * through `update_task` was recorded as a person whose id nobody could resolve.
    */
   agt?: string;
+  /** Trusted client surface. Minted by the server for editor sessions; never
+   * inferred from a request header because it controls kill-switch exemptions. */
+  src?: 'vscode';
   iat:  number;
   exp:  number;
 }

@@ -84,6 +84,13 @@ describe('RuntimeService.submit — governance gate stamping', () => {
     expect(getSaveCount()).toBe(0);
   });
 
+  it.each(['vscode', 'brain'] as const)('keeps interactive %s execution available while the switch is disabled', async (source) => {
+    const { svc, getSaveCount } = makeService(undefined, undefined, async () => false);
+
+    await expect(svc.submit({ taskId: 7, tenantId: 1, submittedBy: 'user-1', source })).resolves.toBeDefined();
+    expect(getSaveCount()).toBe(1);
+  });
+
   it('submits normally while workspace execution is enabled', async () => {
     const seen: number[] = [];
     const { svc, getSaveCount } = makeService(undefined, undefined, async (tenantId) => {

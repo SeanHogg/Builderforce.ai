@@ -425,6 +425,9 @@ export const executions = pgTable('executions', {
   sessionId:    varchar('session_id', { length: 128 }),
   status:       executionStatusEnum('status').notNull().default('pending'),
   payload:      text('payload'),
+  /** Authenticated initiating surface. 'agent' is governed by the tenant kill
+   * switch; interactive VSIX/Brain runs remain available. */
+  source:       varchar('source', { length: 16 }).notNull().default('agent'),
   result:       text('result'),
   errorMessage: text('error_message'),
   /** Cloud agent that actually ran this execution (ide_agents.id by value, no FK).

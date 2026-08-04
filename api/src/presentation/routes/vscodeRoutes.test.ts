@@ -88,7 +88,7 @@ describe('vscodeRoutes — workspace (tenant) management', () => {
     expect(mintTenantSessionToken).toHaveBeenCalledTimes(1);
     const [, secret, opts] = mintTenantSessionToken.mock.calls[0] as any[];
     expect(secret).toBe('test-secret');
-    expect(opts).toMatchObject({ userId: USER, tenantId: 8 });
+    expect(opts).toMatchObject({ userId: USER, tenantId: 8, clientSurface: 'vscode' });
   });
 
   it('POST /tenants/:id/token refuses a workspace the user is NOT a member of (403)', async () => {

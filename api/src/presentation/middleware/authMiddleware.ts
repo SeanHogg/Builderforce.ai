@@ -131,6 +131,7 @@ export const authMiddleware: MiddlewareHandler<HonoEnv> = async (c, next) => {
   // …and a cloud agent replaying a route as itself publishes the agent it acts as, so a
   // write can credit the agent rather than the ref parked in `sub`.
   if (payload.agt) c.set('agentActorRef', payload.agt);
+  if (payload.src === 'vscode') c.set('clientSurface', 'vscode');
   updateCaughtErrorContext({ tenantId: payload.tid, userId: payload.sub });
   if (payload.sid) c.set('sessionId', payload.sid);
 

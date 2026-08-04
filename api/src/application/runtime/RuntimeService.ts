@@ -29,6 +29,8 @@ export interface SubmitTaskDto {
   submittedBy: string;
   sessionId?:  string | null;
   payload?:    string;
+  /** Trusted execution surface, assigned by server routing/auth context. */
+  source?:     'agent' | 'vscode' | 'brain';
 }
 
 export interface UpdateExecutionDto {
@@ -345,7 +347,8 @@ export class RuntimeService {
   }
 
   async submit(dto: SubmitTaskDto): Promise<Execution> {
-    if (this.isAgentExecutionEnabled && !(await this.isAgentExecutionEnabled(dto.tenantId))) {
+    const source = dto.source ?? 'agent';
+    if (source === 'agent' && this.isAgentExecutionEnabled && !(await this.isAgentExecutionEnabled(dto.tenantId))) {
       throw new ForbiddenError(
         'Agent execution is disabled for this workspace. A manager must re-enable it in Settings.',
       );
@@ -382,6 +385,7 @@ export class RuntimeService {
         submittedBy: dto.submittedBy,
         sessionId:   dto.sessionId ?? null,
         payload:     payload ?? null,
+        source,
       }),
     );
 
@@ -397,6 +401,7 @@ export class RuntimeService {
         agentRegistrationId: dto.agentRegistrationId ?? null,
         agentHostId: dto.agentHostId ?? null,
         sessionId: dto.sessionId ?? null,
+        source,
       }),
     }));
 

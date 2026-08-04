@@ -104,6 +104,23 @@ export function canvasChangesCanAutoApply(changes: readonly ProposedCanvasChange
 type MergeItem = { key: string; source: CreationFlowNode; target: CreationFlowNode | null; choice: 'branch' | 'parent' };
 type MergeReview = { parentId: string; parentRevision: number; parentNodes: CreationFlowNode[]; parentEdges: Edge[]; items: MergeItem[] };
 type FramePreset = { id: string; name: string; data: CreationNodeData };
+
+/** A follow-up about the selected object is an edit unless the user clearly asks
+ * for another object. This is also enforced at the tool boundary so a model that
+ * ignores the prompt cannot silently duplicate a chart while claiming an update. */
+export function duplicateAddUpdateTarget(
+  prompt: string,
+  kind: CreationObjectKind,
+  nodes: CreationFlowNode[],
+  selectedIds: string[],
+): CreationFlowNode | undefined {
+  const selected = nodes.find((node) => selectedIds.includes(node.id) && node.data.kind === kind && node.data.kind !== 'chat');
+  if (!selected) return undefined;
+  const escapedKind = kind.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll('-', '[ -]');
+  const explicitlyCreatesObject = new RegExp(`\\b(?:create|add|insert|duplicate|copy)\\s+(?:(?:a|an|another|new|additional|second|one)\\s+)?(?:analytical\\s+)?${escapedKind}\\b`, 'i').test(prompt)
+    || /\b(?:another|new|additional|second)\s+(?:object|visual|widget|version)\b/i.test(prompt);
+  return explicitlyCreatesObject ? undefined : selected;
+}
 type CanvasTimelineMessage = Pick<CreationTimelineMessage, 'clientMessageId' | 'messageRole' | 'body' | 'createdAt'> & { id?: number };
 type BrowserSpeechRecognition = { lang: string; interimResults: boolean; onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void };
 type AccountGate = { title: string; description: string; action: string };
@@ -1530,6 +1547,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const args = raw as { kind?: CreationObjectKind; title?: string; subtitle?: string; status?: string; fields?: unknown; x?: number; y?: number; width?: number; height?: number };
       const allowed = new Set(CREATION_OBJECT_REGISTRY.map((definition) => definition.kind));
       if (!args.kind || !allowed.has(args.kind)) return { error: 'Unsupported canvas object kind' };
+      const updateTarget = duplicateAddUpdateTarget(prompt, args.kind, nodes, effectiveSelectedIds);
+      if (updateTarget) return { error: `This is a correction to selected ${args.kind} ${updateTarget.id}. Call canvas_update_object for that object instead of creating a duplicate.` };
       const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
       const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
       const node = newNode(args.kind, nextCanvasObjectPosition([...nodes, ...stagedNodes], args, narrowViewport));
@@ -1675,7 +1694,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.delete', label: `Delete connection ${connectionId}`, connectionId });
       return { ok: true, proposed: true, connectionId };
     },
-  }], [canEdit, edges, nodes, persistence, requireAccount, resolvedScopeMode, scopedEdges, scopedNodes, sessionId]);
+  }], [canEdit, edges, effectiveSelectedIds, nodes, persistence, prompt, requireAccount, resolvedScopeMode, scopedEdges, scopedNodes, sessionId]);
 
   const evaluateCanvas = useCallback(() => {
     if (!prompt.trim() || thinking) return;
@@ -2041,9 +2060,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const renderedNodes = useMemo(() => nodes.map((node) => {
     const attachedEvermind = node.data.kind === 'evermind' && typeof node.data.resourceId === 'string' && /^evermind:\d+$/.test(node.data.resourceId);
     const live = evermindLiveByNodeId[node.id];
-    const withLiveData = attachedEvermind ? { ...node, data: { ...node.data, ...(live ?? { evermindLoading: true, status: 'Syncing project…' }) } } : node;
+    const liveNode = attachedEvermind ? { ...node, data: { ...node.data, ...(live ?? { evermindLoading: true, status: 'Syncing project…' }) } } : node;
+    const hasDatasetConnection = ['chart', 'dashboard', 'report'].includes(liveNode.data.kind) && edges.some((edge) => {
+      const otherId = edge.source === liveNode.id ? edge.target : edge.target === liveNode.id ? edge.source : null;
+      return otherId != null && nodes.some((candidate) => candidate.id === otherId && ['dataset', 'table', 'spreadsheet'].includes(candidate.data.kind));
+    });
+    const withLiveData = hasDatasetConnection && /connect a dataset/i.test(String(liveNode.data.status || ''))
+      ? { ...liveNode, data: { ...liveNode.data, status: 'Dataset connected' } }
+      : liveNode;
     return withLiveData.data.placementHidden === true ? { ...withLiveData, hidden: !showHidden, style: showHidden ? { ...withLiveData.style, opacity: .42 } : withLiveData.style } : withLiveData;
-  }), [evermindLiveByNodeId, nodes, showHidden]);
+  }), [edges, evermindLiveByNodeId, nodes, showHidden]);
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
     creation: (props) => <CreationNode {...props} canRun={canRun} onRun={(nodeId) => runWorkflow(nodeId)} />,
   }), [canRun, runWorkflow]);

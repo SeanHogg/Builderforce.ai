@@ -215,17 +215,30 @@ function WebsiteBody({ data }: { data: CreationNodeData }) {
 }
 
 function DashboardBody({ data }: { data: CreationNodeData }) {
-  const labels = Array.isArray(data.chartLabels) ? data.chartLabels.map(String).slice(0, 6) : [];
-  const values = Array.isArray(data.chartValues) ? data.chartValues.map(Number).slice(0, 6) : [];
+  const labels = Array.isArray(data.chartLabels) ? data.chartLabels.map(String).slice(0, 8) : [];
+  const values = Array.isArray(data.chartValues) ? data.chartValues.map(Number).slice(0, 8) : [];
   const max = Math.max(1, ...values.filter(Number.isFinite));
   const dateRange = optionLabel(data.dateRange, { '30d': 'Last 30 days', '7d': 'Last 7 days', qtd: 'Quarter to date' }, 'Last 30 days');
+  const authoredKpis = Array.isArray(data.kpis) ? data.kpis.slice(0, 6) : [];
+  const kpis = authoredKpis.length ? authoredKpis : data.kind === 'dashboard' ? [{ label: 'Reach', value: '212K', trend: '↑ 18.4%' }, { label: 'CTR', value: '3.6%', trend: '↑ 0.6pp' }, { label: 'Conversion', value: '2.1%', trend: '↑ 0.3pp' }] : [];
+  const palette = ['#3978f6', '#25b7a3', '#7657df', '#f4a126', '#e85d75', '#46a4d9', '#9b6ad6', '#68b36b'];
+  const positiveValues = values.map((value) => Number.isFinite(value) ? Math.max(0, value) : 0);
+  const total = positiveValues.reduce((sum, value) => sum + value, 0);
+  let cursor = 0;
+  const donutStops = positiveValues.map((value, index) => {
+    const start = total ? cursor / total * 100 : 0;
+    cursor += value;
+    const end = total ? cursor / total * 100 : 0;
+    return `${palette[index % palette.length]} ${start}% ${end}%`;
+  }).join(', ');
   return (
     <>
       {data.kind === 'dashboard' && <div className={styles.widgetContext}><span><small>Date range</small><b>{dateRange}</b></span>{typeof data.fetchedAt === 'string' && <span><small>Refreshed</small><b>{new Date(data.fetchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</b></span>}</div>}
-      <div className={styles.kpis}>{(Array.isArray(data.kpis) && data.kpis.length ? data.kpis.slice(0, 6) : [{ label: 'Reach', value: '212K', trend: '↑ 18.4%' }, { label: 'CTR', value: '3.6%', trend: '↑ 0.6pp' }, { label: 'Conversion', value: '2.1%', trend: '↑ 0.3pp' }]).map((raw, index) => { const item = asRecord(raw, { label: `Metric ${index + 1}`, value: raw }); return <div key={`${String(item.label)}-${index}`}><small>{String(item.label || `Metric ${index + 1}`)}</small><strong>{String(item.value ?? '—')}</strong><em>{String(item.trend || '')}</em></div>; })}</div>
+      {kpis.length > 0 && <div className={styles.kpis}>{kpis.map((raw, index) => { const item = asRecord(raw, { label: `Metric ${index + 1}`, value: raw }); return <div key={`${String(item.label)}-${index}`}><small>{String(item.label || `Metric ${index + 1}`)}</small><strong>{String(item.value ?? '—')}</strong><em>{String(item.trend || '')}</em></div>; })}</div>}
+      {typeof data.chartTitle === 'string' && data.chartTitle.trim() && <strong className={styles.chartTitle}>{data.chartTitle}</strong>}
       <div className={styles.charts}>
-        <div><small>{labels.length ? 'Imported data' : 'Funnel'}</small>{labels.length ? <div style={{ display: 'grid', gap: 5, marginTop: 7 }}>{labels.map((label, index) => <div key={`${label}-${index}`} style={{ display: 'grid', gridTemplateColumns: '70px 1fr 38px', alignItems: 'center', gap: 5, fontSize: 9 }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span><i style={{ display: 'block', height: 7, borderRadius: 5, background: '#08b59d', width: `${Math.max(4, (values[index] || 0) / max * 100)}%` }} /><b>{Number.isFinite(values[index]) ? values[index] : 0}</b></div>)}</div> : <div className={styles.funnel}><i /><i /><i /><i /></div>}</div>
-        <div><small>Channel mix</small><div className={styles.donut} /></div>
+        <div><small>{typeof data.yAxisLabel === 'string' && data.yAxisLabel.trim() ? data.yAxisLabel : labels.length ? 'Task count by status' : 'Funnel'}</small>{labels.length ? <><div style={{ display: 'grid', gap: 5, marginTop: 7 }}>{labels.map((label, index) => <div key={`${label}-${index}`} style={{ display: 'grid', gridTemplateColumns: '70px 1fr 38px', alignItems: 'center', gap: 5, fontSize: 9 }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span><i style={{ display: 'block', height: 7, borderRadius: 5, background: '#08b59d', width: `${Math.max(4, (values[index] || 0) / max * 100)}%` }} /><b>{Number.isFinite(values[index]) ? values[index] : 0}</b></div>)}</div>{typeof data.xAxisLabel === 'string' && data.xAxisLabel.trim() && <small className={styles.axisLabel}>{data.xAxisLabel}</small>}</> : <div className={styles.funnel}><i /><i /><i /><i /></div>}</div>
+        <div><small>{labels.length ? 'Distribution' : 'Channel mix'}</small>{labels.length && total > 0 ? <div className={styles.donutChart}><div className={styles.donut} role="img" aria-label={labels.map((label, index) => `${label}: ${positiveValues[index] ?? 0}`).join(', ')} style={{ background: `conic-gradient(${donutStops})` }} /><div className={styles.donutLegend}>{labels.map((label, index) => <span key={`${label}-legend-${index}`} title={`${label}: ${positiveValues[index] ?? 0}`}><i style={{ background: palette[index % palette.length] }} /><b>{label}</b><em>{positiveValues[index] ?? 0}</em></span>)}</div></div> : <div className={styles.donut} />}</div>
       </div>
     </>
   );

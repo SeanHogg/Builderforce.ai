@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { associateBrainWithArtifacts, canvasChangesCanAutoApply, CreationCanvas, persistCanonicalProjectPrd, projectEvermindNodePatch, shouldAcquireCanvasObjectLock, type ProposedCanvasChange } from './CreationCanvas';
+import { associateBrainWithArtifacts, canvasChangesCanAutoApply, CreationCanvas, duplicateAddUpdateTarget, persistCanonicalProjectPrd, projectEvermindNodePatch, shouldAcquireCanvasObjectLock, type ProposedCanvasChange } from './CreationCanvas';
 import { CreationNode } from './CreationNode';
 import { specsApi } from '@/lib/builderforceApi';
 import type { CreationFlowNode } from './CreationNode';
@@ -120,6 +120,13 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(twice[0]).toMatchObject({ source: 'brain', target: 'artifact', label: 'Brain context', data: { connectionKind: 'reference' } });
   });
 
+  it('redirects selected-object corrections to update while allowing an explicit additional chart', () => {
+    const chart = { id: 'chart-1', type: 'creation', position: { x: 0, y: 0 }, data: { kind: 'chart', title: 'Tasks by status' } } satisfies CreationFlowNode;
+    expect(duplicateAddUpdateTarget('What do you mean by Reach? Change those labels.', 'chart', [chart], [chart.id])).toBe(chart);
+    expect(duplicateAddUpdateTarget('Add labels to the chart', 'chart', [chart], [chart.id])).toBe(chart);
+    expect(duplicateAddUpdateTarget('Create another chart for priority', 'chart', [chart], [chart.id])).toBeUndefined();
+  });
+
   it('fills the persisted project boundary with the visible project card', () => {
     render(<CreationNode
       id="project-node"
@@ -161,6 +168,26 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     rerender(<CreationNode {...props} data={{ kind: 'project', title: 'BuilderForce.AI', projectLens: 'customer-feedback', feedback: ['Faster onboarding'] }} />);
     expect(screen.getByText('Customer feedback')).toBeInTheDocument();
     expect(screen.getByText('Faster onboarding')).toBeInTheDocument();
+  });
+
+  it('renders authored chart labels and values instead of an unlabeled placeholder mix', () => {
+    render(<CreationNode
+      id="status-chart" type="creation" selected={false} dragging={false} zIndex={0}
+      selectable deletable draggable isConnectable positionAbsoluteX={0} positionAbsoluteY={0}
+      data={{
+        kind: 'chart', title: 'Task status distribution', chartType: 'doughnut', chartTitle: 'Current task status', xAxisLabel: 'Status', yAxisLabel: 'Task count',
+        chartLabels: ['In Progress', 'Ready', 'Done', 'To Do', 'Backlog', 'Blocked', 'In Review', 'Review'],
+        chartValues: [95, 42, 35, 18, 12, 12, 3, 2],
+      }}
+    />);
+
+    expect(screen.getByRole('img', { name: /In Progress: 95.*Review: 2/ })).toBeInTheDocument();
+    expect(screen.getByText('Distribution')).toBeInTheDocument();
+    expect(screen.getByText('Current task status')).toBeInTheDocument();
+    expect(screen.getByText('Status')).toBeInTheDocument();
+    expect(screen.getByText('Task count')).toBeInTheDocument();
+    expect(screen.getAllByText('In Review')).toHaveLength(2);
+    expect(screen.queryByText('Reach')).not.toBeInTheDocument();
   });
 
   it('visualizes single-project quality diagnostics and recommendations', () => {

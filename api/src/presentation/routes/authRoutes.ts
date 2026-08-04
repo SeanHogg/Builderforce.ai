@@ -665,6 +665,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const { token, expiresIn } = await mintTenantSessionToken(db, c.env.JWT_SECRET, {
       userId: row.createdByUserId,
       tenantId: row.tenantId,
+      clientSurface: 'vscode',
       userAgent: getUserAgent(c),
       ipAddress: getClientIp(c),
     });

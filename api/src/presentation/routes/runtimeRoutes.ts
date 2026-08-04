@@ -992,6 +992,10 @@ async function cancelTenantExecutions(
     .where(and(
       eq(executions.tenantId, tenantId),
       inArray(executions.status, [...statuses]),
+      // The workspace switch stops autonomous/platform agents. Interactive
+      // editor and Brain runs deliberately remain live; explicit Cancel all
+      // (includePaused=false) still means every run.
+      includePaused ? eq(executions.source, 'agent') : undefined,
       liveExecution(),
     ));
 
@@ -1137,6 +1141,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       submittedBy: c.get('userId'),
       sessionId:   body.sessionId,
       payload:     body.payload,
+      source:      c.get('clientSurface') === 'vscode' ? 'vscode' : 'agent',
     });
 
     const result = await dispatchAndQueue(c, runtimeService, db, execution, taskRow, body.payload);
@@ -1229,6 +1234,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       submittedBy: c.get('userId'),
       sessionId:   body.sessionId,
       payload:     body.payload,
+      source:      c.get('clientSurface') === 'vscode' ? 'vscode' : 'agent',
     });
 
     const result = await dispatchAndQueue(c, runtimeService, db, execution, taskRow, body.payload);
@@ -2044,7 +2050,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
     const execution = await runtimeService.getExecution(id).catch(() => null);
     if (!execution) return c.json({ error: 'Execution not found' }, 404);
-    const plain = execution.toPlain() as { tenantId?: number; agentHostId?: number | null; status?: string; taskId?: number; payload?: string | null; cloudAgentRef?: string | null };
+    const plain = execution.toPlain() as { tenantId?: number; agentHostId?: number | null; status?: string; taskId?: number; payload?: string | null; cloudAgentRef?: string | null; source?: 'agent' | 'vscode' | 'brain' };
     const tenantId = c.get('tenantId');
     if (plain.tenantId != null && plain.tenantId !== tenantId) {
       return c.json({ error: 'Execution not found' }, 404);
@@ -2103,6 +2109,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       tenantId,
       submittedBy: c.get('userId'),
       payload: followUpPayload,
+      source: plain.source === 'vscode' || plain.source === 'brain' ? plain.source : 'agent',
     });
 
     // Echo the directive on the new run's thread (display-only — it is already the
@@ -2469,6 +2476,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
       tenantId: c.get('tenantId'),
       submittedBy: c.get('userId'),
       payload: body.payload,
+      source: c.get('clientSurface') === 'vscode' ? 'vscode' : 'agent',
     });
 
     const targets = await getDispatchTargets(db, c.get('tenantId'), null);
