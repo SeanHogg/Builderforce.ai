@@ -131,9 +131,15 @@ export interface TicketReadiness {
  * maps to a PRODUCING role (developer / qa-tester / tech-writer / devops) then it is
  * meant to yield a branch. An `other`/unclassified ticket, and an Epic (which delegates
  * to children rather than producing directly), do not.
+ *
+ * Decision-type tasks (non-coding work completed through written decisions) also do not
+ * expect a code deliverable — they complete via their written deliverable instead.
  */
 export function expectsCodeDeliverable(taskType: string | null, actionType: string | null): boolean {
+  // Epics delegate to children and don't produce code directly
   if (taskType === 'epic') return false;
+  // Decision-type tasks complete through written decisions, not code
+  if (taskType === 'decision') return false;
   return producerRoleForActionType(actionType) != null;
 }
 
