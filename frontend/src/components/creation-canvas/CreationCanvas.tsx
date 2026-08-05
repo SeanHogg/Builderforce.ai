@@ -64,6 +64,7 @@ import { AITrainingPanel } from '@/components/AITrainingPanel';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
+const PALETTE_OPEN_STORAGE_KEY = 'builderforce:create:palette-open';
 const INSPECTOR_WIDTH_STORAGE_KEY = 'builderforce:create:inspector-width';
 const INSPECTOR_DEFAULT_WIDTH = 270;
 const INSPECTOR_MIN_WIDTH = 270;
@@ -338,6 +339,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const allowed = new Set(CREATION_PALETTE_GROUPS.map((group) => group.group));
       setCollapsedPaletteGroups(new Set(Array.isArray(saved) ? saved.filter((group): group is CreationObjectGroup => typeof group === 'string' && allowed.has(group as CreationObjectGroup)) : []));
     } catch { setCollapsedPaletteGroups(new Set()); }
+    try {
+      const savedOpen = localStorage.getItem(PALETTE_OPEN_STORAGE_KEY);
+      setPaletteOpen(savedOpen === '1' || (savedOpen == null && window.innerWidth > 760));
+    } catch { setPaletteOpen(window.innerWidth > 760); }
     setPalettePreferencesReady(true);
   }, []);
   const [presentMode, setPresentMode] = useState(initialPresent);
@@ -407,8 +412,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [sessionId]);
   useEffect(() => {
     if (!palettePreferencesReady) return;
-    try { localStorage.setItem(PALETTE_COLLAPSE_STORAGE_KEY, JSON.stringify([...collapsedPaletteGroups])); } catch { /* storage can be unavailable in hardened contexts */ }
-  }, [collapsedPaletteGroups, palettePreferencesReady]);
+    try {
+      localStorage.setItem(PALETTE_COLLAPSE_STORAGE_KEY, JSON.stringify([...collapsedPaletteGroups]));
+      localStorage.setItem(PALETTE_OPEN_STORAGE_KEY, paletteOpen ? '1' : '0');
+    } catch { /* storage can be unavailable in hardened contexts */ }
+  }, [collapsedPaletteGroups, paletteOpen, palettePreferencesReady]);
   const flowRef = useRef<ReactFlowInstance<CreationFlowNode, Edge> | null>(null);
   const hydrated = useRef(false);
   const revision = useRef(1);

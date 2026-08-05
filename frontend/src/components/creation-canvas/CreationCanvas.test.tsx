@@ -114,6 +114,24 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(group).toContainElement(screen.getByRole('button', { name: 'Redo canvas change' }));
   });
 
+  it('defaults the mobile palette closed and remembers the user preference', async () => {
+    const desktopWidth = window.innerWidth;
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });
+    const first = render(<CreationCanvas sessionId="mobile-palette-test" persistence="local" />);
+
+    await waitFor(() => expect(screen.queryByText('Add to canvas')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle object palette' }));
+    await waitFor(() => expect(screen.getByText('Add to canvas')).toBeInTheDocument());
+    expect(localStorage.getItem('builderforce:create:palette-open')).toBe('1');
+
+    first.unmount();
+    render(<CreationCanvas sessionId="mobile-palette-restored-test" persistence="local" />);
+    await waitFor(() => expect(screen.getByText('Add to canvas')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Close palette' }));
+    await waitFor(() => expect(localStorage.getItem('builderforce:create:palette-open')).toBe('0'));
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: desktopWidth });
+  });
+
   it('opens the outcome scorecard from the session bar and explains local baselines', () => {
     render(<CreationCanvas sessionId="outcome-metrics-test" persistence="local" />);
 
