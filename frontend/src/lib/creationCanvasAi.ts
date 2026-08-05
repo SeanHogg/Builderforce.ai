@@ -16,6 +16,10 @@ import { ensureGuestToken } from '@/lib/guestChatApi';
 
 type CanvasAiOptions = {
   prompt: string;
+  /** Stable across every agent/model iteration caused by one composer submit. */
+  guestTurnId?: string;
+  /** Original composer text when this is an internal specialist/synthesis call. */
+  guestTurnInput?: string;
   canvasSnapshot: string;
   persistence: 'local' | 'server';
   canvasActions: BrainAction[];
@@ -125,6 +129,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
   }
   const config = options.persistence === 'server' ? brainConfig : guestBrainConfig;
   const transport = config.transport;
+  const guestTurnId = options.guestTurnId ?? crypto.randomUUID();
   let mcpActions: BrainAction[] = [];
   if (options.persistence === 'server') {
     try {
@@ -191,6 +196,7 @@ export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<str
       model: options.model,
       modelStrict: options.modelStrict,
       routingMode: options.routingMode,
+      metadata: { guestTurnId, guestTurnInput: options.guestTurnInput ?? options.prompt },
     }, { onTextDelta: (delta) => { finalText += delta; options.onText?.(finalText); } });
     if (!result.toolCalls.length) {
       if (requestedPages != null && documentWords != null && documentWords < requestedPages * WORDS_PER_DRAFT_PAGE) {

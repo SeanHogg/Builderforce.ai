@@ -1044,6 +1044,17 @@ function proxyForCompletion(
  * Cap exhaustion returns a 402 the UI turns into a "sign up free to keep going"
  * wall — the whole point of the funnel.
  */
+async function guestTurnFingerprint(messages: ChatCompletionRequest['messages'], originalUserInput?: string): Promise<string> {
+  // Tool-loop continuations append assistant/tool messages, while the system and
+  // user messages remain unchanged. Hash only that stable user-authored spine so
+  // retries within one submit dedupe, but reusing an id for different input does not.
+  const stableInput = originalUserInput != null
+    ? JSON.stringify(originalUserInput.slice(0, 8_000))
+    : JSON.stringify(messages.filter((message) => message.role === 'system' || message.role === 'user'));
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(stableInput));
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
 async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   if (!guestBrainEnabled(c.env)) {
     return c.json({ error: 'Guest chat is disabled.', code: 'guest_brain_disabled' }, 503);
@@ -1062,8 +1073,17 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
 
   const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null;
   const guest = new GuestChatService(buildDatabase(c.env));
+  const metadata = (body as unknown as { metadata?: Record<string, unknown> }).metadata;
+  const suppliedTurnId = typeof metadata?.guestTurnId === 'string' && /^[A-Za-z0-9:_-]{1,128}$/.test(metadata.guestTurnId)
+    ? metadata.guestTurnId
+    : null;
+  const originalUserInput = typeof metadata?.guestTurnInput === 'string' ? metadata.guestTurnInput : undefined;
+  const turnFingerprint = await guestTurnFingerprint(body.messages, originalUserInput);
+  // Fingerprint fallback keeps older clients from charging each appended tool
+  // continuation during a rolling deploy. New clients always send a unique id.
+  const turnId = suppliedTurnId ?? turnFingerprint;
 
-  const cap = await guest.checkCap(c.env as Env, visitorId, ip);
+  const cap = await guest.checkCap(c.env as Env, visitorId, ip, turnId, turnFingerprint);
   if (!cap.allowed) {
     // 429 (not 402) — a guest has no plan to upgrade, so this must NOT trip the
     // paid-plan upgrade modal. The UI shows a "sign up free to keep going" wall,
@@ -1105,8 +1125,8 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   // this still happens before the response body is handed to the browser, so an
   // aborted stream counts; gateway/vendor failures do not burn a guest turn.
   let remaining = cap.remaining;
-  if (result.response.ok) {
-    remaining = await guest.consumeMessage(c.env as Env, visitorId, ip);
+  if (result.response.ok && !cap.alreadyConsumed) {
+    remaining = await guest.consumeMessage(c.env as Env, visitorId, ip, turnId, turnFingerprint);
   }
 
   const headers = new Headers();

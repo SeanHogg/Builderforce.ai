@@ -1183,6 +1183,8 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // and auditing it would double-count the turn.
   const metadata: CompletionMetadata = {
     chatId,
+    guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    guestTurnInput: latestUserText(convo),
     ...(req.projectId != null ? { projectId: req.projectId } : {}),
   };
 

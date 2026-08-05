@@ -24,12 +24,14 @@ import type { MarketingTouch } from '../marketing/MarketingService';
 
 export interface GuestCapResult {
   allowed: boolean;
-  /** Remaining visitor messages today (0 when blocked on the visitor axis). */
+  /** Remaining user submits today (0 when blocked on the visitor axis). */
   remaining: number;
   /** The per-visitor daily limit (for display). */
   limit: number;
   /** Why it was blocked, when `allowed` is false. */
   reason?: 'visitor' | 'ip';
+  /** This model call continues a user turn that was already charged. */
+  alreadyConsumed: boolean;
 }
 
 /** UTC day key `YYYYMMDD` for the per-IP KV counter. */
@@ -73,17 +75,24 @@ export class GuestChatService {
   }
 
   /** Today's per-visitor guest message count (0 when the stored day isn't today). */
-  private async visitorCountToday(visitorId: string): Promise<number> {
+  private async visitorStateToday(visitorId: string): Promise<{ count: number; turnId: string | null; turnFingerprint: string | null }> {
     const [row] = await this.db
-      .select({ day: marketingSessions.guestChatDay, count: marketingSessions.guestChatCount })
+      .select({
+        day: marketingSessions.guestChatDay,
+        count: marketingSessions.guestChatCount,
+        turnId: marketingSessions.guestChatTurnId,
+        turnFingerprint: marketingSessions.guestChatTurnFingerprint,
+      })
       .from(marketingSessions)
       .where(eq(marketingSessions.visitorId, visitorId))
       .limit(1);
-    if (!row || !row.day) return 0;
+    if (!row || !row.day) return { count: 0, turnId: null, turnFingerprint: null };
     const today = new Date().toISOString().slice(0, 10);
     // guestChatDay is a `date` column — Drizzle returns it as a `YYYY-MM-DD` string.
     const stored = typeof row.day === 'string' ? row.day : new Date(row.day).toISOString().slice(0, 10);
-    return stored === today ? row.count : 0;
+    return stored === today
+      ? { count: row.count, turnId: row.turnId, turnFingerprint: row.turnFingerprint }
+      : { count: 0, turnId: null, turnFingerprint: null };
   }
 
   /** Current per-IP guest message count today (0 when KV unbound or unset). */
@@ -100,25 +109,28 @@ export class GuestChatService {
    * consuming the allowance. Enforces the per-visitor cap first, then the per-IP
    * backstop. Read-only.
    */
-  async checkCap(env: Env, visitorId: string, ip: string | null): Promise<GuestCapResult> {
+  async checkCap(env: Env, visitorId: string, ip: string | null, turnId?: string, turnFingerprint?: string): Promise<GuestCapResult> {
     const limit = GUEST_CHAT_LIMITS.messagesDailyLimit;
-    const used = await this.visitorCountToday(visitorId);
-    if (used >= limit) return { allowed: false, remaining: 0, limit, reason: 'visitor' };
+    const state = await this.visitorStateToday(visitorId);
+    const used = state.count;
+    const alreadyConsumed = !!turnId && !!turnFingerprint && state.turnId === turnId && state.turnFingerprint === turnFingerprint;
+    if (alreadyConsumed) return { allowed: true, remaining: Math.max(limit - used, 0), limit, alreadyConsumed: true };
+    if (used >= limit) return { allowed: false, remaining: 0, limit, reason: 'visitor', alreadyConsumed: false };
 
     const ipUsed = await this.ipCountToday(env, ip);
     if (ipUsed >= GUEST_CHAT_LIMITS.ipMessagesDailyLimit) {
-      return { allowed: false, remaining: Math.max(limit - used, 0), limit, reason: 'ip' };
+      return { allowed: false, remaining: Math.max(limit - used, 0), limit, reason: 'ip', alreadyConsumed: false };
     }
-    return { allowed: true, remaining: Math.max(limit - used, 0), limit };
+    return { allowed: true, remaining: Math.max(limit - used, 0), limit, alreadyConsumed: false };
   }
 
   /**
-   * Consume ONE message from the guest's allowance — bump the per-visitor counter
+   * Consume ONE user submit from the guest's allowance — bump the per-visitor counter
    * (resetting on a new UTC day) and the per-IP KV counter. Called up-front,
    * before dispatch, so an aborted/streamed request still counts (an abuser can't
    * dodge the cap by killing the stream). Returns the remaining visitor budget.
    */
-  async consumeMessage(env: Env, visitorId: string, ip: string | null): Promise<number> {
+  async consumeMessage(env: Env, visitorId: string, ip: string | null, turnId: string, turnFingerprint: string): Promise<number> {
     // Single statement: reset the day + counters when the stored day isn't today,
     // else increment. `guest_chat_tokens` is topped up separately once the stream
     // reports usage (see addTokens).
@@ -128,6 +140,8 @@ export class GuestChatService {
         guestChatDay: sql`CURRENT_DATE`,
         guestChatCount: sql`CASE WHEN ${marketingSessions.guestChatDay} = CURRENT_DATE THEN ${marketingSessions.guestChatCount} + 1 ELSE 1 END`,
         guestChatTokens: sql`CASE WHEN ${marketingSessions.guestChatDay} = CURRENT_DATE THEN ${marketingSessions.guestChatTokens} ELSE 0 END`,
+        guestChatTurnId: turnId,
+        guestChatTurnFingerprint: turnFingerprint,
         lastSeenAt: sql`now()`,
       })
       .where(eq(marketingSessions.visitorId, visitorId));
@@ -142,8 +156,8 @@ export class GuestChatService {
         });
     }
 
-    const used = await this.visitorCountToday(visitorId);
-    return Math.max(GUEST_CHAT_LIMITS.messagesDailyLimit - used, 0);
+    const state = await this.visitorStateToday(visitorId);
+    return Math.max(GUEST_CHAT_LIMITS.messagesDailyLimit - state.count, 0);
   }
 
   /**

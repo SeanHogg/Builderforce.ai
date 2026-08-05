@@ -7,6 +7,7 @@ import fr from './messages/fr.json';
 import de from './messages/de.json';
 import { LOCALES, DEFAULT_LOCALE, type Locale } from './config';
 import { STALL_CAUSES } from '@/lib/builderforceApi';
+import { CREATION_OBJECT_REGISTRY } from '@/components/creation-canvas/creationObjectRegistry';
 
 /**
  * Catalog guard for the five message files.
@@ -90,6 +91,14 @@ describe('message catalogs', () => {
       const key = `manager.stalls.cause.${cause}`;
       return t(key as never) === key;
     });
+    expect(missing).toEqual([]);
+  });
+
+  it.each(LOCALES)('%s labels every creation canvas object kind', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale] });
+    const missing = CREATION_OBJECT_REGISTRY
+      .map(({ kind }) => kind)
+      .filter((kind) => t(`creationCanvas.object.${kind}` as never) === `creationCanvas.object.${kind}`);
     expect(missing).toEqual([]);
   });
 

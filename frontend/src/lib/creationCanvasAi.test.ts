@@ -34,6 +34,7 @@ describe('runCreationCanvasAi', () => {
 
     const answer = await runCreationCanvasAi({
       prompt: 'build a new LLM',
+      guestTurnId: 'user-submit-1',
       canvasSnapshot: '{"objects":[]}',
       persistence: 'local',
       canvasActions: [{
@@ -48,6 +49,11 @@ describe('runCreationCanvasAi', () => {
     expect(run).toHaveBeenCalledWith({ kind: 'llm', title: 'New LLM' });
     expect(answer).toBe('I proposed a new LLM for review.');
     const firstRequest = mocks.streamChatCompletion.mock.calls[0][0];
+    const secondRequest = mocks.streamChatCompletion.mock.calls[1][0];
+    expect(firstRequest.metadata.guestTurnId).toBe('user-submit-1');
+    expect(secondRequest.metadata.guestTurnId).toBe('user-submit-1');
+    expect(firstRequest.metadata.guestTurnInput).toBe('build a new LLM');
+    expect(secondRequest.metadata.guestTurnInput).toBe('build a new LLM');
     expect(firstRequest.tools).toHaveLength(1);
     expect(firstRequest.messages[0].content).toContain('kind "llm" is a conventional language-model blueprint');
     expect(firstRequest.messages[0].content).toContain('kind "evermind" is BuilderForce\'s self-learning Evermind model');

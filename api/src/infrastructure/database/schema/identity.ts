@@ -1041,6 +1041,8 @@ export const marketingSessions = pgTable('marketing_sessions', {
   guestChatDay:    date('guest_chat_day'),
   guestChatCount:  integer('guest_chat_count').notNull().default(0),
   guestChatTokens: integer('guest_chat_tokens').notNull().default(0),
+  guestChatTurnId: varchar('guest_chat_turn_id', { length: 128 }),
+  guestChatTurnFingerprint: varchar('guest_chat_turn_fingerprint', { length: 64 }),
   firstSeenAt:     timestamp('first_seen_at').notNull().defaultNow(),
   lastSeenAt:      timestamp('last_seen_at').notNull().defaultNow(),
 }, (t) => ({

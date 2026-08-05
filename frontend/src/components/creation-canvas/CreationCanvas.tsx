@@ -1907,6 +1907,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             try {
               const contribution = await runCreationCanvasAi({
                 prompt: 'Contribute a specialist perspective to the latest request.', canvasSnapshot: snapshot,
+                guestTurnId: requestMessageId,
+                guestTurnInput: request,
                 persistence, canvasActions, routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
                 autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
                 participant: { ref, name, instructions: typeof agent.data.instructions === 'string' ? agent.data.instructions : agent.data.subtitle },
@@ -1924,6 +1926,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             ? `Synthesize the invited agents' perspectives and complete the user's requested outcome. Resolve disagreements, make the final Canvas changes, and state what was actually created.`
             : request,
           canvasSnapshot: snapshot, persistence, canvasActions,
+          guestTurnId: requestMessageId,
+          guestTurnInput: request,
           ...(modelSelection.mode === 'model' ? { model: modelSelection.model, modelStrict: true } : {}),
           routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
           autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,

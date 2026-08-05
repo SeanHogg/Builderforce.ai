@@ -5,8 +5,16 @@ import {
   resolveTokenLimits,
   resolveIngestionMonthlyBytes,
   PLAN_LIMITS,
+  GUEST_CHAT_LIMITS,
 } from './PlanLimits';
 import { TenantPlan } from '../shared/types';
+
+describe('PlanLimits — anonymous guest requests', () => {
+  it('allows ten requests per visitor while retaining shared-IP headroom', () => {
+    expect(GUEST_CHAT_LIMITS.messagesDailyLimit).toBe(10);
+    expect(GUEST_CHAT_LIMITS.ipMessagesDailyLimit).toBe(50);
+  });
+});
 
 describe('PlanLimits — image credits are a distinct budget from tokens', () => {
   it('every plan declares an imageCreditsDailyLimit independent of tokenDailyLimit', () => {

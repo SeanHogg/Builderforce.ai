@@ -2801,6 +2801,8 @@ async function runLoop(chatId, c, req) {
   const usedTools = /* @__PURE__ */ new Set();
   const metadata = {
     chatId,
+    guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    guestTurnInput: latestUserText(convo),
     ...req.projectId != null ? { projectId: req.projectId } : {}
   };
   let systemPrompt = resolvedSystemPrompt;

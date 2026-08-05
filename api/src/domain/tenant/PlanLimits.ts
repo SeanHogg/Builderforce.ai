@@ -204,7 +204,7 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
 
 /**
  * Anonymous guest (logged-out) chat allowance — the "try the Brain before you
- * sign up" tier. Deliberately TINY: a logged-out visitor has no account we can
+ * sign up" tier. Deliberately LIMITED: a logged-out visitor has no account we can
  * ban and their visitorId/IP are spoofable, so this is a taste, not a free ride.
  * Signing up unlocks the real FREE tier ({@link PLAN_LIMITS}.free — 10K
  * tokens/day). Metered per visitorId AND per source IP (the spoof backstop) —
@@ -213,11 +213,11 @@ export const PLAN_LIMITS: Record<TenantPlan, PlanLimits> = {
  */
 export const GUEST_CHAT_LIMITS = {
   /** Max assistant turns per visitorId per UTC day. */
-  messagesDailyLimit: 5,
+  messagesDailyLimit: 10,
   /** Max assistant turns per source IP per UTC day — an abuser rotating
    *  visitorIds still hits this. Higher than the per-visitor cap so a shared
    *  office/NAT IP doesn't lock out honest visitors too soon. */
-  ipMessagesDailyLimit: 25,
+  ipMessagesDailyLimit: 50,
   /** Output-token ceiling per guest request (clamped down, never rejected). */
   maxTokensPerRequest: 700,
 } as const;
