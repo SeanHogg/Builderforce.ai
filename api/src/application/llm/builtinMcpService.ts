@@ -19,7 +19,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * Consolidated Gap Register.
  */
 
-import { and, eq, desc, sql, type SQL } from 'drizzle-orm';
+import { and, eq, desc, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { type ToolSchema } from '@builderforce/agent-tools';
 import { advertisedName } from './toolNaming';
 import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
@@ -35,6 +35,7 @@ import { ProjectService } from '../project/ProjectService';
 import { TaskService } from '../task/TaskService';
 import { addManagerDirective } from '../manager/managerDirectives';
 import { createManagerCoachingTask, getEffectiveManagerPolicy } from '../manager/ManagerService';
+import { salesRevenueForecast } from '../sales/salesPolicy';
 import { resolveManagerAssignee } from '../manager/managerPolicy';
 import { TicketParticipantsService } from '../kanban/ticketParticipants';
 import { DEP_TYPES } from '../task/taskDependencies';
@@ -43,7 +44,7 @@ import { TaskRepository } from '../../infrastructure/repositories/TaskRepository
 import { ProjectStatus, TaskPriority, TaskType, TenantRole } from '../../domain/shared/types';
 import { parseJsonObject } from '../../domain/shared/json';
 import { signJwt } from '../../infrastructure/auth/JwtService';
-import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments } from '../../infrastructure/database/schema';
+import { workflows, workflowDefinitions, specs, promptLibraryEntries, promptLibraryVersions, approvalRules, approvals, brainChats, agents, projectAgents, agentAssignments, savedDashboards, dashboardWidgets, alerts, alertEvents, activityLog, boards, cronJobs, portfolios, initiatives, objectives, objectiveLinks, keyResults, ideAgents, marketplaceSkills, artifactAssignments, socControls, socEvidence, pokerSessions, pokerStories, pokerVotes, retrospectives, retroItems, boardConnections, projectRepositories, pullRequests, chatSessions, chatMessages, swimlanes, swimlaneAgentAssignments, tenants, executions, usageSnapshots, toolAuditEvents, executionMessages, agentHosts, agentHostProjects, errorGroups, roadmapItems, projectRoleAssignments, salesAssociateSettings, salesCampaigns, salesCoachingNotes, salesCommissionRules, salesContacts, salesReferrals, salesWeeklyGoals, users } from '../../infrastructure/database/schema';
 import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { McpToolEntry } from './mcpExtensionService';
 import type { Env } from '../../env';
@@ -436,7 +437,58 @@ function summarizeModelStatuses(arr: Array<Record<string, unknown>>): Record<str
 // Catalog
 // ---------------------------------------------------------------------------
 
+const SALES_STAGES = new Set(['new', 'contacted', 'qualified', 'meeting', 'proposal', 'won', 'lost']);
+const SALES_CAMPAIGN_STATUSES = new Set(['draft', 'scheduled', 'active', 'complete']);
+async function salesOwner(ctx: BuiltinCtx, requested: unknown): Promise<string> {
+  if (!ctx.userId) throw new Error('Sales tools require a signed-in user.');
+  const ownerId = str(requested).trim() || ctx.userId;
+  const [viewer] = await ctx.db.select({ accountType: users.accountType, isSuperadmin: users.isSuperadmin }).from(users).where(eq(users.id, ctx.userId)).limit(1);
+  if (!viewer) throw new Error('User not found.');
+  if (ownerId !== ctx.userId && !viewer.isSuperadmin) throw new Error('Only a superadmin can operate another associate’s pipeline.');
+  if (ownerId === ctx.userId && viewer.accountType !== 'sales') throw new Error('Pass associateUserId to operate a sales associate pipeline.');
+  if (ownerId !== ctx.userId) {
+    const [target] = await ctx.db.select({ accountType: users.accountType }).from(users).where(eq(users.id, ownerId)).limit(1);
+    if (target?.accountType !== 'sales') throw new Error('Sales associate not found.');
+  }
+  return ownerId;
+}
+
+function salesText(value: unknown, max: number): string { return str(value).trim().slice(0, max); }
+async function salesSettings(ctx: BuiltinCtx, ownerUserId: string) {
+  const referralCode = `BF${crypto.randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase()}`;
+  const salesCode = `BS${crypto.randomUUID().replace(/-/g, '').slice(0, 10).toUpperCase()}`;
+  const [created] = await ctx.db.insert(salesAssociateSettings).values({ ownerUserId, referralCode, salesCode }).onConflictDoNothing({ target: salesAssociateSettings.ownerUserId }).returning();
+  if (created) return created;
+  const [existing] = await ctx.db.select().from(salesAssociateSettings).where(eq(salesAssociateSettings.ownerUserId, ownerUserId)).limit(1);
+  return existing;
+}
 const CATALOG: BuiltinTool[] = [
+  // ---- Compliance Audit Agent ---------------------------------------------
+  {
+    tool: 'compliance.requirements',
+    mutates: false,
+    description: 'List the jurisdiction matrix used by the Compliance Audit Agent: US federal and state privacy/AI/marketing/minor/accessibility rules plus EU/EEA, UK, Canada/Quebec, Brazil, and Australia. Use this to explain scope or determine applicability before an audit. This is an audit aid, not legal advice.',
+    parameters: obj({}),
+    run: async () => {
+      const { listComplianceJurisdictions } = await import('../tools/complianceJurisdictions');
+      return {
+        jurisdictions: listComplianceJurisdictions(),
+        disclaimer: 'Applicability depends on nexus, thresholds, data, audience, and controller/processor role; counsel must confirm.',
+      };
+    },
+  },
+  {
+    tool: 'compliance.run_audit',
+    mutates: true,
+    description: 'Invoke the Compliance Audit Agent against a project\'s connected GitHub repositories. It records a scored report and files one independently remediable ticket per detected gap for the deep source review. Requires projectId and manager permission. Call this when a user asks to audit a website, application, privacy, AI, or jurisdictional compliance.',
+    parameters: obj({ projectId: N }, ['projectId']),
+    run: async (ctx, a) => replayRoute(
+      ctx,
+      'POST',
+      '/api/tools/audits/privacy-compliance-audit/run',
+      { projectId: num(a.projectId) },
+    ),
+  },
   // ---- Session ----
   {
     tool: 'session.current_model', mutates: false,
@@ -488,6 +540,114 @@ const CATALOG: BuiltinTool[] = [
         ...(premiumSelection ? { premiumSurchargeMillicents: PREMIUM_REQUEST_SURCHARGE_MILLICENTS } : {}),
         premiumAccess: { entitled: premiumAccess.entitled, reason: premiumAccess.reason, ...(premiumAccess.unlock ? { unlock: premiumAccess.unlock } : {}) },
       };
+    },
+  },
+  // ---- Sales associate CRM + marketing execution ----
+  {
+    tool: 'sales.workspace_get', mutates: false,
+    description: 'Load the signed-in sales associate’s complete CRM workspace (contacts, campaigns, weekly goals, and shared coaching notes). A superadmin may pass associateUserId to review that associate inside their shared sales canvas.',
+    parameters: obj({ associateUserId: S }),
+    run: async (ctx, a) => {
+      const ownerId = await salesOwner(ctx, a.associateUserId);
+      const [contacts, campaigns, goals, notes, referrals, settings, commissionRules] = await Promise.all([
+        ctx.db.select().from(salesContacts).where(eq(salesContacts.ownerUserId, ownerId)).orderBy(desc(salesContacts.updatedAt)),
+        ctx.db.select().from(salesCampaigns).where(eq(salesCampaigns.ownerUserId, ownerId)).orderBy(desc(salesCampaigns.updatedAt)),
+        ctx.db.select().from(salesWeeklyGoals).where(eq(salesWeeklyGoals.ownerUserId, ownerId)).limit(1),
+        ctx.db.select().from(salesCoachingNotes).where(eq(salesCoachingNotes.associateUserId, ownerId)).orderBy(desc(salesCoachingNotes.createdAt)),
+        ctx.db.select().from(salesReferrals).where(and(eq(salesReferrals.associateUserId, ownerId), isNotNull(salesReferrals.signupNotifiedAt))).orderBy(desc(salesReferrals.signedUpAt)),
+        salesSettings(ctx, ownerId),
+        ctx.db.select().from(salesCommissionRules).orderBy(salesCommissionRules.plan, salesCommissionRules.billingCycle),
+      ]);
+      return { ownerUserId: ownerId, contacts, campaigns, goals: goals[0] ?? { outreachTarget: 50, contactsTarget: 20, meetingsTarget: 3 }, coachingNotes: notes, referrals, settings, commissionRules, revenueForecast: salesRevenueForecast(settings?.revenueGoalCents ?? 0, commissionRules), referralLinks: settings ? { referral: `https://builderforce.ai/register?ref=${settings.referralCode}`, sales: `https://builderforce.ai/register?ref=${settings.salesCode}` } : null };
+    },
+  },
+  {
+    tool: 'sales.contacts_create', mutates: true,
+    description: 'Create a durable CRM contact from the sales canvas. Use market to identify the target segment and stage to place it in the pipeline.',
+    parameters: obj({ associateUserId: S, name: S, email: S, company: S, market: S, stage: { type: 'string', enum: [...SALES_STAGES] } }, ['name']),
+    run: async (ctx, a) => {
+      const ownerUserId = await salesOwner(ctx, a.associateUserId);
+      const [row] = await ctx.db.insert(salesContacts).values({ ownerUserId, name: salesText(a.name, 255), email: salesText(a.email, 255), company: salesText(a.company, 255), market: salesText(a.market, 255), stage: SALES_STAGES.has(str(a.stage)) ? str(a.stage) : 'new' }).returning();
+      return row;
+    },
+  },
+  {
+    tool: 'sales.contacts_update', mutates: true,
+    description: 'Update a CRM contact or move it to another pipeline stage. Stage changes record the contact touch time.',
+    parameters: obj({ associateUserId: S, contactId: S, name: S, email: S, company: S, market: S, stage: { type: 'string', enum: [...SALES_STAGES] } }, ['contactId']),
+    run: async (ctx, a) => {
+      const ownerId = await salesOwner(ctx, a.associateUserId);
+      const patch: Record<string, unknown> = { updatedAt: new Date() };
+      for (const key of ['name', 'email', 'company', 'market'] as const) if (a[key] != null) patch[key] = salesText(a[key], 255);
+      if (a.stage != null && SALES_STAGES.has(str(a.stage))) { patch.stage = str(a.stage); patch.lastTouchAt = new Date(); }
+      const [row] = await ctx.db.update(salesContacts).set(patch).where(and(eq(salesContacts.id, str(a.contactId)), eq(salesContacts.ownerUserId, ownerId))).returning();
+      if (!row) throw new Error('Contact not found.');
+      return row;
+    },
+  },
+  {
+    tool: 'sales.campaigns_create', mutates: true,
+    description: 'Create a durable sales or marketing campaign from the canvas. This authors and tracks the campaign; use connected marketing/email MCP tools for provider delivery when configured.',
+    parameters: obj({ associateUserId: S, name: S, market: S, subject: S }, ['name']),
+    run: async (ctx, a) => {
+      const ownerUserId = await salesOwner(ctx, a.associateUserId);
+      const [row] = await ctx.db.insert(salesCampaigns).values({ ownerUserId, name: salesText(a.name, 255), market: salesText(a.market, 255), subject: salesText(a.subject, 500) }).returning();
+      return row;
+    },
+  },
+  {
+    tool: 'sales.campaigns_update', mutates: true,
+    description: 'Update campaign execution state or recorded delivery metrics from the sales canvas.',
+    parameters: obj({ associateUserId: S, campaignId: S, status: { type: 'string', enum: [...SALES_CAMPAIGN_STATUSES] }, sent: N, replies: N }, ['campaignId']),
+    run: async (ctx, a) => {
+      const ownerId = await salesOwner(ctx, a.associateUserId);
+      const patch: Record<string, unknown> = { updatedAt: new Date() };
+      if (a.status != null && SALES_CAMPAIGN_STATUSES.has(str(a.status))) patch.status = str(a.status);
+      if (a.sent != null) patch.sent = Math.min(2_147_483_647, Math.max(0, Math.round(num(a.sent))));
+      if (a.replies != null) patch.replies = Math.min(2_147_483_647, Math.max(0, Math.round(num(a.replies))));
+      const [row] = await ctx.db.update(salesCampaigns).set(patch).where(and(eq(salesCampaigns.id, str(a.campaignId)), eq(salesCampaigns.ownerUserId, ownerId))).returning();
+      if (!row) throw new Error('Campaign not found.');
+      return row;
+    },
+  },
+  {
+    tool: 'sales.goals_set', mutates: true,
+    description: 'Set weekly outreach, new-contact, and meeting targets for a sales associate.',
+    parameters: obj({ associateUserId: S, outreachTarget: N, contactsTarget: N, meetingsTarget: N }),
+    run: async (ctx, a) => {
+      const ownerUserId = await salesOwner(ctx, a.associateUserId);
+      const boundedTarget = (value: unknown, fallback: number) => Math.min(1_000_000, Math.max(1, Math.round(num(value) || fallback)));
+      const values = { ownerUserId, outreachTarget: boundedTarget(a.outreachTarget, 50), contactsTarget: boundedTarget(a.contactsTarget, 20), meetingsTarget: boundedTarget(a.meetingsTarget, 3), updatedAt: new Date() };
+      const [row] = await ctx.db.insert(salesWeeklyGoals).values(values).onConflictDoUpdate({ target: salesWeeklyGoals.ownerUserId, set: values }).returning();
+      return row;
+    },
+  },
+  {
+    tool: 'sales.revenue_plan_set', mutates: true,
+    description: 'Set the associate revenue goal and signup/conversion notification preferences. Returns current commission rules so Brain can calculate the required conversions by plan and billing cycle.',
+    parameters: obj({ associateUserId: S, revenueGoalDollars: N, notifyOnSignup: B, notifyOnConversion: B }, ['revenueGoalDollars']),
+    run: async (ctx, a) => {
+      const ownerUserId = await salesOwner(ctx, a.associateUserId);
+      const current = await salesSettings(ctx, ownerUserId); if (!current) throw new Error('Sales settings unavailable.');
+      const goalDollars = num(a.revenueGoalDollars);
+      if (!Number.isFinite(goalDollars) || goalDollars < 0 || goalDollars > 100_000_000) throw new Error('revenueGoalDollars must be between 0 and 100,000,000.');
+      const [settings] = await ctx.db.update(salesAssociateSettings).set({ revenueGoalCents: Math.round(goalDollars * 100), notifyOnSignup: a.notifyOnSignup == null ? current.notifyOnSignup : Boolean(a.notifyOnSignup), notifyOnConversion: a.notifyOnConversion == null ? current.notifyOnConversion : Boolean(a.notifyOnConversion), updatedAt: new Date() }).where(eq(salesAssociateSettings.ownerUserId, ownerUserId)).returning();
+      if (!settings) throw new Error('Sales settings could not be updated.');
+      const commissionRules = await ctx.db.select().from(salesCommissionRules).orderBy(salesCommissionRules.plan, salesCommissionRules.billingCycle);
+      return { settings, commissionRules, revenueForecast: salesRevenueForecast(settings.revenueGoalCents, commissionRules) };
+    },
+  },
+  {
+    tool: 'sales.coaching_note_add', mutates: true,
+    description: 'Superadmin-only: add a shared coaching note to an associate’s sales canvas and pipeline.',
+    parameters: obj({ associateUserId: S, body: S }, ['associateUserId', 'body']),
+    run: async (ctx, a) => {
+      if (!ctx.userId) throw new Error('Signed-in user required.');
+      const associateUserId = await salesOwner(ctx, a.associateUserId);
+      const [viewer] = await ctx.db.select({ isSuperadmin: users.isSuperadmin }).from(users).where(eq(users.id, ctx.userId)).limit(1);
+      if (!viewer?.isSuperadmin) throw new Error('Superadmin required.');
+      const [row] = await ctx.db.insert(salesCoachingNotes).values({ associateUserId, authorUserId: ctx.userId, body: salesText(a.body, 5000) }).returning();
+      return row;
     },
   },
   // ---- Projects ----
@@ -3020,6 +3180,10 @@ export function listBuiltinTools(): McpToolEntry[] {
  * CATALOG-membership test (every id below must exist in CATALOG).
  */
 export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
+  // Compliance agents can explain the jurisdiction matrix and launch the tracked
+  // repository audit. The launch mutates only by recording a report and filing
+  // remediation tickets; it does not change source or external systems.
+  'compliance.requirements', 'compliance.run_audit',
   // Session introspection — read-only. Lets a run answer "what model am I on?" and
   // report the model/tier it is actually driving on the timeline.
   'session.current_model',

@@ -29,8 +29,10 @@ export default function RegisterPageClient() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreeToTerms, setAgreeToTerms] = useState(false);
+  const [ageAttested, setAgeAttested] = useState(false);
   const [discountCode, setDiscountCode] = useState('');
-  const [accountType, setAccountType] = useState<'standard' | 'freelancer'>('standard');
+  const initialType = searchParams.get('role') === 'sales' ? 'sales' : 'standard';
+  const [accountType, setAccountType] = useState<'standard' | 'freelancer' | 'sales'>(initialType);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Set once the account is created but its email needs verifying — swaps the form
@@ -43,7 +45,7 @@ export default function RegisterPageClient() {
   // Freelancers land on their for-hire profile (the restricted gig shell); standard
   // accounts go to the builder dashboard.
   const requestedDestination = safeRedirectPath(searchParams.get('next'));
-  const destination = accountType === 'freelancer' ? '/freelancer/profile' : requestedDestination;
+  const destination = accountType === 'freelancer' ? '/freelancer/profile' : accountType === 'sales' ? '/sales' : requestedDestination;
 
   useEffect(() => {
     if (isAuthenticated) router.replace(destination);
@@ -63,7 +65,8 @@ export default function RegisterPageClient() {
     setError(null);
     setIsLoading(true);
     try {
-      const res = await register(email, password, name.trim() || undefined, agreeToTerms, accountType);
+      const referralCode = searchParams.get('ref')?.trim() || undefined;
+      const res = await register(email, password, name.trim() || undefined, agreeToTerms, accountType, referralCode, ageAttested);
       if (res.needsVerification) {
         setPendingEmail(res.email);
       } else {
@@ -266,6 +269,11 @@ export default function RegisterPageClient() {
                 <span>{tr('terms')}</span>
               </label>
 
+              <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                <input type="checkbox" checked={ageAttested} onChange={e => setAgeAttested(e.target.checked)} style={{ marginTop: 3, accentColor: 'var(--coral-bright)' }} />
+                <span>I confirm I am at least 18 years old. BuilderForce is not directed to children.</span>
+              </label>
+
               {error && (
                 <div style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.4)', color: '#f87171', borderRadius: 10, padding: '10px 14px', fontSize: '0.875rem' }}>
                   {error}
@@ -274,14 +282,14 @@ export default function RegisterPageClient() {
 
               <button
                 type="submit"
-                disabled={isLoading || !email || !password || !confirmPassword || !agreeToTerms}
+                disabled={isLoading || !email || !password || !confirmPassword || !agreeToTerms || !ageAttested}
                 style={{
                   width: '100%', marginTop: 4,
                   background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
                   color: '#fff', border: 'none', borderRadius: 12, padding: '13px',
                   fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.95rem',
                   cursor: isLoading ? 'wait' : 'pointer',
-                  opacity: (isLoading || !email || !password || !confirmPassword || !agreeToTerms) ? 0.5 : 1,
+                  opacity: (isLoading || !email || !password || !confirmPassword || !agreeToTerms || !ageAttested) ? 0.5 : 1,
                   transition: 'opacity 0.2s, box-shadow 0.2s',
                   boxShadow: '0 6px 20px var(--shadow-coral-mid)',
                   letterSpacing: '0.02em',

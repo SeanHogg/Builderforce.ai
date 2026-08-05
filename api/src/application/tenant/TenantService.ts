@@ -11,6 +11,7 @@ import {
 import { NotFoundError, ValidationError } from '../../domain/shared/errors';
 import { trialDaysRemaining } from '../../domain/tenant/effectivePlan';
 import type { PaymentProvider, WebhookEvent } from '../../infrastructure/payment/PaymentProvider';
+import { PLAN_LIMITS } from '../../domain/tenant/PlanLimits';
 
 export interface CreateTenantDto {
   name: string;
@@ -48,6 +49,45 @@ export class TenantService {
       perAgentHostMonthly: 49,
     },
   } as const;
+
+  /**
+   * Public pricing/entitlement contract used by marketing and checkout UI.
+   * Prices come from PRICING and feature availability is derived from the same
+   * PLAN_LIMITS object enforced by API guards, so public plan copy cannot drift
+   * from runtime entitlements.
+   */
+  static publicPricingContract() {
+    const free = PLAN_LIMITS[TenantPlan.FREE];
+    const pro = PLAN_LIMITS[TenantPlan.PRO];
+    const teams = PLAN_LIMITS[TenantPlan.TEAMS];
+    const availability = (key: string, values: [boolean, boolean, boolean]) => ({
+      key,
+      free: values[0],
+      pro: values[1],
+      teams: values[2],
+    });
+
+    return {
+      pricing: TenantService.PRICING,
+      generatedFrom: 'TenantService.PRICING + PLAN_LIMITS',
+      featureAvailability: [
+        availability('agentHosts.free', [free.maxAgentHosts === 1, false, false]),
+        availability('agentHosts.pro', [false, pro.maxAgentHosts === 3, false]),
+        availability('agentHosts.teams', [false, false, teams.maxAgentHosts === -1]),
+        availability('projects.free', [free.maxProjects === 5, false, false]),
+        availability('projects.paid', [false, pro.maxProjects === -1, teams.maxProjects === -1]),
+        availability('tokens.free', [free.tokenDailyLimit === 10_000, false, false]),
+        availability('tokens.pro', [false, pro.tokenDailyLimit === 1_000_000, false]),
+        availability('tokens.teams', [false, false, teams.tokenDailyLimit === 5_000_000]),
+        availability('approvalWorkflows', [free.approvalWorkflows, pro.approvalWorkflows, teams.approvalWorkflows]),
+        availability('fleetMesh', [free.fleetMesh, pro.fleetMesh, teams.fleetMesh]),
+        availability('fullTelemetry', [free.fullTelemetry, pro.fullTelemetry, teams.fullTelemetry]),
+        availability('customAgentRoles', [free.customAgentRoles, pro.customAgentRoles, teams.customAgentRoles]),
+        availability('teamApprovalInbox', [free.teamApprovalInbox, pro.teamApprovalInbox, teams.teamApprovalInbox]),
+        availability('seatCostControls', [free.seatCostControls, pro.seatCostControls, teams.seatCostControls]),
+      ],
+    } as const;
+  }
 
   async listTenants(): Promise<Tenant[]> {
     return this.tenants.findAll();
@@ -225,6 +265,7 @@ export class TenantService {
         durationYears: number;
         redemptionId: string;
       };
+      salesReferralId?: string;
     },
   ): Promise<{ checkoutUrl: string; sessionId: string }> {
     const targetPlan = input.targetPlan ?? TenantPlan.PRO;
@@ -252,6 +293,7 @@ export class TenantService {
       successUrl: input.successUrl,
       cancelUrl: input.cancelUrl,
       discount: input.discount,
+      salesReferralId: input.salesReferralId,
     });
 
     // Store the customer id now so the activation webhook can correlate back to us.

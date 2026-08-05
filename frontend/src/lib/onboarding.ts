@@ -121,7 +121,7 @@ export interface OnboardingState {
   acceptTerms: () => Promise<void>;
   /** Make the one-time account-type choice (Build vs Hired). Resolves once the
    *  gate advances past `pending-role`. */
-  selectRole: (accountType: 'standard' | 'freelancer') => Promise<void>;
+  selectRole: (accountType: 'standard' | 'freelancer' | 'sales', ageAttested: boolean) => Promise<void>;
   /** Re-fetch terms + role status (e.g. after admin publishes a new version). */
   refresh: () => Promise<void>;
 }
@@ -259,8 +259,8 @@ export function useOnboardingState(): OnboardingState {
     })();
   }, [webToken, tenantToken, needsTerms, needsRole, accountType, provisioning, selectTenant, user?.email, user?.name]);
 
-  const selectRole = useCallback(async (accountType: 'standard' | 'freelancer') => {
-    await selectAccountType(accountType);
+  const selectRole = useCallback(async (accountType: 'standard' | 'freelancer' | 'sales', ageAttested: boolean) => {
+    await selectAccountType(accountType, ageAttested);
     // Keep the local copy in lockstep — the auto-provision effect keys off it, and
     // load() won't re-run to refresh it. Without this, a fresh account that just
     // picked Hired would still look 'standard' and wrongly get a workspace.

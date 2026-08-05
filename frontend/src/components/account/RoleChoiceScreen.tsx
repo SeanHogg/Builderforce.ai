@@ -17,12 +17,13 @@ import AccountTypeChooser, { type AccountType } from './AccountTypeChooser';
 export default function RoleChoiceScreen({
   onSelect,
 }: {
-  onSelect: (accountType: AccountType) => Promise<void>;
+  onSelect: (accountType: AccountType, ageAttested: boolean) => Promise<void>;
 }) {
   const t = useTranslations('welcomeRole');
   const [selected, setSelected] = useState<AccountType>('standard');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ageAttested, setAgeAttested] = useState(false);
 
   const marketing = REGISTER_MARKETING[selected];
 
@@ -30,7 +31,7 @@ export default function RoleChoiceScreen({
     setError(null);
     setSubmitting(true);
     try {
-      await onSelect(selected);
+      await onSelect(selected, ageAttested);
     } catch (e) {
       setError(e instanceof Error ? e.message : t('error'));
       setSubmitting(false);
@@ -134,11 +135,12 @@ export default function RoleChoiceScreen({
           </div>
         )}
 
+        <label style={{ display: 'flex', gap: 10, marginTop: 20, color: 'var(--text-secondary)' }}><input type="checkbox" checked={ageAttested} onChange={(e) => setAgeAttested(e.target.checked)} /> I confirm I am at least 18 years old.</label>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 24 }}>
           <button
             type="button"
             onClick={submit}
-            disabled={submitting}
+            disabled={submitting || !ageAttested}
             style={{
               padding: '13px 28px',
               background: 'linear-gradient(135deg, var(--coral-bright), var(--coral-dark))',
@@ -149,7 +151,7 @@ export default function RoleChoiceScreen({
               fontWeight: 700,
               fontSize: '0.95rem',
               cursor: submitting ? 'wait' : 'pointer',
-              opacity: submitting ? 0.6 : 1,
+              opacity: submitting || !ageAttested ? 0.6 : 1,
               boxShadow: '0 6px 20px var(--shadow-coral-mid)',
               letterSpacing: '0.02em',
             }}

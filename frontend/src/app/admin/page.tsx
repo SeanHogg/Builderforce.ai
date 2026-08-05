@@ -23,6 +23,7 @@ import NewsletterPanel from '@/components/admin/panels/NewsletterPanel';
 import ReleaseNotesPanel from '@/components/admin/panels/ReleaseNotesPanel';
 import DemoFunnelPanel from '@/components/admin/panels/DemoFunnelPanel';
 import SalesLeadsPanel from '@/components/admin/panels/SalesLeadsPanel';
+import SalesCommissionsPanel from '@/components/admin/panels/SalesCommissionsPanel';
 import PrivacyPanel from '@/components/admin/panels/PrivacyPanel';
 import PersonasPanel from '@/components/admin/panels/PersonasPanel';
 import GovernancePanel from '@/components/admin/panels/GovernancePanel';
@@ -33,6 +34,7 @@ import AuditLogPanel from '@/components/admin/panels/AuditLogPanel';
 import ErrorsPanel from '@/components/admin/panels/ErrorsPanel';
 import TokenPanel from '@/components/admin/panels/TokenPanel';
 import FeedbackPanel from '@/components/admin/panels/FeedbackPanel';
+import OutcomeMetricsPanel from '@/components/admin/panels/OutcomeMetricsPanel';
 
 /**
  * Platform Admin shell — a THIN router.
@@ -49,6 +51,7 @@ import FeedbackPanel from '@/components/admin/panels/FeedbackPanel';
 const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
   health: HealthPanel,
   cron: CronPanel,
+  outcomes: OutcomeMetricsPanel,
   directory: UsersPanel,
   sessions: GuestSessionsPanel,
   creationSessions: CreationSessionsPanel,
@@ -68,6 +71,7 @@ const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
   releaseNotes: ReleaseNotesPanel,
   demoFunnel: DemoFunnelPanel,
   salesLeads: SalesLeadsPanel,
+  salesCommissions: SalesCommissionsPanel,
   errors: ErrorsPanel,
   audit: AuditLogPanel,
   apiKeys: () => <TenantApiKeysAdminTab active />,

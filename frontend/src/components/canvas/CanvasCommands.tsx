@@ -46,9 +46,14 @@ export function CanvasCommands({
       <ControlButton onClick={onCleanLayout} aria-label="Clean up canvas layout" title="Clean up canvas layout">
         <CleanLayoutIcon />
       </ControlButton>
-      {!minimapOpen && <ControlButton onClick={() => setMinimapOpen(true)} aria-label="Open mini map" title="Open mini map">
+      <ControlButton
+        onClick={() => setMinimapOpen((open) => !open)}
+        aria-label="Toggle mini map"
+        aria-pressed={minimapOpen}
+        title={minimapOpen ? 'Hide mini map' : 'Show mini map'}
+      >
         <MinimapIcon />
-      </ControlButton>}
+      </ControlButton>
     </Controls>
     {minimapOpen && <>
       <MiniMap

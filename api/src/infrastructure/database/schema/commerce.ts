@@ -16,6 +16,7 @@
  */
 import {
   bigserial,
+  bigint,
   boolean,
   index,
   integer,
@@ -32,7 +33,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { freelancerEngagements, timecards } from './collaboration';
+import { creationSessions, freelancerEngagements, timecards } from './collaboration';
 import { artifactTypeEnum, pricingModelEnum } from './common';
 import { segments, tenants, users } from './identity';
 import { proposalEvaluations } from './llm';
@@ -392,4 +393,94 @@ export const catalogAdoptionEvents = pgTable('catalog_adoption_events', {
 }, (t) => [
   index('idx_catalog_events_tenant_kind_time').on(t.tenantId, t.kind, t.createdAt),
   index('idx_catalog_events_tenant_kind_item').on(t.tenantId, t.kind, t.itemId),
+]);
+
+// Person-scoped CRM for sales associates. Platform superadmins collaborate on
+// these same rows; no browser-only shadow copy exists (migration 0401).
+export const salesContacts = pgTable('sales_contacts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerUserId: varchar('owner_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 255 }).notNull().default(''),
+  email: varchar('email', { length: 255 }).notNull().default(''),
+  company: varchar('company', { length: 255 }).notNull().default(''),
+  market: varchar('market', { length: 255 }).notNull().default(''),
+  stage: varchar('stage', { length: 24 }).notNull().default('new'),
+  lastTouchAt: timestamp('last_touch_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('idx_sales_contacts_owner_stage').on(t.ownerUserId, t.stage, t.updatedAt)]);
+
+export const salesCampaigns = pgTable('sales_campaigns', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  ownerUserId: varchar('owner_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name: varchar('name', { length: 255 }).notNull(),
+  market: varchar('market', { length: 255 }).notNull().default(''),
+  subject: varchar('subject', { length: 500 }).notNull().default(''),
+  status: varchar('status', { length: 24 }).notNull().default('draft'),
+  sent: integer('sent').notNull().default(0),
+  replies: integer('replies').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('idx_sales_campaigns_owner_status').on(t.ownerUserId, t.status, t.updatedAt)]);
+
+export const salesWeeklyGoals = pgTable('sales_weekly_goals', {
+  ownerUserId: varchar('owner_user_id', { length: 36 }).primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  outreachTarget: integer('outreach_target').notNull().default(50),
+  contactsTarget: integer('contacts_target').notNull().default(20),
+  meetingsTarget: integer('meetings_target').notNull().default(3),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const salesCoachingNotes = pgTable('sales_coaching_notes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  associateUserId: varchar('associate_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  authorUserId: varchar('author_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  body: text('body').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index('idx_sales_coaching_notes_associate').on(t.associateUserId, t.createdAt)]);
+
+export const salesCanvasSessions = pgTable('sales_canvas_sessions', {
+  ownerUserId: varchar('owner_user_id', { length: 36 }).primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  sessionId: uuid('session_id').notNull().unique().references(() => creationSessions.id, { onDelete: 'cascade' }),
+  tenantId: integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const salesCommissionRules = pgTable('sales_commission_rules', {
+  ruleKey: varchar('rule_key', { length: 40 }).primaryKey(),
+  plan: varchar('plan', { length: 20 }).notNull(),
+  billingCycle: varchar('billing_cycle', { length: 20 }).notNull(),
+  referralBps: integer('referral_bps').notNull().default(0),
+  salesBps: integer('sales_bps').notNull().default(0),
+  updatedBy: varchar('updated_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const salesAssociateSettings = pgTable('sales_associate_settings', {
+  ownerUserId: varchar('owner_user_id', { length: 36 }).primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  referralCode: varchar('referral_code', { length: 32 }).notNull().unique(),
+  salesCode: varchar('sales_code', { length: 32 }).notNull().unique(),
+  revenueGoalCents: bigint('revenue_goal_cents', { mode: 'number' }).notNull().default(0),
+  notifyOnSignup: boolean('notify_on_signup').notNull().default(true),
+  notifyOnConversion: boolean('notify_on_conversion').notNull().default(true),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const salesReferrals = pgTable('sales_referrals', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  associateUserId: varchar('associate_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  referredUserId: varchar('referred_user_id', { length: 36 }).notNull().unique().references(() => users.id, { onDelete: 'cascade' }),
+  attributionType: varchar('attribution_type', { length: 16 }).notNull().default('referral'),
+  signedUpAt: timestamp('signed_up_at', { withTimezone: true }).notNull().defaultNow(),
+  signupNotifiedAt: timestamp('signup_notified_at', { withTimezone: true }),
+  convertedAt: timestamp('converted_at', { withTimezone: true }),
+  tenantId: integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+  plan: varchar('plan', { length: 20 }), billingCycle: varchar('billing_cycle', { length: 20 }),
+  revenueCents: bigint('revenue_cents', { mode: 'number' }), commissionBps: integer('commission_bps'),
+  commissionCents: bigint('commission_cents', { mode: 'number' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_sales_referrals_associate').on(t.associateUserId, t.signedUpAt),
+  index('idx_sales_referrals_conversion').on(t.referredUserId, t.convertedAt),
+  uniqueIndex('uq_sales_referrals_tenant_attribution').on(t.tenantId).where(sql`${t.tenantId} IS NOT NULL`),
 ]);

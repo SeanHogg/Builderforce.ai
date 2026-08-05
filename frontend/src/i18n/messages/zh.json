@@ -418,7 +418,8 @@
       "incidents": "事件",
       "monitoring": "监控",
       "reliability": "可靠性",
-      "agentOps": "智能体运维"
+      "agentOps": "智能体运维",
+      "sales": "销售中心"
     },
     "tab": {
       "projects": "项目",
@@ -591,7 +592,7 @@
     "tasks": "{count, plural, other {# 个任务}}",
     "workflows": "{count, plural, other {# 个工作流}}",
     "viewWorkflows": "查看工作流",
-    "health": "健康度",
+      "health": "健康度",
     "done": "已完成",
     "remaining": "剩余",
     "tier": {
@@ -4546,9 +4547,9 @@
       "longDesc": "闭合循环：训练一个定制智能体（浏览器内 WebGPU LoRA + AI 评估），将其发布到 Workforce Registry，然后雇用它并从你自己的智能体内部调用它。你训练出的专家成为主智能体可委派的工具——一支你拥有并编排的、完全自主的智能体队伍。"
     },
     {
-      "title": "无需离开 VS Code",
-      "shortDesc": "通过 VS Code 扩展运行你的整支队伍。",
-      "longDesc": "BuilderForce VS Code 扩展将整个平台带入你的编辑器：与智能体对话、分配并运行任务、审查并验证它们的工作，以及管理你的整支智能体队伍——全程无需离开 VS Code。人在回路的审批就发生在你编写代码的地方。"
+      "title": "面向工程团队的 VS Code 界面",
+      "shortDesc": "将画布上下文、智能体、审阅和交付带入编辑器。",
+      "longDesc": "BuilderForce 扩展为工程团队提供相关平台工作的编辑器原生视图，包括代码库和诊断上下文、智能体任务、审阅与审批。"
     },
     {
       "title": "Agentic Tester —— 自主 QA",
@@ -4561,19 +4562,19 @@
       "longDesc": "除了 AI 智能体，还能雇用真人：人才市场列出经过审核的自由职业开发者、DBA、设计师和专家，附带简历（由 hired.video 提供支持）、技能和时薪。面试、在任何项目中雇用，并看到计费工时从他们在门户和 VS Code 中的工作自动捕捉——每张工时单都由你在付款前审批。人类与智能体在同一看板上并肩协作。"
     },
     {
-      "title": "AI CTO",
-      "shortDesc": "构建、训练并部署你的 AI 队伍。",
-      "longDesc": "你的 AI CTO 构建、训练并部署你的 AI 智能体队伍——浏览器内 WebGPU LoRA 微调、AI 评估，以及一键发布到 Workforce Registry。"
+      "title": "模型工作室与智能体训练",
+      "shortDesc": "训练、评估并发布专业模型和智能体。",
+      "longDesc": "使用 WebGPU LoRA 微调、评估和发布工具，为受支持的智能体工作流准备专业模型。"
     },
     {
-      "title": "AI CIO",
-      "shortDesc": "连接并编排你的各类系统。",
-      "longDesc": "你的 AI CIO 通过加密凭据连接到你的系统——GitHub、Jira、Confluence 等等——并通过 Brain 助手的工具注册表来编排工作。"
+      "title": "互联系统与编排",
+      "shortDesc": "连接受支持的工具并协调工作。",
+      "longDesc": "通过加密凭据连接受支持的系统，并将已批准的操作提供给工作流和 Brain 工具注册表。"
     },
     {
-      "title": "AI 安全官",
-      "shortDesc": "以审批与审计治理每一个操作。",
-      "longDesc": "你的 AI 安全官治理每一个操作：人在回路的审批关卡、完整的审计追踪、按租户隔离，以及 AES-256-GCM 加密凭据。"
+      "title": "智能体治理与安全",
+      "shortDesc": "应用权限、审批、隔离和执行记录。",
+      "longDesc": "通过基于角色的访问、已配置操作的人工审批、租户隔离、加密凭据和执行记录，让负责人始终掌控工作。"
     },
     {
       "title": "Planning Spine —— 从组合到任务",
@@ -5347,7 +5348,10 @@
       "faqHeading": "常见问题",
       "seeFullComparison": "查看完整对比",
       "relatedHeading": "相关阅读",
-      "vsLabel": "Builderforce.ai 对比 {name}"
+      "vsLabel": "Builderforce.ai 对比 {name}",
+      "criteriaTitle": "基于评估标准的选型指南",
+      "criteriaSummary": "根据你需要完成的工作比较 Builderforce.ai 与 {name}：可视化创作、互联成果物、协作、智能体执行、治理、部署与所有权。",
+      "criteriaNote": "厂商产品、套餐和价格会变化。请用这些标准建立评估框架，并通过最新厂商文档和实际试用核实关键要求。"
     },
     "competitors": {
       "copilot": {
@@ -5388,9 +5392,9 @@
     }
   },
   "home": {
-    "heroBadge": "一个画布 · 人类 + AI 智能体",
-    "heroTitle": "尽情想象，<em>创造。</em>",
-    "heroSub": "从一句提示开始，在同一个可视化会话中创建工作流、网站、数据故事、模型、语音体验并交付真实成果。",
+    "heroBadge": "创意画布 · 人类 + AI 智能体",
+    "heroTitle": "让每个想法都变成<em>真实成果。</em>",
+    "heroSub": "一个可视化工作空间，让你的团队与 AI 智能体共同设计、创建、审核并交付网站、工作流、模型、数据故事和产品，无需在众多工具间切换。",
     "heroPromptPlaceholder": "你想创造什么？",
     "heroPromptAria": "描述你想创造的内容",
     "heroGetStarted": "开始创作",
@@ -5401,7 +5405,7 @@
     ],
     "createCanvas": {
       "eyebrow": "认识 Create",
-      "heading": "Create Canvas — 让想法成为可运行的系统",
+      "heading": "一个画布，承载你的所有想象。",
       "blurb": "保留提示词的速度，并超越聊天。将工作流、网站、数据、模型、人员和智能体放在同一个多人画布上，让每个对象始终可用、互联并随时可以交付。",
       "features": [
         { "title": "从意图开始", "desc": "描述你的目标，立即进入私密的本地画布。只有在需要协作或交付时，才添加账号或项目。" },
@@ -5421,24 +5425,24 @@
       "flow": ["提示", "上下文", "成果物", "审阅", "交付", "结果"]
     },
     "evermindHeadingSuffix": "一个在工作中持续学习、永不过时的模型",
-    "pillarsHeading": "人在回路。完全自主。",
-    "pillarsLead": "训练你自己的智能体，让它们在你的智能体内部投入工作，并对每一步保持掌控——一切尽在一处。",
+    "pillarsHeading": "自由创作，受控交付。",
+    "pillarsLead": "将想法、人员和 AI 智能体带入同一个可视化空间，并决定哪些内容要修改、交付或保持私密。",
     "pillars": [
       {
-        "title": "训练智能体，在你的智能体内部使用它们",
-        "desc": "在浏览器中训练一个定制智能体（WebGPU LoRA + 评估），将其发布到 Workforce Registry，然后雇用它并从你自己的智能体内部调用它。你的专家成为主智能体可委派的工具。"
+        "title": "创作不止于文档",
+        "desc": "将网站、工作流、原型、数据故事、模型和交付计划构建为彼此关联的可编辑对象，而不是分散的文件。"
       },
       {
-        "title": "在看板上管理你的队伍",
-        "desc": "在实时看板上规划、分配并跟踪每一项任务——人类与 AI 智能体同处一块看板，另有表格、日历和甘特图视图。工作从待办流转到完成，全程实时。"
+        "title": "与智能体协作，而不只是聊天",
+        "desc": "将专业智能体放在工作旁边，让它们参与创作、评估和执行，同时让团队始终参与其中。"
       },
       {
-        "title": "无需离开 VS Code",
-        "desc": "BuilderForce VS Code 扩展在你的编辑器中运行整个平台：与智能体对话、分配并运行任务、审查并验证它们的工作，以及审批人在回路的操作——无需离开你的代码。"
+        "title": "交付前先审阅",
+        "desc": "检查建议的变更、保留检查点，并只将已批准的工作送入项目、任务和智能体执行。"
       }
     ],
-    "rolesHeading": "一个记录系统。每个角色各自的运营全景。",
-    "rolesLead": "因为每一个操作——无论人类还是智能体——都被记录、计成本并归因，整个组织得以基于同一个事实来源协作。无需六套工具堆叠，无需用电子表格对账谁以多少成本做了什么。企业级的可见性，以平台的价格呈现。",
+    "rolesHeading": "一段创作旅程，为每个角色提供合适视角。",
+    "rolesLead": "将最初想法与成果物、决策、交付活动、模型使用、审批和可用成本数据连接起来，无需从多个独立工具中重新拼接过程。",
     "roles": [
       {
         "role": "CEO",
@@ -5467,71 +5471,79 @@
     ],
     "stats": [
       {
-        "label": "参数\n浏览器内"
+        "label": "互联的\n创作画布"
       },
       {
-        "label": "数据集\n生成"
+        "label": "实时可编辑\n成果物"
       },
       {
-        "label": "硬件\n加速"
+        "label": "人类 + AI\n协作"
       },
       {
-        "label": "私有——运行\n于你的浏览器"
+        "label": "可审阅的\n变更"
       }
     ],
-    "comparisonHeading": "Builderforce 对比传统工作流",
-    "comparisonLead": "从底层为 AI 智能体而生——而非又一个云笔记本或插件。",
+    "workflowProof": {
+      "heading": "三个可验证的工作流", "lead": "这些测试版流程明确标注边界、仓库内证据和当前限制。", "cta": "查看能力与集成证据",
+      "demos": [
+        { "title": "从想法到交互体验", "audience": "创意与产品团队", "outcome": "创建相互连接的网站、数据和原型对象，审核后交付受支持的结果。", "steps": ["启动创作会话", "创建并连接可编辑成果", "审核并交付受支持的输出"], "evidence": "证据：创作画布流程与对象注册测试。" },
+        { "title": "受治理的智能体交付", "audience": "工程与运营团队", "outcome": "仅在获得有效策略决策后下发已批准的工作。", "steps": ["选择交付工作", "解析审批策略", "有效决策后再下发"], "evidence": "证据：运行时策略门控测试，包括失败时关闭。" },
+        { "title": "从信号到有引用的决策", "audience": "产品与营收负责人", "outcome": "评估受支持的数据，并在会话上下文中保留决策。", "steps": ["连接证据", "运行跨对象评估", "审核引用并应用决策"], "evidence": "证据：画布 AI 评估契约测试。" }
+      ]
+    },
+    "comparisonHeading": "一个互联画布，而不是又一个孤立的 AI 工具",
+    "comparisonLead": "从创作成果出发，只在确有帮助时引入专业工具。",
     "comparisonColFeature": "功能",
     "comparisonColBuilderforce": "Builderforce",
     "comparisonColNotebooks": "通用笔记本",
     "comparisonColCloud": "云端训练",
     "comparisonRows": [
-      "浏览器内 LoRA 训练",
-      "数据集生成向导",
-      "AI 评估引擎",
-      "智能体注册表与技能",
-      "全球 Workforce 市场",
-      "零 GPU 账单"
+      "从想法到成果的可视化空间",
+      "实时互联的成果物",
+      "人员与专业智能体共同协作",
+      "可审阅变更与检查点",
+      "受治理的交付路径",
+      "面向工程的可选 VS Code 界面"
     ],
-    "stepsHeading": "三步即可上手运行",
+    "stepsHeading": "三步从想法走向成果",
     "steps": [
       {
-        "title": "创建账户",
-        "desc": "用你的邮箱注册并开启一个免费工作区。14 天 Pro 试用，无需信用卡。"
+        "title": "描述你想要的成果",
+        "desc": "从你想创造的内容开始。Builderforce 会立即打开一个私密画布，让想法自由生长。"
       },
       {
-        "title": "生成数据集",
-        "desc": "使用向导从单条能力提示词撰写一份指令微调数据集。"
+        "title": "创建并连接",
+        "desc": "添加网站、工作流、数据、模型、人员和智能体，并让工作背景与创作意图始终清晰可见。"
       },
       {
-        "title": "训练并发布",
-        "desc": "在你的浏览器中运行 LoRA 训练、评估结果，并将你的智能体发布到 Workforce Registry。"
+        "title": "审核并交付",
+        "desc": "与团队共同完善工作，批准重要变更，并将成果交付到项目、任务或智能体执行。"
       }
     ],
-    "featuresHeading": "你的 AI 队伍所能做的一切",
+    "featuresHeading": "你可以带到画布上的一切",
     "pricingHeading": "定价",
+    "currentPricing": "查看当前价格",
+    "pricePerSeat": "/席位/月",
     "pricingTeaser": [
       {
         "name": "免费版",
-        "price": "$0",
         "perks": [
-          "Evermind 模型（设备本地）",
-          "WebGPU 训练",
-          "浏览 Workforce"
+          "私密创作工作区",
+          "1 个 AgentHost",
+          "5 个项目"
         ]
       },
       {
         "name": "Pro",
-        "price": "$29/席位",
         "perks": [
-          "不限智能体数量",
-          "私有模型",
-          "优先支持"
+          "最多 3 个 AgentHost",
+          "无限项目",
+          "已配置的审批工作流"
         ]
       }
     ],
     "blogHeading": "博客最新文章",
-    "blogLead": "构建与部署 AI 智能体的深度解析、教程和最佳实践——从 WebGPU LoRA 训练到多智能体编排。",
+    "blogLead": "用 AI 创作的观点与实用指南——涵盖可视化工作流、互联成果物、模型、智能体、治理与交付。",
     "blogReadAll": "阅读全部文章",
     "newsletterHeading": "保持同步",
     "newsletterLead": "获取关于新功能、新智能体和平台改进的更新。无垃圾邮件，随时可退订。",
@@ -5541,9 +5553,9 @@
     "newsletterSubscribedConfirm": "已订阅 ✓",
     "newsletterError": "无法订阅。请重试。",
     "faqHeading": "常见问题",
-    "ctaTitle": "让你的 AI CTO 投入工作",
-    "ctaDesc": "描述你的需求，登录，你的 AI 大脑便开始工作——构建智能体、连接你的系统，并治理每一个操作。无需信用卡。",
-    "ctaSeeLiveAgents": "查看实时智能体",
+    "ctaTitle": "你想创造什么？",
+    "ctaDesc": "从一句提示开始，与团队和 AI 智能体一起，把它变成相互连接、可审核、可交付的成果。无需信用卡。",
+    "ctaSeeLiveAgents": "探索画布",
     "faq": [
       {
         "question": "什么是 Evermind？",
@@ -5551,7 +5563,7 @@
       },
       {
         "question": "什么是 Builderforce.ai？",
-        "answer": "Builderforce.ai 是面向智能体时代的创新平台——一个单一的记录系统，其中每一单位工作，无论由人类还是 AI 智能体完成，都会从创意到交付再到学习被记录、计成本并归因。你用一支由人类和智能体组成的队伍在看板上规划、构建、交付并度量，在浏览器中训练你自己的智能体（数据集生成、WebGPU LoRA 训练、AI 评估，以及 Workforce Registry），连接到你的系统与数据，并以角色、审批关卡和完整审计追踪来治理每一个操作——全程无需离开 VS Code。"
+        "answer": "Builderforce.ai 是一个创作画布，团队和 AI 智能体可以在其中把想法变成有用成果。在同一可视化空间中创建网站、工作流、原型、数据故事、模型、文档和交付计划，再将批准的工作送入受治理的执行流程。"
       },
       {
         "question": "Builderforce.ai 是企业级平台吗？",
@@ -5563,7 +5575,7 @@
       },
       {
         "question": "管理我的智能体必须离开 VS Code 吗？",
-        "answer": "不必。BuilderForce VS Code 扩展将整个平台带入你的编辑器：与智能体对话、在看板上分配并运行任务、审查并验证它们的工作，以及审批人在回路的操作——全程无需离开 VS Code。"
+        "answer": "不必。Builderforce.ai 首先是基于网页的创作画布。工程团队还可以使用 VS Code 扩展，将代码库上下文、诊断、智能体工作、审阅和审批带到更靠近代码的位置。"
       },
       {
         "question": "Builderforce 有看板和项目管理吗？",
@@ -5663,6 +5675,8 @@
     "subtitleConsole": "管理您的订阅和账单详情。",
     "loading": "正在加载订阅…",
     "errorLoad": "加载订阅失败",
+    "errorPricingContract": "无法验证当前价格（{reason}）。购买前请重试。",
+    "pricingUnavailable": "当前价格不可用。购买前请重试。",
     "anonBannerTitle": "从免费版开始",
     "anonBannerDesc": "永久 $0/月 — 1 个 AgentHost、5 个项目、WebGPU LoRA 训练。随时可升级。",
     "anonBannerCta": "创建免费账户",
@@ -5713,7 +5727,6 @@
     "managedAddon": "附加组件：<b>托管 AgentHost</b> — 每个托管 AgentHost ${price}/月。我们为您运行 BuilderForce Agents 实例 — 无需 Docker，无需 DevOps。",
     "relatedHeading": "在您决定之前",
     "planFeatures": [
-      "Evermind 自更新模型（设备端）",
       "1 个 AgentHost",
       "最多 3 个 AgentHosts",
       "无限 AgentHosts",
@@ -5727,9 +5740,7 @@
       "完整遥测 + 审计追踪",
       "自定义智能体角色",
       "共享团队审批收件箱",
-      "按席位成本控制",
-      "优先支持",
-      "社区支持"
+      "按席位成本控制"
     ]
   },
   "product": {
@@ -5738,20 +5749,27 @@
       "description": "全面体验 Builderforce.ai 所提供的一切：浏览器内 WebGPU LoRA 训练、AI 评估引擎、技能与人格市场、工作流编排、团队网格，以及完整的审批与审计。在注册之前先了解整个平台。",
       "ogTitle": "Builderforce.ai 平台 — 构建、训练、编排与治理"
     },
-    "eyebrow": "平台",
-    "title": "AI 团队所需的一切，尽在一处",
-    "sub": "Builderforce.ai 是你的 AI CTO、CIO 兼安全官。它构建并训练你的智能体，在主机网格中对它们进行编排，并通过审批和审计轨迹治理每一项操作。这里就是整个平台 — 在注册之前自由探索任意部分。",
+    "eyebrow": "创意画布",
+    "title": "创造一切，让一切保持连接。",
+    "sub": "把想法、成果、协作者和 AI 智能体汇聚到一个可视化工作空间。自由设计、共同审核，并交付已批准的工作，无需拼接十几种工具。",
     "statLabels": [
-      "参数规模\n浏览器内",
-      "数据集\n生成",
-      "硬件\n加速",
-      "私密 — 运行于\n你的浏览器中"
+      "互联的\n创意画布",
+      "可编辑的\n实时成果",
+      "人与 AI\n协作",
+      "可审核的\n变更"
     ],
     "exploreCta": "探索",
-    "ctaTitle": "让你的 AI 团队投入工作",
-    "ctaDesc": "免费开始 — 无需信用卡。在几分钟内完全在浏览器中构建、训练并部署你的第一个智能体。",
-    "ctaBrowseWorkforce": "浏览团队",
+    "ctaTitle": "从你想创造的内容开始",
+    "ctaDesc": "从一句提示打开私密画布，在准备协作或交付时再邀请你的团队。",
+    "ctaBrowseWorkforce": "探索画布",
     "relatedHeading": "深入了解",
+    "proofNote": "能力标记说明当前成熟度以及执行或数据处理发生的位置。连接服务需要各自的凭据和条款。",
+    "limitationLabel": "当前限制",
+    "disclosure": { "label": "能力详情", "owner": "负责人", "prerequisites": "前置条件", "limits": "当前限制", "exports": "导出与交接", "verified": "最近验证", "example": "打开工作界面", "none": "无" },
+    "workflowLimitations": ["交付目标仅限创作画布中列明的成果与交接类型。", "审批仅适用于已连接有效策略解析器的执行路径。", "来源新鲜度和引用覆盖取决于已配置的连接系统。"],
+    "integrationMatrix": { "title": "具名集成覆盖", "lead": "仅列出明确标注状态、方向、认证、限制、证据和验证日期的连接器。", "integration": "集成", "status": "状态", "direction": "方向", "auth": "认证", "boundary": "边界", "limits": "限制", "verified": "已验证", "directions": { "import": "导入", "export": "导出", "two-way": "双向", "event-ingest": "事件摄取" }, "items": [{"auth":"GitHub 凭据或应用配置","limitation":"仓库、拉取请求和 webhook 行为取决于已安装权限。"},{"auth":"提供商凭据","limitation":"看板和字段映射需按工作区配置。"},{"auth":"提供商凭据","limitation":"导入内容仍受来源权限和刷新行为约束。"},{"auth":"Webhook 或提供商凭据","limitation":"仅摄取已配置项目和受支持字段。"},{"auth":"Webhook 配置","limitation":"覆盖仅限已配置来源和映射。"}] },
+    "capabilityStatus": { "available": "可用", "beta": "测试版", "planned": "计划中" },
+    "dataBoundary": { "browser": "浏览器", "workspace-cloud": "工作区云端", "connected-service": "连接服务", "hybrid": "混合" },
     "sections": [
       {
         "id": "build",
@@ -5849,19 +5867,19 @@
       {
         "id": "govern",
         "title": "治理与运营",
-        "blurb": "审批、安全与完整的可观测性 — 你的 AI 安全官。",
+        "blurb": "通过权限、审批、安全控制和运营可见性，让负责人始终掌控工作。",
         "surfaces": [
           {
             "title": "审批",
-            "desc": "对智能体执行的每一项敏感操作设置人工参与的审批门控。"
+            "desc": "在已配置的智能体执行路径上设置人工审批；策略解析失败时将阻止任务下发。"
           },
           {
             "title": "安全",
-            "desc": "每个租户隔离，以及对每个集成采用 AES-256-GCM 加密的凭据。"
+            "desc": "提供工作区范围的访问控制，并对受支持集成所存储的凭据采用 AES-256-GCM 加密。"
           },
           {
             "title": "可观测性",
-            "desc": "对每一项智能体操作、每个 token 和每次工具调用提供完整的遥测和审计轨迹。"
+            "desc": "为已接入监测的平台工作流提供执行、token 与工具调用遥测，并按界面说明覆盖范围。"
           },
           {
             "title": "质量与错误跟踪",
@@ -7453,7 +7471,12 @@
       "paid": "付费",
       "builderforce": "Builderforce.ai",
       "routableOnly": "仅可路由",
-      "routableOnlyTitle": "仅显示 Builderforce 免费/Pro 级联可路由的模型"
+      "routableOnlyTitle": "仅显示 Builderforce 免费/Pro 级联可路由的模型",
+      "maxInput": "最高输入价 / 百万 token",
+      "maxOutput": "最高输出价 / 百万 token",
+      "anyPrice": "任意价格",
+      "upToPrice": "最高 ${price}",
+      "priceHelp": "按每百万 token 的美元价格筛选模型"
     },
     "price": {
       "free": "免费",
@@ -7656,6 +7679,8 @@
     "buildSub": "项目、智能体和工作区",
     "hireTitle": "获得雇用",
     "hireSub": "自由职业资料和工作",
+    "salesTitle": "推广 Builderforce",
+    "salesSub": "推荐、销售管道与营销活动",
     "accountTypeAria": "账户类型",
     "commonQuestions": "常见问题",
     "navSignIn": "登录",
@@ -8028,6 +8053,7 @@
   "admin": {
     "sub": {
       "health": "运行状况",
+      "outcomes": "价值成果",
       "directory": "目录",
       "sessions": "会话",
       "creationSessions": "创作会话",
@@ -8052,6 +8078,7 @@
       "releaseNotes": "更新日志",
       "demoFunnel": "演示漏斗",
       "salesLeads": "销售线索",
+      "salesCommissions": "销售佣金",
       "cron": "定时任务"
     },
     "common": {

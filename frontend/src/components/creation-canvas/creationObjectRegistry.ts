@@ -47,6 +47,12 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'service', label: 'Local service', icon: '◎', group: 'Build', createData: () => ({ kind: 'service', title: 'Local service', status: 'Preview from VS Code' }) },
   { kind: 'llm', label: 'LLM', icon: '◉', group: 'Models', createData: () => ({ kind: 'llm', title: 'Language model', status: 'Blueprint', model: 'gpt-4o' }) },
   { kind: 'project', label: 'Project', icon: '▦', group: 'Work', createData: () => ({ kind: 'project', title: 'BuilderForce launch', status: 'Not linked', subtitle: 'Search for a canonical project in the inspector.' }) },
+  { kind: 'salesPipeline', label: 'Sales pipeline', icon: '↗', group: 'Work', createData: () => ({ kind: 'salesPipeline', title: 'Sales pipeline', status: 'Live', stages: ['new', 'contacted', 'qualified', 'meeting', 'proposal', 'won'] }) },
+  { kind: 'salesCampaign', label: 'Sales campaign', icon: '◎', group: 'Work', createData: () => ({ kind: 'salesCampaign', title: 'New campaign', status: 'Draft' }) },
+  { kind: 'salesContact', label: 'Sales contact', icon: '●', group: 'People', createData: () => ({ kind: 'salesContact', title: 'New contact', status: 'New', stage: 'new' }) },
+  { kind: 'targetMarket', label: 'Target market', icon: '◇', group: 'Insights', createData: () => ({ kind: 'targetMarket', title: 'Target market', status: 'Researching' }) },
+  { kind: 'salesGoal', label: 'Weekly sales goal', icon: '✓', group: 'Insights', createData: () => ({ kind: 'salesGoal', title: 'Weekly goals', status: 'Active', outreachTarget: 50, contactsTarget: 20, meetingsTarget: 3 }) },
+  { kind: 'salesMeeting', label: 'Sales meeting', icon: '◷', group: 'Collaborate', createData: () => ({ kind: 'salesMeeting', title: 'Sales meeting', status: 'Needs scheduling', durationMinutes: 30 }) },
   { kind: 'task', label: 'Task', icon: '✓', group: 'Work', createData: () => ({ kind: 'task', title: 'Build approved mockup', status: 'Ready', role: 'Campaign Strategist' }) },
   { kind: 'prd', label: 'PRD', icon: '▤', group: 'Work', createData: () => ({ kind: 'prd', title: 'Product requirements', status: 'Draft' }) },
   { kind: 'release', label: 'Release', icon: '◆', group: 'Work', createData: () => ({ kind: 'release', title: 'Release plan', status: 'Planning' }) },
@@ -82,11 +88,13 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   project: ['expand', 'compare'], task: ['assign', 'deliver'], agent: ['inspect', 'configure', 'assign'],
   evermind: ['teach', 'train', 'evaluate', 'publish'], voice: ['record', 'play'], video: ['generate', 'preview'], mcp: ['authenticate', 'execute'],
   mockup: ['preview', 'deliver'], mockupSet: ['expand', 'deliver'], standup: ['start'],
+  salesPipeline: ['refresh', 'review'], salesContact: ['qualify', 'advance'], salesCampaign: ['draft', 'schedule', 'execute'],
+  targetMarket: ['research', 'segment'], salesGoal: ['review', 'update'], salesMeeting: ['schedule', 'invite'],
 };
 
 const MUTABLE_FIELDS = {
   workflow: ['content', 'steps', 'approvalMode', 'runTarget'],
-  website: ['content', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteAccent', 'viewport', 'pages'],
+  website: ['content', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteAccent', 'viewport', 'pages', 'subdomain', 'url', 'siteUrl', 'pathUrl'],
   chat: ['content', 'aiResponse', 'messages', 'trace'],
   dataset: ['content', 'columns', 'rows', 'sampleRows', 'rowCount'],
   table: ['content', 'columns', 'rows'],
@@ -109,6 +117,12 @@ const MUTABLE_FIELDS = {
   service: ['content', 'url', 'port'],
   llm: ['content', 'model', 'instructions', 'parameters'],
   project: ['content', 'projectLens', 'sources', 'qualityScore', 'qualityLabel', 'qualityHeadline', 'diagnosticCount', 'gapCount', 'diagnostics', 'recommendations', 'qualityUpdatedAt'],
+  salesPipeline: ['content', 'ownerUserId', 'stages', 'pipelineCounts', 'recommendations', 'sources'],
+  salesContact: ['content', 'ownerUserId', 'contactId', 'email', 'company', 'market', 'stage', 'lastTouchAt'],
+  salesCampaign: ['content', 'ownerUserId', 'campaignId', 'market', 'subject', 'sent', 'replies', 'scheduledAt'],
+  targetMarket: ['content', 'ownerUserId', 'market', 'segments', 'channels', 'recommendations', 'sources'],
+  salesGoal: ['content', 'ownerUserId', 'outreachTarget', 'contactsTarget', 'meetingsTarget', 'revenueGoalCents', 'referralLink', 'salesLink', 'progress', 'recommendations'],
+  salesMeeting: ['content', 'ownerUserId', 'contactId', 'scheduledAt', 'durationMinutes', 'attendees', 'meetingUrl'],
   task: ['content', 'role', 'assignee', 'agentName', 'agentRef', 'priority', 'acceptanceCriteria', 'taskKey', 'prdTitle', 'prdStatus', 'prdSummary', 'prdCount'],
   prd: ['content', 'markdown', 'requirements', 'userStories'],
   release: ['content', 'items', 'milestones', 'releaseDate'],
@@ -121,7 +135,7 @@ const MUTABLE_FIELDS = {
   standup: ['content', 'participants', 'summary'],
   agent: ['content', 'model', 'instructions', 'tools', 'autonomy'],
   voice: ['content', 'transcript', 'voiceId', 'audioUrl'],
-  video: ['content', 'prompt', 'videoUrl', 'duration'],
+  video: ['content', 'prompt', 'videoUrl', 'duration', 'modelSlug', 'maxFrames', 'frameCount', 'videoWidth', 'videoHeight', 'generatedFrames'],
   document: ['content', 'markdown', 'sources'],
   slides: ['content', 'markdown', 'items', 'sources'],
   knowledge: ['content', 'markdown', 'sources'],
@@ -135,7 +149,7 @@ const MUTABLE_FIELDS = {
   evermind: ['content', 'model', 'instructions', 'teacherModel', 'inferenceEnabled', 'evermindVersion', 'evermindSeeded', 'contributions', 'pendingContributions', 'recentLearnings', 'trainingLoss', 'learningMode', 'lastLearnedAt', 'quarantinedAt', 'quarantineReason', 'evalPoint', 'stages', 'sources'],
 } as const satisfies Record<CreationObjectKind, readonly string[]>;
 
-const COMMON_MUTABLE_FIELDS = ['title', 'subtitle', 'status'] as const;
+const COMMON_MUTABLE_FIELDS = ['title', 'subtitle', 'status', 'deliverables'] as const;
 const SENSITIVE_MUTATION_KEY = /(?:secret|token|password|credential|authorization|api.?key|cookie)/i;
 
 function sanitizeMutationValue(value: unknown, depth = 0): unknown {
@@ -185,6 +199,10 @@ const CONTEXT_FIELDS = [
   'userStories', 'responsibilities', 'tools', 'autonomy', 'transcript', 'stages',
   'approvalMode', 'runTarget', 'deliveryProjectRef', 'deliveryProjectName', 'mockupAgentRef', 'mockupAgentName',
   'qualityScore', 'qualityLabel', 'qualityHeadline', 'diagnosticCount', 'gapCount', 'qualityUpdatedAt',
+  'ownerUserId', 'contactId', 'campaignId', 'email', 'company', 'market', 'stage', 'lastTouchAt',
+  'pipelineCounts', 'subject', 'sent', 'replies', 'scheduledAt', 'segments', 'channels',
+  'outreachTarget', 'contactsTarget', 'meetingsTarget', 'progress', 'durationMinutes', 'attendees', 'meetingUrl',
+  'revenueGoalCents', 'referralLink', 'salesLink',
 ] as const;
 const SENSITIVE_CONTEXT_KEY = /(?:secret|token|password|credential|authorization|api.?key|cookie)/i;
 

@@ -17,6 +17,11 @@ function bareRepo(): ScannedRepo {
     suspectedSecrets: 0, fileCount: 8339,
     hasPrivacyPolicy: false, hasTermsOfService: false, hasCookiePolicy: false, hasCookieConsent: false,
     hasUnsubscribe: false, hasDataExport: false, hasDataDeletion: false, hasRetentionPolicy: false,
+    hasRightsRequestWorkflow: false, hasUniversalOptOut: false, hasDpa: false,
+    hasSubprocessorRegister: false, hasDataInventory: false, hasImpactAssessment: false,
+    hasPrivacyIncidentResponse: false, hasAiTransparency: false,
+    hasAutomatedDecisionSafeguards: false, hasMinorSafety: false,
+    hasTransferSafeguards: false, hasAccessibilityEvidence: false,
   };
 }
 

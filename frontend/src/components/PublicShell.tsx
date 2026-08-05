@@ -26,7 +26,7 @@ export default function PublicShell({ children }: { children: React.ReactNode })
       <div className={`shell ${collapsed ? 'nav-collapsed' : ''}`} style={{ position: 'relative' }}>
         <TopBar onMenuClick={openNav} />
         <Sidebar collapsed={collapsed} onToggleCollapsed={toggle} mobileOpen={navOpen} onMobileClose={closeNav} />
-        <main className="content">
+        <main id="main-content" className="content">
           {children}
           {/* One canonical site footer for every marketing/browse route. */}
           <AppFooter variant="full" />

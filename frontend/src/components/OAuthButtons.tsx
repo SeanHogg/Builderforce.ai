@@ -17,7 +17,11 @@ const PROVIDERS = [
  */
 export default function OAuthButtons() {
   const searchParams = useSearchParams();
-  const next = searchParams.get('next') || '/dashboard';
+  const destination = searchParams.get('next') || '/dashboard';
+  const referralCode = searchParams.get('ref')?.trim();
+  const next = referralCode
+    ? `/sales/referral-claim?ref=${encodeURIComponent(referralCode)}&next=${encodeURIComponent(destination)}`
+    : destination;
 
   return (
     <>

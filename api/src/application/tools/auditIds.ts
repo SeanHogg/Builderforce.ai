@@ -22,9 +22,9 @@ export const SOC2_AUDIT_ID = 'soc2-audit';
 export const QUALITY_AUDIT_ID = 'quality-audit';
 /** Product vision & roadmap audit — planning-spine completeness. */
 export const PM_VISION_AUDIT_ID = 'pm-vision-audit';
-/** Privacy & data-law compliance audit — GDPR, CCPA/CPRA, and CAN-SPAM readiness
- *  scanned from repo signals (privacy policy, cookie consent, unsubscribe, data
- *  export / erasure, retention) and deepened by the compliance agent pass. */
+/** Compliance Audit Agent — multi-jurisdiction privacy, AI, marketing,
+ *  minor-safety, transfer, and accessibility readiness, scanned from GitHub
+ *  repository signals and deepened by the agent source/behavior pass. */
 export const PRIVACY_AUDIT_ID = 'privacy-compliance-audit';
 
 /** Display names for these externally-scored diagnostics (no registered Tool
@@ -34,7 +34,7 @@ export const EXTERNAL_DIAGNOSTIC_NAMES: Record<string, string> = {
   [SOC2_AUDIT_ID]: 'SOC 2 Readiness Audit',
   [QUALITY_AUDIT_ID]: 'Quality Audit',
   [PM_VISION_AUDIT_ID]: 'Product Vision & Roadmap Audit',
-  [PRIVACY_AUDIT_ID]: 'Privacy & Data-Law Compliance',
+  [PRIVACY_AUDIT_ID]: 'Compliance Audit Agent',
 };
 
 /** Canonical emoji icon per externally-scored diagnostic — the SINGLE source the

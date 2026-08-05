@@ -3358,3 +3358,6 @@ textarea.input { resize: vertical; line-height: 1.5; }
   text-align: left;
 }
 .markdown-body th { background: var(--surface, rgba(127, 127, 127, 0.08)); font-weight: 600; }
+/* Keyboard users can bypass repeated navigation; hidden only until focused. */
+.skip-to-content { position: fixed; z-index: 20000; top: 8px; left: 8px; transform: translateY(-160%); padding: 10px 14px; border-radius: 8px; background: #fff; color: #111; font-weight: 700; }
+.skip-to-content:focus { transform: translateY(0); outline: 3px solid #2563eb; outline-offset: 2px; }

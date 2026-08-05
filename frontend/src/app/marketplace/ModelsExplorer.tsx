@@ -8,10 +8,12 @@ import { contrastText } from '@/lib/contrastText';
 import { type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
 import { SkeletonGrid } from './SkeletonGrid';
+import { Select } from '@/components/Select';
 import {
   getModelCatalog,
   formatPricePerMillion,
   formatContext,
+  modelMatchesPriceLimits,
   tierColor,
   type ModelRecord,
 } from '@/lib/modelCatalog';
@@ -19,6 +21,9 @@ import {
 const MAX_COMPARE = 3;
 
 type TierFilter = 'all' | 'free' | 'paid' | 'builderforce';
+type PriceLimit = 'any' | '1' | '5' | '10' | '25' | '50';
+
+const PRICE_LIMITS: PriceLimit[] = ['any', '1', '5', '10', '25', '50'];
 
 /**
  * The live model catalog ("Models") is a category of the marketplace — this
@@ -366,6 +371,8 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
 
   const [tierFilter, setTierFilter] = useState<TierFilter>('all');
   const [routableOnly, setRoutableOnly] = useState(false);
+  const [maxInputPrice, setMaxInputPrice] = useState<PriceLimit>('any');
+  const [maxOutputPrice, setMaxOutputPrice] = useState<PriceLimit>('any');
 
   const [detail, setDetail] = useState<ModelRecord | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -399,10 +406,13 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const maxInput = maxInputPrice === 'any' ? undefined : Number(maxInputPrice);
+    const maxOutput = maxOutputPrice === 'any' ? undefined : Number(maxOutputPrice);
     return models.filter((m) => {
       if (tierFilter === 'builderforce' && !m.isBuilderforce) return false;
       if (tierFilter === 'free' && !(m.pricing.prompt <= 0 && m.pricing.completion <= 0)) return false;
       if (tierFilter === 'paid' && (m.pricing.prompt <= 0 && m.pricing.completion <= 0)) return false;
+      if (!modelMatchesPriceLimits(m, maxInput, maxOutput)) return false;
       // "Routable only": our own products always qualify; upstream models only if
       // the cascade actually routes them.
       if (routableOnly && !m.isBuilderforce && !m.routable) return false;
@@ -413,7 +423,7 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
         m.id.toLowerCase().includes(q)
       );
     });
-  }, [models, search, tierFilter, routableOnly]);
+  }, [models, search, tierFilter, routableOnly, maxInputPrice, maxOutputPrice]);
 
   // Builderforce records always lead, regardless of search ordering.
   const ordered = useMemo(() => {
@@ -464,6 +474,36 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
         >
           ✓ {t('filter.routableOnly')}
         </button>
+        <Select
+          value={maxInputPrice}
+          onChange={(e) => setMaxInputPrice(e.target.value as PriceLimit)}
+          aria-label={t('filter.maxInput')}
+          title={t('filter.priceHelp')}
+          style={{ minWidth: 170, padding: '8px 12px', borderRadius: 8, fontSize: 13 }}
+        >
+          {PRICE_LIMITS.map((limit) => (
+            <option key={limit} value={limit}>
+              {limit === 'any'
+                ? `${t('filter.maxInput')}: ${t('filter.anyPrice')}`
+                : `${t('filter.maxInput')}: ${t('filter.upToPrice', { price: limit })}`}
+            </option>
+          ))}
+        </Select>
+        <Select
+          value={maxOutputPrice}
+          onChange={(e) => setMaxOutputPrice(e.target.value as PriceLimit)}
+          aria-label={t('filter.maxOutput')}
+          title={t('filter.priceHelp')}
+          style={{ minWidth: 178, padding: '8px 12px', borderRadius: 8, fontSize: 13 }}
+        >
+          {PRICE_LIMITS.map((limit) => (
+            <option key={limit} value={limit}>
+              {limit === 'any'
+                ? `${t('filter.maxOutput')}: ${t('filter.anyPrice')}`
+                : `${t('filter.maxOutput')}: ${t('filter.upToPrice', { price: limit })}`}
+            </option>
+          ))}
+        </Select>
       </div>
 
       {loading ? (

@@ -125,12 +125,13 @@ export const newsletterEventTypeEnum = pgEnum('newsletter_event_type', [
 
 
 export const privacyRequestTypeEnum = pgEnum('privacy_request_type', [
-  'ccpa', 'gdpr',
+  'ccpa', 'gdpr', 'access', 'correction', 'deletion', 'portability',
+  'restriction', 'objection', 'opt_out', 'appeal', 'automated_decision_review',
 ]);
 
 
 export const privacyRequestStatusEnum = pgEnum('privacy_request_status', [
-  'pending', 'completed', 'closed',
+  'pending', 'verifying', 'processing', 'completed', 'denied', 'appealed', 'closed',
 ]);
 
 

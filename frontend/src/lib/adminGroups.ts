@@ -32,7 +32,8 @@ export interface AdminGroupMeta {
 
 export const ADMIN_GROUP_META: AdminGroupMeta[] = [
   { id: '', labelKey: 'tab.adminOverview', icon: '🩺', subs: [
-    { id: '', subKey: 'health', icon: '🩺' },
+    { id: '', subKey: 'outcomes', icon: '↗' },
+    { id: 'health', subKey: 'health', icon: '🩺' },
     { id: 'cron', subKey: 'cron', icon: '⏱' },
   ] },
   { id: 'users', labelKey: 'tab.adminUsers', icon: '👤', subs: [
@@ -67,6 +68,7 @@ export const ADMIN_GROUP_META: AdminGroupMeta[] = [
     { id: 'releaseNotes', subKey: 'releaseNotes', icon: '📣' },
     { id: 'demoFunnel', subKey: 'demoFunnel', icon: '🎬' },
     { id: 'salesLeads', subKey: 'salesLeads', icon: '📇' },
+    { id: 'sales-commissions', subKey: 'salesCommissions', icon: '％' },
   ] },
   { id: 'logs', labelKey: 'tab.adminLogs', icon: '📋', subs: [
     { id: '', subKey: 'errors', icon: '🐞' },
@@ -84,7 +86,8 @@ export const ADMIN_GROUP_META: AdminGroupMeta[] = [
  * deep link (e.g. `/admin?tab=security`, bookmarks, the old email links) working.
  */
 export const LEGACY_ADMIN_TAB: Record<string, { group: string; sub: string }> = {
-  health: { group: '', sub: '' },
+  health: { group: '', sub: 'health' },
+  outcomes: { group: '', sub: '' },
   users: { group: 'users', sub: '' },
   security: { group: 'users', sub: 'security' },
   impsessions: { group: 'users', sub: 'emulation' },

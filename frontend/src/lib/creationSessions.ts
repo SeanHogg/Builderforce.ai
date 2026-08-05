@@ -9,7 +9,7 @@ export interface LocalCreationSnapshot {
   version: 1;
   title: string;
   initialPrompt?: string;
-  timeline?: Array<{ clientMessageId: string; role: 'user' | 'assistant' | 'system'; body: string; createdAt: string }>;
+  timeline?: Array<{ clientMessageId: string; role: 'user' | 'assistant' | 'system'; body: string; metadata?: { scope?: string; objectIds?: string[]; model?: string; error?: boolean; authoredBy?: { kind: 'agent' | 'brain'; ref: string; name: string } }; createdAt: string }>;
   nodes: CreationFlowNode[];
   edges: Edge[];
   viewport?: { x: number; y: number; zoom: number };

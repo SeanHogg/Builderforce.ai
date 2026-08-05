@@ -3,15 +3,18 @@ import { describe, expect, it, vi } from 'vitest';
 import { WorkspaceCanvas } from './WorkspaceCanvas';
 
 describe('WorkspaceCanvas', () => {
-  it('opens the mini map by default and lets it be closed and reopened from the canvas controls', () => {
+  it('keeps the mini map action visible while the mini map is opened, closed, and reopened', () => {
     render(<WorkspaceCanvas panels={[
       { id: 'overview', title: 'Overview', content: <div>Overview panel</div> },
     ]} />);
 
     expect(screen.getByRole('button', { name: 'Clean up canvas layout' })).toBeInTheDocument();
+    const minimapAction = screen.getByRole('button', { name: 'Toggle mini map' });
+    expect(minimapAction).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'Close mini map' }));
-    expect(screen.getByRole('button', { name: 'Open mini map' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Open mini map' }));
+    expect(minimapAction).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(minimapAction);
+    expect(minimapAction).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Close mini map' })).toBeInTheDocument();
   });
 

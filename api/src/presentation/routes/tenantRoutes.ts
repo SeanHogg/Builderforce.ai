@@ -35,6 +35,7 @@ import {
   tenantMembers,
   tenants,
   users,
+  salesReferrals,
 } from '../../infrastructure/database/schema';
 import { sendWorkspaceInviteEmail } from '../../infrastructure/email/EmailService';
 import { sendTransactionalEmail } from '../../application/email/sendEmail';
@@ -205,6 +206,10 @@ function forbidCrossTenant(c: Context<HonoEnv>, id: number): Response | undefine
 
 export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+
+  // Public, content-free plan contract. Marketing and checkout read the same
+  // prices and entitlements that server-side billing guards enforce.
+  router.get('/pricing', (c) => c.json(TenantService.publicPricingContract()));
 
   // GET /api/tenants/mine  – WebJWT required; returns tenants the caller belongs to
   // Used by the tenant picker immediately after login (before a tenant JWT exists)
@@ -431,6 +436,10 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         })
       : undefined;
 
+    const [pendingReferral] = await db.select({ id: salesReferrals.id }).from(salesReferrals).where(and(
+      eq(salesReferrals.referredUserId, c.get('userId') as string), isNull(salesReferrals.convertedAt),
+    )).limit(1);
+
     let result: { checkoutUrl: string; sessionId: string };
     try {
       result = await tenantService.createCheckoutSession(tenantId, {
@@ -447,6 +456,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
           durationYears: discount.durationYears,
           redemptionId: discount.redemptionId,
         } : undefined,
+        salesReferralId: pendingReferral?.id,
       });
     } catch (error) {
       if (discount) {
@@ -460,6 +470,24 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       await attachDiscountCheckout(db, tenantId, discount.redemptionId, result.sessionId).catch((error) => {
         reportCaughtError(error, { source: 'presentation/routes/tenantRoutes.ts', operation: 'attachDiscountCheckout' });
       });
+    }
+
+    // Bind attribution to the exact workspace entering checkout. This is more
+    // accurate than assuming the first workspace owner was the purchaser and
+    // lets the signed activation webhook resolve the referral deterministically.
+    if (pendingReferral) {
+      try {
+        // Latest valid checkout owns the still-pending attribution. Clear an
+        // abandoned earlier checkout before binding this one, atomically.
+        await db.batch([
+          db.update(salesReferrals).set({ tenantId: null }).where(and(eq(salesReferrals.tenantId, tenantId), isNull(salesReferrals.convertedAt))),
+          db.update(salesReferrals).set({ tenantId }).where(eq(salesReferrals.id, pendingReferral.id)),
+        ]);
+      } catch (error) {
+        // Checkout already exists at the provider at this point. Attribution must
+        // never turn a valid payment session into a 500.
+        reportCaughtError(error, { source: 'presentation/routes/tenantRoutes.ts', operation: 'bindSalesReferralAttribution' });
+      }
     }
 
     return c.json(result);

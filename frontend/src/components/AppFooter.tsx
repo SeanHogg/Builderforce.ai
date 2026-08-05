@@ -50,6 +50,9 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
         UI {appVersion} · API {apiVersion ?? '…'}
       </button>
       <div className="global-footer-links">
+        <button type="button" onClick={() => window.dispatchEvent(new Event('builderforce:cookie-preferences'))} className="global-footer-link">Cookie preferences</button>
+        <Link href="/legal/subprocessors" className="global-footer-link">Subprocessors</Link>
+        <Link href="/legal/accessibility" className="global-footer-link">Accessibility</Link>
         <button
           type="button"
           onClick={() => setModalType('terms')}
@@ -84,7 +87,7 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
                 />
                 <span>{BRAND.name}</span>
               </Link>
-              <p className="global-footer-summary">{STATS.quotable.humanInLoopAgentic}</p>
+              <p className="global-footer-summary">{STATS.quotable.creativeCanvas}</p>
               <p className="global-footer-credit">
                 {t('builtBy')}{' '}
                 <a href={BRAND.founder.url} target="_blank" rel="noopener">

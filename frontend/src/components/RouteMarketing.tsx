@@ -54,12 +54,12 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
         <h1 className="rm-title">{m.title}</h1>
         <p className="rm-desc">{m.description}</p>
         <p className="rm-sub">
-          Sign in to use {m.title}, or create a free account — no credit card required.
+          Create a free workspace to use {m.title}, or sign in to continue existing work.
         </p>
         <div className="rm-actions">
-          <Link href="/register" className="rm-btn-primary">🚀 Get Started Free</Link>
+          <Link href="/create/new" className="rm-btn-primary">✦ Start creating free</Link>
           <Link href={loginHref} className="rm-btn-secondary">Sign In</Link>
-          <Link href="/product" className="rm-btn-ghost">Explore the product →</Link>
+          <Link href="/creation-canvas" className="rm-btn-ghost">Explore the canvas →</Link>
         </div>
       </section>
 

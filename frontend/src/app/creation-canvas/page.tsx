@@ -6,19 +6,18 @@ import RelatedArticles from '@/components/blog/RelatedArticles';
 export const runtime = 'edge';
 
 export const metadata: Metadata = pageMetadata({
-  title: 'Creation Canvas — One Visual Session for Everything You Build',
-  description: 'Create workflows, websites, data visualizations, prototypes, Evermind models, voice experiences, and agent-delivered work together on one multiplayer AI canvas.',
+  title: 'Creation Canvas — Turn Any Idea Into Something Real',
+  description: 'One visual workspace where your team and AI agents design, build, review, and deliver websites, workflows, models, data stories, and products.',
   path: '/creation-canvas',
 });
 
 const capabilities = [
-  ['Start before structure', 'Type a prompt on builderforce.ai and enter a local session immediately. A project and account are optional until you collaborate or deliver.'],
-  ['Everything is a live object', 'Chat, workflows, websites, datasets, charts, dashboards, WYSIWYG prototypes, code, LLMs, voice, agents, people, projects, tasks, roadmaps, slides, and mockups share one canvas.'],
-  ['Brain sees relationships', 'Scope a prompt to the whole canvas, a selection, or a frame. Typed connections tell Brain what supplies data, controls execution, provides evidence, or receives delivery.'],
-  ['Build together', 'Invite viewers, commenters, editors, runners, and owners. Use live cursors, object comments, mentions, shared activity, presentation mode, and viewport follow.'],
-  ['Review before mutation', 'AI multi-object changes appear as a selectable proposal. Branch a session for exploration and resolve each object explicitly before merging it back.'],
-  ['Find work without exposing it', 'Permission-scoped search covers Session titles, safe Object labels, Projects, collaborators, kinds, status, and activity—never imported rows, prompts, credentials, or secrets.'],
-  ['Close the delivery loop', 'Turn an approved mockup into a project task, assign a human or AI agent, apply approval policy, and follow execution from the same session.'],
+  ['Begin with an idea', 'Describe what you want to create and enter a private canvas immediately. Add an account, team, or project only when the work needs them.'],
+  ['Create with real, connected objects', 'Websites, workflows, datasets, charts, prototypes, models, documents, people, and agents stay editable and connected instead of becoming flattened chat attachments.'],
+  ['Give AI the whole picture', 'Ask Brain to work across the entire canvas, a selection, or a frame. Relationships preserve the context, evidence, and intent behind every artifact.'],
+  ['Bring people and agents together', 'Invite collaborators, leave comments, follow live work, and place specialist AI agents beside the objects they help create.'],
+  ['Stay in control', 'Review proposed changes before they are applied. Use checkpoints and branches to explore ideas without losing the version your team trusts.'],
+  ['Move from concept to outcome', 'Turn approved work into projects and tasks, assign it to humans or AI agents, and follow delivery from the same creative context.'],
 ];
 
 const specs = [
@@ -42,11 +41,11 @@ export default function CreationCanvasMarketingPage() {
       .ccm h2{font:750 clamp(1.7rem,4vw,2.6rem)/1.1 var(--font-sans);letter-spacing:-.035em;margin:64px 0 24px}.ccm-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.ccm-feature{padding:22px;border:1px solid var(--border-subtle);border-radius:16px;background:var(--surface-card)}.ccm-feature h3{margin:0 0 8px;font-size:1rem}.ccm-feature p{margin:0;color:var(--text-secondary);font-size:.9rem;line-height:1.6}.ccm-specs{border:1px solid var(--border-subtle);border-radius:16px;overflow:hidden}.ccm-spec{display:grid;grid-template-columns:190px 1fr;gap:20px;padding:16px 20px;border-bottom:1px solid var(--border-subtle)}.ccm-spec:last-child{border:0}.ccm-spec b{font-size:.9rem}.ccm-spec span{color:var(--text-secondary);line-height:1.55;font-size:.9rem}
       @media(max-width:800px){.ccm-grid{grid-template-columns:1fr}.ccm-board{min-height:650px}.ccm-card{position:relative!important;inset:auto!important;width:auto!important;margin:16px}.ccm-spec{grid-template-columns:1fr;gap:5px}}
     `}</style>
-    <section className="ccm-hero"><div className="ccm-kicker">Builderforce Creation Canvas</div><h1>One session. Every way your team creates.</h1><p>Keep the familiar prompt, then move beyond chat. Design, visualize, train, evaluate, collaborate, and deliver with humans and AI agents on a shared blank canvas.</p><div className="ccm-actions"><Link href="/create/new">Start creating free →</Link><Link href="/product">Explore the platform</Link></div></section>
+    <section className="ccm-hero"><div className="ccm-kicker">Builderforce Creation Canvas</div><h1>Turn any idea into something real.</h1><p>One creative canvas where your team and AI agents design, build, review, and deliver websites, workflows, models, data stories, and products—without the tool sprawl.</p><div className="ccm-actions"><Link href="/create/new">Start creating free →</Link><Link href="/product">See what you can create</Link></div></section>
     <section className="ccm-board" aria-label="Example Creation Canvas"><div className="ccm-card"><b>⌘ Campaign workflow</b><span>Audience → Create → Approve → Publish</span></div><div className="ccm-card"><b>◎ Interactive landing page</b><span>Live WYSIWYG website prototype</span></div><div className="ccm-card"><b>▥ Campaign forecast</b><span>Dataset-bound funnel and channel metrics</span></div><div className="ccm-card"><b>● Brain conversation</b><span>Will this workflow be effective with this page?</span></div><div className="ccm-card"><b>✦ Campaign strategist</b><span>Live agent · configured and assignable</span></div></section>
-    <h2>Creativity without context switching</h2><section className="ccm-grid">{capabilities.map(([title, body]) => <article className="ccm-feature" key={title}><h3>{title}</h3><p>{body}</p></article>)}</section>
+    <h2>From blank canvas to finished outcome</h2><section className="ccm-grid">{capabilities.map(([title, body]) => <article className="ccm-feature" key={title}><h3>{title}</h3><p>{body}</p></article>)}</section>
     <h2>Product specifications</h2><section className="ccm-specs">{specs.map(([label, value]) => <div className="ccm-spec" key={label}><b>{label}</b><span>{value}</span></div>)}</section>
     <RelatedArticles surface="creation-canvas" heading="Creation Canvas guides and use cases" />
-    <section className="ccm-hero" style={{ marginTop: 80, marginBottom: 0 }}><h2>Start with what you want—not where it belongs.</h2><p>Your first prompt creates a session. Add project structure only when it helps organize, compare, govern, or deliver the work.</p><div className="ccm-actions"><Link href="/create/new">Open a blank canvas →</Link></div></section>
+    <section className="ccm-hero" style={{ marginTop: 80, marginBottom: 0 }}><h2>What will you create?</h2><p>Start with a prompt. Keep every idea, artifact, decision, collaborator, and agent connected until the work is ready to deliver.</p><div className="ccm-actions"><Link href="/create/new">Open a blank canvas →</Link></div></section>
   </main>;
 }

@@ -28,8 +28,8 @@ import { McpExtensionsBridge } from './brain/McpExtensionsBridge';
 import { PlatformActionsBridge } from './brain/PlatformActionsBridge';
 import { ProjectScopeProvider } from '@/lib/ProjectScopeContext';
 import { useAuth } from '@/lib/AuthContext';
-import { useIsFreelancer } from '@/lib/rbac';
-import { findActiveGroup, isFreelancerAllowedPath } from '@/lib/navGroups';
+import { useIsFreelancer, useIsSalesAssociate } from '@/lib/rbac';
+import { findActiveGroup, isFreelancerAllowedPath, isSalesAllowedPath } from '@/lib/navGroups';
 import { classifyShell } from '@/lib/shellRouting';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef } from 'react';
@@ -70,6 +70,7 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
   const pathname = usePathname() || '';
   const { isAuthenticated } = useAuth();
   const isFreelancer = useIsFreelancer();
+  const isSales = useIsSalesAssociate();
 
   const kind = classifyShell(pathname);
   if (kind === 'none') return <>{children}</>;
@@ -123,6 +124,9 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
   // fetches, which 401 for a tenantless account) — FreelancerRouteGuard redirects to
   // /freelancer/profile on the next tick.
   if (isFreelancer && !isFreelancerAllowedPath(pathname)) {
+    return <AppShell>{null}</AppShell>;
+  }
+  if (isSales && !isSalesAllowedPath(pathname)) {
     return <AppShell>{null}</AppShell>;
   }
   return (
@@ -183,6 +187,18 @@ function FreelancerRouteGuard() {
   return null;
 }
 
+function SalesRouteGuard() {
+  const isSales = useIsSalesAssociate();
+  const { isAuthenticated } = useAuth();
+  const pathname = usePathname() || '';
+  const router = useRouter();
+  useEffect(() => {
+    if (!isAuthenticated || !isSales) return;
+    if (classifyShell(pathname) === 'app' && !isSalesAllowedPath(pathname)) router.replace('/sales');
+  }, [isAuthenticated, isSales, pathname, router]);
+  return null;
+}
+
 /** Close anonymous Brain/tool attribution as soon as this browser authenticates. */
 function MarketingConversionTracker() {
   const { isAuthenticated } = useAuth();
@@ -234,6 +250,7 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
               {content}
               <MarketingConversionTracker />
               <FreelancerRouteGuard />
+              <SalesRouteGuard />
               {/* Audited "click sense" capture — navigations + explicit signals
                   feed the billable-timecard pipeline. Signed-in users only. */}
               <ActivityTracker />

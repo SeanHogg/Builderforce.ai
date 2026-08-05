@@ -10,9 +10,9 @@
 
 > **Vision**: Human as the manager — developers supervise, prioritize, approve, and steer AI agents rather than writing code themselves.
 
-### 🌟 North Star — "Define a need, the agentic system solves it"
+### 🌟 North Star — "One creation session: idea to delivered outcome"
 
-> Any human defines a need in any modality (prose · dataset/docs · process chart · persona · diagnostic findings) and the platform compiles it into an agent that runs on the right surface (IDE · desktop · cloud · workflow step). The unifying primitive: `compile(need, modality) → AgentSpec → deploy(AgentSpec, surface)`. The spine (`AgentSpec` IR + `lowerAgentSpec` + `compile()`/`deploy()` registries + `PolicyGate` + all six modality adapters + `/compile`) is **shipped**; remaining work is enforcement depth + data providers (below). Full design: **[PRD-agent-compile-primitive.md](./PRD-agent-compile-primitive.md)**.
+> A human starts with a need, collaborates with people and agents in one Creation Session, validates the result, and delivers it. Compilation and runtime activity are means; a validated, delivered, reusable outcome is the product value. Every meaningful action must carry a correlation ID to a measurable result so the same value ledger can roll up from session → project → tenant → privacy-safe platform aggregate.
 
 ## Consolidated Feature Register
 
@@ -31,6 +31,9 @@
 | Remote task result streaming (replaces fire-and-forget dispatch) | Agents | P2 | Q3 2026 | 📋 Planned |
 | Multi-model role routing (per-step model assignment) | Agents | P2 | Q3 2026 | 📋 Planned |
 | Spec import from GitHub Issues / Linear / Jira | Agents | P2 | Q3 2026 | 📋 Planned |
+| Outcome scorecard icon — session vs tenant baseline | Creation | P0 | Q3 2026 | 🔄 In Progress |
+| Correlated outcome ledger + session/project/tenant/platform rollups | Analytics | P0 | Q3 2026 | 🔄 In Progress |
+| Value-generation sales deck sourced from outcome rollups | Revenue | P1 | Q3 2026 | 🔄 Partial |
 | **PHASE 6 — Dev Analytics & Team Intelligence** | | | Q3–Q4 2026 | 📋 Planned |
 | Activity engine, integration engine (Jira/Bitbucket/GitHub/…), reporting/scheduling, PRD multi-agent orchestration, analytics UI | 6 | P0–P1 | Q3–Q4 2026 | 📋 Planned |
 | **PHASE 7 — Agentic Security & Governance** ([PRD 08](./specs/builderforce/08-prd-agentic-governance.md)) | | | Q3 2026 | 📋 Planned |
@@ -51,17 +54,61 @@
 
 ## Key Metrics
 
-**Acquisition:** GitHub stars · npm weekly downloads · Discord members. **Activation:** projects with `.builderforce/` initialized · workflows executed/day · MCP connections. **Retention:** DAU/MAU ≥ 30% · weekly active agents · sessions/user/week.
+**North-star metric:** percentage of Creation Sessions that reach a validated, real deliverable.
 
-## Next Milestones (by business priority)
+**Speed:** time from first prompt to first meaningful artifact. **Delivery:** sessions reaching a real deliverable · artifact validation/pass rate · delivery success and retry rate. **Collaboration:** sessions inviting at least one human or agent · agent group-chat participation · successful synthesis rate. **Compounding value:** sessions resumed within 7 and 30 days · created outputs reused as inputs. **Efficiency:** human interventions per successful delivery · cost and latency per delivered outcome. **Measurement integrity:** percentage of meaningful actions with a correlated terminal outcome.
 
-**P0 — blocking today:** remote task result streaming (`correlationId` round-trip so `remote:<id>` steps return output) · execution WebSocket streaming (replace the 2s poll) · live orchestration workspace (real-time DAG) · BuilderForce Agents as MCP provider (`/mcp` on the local gateway).
+GitHub stars, package downloads, workflow counts, MCP connections, and active-agent counts remain operational or acquisition diagnostics. They are not evidence of customer value and do not lead roadmap prioritization.
 
-**P1 — enterprise readiness:** diff staging & inline approval API (`pending_diffs` + relay frame) · spec & workflow storage API · spec review + workflow portal.
+Every metric is computed from the correlated outcome ledger and supports the same content-free aggregation dimensions: session, project, tenant, and platform. Platform aggregates must enforce minimum cohort sizes and never expose another tenant's session content. The session scorecard compares the current session with an aggregate tenant baseline; project and tenant rollups power value reviews, and privacy-safe platform rollups power the sales deck. Metric contract: **[Creation outcome metrics](./docs/design/creation-canvas/OUTCOME-METRICS.md)**.
 
-**P2 — observability & unit economics:** token usage dashboard · agent run audit trail · fleet capability management UI · persona registry API.
+## Claim-to-Proof Product Program
 
-**P3 — future moat:** model cost tracking + budget alerts · approval workflow API (destructive ops) · spec import (Issues/Linear/Jira) · cross-agent memory sharing.
+Public copy describes evidence available today; stronger promises become roadmap requirements until their acceptance criteria are continuously verified.
+
+**Claim policy:** **Available** means shipped, reachable, and covered by repeatable verification. **Beta** means shipped with a named limitation, environment, or incomplete coverage. **Planned** is approved direction and must not be presented as current capability. Avoid `every`, `always`, `never`, `100%`, `zero`, `entire`, and `instant` unless a test or service objective proves the stated boundary. Every public capability must declare its execution/data boundary, prerequisites, status, and last verification date.
+
+| Priority | Desired promise | Current honest position | System improvement and proof required | Status |
+| --- | --- | --- | --- | --- |
+| P0 | One creative canvas from idea to delivery | The canvas connects supported artifacts and hands approved work into supported delivery surfaces. | Release-gated journey tests for each marketed artifact: create, edit, review, hand off, reopen, recover. | 🔄 Partial |
+| P0 | People remain in control of agent work | Policy gates cover configured execution paths; policy-resolution failure now blocks dispatch (shipped 2026-08-04). | Enumerate every mutating tool as blocked, approval-required, policy-auto-approved, or exempt; fail CI on an unclassified mutation. | 🔄 In Progress |
+| P0 | Complete agent auditability | Supported workflows emit execution and decision records. | Common audit envelope for every mutation entry point with actor, tenant, input reference, decision, result, and correlation ID; reconcile sampled writes against audit records. | 🔄 Partial |
+| P0 | Private, local AI work | Supported WebGPU computation is local; collaboration, remote evaluation, generation, and publishing can transmit data. Public capability and named-integration boundary matrices shipped 2026-08-04. | Extend the boundary manifest to every action, show it before execution, and retain it in provenance. | 🔄 In Progress |
+| P1 | Evermind stays current | Keyed project-memory updates can replace superseded facts; source quality and retrieval coverage still matter. | Provenance, observed-at timestamps, contradiction detection, freshness budgets, stale-source alerts, and published correction-retention/stale-recall evaluations. | 📋 Planned |
+| P1 | The same work is available in VS Code | VS Code is an engineering surface for relevant canvas and delivery context. | Web-to-extension parity matrix and contract tests for sessions, objects, comments, reviews, approvals, repository context, diagnostics, and delivery actions. | 🔄 Partial |
+| P1 | Connected delivery without tool sprawl | Builderforce reduces context switching while connected services remain independent systems. | Integration health, sync direction, last-sync state, conflict handling, source-of-truth selection, and round-trip recovery tests per marketed connector. | 🔄 Partial |
+| P1 | Costs connect to outcomes | Recorded model usage and human effort roll up where instrumentation exists. | Coverage indicators for unattributed spend/effort, immutable source references for priced usage, reconciliation reports, and traceable task-to-initiative rollups. | 🔄 Partial |
+| P2 | Create “anything” | The platform supports a broad, named set of artifact types rather than literally every medium or runtime. A code-owned public registry with status, boundary, prerequisites, evidence, and verification date shipped 2026-08-04. | Add limits, exports, owner, and a working example to each registry entry; extend coverage from public surfaces to every artifact and action. | 🔄 In Progress |
+| P2 | Model and provider freedom | Multiple supported cloud and local options exist; availability changes. | Generate public provider copy from the live catalog by plan, region, credential type, and runtime; remove manually maintained counts. | 📋 Planned |
+| P2 | Fair competitive comparison | Criteria-first pages and five indexed comparison articles now avoid static price/provider scorecards (shipped 2026-08-04). | Any future vendor-specific fact requires a primary source, observation date, reviewer, and automatic expiry. | 🔄 In Progress |
+| P2 | Clear value for CEOs and revenue leaders | Broad capability exists; outcome proof is still limited. | Measure canvas start → first artifact → collaborator/agent → review → delivered outcome; publish customer evidence only with permission. | 🔄 In Progress |
+
+**Marketing release gate:** assign status; link the owning capability and automated evidence; state prerequisites and data boundaries; constrain universal wording to a tested boundary; source and date comparisons; derive pricing and numeric claims from runtime sources of truth.
+
+## Next Milestones (by product priority)
+
+**P0 — Imagine → Create → Deliver:** release-gate the canonical agent group-chat journey and every marketed delivery adapter; expand the shared deliverable manifest to image, voice, repository, mobile, model, and data outputs; make retry/recovery and validation visible on the Canvas.
+
+**P1 — collaborative creation:** directed human/agent mentions, moderator controls, parallel-run budget visibility, object-level review/approval, and cross-surface web/VS Code parity for conversation, artifacts, provenance, and delivery.
+
+**P2 — reusable outcomes:** publishable Creation templates, deliverable reuse as Canvas inputs, version comparison, portable export/import, and project/tenant value rollups sourced from correlated outcomes.
+
+**Supporting platform backlog (not the product north star):** remote task-result streaming, execution WebSockets, live runtime DAG, local gateway MCP provider, diff staging, fleet management, model-cost alerts, and cross-agent memory remain valid enabling work. They do not outrank a broken idea-to-deliver journey.
+
+### 2026-08-04 assessment gap closure
+
+| Previously missing | Implementation status |
+| --- | --- |
+| Canonical workforce agents in Canvas group chat | Shipped: saved Sessions create/link a canonical Brain chat, invite connected `agent:<ref>` participants, persist the user turn, and call the workforce reply runtime. |
+| `@agent`, ask-all, moderator/synthesis routing | Shipped: mentions narrow recipients; unaddressed/ask-all turns run the connected group; Brain performs final synthesis and graph changes. |
+| Independent permissions, memory, usage, and provenance | Shipped by routing agent contributions through the existing canonical reply runtime instead of the Canvas LLM simulation. |
+| Parallel agent participation | Shipped: addressed canonical replies execute concurrently and remain individually attributed in both canonical chat and Session timeline. |
+| Real website publishing | Shipped: Website objects build static assets and call the existing versioned site-publish service; URL and asset validation enter the deliverable manifest. |
+| Real video generation | Shipped: Video objects call a published Evermind media model and persist frames, preview, model, shape, and usage evidence. |
+| Universal deliverable manifest | Shipped for connected adapters: stable lifecycle, provider/resource, validation, errors, metadata, and correlated outcome rows. Continue adding adapter coverage under P0. |
+| Document/deck export | Already shipped through canonical Office export endpoints; retained as delivery adapters rather than roadmap work. |
+| First-prompt execution | Already shipped: the initial Session prompt automatically invokes Canvas evaluation; no duplicate implementation was needed. |
+| Creation architecture boundary | Shipped first extraction: canonical group orchestration and delivery construction moved to dedicated libraries; contract documented in `docs/design/creation-canvas/DELIVERY-ARCHITECTURE.md`. Further decomposition remains ordinary maintainability work. |
 
 ## Known Implementation Gaps (Builderforce.ai API)
 

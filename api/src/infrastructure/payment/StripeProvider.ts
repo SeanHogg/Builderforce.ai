@@ -94,6 +94,10 @@ export class StripeProvider implements PaymentProvider {
       params.set('subscription_data[metadata][discountRedemptionId]', opts.discount.redemptionId);
       params.set('subscription_data[metadata][discountCode]', opts.discount.code);
     }
+    if (opts.salesReferralId) {
+      params.set('metadata[salesReferralId]', opts.salesReferralId);
+      params.set('subscription_data[metadata][salesReferralId]', opts.salesReferralId);
+    }
 
     const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
@@ -320,6 +324,7 @@ export class StripeProvider implements PaymentProvider {
           type: 'subscription.activated',
           ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}),
           ...(meta['discountRedemptionId'] ? { discountRedemptionId: meta['discountRedemptionId'] } : {}),
+          ...(meta['salesReferralId'] ? { salesReferralId: meta['salesReferralId'] } : {}),
           externalCustomerId: customer,
           externalSubscriptionId: sub ?? '',
           billingCycle: (meta['billingCycle'] as TenantBillingCycle) ?? TenantBillingCycle.MONTHLY,

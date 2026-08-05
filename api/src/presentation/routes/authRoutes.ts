@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { and, desc, eq, gt, inArray, isNull, ne, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { AuthService } from '../../application/auth/AuthService';
 import { DeviceAuthService } from '../../application/auth/DeviceAuthService';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
@@ -24,7 +24,10 @@ import {
   users,
   tenantApiKeys,
   tenantMembers,
+  salesAssociateSettings,
+  salesReferrals,
 } from '../../infrastructure/database/schema';
+import { notify } from '../../application/notifications/notify';
 import { hashPassword, hashSecret, verifyPassword } from '../../infrastructure/auth/HashService';
 import { decodeJwtPayload, signJwt, signWebJwt, verifyWebJwt } from '../../infrastructure/auth/JwtService';
 import { mintTenantSessionToken } from '../../infrastructure/auth/tenantSessionToken';
@@ -428,8 +431,10 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
   router.post('/privacy-requests', async (c) => {
     const body = await c.req.json<{
       email?: string;
-      requestType?: 'ccpa' | 'gdpr';
+      requestType?: 'ccpa' | 'gdpr' | 'access' | 'correction' | 'deletion' | 'portability' | 'restriction' | 'objection' | 'opt_out' | 'appeal' | 'automated_decision_review';
       details?: string;
+      jurisdiction?: string;
+      parentRequestId?: number;
     }>();
 
     const rawEmail = body.email ?? '';
@@ -438,7 +443,8 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       return c.json({ error: 'Valid email is required' }, 400);
     }
 
-    const requestType = body.requestType === 'gdpr' ? 'gdpr' : 'ccpa';
+    const allowedTypes = new Set(['ccpa', 'gdpr', 'access', 'correction', 'deletion', 'portability', 'restriction', 'objection', 'opt_out', 'appeal', 'automated_decision_review'] as const);
+    const requestType = allowedTypes.has(body.requestType as never) ? body.requestType! : 'access';
     const details = body.details?.trim() || null;
 
     const [user] = await db
@@ -454,6 +460,9 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         email,
         requestType,
         details,
+        jurisdiction: body.jurisdiction?.trim().slice(0, 32) || null,
+        parentRequestId: Number.isInteger(body.parentRequestId) ? body.parentRequestId : null,
+        dueAt: new Date(Date.now() + 45 * 86_400_000),
       })
       .returning({ id: privacyRequests.id });
 
@@ -484,6 +493,50 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       needsAcceptance: status.needsAcceptance,
       terms,
     });
+  });
+
+  // GET /api/auth/me/privacy-export — machine-readable, authenticated access and
+  // portability bundle. Workspace content remains exportable from its owning UI;
+  // this bundle covers the person's identity, memberships, legal record, and DSRs.
+  router.get('/me/privacy-export', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as UserId;
+    const [account] = await db.select({ id: users.id, email: users.email, username: users.username, displayName: users.displayName, accountType: users.accountType, locale: users.locale, createdAt: users.createdAt, updatedAt: users.updatedAt }).from(users).where(eq(users.id, userId)).limit(1);
+    if (!account) return c.json({ error: 'User not found' }, 404);
+    const [memberships, legalAcceptances, requests] = await Promise.all([
+      db.select().from(tenantMembers).where(eq(tenantMembers.userId, userId)),
+      db.select().from(userLegalAcceptances).where(eq(userLegalAcceptances.userId, userId)),
+      db.select().from(privacyRequests).where(eq(privacyRequests.userId, userId)),
+    ]);
+    c.header('Content-Disposition', `attachment; filename="builderforce-privacy-export-${userId}.json"`);
+    c.header('Cache-Control', 'private, no-store');
+    return c.json({ schemaVersion: 1, exportedAt: new Date().toISOString(), account, memberships, legalAcceptances, privacyRequests: requests });
+  });
+
+  // Authenticated request channel for deletion, correction, objection, appeal,
+  // portability, or human review. Identity is already verified by the WebJWT.
+  router.post('/me/privacy-requests', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as UserId;
+    const body = await c.req.json<{ requestType?: string; details?: string; jurisdiction?: string; parentRequestId?: number }>().catch(() => ({} as { requestType?: string; details?: string; jurisdiction?: string; parentRequestId?: number }));
+    const supported = ['access', 'correction', 'deletion', 'portability', 'restriction', 'objection', 'opt_out', 'appeal', 'automated_decision_review'] as const;
+    if (!supported.includes(body.requestType as typeof supported[number])) return c.json({ error: 'Unsupported privacy request type' }, 400);
+    const [account] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
+    if (!account) return c.json({ error: 'User not found' }, 404);
+    const isDeletion = body.requestType === 'deletion';
+    const [created] = await db.insert(privacyRequests).values({
+      userId, email: account.email, requestType: body.requestType as typeof supported[number],
+      details: body.details?.trim() || null, jurisdiction: body.jurisdiction?.trim().slice(0, 32) || null,
+      parentRequestId: Number.isInteger(body.parentRequestId) ? body.parentRequestId : null,
+      status: body.requestType === 'appeal' ? 'appealed' : 'processing', verifiedAt: new Date(),
+      dueAt: new Date(Date.now() + 45 * 86_400_000),
+      processorDeletionStatus: isDeletion ? { state: 'queued', providers: 'derived from tenant integrations and subprocessor register' } : null,
+      backupDisposition: isDeletion ? 'Queued for live-system deletion; encrypted backups age out under the retention schedule and are not returned to production except disaster recovery.' : null,
+    }).returning({ id: privacyRequests.id, status: privacyRequests.status, dueAt: privacyRequests.dueAt });
+    return c.json({ ok: true, request: created }, 201);
+  });
+
+  router.get('/me/privacy-requests', webAuthMiddleware, async (c) => {
+    const userId = c.get('userId') as UserId;
+    return c.json({ requests: await db.select().from(privacyRequests).where(eq(privacyRequests.userId, userId)).orderBy(desc(privacyRequests.createdAt)) });
   });
 
   // POST /api/auth/legal/terms/accept (requires WebJWT)
@@ -685,16 +738,21 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       agreeToTerms?: boolean;
       accountType?: string;
       anonId?: string;
+      referralCode?: string;
+      ageAttested?: boolean;
     }>();
     if (!body.email || !body.password) {
       return c.json({ error: 'email and password are required' }, 400);
     }
     // Optional landing anon-id — threaded through so the verification path can carry it.
     const anonId = typeof body.anonId === 'string' && body.anonId.trim() ? body.anonId.trim() : undefined;
-    // 'freelancer' = restricted gig account for hire; anything else = standard.
-    const accountType = body.accountType === 'freelancer' ? 'freelancer' : 'standard';
+    // Dedicated shells: freelancer = gig account; sales = referral/sales associate.
+    const accountType = body.accountType === 'freelancer' ? 'freelancer' : body.accountType === 'sales' ? 'sales' : 'standard';
     if (body.agreeToTerms !== true) {
       return c.json({ error: 'You must accept the Terms of Use and Privacy Policy' }, 400);
+    }
+    if (body.ageAttested !== true) {
+      return c.json({ error: 'BuilderForce accounts require confirmation that you are at least 18 years old' }, 400);
     }
 
     const email = body.email.toLowerCase().trim();
@@ -751,6 +809,15 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       .returning();
 
     if (!created) return c.json({ error: 'Failed to create user' }, 500);
+
+    const referralCode = typeof body.referralCode === 'string' ? body.referralCode.trim().toUpperCase().slice(0, 32) : '';
+    if (referralCode) {
+      const [associate] = await db.select({ ownerUserId: salesAssociateSettings.ownerUserId, notifyOnSignup: salesAssociateSettings.notifyOnSignup, salesCode: salesAssociateSettings.salesCode })
+        .from(salesAssociateSettings).where(or(eq(salesAssociateSettings.referralCode, referralCode), eq(salesAssociateSettings.salesCode, referralCode))).limit(1);
+      if (associate && associate.ownerUserId !== created.id) {
+        await db.insert(salesReferrals).values({ associateUserId: associate.ownerUserId, referredUserId: created.id, attributionType: referralCode === associate.salesCode ? 'sales' : 'referral' }).onConflictDoNothing();
+      }
+    }
 
     await db.insert(userLegalAcceptances).values([
       { userId: created.id, documentType: 'terms', version: termsDoc.version },
@@ -844,13 +911,24 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       );
     }
 
+    // Count and announce only verified signups. This intentionally also runs on
+    // an idempotent verification retry, recovering if a prior request committed
+    // email verification but stopped before stamping the referral notification.
+    const [verifiedReferral] = await db.update(salesReferrals).set({ signupNotifiedAt: new Date() })
+      .where(and(eq(salesReferrals.referredUserId, user.id), isNull(salesReferrals.signupNotifiedAt))).returning();
+    if (verifiedReferral) {
+      const [associate] = await db.select({ enabled: salesAssociateSettings.notifyOnSignup }).from(salesAssociateSettings)
+        .where(eq(salesAssociateSettings.ownerUserId, verifiedReferral.associateUserId)).limit(1);
+      if (associate?.enabled !== false) void notify(db, c.env, { userId: verifiedReferral.associateUserId, kind: 'sales.referral_signup', title: 'A referred user signed up', body: `${user.displayName || user.email} verified their Builderforce account.`, ref: '/sales' });
+    }
+
     const expiresIn = body.trustDevice === true ? 30 * 86_400 : 86_400;
     const token = await signWebJwt(
       {
         sub: user.id,
         email: user.email,
         username: user.username ?? '',
-        act: user.accountType === 'freelancer' ? 'freelancer' : undefined,
+        act: user.accountType === 'standard' ? undefined : user.accountType,
         mfa: false,
         amr: ['pwd', 'email'],
       },
@@ -957,7 +1035,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         email: user.email,
         username: user.username ?? '',
         sa: superadmin ? true : undefined,
-        act: user.accountType === 'freelancer' ? 'freelancer' : undefined,
+        act: user.accountType === 'standard' ? undefined : user.accountType,
         mfa: false,
         amr: ['pwd'],
       },
@@ -1024,7 +1102,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         email: user.email,
         username: user.username ?? '',
         sa: superadmin ? true : undefined,
-        act: user.accountType === 'freelancer' ? 'freelancer' : undefined,
+        act: user.accountType === 'standard' ? undefined : user.accountType,
         mfa: true,
         amr: ['pwd', 'mfa'],
       },
@@ -1088,8 +1166,9 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
   // shell churn); returns the current account unchanged in that case.
   router.post('/me/account-type', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as UserId;
-    const body = await c.req.json<{ accountType?: string }>().catch(() => ({} as { accountType?: string }));
-    const accountType = body.accountType === 'freelancer' ? 'freelancer' : 'standard';
+    const body = await c.req.json<{ accountType?: string; ageAttested?: boolean }>().catch(() => ({} as { accountType?: string; ageAttested?: boolean }));
+    const accountType = body.accountType === 'freelancer' ? 'freelancer' : body.accountType === 'sales' ? 'sales' : 'standard';
+    if (body.ageAttested !== true) return c.json({ error: 'BuilderForce accounts require confirmation that you are at least 18 years old' }, 400);
 
     const [existing] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!existing) return c.json({ error: 'User not found' }, 404);
@@ -1138,7 +1217,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         row.email,
         row.displayName ?? row.username ?? '',
         resolveAppBaseUrl(c.env),
-        accountType,
+        accountType === 'sales' ? 'standard' : accountType,
         locale,
       ),
       { storedLocale: row.locale, headers: headerHints(c.req) },
@@ -1155,12 +1234,13 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
   // identically.
   router.patch('/me', webAuthMiddleware, async (c) => {
     const userId = c.get('userId') as UserId;
-    const body = await c.req.json<{ psychometric?: unknown }>().catch(() => ({} as { psychometric?: unknown }));
+    const body = await c.req.json<{ psychometric?: unknown; displayName?: string }>().catch(() => ({} as { psychometric?: unknown; displayName?: string }));
 
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     if (body.psychometric !== undefined) {
       updates.psychometric = body.psychometric === null ? null : sanitizePsychometricProfile(body.psychometric);
     }
+    if (body.displayName !== undefined) updates.displayName = body.displayName.trim().slice(0, 120) || null;
 
     const [row] = await db.update(users).set(updates).where(eq(users.id, userId)).returning();
     if (!row) return c.json({ error: 'User not found' }, 404);

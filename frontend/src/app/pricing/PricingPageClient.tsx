@@ -34,35 +34,23 @@ interface Subscription {
   };
 }
 
+interface PublicPricingContract {
+  pricing: Subscription['pricing'] & { currency: string };
+  generatedFrom: 'TenantService.PRICING + PLAN_LIMITS';
+  featureAvailability: Array<{
+    key: string;
+    free: boolean;
+    pro: boolean;
+    teams: boolean;
+  }>;
+}
+
 const cardStyle: React.CSSProperties = {
   background: 'var(--bg-base)',
   border: '1px solid var(--border-subtle)',
   borderRadius: 12,
   padding: 24,
 };
-
-// Non-translatable plan/feature matrix (entitlement booleans). Row LABELS come
-// from the `pricing.planFeatures` catalog array, paired by index — keep the two
-// the same length and order.
-const PLAN_FEATURE_FLAGS: { free: boolean; pro: boolean; teams: boolean }[] = [
-  { free: true,  pro: true,  teams: true  },
-  { free: true,  pro: false, teams: false },
-  { free: false, pro: true,  teams: false },
-  { free: false, pro: false, teams: true  },
-  { free: true,  pro: false, teams: false },
-  { free: false, pro: true,  teams: true  },
-  { free: true,  pro: false, teams: false },
-  { free: false, pro: true,  teams: false },
-  { free: false, pro: false, teams: true  },
-  { free: false, pro: true,  teams: true  },
-  { free: false, pro: true,  teams: true  },
-  { free: false, pro: true,  teams: true  },
-  { free: false, pro: true,  teams: true  },
-  { free: false, pro: false, teams: true  },
-  { free: false, pro: false, teams: true  },
-  { free: false, pro: true,  teams: true  },
-  { free: true,  pro: false, teams: false },
-];
 
 function PlanBadge({ plan }: { plan: Plan }) {
   const colors: Record<Plan, { bg: string; color: string; label: string }> = {
@@ -136,6 +124,7 @@ export default function PricingPageClient() {
   const tenantId = tenant?.id != null ? Number(tenant.id) : null;
 
   const [sub, setSub] = useState<Subscription | null>(null);
+  const [publicPricing, setPublicPricing] = useState<PublicPricingContract | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -143,7 +132,7 @@ export default function PricingPageClient() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [billingEmail, setBillingEmail] = useState('');
   const [discountCode, setDiscountCode] = useState('');
-  const [seats, setSeats] = useState(5); // ≥ Teams volume minimum (server: PRICING.teams.minimumSeats)
+  const [seats, setSeats] = useState(1); // Clamped once the public entitlement contract loads.
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeError, setUpgradeError] = useState<string | null>(null);
   const [downgrading, setDowngrading] = useState(false);
@@ -169,6 +158,20 @@ export default function PricingPageClient() {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchSub(); }, [tenantId]);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`${AUTH_API_URL}/api/tenants/pricing`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error(`${response.status}`);
+        return response.json() as Promise<PublicPricingContract>;
+      })
+      .then((contract) => { if (active) setPublicPricing(contract); })
+      .catch((cause) => {
+        if (active) setError(t('errorPricingContract', { reason: cause instanceof Error ? cause.message : String(cause) }));
+      });
+    return () => { active = false; };
+  }, [t]);
 
   useEffect(() => {
     if (searchParams?.get('success') === '1') {
@@ -202,14 +205,15 @@ export default function PricingPageClient() {
   // tenant gets the billing-console framing ("manage your subscription").
   const isAnon = tenantId == null;
 
-  const proMonthly  = sub?.pricing.pro.monthly ?? 29;
-  const proYearly   = sub?.pricing.pro.yearly ?? 290;
-  const teamMonthly = sub?.pricing.teams.perSeatMonthly ?? 20;
-  const teamYearly  = sub?.pricing.teams.perSeatYearly ?? 192;
+  const pricing = publicPricing?.pricing ?? sub?.pricing;
+  const proMonthly  = pricing?.pro.monthly;
+  const proYearly   = pricing?.pro.yearly;
+  const teamMonthly = pricing?.teams.perSeatMonthly;
+  const teamYearly  = pricing?.teams.perSeatYearly;
   // Teams is volume-priced below Pro per seat, earned by a seat-block minimum.
   // Surfacing the minimum is what keeps the lower per-seat price from reading as
   // a typo; the seat input and checkout both clamp to it.
-  const teamMinSeats = sub?.pricing.teams.minimumSeats ?? 5;
+  const teamMinSeats = pricing?.teams.minimumSeats ?? 1;
 
   // Keep the seat count at or above the volume minimum whenever it's known —
   // covers both the initial load and a plan-pricing refresh.
@@ -218,8 +222,8 @@ export default function PricingPageClient() {
   }, [teamMinSeats]);
 
   const upgradePrice = upgradeTarget === 'teams'
-    ? (billingCycle === 'yearly' ? teamYearly * seats : teamMonthly * seats)
-    : (billingCycle === 'yearly' ? proYearly : proMonthly);
+    ? (billingCycle === 'yearly' ? (teamYearly ?? 0) * seats : (teamMonthly ?? 0) * seats)
+    : (billingCycle === 'yearly' ? (proYearly ?? 0) : (proMonthly ?? 0));
 
   // Single entry point for every upgrade CTA (Current Plan card + comparison
   // table). With no tenant the checkout can't run, so route to register rather
@@ -236,6 +240,7 @@ export default function PricingPageClient() {
   const handleUpgrade = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tenantId || upgrading || !upgradeTarget) return;
+    if (!pricing) { setUpgradeError(t('pricingUnavailable')); return; }
     if (!billingEmail.trim()) { setUpgradeError(t('errorBillingEmailRequired')); return; }
     setUpgrading(true);
     setUpgradeError(null);
@@ -282,7 +287,7 @@ export default function PricingPageClient() {
     finally { setDowngrading(false); }
   };
 
-  const teamsCostNote = upgradeTarget === 'teams'
+  const teamsCostNote = upgradeTarget === 'teams' && teamMonthly != null && teamYearly != null
     ? billingCycle === 'yearly'
       ? t('teamsCostNoteYear', { perSeat: teamYearly, total: teamYearly * seats })
       : t('teamsCostNoteMonth', { perSeat: teamMonthly, total: teamMonthly * seats })
@@ -290,7 +295,7 @@ export default function PricingPageClient() {
 
   return (
     <>
-    <JsonLd data={pricingSchema()} />
+    <JsonLd data={pricingSchema(publicPricing?.pricing)} />
     <PageContainer width="readable">
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
@@ -413,8 +418,8 @@ export default function PricingPageClient() {
                   <div style={{ display: 'flex', gap: 8 }}>
                     {(['monthly', 'yearly'] as const).map((c) => {
                       const saving = upgradeTarget === 'teams'
-                        ? t('saveCycle', { pct: sub?.pricing.teams.yearlySavingsPercent ?? 20 })
-                        : t('saveCycle', { pct: sub?.pricing.pro.yearlySavingsPercent ?? 17 });
+                        ? t('saveCycle', { pct: pricing?.teams.yearlySavingsPercent ?? 0 })
+                        : t('saveCycle', { pct: pricing?.pro.yearlySavingsPercent ?? 0 });
                       const cycleLabel = c === 'yearly' ? t('cycleYearly') : t('cycleMonthly');
                       return (
                         <button key={c} type="button" onClick={() => setBillingCycle(c)}
@@ -460,7 +465,7 @@ export default function PricingPageClient() {
                 </div>
 
                 <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', padding: '10px 14px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
-                  {t('total', { price: upgradePrice, unit: billingCycle === 'yearly' ? t('unitYear') : t('unitMonth') })}
+                  {pricing ? t('total', { price: upgradePrice, unit: billingCycle === 'yearly' ? t('unitYear') : t('unitMonth') }) : t('pricingUnavailable')}
                   {upgradeTarget === 'teams' && ` ${t('totalForSeats', { seats })}`}
                 </div>
 
@@ -471,7 +476,7 @@ export default function PricingPageClient() {
                     style={{ padding: '8px 16px', fontSize: 13, background: 'none', color: 'var(--text-muted)', border: 'none', cursor: 'pointer' }}>
                     {t('cancel')}
                   </button>
-                  <button type="submit" disabled={upgrading}
+                  <button type="submit" disabled={upgrading || !pricing}
                     style={{ padding: '8px 18px', fontSize: 13, fontWeight: 600, background: upgradeTarget === 'teams' ? '#60a5fa' : 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, cursor: upgrading ? 'wait' : 'pointer' }}>
                     {upgrading ? t('redirecting') : t('continueToPayment')}
                   </button>
@@ -493,11 +498,11 @@ export default function PricingPageClient() {
                       <div style={{ marginTop: 8 }}><PlanCta plan="free" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} /></div>
                     </th>
                     <th style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 700, color: 'var(--coral-bright, #f4726e)', borderBottom: '1px solid var(--border-subtle)', minWidth: 90 }}>
-                      Pro<br /><span style={{ fontWeight: 400, fontSize: 11 }}>{t('priceProMonthly', { price: proMonthly })}</span>
+                      Pro<br /><span style={{ fontWeight: 400, fontSize: 11 }}>{proMonthly != null ? t('priceProMonthly', { price: proMonthly }) : '—'}</span>
                       <div style={{ marginTop: 8 }}><PlanCta plan="pro" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} /></div>
                     </th>
                     <th style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 700, color: '#60a5fa', borderBottom: '1px solid var(--border-subtle)', minWidth: 110 }}>
-                      Teams<br /><span style={{ fontWeight: 400, fontSize: 11 }}>{t('priceTeamsMonthly', { price: teamMonthly })}</span>
+                      Teams<br /><span style={{ fontWeight: 400, fontSize: 11 }}>{teamMonthly != null ? t('priceTeamsMonthly', { price: teamMonthly }) : '—'}</span>
                       <br /><span style={{ fontWeight: 400, fontSize: 10, color: 'var(--text-muted)' }}>{t('teamsVolumeNote', { min: teamMinSeats })}</span>
                       <div style={{ marginTop: 8 }}><PlanCta plan="teams" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} /></div>
                     </th>
@@ -505,7 +510,8 @@ export default function PricingPageClient() {
                 </thead>
                 <tbody>
                   {(t.raw('planFeatures') as string[]).map((label, i) => {
-                    const flags = PLAN_FEATURE_FLAGS[i];
+                    const flags = publicPricing?.featureAvailability[i];
+                    if (!flags) return null;
                     return (
                     <tr key={i} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
                       <td style={{ padding: '9px 12px', color: 'var(--text-secondary)' }}>{label}</td>
@@ -533,7 +539,7 @@ export default function PricingPageClient() {
             </div>
             <div style={{ marginTop: 14, fontSize: 11, color: 'var(--text-muted)' }}>
               {t.rich('managedAddon', {
-                price: sub?.pricing.managedAgentHost.perAgentHostMonthly ?? 49,
+                price: pricing?.managedAgentHost.perAgentHostMonthly ?? '—',
                 b: (c) => <strong>{c}</strong>,
               })}
             </div>

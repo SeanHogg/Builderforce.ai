@@ -17,6 +17,7 @@ import {
 } from '../../application/tenant/cardValidationService';
 import { markDiscountRedeemed } from '../../application/tenant/discountCodeService';
 import { buildDatabase } from '../../infrastructure/database/connection';
+import { recordReferralConversion } from '../../application/sales/recordReferralConversion';
 
 export function createWebhookRoutes(
   tenantService: TenantService,
@@ -98,6 +99,7 @@ export function createWebhookRoutes(
 
     try {
       await tenantService.handleWebhookEvent(event);
+      await recordReferralConversion(buildDatabase(c.env as Env), c.env as Env, event);
       if (event.type === 'subscription.activated' && event.discountRedemptionId) {
         if (!event.tenantId) throw new Error('Discount activation webhook is missing signed tenant metadata');
         await markDiscountRedeemed(buildDatabase(c.env as Env), event.tenantId, event.discountRedemptionId);

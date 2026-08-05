@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-08-04 — ✅ RESOLVED: a BYO-only tenant could be told "LLM proxy not configured" while holding a working key (api 2026.7.206)
+
+Found while verifying that Kimi is genuinely SELECTABLE in the VSIX and Cloud Chat, not merely dispatchable. The selection path itself was already sound end-to-end — `/v1/models` projects a connected provider through `byoModelsFor`, both pickers render `byo.models` from that one projection, and the strict-pin gate exempts a pin whose vendor the tenant's own credentials cover. Writing the test that proves it is what surfaced the bug.
+
+**The pre-flight pool-key check asked the wrong question.** `/v1/chat/completions` returned 503 `LLM proxy not configured` whenever the operator's `OPENROUTER_API_KEY` was absent, exempting only OpenRouter *connections* — never a DIRECT BYO credential. So a tenant whose only connected account is Kimi (or OpenAI, Meta, Moonshot, xAI, or a Claude/Codex/SuperGrok subscription) could be refused, and told the failure was our configuration, on a turn that would never have touched our pool. `/v1/messages` had the identical gap and was worse: it resolved `tenantVendorKeys` *after* the 503, so it could not have known.
+
+One shared `tenantCanSelfFund()` predicate now answers "can this request be served at all", rather than each call site re-deriving "can WE serve it" — and `/v1/messages` resolves the tenant's keys before the check instead of after. Deliberately a capability check and nothing more: `byoRequired` and the strict pin still decide WHICH account serves the turn, and a cascade that cannot reach the pinned vendor still fails with its own real reason rather than this blanket 503.
+
+Not reachable in production today (the operator key is set), which is exactly why it would have sat there until the first BYO-only deployment.
+
+Tests: `llmRoutes.test.ts` (45, +5) — a FREE tenant can pin their connected Kimi account (200, not 402); a tenant who has NOT connected Kimi still gets 402; the self-funding tenant is no longer 503'd with no operator key; a tenant with no credential of their own still is; plus picker coverage that a connected Kimi Code subscription yields `direct/kimi-code/kimi-for-coding` and never leaks Moonshot ids into the Kimi set (or vice versa — non-interchangeable keys). api suite 1208 green; `type-check` (both checkers) exit 0.
+
+Files: `api/src/presentation/routes/llmRoutes.ts`, `api/src/presentation/routes/llmRoutes.test.ts`.
+
+---
+
 ## 2026-08-02 — ✅ RESOLVED: a green local type-check meant nothing about CI — two checkers, gated inconsistently (api 2026.7.205, ui 2026.7.155, brain-embedded 2026.7.59, vsix 2026.7.114)
 
 CI failed on `byoCredentialHealth.ts(352,5) TS2353: 'hostEgress' does not exist in type …`. The immediate cause was a mid-work snapshot committed as `a3f6220b` (api 2026.7.203) while the local-egress wiring was half-applied: the call site existed, `llmProxyForPlan`'s own `opts` param type did not yet. HEAD (2026.7.204) already carried both — verified by counting the declaration at each commit (1 at `a3f6220b`, 2 at HEAD) and by running CI's exact `npm run type-check`, which passes.

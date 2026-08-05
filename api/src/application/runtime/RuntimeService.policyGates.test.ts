@@ -5,8 +5,8 @@
  * only ever saw `[]` because nothing put gates on a run's payload. `submit` is the
  * ONE funnel every execution passes through (board auto-run, manual dispatch, agent
  * handoff), so it stamps the tenant's resolved gates there. These tests pin that
- * contract — including the two ways it must NOT interfere: an explicit spec-compiled
- * gate set wins, and a resolver failure never blocks a dispatch.
+ * contract — including explicit spec-compiled gates winning and resolver failure
+ * blocking dispatch rather than silently running without governance.
  */
 import { describe, it, expect } from 'vitest';
 import { RuntimeService } from './RuntimeService';
@@ -157,12 +157,13 @@ describe('RuntimeService.submit — governance gate stamping', () => {
     expect(parsePolicyGates(getPayload() ?? undefined).map((g) => g.id)).toEqual(['from-spec']);
   });
 
-  it('never blocks a dispatch when the resolver throws', async () => {
-    const { svc, getPayload } = makeService(async () => { throw new Error('kv down'); });
+  it('fails closed when the policy resolver throws', async () => {
+    const { svc, getPayload, getSaveCount } = makeService(async () => { throw new Error('kv down'); });
     const payload = JSON.stringify({ cloudAgentRef: 'ada' });
 
-    await expect(submit(svc, payload)).resolves.toBeDefined();
-    expect(getPayload()).toBe(payload);
+    await expect(submit(svc, payload)).rejects.toThrow(/governance policy could not be resolved/i);
+    expect(getPayload()).toBeNull();
+    expect(getSaveCount()).toBe(0);
   });
 
   it('is a no-op when no resolver is wired (unchanged legacy behaviour)', async () => {

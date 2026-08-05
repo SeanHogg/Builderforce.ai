@@ -959,6 +959,38 @@ function isAgenticToolTurn(body: { tools?: unknown }): boolean {
 }
 
 /**
+ * Can this tenant fund a completion WITHOUT the operator's pool key?
+ *
+ * The pre-flight "LLM proxy not configured" 503 asks whether the request can be served
+ * at all — not whether WE can serve it. A tenant on their own credential does not touch
+ * our pool, so turning them away for a missing `OPENROUTER_API_KEY` refuses a request
+ * that would have succeeded, and blames our configuration for it.
+ *
+ * OpenRouter CONNECTIONS were already exempt; every DIRECT provider (a connected Kimi
+ * Code / OpenAI / Meta / Moonshot / xAI key, or a Claude / Codex / SuperGrok
+ * subscription) is the same case and was simply missed — which is how a tenant whose
+ * only connected account is Kimi could be told the proxy is unconfigured while holding
+ * a perfectly good key.
+ *
+ * Deliberately a capability check, not a routing decision: `byoRequired` + the strict
+ * pin still decide WHICH account serves the turn, and a cascade that cannot reach the
+ * pinned vendor still fails with its own real reason instead of this blanket 503.
+ */
+function tenantCanSelfFund(creds: {
+  vendorKeys?: TenantVendorKeys | null;
+  anthropicOAuthToken?: string | null;
+  openaiCodexAuth?: unknown;
+  xaiOAuthToken?: string | null;
+  openRouterConnections?: readonly { hasKey: boolean }[];
+}): boolean {
+  return Object.values(creds.vendorKeys ?? {}).some(Boolean)
+    || creds.anthropicOAuthToken != null
+    || creds.openaiCodexAuth != null
+    || creds.xaiOAuthToken != null
+    || (creds.openRouterConnections?.some((connection) => connection.hasKey) ?? false);
+}
+
+/**
  * Build the gateway completion proxy, applying the agentic capability floor when
  * the turn carries tools. `codingOnly` keeps the failover cascade inside the
  * curated coder pool and `CODING_BACKSTOP_MODELS` floors an exhausted cascade onto
@@ -1771,10 +1803,16 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       });
     }
 
-    // ── No BYO key → serve from our model pool via Messages ⇄ OpenAI translation ──
+    // ── No BYO ANTHROPIC key → serve via Messages ⇄ OpenAI translation ──────
+    // Resolved BEFORE the pool-key check, not after: the tenant may still bring a
+    // non-Anthropic account (Kimi, OpenAI, Meta, …), and refusing them for a missing
+    // OPENROUTER key would blame our pool for a turn that never needed it.
+    const tenantVendorKeys = await resolveTenantVendorKeys(c.env, access.tenantId);
     const isPro = access.premiumOverride || access.effectivePlan !== 'free';
     const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
-    if (!requiredKey) return c.json({ error: 'LLM proxy not configured', code: 'proxy_unconfigured' }, 503);
+    if (!requiredKey && !tenantCanSelfFund({ vendorKeys: tenantVendorKeys })) {
+      return c.json({ error: 'LLM proxy not configured', code: 'proxy_unconfigured' }, 503);
+    }
 
     // Our-models path bills US (not the tenant's Anthropic key), so apply the
     // SAME daily + monthly token caps as /v1/chat/completions — and close the
@@ -1786,10 +1824,10 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     const openaiBody = anthropicToOpenAiRequest(parsed);
     const traceId = newTraceId();
     const messageId = `msg_${traceId}`;
-    // The tenant has no BYO Anthropic credential here (handled above), but may
-    // still bring OpenAI/Google — overlay those so a translated turn landing on
-    // their vendor rides the tenant's own account ($0 to us, metered byo).
-    const tenantVendorKeys = await resolveTenantVendorKeys(c.env, access.tenantId);
+    // `tenantVendorKeys` was resolved above (before the pool-key check) — the tenant
+    // has no BYO Anthropic credential here (handled earlier) but may still bring
+    // OpenAI/Google/Kimi/…, overlaid so a translated turn landing on their vendor
+    // rides the tenant's own account ($0 to us, metered byo).
     // Determinism for non-Anthropic on-prem BYO: if the requested model belongs to
     // a vendor the tenant has connected, HARD-PIN it (modelStrict) so the run rides
     // their own account instead of the gateway silently cascading onto our free
@@ -2206,7 +2244,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
 
     // Validate required key for the active plan up-front so callers get a clear 503.
     const requiredKey = isPro ? c.env.OPENROUTER_API_KEY_PRO ?? c.env.OPENROUTER_API_KEY : c.env.OPENROUTER_API_KEY;
-    if (!requiredKey && !tenantCreds.openRouterConnections?.some((connection) => connection.hasKey)) {
+    if (!requiredKey && !tenantCanSelfFund(tenantCreds)) {
       return c.json({
         error: isPro
           ? 'LLM proxy not configured (missing OPENROUTER_API_KEY_PRO or OPENROUTER_API_KEY)'

@@ -60,7 +60,7 @@ The extension carries the rest of the platform too:
 
 ## Governed, and yours
 
-Every action still passes through the platform's governance: approval gates, audit trail, and per-tenant isolation. Bring your own frontier model (Anthropic, OpenAI, or Google) and on-prem runs bill against your own account. The extension is a window onto the same instrumented system of record as the web app — nothing is a second-class copy.
+Supported VS Code execution paths use the platform's configured approvals and available execution records. Model availability and billing depend on the current catalog, credentials, plan, and runtime; web-to-extension parity is documented by capability.
 
 ## Why it matters
 
@@ -76,4 +76,4 @@ Context-switching is the tax on managing agents. Every time you leave the editor
 
 **Can I train my project's model from the editor?** Yes. The Evermind sidebar view lets managers inspect what the model learned, steer training, teach it from a pasted transcript, and flush the learning queue — the same console that appears on the web.
 
-**Do agent actions in VS Code bypass governance?** No. Every action runs through the platform's approval gates, audit trail, and tenant isolation, exactly as on the web.
+**Do agent actions in VS Code bypass governance?** Supported execution paths use their configured platform policy. Verify the capability matrix for the action you intend to run because web-to-extension coverage is not universal.

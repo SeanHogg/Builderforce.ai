@@ -7,6 +7,7 @@
 
 import {
   BRAND,
+  STATS,
   HOMEPAGE_FAQ,
   PRICING_FAQ,
   LOGIN_FAQ,
@@ -16,9 +17,8 @@ import {
   EVERMIND,
   EVERMIND_FAQ,
   COMPARE,
-  COMPETITIVE_COMPARISON,
+  FEATURES,
   DEFINED_TERMS,
-  PRICING_PLANS,
   PRODUCT_SECTIONS,
   PROJECTS_TASKS_FAQ,
   type FaqItem,
@@ -93,27 +93,12 @@ export function homepageSchema() {
         '@id': `${BRAND.url}/#app`,
         name: BRAND.name,
         description:
-          'A human-in-the-loop, fully agentic cloud. Train your own AI agents and use them inside your own agent, manage your workforce on a Kanban board, and review and approve every action without leaving VS Code. WebGPU LoRA fine-tuning in the browser, skills marketplace, personas, and the Workforce Registry.',
+          'A creative canvas where teams and AI agents design, build, review, and deliver websites, workflows, models, data stories, and products in one connected visual workspace.',
         url: BRAND.url,
-        applicationCategory: 'DeveloperApplication',
+        applicationCategory: 'DesignApplication',
         operatingSystem: 'Web',
         author: { '@id': `${BRAND.url}/#organization` },
         dateModified: BRAND.dateModified,
-        offers: PRICING_PLANS.map((plan) => ({
-          '@type': 'Offer',
-          name: plan.name,
-          price: String(plan.priceNumeric),
-          priceCurrency: 'USD',
-          description: plan.description,
-          ...(plan.period && {
-            priceSpecification: {
-              '@type': 'UnitPriceSpecification',
-              price: String(plan.priceNumeric),
-              priceCurrency: 'USD',
-              unitText: plan.period.replace(/^\//, ''),
-            },
-          }),
-        })),
       },
       {
         '@type': 'WebSite',
@@ -397,13 +382,13 @@ export function soc2Schema() {
     { name: 'Architecture Analysis', description: 'Rates design-principle adherence (DRY, SOLID, DDD, patterns) across your codebase.' },
     { name: 'Quality Audit', description: 'Checks testing, CI, and build-integrity signals across your repositories.' },
     { name: 'Product Vision & Roadmap Audit', description: 'Measures product direction: objectives, key results, roadmap, and a documented vision.' },
-    { name: 'Privacy & Data-Law Compliance', description: 'Scans for GDPR, CCPA/CPRA, and CAN-SPAM readiness — privacy policy, cookie consent, unsubscribe, data export & erasure, and retention.' },
+    { name: 'Compliance Audit Agent', description: 'Reviews connected GitHub source for privacy, AI, marketing, minor-safety, transfer, and accessibility readiness across US federal/state, EU/EEA, UK, Canada, Brazil, and Australia requirements.' },
   ];
   const faq = [
     { question: 'Is the SOC 2 audit a certification?', answer: 'No. It is a readiness audit: an automated, evidence-backed report that maps your repositories and controls to the SOC 2 Common Criteria (CC1–CC9) and tells you exactly what to close before a formal Type I/II examination.' },
     { question: 'How does the audit run during signup?', answer: 'The onboarding wizard creates a project, connects your ticket system and repositories, then files a ticket for the security agent. The audit scores an instant report and dispatches the agent to open a remediation pull request. You are notified when the report is ready.' },
     { question: 'Which repositories can it scan?', answer: 'GitHub, GitLab, Bitbucket, and Azure DevOps — one or many per project. Tokens stay server-side; the audit reads the repository tree to derive its signals.' },
-    { question: 'What other system audits are included?', answer: 'The same one-click flow runs an Architecture analysis, a Quality audit, a Product Vision & Roadmap audit, and a Privacy & Data-Law (GDPR/CCPA/CAN-SPAM) audit — each producing a scored project report.' },
+    { question: 'What other system audits are included?', answer: 'The same one-click flow runs Architecture, Quality, Product Vision & Roadmap, and a multi-jurisdiction Compliance Audit Agent — each producing a scored project report.' },
   ];
   return {
     '@context': 'https://schema.org',
@@ -494,7 +479,7 @@ export function projectsTasksSchema() {
 
 /** Compare page: SoftwareApplication + ItemList of compared capabilities + FAQ + BreadcrumbList */
 export function compareSchema() {
-  const features = COMPETITIVE_COMPARISON.flatMap((c) => c.rows.map((r) => r.feature));
+  const features = FEATURES.map((feature) => feature.title);
   return {
     '@context': 'https://schema.org',
     '@graph': [
@@ -505,7 +490,7 @@ export function compareSchema() {
         name: BRAND.name,
         description: COMPARE.seo.description,
         url: `${BRAND.url}/compare`,
-        applicationCategory: 'DeveloperApplication',
+        applicationCategory: 'DesignApplication',
         operatingSystem: 'Web',
         author: { '@id': `${BRAND.url}/#organization` },
         dateModified: BRAND.dateModified,
@@ -513,15 +498,14 @@ export function compareSchema() {
       },
       {
         '@type': 'ItemList',
-        name: 'Builderforce.ai capabilities compared to other AI coding tools',
-        itemListElement: COMPETITIVE_COMPARISON.map((cat, i) => ({
+        name: 'Criteria for evaluating Builderforce.ai and adjacent AI tools',
+        itemListElement: COMPARE.pillars.map((criterion, i) => ({
           '@type': 'ListItem',
           position: i + 1,
-          name: cat.title,
-          description: cat.blurb,
+          name: criterion.title,
+          description: criterion.desc,
         })),
       },
-      faqSchema(COMPARE_FAQ),
       breadcrumbs(
         { name: 'Home', url: BRAND.url },
         { name: 'Compare', url: `${BRAND.url}/compare` },
@@ -531,7 +515,16 @@ export function compareSchema() {
 }
 
 /** Pricing page: Product with Offers + FAQ + BreadcrumbList */
-export function pricingSchema() {
+export function pricingSchema(pricing?: {
+  currency: string;
+  pro: { monthly: number };
+  teams: { perSeatMonthly: number; minimumSeats: number };
+}) {
+  const offers = pricing ? [
+    { '@type': 'Offer', name: 'Free', price: '0', priceCurrency: pricing.currency, url: `${BRAND.url}/register` },
+    { '@type': 'Offer', name: 'Pro', price: String(pricing.pro.monthly), priceCurrency: pricing.currency, url: `${BRAND.url}/pricing?upgrade=pro` },
+    { '@type': 'Offer', name: `Teams (${pricing.teams.minimumSeats}-seat minimum)`, price: String(pricing.teams.perSeatMonthly), priceCurrency: pricing.currency, url: `${BRAND.url}/pricing?upgrade=teams` },
+  ] : undefined;
   return {
     '@context': 'https://schema.org',
     '@graph': [
@@ -541,14 +534,7 @@ export function pricingSchema() {
         description: 'AI agent training platform with Free, Pro, and Teams plans.',
         url: `${BRAND.url}/pricing`,
         brand: { '@id': `${BRAND.url}/#organization` },
-        offers: PRICING_PLANS.map((plan) => ({
-          '@type': 'Offer',
-          name: plan.name,
-          price: String(plan.priceNumeric),
-          priceCurrency: 'USD',
-          description: plan.description,
-          url: `${BRAND.url}${plan.ctaHref}`,
-        })),
+        ...(offers ? { offers } : {}),
       },
       faqSchema(PRICING_FAQ),
       breadcrumbs(
@@ -619,7 +605,7 @@ export function competitorCompareSchema(seo: CompetitorSeo) {
       {
         '@type': 'WebPage',
         name: `Builderforce.ai vs ${seo.name}`,
-        description: seo.summary,
+        description: `A criteria-based guide for evaluating Builderforce.ai alongside ${seo.name}. Verify current vendor capabilities and pricing for decision-critical requirements.`,
         url: `${BRAND.url}/compare/${seo.slug}`,
         dateModified: BRAND.dateModified,
         about: { '@type': 'Thing', name: seo.name },
@@ -627,12 +613,11 @@ export function competitorCompareSchema(seo: CompetitorSeo) {
       {
         '@type': 'SoftwareApplication',
         name: BRAND.name,
-        applicationCategory: 'DeveloperApplication',
-        operatingSystem: 'Web, Self-hosted',
-        description: seo.verdict,
+        applicationCategory: 'DesignApplication',
+        operatingSystem: 'Web',
+        description: STATS.quotable.creativeCanvas,
         offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
       },
-      faqSchema(COMPARE_FAQ),
       breadcrumbs(
         { name: 'Home', url: BRAND.url },
         { name: 'Compare', url: `${BRAND.url}/compare` },

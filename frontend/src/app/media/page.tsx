@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
+import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import { MEDIA_KIT } from '@/lib/content';
 import { pageMetadata } from '@/lib/seo';
@@ -73,6 +74,34 @@ export default async function MediaPage() {
           </div>
         ))}
       </div>
+
+      {/* Sales enablement library */}
+      <section style={{ marginTop: 52 }}>
+        <p style={{ color: 'var(--accent)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: 12, margin: '0 0 8px' }}>Sales enablement</p>
+        <h2 style={{ color: 'var(--text-primary)', fontSize: 'clamp(22px, 3vw, 30px)', margin: '0 0 8px' }}>Turn interest into a useful conversation.</h2>
+        <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6, maxWidth: 700, margin: '0 0 22px' }}>Practical, approved materials for prospecting, discovery, follow-up, and lead management.</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 14 }}>
+          {[
+            { name: 'Sales discovery guide', desc: 'Qualification questions, impact prompts, and a clean next-step framework.', href: '/media/sales/Builderforce-Sales-Discovery-Guide.html', format: 'GUIDE' },
+            { name: 'Outbound email playbook', desc: 'A concise three-touch sequence with approved Builderforce positioning.', href: '/media/sales/Builderforce-Outbound-Playbook.html', format: 'PLAYBOOK' },
+            { name: 'CRM contact template', desc: 'Import-ready CSV columns for contacts, markets, and pipeline stages.', href: '/media/sales/Builderforce-Contacts-Template.csv', format: 'CSV' },
+          ].map((asset) => (
+            <a key={asset.href} href={asset.href} download style={{ display: 'flex', gap: 14, alignItems: 'center', padding: 18, border: '1px solid var(--border)', borderRadius: 12, background: 'var(--bg-elevated)', color: 'var(--text-primary)', textDecoration: 'none' }}>
+              <span style={{ display: 'grid', placeItems: 'center', width: 42, height: 42, flexShrink: 0, borderRadius: 10, background: 'var(--accent-subtle)', color: 'var(--accent)', fontSize: 11, fontWeight: 800 }}>{asset.format}</span>
+              <span><strong style={{ display: 'block', fontSize: 15, marginBottom: 4 }}>{asset.name}</strong><small style={{ display: 'block', color: 'var(--text-muted)', lineHeight: 1.45 }}>{asset.desc}</small></span>
+            </a>
+          ))}
+        </div>
+      </section>
+
+      <section style={{ marginTop: 52, padding: 'clamp(24px, 4vw, 42px)', borderRadius: 18, border: '1px solid var(--border-accent)', background: 'linear-gradient(135deg, var(--accent-subtle), var(--bg-elevated) 68%)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 24, flexWrap: 'wrap' }}>
+        <div style={{ maxWidth: 670 }}>
+          <p style={{ color: 'var(--accent)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', fontSize: 12, margin: '0 0 8px' }}>Referral & sales associate program</p>
+          <h2 style={{ color: 'var(--text-primary)', fontSize: 'clamp(22px, 3vw, 31px)', margin: '0 0 8px' }}>Want to grow Builderforce with us?</h2>
+          <p style={{ color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>Create a free associate account and get a focused sales hub with contact lists, pipeline management, market targeting, email campaigns, weekly goals, calendar sync, and direct access to Builderforce leadership.</p>
+        </div>
+        <Link href="/register?role=sales&next=/sales" style={{ display: 'inline-flex', minHeight: 48, alignItems: 'center', justifyContent: 'center', padding: '0 21px', borderRadius: 10, background: 'var(--accent)', color: '#fff', textDecoration: 'none', fontWeight: 700, whiteSpace: 'nowrap' }}>Become a sales associate →</Link>
+      </section>
 
       <p style={{ color: 'var(--text-muted)', fontSize: 13.5, lineHeight: 1.6, marginTop: 28, maxWidth: 760 }}>
         {t('media.usageNote')}

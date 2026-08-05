@@ -1,12 +1,11 @@
 import type { Metadata } from 'next';
-import { Fragment } from 'react';
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import { compareSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
-import { COMPARE, COMPETITORS } from '@/lib/content';
+import { COMPARE } from '@/lib/content';
 
 export const runtime = 'edge';
 
@@ -20,20 +19,16 @@ export async function generateMetadata(): Promise<Metadata> {
   });
 }
 
-const COL_COUNT = 2 + COMPETITORS.length;
-
 type CompareCategory = { id: string; title: string; blurb: string; rows: { feature: string; note?: string; values: Record<string, string> }[] };
-type CompareFaq = { question: string; answer: string };
 
 // Visible copy from the `compare` catalog (localized in all 5 locales).
-// `content.ts` COMPARE/COMPETITIVE_COMPARISON stays canonical English for the
+// `content.ts` COMPARE stays canonical English for the
 // crawler-facing JSON-LD (compareSchema); COMPETITORS supplies the stable column
 // ORDER + keys, and pillar ICONS are paired from COMPARE.pillars by index.
 export default async function ComparePage() {
   const t = await getTranslations();
   const pillars = t.raw('compare.pillars') as { title: string; desc: string }[];
   const categories = t.raw('compare.categories') as CompareCategory[];
-  const faq = t.raw('compare.faq') as CompareFaq[];
 
   return (
     <>
@@ -66,54 +61,10 @@ export default async function ComparePage() {
         .cmp-section { max-width: 1100px; margin: 0 auto; padding: 28px 24px 8px; width: 100%; }
         .cmp-intro { font-size: 0.97rem; color: var(--text-secondary); line-height: 1.7; max-width: none; margin: 0 0 24px; }
 
-        .cmp-table-wrap {
-          overflow-x: auto; border: 1px solid var(--border-subtle); border-radius: 16px; background: var(--surface-card);
-          -webkit-overflow-scrolling: touch;
-        }
-        .cmp-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; min-width: 880px; }
-        .cmp-table thead th {
-          position: sticky; top: 0; z-index: 2; background: var(--surface-card-strong, var(--surface-card));
-          padding: 14px 12px; text-align: center; font-family: var(--font-display); font-weight: 600;
-          color: var(--text-muted); border-bottom: 2px solid var(--border-subtle); white-space: nowrap;
-        }
-        .cmp-feat-head { text-align: left !important; left: 0; z-index: 3 !important; }
-        .cmp-bf-head { color: var(--coral-bright) !important; border-bottom-color: var(--coral-bright) !important; }
-
-        .cmp-cat-row th {
-          text-align: left; padding: 16px 14px 8px; background: transparent;
-          border-bottom: 1px solid var(--border-subtle);
-        }
-        .cmp-cat-title { font-family: var(--font-display); font-weight: 700; font-size: 0.95rem; color: var(--text-primary); }
-        .cmp-cat-blurb { display: block; font-weight: 400; font-size: 0.8rem; color: var(--text-muted); margin-top: 3px; }
-
-        .cmp-table tbody tr:hover td, .cmp-table tbody tr:hover .cmp-feat { background: var(--surface-card-strong, rgba(255,255,255,0.02)); }
-        .cmp-feat {
-          position: sticky; left: 0; z-index: 1; text-align: left; padding: 11px 14px; font-weight: 500;
-          color: var(--text-primary); background: var(--surface-card); border-bottom: 1px solid var(--border-subtle); min-width: 220px;
-        }
-        .cmp-note { display: block; font-weight: 400; font-size: 0.72rem; color: var(--text-muted); margin-top: 2px; }
-        .cmp-cell {
-          text-align: center; padding: 11px 12px; color: var(--text-muted);
-          border-bottom: 1px solid var(--border-subtle); white-space: nowrap;
-        }
-        .cmp-bf {
-          text-align: center; padding: 11px 12px; font-weight: 700; color: var(--coral-bright);
-          border-bottom: 1px solid var(--border-subtle); background: var(--surface-coral-soft, rgba(255,107,74,0.06)); white-space: nowrap;
-        }
-
-        .cmp-quote { max-width: 880px; margin: 36px auto 0; padding: 0 24px; }
-        .cmp-quote-box {
-          border-left: 3px solid var(--coral-bright); background: var(--surface-card); border-radius: 0 14px 14px 0;
-          padding: 22px 26px; font-size: 1.05rem; line-height: 1.65; color: var(--text-primary); font-family: var(--font-display);
-        }
-
-        .cmp-faq { max-width: 820px; margin: 8px auto 0; padding: 36px 24px 8px; width: 100%; }
-        .cmp-faq h2 { font-family: var(--font-display); font-weight: 700; font-size: 1.5rem; color: var(--text-primary); margin: 0 0 16px; }
-        .cmp-faq details {
-          border: 1px solid var(--border-subtle); border-radius: 12px; padding: 14px 18px; margin-bottom: 10px; background: var(--surface-card);
-        }
-        .cmp-faq summary { cursor: pointer; font-weight: 600; color: var(--text-primary); font-size: 0.95rem; }
-        .cmp-faq details p { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.65; margin: 12px 0 0; }
+        .cmp-criteria { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+        .cmp-criterion { border: 1px solid var(--border-subtle); border-radius: 16px; background: var(--surface-card); padding: 20px; }
+        .cmp-cat-title { font-family: var(--font-display); font-weight: 700; font-size: 0.95rem; color: var(--text-primary); margin: 0 0 6px; }
+        .cmp-cat-blurb { font-size: 0.84rem; color: var(--text-muted); line-height: 1.6; margin: 0; }
 
         .cmp-cta { max-width: 820px; margin: 0 auto; padding: 40px 24px 80px; }
         .cmp-cta-box {
@@ -159,57 +110,14 @@ export default async function ComparePage() {
 
           <section className="cmp-section">
             <p className="cmp-intro">{t('compare.intro')}</p>
-            <div className="cmp-table-wrap">
-              <table className="cmp-table">
-                <thead>
-                  <tr>
-                    <th className="cmp-feat-head">{t('compare.capabilityHeader')}</th>
-                    <th className="cmp-bf-head">Builderforce.ai</th>
-                    {COMPETITORS.map((c) => (
-                      <th key={c.key}>{t(`compare.competitorLabels.${c.key}`)}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {categories.map((cat) => (
-                    <Fragment key={cat.id}>
-                      <tr className="cmp-cat-row">
-                        <th colSpan={COL_COUNT} scope="colgroup">
-                          <span className="cmp-cat-title">{cat.title}</span>
-                          <span className="cmp-cat-blurb">{cat.blurb}</span>
-                        </th>
-                      </tr>
-                      {cat.rows.map((row) => (
-                        <tr key={row.feature}>
-                          <th scope="row" className="cmp-feat">
-                            {row.feature}
-                            {row.note && <span className="cmp-note">{row.note}</span>}
-                          </th>
-                          <td className="cmp-bf">{row.values.builderforce}</td>
-                          {COMPETITORS.map((c) => (
-                            <td key={c.key} className="cmp-cell">{row.values[c.key]}</td>
-                          ))}
-                        </tr>
-                      ))}
-                    </Fragment>
-                  ))}
-                </tbody>
-              </table>
+            <div className="cmp-criteria" aria-label={t('compare.capabilityHeader')}>
+              {categories.map((cat) => (
+                <article className="cmp-criterion" key={cat.id}>
+                  <h2 className="cmp-cat-title">{cat.title}</h2>
+                  <p className="cmp-cat-blurb">{cat.blurb}</p>
+                </article>
+              ))}
             </div>
-          </section>
-
-          <section className="cmp-quote">
-            <blockquote className="cmp-quote-box">{t('compare.quotable')}</blockquote>
-          </section>
-
-          <section className="cmp-faq">
-            <h2>{t('compare.faqHeading')}</h2>
-            {faq.map((item) => (
-              <details key={item.question}>
-                <summary>{item.question}</summary>
-                <p>{item.answer}</p>
-              </details>
-            ))}
           </section>
 
           <RelatedArticles surface="compare" heading={t('compare.relatedHeading')} />

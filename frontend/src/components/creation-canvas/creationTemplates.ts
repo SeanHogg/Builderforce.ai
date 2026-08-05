@@ -16,6 +16,19 @@ export interface CreationTemplate {
  */
 export const CREATION_TEMPLATES: readonly CreationTemplate[] = [
   {
+    id: 'sales-command-center', name: 'Sales command center', category: 'Marketplace template',
+    description: 'Run targeting, outreach, pipeline management, goals, and coaching from one collaborative canvas.',
+    objects: [
+      { kind: 'salesPipeline', title: 'Live sales pipeline', x: 0, y: 0 },
+      { kind: 'targetMarket', title: 'Target market', x: 440, y: 0 },
+      { kind: 'salesCampaign', title: 'Campaign workspace', x: 880, y: 0 },
+      { kind: 'salesGoal', title: 'Weekly activity goals', x: 0, y: 320 },
+      { kind: 'salesMeeting', title: 'Meetings & coaching', x: 440, y: 320 },
+      { kind: 'agent', title: 'Sales coach', x: 880, y: 320 },
+    ],
+    connections: [{ source: 1, target: 2, label: 'targets' }, { source: 2, target: 0, label: 'creates leads' }, { source: 0, target: 3, label: 'measures' }, { source: 3, target: 5, label: 'coaches' }],
+  },
+  {
     id: 'campaign', name: 'Campaign studio', category: 'Marketplace template',
     description: 'Plan a campaign, prototype its landing page, and evaluate forecast evidence.',
     objects: [

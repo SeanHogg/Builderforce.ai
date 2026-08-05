@@ -7968,9 +7968,25 @@ export interface CreationTimelineMessage {
   clientMessageId: string;
   messageRole: 'user' | 'assistant' | 'system';
   body: string;
-  metadata: { scope?: string; objectIds?: string[]; model?: string; error?: boolean };
+  metadata: { scope?: string; objectIds?: string[]; model?: string; error?: boolean; authoredBy?: { kind: 'agent' | 'brain'; ref: string; name: string } };
   createdBy: string | null;
   createdAt: string;
+}
+
+export interface CreationOutcomeMetric {
+  key: string;
+  label: string;
+  unit: 'seconds' | 'percent' | 'agents' | 'count' | 'usd';
+  direction: 'higher' | 'lower';
+  current: number | null;
+  baseline: number | null;
+}
+
+export interface CreationOutcomeMetrics {
+  sessionId: string;
+  scope: 'tenant';
+  sampleSize: number;
+  metrics: CreationOutcomeMetric[];
 }
 
 export interface CreationCommandResult {
@@ -8000,9 +8016,12 @@ export const creationSessionsApi = {
   quotas: () => request<{ usage: { sessions: number; templates: number }; limits: { sessions: number; collaboratorsPerSession: number; templates: number; historyPerSession: number; datasetRows: number; realtimeEditors: number; artifactBytesPerSession: number } }>('/api/creation-sessions/quotas'),
   create: (body: { title?: string; description?: string; initialPrompt?: string; projectIds?: number[] }) =>
     request<{ session: { id: string; title: string; revision: number } }>('/api/creation-sessions', { method: 'POST', headers: { 'Idempotency-Key': crypto.randomUUID() }, body: JSON.stringify(body) }),
-  claim: (body: CreationGraphInput & { clientSessionId: string; title: string; initialPrompt?: string; timeline?: Array<{ clientMessageId: string; role: 'user' | 'assistant' | 'system'; body: string; createdAt: string }> }) =>
+  claim: (body: CreationGraphInput & { clientSessionId: string; title: string; initialPrompt?: string; timeline?: Array<{ clientMessageId: string; role: 'user' | 'assistant' | 'system'; body: string; metadata?: CreationTimelineMessage['metadata']; createdAt: string }> }) =>
     request<{ session: { id: string; title?: string; revision?: number; claimed: true; replayed?: boolean } }>('/api/creation-sessions/claim', { method: 'POST', body: JSON.stringify(body) }),
   get: (id: string): Promise<CreationSessionDetail> => request(`/api/creation-sessions/${encodeURIComponent(id)}`),
+  outcomeMetrics: (id: string): Promise<CreationOutcomeMetrics> => request(`/api/creation-sessions/${encodeURIComponent(id)}/outcome-metrics`),
+  recordOutcome: (id: string, body: { correlationId: string; action: string; phase: 'started' | 'succeeded' | 'failed' | 'validated' | 'reused'; actorType?: 'user' | 'agent' | 'brain' | 'system'; actorRef?: string; projectId?: number; metricKey?: string; metricValue?: number; unit?: string; artifactId?: string; durationMs?: number; costUsdMillicents?: number; metadata?: unknown }) =>
+    request<{ recorded: boolean; duplicate: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/outcomes`, { method: 'POST', body: JSON.stringify(body) }),
   update: (id: string, body: { title?: string; description?: string | null; status?: 'active' | 'archived'; preview?: unknown }) =>
     request<CreationSessionSummary>(`/api/creation-sessions/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   remove: (id: string) => request<{ session: { id: string; status: 'deleted' }; recoverable: true }>(`/api/creation-sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
@@ -8011,7 +8030,7 @@ export const creationSessionsApi = {
   events: (id: string, after = 0) => request<{ events: Array<Record<string, unknown>>; revision: number; hasMore: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/events?after=${Math.max(0, Math.floor(after))}`),
   timeline: {
     list: (id: string, after = 0, limit = 200) => request<{ messages: CreationTimelineMessage[]; lastId: number; hasMore: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/timeline?after=${Math.max(0, Math.floor(after))}&limit=${Math.min(500, Math.max(1, Math.floor(limit)))}`),
-    append: (id: string, message: { clientMessageId: string; role: 'user' | 'assistant' | 'system'; body: string; metadata?: { scope?: string; objectIds?: string[]; model?: string; error?: boolean } }) => request<CreationTimelineMessage>(`/api/creation-sessions/${encodeURIComponent(id)}/timeline`, { method: 'POST', body: JSON.stringify(message) }),
+    append: (id: string, message: { clientMessageId: string; role: 'user' | 'assistant' | 'system'; body: string; metadata?: CreationTimelineMessage['metadata'] }) => request<CreationTimelineMessage>(`/api/creation-sessions/${encodeURIComponent(id)}/timeline`, { method: 'POST', body: JSON.stringify(message) }),
   },
   liveUrl: (id: string): string | null => {
     const token = getStoredTenantToken();

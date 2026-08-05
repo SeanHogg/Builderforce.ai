@@ -204,9 +204,14 @@ export function usePermission(cap: Capability): PermissionResult {
  * gig/for-hire account that sees only the Profile / Find Work / Timecard shell.
  * Undefined outside an AuthProvider so callers never crash the tree.
  */
-export function useAccountType(): 'standard' | 'freelancer' | undefined {
+export function useAccountType(): 'standard' | 'freelancer' | 'sales' | undefined {
   const auth = useOptionalAuth();
   return auth?.user?.accountType;
+}
+
+/** True for referral / sales-associate accounts. */
+export function useIsSalesAssociate(): boolean {
+  return useAccountType() === 'sales';
 }
 
 /** True when the signed-in user is a freelancer (restricted gig shell). The ONE

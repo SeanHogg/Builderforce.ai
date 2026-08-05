@@ -2,11 +2,10 @@
 
 import { useTranslations } from 'next-intl';
 
-export type AccountType = 'standard' | 'freelancer';
+export type AccountType = 'standard' | 'freelancer' | 'sales';
 
 /**
- * The Build (standard) vs Hired (freelancer) radiogroup. The ONE place this
- * two-option choice is rendered, shared by the /register form and the post-OAuth
+ * The account-purpose radiogroup. The ONE place this choice is rendered, shared by the /register form and the post-OAuth
  * role chooser so the labels, order, and accessibility semantics never drift.
  */
 export default function AccountTypeChooser({
@@ -21,10 +20,11 @@ export default function AccountTypeChooser({
   const options: { key: AccountType; icon: string; title: string; sub: string }[] = [
     { key: 'standard', icon: '🚀', title: tr('buildTitle'), sub: tr('buildSub') },
     { key: 'freelancer', icon: '💼', title: tr('hireTitle'), sub: tr('hireSub') },
+    { key: 'sales', icon: '📈', title: tr('salesTitle'), sub: tr('salesSub') },
   ];
 
   return (
-    <div role="radiogroup" aria-label={tr('accountTypeAria')} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+    <div role="radiogroup" aria-label={tr('accountTypeAria')} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
       {options.map((opt) => {
         const active = value === opt.key;
         return (

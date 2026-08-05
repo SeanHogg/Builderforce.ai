@@ -64,6 +64,22 @@ describe('runCreationCanvasAi', () => {
     expect(firstRequest.messages[0].content).toContain('Never claim an object was updated unless canvas_update_object succeeded');
   });
 
+  it('runs an invited Canvas agent under its own identity and instructions', async () => {
+    mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'I recommend validating demand before expanding scope.', toolCalls: [] });
+
+    const answer = await runCreationCanvasAi({
+      prompt: 'Contribute to the launch discussion', canvasSnapshot: '{"objects":[]}', persistence: 'local', canvasActions: [],
+      participant: { ref: 'market-researcher', name: 'Market Researcher', instructions: 'Challenge unsupported market assumptions.' },
+      conversation: [{ role: 'user', content: 'Should we launch this product?' }],
+    });
+
+    expect(answer).toContain('validating demand');
+    const system = mocks.streamChatCompletion.mock.calls[0][0].messages[0].content;
+    expect(system).toContain('You are Market Researcher, an invited specialist agent');
+    expect(system).toContain('Challenge unsupported market assumptions.');
+    expect(system).toContain('Do not pretend to be Brain');
+  });
+
   it('does not claim that a large document stub satisfies the requested page count', async () => {
     const run = vi.fn(() => ({ ok: true, proposed: true }));
     mocks.streamChatCompletion

@@ -2,11 +2,11 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
-import { FEATURES, EVERMIND } from '@/lib/content';
+import { FEATURES, EVERMIND, STATS, WORKFLOW_PROOF_DEMOS } from '@/lib/content';
 import { createLocalCreationSession } from '@/lib/creationSessions';
 import { BLOG_POSTS } from '@/lib/blogData';
 import { ArticleCardGrid } from '@/components/blog/ArticleCard';
@@ -14,6 +14,7 @@ import QuickStart from '@/components/QuickStart';
 import BrainBackdrop from '@/components/BrainBackdrop';
 import { DemoShowcase } from '@/components/demo/DemoShowcase';
 import { ChatInput } from '@/components/ChatInput';
+import { AUTH_API_URL } from '@/lib/auth';
 
 // Visible copy is sourced from the `home`, `features`, `compare` and `evermind`
 // catalog namespaces (localized in all 5 locales). `content.ts` (EVERMIND,
@@ -24,9 +25,10 @@ type TitleDesc = { title: string; desc: string };
 type RoleDesc = { role: string; desc: string };
 type StatLabel = { label: string };
 type FaqItem = { question: string; answer: string };
-type PricingTeaser = { name: string; price: string; perks: string[] };
+type PricingTeaser = { name: string; perks: string[] };
 type CanvasFeature = { title: string; desc: string };
 type CanvasObject = { title: string; meta: string };
+type WorkflowProofCopy = { title: string; audience: string; outcome: string; steps: string[]; evidence: string };
 
 export default function LandingPage() {
   const router = useRouter();
@@ -34,6 +36,16 @@ export default function LandingPage() {
   const [prompt, setPrompt] = useState('');
   const [nlEmail, setNlEmail] = useState('');
   const [nlStatus, setNlStatus] = useState<'idle'|'sending'|'ok'|'error'>('idle');
+  const [publicPlanPrices, setPublicPlanPrices] = useState<{ pro: number } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch(`${AUTH_API_URL}/api/tenants/pricing`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error(`${response.status}`)))
+      .then((contract: { pricing: { pro: { monthly: number } } }) => { if (active) setPublicPlanPrices({ pro: contract.pricing.pro.monthly }); })
+      .catch(() => { /* Pricing CTA remains available; never invent a fallback price. */ });
+    return () => { active = false; };
+  }, []);
 
   function handlePromptSubmit() {
     const text = prompt.trim();
@@ -744,45 +756,41 @@ export default function LandingPage() {
         <div className="lp-stats">
           {(t.raw('home.stats') as StatLabel[]).map((s, i) => (
             <div key={i} className="lp-stat">
-              <div className="lp-stat-number">{['2B+', '<30s', 'WebGPU', '100%'][i]}</div>
+              <div className="lp-stat-number">{STATS.marketing[i]?.value}</div>
               <div className="lp-stat-label" style={{ whiteSpace: 'pre-line' }}>{s.label}</div>
             </div>
           ))}
         </div>
 
-        {/* ── Comparison vs conventional platforms ── */}
-        <section className="lp-section" style={{ background: 'var(--surface-card-strong)' }}>
+        {/* ── Evidence-backed workflows ── */}
+        <section className="lp-section" id="workflow-proof" style={{ background: 'var(--surface-card-strong)', scrollMarginTop: '90px' }}>
           <div className="lp-features">
             <h2 className="section-title">
-              <span className="agentHost-accent">⟩</span> {t('home.comparisonHeading')}
+              <span className="agentHost-accent">⟩</span> {t('home.workflowProof.heading')}
             </h2>
             <p style={{maxWidth:'none',margin:'0 0 32px',color:'var(--text-secondary)'}}>
-              {t('home.comparisonLead')}
+              {t('home.workflowProof.lead')}
             </p>
-            <div style={{overflowX:'auto'}}>
-              <table style={{width:'100%',borderCollapse:'collapse',fontSize:'13px',minWidth:'560px'}}>
-                <thead>
-                  <tr>
-                    <th style={{textAlign:'left',padding:'10px 14px',color:'var(--muted)',fontWeight:600,borderBottom:'2px solid var(--border)'}}>{t('home.comparisonColFeature')}</th>
-                    <th style={{textAlign:'center',padding:'10px 14px',color:'var(--accent)',fontWeight:700,borderBottom:'2px solid var(--accent)'}}>{t('home.comparisonColBuilderforce')}</th>
-                    <th style={{textAlign:'center',padding:'10px 14px',color:'var(--muted)',fontWeight:600,borderBottom:'2px solid var(--border)'}}>{t('home.comparisonColNotebooks')}</th>
-                    <th style={{textAlign:'center',padding:'10px 14px',color:'var(--muted)',fontWeight:600,borderBottom:'2px solid var(--border)'}}>{t('home.comparisonColCloud')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(t.raw('home.comparisonRows') as string[]).map((feature,i)=>{
-                    const marks = [['✅','❌','⚠️'],['✅','⚠️','❌'],['✅','❌','❌'],['✅','❌','❌'],['✅','❌','❌'],['✅','❌','⚠️']][i];
-                    return (
-                    <tr key={i} style={{background:i%2===0?'transparent':'var(--surface-2)'}}>
-                      <td style={{padding:'9px 14px',borderBottom:'1px solid var(--border)'}}>{feature}</td>
-                      <td style={{textAlign:'center',padding:'9px 14px',borderBottom:'1px solid var(--border)',fontWeight:600,color:'var(--accent)'}}>{marks[0]}</td>
-                      <td style={{textAlign:'center',padding:'9px 14px',borderBottom:'1px solid var(--border)',color:'var(--muted)'}}>{marks[1]}</td>
-                      <td style={{textAlign:'center',padding:'9px 14px',borderBottom:'1px solid var(--border)',color:'var(--muted)'}}>{marks[2]}</td>
-                    </tr>
-                  );})}
-                </tbody>
-              </table>
+            <div className="lp-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))' }}>
+              {(t.raw('home.workflowProof.demos') as WorkflowProofCopy[]).map((demo, index) => {
+                const proof = WORKFLOW_PROOF_DEMOS[index];
+                return (
+                  <article className="lp-card" key={proof?.id ?? demo.title}>
+                    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>
+                      <span style={{border:'1px solid var(--border-accent)',borderRadius:999,padding:'3px 8px',fontSize:'0.7rem',color:'var(--coral-bright)'}}>{t('product.capabilityStatus.beta')}</span>
+                      <span style={{border:'1px solid var(--border-subtle)',borderRadius:999,padding:'3px 8px',fontSize:'0.7rem',color:'var(--text-muted)'}}>{t(`product.dataBoundary.${proof?.dataBoundary ?? 'hybrid'}`)}</span>
+                    </div>
+                    <h3 className="lp-card-title">{demo.title}</h3>
+                    <p className="lp-card-desc"><strong>{demo.audience}</strong> — {demo.outcome}</p>
+                    <ol style={{paddingLeft:20,color:'var(--text-secondary)',fontSize:'0.84rem',lineHeight:1.6}}>
+                      {demo.steps.map((step) => <li key={step}>{step}</li>)}
+                    </ol>
+                    <p style={{fontSize:'0.78rem',color:'var(--text-muted)',lineHeight:1.5}}>{demo.evidence}</p>
+                  </article>
+                );
+              })}
             </div>
+            <div style={{marginTop:24}}><Link href="/product#workflow-proof" className="lp-btn-secondary">{t('home.workflowProof.cta')} →</Link></div>
           </div>
         </section>
 
@@ -853,10 +861,10 @@ export default function LandingPage() {
               <span className="agentHost-accent">⟩</span> {t('home.pricingHeading')}
             </h2>
             <div className="lp-grid" style={{gap:'18px',marginTop:'24px'}}>
-              {(t.raw('home.pricingTeaser') as PricingTeaser[]).map(p=>(
+              {(t.raw('home.pricingTeaser') as PricingTeaser[]).map((p, index)=>(
                 <div key={p.name} className="lp-card">
                   <h3 className="lp-card-title">{p.name}</h3>
-                  <div style={{fontSize:'1.6rem',fontWeight:700,margin:'12px 0'}}>{p.price}</div>
+                  <div style={{fontSize:'1.6rem',fontWeight:700,margin:'12px 0'}}>{index === 0 ? '$0' : publicPlanPrices ? `$${publicPlanPrices.pro}${t('home.pricePerSeat')}` : <Link href="/pricing">{t('home.currentPricing')}</Link>}</div>
                   <ul style={{paddingLeft:'16px',fontSize:'0.85rem',color:'var(--text-secondary)'}}>
                     {p.perks.map(perk=><li key={perk}>{perk}</li>)}
                   </ul>
@@ -933,7 +941,7 @@ export default function LandingPage() {
             <p className="lp-cta-desc">{t('home.ctaDesc')}</p>
             <div className="lp-actions">
               <Link href="/register" className="lp-btn-primary">⚡ {t('marketing.ctaGetStartedFree')}</Link>
-              <Link href="/marketplace" className="lp-btn-secondary">👀 {t('home.ctaSeeLiveAgents')}</Link>
+              <Link href="/creation-canvas" className="lp-btn-secondary">✦ {t('home.ctaSeeLiveAgents')}</Link>
             </div>
           </div>
         </section>

@@ -22,7 +22,7 @@ import { CanvasCommands, cleanCanvasLayout } from '@/components/canvas/CanvasCom
 import { CreationNode, type CreationFlowNode } from './CreationNode';
 import type { CreationNodeData, CreationObjectKind } from './types';
 import styles from './CreationCanvas.module.css';
-import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, toolsApi, workflowDefinitions, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
+import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, toolsApi, workflowDefinitions, type CreationOutcomeMetrics, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import { creationGraphFromSnapshot, creationStorageKey, readLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
 import { runCreationCanvasAi } from '@/lib/creationCanvasAi';
 import type { BrainAction, BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
@@ -33,7 +33,7 @@ import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
 import { EvermindValidationProvider } from '@/components/ide/EvermindValidationContext';
 import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
 import { isAwaitingApprovalExecution } from '@/lib/builderforceApi';
-import { fetchProjects } from '@/lib/api';
+import { fetchProjects, publishSite } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
 import { updateAgent } from '@/lib/api';
 import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData, creationObjectDefinition, sanitizeCreationObjectPatch, type CreationObjectGroup } from './creationObjectRegistry';
@@ -57,6 +57,9 @@ import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useLlmModels } from '@/lib/useLlmModels';
 import { ChatInput, type ChatModelOptions, type ChatModelSelection } from '@/components/ChatInput';
+import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
+import { buildWebsiteAssets, creationDeliverables, generateEvermindMedia, mediaFrameDataUrl, withCreationDeliverable, type CreationDeliverable } from '@/lib/creationDeliverables';
+import { listEvermindModels } from '@/lib/studioModelsApi';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
@@ -66,6 +69,16 @@ const INSPECTOR_MIN_WIDTH = 270;
 const INSPECTOR_WIDE_WIDTH = 520;
 const INSPECTOR_MAX_WIDTH = 720;
 const ACCOUNT_REQUIRED_OBJECT_ACTIONS = new Set(['publish', 'deliver', 'assign', 'authenticate', 'execute', 'record', 'generate', 'train', 'start', 'compare']);
+const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
+  website: ['publish'], video: ['generate'],
+  workflow: ['run'], dataset: ['visualize'], project: ['expand', 'compare'],
+  mockup: ['deliver'], mockupSet: ['expand', 'deliver'], standup: ['start'],
+};
+
+/** True only when an advertised capability has a real Canvas-side adapter. */
+export function canInvokeCreationObjectAction(kind: CreationObjectKind, action: string): boolean {
+  return action === 'inspect' || action === 'edit' || CONNECTED_CANVAS_ACTIONS[kind]?.includes(action) === true;
+}
 const PALETTE_GROUP_ICONS: Record<CreationObjectGroup, string> = {
   Build: '✦', Data: '▦', Knowledge: '▤', Insights: '↗', Work: '✓', People: '●', Agents: '✧', Models: '◉', Collaborate: '◇', Integrations: '⌘',
 };
@@ -114,7 +127,7 @@ export function duplicateAddUpdateTarget(
     || /\b(?:another|new|additional|second)\s+(?:object|visual|widget|version)\b/i.test(prompt);
   return explicitlyCreatesObject ? undefined : selected;
 }
-type CanvasTimelineMessage = Pick<CreationTimelineMessage, 'clientMessageId' | 'messageRole' | 'body' | 'createdAt'> & { id?: number };
+type CanvasTimelineMessage = Pick<CreationTimelineMessage, 'clientMessageId' | 'messageRole' | 'body' | 'createdAt'> & { id?: number; metadata?: CreationTimelineMessage['metadata'] };
 type BrowserSpeechRecognition = { lang: string; interimResults: boolean; onresult: ((event: { results: ArrayLike<{ 0: { transcript: string } }> }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null; start: () => void };
 type AccountGate = { title: string; description: string; action: string };
 
@@ -347,6 +360,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [memoryEnabled, setMemoryEnabled] = useState(true);
   const [conversationOpen, setConversationOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [outcomeMetricsOpen, setOutcomeMetricsOpen] = useState(false);
+  const [outcomeMetrics, setOutcomeMetrics] = useState<CreationOutcomeMetrics | null>(null);
+  const [outcomeMetricsLoading, setOutcomeMetricsLoading] = useState(false);
+  const [outcomeMetricsError, setOutcomeMetricsError] = useState<string | null>(null);
   const [proposedChanges, setProposedChanges] = useState<ProposedCanvasChange[]>([]);
   const [acceptedProposalIds, setAcceptedProposalIds] = useState<Set<string>>(new Set());
   const [autoApply, setAutoApply] = useState(false);
@@ -374,6 +391,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const hydrated = useRef(false);
   const revision = useRef(1);
   const lastSavedGraph = useRef('');
+  const sessionOpenCorrelation = useRef(crypto.randomUUID());
   const currentGraph = useRef('');
   const saveInFlight = useRef(false);
   const pendingSave = useRef<{ serialized: string; key: string } | null>(null);
@@ -463,13 +481,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           setTitle(saved.title);
           setNodes(saved.nodes);
           setEdges(saved.edges);
-          setTimeline((saved.timeline ?? []).map((message) => ({ clientMessageId: message.clientMessageId, messageRole: message.role, body: message.body, createdAt: message.createdAt })));
+          setTimeline((saved.timeline ?? []).map((message) => ({ clientMessageId: message.clientMessageId, messageRole: message.role, body: message.body, metadata: message.metadata ?? {}, createdAt: message.createdAt })));
           if (saved.viewport) { viewportRef.current = saved.viewport; pendingViewport.current = saved.viewport; void flowRef.current?.setViewport(saved.viewport); }
         }
         hydrated.current = true;
         trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: 'web', persistence: 'local' } });
         return;
       }
+      const openedAt = performance.now();
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'started' }).catch(() => undefined);
       void Promise.all([creationSessionsApi.get(sessionId), creationSessionsApi.timeline.list(sessionId)]).then(([detail, transcript]) => {
         const { nodes: loadedNodes, edges: loadedEdges } = flowFromSession(detail);
         setTitle(detail.session.title);
@@ -498,8 +518,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         currentGraph.current = lastSavedGraph.current;
         hydrated.current = true;
         trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: 'web', objectKinds: [...new Set(loadedNodes.map((node) => node.data.kind))] } });
+        void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'succeeded', durationMs: performance.now() - openedAt }).catch(() => undefined);
         setNotice('Session saved');
-      }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not load session')).finally(() => setLoadingSession(false));
+      }).catch((error) => {
+        void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'failed', durationMs: performance.now() - openedAt }).catch(() => undefined);
+        setNotice(error instanceof Error ? error.message : 'Could not load session');
+      }).finally(() => setLoadingSession(false));
     } catch { hydrated.current = true; }
   }, [persistence, sessionId, setEdges, setNodes]);
 
@@ -572,7 +596,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (serialized === lastSavedGraph.current) return;
       if (persistence === 'local') {
         const prior = readLocalCreationSession(sessionId);
-        const snapshot: LocalCreationSnapshot = { version: 1, title, initialPrompt: prior?.initialPrompt, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, createdAt: message.createdAt })), nodes, edges, viewport: viewportRef.current, updatedAt: new Date().toISOString() };
+        const snapshot: LocalCreationSnapshot = { version: 1, title, initialPrompt: prior?.initialPrompt, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport: viewportRef.current, updatedAt: new Date().toISOString() };
         localStorage.setItem(storageKey, JSON.stringify(snapshot));
         lastSavedGraph.current = serialized;
         setNotice('Saved on this device');
@@ -616,7 +640,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (persistence !== 'local' || !hydrated.current) return;
     const handle = window.setTimeout(() => {
       const prior = readLocalCreationSession(sessionId); if (!prior) return;
-      const snapshot: LocalCreationSnapshot = { ...prior, title, nodes, edges, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, createdAt: message.createdAt })), viewport: viewportRef.current, updatedAt: new Date().toISOString() };
+      const snapshot: LocalCreationSnapshot = { ...prior, title, nodes, edges, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), viewport: viewportRef.current, updatedAt: new Date().toISOString() };
       localStorage.setItem(storageKey, JSON.stringify(snapshot));
     }, 150);
     return () => window.clearTimeout(handle);
@@ -774,8 +798,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNotice(`Website viewport changed to ${viewport}`);
   }, [canEdit, lockBlocked, selectedId, setNodes]);
 
-  const appendTimeline = useCallback((role: 'user' | 'assistant' | 'system', body: string, metadata?: { scope?: string; objectIds?: string[]; model?: string; error?: boolean }, clientMessageId = crypto.randomUUID()) => {
-    const message: CanvasTimelineMessage = { clientMessageId, messageRole: role, body, createdAt: new Date().toISOString() };
+  const appendTimeline = useCallback((role: 'user' | 'assistant' | 'system', body: string, metadata: CreationTimelineMessage['metadata'] = {}, clientMessageId = crypto.randomUUID()) => {
+    const message: CanvasTimelineMessage = { clientMessageId, messageRole: role, body, metadata, createdAt: new Date().toISOString() };
     setTimeline((current) => current.some((item) => item.clientMessageId === clientMessageId) ? current : [...current, message]);
     if (persistence === 'server') void creationSessionsApi.timeline.append(sessionId, { clientMessageId, role, body, metadata }).then((saved) => {
       setTimeline((current) => current.map((item) => item.clientMessageId === clientMessageId ? saved : item));
@@ -991,7 +1015,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((current) => addEdge({ ...connection, id: crypto.randomUUID(), type: 'smoothstep', data: { connectionKind }, label: connectionKind, markerEnd: { type: MarkerType.ArrowClosed } }, current));
     trackActivity('creation_connection_added', { sessionId, metadata: { clientSurface: 'web', connectionKind } });
-  }, [connectionKind, sessionId, setEdges]);
+    const source = nodes.find((node) => node.id === connection.source);
+    const target = nodes.find((node) => node.id === connection.target);
+    if (persistence === 'server' && source && target && source.data.kind !== 'chat' && target.data.kind !== 'chat') {
+      const correlationId = crypto.randomUUID();
+      const metadata = { sourceKind: source.data.kind, targetKind: target.data.kind, connectionKind };
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'output.reuse', phase: 'started', artifactId: source.id, metadata }).catch(() => undefined);
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'output.reuse', phase: 'reused', artifactId: source.id, metricKey: 'outputs_reused', metricValue: 1, unit: 'count', metadata }).catch(() => undefined);
+    }
+  }, [connectionKind, nodes, persistence, sessionId, setEdges]);
 
   const onNodeClick: NodeMouseHandler<CreationFlowNode> = useCallback((_event, node) => { setSelectedId(node.id); if (!node.selected) setSelectedIds([node.id]); }, []);
   // XYFlow subscribes to this callback through its Zustand store. An inline
@@ -1035,7 +1067,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     viewportRef.current = viewport;
     if (persistence !== 'local' || !hydrated.current) return;
     const prior = readLocalCreationSession(sessionId);
-    const snapshot: LocalCreationSnapshot = { version: 1, title, initialPrompt: prior?.initialPrompt, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, createdAt: message.createdAt })), nodes, edges, viewport, updatedAt: new Date().toISOString() };
+    const snapshot: LocalCreationSnapshot = { version: 1, title, initialPrompt: prior?.initialPrompt, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport, updatedAt: new Date().toISOString() };
     localStorage.setItem(storageKey, JSON.stringify(snapshot));
   }, [edges, nodes, persistence, sessionId, storageKey, timeline, title]);
 
@@ -1265,6 +1297,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       else setNotice('Attach a saved project before loading quality diagnostics');
       return;
     }
+    const validationCorrelationId = crypto.randomUUID();
+    const validationStartedAt = performance.now();
+    void creationSessionsApi.recordOutcome(sessionId, { correlationId: validationCorrelationId, action: 'artifact.validate', phase: 'started', projectId: Number(projectId), artifactId: project.id }).catch(() => undefined);
     setNotice('Loading project quality diagnostics…');
     void toolsApi.projectScore(Number(projectId)).then((quality) => {
       const diagnostics = quality.diagnostics.map((diagnostic) => ({
@@ -1289,7 +1324,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!existing) setEdges((current) => [...current, { id: crypto.randomUUID(), source: project.id, target: qualityNode.id, label: 'quality evidence', type: 'smoothstep', animated: true }]);
       setSelectedId(qualityNode.id);
       setNotice(diagnostics.length ? `${diagnostics.length} quality diagnostics added to the canvas` : 'Quality card added — run a diagnostic to establish a score');
-    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not load project quality'));
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId: validationCorrelationId, action: 'artifact.validate', phase: 'validated', projectId: Number(projectId), artifactId: project.id, durationMs: performance.now() - validationStartedAt, metricKey: 'validation_pass', metricValue: Number(quality.result.score ?? 0) >= 70 ? 1 : 0, unit: 'boolean', metadata: { score: quality.result.score, diagnosticCount: diagnostics.length } }).catch(() => undefined);
+    }).catch((error) => {
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId: validationCorrelationId, action: 'artifact.validate', phase: 'failed', projectId: Number(projectId), artifactId: project.id, durationMs: performance.now() - validationStartedAt }).catch(() => undefined);
+      setNotice(error instanceof Error ? error.message : 'Could not load project quality');
+    });
   }, [nodes, persistence, requireAccount, selectedNode, setEdges, setNodes]);
 
   const deliverMockup = useCallback(() => {
@@ -1316,6 +1355,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return taskId;
     };
     if (persistence === 'server' && Number.isInteger(projectId) && projectId > 0) {
+      const deliveryCorrelationId = crypto.randomUUID();
+      const deliveryStartedAt = performance.now();
+      const deliverable: CreationDeliverable = { id: deliveryCorrelationId, action: 'deliver', artifactKind: 'project-task', status: 'running', createdAt: new Date().toISOString(), provider: 'builderforce-tasks', resourceRef: `project:${projectId}` };
+      setNodes((current) => current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status: 'Delivering…', deliverables: withCreationDeliverable(node.data, deliverable) } } : node));
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId: deliveryCorrelationId, action: 'artifact.deliver', phase: 'started', projectId, artifactId: selectedNode.id, metadata: { kind: selectedNode.data.kind } }).catch(() => undefined);
       setNotice('Creating delivery task…');
       const agentRef = agent?.data.resourceId?.startsWith('agent:') ? agent.data.resourceId.slice('agent:'.length) : undefined;
       void tasksApi.create({
@@ -1325,8 +1369,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         priority: 'high',
         ...(agentRef ? { assignedAgentRef: agentRef } : {}),
       }).then(async (created) => {
+        const delivered: CreationDeliverable = { ...deliverable, status: 'delivered', completedAt: new Date().toISOString(), resourceRef: `task:${created.id}`, validation: { status: 'passed', detail: `Task ${created.key || created.id} created in ${project?.data.title || `project ${projectId}`}` }, metadata: { projectId, taskId: created.id, agentRef: agentRef || null } };
+        setNodes((current) => current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status: 'Delivered', deliverables: withCreationDeliverable(node.data, delivered) } } : node));
         const canvasTaskId = addTaskNode(`task:${created.id}`, created.status || (agentRef ? 'Assigned' : 'Ready'), { taskKey: created.key, priority: created.priority, content: created.description || undefined, agentRef: created.assignedAgentRef || undefined });
         trackActivity('creation_artifact_delivered', { sessionId, metadata: { clientSurface: 'web', objectKinds: [selectedNode.data.kind], projectId } });
+        void creationSessionsApi.recordOutcome(sessionId, { correlationId: deliveryCorrelationId, action: 'artifact.deliver', phase: 'succeeded', projectId, artifactId: selectedNode.id, durationMs: performance.now() - deliveryStartedAt, metricKey: 'delivered_outcomes', metricValue: 1, unit: 'count', metadata: { taskId: created.id, agentAssigned: !!agentRef } }).catch(() => undefined);
         if (agentRef) {
           trackActivity('creation_agent_assigned', { sessionId, metadata: { clientSurface: 'web', projectId } });
           let execution;
@@ -1356,7 +1403,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         } else {
           setNotice('Mockup delivered to the project as a task');
         }
-      }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not create delivery task'));
+      }).catch((error) => {
+        const message = error instanceof Error ? error.message : 'Could not create delivery task';
+        const failed: CreationDeliverable = { ...deliverable, status: 'failed', completedAt: new Date().toISOString(), error: message, validation: { status: 'failed', detail: message } };
+        setNodes((current) => current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status: 'Delivery failed', deliverables: withCreationDeliverable(node.data, failed) } } : node));
+        void creationSessionsApi.recordOutcome(sessionId, { correlationId: deliveryCorrelationId, action: 'artifact.deliver', phase: 'failed', projectId, artifactId: selectedNode.id, durationMs: performance.now() - deliveryStartedAt }).catch(() => undefined);
+        setNotice(message);
+      });
       return;
     }
     addTaskNode(`draft-task:${crypto.randomUUID()}`, 'Draft');
@@ -1640,6 +1693,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!args.action || !definition.actions.includes(args.action)) return { error: `Unsupported action. Available actions: ${definition.actions.join(', ')}` };
       if (args.action === 'inspect') return { object: { id: target.id, ...definition.contextAdapter(target.data) }, actions: definition.actions, mutableFields: definition.mutableFields };
       if (args.action === 'edit') return { objectId: target.id, kind: target.data.kind, mutableFields: definition.mutableFields, instruction: 'Call canvas_update_object with the desired fields.' };
+      if (!canInvokeCreationObjectAction(target.data.kind, args.action)) {
+        return { error: `${args.action} is declared for ${definition.label}, but no real Canvas delivery adapter is connected yet. Do not claim that it ran.` };
+      }
       if (persistence === 'local' && ACCOUNT_REQUIRED_OBJECT_ACTIONS.has(args.action)) {
         requireAccount(args.action, `Create an account to ${args.action}`, `Your ${target.data.title} remains saved on this device. Create a free account to ${args.action} it with durable tenant resources, permissions, and history.`);
         return { requiresAccount: true, action: args.action, objectId: target.id, message: 'The account creation prompt is open. The local canvas remains unchanged.' };
@@ -1700,6 +1756,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNotice('Brain is evaluating connected objects…');
     const initialMessage = initialPromptSubmitted.current ? timeline.find((message) => (message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:')) && message.body === requestText) : undefined;
     const requestMessageId = appendTimeline('user', requestText, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds] }, initialMessage?.clientMessageId);
+    const promptStartedAt = performance.now();
+    if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'started', metadata: { scope: resolvedScopeMode } }).catch(() => undefined);
     // A composer submission is a chat interaction, so reveal its Brain object
     // immediately. Waiting for the vendor request to succeed left a blank canvas
     // (and hid useful streaming/failure state) whenever the provider cascade
@@ -1725,27 +1783,87 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         connections: scopedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
       });
       setPrompt('');
-      void runCreationCanvasAi({
-        prompt: request, canvasSnapshot: snapshot, persistence, canvasActions,
-        ...(modelSelection.mode === 'model' ? { model: modelSelection.model, modelStrict: true } : {}),
-        routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
-        autoApprove: autoApplyRef.current,
-        confirmAction: ({ name, args }) => {
-          let preview = '';
-          try { const serialized = JSON.stringify(args ?? {}); preview = serialized === '{}' ? '' : serialized.length > 320 ? `${serialized.slice(0, 320)}…` : serialized; } catch { preview = ''; }
-          return confirm({ title: 'Approve Brain action', message: `Brain wants to run ${name.replaceAll('_', ' ')}.${preview ? `\n\n${preview}` : ''}`, confirmLabel: 'Approve', cancelLabel: 'Cancel', destructive: false });
-        },
-        ...(persistence === 'server' && memoryEnabled && evermindProjectId != null ? { evermind: {
-          recall: (query: string) => recallProjectEvermind(evermindProjectId, query).catch(() => null),
-          learn: (answer: string, question: string) => teachProjectEvermindFromText(evermindProjectId, answer, question),
-        } } : {}),
-        onTrace: (event) => setBrainTrace((current) => [...current, event]),
-        conversation: timeline.map((message) => ({ role: message.messageRole, content: message.body })),
-      }).then((answer) => {
+      const connectedAgentNodes = nodes.filter((node) => node.data.kind === 'agent' && (
+        effectiveSelectedIds.includes(node.id)
+        || edges.some((edge) => (edge.source === brainId && edge.target === node.id) || (edge.target === brainId && edge.source === node.id))
+      )).slice(0, 3);
+      const confirmCanvasAction = ({ name, args }: { name: string; args: unknown }) => {
+        let preview = '';
+        try { const serialized = JSON.stringify(args ?? {}); preview = serialized === '{}' ? '' : serialized.length > 320 ? `${serialized.slice(0, 320)}…` : serialized; } catch { preview = ''; }
+        return confirm({ title: 'Approve agent action', message: `A session agent wants to run ${name.replaceAll('_', ' ')}.${preview ? `\n\n${preview}` : ''}`, confirmLabel: 'Approve', cancelLabel: 'Cancel', destructive: false });
+      };
+      const runGroupTurn = async () => {
+        const historicalConversation = timeline.map((message) => ({ role: message.messageRole, content: message.metadata?.authoredBy?.name ? `${message.metadata.authoredBy.name}: ${message.body}` : message.body }));
+        const groupConversation = connectedAgentNodes.length
+          ? [...historicalConversation, { role: 'user' as const, content: request }]
+          : historicalConversation;
+        const canonicalAgents = connectedAgentNodes.flatMap((agent) => {
+          const ref = agent.data.resourceId?.match(/^agent:(.+)$/)?.[1];
+          return ref ? [{ ref, name: agent.data.title || 'Specialist agent', role: typeof agent.data.role === 'string' ? agent.data.role : undefined }] : [];
+        });
+        if (persistence === 'server' && canonicalAgents.length) {
+          try {
+            const existingChatId = nodes.find((node) => node.data.kind === 'chat')?.data.resourceId?.match(/^chat:(\d+)$/)?.[1];
+            const projectId = nodes.find((node) => node.data.kind === 'project')?.data.resourceId?.match(/^project:(\d+)$/)?.[1];
+            const groupTurn = await runCanonicalCanvasGroupTurn({
+              chatId: existingChatId ? Number(existingChatId) : null,
+              title, projectId: projectId ? Number(projectId) : null,
+              sessionId, prompt: request, agents: canonicalAgents,
+            });
+            setNodes((current) => current.map((node) => node.id === brainId ? { ...node, data: { ...node.data, resourceId: `chat:${groupTurn.chatId}`, status: 'Canonical group chat' } } : node));
+            for (const { agent, message } of groupTurn.contributions) {
+              appendTimeline('assistant', message.content, {
+                scope: resolvedScopeMode, objectIds: [...scopedNodeIds],
+                authoredBy: { kind: 'agent', ref: agent.ref, name: agent.name },
+              }, `${requestMessageId}:agent:${agent.ref}`);
+              groupConversation.push({ role: 'assistant', content: `${agent.name}: ${message.content}` });
+            }
+          } catch (error) {
+            const detail = error instanceof Error ? error.message : 'Canonical agent turn failed';
+            appendTimeline('system', `The canonical agent group could not complete its turn: ${detail}`, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:agent-group-error`);
+          }
+        } else if (connectedAgentNodes.length) {
+          // Guest drafts cannot call the tenant workforce runtime. Keep ideation
+          // useful, but do not present these local personas as canonical agents.
+          for (const agent of connectedAgentNodes) {
+            const name = agent.data.title || 'Draft specialist';
+            const ref = agent.id;
+            try {
+              const contribution = await runCreationCanvasAi({
+                prompt: 'Contribute a specialist perspective to the latest request.', canvasSnapshot: snapshot,
+                persistence, canvasActions, routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
+                autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
+                participant: { ref, name, instructions: typeof agent.data.instructions === 'string' ? agent.data.instructions : agent.data.subtitle },
+                conversation: groupConversation,
+              });
+              if (contribution.trim()) {
+                appendTimeline('assistant', contribution.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'agent', ref, name } }, `${requestMessageId}:draft-agent:${agent.id}`);
+                groupConversation.push({ role: 'assistant', content: `${name}: ${contribution.trim()}` });
+              }
+            } catch { /* Brain synthesis still runs with the available transcript. */ }
+          }
+        }
+        return runCreationCanvasAi({
+          prompt: connectedAgentNodes.length
+            ? `Synthesize the invited agents' perspectives and complete the user's requested outcome. Resolve disagreements, make the final Canvas changes, and state what was actually created.`
+            : request,
+          canvasSnapshot: snapshot, persistence, canvasActions,
+          ...(modelSelection.mode === 'model' ? { model: modelSelection.model, modelStrict: true } : {}),
+          routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
+          autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
+          ...(persistence === 'server' && memoryEnabled && evermindProjectId != null ? { evermind: {
+            recall: (query: string) => recallProjectEvermind(evermindProjectId, query).catch(() => null),
+            learn: (answer: string, question: string) => teachProjectEvermindFromText(evermindProjectId, answer, question),
+          } } : {}),
+          onTrace: (event) => setBrainTrace((current) => [...current, event]),
+          conversation: groupConversation,
+        });
+      };
+      void runGroupTurn().then((answer) => {
         const changes = [...proposalBuffer.current];
         const shouldAutoApply = changes.length > 0 && (autoApplyRef.current || canvasChangesCanAutoApply(changes));
         if (answer.trim()) {
-          appendTimeline('assistant', answer.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds] }, `${requestMessageId}:assistant`);
+          appendTimeline('assistant', answer.trim(), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'brain', ref: 'brain', name: 'Brain' } }, `${requestMessageId}:assistant`);
           setNodes((current) => current.map((node) => node.id === brainId ? { ...node, data: { ...node.data, subtitle: request, aiResponse: answer.trim() } } : node));
           const promptTargets = effectiveSelectedIds.filter((id) => id !== brainId && nodes.some((node) => node.id === id && node.data.kind !== 'chat'));
           if (promptTargets.length) setEdges((current) => associateBrainWithArtifacts(current, brainId, promptTargets));
@@ -1762,10 +1880,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         setThinking(false);
         setNotice(changes.length ? shouldAutoApply ? `Applying ${changes.length} Brain changes…` : `${changes.length} Brain changes await review` : 'Brain finished evaluating the canvas');
         trackActivity('creation_ai_evaluation_completed', { sessionId, metadata: { clientSurface: 'web', proposedChangeCount: changes.length, objectKinds: [...new Set(nodes.map((node) => node.data.kind))] } });
+        if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'succeeded', actorType: 'brain', durationMs: performance.now() - promptStartedAt, metricKey: 'artifacts_proposed', metricValue: changes.length, unit: 'count' }).catch(() => undefined);
       }).catch((error) => {
         appendTimeline('system', error instanceof Error ? error.message : 'Brain could not complete this request', { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:error`);
         setThinking(false);
         setNotice(error instanceof Error ? error.message : 'Brain could not complete this request');
+        if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'failed', actorType: 'brain', durationMs: performance.now() - promptStartedAt }).catch(() => undefined);
       });
       return;
     }
@@ -1799,7 +1919,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setPrompt('');
       setNotice('Evaluation added to canvas');
     }, 850);
-  }, [appendTimeline, canvasActions, confirm, effectiveSelectedIds, edges, evermindProjectId, memoryEnabled, modelSelection, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, setEdges, setNodes, thinking, timeline]);
+  }, [appendTimeline, canvasActions, confirm, effectiveSelectedIds, edges, evermindProjectId, memoryEnabled, modelSelection, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, setEdges, setNodes, thinking, timeline, title]);
 
   useEffect(() => {
     if (!hydrated.current || initialPromptSubmitted.current || thinking) return;
@@ -1903,7 +2023,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const target = requestedTarget ?? (selectedNode?.data.kind === 'workflow' ? selectedNode : nodes.find((node) => node.data.kind === 'workflow'));
     if (!target) { setNotice('Add a workflow to run it'); return; }
     const targetId = target.id;
-    setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Running' } } : node));
+    const deliveryId = crypto.randomUUID();
+    const started: CreationDeliverable = { id: deliveryId, action: 'run', artifactKind: 'workflow-run', status: 'running', createdAt: new Date().toISOString(), provider: 'builderforce-workflows' };
+    setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Running', deliverables: withCreationDeliverable(node.data, started) } } : node));
     const definitionId = target.data.resourceId?.startsWith('workflow:') ? target.data.resourceId.slice('workflow:'.length) : '';
     if (persistence === 'server' && target.data.workflowExecutable === false) {
       setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: target.data.status } } : node));
@@ -1920,7 +2042,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           cloudAgentRef: definition.runTargetCloudAgentRef,
         });
       }).then((run) => {
-        setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Running', workflowRunId: run.workflowId, workflowTaskCount: run.taskCount } } : node));
+        setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Running', workflowRunId: run.workflowId, workflowTaskCount: run.taskCount, deliverables: withCreationDeliverable(node.data, { ...started, resourceRef: `workflow-run:${run.workflowId}`, metadata: { taskCount: run.taskCount } }) } } : node));
         setNotice(`Workflow started · ${run.taskCount} task${run.taskCount === 1 ? '' : 's'}`);
         const pollRun = (remaining: number) => {
           if (remaining <= 0) return;
@@ -1931,7 +2053,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               const normalized = currentRun.status.toLowerCase();
               const terminal = ['completed', 'complete', 'failed', 'cancelled', 'canceled'].includes(normalized);
               const label = normalized === 'completed' || normalized === 'complete' ? 'Complete' : normalized === 'failed' ? 'Run failed' : normalized === 'cancelled' || normalized === 'canceled' ? 'Cancelled' : currentRun.status;
-              setNodes((nodesNow) => nodesNow.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: label, workflowRunStatus: currentRun.status, workflowCompletedAt: currentRun.completedAt } } : node));
+              setNodes((nodesNow) => nodesNow.map((node) => {
+                if (node.id !== targetId) return node;
+                const terminalDeliverable: CreationDeliverable | null = terminal ? { ...started, status: normalized === 'completed' || normalized === 'complete' ? 'delivered' : 'failed', completedAt: currentRun.completedAt || new Date().toISOString(), resourceRef: `workflow-run:${run.workflowId}`, validation: { status: normalized === 'completed' || normalized === 'complete' ? 'passed' : 'failed', detail: `Workflow ${currentRun.status}` }, metadata: { taskCount: run.taskCount }, ...(!(normalized === 'completed' || normalized === 'complete') ? { error: `Workflow ${currentRun.status}` } : {}) } : null;
+                return { ...node, data: { ...node.data, status: label, workflowRunStatus: currentRun.status, workflowCompletedAt: currentRun.completedAt, ...(terminalDeliverable ? { deliverables: withCreationDeliverable(node.data, terminalDeliverable) } : {}) } };
+              }));
               if (terminal) setNotice(`Workflow ${label.toLowerCase()}`);
               else pollRun(remaining - 1);
             }).catch(() => pollRun(remaining - 1));
@@ -1939,8 +2065,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         };
         pollRun(30);
       }).catch((error) => {
-        setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Run failed' } } : node));
-        setNotice(error instanceof Error ? error.message : 'Workflow could not be started');
+        const message = error instanceof Error ? error.message : 'Workflow could not be started';
+        const failed: CreationDeliverable = { ...started, status: 'failed', completedAt: new Date().toISOString(), error: message, validation: { status: 'failed', detail: message } };
+        setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Run failed', deliverables: withCreationDeliverable(node.data, failed) } } : node));
+        setNotice(message);
       });
       return;
     }
@@ -1950,7 +2078,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return;
     }
     window.setTimeout(() => {
-      setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Complete' } } : node));
+      const completed: CreationDeliverable = { ...started, status: 'delivered', completedAt: new Date().toISOString(), provider: 'browser-draft', validation: { status: 'passed', detail: 'Local draft workflow completed' } };
+      setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Complete', deliverables: withCreationDeliverable(node.data, completed) } } : node));
       setNotice('Workflow completed');
     }, 1400);
   }, [canRun, nodes, persistence, selectedNode, setNodes]);
@@ -1965,6 +2094,69 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       .catch((error) => setNotice(error instanceof Error ? error.message : 'Agent settings could not be saved'));
   }, [selectedNode]);
 
+  const publishWebsite = useCallback((websiteId?: string) => {
+    const target = nodes.find((node) => node.id === websiteId && node.data.kind === 'website')
+      ?? (selectedNode?.data.kind === 'website' ? selectedNode : nodes.find((node) => node.data.kind === 'website'));
+    if (!target) { setNotice('Add a Website object to publish'); return; }
+    if (persistence !== 'server') { requireAccount('publish', 'Create an account to publish', 'Save this session to publish the Website as a live Builderforce site.'); return; }
+    const connectedProject = nodes.find((node) => node.data.kind === 'project' && /^project:\d+$/.test(node.data.resourceId || '') && edges.some((edge) => (edge.source === target.id && edge.target === node.id) || (edge.target === target.id && edge.source === node.id)))
+      ?? nodes.find((node) => node.data.kind === 'project' && /^project:\d+$/.test(node.data.resourceId || ''));
+    const projectId = connectedProject?.data.resourceId?.match(/^project:(\d+)$/)?.[1];
+    if (!projectId) { setNotice('Connect this Website to a saved Project before publishing'); return; }
+    const deliveryId = crypto.randomUUID();
+    const correlationId = `deliver:${deliveryId}`;
+    const startedAt = performance.now();
+    const started: CreationDeliverable = { id: deliveryId, action: 'publish', artifactKind: 'website', status: 'running', createdAt: new Date().toISOString(), provider: 'builderforce-sites', resourceRef: `project:${projectId}` };
+    setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Publishing…', deliverables: withCreationDeliverable(node.data, started) } } : node));
+    setNotice('Building and publishing the Website…');
+    void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'website.publish', phase: 'started', artifactId: target.id, projectId: Number(projectId) }).catch(() => undefined);
+    const subdomain = typeof target.data.subdomain === 'string' ? target.data.subdomain : undefined;
+    void publishSite(projectId, buildWebsiteAssets(target.data), subdomain).then((site) => {
+      const delivered: CreationDeliverable = { ...started, status: 'delivered', completedAt: new Date().toISOString(), url: site.url, pathUrl: site.pathUrl, mimeType: 'text/html', resourceRef: `site:${site.subdomain}`, validation: { status: 'passed', detail: `${site.assetCount} assets published (${site.totalBytes} bytes)` }, metadata: { versionToken: site.versionToken, assetCount: site.assetCount, totalBytes: site.totalBytes } };
+      setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Published', url: site.url, siteUrl: site.url, pathUrl: site.pathUrl, subdomain: site.subdomain, deliverables: withCreationDeliverable(node.data, delivered) } } : node));
+      setNotice(`Website published to ${site.url}`);
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'website.publish', phase: 'succeeded', artifactId: target.id, projectId: Number(projectId), durationMs: performance.now() - startedAt, metricKey: 'deliverables_completed', metricValue: 1, unit: 'count', metadata: { url: site.url, versionToken: site.versionToken } }).catch(() => undefined);
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : 'Website publish failed';
+      const failed: CreationDeliverable = { ...started, status: 'failed', completedAt: new Date().toISOString(), error: message, validation: { status: 'failed', detail: message } };
+      setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Publish failed', deliverables: withCreationDeliverable(node.data, failed) } } : node));
+      setNotice(message);
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'website.publish', phase: 'failed', artifactId: target.id, projectId: Number(projectId), durationMs: performance.now() - startedAt }).catch(() => undefined);
+    });
+  }, [edges, nodes, persistence, requireAccount, selectedNode, sessionId, setNodes]);
+
+  const generateVideo = useCallback((videoId?: string) => {
+    const target = nodes.find((node) => node.id === videoId && node.data.kind === 'video')
+      ?? (selectedNode?.data.kind === 'video' ? selectedNode : nodes.find((node) => node.data.kind === 'video'));
+    if (!target) { setNotice('Add a Video object to generate'); return; }
+    if (persistence !== 'server') { requireAccount('generate', 'Create an account to generate video', 'Save this session to run a published Evermind video model.'); return; }
+    const deliveryId = crypto.randomUUID();
+    const correlationId = `deliver:${deliveryId}`;
+    const startedAt = performance.now();
+    const started: CreationDeliverable = { id: deliveryId, action: 'generate', artifactKind: 'video', status: 'running', createdAt: new Date().toISOString(), provider: 'evermind' };
+    setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Generating…', deliverables: withCreationDeliverable(node.data, started) } } : node));
+    setNotice('Generating video with Evermind…');
+    void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'video.generate', phase: 'started', artifactId: target.id }).catch(() => undefined);
+    void listEvermindModels().then((models) => {
+      const configured = typeof target.data.modelSlug === 'string' ? target.data.modelSlug : typeof target.data.model === 'string' ? target.data.model : '';
+      const model = models.find((candidate) => candidate.slug === configured || candidate.name === configured) ?? models[0];
+      if (!model) throw new Error('Publish an Evermind video model before generating this deliverable');
+      return generateEvermindMedia(model.slug, { prompt: typeof target.data.prompt === 'string' ? target.data.prompt : target.data.content as string | undefined, maxFrames: typeof target.data.maxFrames === 'number' ? target.data.maxFrames : 16 }).then((media) => ({ media, model }));
+    }).then(({ media, model }) => {
+      const previewUrl = media.frames[0] ? mediaFrameDataUrl(media.frames[0], media.width, media.height, media.channels) : null;
+      const delivered: CreationDeliverable = { ...started, status: 'delivered', completedAt: new Date().toISOString(), mimeType: media.modality === 'video' ? 'application/x-builderforce-video-frames' : 'image/png', resourceRef: media.model, validation: { status: media.frameCount > 0 ? 'passed' : 'failed', detail: `${media.frameCount} ${media.width}×${media.height} frames generated` }, metadata: { modelSlug: model.slug, frameCount: media.frameCount, width: media.width, height: media.height, channels: media.channels, usage: media.usage } };
+      setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Generated', modelSlug: model.slug, frameCount: media.frameCount, videoWidth: media.width, videoHeight: media.height, generatedFrames: media.frames, ...(previewUrl ? { videoUrl: previewUrl } : {}), deliverables: withCreationDeliverable(node.data, delivered) } } : node));
+      setNotice(`${media.frameCount}-frame video generated with ${model.name}`);
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'video.generate', phase: 'succeeded', actorType: 'system', artifactId: target.id, durationMs: performance.now() - startedAt, metricKey: 'deliverables_completed', metricValue: 1, unit: 'count', metadata: { model: model.slug, frameCount: media.frameCount } }).catch(() => undefined);
+    }).catch((error) => {
+      const message = error instanceof Error ? error.message : 'Video generation failed';
+      const failed: CreationDeliverable = { ...started, status: 'failed', completedAt: new Date().toISOString(), error: message, validation: { status: 'failed', detail: message } };
+      setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Generation failed', deliverables: withCreationDeliverable(node.data, failed) } } : node));
+      setNotice(message);
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'video.generate', phase: 'failed', actorType: 'system', artifactId: target.id, durationMs: performance.now() - startedAt }).catch(() => undefined);
+    });
+  }, [nodes, persistence, requireAccount, selectedNode, sessionId, setNodes]);
+
   useEffect(() => {
     const pending = pendingBrainActions[0];
     if (!pending) return;
@@ -1977,6 +2169,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }
     const finish = () => setPendingBrainActions((current) => current.slice(1));
     if (target.data.kind === 'workflow' && pending.action === 'run') runWorkflow();
+    else if (target.data.kind === 'website' && pending.action === 'publish') publishWebsite(target.id);
+    else if (target.data.kind === 'video' && pending.action === 'generate') generateVideo(target.id);
     else if (target.data.kind === 'dataset' && pending.action === 'visualize') visualizeDataset();
     else if (target.data.kind === 'project' && pending.action === 'expand') expandProject();
     else if (target.data.kind === 'project' && pending.action === 'compare') compareProjects();
@@ -1990,18 +2184,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNodes((current) => [...current, evaluation]);
       setEdges((current) => [...current, { id: crypto.randomUUID(), source: target.id, target: evaluation.id, type: 'smoothstep', label: 'evaluates', animated: true }]);
       setNotice('Evermind evaluation added to the canvas');
-    } else if (['preview', 'drill', 'play', 'profile'].includes(pending.action)) {
-      void flowRef.current?.fitView({ nodes: [{ id: target.id }], padding: .3, duration: 350 });
-      setNotice(`${target.data.title} ready to ${pending.action}`);
-    } else if (pending.action === 'publish' && ['website', 'evermind'].includes(target.data.kind)) {
-      setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: persistence === 'local' ? 'Publish-ready draft' : 'Publish requested' } } : node));
-      setNotice(persistence === 'local' ? 'Save the session to publish this artifact' : `${target.data.title} is ready for its canonical publish step`);
     } else {
-      setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: `${pending.action} requested` } } : node));
-      setNotice(`${pending.action} is ready in the ${creationObjectDefinition(target.data.kind).label} inspector`);
+      setNotice(`${pending.action} did not run because this ${creationObjectDefinition(target.data.kind).label} has no connected delivery adapter`);
     }
     finish();
-  }, [compareProjects, deliverMockup, expandEvermindPipeline, expandMockupSet, expandProject, nodes, pendingBrainActions, persistence, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
+  }, [compareProjects, deliverMockup, expandEvermindPipeline, expandMockupSet, expandProject, generateVideo, nodes, pendingBrainActions, persistence, publishWebsite, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
 
   const openHistory = useCallback(() => {
     setHistoryOpen(true);
@@ -2088,6 +2275,26 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     brain: { scope: resolvedScopeMode, thinking, proposedChangeCount: proposedChanges.length, actionCount: canvasActions.length },
   }, await captureDiagnosticsContext()), [allMembers.length, canvasActions.length, edges.length, effectiveSelectedIds, nodes, pendingInvitations.length, persistence, proposedChanges.length, realtimeState, resolvedScopeMode, sessionId, sessionRole, thinking, timeline, title]);
 
+  const openOutcomeMetrics = useCallback(() => {
+    setOutcomeMetricsOpen(true);
+    setOutcomeMetricsError(null);
+    if (persistence === 'local') return;
+    setOutcomeMetricsLoading(true);
+    void creationSessionsApi.outcomeMetrics(sessionId)
+      .then(setOutcomeMetrics)
+      .catch((error) => setOutcomeMetricsError(error instanceof Error ? error.message : 'Outcome metrics could not be loaded'))
+      .finally(() => setOutcomeMetricsLoading(false));
+  }, [persistence, sessionId]);
+
+  const formatOutcomeValue = useCallback((value: number | null, unit: string) => {
+    if (value == null) return 'Not measured';
+    if (unit === 'percent') return `${Math.round(value * 100)}%`;
+    if (unit === 'usd') return `$${value.toFixed(2)}`;
+    if (unit === 'seconds') return value >= 60 ? `${(value / 60).toFixed(value >= 600 ? 0 : 1)} min` : `${Math.round(value)} sec`;
+    if (unit === 'agents') return `${value.toFixed(value % 1 ? 1 : 0)} agent${value === 1 ? '' : 's'}`;
+    return value.toFixed(value % 1 ? 1 : 0);
+  }, []);
+
   return (
     <div className={`${styles.canvasShell} app-full-height`}>
       <div className={styles.sessionBar}>
@@ -2101,6 +2308,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             <button className={styles.secondaryButton} onClick={undo} aria-label="Undo canvas change">↶</button>
             <button className={styles.secondaryButton} onClick={redo} aria-label="Redo canvas change">↷</button>
           </div>
+          <button className={styles.secondaryButton} aria-expanded={outcomeMetricsOpen} aria-label="View outcome metrics" title="Idea-to-delivery outcome metrics" onClick={openOutcomeMetrics}>↗</button>
           <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-label={t('openDiagnostics')} onClick={() => setDiagnosticsOpen((value) => !value)}>⚠ <span>{t('diagnostics')}</span></button>
           <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}>•••</button>
           <button className={styles.secondaryButton} onClick={() => { if (persistence === 'local') requireAccount('share', 'Create an account to share this canvas', 'Your work is already safe on this device. An account saves it to your tenant and enables live collaboration, invitations, and access controls.'); else setShareOpen((value) => !value); setMoreOpen(false); }}>{t('share')} ▾</button>
@@ -2236,7 +2444,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           })}</div>
         </aside>}
 
-        {!presentMode && selectedNode && <Inspector node={selectedNode} nodes={nodes} edges={edges} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => setSelectedId(null)} onRun={runWorkflow} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}
+        {!presentMode && selectedNode && <Inspector node={selectedNode} nodes={nodes} edges={edges} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => setSelectedId(null)} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onGenerateVideo={() => generateVideo(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}
 
         {workflowFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label="Workflow focus editor">
           <header><div><strong>Edit Workflow on Canvas</strong><small>Changes save to the canonical Workflow definition.</small></div><button type="button" onClick={() => setWorkflowFocus(null)} aria-label="Close workflow editor">×</button></header>
@@ -2244,7 +2452,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         </section>}
 
         {historyOpen && <aside className={styles.historyPanel}><header><div><strong>Version history</strong><small>Restore creates a new revision</small></div><button onClick={() => setHistoryOpen(false)} aria-label="Close history">×</button></header>{persistence === 'local' ? <p>This session is currently stored on this device. Server version history begins after you save it.</p> : <><button className={styles.primaryButton} onClick={createCheckpoint} disabled={!canEdit}>+ Name current checkpoint</button><div>{history.length ? history.map((snapshot) => <button key={snapshot.revision} onClick={() => restoreRevision(snapshot.revision)} disabled={!canEdit}><b>{snapshot.label || `Revision ${snapshot.revision}`}</b><span>Revision {snapshot.revision} · {new Date(snapshot.createdAt).toLocaleString()}</span></button>) : <p>No saved revisions yet.</p>}</div></>}</aside>}
-        {conversationOpen && <aside className={styles.historyPanel} aria-label="Session conversation"><header><div><strong>Session conversation</strong><small>Persists even when Chat Objects are removed</small></div><span className={styles.panelHeaderActions}><CopyButton compact label={t('copyDiagnostics')} ariaLabel={t('copyChatDiagnostics')} getText={buildDiagnostics} /><button onClick={() => setConversationOpen(false)} aria-label="Close conversation">×</button></span></header><div>{timeline.length ? timeline.map((message) => <article key={message.clientMessageId} style={{ padding: '9px 10px', borderBottom: '1px solid var(--border-subtle)' }}><strong style={{ textTransform: 'capitalize' }}>{message.messageRole === 'assistant' ? 'Brain' : message.messageRole}</strong><p style={{ margin: '4px 0', whiteSpace: 'pre-wrap' }}>{message.body}</p><small>{new Date(message.createdAt).toLocaleString()}</small></article>) : <p>No conversation yet. Ask Brain from the composer to begin.</p>}</div></aside>}
+        {outcomeMetricsOpen && <aside className={`${styles.historyPanel} ${styles.outcomeMetricsPanel}`} aria-label="Session outcome metrics">
+          <header><div><strong>Idea → delivery</strong><small>{outcomeMetrics ? `This session vs ${outcomeMetrics.sampleSize} tenant session${outcomeMetrics.sampleSize === 1 ? '' : 's'}` : 'Value generated in this session'}</small></div><button onClick={() => setOutcomeMetricsOpen(false)} aria-label="Close outcome metrics">×</button></header>
+          {persistence === 'local' ? <div className={styles.outcomeEmpty}><span aria-hidden>↗</span><strong>Save to establish a baseline</strong><p>Your draft stays local. Saving lets Builderforce correlate actions with outcomes and compare this session to aggregated tenant sessions.</p><button className={styles.primaryButton} onClick={() => requireAccount('metrics', 'Create an account to measure delivered value', 'Save this session to compare idea-to-delivery outcomes across sessions, projects, and your workspace.')}>Save and measure</button></div> : outcomeMetricsLoading ? <p role="status">Calculating delivered value…</p> : outcomeMetricsError ? <div className={styles.outcomeEmpty}><strong>Metrics unavailable</strong><p>{outcomeMetricsError}</p><button className={styles.secondaryButton} onClick={openOutcomeMetrics}>Retry</button></div> : outcomeMetrics ? <div className={styles.outcomeMetricList}>{outcomeMetrics.metrics.map((metric) => {
+            const comparable = metric.current != null && metric.baseline != null;
+            const delta = comparable ? metric.current! - metric.baseline! : null;
+            const favorable = delta == null ? null : metric.direction === 'higher' ? delta >= 0 : delta <= 0;
+            return <article key={metric.key} className={styles.outcomeMetric}>
+              <div><strong>{metric.label}</strong><span>{formatOutcomeValue(metric.current, metric.unit)}</span></div>
+              <small>{metric.baseline == null ? 'Baseline gathering' : `Typical: ${formatOutcomeValue(metric.baseline, metric.unit)}`}{delta != null && Math.abs(delta) > .0001 ? <em data-positive={favorable}>{favorable ? ' ↗' : ' ↘'}</em> : null}</small>
+            </article>;
+          })}</div> : null}
+          <footer><span>Correlation coverage keeps every action accountable.</span><small>Aggregates are content-free and tenant scoped.</small></footer>
+        </aside>}
+        {conversationOpen && <aside className={styles.historyPanel} aria-label="Session conversation"><header><div><strong>Session conversation</strong><small>Persists even when Chat Objects are removed</small></div><span className={styles.panelHeaderActions}><CopyButton compact label={t('copyDiagnostics')} ariaLabel={t('copyChatDiagnostics')} getText={buildDiagnostics} /><button onClick={() => setConversationOpen(false)} aria-label="Close conversation">×</button></span></header><div>{timeline.length ? timeline.map((message) => <article key={message.clientMessageId} style={{ padding: '9px 10px', borderBottom: '1px solid var(--border-subtle)' }}><strong style={{ textTransform: 'capitalize' }}>{message.metadata?.authoredBy?.name || (message.messageRole === 'assistant' ? 'Brain' : message.messageRole)}</strong><p style={{ margin: '4px 0', whiteSpace: 'pre-wrap' }}>{message.body}</p><small>{new Date(message.createdAt).toLocaleString()}</small></article>) : <p>No conversation yet. Ask Brain from the composer to begin.</p>}</div></aside>}
         {diagnosticsOpen && <aside className={`${styles.historyPanel} ${styles.diagnosticsPanel}`} aria-label="Canvas diagnostics"><header><div><strong>{t('diagnostics')}</strong><small>{t('diagnosticsHint')}</small></div><button onClick={() => setDiagnosticsOpen(false)} aria-label="Close diagnostics">×</button></header><div className={styles.diagnosticsSummary}><dl><div><dt>Session</dt><dd>{persistence} · revision {revision.current}</dd></div><div><dt>Realtime</dt><dd>{realtimeState}</dd></div><div><dt>Canvas</dt><dd>{nodes.length} objects · {edges.length} connections</dd></div><div><dt>Brain</dt><dd>{thinking ? 'responding' : 'ready'} · {canvasActions.length} actions</dd></div><div><dt>Scope</dt><dd>{resolvedScopeMode}</dd></div><div><dt>Access</dt><dd>{sessionRole}</dd></div></dl><CopyButton label={t('copyDiagnostics')} ariaLabel={t('copyCanvasDiagnostics')} getText={buildDiagnostics} /></div></aside>}
 
         {!!proposedChanges.length && <aside className={styles.changeSetPanel}><header><div><strong>Review Brain changes</strong><small>Select exactly what should change</small></div><button onClick={rejectProposedChanges} aria-label="Close change set">×</button></header><div>{proposedChanges.map((change) => <label key={change.id}><input type="checkbox" checked={acceptedProposalIds.has(change.id)} onChange={() => setAcceptedProposalIds((current) => { const next = new Set(current); if (next.has(change.id)) next.delete(change.id); else next.add(change.id); return next; })} /><span><b>{change.label}</b><small>{change.type.replace('.', ' ')}</small></span></label>)}</div><footer><button className={styles.secondaryButton} onClick={rejectProposedChanges}>Reject all</button><button className={styles.secondaryButton} disabled={!acceptedProposalIds.size} onClick={applyAndEnableAutoApply} title="Apply this batch and automatically apply following Brain actions">Apply &amp; auto-apply</button><button className={styles.primaryButton} disabled={!acceptedProposalIds.size} onClick={applyProposedChanges}>Apply {acceptedProposalIds.size} selected</button></footer></aside>}
@@ -2289,7 +2510,7 @@ function RemoteCursors({ members, currentUserId, instance, container }: { member
 }
 
 function BrainObjectDetails({ node, nodes, edges, timeline, trace }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; timeline: CanvasTimelineMessage[]; trace: BrainTraceEvent[] }) {
-  const messages = timeline.length ? timeline : Array.isArray(node.data.messages) ? node.data.messages.flatMap((value) => {
+  const messages: CanvasTimelineMessage[] = timeline.length ? timeline : Array.isArray(node.data.messages) ? node.data.messages.flatMap((value) => {
     if (!value || typeof value !== 'object') return [];
     const message = value as Record<string, unknown>;
     if (typeof message.content !== 'string') return [];
@@ -2312,7 +2533,7 @@ function BrainObjectDetails({ node, nodes, edges, timeline, trace }: { node: Cre
     seq: index + 1,
     role: message.messageRole,
     content: message.body,
-    metadata: null,
+    metadata: message.metadata?.authoredBy ? JSON.stringify({ authoredBy: message.metadata.authoredBy }) : null,
     createdAt: message.createdAt,
   }));
   const visibleTrace = trace.length ? trace : Array.isArray(node.data.trace) ? node.data.trace.filter((value): value is BrainTraceEvent => !!value && typeof value === 'object' && typeof (value as { ts?: unknown }).ts === 'string' && typeof (value as { category?: unknown }).category === 'string' && typeof (value as { label?: unknown }).label === 'string') : [];
@@ -2335,7 +2556,7 @@ function BrainObjectDetails({ node, nodes, edges, timeline, trace }: { node: Cre
   </div>;
 }
 
-function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onEditWorkflow, onSaveAgent, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onAttachEvermindProject, onExpandEvermindPipeline, onStartStandup }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onEditWorkflow: () => void; onSaveAgent: () => void; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onStartStandup: () => void }) {
+function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onGenerateVideo, onEditWorkflow, onSaveAgent, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onAttachEvermindProject, onExpandEvermindPipeline, onStartStandup }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onGenerateVideo: () => void; onEditWorkflow: () => void; onSaveAgent: () => void; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onStartStandup: () => void }) {
   const kind = node.data.kind;
   const [tab, setTab] = useState<'details' | 'activity'>('details');
   const [accessStatus, setAccessStatus] = useState('');
@@ -2385,6 +2606,7 @@ function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persis
   };
   const markdown = artifactMarkdown(node.data);
   const csv = artifactCsv(node.data);
+  const deliverables = creationDeliverables(node.data);
   const taskId = kind === 'task' && /^task:\d+$/.test(node.data.resourceId || '') ? Number(node.data.resourceId!.slice(5)) : null;
   const taskAgents = nodes.filter((candidate) => candidate.data.kind === 'agent');
   const agentTools = Array.isArray(node.data.tools) ? node.data.tools.map(String) : ['Audience Analyzer', 'Copy Optimizer'];
@@ -2444,6 +2666,9 @@ function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persis
         else await exportPptx(markdown, node.data.title);
       }
       if (action === 'json') downloadJson({ kind, title: node.data.title, data: node.data }, `${base}.json`);
+      const extension = action === 'markdown' ? 'md' : action;
+      const delivered: CreationDeliverable = { id: crypto.randomUUID(), action: 'export', artifactKind: action, status: 'delivered', createdAt: new Date().toISOString(), completedAt: new Date().toISOString(), provider: action === 'docx' || action === 'pptx' ? (persistence === 'server' ? 'builderforce-office-export' : 'browser-markdown-fallback') : 'browser-download', fileName: `${base}.${persistence === 'local' && (action === 'docx' || action === 'pptx') ? 'md' : extension}`, mimeType: action === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : action === 'pptx' ? 'application/vnd.openxmlformats-officedocument.presentationml.presentation' : action === 'csv' ? 'text/csv' : action === 'json' ? 'application/json' : 'text/markdown', validation: { status: 'passed', detail: 'Export generated and download started' } };
+      onChange({ deliverables: withCreationDeliverable(node.data, delivered) });
       setActionStatus(action === 'docx' && persistence === 'local' || action === 'pptx' && persistence === 'local' ? 'Markdown downloaded; save the Session for Office export' : 'Download ready');
     } catch (error) {
       setActionStatus(error instanceof Error ? error.message : 'Export failed');
@@ -2491,7 +2716,8 @@ function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persis
         <button type="button" className={styles.fullButton} onClick={onSaveAgent}>Save agent settings everywhere</button>
       </>}
       {kind === 'staff' && <><label>Role<input value={node.data.role || ''} onChange={(event) => onChange({ role: event.target.value })} /></label><label>Current focus<textarea value={node.data.focus || ''} onChange={(event) => onChange({ focus: event.target.value })} rows={4} /></label></>}
-      {(kind === 'website' || kind === 'prototype') && <><label>Headline<input value={typeof node.data.websiteHeadline === 'string' ? node.data.websiteHeadline : 'Fall in love with every look'} onChange={(event) => onChange({ websiteHeadline: event.target.value })} /></label><label>Supporting copy<textarea rows={3} value={typeof node.data.websiteBody === 'string' ? node.data.websiteBody : 'New arrivals for the season ahead.'} onChange={(event) => onChange({ websiteBody: event.target.value })} /></label><label>Call to action<input value={typeof node.data.websiteCta === 'string' ? node.data.websiteCta : 'Shop the collection'} onChange={(event) => onChange({ websiteCta: event.target.value })} /></label><label>Accent color<input type="color" value={typeof node.data.websiteAccent === 'string' ? node.data.websiteAccent : '#3978f6'} onChange={(event) => onChange({ websiteAccent: event.target.value })} /></label><label>Viewport<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onWebsiteViewportChange(event.target.value as 'desktop' | 'tablet' | 'mobile')}><option value="desktop">Desktop · 1440</option><option value="tablet">Tablet · 768</option><option value="mobile">Mobile · 390</option></select></label><p className={styles.inspectorHint}>Changes render live in the interactive prototype on the canvas.</p></>}
+      {(kind === 'website' || kind === 'prototype') && <><label>Headline<input value={typeof node.data.websiteHeadline === 'string' ? node.data.websiteHeadline : 'Fall in love with every look'} onChange={(event) => onChange({ websiteHeadline: event.target.value })} /></label><label>Supporting copy<textarea rows={3} value={typeof node.data.websiteBody === 'string' ? node.data.websiteBody : 'New arrivals for the season ahead.'} onChange={(event) => onChange({ websiteBody: event.target.value })} /></label><label>Call to action<input value={typeof node.data.websiteCta === 'string' ? node.data.websiteCta : 'Shop the collection'} onChange={(event) => onChange({ websiteCta: event.target.value })} /></label><label>Accent color<input type="color" value={typeof node.data.websiteAccent === 'string' ? node.data.websiteAccent : '#3978f6'} onChange={(event) => onChange({ websiteAccent: event.target.value })} /></label><label>Viewport<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onWebsiteViewportChange(event.target.value as 'desktop' | 'tablet' | 'mobile')}><option value="desktop">Desktop · 1440</option><option value="tablet">Tablet · 768</option><option value="mobile">Mobile · 390</option></select></label>{kind === 'website' && <><label>Subdomain<input value={typeof node.data.subdomain === 'string' ? node.data.subdomain : ''} placeholder="uses project name when blank" onChange={(event) => onChange({ subdomain: event.target.value })} /></label><button type="button" className={styles.fullButton} onClick={onPublishWebsite}>Publish live website</button>{typeof node.data.siteUrl === 'string' && <a href={node.data.siteUrl} target="_blank" rel="noreferrer">Open published site ↗</a>}</>}<p className={styles.inspectorHint}>Changes render live in the interactive prototype on the canvas.</p></>}
+      {kind === 'video' && <><label>Prompt<textarea rows={5} value={typeof node.data.prompt === 'string' ? node.data.prompt : ''} onChange={(event) => onChange({ prompt: event.target.value })} placeholder="Describe the video to generate" /></label><label>Published Evermind model (optional)<input value={typeof node.data.modelSlug === 'string' ? node.data.modelSlug : ''} onChange={(event) => onChange({ modelSlug: event.target.value })} placeholder="First published media model" /></label><label>Frames<input type="number" min="1" max="64" value={typeof node.data.maxFrames === 'number' ? node.data.maxFrames : 16} onChange={(event) => onChange({ maxFrames: Math.max(1, Math.min(64, Number(event.target.value) || 16)) })} /></label><button type="button" className={styles.fullButton} onClick={onGenerateVideo}>Generate video</button>{typeof node.data.videoUrl === 'string' && <img src={node.data.videoUrl} alt="Generated video first frame" style={{ width: '100%', borderRadius: 10 }} />}</>}
       {kind === 'workflow' && <><label>Execution target<select value={typeof node.data.runTarget === 'string' ? node.data.runTarget : 'builderforce'} onChange={(event) => onChange({ runTarget: event.target.value })}><option value="builderforce">BuilderForce.AI</option><option value="campaign-strategist">Campaign Strategist</option></select></label><label>Approval mode<select value={typeof node.data.approvalMode === 'string' ? node.data.approvalMode : 'required'} onChange={(event) => onChange({ approvalMode: event.target.value })}><option value="required">Required before publish</option><option value="autonomous">Fully autonomous</option></select></label><button type="button" className={styles.fullButton} onClick={onEditWorkflow}>Edit Workflow on Canvas</button><button className={styles.fullButton} onClick={onRun}>▶ Run workflow</button></>}
       {kind === 'dashboard' && <><label>Date range<select value={typeof node.data.dateRange === 'string' ? node.data.dateRange : '30d'} onChange={(event) => onChange({ dateRange: event.target.value })}><option value="30d">Last 30 days</option><option value="7d">Last 7 days</option><option value="qtd">Quarter to date</option></select></label><button type="button" className={styles.fullButton} onClick={() => onChange({ fetchedAt: new Date().toISOString(), status: 'Live' })}>Refresh live data</button></>}
       {kind === 'dataset' && <><label>Import CSV or TSV<input type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onImportDataset(file); }} /></label><p className={styles.inspectorHint}>A safe preview of up to 500 rows is stored with this session. Connect it to a dashboard or ask Brain to analyze it.</p><button className={styles.fullButton} onClick={onVisualizeDataset}>Create visualization</button></>}
@@ -2541,6 +2767,7 @@ function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persis
         </div>
         {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
       </section>}
+      {tab === 'details' && deliverables.length > 0 && <section aria-label="Deliverables" style={{ display: 'grid', gap: 8, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}><strong style={{ fontSize: 12 }}>Delivered outputs</strong>{deliverables.slice(0, 6).map((deliverable) => <div key={deliverable.id} style={{ display: 'grid', gap: 2, fontSize: 12 }}><span><b>{deliverable.artifactKind}</b> · {deliverable.status}</span><small>{deliverable.provider || 'Builderforce'} · {new Date(deliverable.completedAt || deliverable.createdAt).toLocaleString()}</small>{deliverable.url && !deliverable.url.startsWith('data:') && <a href={deliverable.url} target="_blank" rel="noreferrer">Open deliverable ↗</a>}{deliverable.error && <small style={{ color: 'var(--text-error, #c0392b)' }}>{deliverable.error}</small>}</div>)}</section>}
     </div>
     <footer><span>Resource · {role}</span><code>{node.data.resourceId || `session:${node.id}`}</code><button className={styles.fullButton} disabled={!editable} onClick={() => kind === 'task' ? setActionStatus('Task details are saved') : onChange({ status: 'Saved' })}>{kind === 'task' ? 'Save task details' : 'Save changes'}</button></footer>
   </aside>;

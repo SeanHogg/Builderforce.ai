@@ -53,6 +53,8 @@ export interface CheckoutSessionOpts {
     durationYears: number;
     redemptionId: string;
   };
+  /** Pending first-party referral attribution carried in signed provider metadata. */
+  salesReferralId?: string;
 }
 
 export interface CheckoutSessionResult {
@@ -125,6 +127,8 @@ export interface WebhookEvent {
   paymentMethodId?: string;
   /** Signed Checkout metadata used to finalize a reserved one-time discount. */
   discountRedemptionId?: string;
+  /** Signed checkout/subscription metadata identifying the attributed referral. */
+  salesReferralId?: string;
 
   /** Raw provider-specific data for logging/debugging */
   raw: unknown;

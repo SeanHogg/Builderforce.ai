@@ -9,7 +9,7 @@
  * Shared by the /register split-panel and the post-OAuth role chooser so the
  * two surfaces stay visually identical.
  */
-export default function MarketingVisual({ variant }: { variant: 'standard' | 'freelancer' }) {
+export default function MarketingVisual({ variant }: { variant: 'standard' | 'freelancer' | 'sales' }) {
   const wrap: React.CSSProperties = {
     width: '100%',
     borderRadius: 16,
@@ -44,6 +44,18 @@ export default function MarketingVisual({ variant }: { variant: 'standard' | 'fr
           {/* Play badge (hired.video résumé) */}
           <circle cx="278" cy="102" r="14" fill="var(--coral-bright)" />
           <path d="M274 96l8 6-8 6z" fill="#fff" />
+        </svg>
+      </div>
+    );
+  }
+  if (variant === 'sales') {
+    return (
+      <div style={wrap} aria-hidden>
+        <svg viewBox="0 0 320 150" width="100%" role="presentation" style={{ display: 'block' }}>
+          <rect x="18" y="16" width="284" height="116" rx="14" fill="var(--bg-elevated)" stroke="var(--border-subtle)" />
+          {[86, 65, 42, 24].map((w, i) => <rect key={w} x="38" y={35 + i * 22} width={w} height="10" rx="5" fill="var(--coral-bright)" opacity={1 - i * .16} />)}
+          <path d="M155 104 L188 78 L220 87 L274 39" fill="none" stroke="var(--coral-bright)" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+          {[155, 188, 220, 274].map((x, i) => <circle key={x} cx={x} cy={[104, 78, 87, 39][i]} r="6" fill="var(--bg-elevated)" stroke="var(--coral-bright)" strokeWidth="3" />)}
         </svg>
       </div>
     );

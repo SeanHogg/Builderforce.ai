@@ -5,6 +5,7 @@ import {
   ValidationError,
   ForbiddenError,
   UnauthorizedError,
+  ServiceUnavailableError,
 } from '../../domain/shared/errors';
 import { reportUnhandledError } from '../../application/observability/caughtErrorReporter';
 import type { HonoEnv } from '../../env';
@@ -24,6 +25,7 @@ export async function errorHandler(err: Error, c: Context): Promise<Response> {
   else if (err instanceof ForbiddenError)   res = c.json({ error: err.message }, 403);
   else if (err instanceof NotFoundError)    res = c.json({ error: err.message }, 404);
   else if (err instanceof ConflictError)    res = c.json({ error: err.message }, 409);
+  else if (err instanceof ServiceUnavailableError) res = c.json({ error: err.message }, 503);
   else {
     const message = err instanceof Error ? err.message : String(err);
     const honoContext = c as Context<HonoEnv>;

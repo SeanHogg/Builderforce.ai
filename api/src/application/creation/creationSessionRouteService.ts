@@ -15,6 +15,7 @@ import {
   brainChats,
   brainChatMessages,
   creationSessionEvents,
+  creationOutcomeEvents,
   creationSessionInvites,
   creationSessionMembers,
   creationSessionObjects,
@@ -96,10 +97,25 @@ type LockBody = { action?: 'acquire' | 'renew' | 'release'; leaseSeconds?: numbe
 type TemplateBody = { name?: string; description?: string; category?: string; visibility?: string; graph?: unknown };
 type BranchBody = { title?: string };
 type MergeBody = { sourceSessionId?: string; resolutions?: Record<string, 'source' | 'target'> };
-type ClaimSessionBody = SaveGraphBody & { clientSessionId?: string; title?: string; initialPrompt?: string; timeline?: Array<{ clientMessageId?: string; role?: string; body?: string; createdAt?: string }> };
+type ClaimSessionBody = SaveGraphBody & { clientSessionId?: string; title?: string; initialPrompt?: string; timeline?: Array<{ clientMessageId?: string; role?: string; body?: string; metadata?: unknown; createdAt?: string }> };
 type MemberBody = { role?: string };
 type ExpandProjectBody = { lens?: 'everything' | 'delivery' | 'metrics' | 'customer-feedback' };
 type TimelineBody = { clientMessageId?: string; role?: 'user' | 'assistant' | 'system'; body?: string; metadata?: unknown };
+type OutcomeBody = {
+  correlationId?: string;
+  action?: string;
+  phase?: 'started' | 'succeeded' | 'failed' | 'validated' | 'reused';
+  actorType?: 'user' | 'agent' | 'brain' | 'system';
+  actorRef?: string;
+  projectId?: number;
+  metricKey?: string;
+  metricValue?: number;
+  unit?: string;
+  artifactId?: string;
+  durationMs?: number;
+  costUsdMillicents?: number;
+  metadata?: unknown;
+};
 
 const BUILT_IN_TEMPLATE_IDS = ['campaign', 'product-discovery', 'data-story', 'stand-up', 'model-build', 'executive-review'] as const;
 
@@ -189,7 +205,18 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       ))
       .where(and(eq(creationSessions.id, sessionId), eq(creationSessions.tenantId, tenantId)))
       .limit(1);
-    return row ?? null;
+    if (row) return row;
+    // Platform superadmins collaborate in associate-owned sales canvases across
+    // tenant boundaries. They must still be explicit session members; this does
+    // not grant blanket access to every canvas.
+    const [adminMember] = await db
+      .select({ session: creationSessions, role: creationSessionMembers.role })
+      .from(creationSessions)
+      .innerJoin(creationSessionMembers, and(eq(creationSessionMembers.sessionId, creationSessions.id), eq(creationSessionMembers.userId, userId)))
+      .innerJoin(users, eq(users.id, userId))
+      .where(and(eq(creationSessions.id, sessionId), eq(users.isSuperadmin, true)))
+      .limit(1);
+    return adminMember ?? null;
   }
 
   async function requireSession(c: Context<HonoEnv>, minimum: SessionRole = 'viewer') {
@@ -639,9 +666,16 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       const text = typeof message.body === 'string' ? message.body.trim().slice(0, 50_000) : '';
       if (!text) return [];
       const messageRole = message.role === 'assistant' || message.role === 'system' ? message.role : 'user';
-      return [{ sessionId, clientMessageId: String(message.clientMessageId || crypto.randomUUID()).slice(0, 128), messageRole, body: text, createdBy: userId }];
+      const rawMeta = message.metadata && typeof message.metadata === 'object' && !Array.isArray(message.metadata) ? message.metadata as Record<string, unknown> : {};
+      const author = rawMeta.authoredBy && typeof rawMeta.authoredBy === 'object' && !Array.isArray(rawMeta.authoredBy) ? rawMeta.authoredBy as Record<string, unknown> : null;
+      const metadata = author ? { authoredBy: {
+        kind: author.kind === 'agent' ? 'agent' : 'brain',
+        ref: String(author.ref || '').slice(0, 128),
+        name: String(author.name || '').slice(0, 160),
+      } } : {};
+      return [{ sessionId, clientMessageId: String(message.clientMessageId || crypto.randomUUID()).slice(0, 128), messageRole, body: text, metadata, createdBy: userId }];
     }) : [];
-    if (!claimedTimeline.length && typeof body.initialPrompt === 'string' && body.initialPrompt.trim()) claimedTimeline.push({ sessionId, clientMessageId: `claim:${clientSessionId}`, messageRole: 'user', body: body.initialPrompt.trim().slice(0, 50_000), createdBy: userId });
+    if (!claimedTimeline.length && typeof body.initialPrompt === 'string' && body.initialPrompt.trim()) claimedTimeline.push({ sessionId, clientMessageId: `claim:${clientSessionId}`, messageRole: 'user', body: body.initialPrompt.trim().slice(0, 50_000), metadata: {}, createdBy: userId });
     if (claimedTimeline.length) statements.push(db.insert(creationSessionTimeline).values(claimedTimeline));
     try {
       await db.batch(statements as unknown as Parameters<typeof db.batch>[0]);
@@ -755,6 +789,149 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     ]);
     const currentMember = members.find((member) => member.userId === c.get('userId'));
     return c.json({ session: access.session, role: access.role, currentUserId: c.get('userId'), objects: graph.objects, connections: graph.connections, projectIds: projectLinks.map((p) => p.projectId), members, personalViewport: currentMember?.viewport ?? access.session.viewport });
+  });
+
+  router.post('/:id/outcomes', async (c) => {
+    const access = await requireSession(c, 'viewer');
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const body = await c.req.json<OutcomeBody>().catch(() => ({} as OutcomeBody));
+    const correlationId = typeof body.correlationId === 'string' ? body.correlationId.trim().slice(0, 128) : '';
+    const action = typeof body.action === 'string' ? body.action.trim().toLowerCase().replace(/[^a-z0-9._-]/g, '_').slice(0, 64) : '';
+    const phases = new Set(['started', 'succeeded', 'failed', 'validated', 'reused']);
+    if (!correlationId || !action || !body.phase || !phases.has(body.phase)) return c.json({ error: 'correlationId, action, and a valid phase are required' }, 400);
+    if (action !== 'session.open' && ROLE_RANK[access.role as SessionRole] < ROLE_RANK.editor) return c.json({ error: 'Session role cannot record this outcome' }, 403);
+    const actorType = action === 'session.open' ? 'user' : body.actorType === 'agent' || body.actorType === 'brain' || body.actorType === 'system' ? body.actorType : 'user';
+    const projectId = Number.isInteger(body.projectId) && Number(body.projectId) > 0 ? Number(body.projectId) : null;
+    if (projectId != null) {
+      const [linked] = await db.select({ projectId: creationSessionProjectLinks.projectId }).from(creationSessionProjectLinks).where(and(
+        eq(creationSessionProjectLinks.sessionId, access.session.id), eq(creationSessionProjectLinks.projectId, projectId),
+      )).limit(1);
+      if (!linked) return c.json({ error: 'Project is not linked to this session' }, 400);
+    }
+    const rawMetadata = body.metadata && typeof body.metadata === 'object' && !Array.isArray(body.metadata) ? body.metadata : {};
+    let metadata: unknown = rawMetadata;
+    try { if (JSON.stringify(rawMetadata).length > 4_000) metadata = { truncated: true }; } catch { metadata = {}; }
+    const [event] = await db.insert(creationOutcomeEvents).values({
+      correlationId,
+      sessionId: access.session.id,
+      tenantId: access.session.tenantId,
+      projectId,
+      actorType,
+      actorRef: actorType === 'user' ? c.get('userId') as string : typeof body.actorRef === 'string' ? body.actorRef.slice(0, 128) : actorType,
+      action,
+      phase: body.phase,
+      metricKey: typeof body.metricKey === 'string' ? body.metricKey.slice(0, 80) : null,
+      metricValue: Number.isFinite(body.metricValue) ? Number(body.metricValue) : null,
+      unit: typeof body.unit === 'string' ? body.unit.slice(0, 24) : null,
+      artifactId: typeof body.artifactId === 'string' ? body.artifactId.slice(0, 128) : null,
+      durationMs: Number.isFinite(body.durationMs) ? Math.max(0, Math.round(Number(body.durationMs))) : null,
+      costUsdMillicents: Number.isFinite(body.costUsdMillicents) ? Math.max(0, Math.round(Number(body.costUsdMillicents))) : null,
+      metadata,
+    }).onConflictDoNothing().returning({ id: creationOutcomeEvents.id });
+    return c.json({ recorded: !!event, duplicate: !event }, event ? 201 : 200);
+  });
+
+  router.get('/:id/outcome-metrics', async (c) => {
+    const access = await requireSession(c, 'viewer');
+    if (!access) return c.json({ error: 'Session not found' }, 404);
+    const result = await db.execute(sql`
+      WITH scoped AS (
+        SELECT id, created_at
+        FROM creation_sessions
+        WHERE tenant_id = ${access.session.tenantId} AND status <> 'deleted'
+        ORDER BY last_activity_at DESC
+        LIMIT 500
+      ), facts AS (
+        SELECT s.id,
+          EXTRACT(EPOCH FROM (
+            (SELECT MIN(o.created_at) FROM creation_session_objects o WHERE o.session_id = s.id AND o.kind <> 'chat') -
+            COALESCE((SELECT MIN(t.created_at) FROM creation_session_timeline t WHERE t.session_id = s.id AND t.message_role = 'user'), s.created_at)
+          )) AS time_to_artifact_seconds,
+          (SELECT COUNT(*) FROM creation_session_objects o WHERE o.session_id = s.id AND o.kind <> 'chat') AS artifact_count,
+          (SELECT COUNT(*) FROM creation_session_members m WHERE m.session_id = s.id) AS member_count,
+          (SELECT COUNT(DISTINCT t.metadata #>> '{authoredBy,ref}') FROM creation_session_timeline t WHERE t.session_id = s.id AND t.metadata #>> '{authoredBy,kind}' = 'agent') AS agent_participants,
+          EXISTS (
+            SELECT 1 FROM creation_session_timeline brain
+            WHERE brain.session_id = s.id AND brain.metadata #>> '{authoredBy,kind}' = 'brain'
+              AND brain.created_at > COALESCE((SELECT MAX(agent.created_at) FROM creation_session_timeline agent WHERE agent.session_id = s.id AND agent.metadata #>> '{authoredBy,kind}' = 'agent'), 'infinity'::timestamp)
+          ) AS synthesized,
+          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action IN ('artifact.deliver','artifact.publish','workflow.execute') AND e.phase = 'started') AS delivery_attempts,
+          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action IN ('artifact.deliver','artifact.publish','workflow.execute') AND e.phase = 'succeeded') AS delivery_successes,
+          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action IN ('artifact.deliver','artifact.publish','workflow.execute') AND e.phase = 'failed') AS delivery_failures,
+          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action = 'delivery.retry' AND e.phase = 'succeeded') AS delivery_retries,
+          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.phase = 'validated') AS validations,
+          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.phase = 'validated' AND COALESCE(e.metric_value, 1) > 0) AS validation_passes,
+          EXISTS (SELECT 1 FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action = 'session.open' AND e.phase = 'succeeded' AND e.occurred_at > s.created_at + interval '1 hour' AND e.occurred_at <= s.created_at + interval '7 days') AS resumed_7d,
+          EXISTS (SELECT 1 FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action = 'session.open' AND e.phase = 'succeeded' AND e.occurred_at > s.created_at + interval '1 hour' AND e.occurred_at <= s.created_at + interval '30 days') AS resumed_30d,
+          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.phase = 'reused') AS reused_outputs,
+          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.actor_type = 'user' AND e.action IN ('agent.approve','artifact.revise','delivery.retry') AND e.phase = 'succeeded') AS human_interventions,
+          (SELECT SUM(e.cost_usd_millicents) FROM creation_outcome_events e WHERE e.session_id = s.id) AS cost_millicents,
+          (SELECT AVG(e.duration_ms) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action IN ('artifact.deliver','artifact.publish','workflow.execute') AND e.phase = 'succeeded' AND e.duration_ms IS NOT NULL) AS avg_latency_ms,
+          (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.phase <> 'started') AS terminal_events,
+          (SELECT COUNT(*) FROM creation_outcome_events terminal WHERE terminal.session_id = s.id AND terminal.phase <> 'started' AND EXISTS (
+            SELECT 1 FROM creation_outcome_events started WHERE started.session_id = terminal.session_id AND started.correlation_id = terminal.correlation_id AND started.action = terminal.action AND started.phase = 'started'
+          )) AS correlated_events
+        FROM scoped s
+      ) SELECT * FROM facts
+    `);
+    type Fact = Record<string, unknown> & { id: string };
+    const facts = result.rows as unknown as Fact[];
+    const current = facts.find((fact) => fact.id === access.session.id);
+    if (!current) return c.json({ error: 'Session metrics unavailable' }, 404);
+    const peers = facts.filter((fact) => fact.id !== access.session.id);
+    const num = (value: unknown): number => Number(value ?? 0);
+    const nullableNum = (value: unknown): number | null => value == null ? null : Number(value);
+    const rate = (part: number, total: number): number | null => total > 0 ? part / total : null;
+    const mean = (values: Array<number | null>): number | null => {
+      const available = values.filter((value): value is number => value != null && Number.isFinite(value));
+      return available.length ? available.reduce((sum, value) => sum + value, 0) / available.length : null;
+    };
+    const bool = (value: unknown): number => value === true || value === 'true' ? 1 : 0;
+    const valueFor = (fact: Fact, key: string): number | null => {
+      const attempts = num(fact.delivery_attempts);
+      const successes = num(fact.delivery_successes);
+      switch (key) {
+        case 'time_to_artifact': return nullableNum(fact.time_to_artifact_seconds);
+        case 'deliverable_rate': return successes > 0 ? 1 : 0;
+        case 'collaboration_rate': return num(fact.member_count) > 1 || num(fact.agent_participants) > 0 ? 1 : 0;
+        case 'agent_participation': return num(fact.agent_participants);
+        case 'synthesis_rate': return num(fact.agent_participants) > 0 ? bool(fact.synthesized) : null;
+        case 'validation_rate': return rate(num(fact.validation_passes), num(fact.validations));
+        case 'delivery_success_rate': return rate(successes, attempts);
+        case 'delivery_retry_rate': return attempts > 0 && nullableNum(fact.delivery_retries) != null ? num(fact.delivery_retries) / attempts : null;
+        case 'resumed_7d': return bool(fact.resumed_7d);
+        case 'resumed_30d': return bool(fact.resumed_30d);
+        case 'output_reuse': return num(fact.reused_outputs);
+        case 'human_intervention': return successes > 0 ? num(fact.human_interventions) / successes : null;
+        case 'cost_per_delivery': return successes > 0 && nullableNum(fact.cost_millicents) != null ? num(fact.cost_millicents) / 100000 / successes : null;
+        case 'latency_per_outcome': return nullableNum(fact.avg_latency_ms) == null ? null : num(fact.avg_latency_ms) / 1000;
+        case 'correlation_coverage': return rate(num(fact.correlated_events), num(fact.terminal_events));
+        default: return null;
+      }
+    };
+    const definitions = [
+      ['time_to_artifact', 'Time to first artifact', 'seconds', 'lower'],
+      ['deliverable_rate', 'Reached a real deliverable', 'percent', 'higher'],
+      ['collaboration_rate', 'Invited a human or agent', 'percent', 'higher'],
+      ['agent_participation', 'Agent group-chat participation', 'agents', 'higher'],
+      ['synthesis_rate', 'Successful agent synthesis', 'percent', 'higher'],
+      ['validation_rate', 'Artifact validation pass rate', 'percent', 'higher'],
+      ['delivery_success_rate', 'Delivery success rate', 'percent', 'higher'],
+      ['delivery_retry_rate', 'Delivery retry rate', 'percent', 'lower'],
+      ['resumed_7d', 'Resumed within 7 days', 'percent', 'higher'],
+      ['resumed_30d', 'Resumed within 30 days', 'percent', 'higher'],
+      ['output_reuse', 'Outputs reused as inputs', 'count', 'higher'],
+      ['human_intervention', 'Human interventions per delivery', 'count', 'lower'],
+      ['cost_per_delivery', 'Cost per delivered outcome', 'usd', 'lower'],
+      ['latency_per_outcome', 'Latency per successful outcome', 'seconds', 'lower'],
+      ['correlation_coverage', 'Actions with correlated outcomes', 'percent', 'higher'],
+    ] as const;
+    return c.json({
+      sessionId: access.session.id,
+      scope: 'tenant',
+      sampleSize: peers.length,
+      metrics: definitions.map(([key, label, unit, direction]) => ({ key, label, unit, direction, current: valueFor(current, key), baseline: mean(peers.map((fact) => valueFor(fact, key))) })),
+    });
   });
 
   router.get('/:id/events', async (c) => {
@@ -874,6 +1051,13 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       ...(Array.isArray(rawMeta.objectIds) ? { objectIds: rawMeta.objectIds.filter((id): id is string => typeof id === 'string' && UUID_RE.test(id)).slice(0, 100) } : {}),
       ...(typeof rawMeta.model === 'string' ? { model: rawMeta.model.slice(0, 120) } : {}),
       ...(typeof rawMeta.error === 'boolean' ? { error: rawMeta.error } : {}),
+      ...(rawMeta.authoredBy && typeof rawMeta.authoredBy === 'object' && !Array.isArray(rawMeta.authoredBy) ? {
+        authoredBy: {
+          kind: (rawMeta.authoredBy as Record<string, unknown>).kind === 'agent' ? 'agent' : 'brain',
+          ref: String((rawMeta.authoredBy as Record<string, unknown>).ref || '').slice(0, 128),
+          name: String((rawMeta.authoredBy as Record<string, unknown>).name || '').slice(0, 160),
+        },
+      } : {}),
     };
     const [inserted] = await db.insert(creationSessionTimeline).values({
       sessionId: access.session.id, clientMessageId, messageRole: role, body, metadata, createdBy: c.get('userId') as string,

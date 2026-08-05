@@ -9,6 +9,59 @@ async function openLocalCanvas(page: Page) {
 }
 
 test.describe('Creation Canvas deployed product matrix', () => {
+  test('Website publish and Video generation execute adapters and surface terminal deliverables', async ({ page }) => {
+    const sessionId = '11111111-1111-4111-8111-111111111111';
+    const websiteId = '22222222-2222-4222-8222-222222222222';
+    const projectObjectId = '33333333-3333-4333-8333-333333333333';
+    const videoId = '44444444-4444-4444-8444-444444444444';
+    let publishedAssets = false;
+    let generatedVideo = false;
+
+    await page.route('**/api/creation-sessions/quotas', (route) => route.fulfill({ json: { usage: { sessions: 1, templates: 0 }, limits: { sessions: 20, collaboratorsPerSession: 10, templates: 10, historyPerSession: 50, datasetRows: 500, realtimeEditors: 10, artifactBytesPerSession: 10_000_000 } } }));
+    await page.route(`**/api/creation-sessions/${sessionId}*`, async (route) => {
+      const request = route.request();
+      const url = request.url();
+      if (url.includes('/timeline')) return route.fulfill({ json: request.method() === 'GET' ? { messages: [], lastId: 0, hasMore: false } : { id: 1, clientMessageId: 'e2e', messageRole: 'system', body: 'saved', metadata: {}, createdBy: null, createdAt: new Date().toISOString() } });
+      if (url.includes('/outcomes')) return route.fulfill({ json: { recorded: true, duplicate: false } });
+      if (url.includes('/presence')) return route.fulfill({ json: { revision: 1, currentUserId: 'e2e-user', members: [] } });
+      if (url.includes('/graph')) return route.fulfill({ json: { revision: 2, savedAt: new Date().toISOString() } });
+      if (request.method() !== 'GET') return route.fulfill({ json: {} });
+      return route.fulfill({ json: {
+        session: { id: sessionId, title: 'Delivery E2E', description: null, status: 'active', preview: null, revision: 1, canvasRevision: 1, lastActivityAt: new Date().toISOString(), createdAt: new Date().toISOString(), role: 'owner' },
+        role: 'owner', currentUserId: 'e2e-user', projectIds: [77], members: [], personalViewport: null,
+        objects: [
+          { id: websiteId, kind: 'website', resourceType: null, resourceId: null, canvasData: { x: 120, y: 120 }, content: { title: 'Launch site', websiteHeadline: 'Ship the idea', websiteBody: 'A real deployed outcome.', websiteCta: 'Begin', websiteAccent: '#3978f6' } },
+          { id: projectObjectId, kind: 'project', resourceType: 'project', resourceId: '77', canvasData: { x: 560, y: 120 }, content: { title: 'Launch project', status: 'Active' } },
+          { id: videoId, kind: 'video', resourceType: null, resourceId: null, canvasData: { x: 120, y: 560 }, content: { title: 'Launch video', prompt: 'A bright product reveal', maxFrames: 1 } },
+        ],
+        connections: [{ id: '55555555-5555-4555-8555-555555555555', sourceObjectId: websiteId, targetObjectId: projectObjectId, kind: 'delivery', label: 'publishes' }],
+      } });
+    });
+    await page.route('**/api/ide/projects/77/publish', async (route) => {
+      publishedAssets = (await route.request().postDataBuffer())?.includes(Buffer.from('index.html')) === true;
+      return route.fulfill({ json: { subdomain: 'delivery-e2e', versionToken: 'v1', assetCount: 2, totalBytes: 2048, url: 'https://delivery-e2e.builderforce.ai', pathUrl: 'https://builderforce.ai/sites/delivery-e2e' } });
+    });
+    await page.route('**/api/llm/models', (route) => route.fulfill({ json: { models: [{ slug: 'video-e2e', name: 'Video E2E', baseModel: 'evermind/fixture' }] } }));
+    await page.route('**/api/studio/models/video-e2e/generate-media', (route) => {
+      generatedVideo = true;
+      return route.fulfill({ json: { model: 'evermind/fixture', modality: 'video', width: 1, height: 1, channels: 3, frameCount: 1, frames: ['//8A'], usage: { prompt_tokens: 4, completion_tokens: 1, total_tokens: 5 } } });
+    });
+
+    await page.goto(`/create/${sessionId}`);
+    await expect(page.getByRole('textbox', { name: /session title/i })).toHaveValue('Delivery E2E');
+    await page.getByText(/accessible canvas outline/i).click();
+    await page.getByRole('button', { name: /focus launch site/i }).click();
+    await page.getByRole('button', { name: /publish live website/i }).click();
+    await expect(page.getByRole('link', { name: /open published site/i })).toBeVisible();
+    await expect(page.getByLabel('Deliverables').getByText(/website.*delivered/i)).toBeVisible();
+    expect(publishedAssets).toBe(true);
+
+    await page.getByRole('button', { name: /focus launch video/i }).click();
+    await page.getByRole('button', { name: /generate video/i }).click();
+    await expect(page.getByLabel('Deliverables').getByText(/video.*delivered/i)).toBeVisible();
+    expect(generatedVideo).toBe(true);
+  });
+
   test('tutorial, template library, structured graph, and Brain change review work without a project', async ({ browser, baseURL }) => {
     const context = await browser.newContext({ baseURL, storageState: undefined });
     const page = await context.newPage();

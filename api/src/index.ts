@@ -100,6 +100,7 @@ import { createProjectAgentRoutes } from './presentation/routes/projectAgentRout
 import { createMarketplaceStatsRoutes } from './presentation/routes/marketplaceStatsRoutes';
 import { createWorkforceRoutes }        from './presentation/routes/workforceRoutes';
 import { createFreelancerRoutes, createEngagementRoutes } from './presentation/routes/freelancerRoutes';
+import { createSalesRoutes } from './presentation/routes/salesRoutes';
 import { createActivityRoutes, createTimecardRoutes } from './presentation/routes/activityRoutes';
 import { createJobRoutes, createNotificationRoutes } from './presentation/routes/jobRoutes';
 import { createEmailPreferenceRoutes } from './presentation/routes/emailPreferenceRoutes';
@@ -432,6 +433,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // login for public profiles), cross-tenant engagements (hire/interview/terminate),
   // and the activity-signal → billable-timecard pipeline.
   app.route('/api/freelancers', createFreelancerRoutes());
+  app.route('/api/sales', createSalesRoutes(db));
   app.route('/api/engagements', createEngagementRoutes(db));
   app.route('/api/activity', createActivityRoutes(db));
   app.route('/api/timecards', createTimecardRoutes());

@@ -7,6 +7,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * GET  /api/admin/users                — all platform users + tenant counts
  * GET  /api/admin/guest-sessions       — anonymous Brain/tool adoption sessions
  * GET  /api/admin/creation-sessions    — saved Canvases with invitation evidence
+ * GET  /api/admin/outcome-metrics      — platform/tenant/project value rollups
  * GET  /api/admin/tenants              — all tenants + member/agentHost counts
  * GET  /api/admin/health               — system health (DB ping, model pool, counts)
  * GET  /api/admin/errors               — recent API error log (last 200 entries)
@@ -33,6 +34,7 @@ import { slugify } from '../../domain/shared/strings';
 import { countActiveSessionsAndTokens } from '../../application/security/sessionCounts';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { computePlatformRollup } from '../../application/admin/platformRollup';
+import { getOutcomeValueRollup } from '../../application/admin/outcomeValueRollup';
 import {
   clampErrorLogLimit,
   getErrorLogEntry,
@@ -1311,6 +1313,21 @@ export function createAdminRoutes(): Hono<HonoEnv> {
       LIMIT 500
     `);
     return c.json({ sessions: rows.rows });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/outcome-metrics
+  // Content-free value generation across the platform, optionally narrowed to
+  // one tenant or project. The previous equal-length period is the baseline.
+  // -------------------------------------------------------------------------
+  router.get('/outcome-metrics', async (c) => {
+    const days = Math.min(365, Math.max(7, Math.floor(Number(c.req.query('days') ?? 30) || 30)));
+    const tenantValue = Number(c.req.query('tenantId'));
+    const projectValue = Number(c.req.query('projectId'));
+    const tenantId = Number.isInteger(tenantValue) && tenantValue > 0 ? tenantValue : undefined;
+    const projectId = Number.isInteger(projectValue) && projectValue > 0 ? projectValue : undefined;
+    const db = buildDatabase(c.env);
+    return c.json(await getOutcomeValueRollup(db, { days, tenantId, projectId }));
   });
 
   // -------------------------------------------------------------------------

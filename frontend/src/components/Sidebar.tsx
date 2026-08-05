@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { findActiveGroup, navGroupsForAccountType, type NavGroup } from '@/lib/navGroups';
-import { useAvailableForHire, useIsFreelancer } from '@/lib/rbac';
+import { useAvailableForHire, useIsFreelancer, useIsSalesAssociate } from '@/lib/rbac';
 import SidebarLegalMenu from './legal/SidebarLegalMenu';
 import UsageMeter from './UsageMeter';
 
@@ -59,7 +59,8 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
 
   const isFreelancer = useIsFreelancer();
   const availableForHire = useAvailableForHire();
-  const allGroups = navGroupsForAccountType(isFreelancer, availableForHire);
+  const isSales = useIsSalesAssociate();
+  const allGroups = navGroupsForAccountType(isFreelancer, availableForHire, isSales);
   const activeGroupId = findActiveGroup(pathname)?.id
     ?? allGroups.find((g) => g.match.some((m) => pathname === m || pathname.startsWith(`${m}/`)))?.id;
   const groups = allGroups.filter((g) => !g.superadminOnly || user?.isSuperadmin);

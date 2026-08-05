@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
-import { useIsFreelancer } from '@/lib/rbac';
+import { useIsFreelancer, useIsSalesAssociate } from '@/lib/rbac';
 import { isNavItemActive, type NavMatch } from '@/lib/nav';
 import MascotIcon from './MascotIcon';
 
@@ -32,6 +32,7 @@ export function itemsFor(
   isAuthenticated: boolean,
   isSuperadmin: boolean,
   isFreelancer = false,
+  isSales = false,
 ): BottomItem[] {
   if (!isAuthenticated) {
     return [
@@ -58,6 +59,13 @@ export function itemsFor(
       accountSlot,
     ];
   }
+  if (isSales) {
+    return [
+      { href: '/sales', labelKey: 'group.sales', icon: '📈' },
+      { href: '/media', labelKey: 'group.library', icon: '🗂' },
+      accountSlot,
+    ];
+  }
   // Builder (IDE creator): the four primary work destinations + the account slot.
   return [
     { href: '/dashboard', labelKey: 'tab.home', icon: '🏠' },
@@ -77,8 +85,9 @@ export default function MobileBottomNav() {
   const pathname = usePathname() || '';
   const { isAuthenticated, user } = useAuth();
   const isFreelancer = useIsFreelancer();
+  const isSales = useIsSalesAssociate();
   const t = useTranslations('nav');
-  const items = itemsFor(isAuthenticated, !!user?.isSuperadmin, isFreelancer);
+  const items = itemsFor(isAuthenticated, !!user?.isSuperadmin, isFreelancer, isSales);
 
   return (
     <nav className="mobile-bottom-nav" aria-label={t('primaryAria')}>

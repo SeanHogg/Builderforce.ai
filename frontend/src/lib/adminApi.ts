@@ -154,6 +154,30 @@ export interface AdminCreationSession {
   invitations: AdminCreationSessionInvitation[];
 }
 
+export interface AdminOutcomeMetric {
+  key: string;
+  label: string;
+  unit: 'seconds' | 'percent' | 'agents' | 'count' | 'usd';
+  direction: 'higher' | 'lower';
+  current: number | null;
+  baseline: number | null;
+}
+
+export interface AdminOutcomeRollup {
+  scope: 'platform' | 'tenant' | 'project';
+  filters: { days: number; tenantId?: number; projectId?: number };
+  period: { start: string; end: string; days: number };
+  previousPeriod: { start: string; end: string };
+  sampleSize: number;
+  deliveredSessions: number;
+  metrics: AdminOutcomeMetric[];
+  trends: Array<{ day: string; sessions: number; deliveries: number }>;
+  tenants: Array<{ tenantId: number; tenantName: string; sessions: number; deliveries: number }>;
+  projects: Array<{ projectId: number; projectName: string; tenantId: number; tenantName: string; sessions: number; deliveries: number }>;
+  generatedAt: string;
+  privacy: { contentFree: true; minimumExternalCohort: number; externalClaimsEligible: boolean };
+}
+
 // Sales-cycle demo accounts (migration 0360).
 export interface AdminDemoFunnelRow {
   persona: string | null;
@@ -834,6 +858,15 @@ export const adminApi = {
   async creationSessions(): Promise<AdminCreationSession[]> {
     const res = await adminRequest<{ sessions: AdminCreationSession[] }>('/api/admin/creation-sessions');
     return res.sessions;
+  },
+
+  async outcomeMetrics(filters: { days?: number; tenantId?: number; projectId?: number } = {}): Promise<AdminOutcomeRollup> {
+    const params = new URLSearchParams();
+    if (filters.days) params.set('days', String(filters.days));
+    if (filters.tenantId) params.set('tenantId', String(filters.tenantId));
+    if (filters.projectId) params.set('projectId', String(filters.projectId));
+    const query = params.toString();
+    return adminRequest<AdminOutcomeRollup>(`/api/admin/outcome-metrics${query ? `?${query}` : ''}`);
   },
 
   // Demo-account conversion funnel + book-a-demo pipeline (migration 0360).

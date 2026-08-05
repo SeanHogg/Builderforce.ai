@@ -113,6 +113,26 @@ describe('chat-scoped agent tool subset (@agent addressed-reply loop)', () => {
 describe('listBuiltinTools', () => {
   const tools = listBuiltinTools();
 
+  it('advertises the chat-invokable Compliance Audit Agent tools', () => {
+    const requirements = tools.find((tool) => tool.tool === 'compliance.requirements');
+    const run = tools.find((tool) => tool.tool === 'compliance.run_audit');
+    expect(requirements?.mutates).toBe(false);
+    expect(run?.mutates).toBe(true);
+    expect(run?.parameters).toMatchObject({ required: ['projectId'] });
+  });
+
+  it('advertises the shared sales canvas CRM toolset', () => {
+    const byName = new Map(tools.map((tool) => [tool.name, tool]));
+    expect(byName.get('builtin_sales_workspace_get')?.mutates).toBe(false);
+    for (const name of [
+      'builtin_sales_contacts_create', 'builtin_sales_contacts_update',
+      'builtin_sales_campaigns_create', 'builtin_sales_campaigns_update',
+      'builtin_sales_goals_set', 'builtin_sales_coaching_note_add',
+      'builtin_sales_revenue_plan_set',
+    ]) expect(byName.get(name)?.mutates, `${name} should be an MCP mutation`).toBe(true);
+    expect(byName.get('builtin_meetings_schedule')?.mutates).toBe(true);
+  });
+
   it('advertises projects + tasks as gateway-safe, builtin-tagged tools', () => {
     expect(tools.length).toBeGreaterThanOrEqual(11);
     expect(tools.every((t) => t.extensionId === BUILTIN_EXTENSION_ID)).toBe(true);

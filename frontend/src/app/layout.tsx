@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
-import Script from 'next/script';
 import { JetBrains_Mono } from 'next/font/google';
 import { LocaleProvider } from './LocaleProvider';
 import './globals.css';
@@ -31,6 +30,7 @@ import { ChunkErrorRecovery } from '@/components/ChunkErrorRecovery';
 import { EMBED_ERROR_REPORTER } from '@/lib/embed/embedErrorReporter';
 import { AUTH_API_URL } from '@/lib/auth';
 import { DiscountCodeCapture } from '@/components/DiscountCodeCapture';
+import { CookieConsentManager } from '@/components/privacy/CookieConsentManager';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://builderforce.ai';
 
@@ -44,12 +44,16 @@ const QUALITY_ENVIRONMENT = process.env.NODE_ENV === 'production' ? 'production'
 export const metadata: Metadata = {
   metadataBase: new URL(BASE_URL),
   title: {
-    default: 'Builderforce.ai — AI Agent Training Platform | Build & Deploy AI Agents',
+    default: 'Builderforce.ai — The Creative Canvas for Humans and AI Agents',
     template: '%s | Builderforce.ai',
   },
   description:
-    'A human-in-the-loop, fully agentic cloud. Train your own AI agents and use them inside your own agent, manage your whole workforce on a Kanban board, and review and approve every action — without leaving VS Code. WebGPU LoRA fine-tuning, skills marketplace, personas, and the Workforce Registry.',
+    'Turn any idea into something real in one visual workspace where your team and AI agents design, build, review, and deliver websites, workflows, models, data stories, and products.',
   keywords: [
+    'AI creative canvas',
+    'visual AI workspace',
+    'human AI collaboration',
+    'AI product creation',
     'AI agent training',
     'AI agents',
     'human-in-the-loop AI',
@@ -75,10 +79,10 @@ export const metadata: Metadata = {
     type: 'website',
     url: BASE_URL,
     siteName: 'Builderforce.ai',
-    title: 'Builderforce.ai — Your AI CTO, CIO & Security Officer',
+    title: 'Builderforce.ai — Turn Any Idea Into Something Real',
     // Front-loaded for chat/link unfurls, which truncate after ~1–2 lines on mobile.
     description:
-      'Train your own AI agents, run a whole AI workforce on a Kanban board, and approve every action — without leaving VS Code.',
+      'One creative canvas where your team and AI agents design, build, review, and deliver—without the tool sprawl.',
     // Static branded PNG (the B-logo lockup). We do NOT use a next/og ImageResponse
     // route here: on the Cloudflare edge runtime it returns an empty 0-byte image, so
     // iMessage/SMS/Slack unfurl a stale cached preview. See lib/seo.ts → OG_IMAGE.
@@ -87,9 +91,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Builderforce.ai — Your AI CTO, CIO & Security Officer',
+    title: 'Builderforce.ai — The Creative Canvas for Humans and AI Agents',
     description:
-      'Train your own AI agents and run an AI workforce on a Kanban board — approve every action without leaving VS Code.',
+      'Turn ideas into websites, workflows, models, data stories, and products with your team and AI agents in one visual workspace.',
     images: ['/og-image.png'],
   },
   manifest: '/manifest.json',
@@ -124,16 +128,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" data-theme="dark" suppressHydrationWarning className={jetbrainsMono.variable}>
       <head>
-        {/* Google Tag Manager — uses next/script so Next.js can manage loading strategy */}
-        <Script
-          id="gtm"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src='https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);})(window,document,'script','dataLayer','GTM-5Q488PKG');`,
-          }}
-        />
-        {/* End Google Tag Manager */}
-
         {/*
           Anti-FOUC: runs synchronously before any paint.
           Reads saved theme from localStorage; defaults to "dark".
@@ -161,17 +155,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             level; per-page schemas are injected in individual page components */}
       </head>
       <body>
+        <a className="skip-to-content" href="#main-content">Skip to main content</a>
         <Suspense fallback={null}><DiscountCodeCapture /></Suspense>
-        {/* Google Tag Manager (noscript) */}
-        <noscript>
-          <iframe
-            src="https://www.googletagmanager.com/ns.html?id=GTM-5Q488PKG"
-            height="0"
-            width="0"
-            style={{ display: 'none', visibility: 'hidden' }}
-          />
-        </noscript>
-        {/* End Google Tag Manager (noscript) */}
+        <CookieConsentManager />
 
         {/* Deep space starfield + nebula — fixed, z-index 0, behind all content */}
         <div className="stars" aria-hidden="true" />

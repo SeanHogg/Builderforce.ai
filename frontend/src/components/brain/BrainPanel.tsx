@@ -1488,7 +1488,7 @@ export function BrainPanel({
           </div>
           <div className="bs-chat-list">{chatRows}</div>
         </div>
-        <div className="bs-main">{conversation}</div>
+        <div className="bs-main"><AiDisclosure />{conversation}</div>
       </div>
     );
   }
@@ -1540,8 +1540,17 @@ export function BrainPanel({
           {chatRows}
         </div>
       )}
+      <AiDisclosure />
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{conversation}</div>
     </div>
+  );
+}
+
+function AiDisclosure() {
+  return (
+    <aside aria-label="AI disclosure" style={{ flexShrink: 0, padding: '7px 12px', fontSize: 11, lineHeight: 1.45, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-subtle)' }}>
+      You are interacting with AI agents. Outputs can be inaccurate; review consequential results before relying on them. Mutating actions require your approval unless you explicitly enable auto-approve. <Link href="/legal/ai-transparency">How AI works, explanations, and human review</Link>.
+    </aside>
   );
 }
 

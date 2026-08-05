@@ -57,7 +57,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <TopBar onMenuClick={openNav} />
         <Sidebar collapsed={navCollapsed} onToggleCollapsed={toggleNav} mobileOpen={navOpen} onMobileClose={closeNav} />
         <NavCountsProvider>
-          <main className="content" style={{ width: '100%', paddingLeft: 0 }}>
+          <main id="main-content" className="content" style={{ width: '100%', paddingLeft: 0 }}>
             {!isFullScreenRoute(pathname) && <SectionTabs />}
             {children}
           </main>

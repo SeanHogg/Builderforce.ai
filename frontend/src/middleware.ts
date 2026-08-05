@@ -163,6 +163,7 @@ export function middleware(request: NextRequest) {
     '/personas',
     '/security',
     '/settings',
+    '/sales',
     '/debug',
   ];
   const isProtected = protectedPaths.some((p) => pathname === p || pathname.startsWith(p + '/'));
@@ -202,6 +203,7 @@ export const config = {
     '/personas/:path*',
     '/security/:path*',
     '/settings/:path*',
+    '/sales/:path*',
     '/observability/:path*',
     '/debug/:path*',
   ],

@@ -24,7 +24,8 @@ interface BuiltinAgentSeed {
 
 /** The seeded built-in workforce — kept in sync with migrations 0271 (Validator),
  *  0291 (Security), 0293 (Product Manager + Designer), 0326 (Incident Manager),
- *  0335 (CTO + Product Owner), 0376 (Manager) and 0395 (PR/Ticket Reconciler) so an existing-tenant backfill and a
+ *  0335 (CTO + Product Owner), 0376 (Manager), 0395 (PR/Ticket Reconciler), and
+ *  0403 (Compliance Audit) so an existing-tenant backfill and a
  *  new-tenant provision agree. */
 export const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
   {
@@ -42,6 +43,14 @@ export const BUILTIN_AGENTS: BuiltinAgentSeed[] = [
     title: 'Security — SOC 2 Auditor (all Trust Service Criteria)',
     bio: 'Audits the codebase against SOC 2 across all five Trust Service Criteria — Security (Common Criteria), Availability, Processing Integrity, Confidentiality, and Privacy. Reads the real code, dependencies, config, and data flows; for every issue it files an access-restricted SECURITY ticket carrying the severity, the criterion it maps to, and a concrete recommendation, plus an audit-summary result. Its findings are visible only to the people you allow.',
     skills: ['security-audit', 'soc2', 'appsec', 'compliance'],
+  },
+  {
+    kind: 'compliance_auditor',
+    idPrefix: 'compliance-auditor-t',
+    name: 'Compliance Audit',
+    title: 'Compliance Audit Agent — privacy, AI governance, and website readiness',
+    bio: 'Audits connected GitHub source and deployed website behavior against the privacy, consumer-protection, marketing, children\'s-data, accessibility, and AI-transparency rules that apply to the project. It inventories data and model flows, reads implementation evidence instead of trusting policy claims, maps every finding to a jurisdiction and authority, distinguishes a missing control from an unverified one, and files one independently remediable ticket per gap. It never represents a readiness scan as legal certification and requires counsel review for launch decisions.',
+    skills: ['github', 'privacy', 'ai-governance', 'compliance-audit', 'data-protection', 'accessibility'],
   },
   {
     kind: 'product_manager',

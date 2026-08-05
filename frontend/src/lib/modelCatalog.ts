@@ -207,6 +207,25 @@ export function formatPricePerMillion(perToken: number): string {
   return `$${perMillion.toFixed(2)}`;
 }
 
+/**
+ * Test a model against optional USD-per-million-token price ceilings.
+ * Catalog prices are stored per token, while every marketplace price is shown
+ * per 1M tokens; keeping the conversion here prevents the filter UI from
+ * accidentally comparing values expressed in different units.
+ */
+export function modelMatchesPriceLimits(
+  record: ModelRecord,
+  maxInputPerMillion?: number,
+  maxOutputPerMillion?: number,
+): boolean {
+  const inputPerMillion = record.pricing.prompt * 1_000_000;
+  const outputPerMillion = record.pricing.completion * 1_000_000;
+  return (
+    (maxInputPerMillion === undefined || inputPerMillion <= maxInputPerMillion) &&
+    (maxOutputPerMillion === undefined || outputPerMillion <= maxOutputPerMillion)
+  );
+}
+
 /** Format a context-window token count as "128K" / "1M". */
 export function formatContext(record: ModelRecord): string {
   if (record.contextLabel) return record.contextLabel;

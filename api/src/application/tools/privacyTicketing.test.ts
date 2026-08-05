@@ -21,6 +21,11 @@ function bareRepo(): ScannedRepo {
     suspectedSecrets: 0, fileCount: 8339,
     hasPrivacyPolicy: false, hasTermsOfService: false, hasCookiePolicy: false, hasCookieConsent: false,
     hasUnsubscribe: false, hasDataExport: false, hasDataDeletion: false, hasRetentionPolicy: false,
+    hasRightsRequestWorkflow: false, hasUniversalOptOut: false, hasDpa: false,
+    hasSubprocessorRegister: false, hasDataInventory: false, hasImpactAssessment: false,
+    hasPrivacyIncidentResponse: false, hasAiTransparency: false,
+    hasAutomatedDecisionSafeguards: false, hasMinorSafety: false,
+    hasTransferSafeguards: false, hasAccessibilityEvidence: false,
   };
 }
 
@@ -71,7 +76,7 @@ describe('Privacy diagnostic — per-gap ticket create→resolve', () => {
     // Every ticket carries the privacy_audit workflow hint + a legal-obligation title.
     for (const t of board.tasks) {
       expect(t.persona).toBe('privacy_audit');
-      expect(t.title.startsWith('Privacy & Data-Law Compliance:')).toBe(true);
+      expect(t.title.startsWith('Compliance Audit Agent:')).toBe(true);
       expect(t.status).toBe('todo');
     }
     // At least one names an unmistakable data-law obligation.

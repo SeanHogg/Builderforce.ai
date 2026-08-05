@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { associateBrainWithArtifacts, canvasChangesCanAutoApply, CreationCanvas, duplicateAddUpdateTarget, persistCanonicalProjectPrd, projectEvermindNodePatch, shouldAcquireCanvasObjectLock, type ProposedCanvasChange } from './CreationCanvas';
+import { associateBrainWithArtifacts, canInvokeCreationObjectAction, canvasChangesCanAutoApply, CreationCanvas, duplicateAddUpdateTarget, persistCanonicalProjectPrd, projectEvermindNodePatch, shouldAcquireCanvasObjectLock, type ProposedCanvasChange } from './CreationCanvas';
 import { CreationNode } from './CreationNode';
 import { specsApi } from '@/lib/builderforceApi';
 import type { CreationFlowNode } from './CreationNode';
@@ -53,13 +53,16 @@ vi.mock('@/components/workflow-builder/WorkflowBuilder', () => ({
 }));
 
 describe('CreationCanvas', { timeout: 15_000 }, () => {
-  it('opens the mini map by default and lets it be closed and reopened from the canvas controls', () => {
+  it('keeps the mini map action visible while the mini map is opened, closed, and reopened', () => {
     render(<CreationCanvas sessionId="minimap-controls-test" persistence="local" />);
 
     expect(screen.getByRole('button', { name: 'Clean up canvas layout' })).toBeInTheDocument();
+    const minimapAction = screen.getByRole('button', { name: 'Toggle mini map' });
+    expect(minimapAction).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(screen.getByRole('button', { name: 'Close mini map' }));
-    expect(screen.getByRole('button', { name: 'Open mini map' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Open mini map' }));
+    expect(minimapAction).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(minimapAction);
+    expect(minimapAction).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Close mini map' })).toBeInTheDocument();
   });
 
@@ -80,6 +83,13 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     }])).toBe(false);
   });
 
+  it('distinguishes real Canvas actions from advertised capability intent', () => {
+    expect(canInvokeCreationObjectAction('workflow', 'run')).toBe(true);
+    expect(canInvokeCreationObjectAction('mockup', 'deliver')).toBe(true);
+    expect(canInvokeCreationObjectAction('website', 'publish')).toBe(true);
+    expect(canInvokeCreationObjectAction('video', 'generate')).toBe(true);
+  });
+
   beforeEach(() => {
     localStorage.clear();
   });
@@ -97,6 +107,17 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     const group = screen.getByRole('group', { name: 'Canvas history' });
     expect(group).toContainElement(screen.getByRole('button', { name: 'Undo canvas change' }));
     expect(group).toContainElement(screen.getByRole('button', { name: 'Redo canvas change' }));
+  });
+
+  it('opens the outcome scorecard from the session bar and explains local baselines', () => {
+    render(<CreationCanvas sessionId="outcome-metrics-test" persistence="local" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'View outcome metrics' }));
+    expect(screen.getByRole('complementary', { name: 'Session outcome metrics' })).toBeInTheDocument();
+    expect(screen.getByText('Idea → delivery')).toBeInTheDocument();
+    expect(screen.getByText('Save to establish a baseline')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close outcome metrics' }));
+    expect(screen.queryByRole('complementary', { name: 'Session outcome metrics' })).not.toBeInTheDocument();
   });
 
   it('does not lock a newly created server object until autosave persists it', () => {

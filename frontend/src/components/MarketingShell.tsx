@@ -27,7 +27,7 @@ export default function MarketingShell({ children }: { children: React.ReactNode
   return (
     <div className={`marketing-frame${fullHeight ? ' marketing-frame-full-height' : ''}`}>
       <MarketingHeader />
-      <main className={`marketing-content${fullHeight ? ' marketing-content-full-height' : ''}`}>
+      <main id="main-content" className={`marketing-content${fullHeight ? ' marketing-content-full-height' : ''}`}>
         {children}
         {!fullHeight && <AppFooter variant="full" />}
       </main>

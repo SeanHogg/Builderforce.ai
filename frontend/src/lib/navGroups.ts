@@ -219,6 +219,7 @@ export const NAV_GROUPS: NavGroup[] = [
     tabKind: 'query', basePath: '/admin',
     tabs: ADMIN_GROUP_META.map((g) => ({ id: g.id, labelKey: g.labelKey, icon: g.icon })),
   },
+  { id: 'sales-admin', labelKey: 'group.sales', icon: '📈', href: '/sales', match: ['/sales'], superadminOnly: true },
 ];
 
 /**
@@ -269,14 +270,25 @@ export const FREELANCER_ALLOWED_PREFIXES = ['/freelancer'];
  *  reachable for old deep links; it degrades to a "no workspace" state. */
 export const FREELANCER_ALLOWED_EXACT = ['/settings', '/security'];
 
+/** Focused navigation for referral and sales-associate accounts. */
+export const SALES_NAV_GROUPS: NavGroup[] = [
+  { id: 'sales', labelKey: 'group.sales', icon: '📈', href: '/sales', match: ['/sales'] },
+  { id: 'settings', labelKey: 'group.settings', icon: '⚙', href: '/settings', match: ['/settings'] },
+];
+
 /** The nav destinations for the current account type — the ONE place the
  *  freelancer-vs-builder nav split is decided, so the Sidebar + SectionTabs and
  *  the route guard never drift. A dedicated freelancer gets the restricted shell; a
  *  builder who opted in to being hired (`availableForHire`) keeps the full builder
  *  nav PLUS the for-hire worker destinations. */
-export function navGroupsForAccountType(isFreelancer: boolean, availableForHire = false): NavGroup[] {
+export function navGroupsForAccountType(isFreelancer: boolean, availableForHire = false, isSales = false): NavGroup[] {
+  if (isSales) return SALES_NAV_GROUPS;
   if (isFreelancer) return FREELANCER_NAV_GROUPS;
   return availableForHire ? [...NAV_GROUPS, ...FOR_HIRE_NAV_GROUPS] : NAV_GROUPS;
+}
+
+export function isSalesAllowedPath(pathname: string): boolean {
+  return pathname === '/sales' || pathname.startsWith('/sales/') || pathname === '/create' || pathname.startsWith('/create/') || pathname === '/settings' || pathname === '/security';
 }
 
 /** Whether a freelancer account may view this in-app path (else redirect). */

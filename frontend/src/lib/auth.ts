@@ -232,12 +232,14 @@ export async function register(
   password: string,
   name: string | undefined,
   agreeToTerms: boolean,
-  accountType?: 'standard' | 'freelancer'
+  accountType?: 'standard' | 'freelancer' | 'sales',
+  referralCode?: string,
+  ageAttested = false,
 ): Promise<AuthStepResult> {
   const res = await fetch(`${AUTH_API_URL}/api/auth/web/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password, name, agreeToTerms, accountType }),
+    body: JSON.stringify({ email, password, name, agreeToTerms, accountType, referralCode, ageAttested }),
   });
   const body = await res.json().catch(() => ({})) as {
     token?: string; user?: AuthUser; error?: string; message?: string;
@@ -454,7 +456,7 @@ export async function getMe(webToken: string): Promise<{
   onboardingCompletedAt: string | null;
   onboardingProgress: OnboardingProgress | null;
   psychometric: PsychometricProfile | null;
-  accountType: 'standard' | 'freelancer';
+  accountType: 'standard' | 'freelancer' | 'sales';
   accountTypeSelected: boolean;
   availableForHire: boolean;
 }> {
@@ -463,7 +465,7 @@ export async function getMe(webToken: string): Promise<{
   });
   checkUnauthorizedAndRedirect(res, !!webToken);
   if (!res.ok) return { onboardingCompletedAt: null, onboardingProgress: null, psychometric: null, accountType: 'standard', accountTypeSelected: true, availableForHire: false };
-  const data = await res.json() as { user?: { onboardingCompletedAt?: string | null; onboardingProgress?: OnboardingProgress | null; psychometric?: PsychometricProfile | null; accountType?: 'standard' | 'freelancer'; accountTypeSelected?: boolean; availableForHire?: boolean } };
+  const data = await res.json() as { user?: { onboardingCompletedAt?: string | null; onboardingProgress?: OnboardingProgress | null; psychometric?: PsychometricProfile | null; accountType?: 'standard' | 'freelancer' | 'sales'; accountTypeSelected?: boolean; availableForHire?: boolean } };
   return {
     onboardingCompletedAt: data.user?.onboardingCompletedAt ?? null,
     onboardingProgress: data.user?.onboardingProgress ?? null,
@@ -505,12 +507,13 @@ export async function setAvailableForHire(
  */
 export async function selectAccountType(
   webToken: string,
-  accountType: 'standard' | 'freelancer',
+  accountType: 'standard' | 'freelancer' | 'sales',
+  ageAttested: boolean,
 ): Promise<AuthUser> {
   const res = await fetch(`${AUTH_API_URL}/api/auth/me/account-type`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
-    body: JSON.stringify({ accountType }),
+    body: JSON.stringify({ accountType, ageAttested }),
   });
   checkUnauthorizedAndRedirect(res, !!webToken);
   if (!res.ok) {

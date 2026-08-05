@@ -418,7 +418,8 @@
       "incidents": "Incidents",
       "monitoring": "Surveillance",
       "reliability": "Fiabilité",
-      "agentOps": "Ops des agents"
+      "agentOps": "Ops des agents",
+      "sales": "Centre des ventes"
     },
     "tab": {
       "projects": "Projets",
@@ -591,7 +592,7 @@
     "tasks": "{count, plural, one {# tâche} other {# tâches}}",
     "workflows": "{count, plural, one {# workflow} other {# workflows}}",
     "viewWorkflows": "Voir les workflows",
-    "health": "Santé",
+      "health": "Santé",
     "done": "Terminé",
     "remaining": "Restant",
     "tier": {
@@ -4546,9 +4547,9 @@
       "longDesc": "Bouclez la boucle : entraînez un agent personnalisé (LoRA WebGPU dans le navigateur + évaluation par IA), publiez-le dans le Workforce Registry, puis recrutez-le et appelez-le depuis votre propre agent. Vos spécialistes entraînés deviennent des outils auxquels votre agent principal délègue — une main-d'œuvre pleinement agentique que vous possédez et orchestrez."
     },
     {
-      "title": "Ne quittez jamais VS Code",
-      "shortDesc": "Pilotez toute votre main-d'œuvre depuis l'extension VS Code.",
-      "longDesc": "L'extension BuilderForce pour VS Code intègre toute la plateforme dans votre éditeur : discutez avec les agents, attribuez et exécutez des tâches, examinez et validez leur travail, et gérez l'ensemble de votre main-d'œuvre d'agents — le tout sans quitter VS Code. Les approbations avec intervention humaine se déroulent là où vous codez."
+      "title": "Une surface VS Code pour les équipes d’ingénierie",
+      "shortDesc": "Apportez le contexte du canevas, les agents, la révision et la livraison dans l’éditeur.",
+      "longDesc": "L’extension BuilderForce offre aux équipes d’ingénierie une vue native du travail pertinent : contexte du dépôt, diagnostics, tâches d’agents, révisions et approbations près du code."
     },
     {
       "title": "Testeur agentique — assurance qualité autonome",
@@ -4561,19 +4562,19 @@
       "longDesc": "Au-delà des agents IA, recrutez de vraies personnes : la Place de marché des talents répertorie des développeurs, DBA, designers et spécialistes freelance vérifiés, avec CV (propulsés par hired.video), compétences et tarifs horaires. Faites passer des entretiens, recrutez sur n’importe quel projet et voyez les heures facturables capturées automatiquement à partir du travail qu’ils réalisent dans le portail et VS Code — chaque feuille de temps vous revient à approuver avant de payer. Humains et agents travaillent côte à côte sur le même tableau."
     },
     {
-      "title": "CTO IA",
-      "shortDesc": "Conçoit, entraîne et déploie votre main-d'œuvre IA.",
-      "longDesc": "Votre CTO IA conçoit, entraîne et déploie votre main-d'œuvre d'agents IA — affinage LoRA WebGPU dans le navigateur, évaluation par IA et publication en un clic dans le Workforce Registry."
+      "title": "Studio de modèles et entraînement d’agents",
+      "shortDesc": "Entraînez, évaluez et publiez des modèles et agents spécialisés.",
+      "longDesc": "Utilisez l’affinage LoRA WebGPU, l’évaluation et la publication pour rendre des modèles spécialisés disponibles aux workflows d’agents compatibles."
     },
     {
-      "title": "CIO IA",
-      "shortDesc": "Connecte et orchestre vos systèmes.",
-      "longDesc": "Votre CIO IA se connecte à vos systèmes — GitHub, Jira, Confluence et bien d'autres via des identifiants chiffrés — et orchestre le travail grâce au registre d'outils de l'assistant Brain."
+      "title": "Systèmes connectés et orchestration",
+      "shortDesc": "Connectez les outils compatibles et coordonnez le travail.",
+      "longDesc": "Connectez les systèmes compatibles avec des identifiants chiffrés et rendez les opérations approuvées disponibles aux workflows et au registre d’outils Brain."
     },
     {
-      "title": "Responsable de la sécurité IA",
-      "shortDesc": "Régit chaque action par des approbations et un audit.",
-      "longDesc": "Votre responsable de la sécurité IA régit chaque action : points d'approbation avec intervention humaine, piste d'audit complète, isolation par locataire et identifiants chiffrés en AES-256-GCM."
+      "title": "Gouvernance et sécurité des agents",
+      "shortDesc": "Appliquez permissions, approbations, isolation et traces d’exécution.",
+      "longDesc": "Gardez des personnes responsables aux commandes grâce aux rôles, aux approbations des actions configurées, à l’isolation, aux identifiants chiffrés et aux traces d’exécution."
     },
     {
       "title": "Colonne vertébrale de planification — du portefeuille à la tâche",
@@ -5347,7 +5348,10 @@
       "faqHeading": "Questions fréquentes",
       "seeFullComparison": "Voir le comparatif complet",
       "relatedHeading": "Lectures connexes",
-      "vsLabel": "Builderforce.ai face à {name}"
+      "vsLabel": "Builderforce.ai face à {name}",
+      "criteriaTitle": "Un guide d’évaluation fondé sur des critères",
+      "criteriaSummary": "Comparez Builderforce.ai à {name} selon le travail à accomplir : création visuelle, livrables connectés, collaboration, exécution par agents, gouvernance, déploiement et propriété.",
+      "criteriaNote": "Les produits, offres et tarifs évoluent. Utilisez ces critères pour cadrer l’évaluation, puis vérifiez les exigences décisives dans la documentation actuelle et par un essai pratique."
     },
     "competitors": {
       "copilot": {
@@ -5388,9 +5392,9 @@
     }
   },
   "home": {
-    "heroBadge": "Un canevas · Humains + agents IA",
-    "heroTitle": "Imaginez. <em>Créez.</em>",
-    "heroSub": "Commencez par une demande, puis créez workflows, sites, récits de données, modèles, expériences vocales et livrables dans une seule session visuelle.",
+    "heroBadge": "Le canevas créatif · Humains + agents IA",
+    "heroTitle": "Transformez toute idée en <em>quelque chose de réel.</em>",
+    "heroSub": "Un espace visuel où votre équipe et les agents IA conçoivent, créent, révisent et livrent sites, workflows, modèles, récits de données et produits, sans multiplier les outils.",
     "heroPromptPlaceholder": "Que voulez-vous créer ?",
     "heroPromptAria": "Décrivez ce que vous voulez créer",
     "heroGetStarted": "Commencer à créer",
@@ -5401,7 +5405,7 @@
     ],
     "createCanvas": {
       "eyebrow": "Découvrez Create",
-      "heading": "Create Canvas — Là où les idées deviennent des systèmes opérationnels",
+      "heading": "Un canevas. Tout ce que vous pouvez imaginer.",
       "blurb": "Gardez la rapidité d’un prompt, puis dépassez le chat. Réunissez workflows, sites web, données, modèles, personnes et agents sur un canevas multijoueur où chaque objet reste actif, connecté et prêt à être livré.",
       "features": [
         { "title": "Partez de l’intention", "desc": "Décrivez votre objectif et ouvrez immédiatement un canevas local privé. Ajoutez un compte ou un projet seulement au moment de collaborer ou livrer." },
@@ -5421,24 +5425,24 @@
       "flow": ["Prompt", "Contexte", "Livrable", "Révision", "Livraison", "Résultat"]
     },
     "evermindHeadingSuffix": "Un modèle qui apprend en travaillant — et ne se périme jamais",
-    "pillarsHeading": "Intervention humaine. Pleinement agentique.",
-    "pillarsLead": "Entraînez vos propres agents, mettez-les au travail au sein de votre agent et gardez la maîtrise de chaque étape — depuis un seul endroit.",
+    "pillarsHeading": "Créez librement. Livrez avec contrôle.",
+    "pillarsLead": "Réunissez idées, personnes et agents IA dans un espace visuel, puis décidez de ce qui change, de ce qui est livré et de ce qui reste privé.",
     "pillars": [
       {
-        "title": "Entraînez des agents, utilisez-les au sein de votre agent",
-        "desc": "Entraînez un agent personnalisé dans le navigateur (LoRA WebGPU + évaluation), publiez-le dans le Workforce Registry, puis recrutez-le et appelez-le depuis votre propre agent. Vos spécialistes deviennent des outils auxquels votre agent principal délègue."
+        "title": "Créez plus que des documents",
+        "desc": "Construisez des sites, workflows, prototypes, récits de données, modèles et plans de livraison sous forme d’objets connectés, pas de fichiers dispersés."
       },
       {
-        "title": "Gérez votre main-d'œuvre sur un tableau Kanban",
-        "desc": "Planifiez, attribuez et suivez chaque tâche sur un tableau Kanban en direct — humains et agents IA sur le même tableau, avec des vues tableau, calendrier et Gantt. Le travail circule du backlog au terminé en temps réel."
+        "title": "Travaillez avec des agents, pas seulement un chatbot",
+        "desc": "Placez des agents spécialisés à côté du travail et laissez-les créer, évaluer et exécuter pendant que votre équipe reste impliquée."
       },
       {
-        "title": "Ne quittez jamais VS Code",
-        "desc": "L'extension BuilderForce pour VS Code exécute toute la plateforme dans votre éditeur : discutez avec les agents, attribuez et exécutez des tâches, examinez et validez leur travail, et approuvez les actions avec intervention humaine — sans quitter votre code."
+        "title": "Révisez avant de livrer",
+        "desc": "Examinez les changements proposés, conservez des points de contrôle et n’envoyez que le travail approuvé vers les projets, tâches et agents."
       }
     ],
-    "rolesHeading": "Un seul système de référence. La vue opérationnelle de chaque rôle.",
-    "rolesLead": "Parce que chaque action — humaine ou agentique — est instrumentée, chiffrée et attribuée, toute l'organisation travaille à partir d'une source de vérité unique. Pas de pile de six outils, pas de feuilles de calcul pour réconcilier qui a fait quoi et à quel coût. Une visibilité de niveau entreprise, au prix d'une plateforme.",
+    "rolesHeading": "Un parcours créatif. La bonne vue pour chaque rôle.",
+    "rolesLead": "Reliez l’idée d’origine aux livrables, décisions, activités de livraison, modèles, approbations et coûts disponibles, sans reconstruire l’histoire depuis des outils séparés.",
     "roles": [
       {
         "role": "CEO",
@@ -5467,71 +5471,79 @@
     ],
     "stats": [
       {
-        "label": "Paramètres\ndans le navigateur"
+        "label": "Canevas créatif\nconnecté"
       },
       {
-        "label": "Génération\nde jeux de données"
+        "label": "Livrables actifs\net modifiables"
       },
       {
-        "label": "Accélération\nmatérielle"
+        "label": "Collaboration\nhumains + IA"
       },
       {
-        "label": "Privé — s'exécute\ndans votre navigateur"
+        "label": "Changements\nrévisables"
       }
     ],
-    "comparisonHeading": "Builderforce vs. les flux de travail conventionnels",
-    "comparisonLead": "Spécialement conçu pour les agents IA dès l'origine — pas un énième notebook cloud ou plugin.",
+    "workflowProof": {
+      "heading": "Trois workflows vérifiables", "lead": "Ces parcours bêta indiquent leur périmètre, leurs preuves dans le dépôt et leur limite actuelle.", "cta": "Voir les preuves des capacités et intégrations",
+      "demos": [
+        { "title": "De l’idée à l’expérience interactive", "audience": "Équipes créatives et produit", "outcome": "Créez des objets site, données et prototype connectés, révisez-les et livrez les résultats pris en charge.", "steps": ["Démarrer une session", "Créer et relier les artefacts", "Réviser et livrer le résultat"], "evidence": "Preuve : tests de parcours et de registre d’objets du canevas." },
+        { "title": "Livraison gouvernée par agents", "audience": "Ingénierie et opérations", "outcome": "Exécutez le travail approuvé seulement après une décision de politique valide.", "steps": ["Sélectionner le travail", "Résoudre la politique d’approbation", "Exécuter après une décision valide"], "evidence": "Preuve : tests des politiques d’exécution, dont le blocage en cas d’échec." },
+        { "title": "Des signaux à une décision citée", "audience": "Responsables produit et revenus", "outcome": "Évaluez les données prises en charge et conservez la décision avec le contexte de session.", "steps": ["Relier les preuves", "Lancer l’évaluation", "Vérifier les citations et appliquer"], "evidence": "Preuve : tests contractuels d’évaluation IA du canevas." }
+      ]
+    },
+    "comparisonHeading": "Un canevas connecté, pas un outil IA isolé de plus",
+    "comparisonLead": "Commencez par le résultat créatif et n’ajoutez des outils spécialisés que lorsqu’ils sont utiles.",
     "comparisonColFeature": "Fonctionnalité",
     "comparisonColBuilderforce": "Builderforce",
     "comparisonColNotebooks": "Notebooks génériques",
     "comparisonColCloud": "Entraînement cloud",
     "comparisonRows": [
-      "Entraînement LoRA dans le navigateur",
-      "Assistant de génération de jeux de données",
-      "Moteur d'évaluation par IA",
-      "Registre d'agents et compétences",
-      "Place de marché Workforce mondiale",
-      "Zéro facture GPU"
+      "Espace visuel de l’idée au résultat",
+      "Livrables actifs et connectés",
+      "Humains et agents spécialisés ensemble",
+      "Changements révisables et points de contrôle",
+      "Parcours gouverné vers la livraison",
+      "Surface VS Code facultative pour l’ingénierie"
     ],
-    "stepsHeading": "Opérationnel en trois étapes",
+    "stepsHeading": "De l’idée au résultat en trois étapes",
     "steps": [
       {
-        "title": "Créez un compte",
-        "desc": "Inscrivez-vous avec votre e-mail et démarrez un espace de travail gratuit. Essai Pro de 14 jours, sans carte bancaire."
+        "title": "Décrivez le résultat",
+        "desc": "Commencez par ce que vous voulez créer. Builderforce ouvre immédiatement un canevas privé où l’idée peut prendre forme."
       },
       {
-        "title": "Générez un jeu de données",
-        "desc": "Utilisez l'assistant pour rédiger un jeu de données d'affinage par instructions à partir d'une seule invite de capacité."
+        "title": "Créez et connectez",
+        "desc": "Ajoutez sites, workflows, données, modèles, personnes et agents tout en préservant le contexte et l’intention."
       },
       {
-        "title": "Entraînez et publiez",
-        "desc": "Lancez l'entraînement LoRA dans votre navigateur, évaluez les résultats et publiez votre agent dans le Workforce Registry."
+        "title": "Révisez et livrez",
+        "desc": "Façonnez le travail en équipe, approuvez les changements importants et envoyez le résultat vers les projets, tâches ou agents."
       }
     ],
-    "featuresHeading": "Tout ce que votre main-d'œuvre IA peut faire",
+    "featuresHeading": "Tout ce que vous pouvez apporter au canevas",
     "pricingHeading": "Tarifs",
+    "currentPricing": "Voir les tarifs actuels",
+    "pricePerSeat": "/poste/mois",
     "pricingTeaser": [
       {
         "name": "Gratuit",
-        "price": "$0",
         "perks": [
-          "Modèle Evermind (sur l'appareil)",
-          "Entraînement WebGPU",
-          "Exploration de la Workforce"
+          "Espace de création privé",
+          "1 AgentHost",
+          "5 projets"
         ]
       },
       {
         "name": "Pro",
-        "price": "$29/seat",
         "perks": [
-          "Agents illimités",
-          "Modèles privés",
-          "Support prioritaire"
+          "Jusqu’à 3 AgentHosts",
+          "Projets illimités",
+          "Workflows d’approbation configurés"
         ]
       }
     ],
     "blogHeading": "Les dernières publications du blog",
-    "blogLead": "Analyses approfondies, tutoriels et bonnes pratiques pour concevoir et déployer des agents IA — de l'entraînement LoRA WebGPU à l'orchestration multi-agents.",
+    "blogLead": "Idées et guides pratiques pour créer avec l’IA—des workflows visuels et livrables connectés aux modèles, agents, contrôles et à la livraison.",
     "blogReadAll": "Lire tous les articles",
     "newsletterHeading": "Restez informé",
     "newsletterLead": "Recevez les actualités sur les nouvelles fonctionnalités, les agents et les améliorations de la plateforme. Pas de spam, désinscription à tout moment.",
@@ -5541,9 +5553,9 @@
     "newsletterSubscribedConfirm": "Abonné ✓",
     "newsletterError": "Impossible de s'abonner. Réessayez.",
     "faqHeading": "Foire aux questions",
-    "ctaTitle": "Mettez votre CTO IA au travail",
-    "ctaDesc": "Décrivez votre besoin, connectez-vous, et votre cerveau IA se met au travail — concevoir des agents, connecter vos systèmes et régir chaque action. Sans carte bancaire.",
-    "ctaSeeLiveAgents": "Voir les agents en direct",
+    "ctaTitle": "Qu’allez-vous créer ?",
+    "ctaDesc": "Commencez par une demande et transformez-la avec votre équipe et des agents IA en un travail connecté, révisable et prêt à livrer. Sans carte bancaire.",
+    "ctaSeeLiveAgents": "Explorer le canevas",
     "faq": [
       {
         "question": "Qu'est-ce qu'Evermind ?",
@@ -5551,7 +5563,7 @@
       },
       {
         "question": "Qu'est-ce que Builderforce.ai ?",
-        "answer": "Builderforce.ai est la plateforme d'innovation pour l'ère agentique — un système de référence unique où chaque unité de travail, réalisée par un humain ou un agent IA, est instrumentée, chiffrée et attribuée, de l'idée à la livraison jusqu'à l'apprentissage. Vous planifiez, concevez, livrez et mesurez avec une seule main-d'œuvre d'humains et d'agents sur un tableau Kanban, vous entraînez vos propres agents dans le navigateur (génération de jeux de données, entraînement LoRA WebGPU, évaluation par IA et le Workforce Registry), vous vous connectez à vos systèmes et à vos données, et vous régissez chaque action par des rôles, des points d'approbation et une piste d'audit complète — le tout sans quitter VS Code."
+        "answer": "Builderforce.ai est un canevas créatif où les équipes et les agents IA transforment des idées en résultats utiles. Créez des sites, workflows, prototypes, récits de données, modèles, documents et plans de livraison dans un espace visuel, puis envoyez le travail approuvé vers une exécution gouvernée."
       },
       {
         "question": "Builderforce.ai est-il une plateforme d'entreprise ?",
@@ -5563,7 +5575,7 @@
       },
       {
         "question": "Dois-je quitter VS Code pour gérer mes agents ?",
-        "answer": "Non. L'extension BuilderForce pour VS Code intègre toute la plateforme dans votre éditeur : discutez avec les agents, attribuez et exécutez des tâches sur le tableau Kanban, examinez et validez leur travail, et approuvez les actions avec intervention humaine — le tout sans quitter VS Code."
+        "answer": "Non. Builderforce.ai est d’abord un canevas créatif sur le web. Les équipes d’ingénierie peuvent aussi utiliser l’extension VS Code pour rapprocher du code le contexte du dépôt, les diagnostics, le travail des agents, les révisions et les approbations."
       },
       {
         "question": "Builderforce dispose-t-il d'un tableau Kanban et d'une gestion de projet ?",
@@ -5663,6 +5675,8 @@
     "subtitleConsole": "Gérez votre abonnement et vos informations de facturation.",
     "loading": "Chargement de l'abonnement…",
     "errorLoad": "Échec du chargement de l'abonnement",
+    "errorPricingContract": "Les tarifs actuels n’ont pas pu être vérifiés ({reason}). Réessayez avant tout achat.",
+    "pricingUnavailable": "Les tarifs actuels sont indisponibles. Réessayez avant tout achat.",
     "anonBannerTitle": "Démarrez avec le forfait Free",
     "anonBannerDesc": "0 $/mois à vie — 1 AgentHost, 5 projets, entraînement LoRA WebGPU. Évoluez à tout moment.",
     "anonBannerCta": "Créer un compte gratuit",
@@ -5713,7 +5727,6 @@
     "managedAddon": "Module complémentaire : <b>AgentHost géré</b> — {price} $/mois par AgentHost hébergé. Nous exécutons votre instance BuilderForce Agents pour vous — sans Docker, sans DevOps.",
     "relatedHeading": "Avant de vous décider",
     "planFeatures": [
-      "Modèle auto-actualisant Evermind (sur l'appareil)",
       "1 AgentHost",
       "Jusqu'à 3 AgentHosts",
       "AgentHosts illimités",
@@ -5727,9 +5740,7 @@
       "Télémétrie complète + piste d'audit",
       "Rôles d'agent personnalisés",
       "Boîte de réception d'approbation partagée pour l'équipe",
-      "Contrôles de coûts par poste",
-      "Support prioritaire",
-      "Support communautaire"
+      "Contrôles de coûts par poste"
     ]
   },
   "product": {
@@ -5738,20 +5749,27 @@
       "description": "Découvrez tout ce que propose Builderforce.ai : entraînement LoRA WebGPU dans le navigateur, moteur d'évaluation d'IA, place de marché de compétences et de personas, orchestration de workflows, maillage de main-d'œuvre, et approbations + audit complets. Découvrez toute la plateforme avant de vous inscrire.",
       "ogTitle": "La plateforme Builderforce.ai — Créez, entraînez, orchestrez et gouvernez"
     },
-    "eyebrow": "La plateforme",
-    "title": "Tout ce dont votre main-d'œuvre IA a besoin, au même endroit",
-    "sub": "Builderforce.ai est votre AI CTO, CIO et responsable de la sécurité. Il crée et entraîne vos agents, les orchestre sur un maillage d'hôtes, et gouverne chaque action grâce aux approbations et à une piste d'audit. Voici la plateforme dans son ensemble — explorez chacune de ses parties avant de vous inscrire.",
+    "eyebrow": "Le canevas créatif",
+    "title": "Créez tout. Gardez tout connecté.",
+    "sub": "Réunissez idées, artefacts, collaborateurs et agents IA dans un espace visuel. Concevez librement, révisez ensemble et livrez le travail approuvé sans assembler une douzaine d’outils.",
     "statLabels": [
-      "Paramètres\ndans le navigateur",
-      "Génération\nde jeux de données",
-      "Accéléré\npar le matériel",
-      "Privé — s'exécute\ndans votre navigateur"
+      "Canevas créatif\nconnecté",
+      "Artefacts vivants\nmodifiables",
+      "Collaboration\nhumains + IA",
+      "Modifications\nrévisables"
     ],
     "exploreCta": "Explorer",
-    "ctaTitle": "Mettez votre main-d'œuvre IA au travail",
-    "ctaDesc": "Commencez gratuitement — aucune carte bancaire requise. Créez, entraînez et déployez votre premier agent en quelques minutes, entièrement dans votre navigateur.",
-    "ctaBrowseWorkforce": "Parcourir la main-d'œuvre",
+    "ctaTitle": "Commencez par ce que vous voulez créer",
+    "ctaDesc": "Ouvrez un canevas privé à partir d’une demande, puis invitez votre équipe lorsque vous êtes prêt à collaborer ou à livrer.",
+    "ctaBrowseWorkforce": "Explorer le canevas",
     "relatedHeading": "Aller plus loin",
+    "proofNote": "Les badges indiquent la maturité actuelle et le lieu d’exécution ou de traitement des données. Les services connectés exigent leurs propres identifiants et conditions.",
+    "limitationLabel": "Limite actuelle",
+    "disclosure": { "label": "Détails de la capacité", "owner": "Responsable", "prerequisites": "Prérequis", "limits": "Limite actuelle", "exports": "Exports et transferts", "verified": "Dernière vérification", "example": "Ouvrir la surface", "none": "Aucun" },
+    "workflowLimitations": ["Les destinations sont limitées aux artefacts et transferts nommés dans le canevas.", "L’approbation concerne les parcours reliés au résolveur de politiques.", "La fraîcheur des sources et les citations dépendent des systèmes connectés."],
+    "integrationMatrix": { "title": "Couverture des intégrations nommées", "lead": "Seuls les connecteurs avec statut, direction, authentification, limite, preuve et date de vérification sont affichés.", "integration": "Intégration", "status": "Statut", "direction": "Direction", "auth": "Authentification", "boundary": "Périmètre", "limits": "Limite", "verified": "Vérifié", "directions": { "import": "Import", "export": "Export", "two-way": "Bidirectionnel", "event-ingest": "Ingestion d’événements" }, "items": [{"auth":"Identifiant GitHub ou configuration d’application","limitation":"Dépôts, PR et webhooks dépendent des autorisations installées."},{"auth":"Identifiants du fournisseur","limitation":"Les correspondances doivent être configurées par espace."},{"auth":"Identifiants du fournisseur","limitation":"Le contenu reste soumis aux droits et à l’actualisation de la source."},{"auth":"Webhook ou identifiants","limitation":"Seuls les projets et champs configurés sont ingérés."},{"auth":"Configuration webhook","limitation":"Couverture limitée aux sources et correspondances configurées."}] },
+    "capabilityStatus": { "available": "Disponible", "beta": "Bêta", "planned": "Planifié" },
+    "dataBoundary": { "browser": "Navigateur", "workspace-cloud": "Cloud de l’espace", "connected-service": "Service connecté", "hybrid": "Hybride" },
     "sections": [
       {
         "id": "build",
@@ -5849,19 +5867,19 @@
       {
         "id": "govern",
         "title": "Gouverner & exploiter",
-        "blurb": "Approbations, sécurité et observabilité complète — votre responsable de la sécurité IA.",
+        "blurb": "Gardez des personnes responsables aux commandes grâce aux permissions, approbations, à la sécurité et à la visibilité opérationnelle.",
         "surfaces": [
           {
             "title": "Approbations",
-            "desc": "Des points de contrôle d'approbation avec intervention humaine sur chaque action sensible de vos agents."
+            "desc": "Approbation humaine sur les parcours d’exécution d’agents configurés ; si la résolution des politiques échoue, l’exécution est bloquée."
           },
           {
             "title": "Sécurité",
-            "desc": "Isolation par locataire et identifiants chiffrés en AES-256-GCM pour chaque intégration."
+            "desc": "Contrôles d’accès par espace et chiffrement AES-256-GCM des identifiants stockés pour les intégrations prises en charge."
           },
           {
             "title": "Observabilité",
-            "desc": "Télémétrie complète et piste d'audit de chaque action d'agent, jeton et appel d'outil."
+            "desc": "Télémétrie d’exécution, de jetons et d’appels d’outils pour les workflows instrumentés, avec une couverture indiquée par surface."
           },
           {
             "title": "Suivi de la qualité & des erreurs",
@@ -7453,7 +7471,12 @@
       "paid": "Payant",
       "builderforce": "Builderforce.ai",
       "routableOnly": "Routables uniquement",
-      "routableOnlyTitle": "Afficher uniquement les modèles routés par la cascade Free/Pro de Builderforce"
+      "routableOnlyTitle": "Afficher uniquement les modèles routés par la cascade Free/Pro de Builderforce",
+      "maxInput": "Entrée max. / 1 M",
+      "maxOutput": "Sortie max. / 1 M",
+      "anyPrice": "Tous les prix",
+      "upToPrice": "Jusqu’à ${price}",
+      "priceHelp": "Filtrer selon le prix du modèle en USD par million de jetons"
     },
     "price": {
       "free": "Gratuit",
@@ -7656,6 +7679,8 @@
     "buildSub": "Projets, agents et espace",
     "hireTitle": "Être recruté",
     "hireSub": "Profil freelance et missions",
+    "salesTitle": "Vendre Builderforce",
+    "salesSub": "Parrainages, pipeline et campagnes",
     "accountTypeAria": "Type de compte",
     "commonQuestions": "Questions fréquentes",
     "navSignIn": "Se connecter",
@@ -8028,6 +8053,7 @@
   "admin": {
     "sub": {
       "health": "État",
+      "outcomes": "Résultats de valeur",
       "directory": "Annuaire",
       "sessions": "Sessions",
       "creationSessions": "Sessions de création",
@@ -8052,6 +8078,7 @@
       "releaseNotes": "Nouveautés",
       "demoFunnel": "Entonnoir démo",
       "salesLeads": "Leads commerciaux",
+      "salesCommissions": "Commissions commerciales",
       "cron": "Tâches planifiées"
     },
     "common": {

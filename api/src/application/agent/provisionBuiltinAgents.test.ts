@@ -96,3 +96,15 @@ describe('Manager persona · seed ⇄ migration parity', () => {
     expect(sql).toContain('builtin_manager_digest for what finished today');
   });
 });
+
+describe('Compliance Audit persona · seed ⇄ migration parity', () => {
+  it('0403 backfills exactly the persona provisioned for new tenants', () => {
+    const migration = readFileSync(
+      fileURLToPath(new URL('../../../migrations/0403_builderforce_legal_v2_and_compliance_agent.sql', import.meta.url).href),
+      'utf8',
+    );
+    const bio = BUILTIN_AGENTS.find((a) => a.kind === 'compliance_auditor')?.bio ?? '';
+    expect(bio.length).toBeGreaterThan(100);
+    expect(migration).toContain(bio.replace(/'/g, "''"));
+  });
+});

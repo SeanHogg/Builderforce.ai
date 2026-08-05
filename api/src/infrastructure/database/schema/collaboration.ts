@@ -1130,6 +1130,36 @@ export const creationSessionEvents = pgTable('creation_session_events', {
   bySession: index('idx_creation_events_session_revision').on(t.sessionId, t.revision),
 }));
 
+/** Outcome telemetry is the value ledger for Creation Sessions. Unlike the
+ * low-level revision event stream, every row carries a correlation id and can
+ * roll up without exposing canvas content: session -> project -> tenant ->
+ * platform. A single user/agent action may emit started + terminal rows. */
+export const creationOutcomeEvents = pgTable('creation_outcome_events', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  correlationId:  varchar('correlation_id', { length: 128 }).notNull(),
+  sessionId:      uuid('session_id').notNull().references(() => creationSessions.id, { onDelete: 'cascade' }),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:      integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  actorType:      varchar('actor_type', { length: 16 }).notNull().default('user'),
+  actorRef:       varchar('actor_ref', { length: 128 }),
+  action:         varchar('action', { length: 64 }).notNull(),
+  phase:          varchar('phase', { length: 16 }).notNull(),
+  metricKey:      varchar('metric_key', { length: 80 }),
+  metricValue:    real('metric_value'),
+  unit:           varchar('unit', { length: 24 }),
+  artifactId:     varchar('artifact_id', { length: 128 }),
+  durationMs:     integer('duration_ms'),
+  costUsdMillicents: integer('cost_usd_millicents'),
+  metadata:       jsonb('metadata').notNull().default(sql`'{}'::jsonb`),
+  occurredAt:     timestamp('occurred_at').notNull().defaultNow(),
+}, (t) => ({
+  bySession: index('idx_creation_outcomes_session_time').on(t.sessionId, t.occurredAt),
+  byProject: index('idx_creation_outcomes_project_time').on(t.projectId, t.occurredAt),
+  byTenant: index('idx_creation_outcomes_tenant_time').on(t.tenantId, t.occurredAt),
+  byCorrelation: index('idx_creation_outcomes_correlation').on(t.sessionId, t.correlationId),
+  correlationPhase: uniqueIndex('uq_creation_outcomes_correlation_phase').on(t.sessionId, t.correlationId, t.action, t.phase),
+}));
+
 export const creationSessionComments = pgTable('creation_session_comments', {
   id:              uuid('id').primaryKey().defaultRandom(),
   sessionId:       uuid('session_id').notNull().references(() => creationSessions.id, { onDelete: 'cascade' }),

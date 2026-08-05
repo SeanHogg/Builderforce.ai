@@ -112,6 +112,7 @@ describe('createCheckoutSession — discount', () => {
         durationYears: 1,
         redemptionId: 'redemption-1',
       },
+      salesReferralId: 'referral-1',
     });
 
     expect(fetch).toHaveBeenCalledTimes(2);
@@ -126,6 +127,8 @@ describe('createCheckoutSession — discount', () => {
     expect(checkout.get('discounts[0][coupon]')).toBe('bf_11111111222233334444555555555555_50_12');
     expect(checkout.get('metadata[discountRedemptionId]')).toBe('redemption-1');
     expect(checkout.get('subscription_data[metadata][discountCode]')).toBe('ANNUAL50');
+    expect(checkout.get('metadata[salesReferralId]')).toBe('referral-1');
+    expect(checkout.get('subscription_data[metadata][salesReferralId]')).toBe('referral-1');
   });
 });
 
@@ -260,7 +263,7 @@ describe('checkout.session.completed', () => {
         customer: 'cus_123',
         subscription: 'sub_123',
         customer_email: 'billing@example.com',
-        metadata: { tenantId: '7', billingCycle: 'yearly', targetPlan: 'teams', seats: '5', discountRedemptionId: 'redemption-1' },
+        metadata: { tenantId: '7', billingCycle: 'yearly', targetPlan: 'teams', seats: '5', discountRedemptionId: 'redemption-1', salesReferralId: 'referral-1' },
       },
     },
   });
@@ -311,6 +314,7 @@ describe('checkout.session.completed', () => {
       seats: 5,
       billingEmail: 'billing@example.com',
       discountRedemptionId: 'redemption-1',
+      salesReferralId: 'referral-1',
     });
   });
 
