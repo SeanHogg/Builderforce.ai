@@ -439,6 +439,10 @@ export interface Env {
    *  Set via: wrangler secret put RESEND_API_KEY */
   RESEND_API_KEY?: string;
 
+  /** Static SendPulse API key used only when Resend exhausts its daily/monthly quota.
+   *  Set via: wrangler secret put SENDPULSE_API_KEY */
+  SENDPULSE_API_KEY?: string;
+
   /** From address for notification emails, e.g. "Builderforce <notifications@builderforce.ai>" */
   NOTIFICATION_EMAIL_FROM?: string;
 
