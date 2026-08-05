@@ -51,6 +51,7 @@ import { sanitizePsychometricProfile } from '../../application/persona/psychomet
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
 import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 
 /** Parse a stored psychometric JSON column into an object (null when unset/invalid). */
 function parsePsychometric(raw: string | null | undefined): unknown {
@@ -844,7 +845,11 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       await issueVerificationCode(db, c.env, created, { force: true, anonId, headers: headerHints(c.req) });
     } catch (error) {
       emailDeliveryFailed = true;
-      console.error('[auth:register] verification email delivery failed', error);
+      reportCaughtError(error, {
+        source: 'presentation/routes/authRoutes.ts',
+        operation: 'registerVerificationEmail',
+        context: { userId: created.id },
+      });
     }
 
     return c.json({
@@ -972,7 +977,11 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         try {
           res = await issueVerificationCode(db, c.env, user, { headers: headerHints(c.req) });
         } catch (error) {
-          console.error('[auth:resend] verification email delivery failed', error);
+          reportCaughtError(error, {
+            source: 'presentation/routes/authRoutes.ts',
+            operation: 'resendVerificationEmail',
+            context: { userId: user.id },
+          });
           return c.json({ ok: false, error: 'Verification email could not be sent. Please try again.' }, 503);
         }
         if (!res.sent && res.cooldownSeconds) {
@@ -1018,7 +1027,11 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
         await issueVerificationCode(db, c.env, user, { headers: headerHints(c.req) });
       } catch (error) {
         emailDeliveryFailed = true;
-        console.error('[auth:login] verification email delivery failed', error);
+        reportCaughtError(error, {
+          source: 'presentation/routes/authRoutes.ts',
+          operation: 'loginVerificationEmail',
+          context: { userId: user.id },
+        });
       }
       return c.json({ verificationRequired: true, email: user.email, emailDeliveryFailed }, 403);
     }

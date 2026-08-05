@@ -36,6 +36,7 @@ import {
   resolveEmailLocale,
   type LocaleHeaderHints,
 } from './emailLocaleResolver';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 /** What a template is handed once the locale (and consent) are settled. */
 export interface TransactionalSendContext {
@@ -78,7 +79,11 @@ async function recordDeliveryFailure(
   } catch (ledgerError) {
     // Delivery remains the primary failure. A ledger outage must not replace its
     // useful provider error or make callers believe the message was sent.
-    console.error('[email] failed to persist delivery failure', ledgerError);
+    reportCaughtError(ledgerError, {
+      source: 'application/email/sendEmail.ts',
+      operation: 'recordDeliveryFailure',
+      context: { provider: providerError?.provider ?? 'resend', deliveryType },
+    });
   }
 }
 
