@@ -72,6 +72,7 @@ export const ADMIN_GROUP_META: AdminGroupMeta[] = [
   ] },
   { id: 'logs', labelKey: 'tab.adminLogs', icon: '📋', subs: [
     { id: '', subKey: 'errors', icon: '🐞' },
+    { id: 'email-deliveries', subKey: 'emailDeliveries', icon: '✉️' },
     { id: 'audit', subKey: 'audit', icon: '📋' },
     { id: 'feedback', subKey: 'feedback', icon: '💬' },
   ] },

@@ -1,2 +1,30 @@
-import { CompliancePage } from '@/components/legal/CompliancePage';
-export default function Page(){return <CompliancePage title="Cookie Policy"><h2>Default choices</h2><p>Necessary local storage and cookies support authentication, security, language, theme, and saved work. Optional analytics is off until you opt in. BuilderForce does not use targeted-advertising cookies and does not sell or share personal information for cross-context behavioral advertising.</p><h2>Global Privacy Control</h2><p>When your browser sends Global Privacy Control, BuilderForce treats it as an opt-out and disables optional analytics and marketing choices. You can reopen Cookie preferences in the footer at any time.</p><h2>Current analytics provider</h2><p>Google Tag Manager is loaded only after affirmative analytics consent. Consent withdrawal prevents future loading; browser storage can be cleared to remove the saved choice.</p></CompliancePage>}
+import { CompliancePage, LegalCallout, LegalChecklist, LegalSection } from '@/components/legal/CompliancePage';
+
+export default function Page() {
+  return (
+    <CompliancePage title="Cookie policy" currentHref="/legal/cookies">
+      <LegalCallout label="Privacy-protective defaults">
+        Optional analytics stays off until you opt in. BuilderForce does not use targeted-advertising cookies or sell personal information.
+      </LegalCallout>
+
+      <LegalSection title="Default choices">
+        <p>Necessary local storage and cookies support the features required to operate and remember your experience.</p>
+        <LegalChecklist items={[
+          'Authentication and security',
+          'Language preferences',
+          'Theme preferences',
+          'Saved work',
+        ]} />
+        <p>BuilderForce does not sell or share personal information for cross-context behavioral advertising.</p>
+      </LegalSection>
+
+      <LegalSection title="Global Privacy Control">
+        <p>When your browser sends Global Privacy Control, BuilderForce treats it as an opt-out and disables optional analytics and marketing choices. You can reopen Cookie preferences in the footer at any time.</p>
+      </LegalSection>
+
+      <LegalSection title="Current analytics provider">
+        <p>Google Tag Manager is loaded only after affirmative analytics consent. Consent withdrawal prevents future loading; browser storage can be cleared to remove the saved choice.</p>
+      </LegalSection>
+    </CompliancePage>
+  );
+}

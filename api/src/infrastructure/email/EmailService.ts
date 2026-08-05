@@ -32,6 +32,18 @@ interface EmailProvider {
   send(message: EmailMessage): Promise<void>;
 }
 
+/** Safe provider failure metadata persisted for SuperAdmin diagnostics. */
+export class EmailDeliveryError extends Error {
+  constructor(
+    message: string,
+    readonly provider: 'resend',
+    readonly status: number | null,
+  ) {
+    super(message);
+    this.name = 'EmailDeliveryError';
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Resend provider
 // ---------------------------------------------------------------------------
@@ -60,7 +72,14 @@ class ResendEmailProvider implements EmailProvider {
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       console.error(`[email:resend] error: ${body}`);
-      throw new Error(`Resend rejected email delivery with status ${res.status}`);
+      // Resend's response is useful operational evidence, but cap it so an
+      // upstream proxy can never make the failure ledger unbounded.
+      const detail = body.trim().slice(0, 1_500);
+      throw new EmailDeliveryError(
+        `Resend rejected email delivery with status ${res.status}${detail ? `: ${detail}` : ''}`,
+        'resend',
+        res.status,
+      );
     }
   }
 }
@@ -205,10 +224,17 @@ async function deliver(
     copy: EmailCopy;
     vars?: Record<string, string>;
     unsubscribeUrl?: string;
+    /** Account-critical messages cannot silently no-op when the key is absent. */
+    requireProvider?: boolean;
   },
 ): Promise<void> {
   const provider = getEmailProvider(env);
-  if (!provider) return;
+  if (!provider) {
+    if (args.requireProvider) {
+      throw new EmailDeliveryError('RESEND_API_KEY is not configured', 'resend', null);
+    }
+    return;
+  }
 
   const html = render(HEADER + args.body + footer(args.copy, args.unsubscribeUrl), {
     Subject: args.subject,
@@ -293,6 +319,7 @@ export async function sendVerificationCodeEmail(
     locale,
     copy,
     vars: { RecipientName: name || to, Code: code },
+    requireProvider: true,
   });
 }
 

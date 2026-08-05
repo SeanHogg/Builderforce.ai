@@ -39,6 +39,8 @@ describe('classifyShell — app-shell deny-list model [1557]', () => {
     expect(classifyShell('/integrations/github')).toBe('public');
     // Media kit (downloadable sales deck) must be reachable logged-out.
     expect(classifyShell('/media')).toBe('public');
+    // Sales-associate enrollment is a public marketing surface, not an app gate.
+    expect(classifyShell('/sell-builderforce')).toBe('public');
     // Guided demo deck (the 5-scenario walkthrough) is a public marketing route.
     expect(classifyShell('/demo')).toBe('public');
   });

@@ -582,7 +582,13 @@ export default function LandingPage() {
 
         @media (max-width: 640px) {
           .lp-cta-box { padding: 40px 24px; }
-          .lp-hero { padding: 28px 20px 48px; }
+          /* Keep the artwork's canvas in place, but start the copy immediately
+             below the mobile header instead of vertically centering it. */
+          .lp-hero {
+            justify-content: flex-start;
+            padding: 18px 20px 48px;
+          }
+          .lp-badge { margin-bottom: 18px; }
         }
       `}</style>
 

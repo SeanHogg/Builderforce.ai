@@ -17,12 +17,16 @@ import AccountTypeChooser from '@/components/account/AccountTypeChooser';
 import EmailVerificationStep from '@/components/account/EmailVerificationStep';
 import { safeRedirectPath } from '@/lib/safeRedirect';
 import { getRetainedDiscountCode, retainDiscountCode } from '@/lib/discountCode';
+import { useLegalDocs } from '@/components/legal/useLegalDocs';
+import LegalDocModal, { type LegalModalType } from '@/components/legal/LegalDocModal';
 
 export default function RegisterPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const tr = useTranslations('register');
   const { register, isAuthenticated } = useAuth();
+  const { legal } = useLegalDocs();
+  const [legalModalType, setLegalModalType] = useState<LegalModalType | null>(null);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -266,7 +270,36 @@ export default function RegisterPageClient() {
                   onChange={e => setAgreeToTerms(e.target.checked)}
                   style={{ marginTop: 3, accentColor: 'var(--coral-bright)' }}
                 />
-                <span>{tr('terms')}</span>
+                <span>
+                  {tr.rich('terms', {
+                    terms: chunks => (
+                      <a
+                        href="#terms-of-use"
+                        onClick={event => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setLegalModalType('terms');
+                        }}
+                        style={{ color: 'inherit', textDecoration: 'underline' }}
+                      >
+                        {chunks}
+                      </a>
+                    ),
+                    privacy: chunks => (
+                      <a
+                        href="#privacy-policy"
+                        onClick={event => {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          setLegalModalType('privacy');
+                        }}
+                        style={{ color: 'inherit', textDecoration: 'underline' }}
+                      >
+                        {chunks}
+                      </a>
+                    ),
+                  })}
+                </span>
               </label>
 
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
@@ -312,6 +345,8 @@ export default function RegisterPageClient() {
           </p>
         </div>
         </div>
+
+        <LegalDocModal type={legalModalType} legal={legal} onClose={() => setLegalModalType(null)} />
 
         {/* RIGHT PANEL — marketing banner (hidden on mobile via CSS) */}
         <aside className="auth-marketing-panel" style={{

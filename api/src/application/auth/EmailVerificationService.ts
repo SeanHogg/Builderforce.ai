@@ -75,30 +75,43 @@ export async function issueVerificationCode(
 
   const code = generateVerificationCode();
   const codeHash = await hashSecret(code);
-  await db.insert(emailVerificationCodes).values({
+  const [inserted] = await db.insert(emailVerificationCodes).values({
     userId: user.id,
     email: user.email,
     codeHash,
     expiresAt: new Date(Date.now() + CODE_TTL_MS),
-  });
+  }).returning({ id: emailVerificationCodes.id });
 
   // TRANSACTIONAL — the user just asked for this code; there is nothing to opt out
   // of. Goes through the shared seam purely so the locale is resolved the same way
   // every other send resolves it.
-  await sendTransactionalEmail(
-    env,
-    db,
-    user.email,
-    ({ locale }) => sendVerificationCodeEmail(
+  try {
+    await sendTransactionalEmail(
       env,
+      db,
       user.email,
-      user.displayName ?? user.username ?? user.email,
-      code,
-      opts.anonId,
-      locale,
-    ),
-    { storedLocale: user.locale, headers: opts.headers },
-  );
+      ({ locale }) => sendVerificationCodeEmail(
+        env,
+        user.email,
+        user.displayName ?? user.username ?? user.email,
+        code,
+        opts.anonId,
+        locale,
+      ),
+      { storedLocale: user.locale, headers: opts.headers, deliveryType: 'verification_code' },
+    );
+  } catch (error) {
+    // Do not make a provider rejection consume the one-minute resend window.
+    // Only retire the row created by this attempt; an unrelated newer request is
+    // left untouched.
+    if (inserted) {
+      await db
+        .update(emailVerificationCodes)
+        .set({ consumedAt: new Date() })
+        .where(eq(emailVerificationCodes.id, inserted.id));
+    }
+    throw error;
+  }
   return { sent: true };
 }
 

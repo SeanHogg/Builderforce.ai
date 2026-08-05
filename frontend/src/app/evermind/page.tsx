@@ -82,6 +82,16 @@ export default async function EvermindPage() {
         }
         .ev-btn-secondary:hover { border-color: var(--border-accent); transform: translateY(-3px); }
 
+        @media (max-width: 640px) {
+          /* Match the homepage: leave the brain scene anchored to the hero,
+             while removing the mobile gap above the badge and copy. */
+          .ev-hero {
+            justify-content: flex-start;
+            padding: 18px 20px 48px;
+          }
+          .ev-eyebrow { margin-bottom: 18px; }
+        }
+
         .ev-section { max-width: 1100px; margin: 0 auto; padding: 0 24px 64px; width: 100%; }
         .ev-h2 { font-family: var(--font-display); font-weight: 700; font-size: clamp(1.5rem, 3.4vw, 2rem); color: var(--text-primary); margin: 0 0 10px; }
         .ev-h2 .ev-accent { color: var(--coral-bright); margin-right: 8px; }

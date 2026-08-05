@@ -22,6 +22,8 @@
  */
 
 import type { Db } from '../../infrastructure/database/connection';
+import { emailDeliveryFailures } from '../../infrastructure/database/schema';
+import { EmailDeliveryError } from '../../infrastructure/email/EmailService';
 import type { Env } from '../../env';
 import type { EmailLocale } from '../../infrastructure/email/emailLocale';
 import { signState, verifyState } from '../../infrastructure/auth/oauthState';
@@ -53,6 +55,31 @@ export interface SendOptions {
   headers?: LocaleHeaderHints;
   /** An already-loaded `users.locale`, to skip the lookup. */
   storedLocale?: string | null;
+  /** Stable template/purpose label shown in the SuperAdmin delivery ledger. */
+  deliveryType?: string;
+}
+
+async function recordDeliveryFailure(
+  db: Db,
+  to: string,
+  deliveryType: string,
+  error: unknown,
+): Promise<void> {
+  const providerError = error instanceof EmailDeliveryError ? error : null;
+  const message = error instanceof Error ? error.message : String(error);
+  try {
+    await db.insert(emailDeliveryFailures).values({
+      recipient: normalizeEmailKey(to).slice(0, 255),
+      deliveryType: deliveryType.slice(0, 64),
+      provider: providerError?.provider ?? 'resend',
+      providerStatus: providerError?.status ?? null,
+      errorMessage: message.slice(0, 2_000),
+    });
+  } catch (ledgerError) {
+    // Delivery remains the primary failure. A ledger outage must not replace its
+    // useful provider error or make callers believe the message was sent.
+    console.error('[email] failed to persist delivery failure', ledgerError);
+  }
 }
 
 /**
@@ -71,7 +98,12 @@ export async function sendTransactionalEmail(
     stored: opts?.storedLocale,
     headers: opts?.headers,
   });
-  await send({ locale });
+  try {
+    await send({ locale });
+  } catch (error) {
+    await recordDeliveryFailure(db, to, opts?.deliveryType ?? 'transactional', error);
+    throw error;
+  }
 }
 
 /**
@@ -94,7 +126,12 @@ export async function sendLifecycleEmail(
     buildUnsubscribeUrl(env, to),
   ]);
 
-  await send({ locale, unsubscribeUrl });
+  try {
+    await send({ locale, unsubscribeUrl });
+  } catch (error) {
+    await recordDeliveryFailure(db, to, opts?.deliveryType ?? `lifecycle:${category}`, error);
+    throw error;
+  }
   return 'sent';
 }
 

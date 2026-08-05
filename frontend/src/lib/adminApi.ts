@@ -390,6 +390,31 @@ export interface AdminErrorPage {
   sources: string[];
 }
 
+export interface AdminEmailDeliveryFailure {
+  id: number;
+  recipient: string;
+  deliveryType: string;
+  provider: string;
+  providerStatus: number | null;
+  errorMessage: string;
+  createdAt: string;
+}
+
+export interface AdminEmailDeliveryFailurePage {
+  failures: AdminEmailDeliveryFailure[];
+  total: number;
+  returned: number;
+  offset: number;
+  hasMore: boolean;
+  summary: {
+    total: number;
+    last24Hours: number;
+    affectedRecipients: number;
+    latestAt: string | null;
+  };
+  deliveryTypes: string[];
+}
+
 /** One row in the superadmin LLM trace list (summary columns only). */
 export interface AdminLlmTraceSummary {
   traceId: string;
@@ -1045,6 +1070,16 @@ export const adminApi = {
   async errorDetail(id: number): Promise<AdminError> {
     const res = await adminRequest<{ error: AdminError }>(`/api/admin/errors/${id}`);
     return res.error;
+  },
+
+  /** Provider-rejected outbound mail, newest first. */
+  async emailDeliveryFailures(params: { q?: string; deliveryType?: string; limit?: number; offset?: number } = {}): Promise<AdminEmailDeliveryFailurePage> {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined && value !== '') query.set(key, String(value));
+    }
+    const suffix = query.toString();
+    return adminRequest<AdminEmailDeliveryFailurePage>(`/api/admin/email-delivery-failures${suffix ? `?${suffix}` : ''}`);
   },
 
   /** Platform-wide historical trends (growth / LLM usage / errors) for the

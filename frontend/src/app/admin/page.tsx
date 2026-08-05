@@ -35,6 +35,7 @@ import ErrorsPanel from '@/components/admin/panels/ErrorsPanel';
 import TokenPanel from '@/components/admin/panels/TokenPanel';
 import FeedbackPanel from '@/components/admin/panels/FeedbackPanel';
 import OutcomeMetricsPanel from '@/components/admin/panels/OutcomeMetricsPanel';
+import EmailDeliveriesPanel from '@/components/admin/panels/EmailDeliveriesPanel';
 
 /**
  * Platform Admin shell — a THIN router.
@@ -73,6 +74,7 @@ const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
   salesLeads: SalesLeadsPanel,
   salesCommissions: SalesCommissionsPanel,
   errors: ErrorsPanel,
+  emailDeliveries: EmailDeliveriesPanel,
   audit: AuditLogPanel,
   apiKeys: () => <TenantApiKeysAdminTab active />,
   token: TokenPanel,

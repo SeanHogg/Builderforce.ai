@@ -1,2 +1,72 @@
 import { CompliancePage } from '@/components/legal/CompliancePage';
-export default function Page(){return <CompliancePage title="Subprocessor List"><p>Providers are used only when the corresponding feature is enabled. Customers receive notice of material additions through this page and may object by contacting privacy@builderforce.ai.</p><table><thead><tr><th>Provider category</th><th>Purpose</th><th>Data / location safeguards</th></tr></thead><tbody><tr><td>Cloudflare</td><td>Hosting, edge security, storage</td><td>Account, content, telemetry; DPA and transfer safeguards</td></tr><tr><td>PostgreSQL hosting provider</td><td>Application database</td><td>Account and workspace data; configured region, encryption</td></tr><tr><td>OpenAI / customer-selected AI providers</td><td>Model inference</td><td>Prompt/content needed for the request; API/business terms, training disabled where contractually available</td></tr><tr><td>Resend or configured mail provider</td><td>Transactional email</td><td>Email address and message delivery metadata</td></tr><tr><td>Stripe</td><td>Payments</td><td>Billing identifiers; card data handled by Stripe</td></tr><tr><td>Google Tag Manager</td><td>Optional analytics tag delivery</td><td>Loads only after opt-in; GPC disables</td></tr></tbody></table><p>Exact provider selection and region can vary by customer configuration. A tenant-specific list is available on request.</p></CompliancePage>}
+import styles from './page.module.css';
+
+const providers = [
+  {
+    provider: 'Cloudflare',
+    purpose: 'Hosting, edge security, and storage',
+    safeguards: 'Account data, content, and telemetry; protected by a DPA and transfer safeguards.',
+  },
+  {
+    provider: 'PostgreSQL hosting provider',
+    purpose: 'Application database',
+    safeguards: 'Account and workspace data; configured region and encryption controls.',
+  },
+  {
+    provider: 'OpenAI or customer-selected AI providers',
+    purpose: 'Model inference',
+    safeguards: 'Prompt and content required for the request; API or business terms, with training disabled where contractually available.',
+  },
+  {
+    provider: 'Resend or configured mail provider',
+    purpose: 'Transactional email',
+    safeguards: 'Email address and message-delivery metadata.',
+  },
+  {
+    provider: 'Stripe',
+    purpose: 'Payments',
+    safeguards: 'Billing identifiers; payment-card data is handled directly by Stripe.',
+  },
+  {
+    provider: 'Google Tag Manager',
+    purpose: 'Optional analytics tag delivery',
+    safeguards: 'Loads only after opt-in; Global Privacy Control disables optional analytics.',
+  },
+];
+
+export default function Page() {
+  return (
+    <CompliancePage title="Subprocessor list" currentHref="/legal/subprocessors">
+      <p className={styles.intro}>
+        Providers are used only when the corresponding feature is enabled. Customers receive notice of material additions through this page and may object by contacting <a href="mailto:privacy@builderforce.ai">privacy@builderforce.ai</a>.
+      </p>
+
+      <div className={styles.tableShell}>
+        <table className={styles.table}>
+          <caption className={styles.caption}>BuilderForce service providers and their data safeguards</caption>
+          <thead>
+            <tr>
+              <th scope="col">Provider</th>
+              <th scope="col">Purpose</th>
+              <th scope="col">Data and safeguards</th>
+            </tr>
+          </thead>
+          <tbody>
+            {providers.map((row) => (
+              <tr key={row.provider}>
+                <td data-label="Provider"><strong>{row.provider}</strong></td>
+                <td data-label="Purpose">{row.purpose}</td>
+                <td data-label="Data and safeguards">{row.safeguards}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <aside className={styles.note}>
+        <span aria-hidden="true">i</span>
+        <p>Exact provider selection and region can vary by customer configuration. A tenant-specific list is available on request.</p>
+      </aside>
+    </CompliancePage>
+  );
+}

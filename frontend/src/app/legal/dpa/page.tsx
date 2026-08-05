@@ -1,2 +1,32 @@
-import { CompliancePage } from '@/components/legal/CompliancePage';
-export default function Page(){return <CompliancePage title="Customer Data Processing Addendum"><p>This DPA forms part of the customer agreement when Fix Faster LLC processes Customer Personal Data on the customer’s behalf.</p><h2>Processing</h2><p>BuilderForce processes data only on documented instructions to provide, secure, support, and improve the service; imposes confidentiality; applies appropriate technical and organizational measures; assists with data-subject requests, impact assessments, and incidents; deletes or returns data at termination subject to lawful retention and isolated backup expiry; and provides audit information.</p><h2>Subprocessors and transfers</h2><p>BuilderForce remains responsible for subprocessor obligations, publishes its list, gives notice of material changes, and uses applicable Standard Contractual Clauses, the UK Addendum, or another lawful transfer mechanism where required.</p><h2>Instructions and execution</h2><p>The agreement and customer configuration are the documented instructions. Contact privacy@builderforce.ai to execute this DPA or obtain SCC modules and security exhibits applicable to your deployment.</p></CompliancePage>}
+import { CompliancePage, LegalCallout, LegalChecklist, LegalSection } from '@/components/legal/CompliancePage';
+
+export default function Page() {
+  return (
+    <CompliancePage title="Customer data processing addendum" currentHref="/legal/dpa">
+      <LegalCallout label="When this DPA applies">
+        This DPA forms part of the customer agreement when Fix Faster LLC processes Customer Personal Data on the customer&apos;s behalf.
+      </LegalCallout>
+
+      <LegalSection title="Processing commitments">
+        <p>BuilderForce processes data only on documented instructions to provide, secure, support, and improve the service.</p>
+        <LegalChecklist items={[
+          'Confidentiality obligations',
+          'Technical and organizational safeguards',
+          'Assistance with data-subject requests',
+          'Impact-assessment and incident assistance',
+          'Deletion or return at termination',
+          'Audit information',
+        ]} />
+        <p>Lawful retention and isolated backup-expiry requirements continue to apply.</p>
+      </LegalSection>
+
+      <LegalSection title="Subprocessors and transfers">
+        <p>BuilderForce remains responsible for subprocessor obligations, publishes its list, gives notice of material changes, and uses applicable Standard Contractual Clauses, the UK Addendum, or another lawful transfer mechanism where required.</p>
+      </LegalSection>
+
+      <LegalSection title="Instructions and execution">
+        <p>The agreement and customer configuration are the documented instructions. Contact <a href="mailto:privacy@builderforce.ai">privacy@builderforce.ai</a> to execute this DPA or obtain SCC modules and security exhibits applicable to your deployment.</p>
+      </LegalSection>
+    </CompliancePage>
+  );
+}

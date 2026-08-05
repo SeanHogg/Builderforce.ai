@@ -34,6 +34,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE}/marketplace`, lastModified: now, changeFrequency: 'daily', priority: 0.7 },
     { url: `${BASE}/prompts`, lastModified: now, changeFrequency: 'daily', priority: 0.6 },
     { url: `${BASE}/media`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
+    { url: `${BASE}/sell-builderforce`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${BASE}/tools`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${BASE}/tools/agentic-maturity`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
     { url: `${BASE}/tools/ai-dev-maturity`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },

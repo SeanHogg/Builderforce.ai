@@ -1,0 +1,83 @@
+.lead {
+  max-width: 750px;
+  color: var(--text-secondary);
+  font-size: clamp(1rem, 2vw, 1.12rem);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 32px 0;
+}
+
+.card {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  min-height: 104px;
+  padding: 18px;
+  color: inherit;
+  background: color-mix(in srgb, var(--surface-card-strong) 94%, transparent);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  text-decoration: none;
+  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.card:hover {
+  background: color-mix(in srgb, var(--surface-card-strong) 88%, var(--coral-bright));
+  border-color: var(--border-accent);
+  transform: translateY(-2px);
+}
+
+.icon {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  color: var(--cyan-bright);
+  background: var(--surface-cyan-soft);
+  border: 1px solid color-mix(in srgb, var(--cyan-bright) 24%, transparent);
+  border-radius: 10px;
+  font-size: 1rem;
+}
+
+.cardCopy { display: grid; gap: 4px; }
+.cardCopy strong { color: var(--text-primary); font-size: 0.9rem; line-height: 1.35; }
+.cardCopy > span { color: var(--text-secondary); font-size: 0.75rem; line-height: 1.5; }
+.arrow { color: var(--text-muted); transition: color 160ms ease, transform 160ms ease; }
+.card:hover .arrow { color: var(--coral-bright); transform: translateX(3px); }
+
+.assurance {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-top: 36px;
+  padding: 20px;
+  background: var(--surface-cyan-soft);
+  border: 1px solid color-mix(in srgb, var(--cyan-bright) 22%, var(--border-subtle));
+  border-radius: 14px;
+}
+
+.assurance p { margin: 0; font-size: 0.86rem; line-height: 1.65; }
+.assurance strong { color: var(--text-primary); }
+.pulse {
+  flex: 0 0 9px;
+  width: 9px;
+  height: 9px;
+  margin-top: 7px;
+  background: var(--cyan-bright);
+  border-radius: 50%;
+  box-shadow: 0 0 12px var(--cyan-glow);
+}
+
+@media (max-width: 700px) {
+  .grid { grid-template-columns: 1fr; gap: 10px; }
+  .card { min-height: 92px; padding: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card, .arrow { transition: none; }
+}

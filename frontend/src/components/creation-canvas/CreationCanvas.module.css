@@ -446,12 +446,22 @@
   .undoRedoGroup { display:none; }
   .saved,.secondaryButton { display:none; }
   .sessionBar { height:50px; gap:7px; padding:0 8px; }.sessionActions { flex:none; gap:5px; }.titleBlock { flex:1; gap:3px; min-width:0; }.titleBlock input { width:100%; min-width:0; padding-inline:5px; font-size:13px; }.spark,.collaborators { display:none; }
-  .flowWrap { height:calc(100% - 50px); }
+  .flowWrap {
+    --mobile-composer-space: 190px;
+    height:calc(100% - 50px);
+  }
+  /* The composer is a dock on phones, so the interactive viewport must end
+     above it. Nodes and React Flow controls can no longer settle underneath
+     the prompt. */
+  .flowWrap :global(.react-flow) { height:calc(100% - var(--mobile-composer-space)); }
+  .node { max-width:calc(100vw - 32px); }
   .mobileAction { display:inline-flex; min-width:36px; min-height:36px; align-items:center; justify-content:center; padding:7px 8px; }.mobileAction span { display:none; }.primaryButton { min-height:36px; padding:7px 10px; font-size:10px; }.saveButtonFull { display:none; }.saveButtonShort { display:inline; }
   .moreMenu { top:44px; right:0; width:min(280px,calc(100vw - 16px)); }
   .shareMenu { top:44px; right:0; width:min(300px,calc(100vw - 16px)); box-sizing:border-box; }
-  .palette { top:8px; right:8px; bottom:8px; left:44px; width:auto; max-height:none; }
-  .inspector { left:8px; right:8px; top:auto; bottom:82px; width:auto; height:48%; }
+  .palette { top:8px; right:8px; bottom:calc(var(--mobile-composer-space) + 8px); left:44px; width:auto; max-height:none; }
+  .templateMenu { top:8px; right:8px; left:8px; width:auto; max-height:calc(100% - var(--mobile-composer-space) - 16px); box-sizing:border-box; }
+  .mergePanel { inset:8px 8px calc(var(--mobile-composer-space) + 8px); width:auto; box-sizing:border-box; }
+  .inspector { left:8px; right:8px; top:8px; bottom:calc(var(--mobile-composer-space) + 8px); width:auto; height:auto; }
   .inspectorResizeHandle,.inspectorHeaderActions button:first-child { display:none; }
   .composer { box-sizing:border-box; width:calc(100% - 20px); min-width:0; bottom:8px; padding:8px 9px; }
   .composer textarea { padding-bottom:7px; font-size:11px; }
@@ -460,10 +470,10 @@
   .memoryButton { width:29px; height:29px; flex:none; justify-content:center; padding:0; }
   .composerActionLabel { display:none; }
   .flowWrap :global(.react-flow__minimap),.minimapClose { display:none; }
-  .flowWrap :global(.react-flow__controls) { bottom:102px!important; left:10px!important; }
-  .structuredGraph { right:10px; bottom:100px; left:54px; width:auto; max-height:min(36%,260px); box-sizing:border-box; }
-  .historyPanel,.diagnosticsPanel { top:8px; right:8px; bottom:82px; left:8px; width:auto; }
-  .changeSetPanel { top:8px; right:8px; bottom:82px; left:8px; width:auto; max-height:none; display:flex; flex-direction:column; }
+  .flowWrap :global(.react-flow__controls) { bottom:10px!important; left:10px!important; }
+  .structuredGraph { z-index:8; right:10px; bottom:calc(var(--mobile-composer-space) + 8px); left:54px; width:auto; max-height:min(36%,260px); box-sizing:border-box; }
+  .historyPanel,.diagnosticsPanel { top:8px; right:8px; bottom:calc(var(--mobile-composer-space) + 8px); left:8px; width:auto; }
+  .changeSetPanel { top:8px; right:8px; bottom:calc(var(--mobile-composer-space) + 8px); left:8px; width:auto; max-height:none; display:flex; flex-direction:column; }
   .changeSetPanel > div { flex:1; min-height:0; max-height:none; }
   .selectionToolbar { right:8px; left:8px; max-width:none; transform:none; overflow-x:auto; justify-content:flex-start; }
   .collaborators span:nth-child(2),.collaborators span:nth-child(3) { display:none; }

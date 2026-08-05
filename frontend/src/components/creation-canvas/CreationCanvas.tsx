@@ -600,7 +600,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const handle = window.setTimeout(() => {
       if (!flowRef.current) return;
       mobileViewportFitted.current = true;
-      void flowRef.current.fitView({ padding: 0.18, maxZoom: 0.72, duration: 280 });
+      // A full desktop graph can otherwise shrink to an illegible thumbnail on
+      // a phone. Keep objects readable and let the user pan to off-screen work.
+      void flowRef.current.fitView({ padding: 0.18, minZoom: 0.62, maxZoom: 0.82, duration: 280 });
     }, 80);
     return () => window.clearTimeout(handle);
   }, [loadingSession, nodes]);
@@ -2121,7 +2123,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const brainId = nodes.find((node) => node.data.kind === 'chat')?.id;
       const focusIds = [brainId, ...materializedAdditions.map((change) => change.node.id)].filter((id): id is string => !!id);
       window.setTimeout(() => {
-        void flowRef.current?.fitView({ nodes: focusIds.map((id) => ({ id })), padding: .18, duration: 350 });
+        void flowRef.current?.fitView({ nodes: focusIds.map((id) => ({ id })), padding: .18, minZoom: .62, maxZoom: .9, duration: 350 });
       }, 0);
     }
     if (actions.length) setPendingBrainActions((current) => [...current, ...actions.filter((change) => !deletedObjectIds.has(change.objectId)).map(({ objectId, action }) => ({ objectId, action }))]);

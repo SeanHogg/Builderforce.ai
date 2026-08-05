@@ -59,6 +59,7 @@ import {
   projects,
   platformPersonas,
   discountCodes,
+  emailDeliveryFailures,
 } from '../../infrastructure/database/schema';
 import { normalizeDiscountCode } from '../../application/tenant/discountCodeService';
 import { signJwt, signEmulationJwt } from '../../infrastructure/auth/JwtService';
@@ -2099,6 +2100,51 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const entry = await getErrorLogEntry(buildTransactionalDatabase(c.env), Number(c.req.param('id')));
     if (!entry) return c.json({ error: 'Error log entry not found' }, 404);
     return c.json({ error: entry });
+  });
+
+  // -------------------------------------------------------------------------
+  // GET /api/admin/email-delivery-failures
+  // Durable provider-rejection ledger. Message bodies, OTPs and API keys are
+  // never stored, so this view is diagnostic without becoming a secrets store.
+  // -------------------------------------------------------------------------
+  router.get('/email-delivery-failures', async (c) => {
+    const db = buildDatabase(c.env);
+    const q = c.req.query();
+    const limit = Math.min(Math.max(Number(q.limit) || 50, 1), 200);
+    const offset = Math.max(Number(q.offset) || 0, 0);
+    const conditions = [];
+    if (q.deliveryType) conditions.push(eq(emailDeliveryFailures.deliveryType, q.deliveryType.slice(0, 64)));
+    if (q.q) {
+      const needle = `%${q.q.slice(0, 200)}%`;
+      conditions.push(or(
+        ilike(emailDeliveryFailures.recipient, needle),
+        ilike(emailDeliveryFailures.errorMessage, needle),
+      )!);
+    }
+    const where = conditions.length ? and(...conditions) : undefined;
+    const [failures, countRows, summaryRows, typeRows] = await Promise.all([
+      db.select().from(emailDeliveryFailures).where(where)
+        .orderBy(desc(emailDeliveryFailures.createdAt)).limit(limit).offset(offset),
+      db.select({ count: sql<number>`count(*)::int` }).from(emailDeliveryFailures).where(where),
+      db.select({
+        total: sql<number>`count(*)::int`,
+        last24Hours: sql<number>`count(*) filter (where ${emailDeliveryFailures.createdAt} >= now() - interval '24 hours')::int`,
+        affectedRecipients: sql<number>`count(distinct ${emailDeliveryFailures.recipient})::int`,
+        latestAt: sql<Date | null>`max(${emailDeliveryFailures.createdAt})`,
+      }).from(emailDeliveryFailures),
+      db.selectDistinct({ deliveryType: emailDeliveryFailures.deliveryType })
+        .from(emailDeliveryFailures).orderBy(emailDeliveryFailures.deliveryType),
+    ]);
+    const total = countRows[0]?.count ?? 0;
+    return c.json({
+      failures,
+      total,
+      returned: failures.length,
+      offset,
+      hasMore: offset + failures.length < total,
+      summary: summaryRows[0] ?? { total: 0, last24Hours: 0, affectedRecipients: 0, latestAt: null },
+      deliveryTypes: typeRows.map((row) => row.deliveryType),
+    });
   });
 
   // -------------------------------------------------------------------------

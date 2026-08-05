@@ -67,6 +67,24 @@ export const ingestionUsageLog = pgTable('ingestion_usage_log', {
   createdAt:     timestamp('created_at').notNull().defaultNow(),
 });
 
+/**
+ * Durable ledger of outbound email attempts rejected before delivery. This is
+ * platform-scoped operational evidence for SuperAdmin; it deliberately stores no
+ * HTML body, verification code, or provider credential.
+ */
+export const emailDeliveryFailures = pgTable('email_delivery_failures', {
+  id:             serial('id').primaryKey(),
+  recipient:      varchar('recipient', { length: 255 }).notNull(),
+  deliveryType:   varchar('delivery_type', { length: 64 }).notNull().default('transactional'),
+  provider:       varchar('provider', { length: 32 }).notNull().default('resend'),
+  providerStatus: integer('provider_status'),
+  errorMessage:   text('error_message').notNull(),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_email_delivery_failures_created').on(t.createdAt),
+  index('idx_email_delivery_failures_recipient').on(t.recipient, t.createdAt),
+]);
+
 
 /**
  * Per-tenant integration credentials.

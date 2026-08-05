@@ -839,11 +839,18 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     // issued until the user enters the 6-digit code we email now. This is what
     // stops fake / unowned-email signups. The client flips to the code-entry step
     // on `verificationRequired` and calls /web/register/verify to obtain a session.
-    await issueVerificationCode(db, c.env, created, { force: true, anonId, headers: headerHints(c.req) });
+    let emailDeliveryFailed = false;
+    try {
+      await issueVerificationCode(db, c.env, created, { force: true, anonId, headers: headerHints(c.req) });
+    } catch (error) {
+      emailDeliveryFailed = true;
+      console.error('[auth:register] verification email delivery failed', error);
+    }
 
     return c.json({
       verificationRequired: true,
       email: created.email,
+      emailDeliveryFailed,
     }, 201);
   });
 
@@ -961,7 +968,13 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     if (email) {
       const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
       if (user && !user.emailVerifiedAt && !user.isSuspended) {
-        const res = await issueVerificationCode(db, c.env, user, { headers: headerHints(c.req) });
+        let res;
+        try {
+          res = await issueVerificationCode(db, c.env, user, { headers: headerHints(c.req) });
+        } catch (error) {
+          console.error('[auth:resend] verification email delivery failed', error);
+          return c.json({ ok: false, error: 'Verification email could not be sent. Please try again.' }, 503);
+        }
         if (!res.sent && res.cooldownSeconds) {
           return c.json({ ok: true, cooldownSeconds: res.cooldownSeconds });
         }
@@ -1000,8 +1013,14 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     // (cooldown-guarded) and route the client into the same code-entry step instead
     // of issuing a session. Keeps a half-finished fake signup from ever logging in.
     if (!user.emailVerifiedAt) {
-      await issueVerificationCode(db, c.env, user, { headers: headerHints(c.req) });
-      return c.json({ verificationRequired: true, email: user.email }, 403);
+      let emailDeliveryFailed = false;
+      try {
+        await issueVerificationCode(db, c.env, user, { headers: headerHints(c.req) });
+      } catch (error) {
+        emailDeliveryFailed = true;
+        console.error('[auth:login] verification email delivery failed', error);
+      }
+      return c.json({ verificationRequired: true, email: user.email, emailDeliveryFailed }, 403);
     }
 
     if (user.mfaEnabled) {

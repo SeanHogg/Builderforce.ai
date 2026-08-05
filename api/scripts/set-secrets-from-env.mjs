@@ -44,6 +44,10 @@ const SECRET_KEYS = [
   'CLAUDE_API_KEY',
   'TOGETHER_API_KEY',
   'FLUX_API_KEY',
+  // Transactional account email (verification codes, magic links, welcomes).
+  // Keep this in the deployment list: EmailService intentionally reads it from
+  // the Worker secret binding, not from wrangler.toml vars.
+  'RESEND_API_KEY',
 ];
 
 for (const key of SECRET_KEYS) {
