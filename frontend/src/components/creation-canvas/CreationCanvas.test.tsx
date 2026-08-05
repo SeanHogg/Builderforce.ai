@@ -454,6 +454,21 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByDisplayValue('Campaign Strategist')).toBeInTheDocument();
   });
 
+  it('uses the compact composer controls for models, artifacts, and memory', async () => {
+    const { container } = render(<CreationCanvas sessionId="compact-composer-test" persistence="local" />);
+
+    expect(screen.getByRole('button', { name: 'Choose model' })).toHaveTextContent('/');
+    expect(screen.getByRole('button', { name: 'Memory' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }));
+    expect(screen.getByRole('menuitem', { name: /Upload from computer/ })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /Add context/ })).toBeInTheDocument();
+
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input).not.toBeNull();
+    fireEvent.change(input!, { target: { files: [new File(['image'], 'concept.png', { type: 'image/png' })] } });
+    await waitFor(() => expect(screen.getAllByText('concept.png').length).toBeGreaterThan(0));
+  });
+
   it('renders a scrollable Brain transcript, rich chat details, and a recognizable microphone control', () => {
     render(<CreationCanvas sessionId="brain-object-details-test" persistence="local" />);
 

@@ -1109,6 +1109,36 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: 'web', objectKinds: [kind] } });
   }, [canEdit, sessionId, setNodes, timeline]);
 
+  const attachCanvasArtifact = useCallback(async (file: File) => {
+    if (!canEdit) { setNotice('Your session role does not allow editing'); return; }
+    const position = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 300 };
+    const isImage = file.type.startsWith('image/');
+    const node = newNode(isImage ? 'image' : 'file', position);
+    let dataUrl: string | null = null;
+    if (isImage) {
+      dataUrl = await new Promise<string | null>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(file);
+      });
+    }
+    node.data = {
+      ...node.data,
+      title: file.name,
+      subtitle: `${file.type || 'File'} · ${Math.max(1, Math.round(file.size / 1024)).toLocaleString()} KB`,
+      status: isImage ? 'Image attached' : 'File attached',
+      mimeType: file.type || 'application/octet-stream',
+      fileSize: file.size,
+      ...(dataUrl ? { thumbnailUrl: dataUrl, outputUrl: dataUrl } : {}),
+    };
+    setNodes((current) => [...current, node]);
+    setSelectedId(node.id);
+    setSelectedIds([node.id]);
+    setNotice(`${file.name} added to the canvas`);
+    trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: 'web', objectKinds: [node.data.kind], source: 'composer_attachment' } });
+  }, [canEdit, sessionId, setNodes]);
+
   const applyTemplate = useCallback((template: CreationTemplate) => {
     if (!canEdit) return;
     const center = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 260 };
@@ -2664,17 +2694,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           placeholder={t('askBrain')}
           submitLabel={t('sendBrain')}
           disabled={thinking}
-          rows={2}
+          rows={1}
           submitOnEnter
           contextControls={<>
-            <button type="button" className={styles.iconButton} onClick={openPalette} aria-label={t('addToCanvas')}>＋</button>
             <label className={styles.scopeChip}>⌁ <span className="sr-only">Brain scope</span><select aria-label="Brain scope" value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">Entire canvas</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects` : 'Selected object'}</option><option value="connected" disabled={!effectiveSelectedIds.length}>Connected objects</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>Current frame</option></select></label>
           </>}
+          onAttach={attachCanvasArtifact}
+          onAddContext={openPalette}
           autoMode={autoApply}
           onAutoModeChange={setAutoApplyMode}
           modelSelection={modelSelection}
           modelOptions={canvasModelOptions}
           onModelSelectionChange={setModelSelection}
+          modelTrigger="slash"
           modeControls={
             <button type="button" className={`${styles.memoryButton} ${memoryEnabled ? styles.memoryButtonActive : ''}`} aria-pressed={memoryEnabled} aria-label="Memory" disabled={evermindProjectId == null || persistence !== 'server'} title={evermindProjectId == null ? 'Add a saved Project to connect its Evermind' : memoryEnabled ? 'Evermind recall and learning are enabled' : 'Evermind is disabled for this canvas chat'} onClick={() => setMemoryMode(!memoryEnabled)}><span aria-hidden>🧠</span><span className={styles.composerActionLabel}>Memory</span></button>
           }

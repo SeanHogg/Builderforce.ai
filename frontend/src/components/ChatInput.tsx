@@ -73,6 +73,8 @@ export interface ChatInputProps {
   modelSelection?: ChatModelSelection;
   modelOptions?: ChatModelOptions;
   onModelSelectionChange?: (selection: ChatModelSelection) => void;
+  /** Render model selection as a compact `/` control instead of a labeled picker. */
+  modelTrigger?: 'label' | 'slash';
   /** When set, an "Auto mode" pill toggles this (auto-approve tool actions). */
   autoMode?: boolean;
   onAutoModeChange?: (on: boolean) => void;
@@ -340,6 +342,7 @@ export function ChatInput({
   modelSelection,
   modelOptions,
   onModelSelectionChange,
+  modelTrigger = 'label',
   autoMode,
   onAutoModeChange,
   showBrainIcon = false,
@@ -550,7 +553,6 @@ export function ChatInput({
         )}
         actions={(
           <>
-            {contextControls}
             {onAttach && (
               <>
             <input
@@ -580,6 +582,10 @@ export function ChatInput({
             </ComposerMenu>
               </>
             )}
+            {modelTrigger === 'slash' && onModelSelectionChange && modelOptions && modelSelection && (
+          <ModelSelectionPicker selection={modelSelection} options={modelOptions} onChange={onModelSelectionChange} disabled={disabled} triggerVariant="slash" />
+            )}
+            {contextControls}
             {hasOptionsMenu && (
           <ComposerMenu title={t('options')} disabled={disabled} trigger={<SlashIcon />}>
             {(close) => (
@@ -617,6 +623,7 @@ export function ChatInput({
             {onAutoModeChange && (
           <button
             type="button"
+            className="bf-chat-auto-mode"
             onClick={() => onAutoModeChange(!autoMode)}
             disabled={disabled}
             title={t('autoModeHint')}
@@ -640,7 +647,7 @@ export function ChatInput({
             <span>{t('autoMode')}</span>
           </button>
             )}
-            {onModelSelectionChange && modelOptions && modelSelection && (
+            {modelTrigger !== 'slash' && onModelSelectionChange && modelOptions && modelSelection && (
           <ModelSelectionPicker selection={modelSelection} options={modelOptions} onChange={onModelSelectionChange} disabled={disabled} />
             )}
             {modeControls}

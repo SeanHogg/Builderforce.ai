@@ -586,8 +586,12 @@ export default function LandingPage() {
              below the mobile header instead of vertically centering it. */
           .lp-hero {
             justify-content: flex-start;
-            padding: 18px 20px 48px;
+            min-height: 0;
+            padding: 18px 20px;
           }
+          /* Preserve the backdrop's original viewport-based geometry even
+             though the content section now ends directly after the chips. */
+          .lp-hero-wave { bottom: auto; height: 84vh; }
           .lp-badge { margin-bottom: 18px; }
         }
       `}</style>

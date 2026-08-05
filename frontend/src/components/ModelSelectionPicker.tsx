@@ -43,12 +43,13 @@ function buildItems(options: ChatModelOptions): Item[] {
   return items;
 }
 
-export function ModelSelectionPicker({ selection, options, onChange, disabled = false, ariaLabel = 'Choose model' }: {
+export function ModelSelectionPicker({ selection, options, onChange, disabled = false, ariaLabel = 'Choose model', triggerVariant = 'label' }: {
   selection: ChatModelSelection;
   options: ChatModelOptions;
   onChange: (selection: ChatModelSelection) => void;
   disabled?: boolean;
   ariaLabel?: string;
+  triggerVariant?: 'label' | 'slash';
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -73,9 +74,10 @@ export function ModelSelectionPicker({ selection, options, onChange, disabled = 
     return () => { document.removeEventListener('mousedown', close); window.clearTimeout(timer); };
   }, [open]);
 
-  return <div ref={rootRef} style={{ position: 'relative', flexShrink: 1, minWidth: 0 }}>
-    <button type="button" disabled={disabled} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((value) => !value)} style={{ height: 'var(--chat-ctl-size, 32px)', minWidth: 92, maxWidth: 220, padding: '0 9px', borderRadius: 8, border: '1px solid var(--chat-input-border, var(--border-subtle))', background: 'var(--chat-input-bg, var(--bg-elevated))', color: 'var(--text-primary)', cursor: disabled ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-      <span aria-hidden>◉</span><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{active?.label ?? (selection.mode === 'model' ? selection.model : 'Auto')}</span><span aria-hidden style={{ marginLeft: 'auto' }}>⌄</span>
+  const slashTrigger = triggerVariant === 'slash';
+  return <div ref={rootRef} className="bf-model-picker" style={{ position: 'relative', flexShrink: slashTrigger ? 0 : 1, minWidth: 0 }}>
+    <button className="bf-model-picker__trigger" type="button" disabled={disabled} aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} onClick={() => setOpen((value) => !value)} style={{ width: slashTrigger ? 'var(--chat-ctl-size, 32px)' : undefined, height: 'var(--chat-ctl-size, 32px)', minWidth: slashTrigger ? 'var(--chat-ctl-size, 32px)' : 92, maxWidth: slashTrigger ? 'var(--chat-ctl-size, 32px)' : 220, padding: slashTrigger ? 0 : '0 9px', justifyContent: slashTrigger ? 'center' : undefined, borderRadius: slashTrigger ? '50%' : 8, border: '1px solid var(--chat-input-border, var(--border-subtle))', background: 'var(--chat-input-bg, var(--bg-elevated))', color: 'var(--text-primary)', cursor: disabled ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+      {slashTrigger ? <span aria-hidden style={{ fontSize: 18, lineHeight: 1 }}>/</span> : <><span aria-hidden>◉</span><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{active?.label ?? (selection.mode === 'model' ? selection.model : 'Auto')}</span><span aria-hidden style={{ marginLeft: 'auto' }}>⌄</span></>}
     </button>
     {open && <div role="dialog" aria-label="Model picker" style={{ position: 'absolute', left: 0, bottom: 'calc(100% + 7px)', zIndex: 10000, width: 'min(440px, calc(100vw - 32px))', padding: 10, borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', boxShadow: '0 16px 42px rgba(0,0,0,.32)' }}>
       <input ref={searchRef} value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search models…" aria-label="Search models" style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 7, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />

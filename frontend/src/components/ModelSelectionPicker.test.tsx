@@ -11,6 +11,16 @@ const options: ChatModelOptions = {
 };
 
 describe('ModelSelectionPicker', () => {
+  it('uses a slash trigger for compact Claude-style composers', () => {
+    render(<ModelSelectionPicker selection={{ mode: 'auto' }} options={options} onChange={() => {}} triggerVariant="slash" />);
+
+    const trigger = screen.getByRole('button', { name: 'Choose model' });
+    expect(trigger).toHaveTextContent('/');
+    expect(trigger).not.toHaveTextContent('Auto');
+    fireEvent.click(trigger);
+    expect(screen.getByRole('listbox')).toBeTruthy();
+  });
+
   it('filters by funding category and selects a strict model choice', () => {
     const onChange = vi.fn();
     render(<ModelSelectionPicker selection={{ mode: 'auto' }} options={options} onChange={onChange} />);
