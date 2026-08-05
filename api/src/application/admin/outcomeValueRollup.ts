@@ -66,9 +66,9 @@ async function queryPeriod(db: Db, start: Date, end: Date, filters: OutcomeValue
         (SELECT COUNT(*) FROM creation_session_members m WHERE m.session_id = s.id) AS members,
         (SELECT COUNT(DISTINCT NULLIF(t.metadata #>> '{authoredBy,ref}', '')) FROM creation_session_timeline t WHERE t.session_id = s.id AND t.metadata #>> '{authoredBy,kind}' = 'agent') AS agents,
         EXISTS (
-          SELECT 1 FROM creation_session_timeline brain
-          WHERE brain.session_id = s.id AND brain.metadata #>> '{authoredBy,kind}' = 'brain'
-            AND brain.created_at > COALESCE((SELECT MAX(agent.created_at) FROM creation_session_timeline agent WHERE agent.session_id = s.id AND agent.metadata #>> '{authoredBy,kind}' = 'agent'), 'infinity'::timestamp)
+          SELECT 1 FROM creation_session_timeline brain_event
+          WHERE brain_event.session_id = s.id AND brain_event.metadata #>> '{authoredBy,kind}' = 'brain'
+            AND brain_event.created_at > COALESCE((SELECT MAX(agent.created_at) FROM creation_session_timeline agent WHERE agent.session_id = s.id AND agent.metadata #>> '{authoredBy,kind}' = 'agent'), 'infinity'::timestamp)
         ) AS synthesized,
         (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action IN ('artifact.deliver','artifact.publish','workflow.execute') AND e.phase = 'started') AS attempts,
         (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action IN ('artifact.deliver','artifact.publish','workflow.execute') AND e.phase = 'succeeded') AS deliveries,

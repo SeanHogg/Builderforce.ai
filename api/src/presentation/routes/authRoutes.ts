@@ -1,5 +1,5 @@
 import { Hono, type Context } from 'hono';
-import { and, desc, eq, gt, inArray, isNull, ne, or, sql } from 'drizzle-orm';
+import { and, desc, eq, getTableColumns, gt, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { AuthService } from '../../application/auth/AuthService';
 import { DeviceAuthService } from '../../application/auth/DeviceAuthService';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
@@ -503,7 +503,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     const [account] = await db.select({ id: users.id, email: users.email, username: users.username, displayName: users.displayName, accountType: users.accountType, locale: users.locale, createdAt: users.createdAt, updatedAt: users.updatedAt }).from(users).where(eq(users.id, userId)).limit(1);
     if (!account) return c.json({ error: 'User not found' }, 404);
     const [memberships, legalAcceptances, requests] = await Promise.all([
-      db.select().from(tenantMembers).where(eq(tenantMembers.userId, userId)),
+      db.select({ ...getTableColumns(tenantMembers), tenantId: tenantMembers.tenantId }).from(tenantMembers).where(eq(tenantMembers.userId, userId)),
       db.select().from(userLegalAcceptances).where(eq(userLegalAcceptances.userId, userId)),
       db.select().from(privacyRequests).where(eq(privacyRequests.userId, userId)),
     ]);
@@ -915,7 +915,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     // an idempotent verification retry, recovering if a prior request committed
     // email verification but stopped before stamping the referral notification.
     const [verifiedReferral] = await db.update(salesReferrals).set({ signupNotifiedAt: new Date() })
-      .where(and(eq(salesReferrals.referredUserId, user.id), isNull(salesReferrals.signupNotifiedAt))).returning();
+      .where(and(eq(salesReferrals.referredUserId, user.id), isNull(salesReferrals.signupNotifiedAt))).returning({ ...getTableColumns(salesReferrals), tenantId: salesReferrals.tenantId });
     if (verifiedReferral) {
       const [associate] = await db.select({ enabled: salesAssociateSettings.notifyOnSignup }).from(salesAssociateSettings)
         .where(eq(salesAssociateSettings.ownerUserId, verifiedReferral.associateUserId)).limit(1);
@@ -1324,7 +1324,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
 
     const keyHash = await hashSecret(body.apiKey);
     const [agentHost] = await db
-      .select()
+      .select({ ...getTableColumns(agentHosts), tenantId: agentHosts.tenantId })
       .from(agentHosts)
       .where(eq(agentHosts.apiKeyHash, keyHash))
       .limit(1);
@@ -1564,7 +1564,7 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
       ? await db
         .select({
           sessionId: authTokens.sessionId,
-          activeCount: sql<number>`COUNT(*)`,
+          activeCount: sql<number>`COUNT(COALESCE(${authTokens.tenantId}, 0))`,
         })
         .from(authTokens)
         .where(
@@ -1620,7 +1620,8 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
           eq(authTokens.sessionId, sessionId),
           isNull(authTokens.revokedAt),
         ),
-      );
+      )
+      .returning({ tenantId: authTokens.tenantId });
 
     return c.json({ ok: true });
   });
@@ -1651,7 +1652,8 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
           ne(authTokens.sessionId, currentSessionId),
           isNull(authTokens.revokedAt),
         ),
-      );
+      )
+      .returning({ tenantId: authTokens.tenantId });
 
     return c.json({ ok: true });
   });
@@ -1696,7 +1698,8 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     await db
       .update(authTokens)
       .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authTokens.jti, jti), eq(authTokens.userId, userId), isNull(authTokens.revokedAt)));
+      .where(and(eq(authTokens.jti, jti), eq(authTokens.userId, userId), isNull(authTokens.revokedAt)))
+      .returning({ tenantId: authTokens.tenantId });
 
     return c.json({ ok: true });
   });

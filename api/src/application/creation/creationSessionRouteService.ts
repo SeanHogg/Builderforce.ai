@@ -210,7 +210,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     // tenant boundaries. They must still be explicit session members; this does
     // not grant blanket access to every canvas.
     const [adminMember] = await db
-      .select({ session: creationSessions, role: creationSessionMembers.role })
+      .select({ session: creationSessions, tenantId: creationSessions.tenantId, role: creationSessionMembers.role })
       .from(creationSessions)
       .innerJoin(creationSessionMembers, and(eq(creationSessionMembers.sessionId, creationSessions.id), eq(creationSessionMembers.userId, userId)))
       .innerJoin(users, eq(users.id, userId))
@@ -851,9 +851,9 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
           (SELECT COUNT(*) FROM creation_session_members m WHERE m.session_id = s.id) AS member_count,
           (SELECT COUNT(DISTINCT t.metadata #>> '{authoredBy,ref}') FROM creation_session_timeline t WHERE t.session_id = s.id AND t.metadata #>> '{authoredBy,kind}' = 'agent') AS agent_participants,
           EXISTS (
-            SELECT 1 FROM creation_session_timeline brain
-            WHERE brain.session_id = s.id AND brain.metadata #>> '{authoredBy,kind}' = 'brain'
-              AND brain.created_at > COALESCE((SELECT MAX(agent.created_at) FROM creation_session_timeline agent WHERE agent.session_id = s.id AND agent.metadata #>> '{authoredBy,kind}' = 'agent'), 'infinity'::timestamp)
+            SELECT 1 FROM creation_session_timeline brain_event
+            WHERE brain_event.session_id = s.id AND brain_event.metadata #>> '{authoredBy,kind}' = 'brain'
+              AND brain_event.created_at > COALESCE((SELECT MAX(agent.created_at) FROM creation_session_timeline agent WHERE agent.session_id = s.id AND agent.metadata #>> '{authoredBy,kind}' = 'agent'), 'infinity'::timestamp)
           ) AS synthesized,
           (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action IN ('artifact.deliver','artifact.publish','workflow.execute') AND e.phase = 'started') AS delivery_attempts,
           (SELECT COUNT(*) FROM creation_outcome_events e WHERE e.session_id = s.id AND e.action IN ('artifact.deliver','artifact.publish','workflow.execute') AND e.phase = 'succeeded') AS delivery_successes,

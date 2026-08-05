@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   detachCards: vi.fn(async () => 1),
   parseWebhook: vi.fn(),
   markDiscountRedeemed: vi.fn(async () => undefined),
+  recordReferralConversion: vi.fn(async () => undefined),
 }));
 
 vi.mock('../../application/tenant/cardValidationService', async (orig) => ({
@@ -30,6 +31,9 @@ vi.mock('../../application/tenant/cardValidationService', async (orig) => ({
 }));
 vi.mock('../../application/tenant/discountCodeService', () => ({
   markDiscountRedeemed: mocks.markDiscountRedeemed,
+}));
+vi.mock('../../application/sales/recordReferralConversion', () => ({
+  recordReferralConversion: mocks.recordReferralConversion,
 }));
 vi.mock('../../infrastructure/database/connection', () => ({
   buildDatabase: vi.fn(() => ({})),

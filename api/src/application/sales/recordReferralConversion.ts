@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, getTableColumns, isNull } from 'drizzle-orm';
 import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { salesAssociateSettings, salesCommissionRules, salesReferrals, tenantMembers, tenants } from '../../infrastructure/database/schema';
@@ -12,7 +12,7 @@ export async function recordReferralConversion(db: Db, env: Env, event: WebhookE
   const [tenant] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.externalCustomerId, event.externalCustomerId)).limit(1);
   if (!tenant) return;
   let [referral] = event.salesReferralId
-    ? await db.select().from(salesReferrals).where(and(eq(salesReferrals.id, event.salesReferralId), isNull(salesReferrals.convertedAt))).limit(1)
+    ? await db.select({ ...getTableColumns(salesReferrals), tenantId: salesReferrals.tenantId }).from(salesReferrals).where(and(eq(salesReferrals.id, event.salesReferralId), isNull(salesReferrals.convertedAt))).limit(1)
     : [];
   if (!referral) [referral] = await db.select().from(salesReferrals).where(and(eq(salesReferrals.tenantId, tenant.id), isNull(salesReferrals.convertedAt))).limit(1);
   if (!referral) {
@@ -20,7 +20,7 @@ export async function recordReferralConversion(db: Db, env: Env, event: WebhookE
     // binding existed: find an active owner of this workspace who was referred.
     const [owner] = await db.select({ userId: tenantMembers.userId }).from(tenantMembers)
       .where(and(eq(tenantMembers.tenantId, tenant.id), eq(tenantMembers.role, 'owner'), eq(tenantMembers.isActive, true))).limit(1);
-    if (owner) [referral] = await db.select().from(salesReferrals).where(and(eq(salesReferrals.referredUserId, owner.userId), isNull(salesReferrals.convertedAt))).limit(1);
+    if (owner) [referral] = await db.select({ ...getTableColumns(salesReferrals), tenantId: salesReferrals.tenantId }).from(salesReferrals).where(and(eq(salesReferrals.referredUserId, owner.userId), isNull(salesReferrals.convertedAt))).limit(1);
   }
   if (!referral) return;
   const plan = event.targetPlan === 'teams' ? 'teams' : 'pro';

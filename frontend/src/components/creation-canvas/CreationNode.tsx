@@ -167,13 +167,14 @@ function optionLabel(value: unknown, labels: Record<string, string>, fallback: s
   return typeof value === 'string' && labels[value] ? labels[value] : fallback;
 }
 
-function AgentBody({ data }: { data: CreationNodeData }) {
+function AgentBody({ data, onOpen }: { data: CreationNodeData; onOpen?: (focus: 'knowledge' | 'test') => void }) {
   const tools = Array.isArray(data.tools) ? data.tools.map(String) : ['Audience Analyzer', 'Copy Optimizer'];
   const autonomy = optionLabel(data.autonomy, { low: 'Low autonomy', medium: 'Medium autonomy', high: 'High autonomy' }, 'Medium autonomy');
   return <>
     <div className={styles.personRow}><span className={styles.presence} /><b>{data.status || 'Online'}</b><span>{data.model || 'gpt-4o'}</span></div>
     <p>{textValue(data.instructions, data.subtitle || '')}</p>
     <div className={styles.pills}>{tools.map((tool) => <span key={tool}>{tool}</span>)}<span>{autonomy}</span>{typeof data.testStatus === 'string' && data.testStatus && <span>{data.testStatus}</span>}</div>
+    <div className={`${styles.nodeActionBar} nodrag nowheel`}><button type="button" onClick={(event) => { event.stopPropagation(); onOpen?.('knowledge'); }}>1 · Add knowledge</button><button type="button" onClick={(event) => { event.stopPropagation(); onOpen?.('test'); }}>2 · Test agent</button></div>
   </>;
 }
 
@@ -266,16 +267,23 @@ function KpiBody({ data }: { data: CreationNodeData }) {
   return <div className={styles.kpis}><div><small>{data.title}</small><strong>{String(data.value ?? '—')}{data.unit ? ` ${String(data.unit)}` : ''}</strong><em>{data.trend ? String(data.trend) : data.target != null ? `Target ${String(data.target)}` : ''}</em></div></div>;
 }
 
-function EvaluationBody({ data }: { data: CreationNodeData }) {
+function EvaluationBody({ data, onOpen }: { data: CreationNodeData; onOpen?: () => void }) {
   const gaps = Array.isArray(data.gaps) ? data.gaps.slice(0, 3).map(String) : [];
   const recommendations = Array.isArray(data.recommendations) ? data.recommendations.slice(0, 3).map(String) : [];
   return (
     <div className={styles.evaluationBody}>
       <div className={styles.verdict}>{String(data.verdict || 'Evaluation ready')}</div>
       {(gaps.length ? gaps : ['Message match needs review', 'Validate the primary action', 'Confirm delivery timing']).map((gap, index) => <div key={`${gap}-${index}`}><b>{index ? '△' : '✓'} {gap}</b><p>{recommendations[index] || (index ? 'Ask Brain to propose a resolution.' : authoredText(data) || 'Evidence is available on the canvas.')}</p></div>)}
-      <button>Apply recommendations</button>
+      <button type="button" className="nodrag nowheel" onClick={(event) => { event.stopPropagation(); onOpen?.(); }}>{Array.isArray(data.testResults) && data.testResults.length ? 'Review test results' : '3 · Review evaluation'}</button>
     </div>
   );
+}
+
+function ReleaseBody({ data, onOpen }: { data: CreationNodeData; onOpen?: () => void }) {
+  return <div className={styles.releaseBody}>
+    <p>{authoredText(data) || 'Review the delivery checklist, then save the agent to publish it to your workforce.'}</p>
+    <div className={`${styles.nodeActionBar} nodrag nowheel`}><button type="button" onClick={(event) => { event.stopPropagation(); onOpen?.(); }}>4 · Open delivery checklist</button></div>
+  </div>;
 }
 
 type CanvasDiagnostic = {
@@ -534,11 +542,12 @@ function DrawingBody({ data }: { data: CreationNodeData }) {
 type CreationNodeProps = NodeProps<CreationFlowNode> & {
   canRun?: boolean;
   onRun?: (nodeId: string) => void;
+  onOpenDetails?: (nodeId: string, focus?: 'knowledge' | 'test' | 'evaluation' | 'delivery') => void;
 };
 
-export function CreationNode({ id, data, selected, width, height, canRun = true, onRun }: CreationNodeProps) {
+export function CreationNode({ id, data, selected, width, height, canRun = true, onRun, onOpenDetails }: CreationNodeProps) {
   const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'prd', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame'].includes(data.kind);
-  const specialized = new Set(['workflow','website','prototype','dashboard','chart','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame']);
+  const specialized = new Set(['workflow','website','prototype','dashboard','chart','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release']);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || '#f8f6ff'), borderColor: String(data.frameBorder || '#9d8bea') } : undefined;
   const measuredStyle = { ...frameStyle, ...(typeof width === 'number' && width > 0 ? { width } : {}), ...(typeof height === 'number' && height > 0 ? { height } : {}) };
   const chatMessages = data.kind === 'chat' ? brainTimelineMessages(data) : [];
@@ -566,9 +575,9 @@ export function CreationNode({ id, data, selected, width, height, canRun = true,
         {data.kind === 'workflow' && <WorkflowBody data={data} />}
         {(data.kind === 'website' || data.kind === 'prototype') && <WebsiteBody data={data} />}
         {(data.kind === 'dashboard' || data.kind === 'chart' || data.kind === 'report') && <DashboardBody data={data} />}
-        {data.kind === 'evaluation' && <EvaluationBody data={data} />}
+        {data.kind === 'evaluation' && <EvaluationBody data={data} onOpen={() => onOpenDetails?.(id, 'evaluation')} />}
         {data.kind === 'diagnostics' && <DiagnosticsBody data={data} />}
-        {data.kind === 'agent' && <AgentBody data={data} />}
+        {data.kind === 'agent' && <AgentBody data={data} onOpen={(focus) => onOpenDetails?.(id, focus)} />}
         {data.kind === 'staff' && <><div className={styles.personRow}><span className={styles.avatar} style={{ background: data.accent }}>{data.title.slice(0, 1)}</span><b>{data.role}</b><span className={styles.presence} /></div><small>Current focus</small><p>{data.focus}</p></>}
         {data.kind === 'chat' && <div className={`${styles.chatHistory} nowheel nodrag`} role="log" aria-label="Brain chat history" tabIndex={0}>
           <BrainTimeline messages={chatMessages} trace={chatTrace} streamingText="" isRunning={false} assistantName="Brain" labels={{ you: 'You', assistant: 'Brain' }} />
@@ -588,6 +597,7 @@ export function CreationNode({ id, data, selected, width, height, canRun = true,
         {data.kind === 'standup' && <StandupBody data={data} />}
         {data.kind === 'drawing' && <DrawingBody data={data} />}
         {data.kind === 'frame' && <div className={styles.frameBody}><strong>{String(data.framePurpose || 'Arrange related objects here')}</strong><p>{data.subtitle || 'A reusable spatial section for presentation, facilitation, or review.'}</p></div>}
+        {data.kind === 'release' && <ReleaseBody data={data} onOpen={() => onOpenDetails?.(id, 'delivery')} />}
         {!specialized.has(data.kind) && <><AuthoredContent data={data} fallback={`${creationObjectDefinition(data.kind).label} is ready to connect, edit, and use as Brain context.`} /><div className={styles.pills}><span>{data.status || 'Canvas object'}</span><span>Live session context</span></div></>}
       </div>
       <Handle type="source" position={Position.Right} className={styles.handle} />

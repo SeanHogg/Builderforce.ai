@@ -184,6 +184,28 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByRole('article')).toHaveStyle({ width: '320px', height: '220px' });
   });
 
+  it('makes the agent lifecycle discoverable from the canvas cards', () => {
+    const onOpenDetails = vi.fn();
+    const props = {
+      type: 'creation' as const, selected: false, dragging: false, zIndex: 0,
+      selectable: true, deletable: true, draggable: true, isConnectable: true,
+      positionAbsoluteX: 0, positionAbsoluteY: 0, onOpenDetails,
+    };
+    const { rerender } = render(<CreationNode {...props} id="agent-card" data={{ kind: 'agent', title: 'Customer Support Agent' }} />);
+    fireEvent.click(screen.getByRole('button', { name: '1 · Add knowledge' }));
+    fireEvent.click(screen.getByRole('button', { name: '2 · Test agent' }));
+    expect(onOpenDetails).toHaveBeenNthCalledWith(1, 'agent-card', 'knowledge');
+    expect(onOpenDetails).toHaveBeenNthCalledWith(2, 'agent-card', 'test');
+
+    rerender(<CreationNode {...props} id="evaluation-card" data={{ kind: 'evaluation', title: 'Agent Evaluation' }} />);
+    fireEvent.click(screen.getByRole('button', { name: '3 · Review evaluation' }));
+    expect(onOpenDetails).toHaveBeenLastCalledWith('evaluation-card', 'evaluation');
+
+    rerender(<CreationNode {...props} id="release-card" data={{ kind: 'release', title: 'Agent Release' }} />);
+    fireEvent.click(screen.getByRole('button', { name: '4 · Open delivery checklist' }));
+    expect(onOpenDetails).toHaveBeenLastCalledWith('release-card', 'delivery');
+  });
+
   it('updates the project widget rendering when its project view changes', () => {
     const props = {
       id: 'project-node', type: 'creation' as const, selected: false, dragging: false, zIndex: 0,

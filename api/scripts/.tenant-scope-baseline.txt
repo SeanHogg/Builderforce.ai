@@ -45,7 +45,6 @@ application/kanban/kanbanTemplateService.ts:8
 application/kanban/rosterService.ts:1
 application/kanban/ticketParticipants.ts:8
 application/knowledge/knowledgeMarket.ts:1
-application/llm/builtinMcpService.ts:7
 application/llm/projectEvermind.ts:2
 application/llm/projectFacts.ts:1
 application/llm/routingTable.ts:1
@@ -118,7 +117,6 @@ presentation/routes/adminRoutes.ts:21
 presentation/routes/agentHostRoutes.ts:9
 presentation/routes/agentRuntimeRoutes.ts:1
 presentation/routes/analyticsRoutes.ts:1
-presentation/routes/authRoutes.ts:5
 presentation/routes/boardWebhookRoutes.ts:1
 presentation/routes/ceremonyRoutes.ts:9
 presentation/routes/chatRoutes.ts:3
@@ -151,7 +149,6 @@ presentation/routes/skillAssignmentRoutes.ts:1
 presentation/routes/specRoutes.ts:1
 presentation/routes/studioVoiceCloneRoutes.ts:6
 presentation/routes/taskRoutes.ts:3
-presentation/routes/tenantRoutes.ts:6
 presentation/routes/vscodeRoutes.ts:1
 presentation/routes/workflowDefinitionRoutes.ts:5
 presentation/routes/workflowRoutes.ts:5

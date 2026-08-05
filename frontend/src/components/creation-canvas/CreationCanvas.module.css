@@ -358,6 +358,16 @@
 .evaluationSummary strong { color:#243348; font-size:12px; }.evaluationSummary span { color:#65758b; font-size:10px; }
 .testResults { display:grid; gap:7px; }.testResults div { display:grid; gap:2px; padding:8px; border:1px solid #d9e2ed; border-radius:7px; background:#fff; }
 .testResults b { font-size:10px; color:#243348; }.testResults span { font-size:11px; color:#53647a; }.testResults small { font-size:9px; color:#7b899c; }
+.nodeActionBar { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+.nodeActionBar button { flex:1 1 auto; min-width:92px; padding:7px 9px; border:1px solid color-mix(in srgb, var(--canvas-blue) 55%, #d9e2ed); border-radius:7px; background:color-mix(in srgb, var(--canvas-blue) 10%, transparent); color:var(--canvas-blue); font:inherit; font-size:10px; font-weight:700; cursor:pointer; }
+.nodeActionBar button:hover { background:color-mix(in srgb, var(--canvas-blue) 18%, transparent); }
+.releaseBody p { margin:0; color:var(--text-secondary, #53647a); font-size:11px; line-height:1.5; }
+.agentSetupGuide { display:grid; gap:7px; margin-bottom:14px; padding:11px; border:1px solid #cfe0fb; border-radius:9px; background:#f3f7ff; }
+.agentSetupGuide > strong { color:#243348; font-size:12px; }.agentSetupGuide > p { margin:0; color:#5f7390; font-size:10px; line-height:1.45; }
+.agentSetupSteps { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px; }
+.agentSetupSteps span { padding:6px; border-radius:6px; background:#fff; color:#65758b; font-size:9px; }.agentSetupSteps span[data-done="true"] { background:#e4f7ed; color:#27764b; }
+.deliveryChecklist { display:grid; gap:7px; padding:11px; border:1px solid #d9e2ed; border-radius:9px; background:#f8fbff; }
+.deliveryChecklist > strong { color:#243348; font-size:12px; }.deliveryChecklist span { display:flex; align-items:center; gap:7px; color:#53647a; font-size:11px; }
 .taskInspectorGrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }.taskInspectorGrid label { min-width:0; }
 .statusGuidance { margin:-4px 0 13px; padding:9px 10px; border:1px solid #cfe0fb; border-radius:8px; background:#f3f7ff; }
 .statusGuidance b { color:#31598d; font-size:10px; }.statusGuidance p { margin:4px 0 0; color:#5f7390; font-size:10px; line-height:1.5; }
@@ -513,6 +523,13 @@
 }
 .statusGuidance { border-color:color-mix(in srgb, var(--canvas-blue) 35%, var(--canvas-line)); background:color-mix(in srgb, var(--canvas-blue) 9%, var(--canvas-panel)); }
 .statusGuidance b { color:var(--canvas-ink); }.statusGuidance p,.taskContext p,.taskPrdSummary p { color:var(--canvas-muted); }
+.agentWorkbench,.deliveryChecklist { border-color:var(--canvas-line); background:var(--canvas-panel-muted); }
+.agentSetupGuide { border-color:color-mix(in srgb, var(--canvas-blue) 35%, var(--canvas-line)); background:color-mix(in srgb, var(--canvas-blue) 9%, var(--canvas-panel)); }
+.agentSetupGuide > strong,.workbenchHeading strong,.deliveryChecklist > strong,.testResponse strong,.evaluationSummary strong,.testResults b { color:var(--canvas-ink); }
+.agentSetupGuide > p,.workbenchHeading span,.deliveryChecklist span,.testResponse p,.evaluationSummary span,.testResults span,.testResults small,.releaseBody p { color:var(--canvas-muted); }
+.agentSetupSteps span,.testResponse,.testResults div,.evaluationSummary { border-color:var(--canvas-line); background:var(--canvas-panel); color:var(--canvas-muted); }
+.agentSetupSteps span[data-done="true"] { background:color-mix(in srgb, #2faf70 18%, var(--canvas-panel)); color:#74d8a2; }
+.knowledgeList span { background:color-mix(in srgb, var(--canvas-blue) 15%, var(--canvas-panel)); color:#72a1ff; }
 .taskFacts small,.taskContext small,.taskPrdSummary span,.widgetSettings small,.widgetContext small,.projectOverview small,.projectFeedback small,.evermindMapHeading > span,.evermindRecent article p,.evermindRecent article small,.evermindSignals small { color:var(--canvas-muted); }
 .taskFacts b,.taskContext b,.taskPrdSummary strong,.widgetSettings b,.widgetContext b,.projectOverview b,.evermindMapHeading b,.evermindRecent article b,.evermindSignals b,.evermindEmpty b { color:var(--canvas-ink); }
 .evermindBrain { background:radial-gradient(circle at 35% 40%,rgba(226,129,194,.22),transparent 34%),radial-gradient(circle at 70% 48%,rgba(123,91,231,.21),transparent 35%),var(--canvas-panel-muted); }

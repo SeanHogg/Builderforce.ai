@@ -183,7 +183,7 @@ async function acceptPendingInvitations(
       await db
         .update(tenantInvitations)
         .set({ status: 'accepted', acceptedAt: new Date() })
-        .where(eq(tenantInvitations.id, invite.id));
+        .where(and(eq(tenantInvitations.id, invite.id), eq(tenantInvitations.tenantId, invite.tenantId)));
       await invalidateTaskAssignees(env, invite.tenantId);
       await invalidateInvitations(env, invite.tenantId);
     } catch (error) {
@@ -436,7 +436,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         })
       : undefined;
 
-    const [pendingReferral] = await db.select({ id: salesReferrals.id }).from(salesReferrals).where(and(
+    const [pendingReferral] = await db.select({ id: salesReferrals.id, tenantId: salesReferrals.tenantId }).from(salesReferrals).where(and(
       eq(salesReferrals.referredUserId, c.get('userId') as string), isNull(salesReferrals.convertedAt),
     )).limit(1);
 
@@ -1000,7 +1000,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       await db
         .update(tenantInvitations)
         .set({ role, invitedByUserId: actorUserId, createdAt: new Date() })
-        .where(eq(tenantInvitations.id, existing.id));
+        .where(and(eq(tenantInvitations.id, existing.id), eq(tenantInvitations.tenantId, id)));
     } else {
       await db
         .insert(tenantInvitations)
@@ -1292,6 +1292,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
         .where(
           and(
             eq(authTokens.userId, userId),
+            eq(authTokens.tenantId, tenantId),
             inArray(authTokens.sessionId, sessionIds),
             isNull(authTokens.revokedAt),
             gt(authTokens.expiresAt, new Date()),
@@ -1375,7 +1376,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     await db
       .update(authTokens)
       .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authTokens.userId, userId), eq(authTokens.sessionId, sessionId), isNull(authTokens.revokedAt)));
+      .where(and(eq(authTokens.userId, userId), eq(authTokens.tenantId, tenantId), eq(authTokens.sessionId, sessionId), isNull(authTokens.revokedAt)));
 
     return c.json({ ok: true });
   });
@@ -1400,7 +1401,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     await db
       .update(authTokens)
       .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authTokens.userId, userId), isNull(authTokens.revokedAt)));
+      .where(and(eq(authTokens.userId, userId), eq(authTokens.tenantId, tenantId), isNull(authTokens.revokedAt)));
 
     return c.json({ ok: true });
   });
@@ -1421,7 +1422,7 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     await db
       .update(authTokens)
       .set({ revokedAt: sql`now()`, lastSeenAt: sql`now()` })
-      .where(and(eq(authTokens.userId, userId), eq(authTokens.jti, jti), isNull(authTokens.revokedAt)));
+      .where(and(eq(authTokens.userId, userId), eq(authTokens.tenantId, tenantId), eq(authTokens.jti, jti), isNull(authTokens.revokedAt)));
 
     return c.json({ ok: true });
   });

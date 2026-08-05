@@ -19,7 +19,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * Consolidated Gap Register.
  */
 
-import { and, eq, desc, isNotNull, sql, type SQL } from 'drizzle-orm';
+import { and, eq, desc, getTableColumns, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { type ToolSchema } from '@builderforce/agent-tools';
 import { advertisedName } from './toolNaming';
 import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
@@ -554,7 +554,7 @@ const CATALOG: BuiltinTool[] = [
         ctx.db.select().from(salesCampaigns).where(eq(salesCampaigns.ownerUserId, ownerId)).orderBy(desc(salesCampaigns.updatedAt)),
         ctx.db.select().from(salesWeeklyGoals).where(eq(salesWeeklyGoals.ownerUserId, ownerId)).limit(1),
         ctx.db.select().from(salesCoachingNotes).where(eq(salesCoachingNotes.associateUserId, ownerId)).orderBy(desc(salesCoachingNotes.createdAt)),
-        ctx.db.select().from(salesReferrals).where(and(eq(salesReferrals.associateUserId, ownerId), isNotNull(salesReferrals.signupNotifiedAt))).orderBy(desc(salesReferrals.signedUpAt)),
+        ctx.db.select({ ...getTableColumns(salesReferrals), tenantId: salesReferrals.tenantId }).from(salesReferrals).where(and(eq(salesReferrals.associateUserId, ownerId), isNotNull(salesReferrals.signupNotifiedAt))).orderBy(desc(salesReferrals.signedUpAt)),
         salesSettings(ctx, ownerId),
         ctx.db.select().from(salesCommissionRules).orderBy(salesCommissionRules.plan, salesCommissionRules.billingCycle),
       ]);
@@ -1631,7 +1631,7 @@ const CATALOG: BuiltinTool[] = [
   // ---- Prompt library (write) — promptLibraryEntries is segment-scoped; versions hang off an
   //       entry (FK entryId), so every version op first asserts the parent entry's tenant+segment. ----
   { tool: 'prompts.get', mutates: false, description: 'Get a prompt-library entry by id.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); return (await ctx.db.select().from(promptLibraryEntries).where(and(eq(promptLibraryEntries.id, str(a.id)), eq(promptLibraryEntries.tenantId, ctx.tenantId), eq(promptLibraryEntries.segmentId, seg))).limit(1))[0] ?? null; } },
-  { tool: 'prompts.browse_public', mutates: false, description: 'Browse the public prompt gallery (published prompts across all workspaces).', parameters: obj({ q: S, category: S, limit: N }), run: (ctx, a) => ctx.db.select().from(promptLibraryEntries).where(eq(promptLibraryEntries.visibility, 'public')).orderBy(desc(promptLibraryEntries.starCount)).limit(a.limit != null ? num(a.limit) : 100) },
+  { tool: 'prompts.browse_public', mutates: false, description: 'Browse the public prompt gallery (published prompts across all workspaces).', parameters: obj({ q: S, category: S, limit: N }), run: (ctx, a) => ctx.db.select({ ...getTableColumns(promptLibraryEntries), tenantId: promptLibraryEntries.tenantId }).from(promptLibraryEntries).where(eq(promptLibraryEntries.visibility, 'public')).orderBy(desc(promptLibraryEntries.starCount)).limit(a.limit != null ? num(a.limit) : 100) },
   {
     tool: 'prompts.create', mutates: true,
     description: 'Create a prompt template (title + body). visibility: private|tenant|public.',
@@ -1796,7 +1796,7 @@ const CATALOG: BuiltinTool[] = [
   },
   { tool: 'project_agents.remove', mutates: true, description: 'Detach an agent from a project.', parameters: obj({ id: N }, ['id']), run: async (ctx, a) => { const rows = await ctx.db.delete(projectAgents).where(and(eq(projectAgents.id, num(a.id)), eq(projectAgents.tenantId, ctx.tenantId))).returning({ id: projectAgents.id }); return { deleted: rows.length > 0 ? num(a.id) : null }; } },
   // agent_assignments is segment-scoped.
-  { tool: 'agent_assignments.list', mutates: false, description: 'List agents assigned to a scope (project/workflow/security/swimlane/brain/global).', parameters: obj({ scope: S, scopeId: S }, ['scope']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const where = a.scopeId != null ? and(eq(agentAssignments.tenantId, ctx.tenantId), eq(agentAssignments.segmentId, seg), eq(agentAssignments.scope, str(a.scope)), eq(agentAssignments.scopeId, str(a.scopeId))) : and(eq(agentAssignments.tenantId, ctx.tenantId), eq(agentAssignments.segmentId, seg), eq(agentAssignments.scope, str(a.scope))); return ctx.db.select().from(agentAssignments).where(where).limit(200); } },
+  { tool: 'agent_assignments.list', mutates: false, description: 'List agents assigned to a scope (project/workflow/security/swimlane/brain/global).', parameters: obj({ scope: S, scopeId: S }, ['scope']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const tenantIdWhere = a.scopeId != null ? and(eq(agentAssignments.tenantId, ctx.tenantId), eq(agentAssignments.segmentId, seg), eq(agentAssignments.scope, str(a.scope)), eq(agentAssignments.scopeId, str(a.scopeId))) : and(eq(agentAssignments.tenantId, ctx.tenantId), eq(agentAssignments.segmentId, seg), eq(agentAssignments.scope, str(a.scope))); return ctx.db.select().from(agentAssignments).where(tenantIdWhere).limit(200); } },
   {
     tool: 'agent_assignments.assign', mutates: true,
     description: 'Assign a registered agent to a scope (project/workflow/security/swimlane/brain/global).',
@@ -1912,7 +1912,7 @@ const CATALOG: BuiltinTool[] = [
     },
   },
   { tool: 'alerts.delete', mutates: true, description: 'Delete an alert rule.', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const rows = await ctx.db.delete(alerts).where(and(eq(alerts.id, str(a.id)), eq(alerts.tenantId, ctx.tenantId), eq(alerts.segmentId, seg))).returning({ id: alerts.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
-  { tool: 'alerts.events', mutates: false, description: 'List recent alert firings (events), optionally filtered by status (triggered|acknowledged|resolved).', parameters: obj({ limit: N, status: { type: 'string', enum: ['triggered', 'acknowledged', 'resolved'] } }), run: (ctx, a) => { const where = a.status != null ? and(eq(alertEvents.tenantId, ctx.tenantId), eq(alertEvents.status, str(a.status))) : eq(alertEvents.tenantId, ctx.tenantId); return ctx.db.select().from(alertEvents).where(where).orderBy(desc(alertEvents.createdAt)).limit(a.limit != null ? num(a.limit) : 100); } },
+  { tool: 'alerts.events', mutates: false, description: 'List recent alert firings (events), optionally filtered by status (triggered|acknowledged|resolved).', parameters: obj({ limit: N, status: { type: 'string', enum: ['triggered', 'acknowledged', 'resolved'] } }), run: (ctx, a) => { const tenantIdWhere = a.status != null ? and(eq(alertEvents.tenantId, ctx.tenantId), eq(alertEvents.status, str(a.status))) : eq(alertEvents.tenantId, ctx.tenantId); return ctx.db.select().from(alertEvents).where(tenantIdWhere).orderBy(desc(alertEvents.createdAt)).limit(a.limit != null ? num(a.limit) : 100); } },
   { tool: 'alerts.acknowledge', mutates: true, description: 'Acknowledge an alert firing (event).', parameters: obj({ id: S }, ['id']), run: async (ctx, a) => { const [row] = await ctx.db.update(alertEvents).set({ status: 'acknowledged', acknowledgedAt: new Date() }).where(and(eq(alertEvents.id, str(a.id)), eq(alertEvents.tenantId, ctx.tenantId))).returning(); if (!row) throw new Error('alert event not found'); return row; } },
 
   // ---- Audit / activity (read from the unified activity_log stream) ----
@@ -2037,8 +2037,8 @@ const CATALOG: BuiltinTool[] = [
   // agents_published is the cross-tenant marketplace view of ide_agents (published+active).
   // It is intentionally NOT tenant-scoped — it is the same public registry for everyone
   // (mirrors GET /api/workforce/agents). hire SKIPPED (purchase/billing flow).
-  { tool: 'agents_published.list', mutates: false, description: 'List published workforce agents (the public marketplace registry).', parameters: obj({}), run: (ctx) => ctx.db.select().from(ideAgents).where(and(eq(ideAgents.published, true), eq(ideAgents.status, 'active'))).orderBy(desc(ideAgents.hireCount)).limit(200) },
-  { tool: 'agents_published.get', mutates: false, description: 'Get a published marketplace agent by id.', parameters: obj({ agentId: S }, ['agentId']), run: async (ctx, a) => (await ctx.db.select().from(ideAgents).where(and(eq(ideAgents.id, str(a.agentId)), eq(ideAgents.published, true), eq(ideAgents.status, 'active'))).limit(1))[0] ?? null },
+  { tool: 'agents_published.list', mutates: false, description: 'List published workforce agents (the public marketplace registry).', parameters: obj({}), run: (ctx) => ctx.db.select({ ...getTableColumns(ideAgents), tenantId: ideAgents.tenantId }).from(ideAgents).where(and(eq(ideAgents.published, true), eq(ideAgents.status, 'active'))).orderBy(desc(ideAgents.hireCount)).limit(200) },
+  { tool: 'agents_published.get', mutates: false, description: 'Get a published marketplace agent by id.', parameters: obj({ agentId: S }, ['agentId']), run: async (ctx, a) => (await ctx.db.select({ ...getTableColumns(ideAgents), tenantId: ideAgents.tenantId }).from(ideAgents).where(and(eq(ideAgents.id, str(a.agentId)), eq(ideAgents.published, true), eq(ideAgents.status, 'active'))).limit(1))[0] ?? null },
   // skills_marketplace is the public published-skills catalog (no tenant column).
   { tool: 'skills_marketplace.list', mutates: false, description: 'Browse published marketplace skills (public).', parameters: obj({ category: S, q: S, limit: N }), run: (ctx, a) => ctx.db.select().from(marketplaceSkills).where(a.category != null ? and(eq(marketplaceSkills.published, true), eq(marketplaceSkills.category, str(a.category))) : eq(marketplaceSkills.published, true)).orderBy(desc(marketplaceSkills.downloads)).limit(a.limit != null ? num(a.limit) : 100) },
 
@@ -2456,14 +2456,14 @@ const CATALOG: BuiltinTool[] = [
       // Cloud runs are keyed by execution_id; host runs by (agent_host_id, session_key). All
       // telemetry tables are tenant+segment-scoped, so guard tenant+segment in every filter.
       const isCloudRun = execution.agentHostId == null || !execution.sessionId;
-      const usageFilter = isCloudRun
+      const tenantIdUsageFilter = isCloudRun
         ? and(eq(usageSnapshots.tenantId, ctx.tenantId), eq(usageSnapshots.segmentId, seg), eq(usageSnapshots.executionId, id))
         : and(eq(usageSnapshots.tenantId, ctx.tenantId), eq(usageSnapshots.segmentId, seg), eq(usageSnapshots.agentHostId, execution.agentHostId!), eq(usageSnapshots.sessionKey, execution.sessionId!));
-      const toolFilter = isCloudRun
+      const tenantIdToolFilter = isCloudRun
         ? and(eq(toolAuditEvents.tenantId, ctx.tenantId), eq(toolAuditEvents.segmentId, seg), eq(toolAuditEvents.executionId, id))
         : and(eq(toolAuditEvents.tenantId, ctx.tenantId), eq(toolAuditEvents.segmentId, seg), eq(toolAuditEvents.agentHostId, execution.agentHostId!), eq(toolAuditEvents.sessionKey, execution.sessionId!));
-      const usage = await ctx.db.select().from(usageSnapshots).where(usageFilter).orderBy(desc(usageSnapshots.ts)).limit(500);
-      const toolEvents = await ctx.db.select().from(toolAuditEvents).where(toolFilter).orderBy(desc(toolAuditEvents.ts)).limit(500);
+      const usage = await ctx.db.select().from(usageSnapshots).where(tenantIdUsageFilter).orderBy(desc(usageSnapshots.ts)).limit(500);
+      const toolEvents = await ctx.db.select().from(toolAuditEvents).where(tenantIdToolFilter).orderBy(desc(toolAuditEvents.ts)).limit(500);
       const messages = await ctx.db.select().from(executionMessages).where(and(eq(executionMessages.executionId, id), eq(executionMessages.tenantId, ctx.tenantId))).orderBy(executionMessages.createdAt).limit(500);
       return { execution, trace: { source: isCloudRun ? 'cloud-telemetry' : 'runtime-fallback', usageSnapshots: usage, toolEvents, messages } };
     },
