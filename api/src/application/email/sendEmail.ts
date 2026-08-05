@@ -58,7 +58,11 @@ export interface SendOptions {
   storedLocale?: string | null;
   /** Stable template/purpose label shown in the SuperAdmin delivery ledger. */
   deliveryType?: string;
+  /** Verification uses a typed failure result so routes never catch providers. */
+  onDeliveryFailure?: 'throw' | 'return';
 }
+
+export type DeliveryResult = 'sent' | 'failed';
 
 async function recordDeliveryFailure(
   db: Db,
@@ -87,6 +91,24 @@ async function recordDeliveryFailure(
   }
 }
 
+/** The single provider-failure boundary for transactional and lifecycle mail. */
+async function deliverTracked(
+  db: Db,
+  to: string,
+  deliveryType: string,
+  onFailure: 'throw' | 'return',
+  send: () => Promise<void>,
+): Promise<DeliveryResult> {
+  try {
+    await send();
+    return 'sent';
+  } catch (error) {
+    await recordDeliveryFailure(db, to, deliveryType, error);
+    if (onFailure === 'return') return 'failed';
+    throw error;
+  }
+}
+
 /**
  * Send a mail the recipient asked for. Resolves locale, then calls `send`. No
  * consent check by design — see the module docblock.
@@ -97,18 +119,19 @@ export async function sendTransactionalEmail(
   to: string,
   send: (ctx: TransactionalSendContext) => Promise<void>,
   opts?: SendOptions,
-): Promise<void> {
+): Promise<DeliveryResult> {
   const locale = await resolveEmailLocale(env, db, {
     email: to,
     stored: opts?.storedLocale,
     headers: opts?.headers,
   });
-  try {
-    await send({ locale });
-  } catch (error) {
-    await recordDeliveryFailure(db, to, opts?.deliveryType ?? 'transactional', error);
-    throw error;
-  }
+  return deliverTracked(
+    db,
+    to,
+    opts?.deliveryType ?? 'transactional',
+    opts?.onDeliveryFailure ?? 'throw',
+    () => send({ locale }),
+  );
 }
 
 /**
@@ -123,7 +146,7 @@ export async function sendLifecycleEmail(
   category: LifecycleCategory,
   send: (ctx: LifecycleSendContext) => Promise<void>,
   opts?: SendOptions,
-): Promise<'sent' | 'suppressed'> {
+): Promise<DeliveryResult | 'suppressed'> {
   if (!(await canSendLifecycleEmail(env, db, to, category))) return 'suppressed';
 
   const [locale, unsubscribeUrl] = await Promise.all([
@@ -131,13 +154,13 @@ export async function sendLifecycleEmail(
     buildUnsubscribeUrl(env, to),
   ]);
 
-  try {
-    await send({ locale, unsubscribeUrl });
-  } catch (error) {
-    await recordDeliveryFailure(db, to, opts?.deliveryType ?? `lifecycle:${category}`, error);
-    throw error;
-  }
-  return 'sent';
+  return deliverTracked(
+    db,
+    to,
+    opts?.deliveryType ?? `lifecycle:${category}`,
+    opts?.onDeliveryFailure ?? 'throw',
+    () => send({ locale, unsubscribeUrl }),
+  );
 }
 
 // ---------------------------------------------------------------------------

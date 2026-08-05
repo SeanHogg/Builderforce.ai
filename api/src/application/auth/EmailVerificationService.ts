@@ -38,7 +38,7 @@ type VerificationUser = {
   locale?: string | null;
 };
 
-export type IssueResult = { sent: boolean; cooldownSeconds?: number };
+export type IssueResult = { sent: boolean; cooldownSeconds?: number; deliveryFailed?: boolean };
 
 /**
  * Issue a fresh code: supersede any outstanding one, store the new hash, email it.
@@ -85,22 +85,26 @@ export async function issueVerificationCode(
   // TRANSACTIONAL — the user just asked for this code; there is nothing to opt out
   // of. Goes through the shared seam purely so the locale is resolved the same way
   // every other send resolves it.
-  try {
-    await sendTransactionalEmail(
+  const delivery = await sendTransactionalEmail(
+    env,
+    db,
+    user.email,
+    ({ locale }) => sendVerificationCodeEmail(
       env,
-      db,
       user.email,
-      ({ locale }) => sendVerificationCodeEmail(
-        env,
-        user.email,
-        user.displayName ?? user.username ?? user.email,
-        code,
-        opts.anonId,
-        locale,
-      ),
-      { storedLocale: user.locale, headers: opts.headers, deliveryType: 'verification_code' },
-    );
-  } catch (error) {
+      user.displayName ?? user.username ?? user.email,
+      code,
+      opts.anonId,
+      locale,
+    ),
+    {
+      storedLocale: user.locale,
+      headers: opts.headers,
+      deliveryType: 'verification_code',
+      onDeliveryFailure: 'return',
+    },
+  );
+  if (delivery === 'failed') {
     // Do not make a provider rejection consume the one-minute resend window.
     // Only retire the row created by this attempt; an unrelated newer request is
     // left untouched.
@@ -110,7 +114,7 @@ export async function issueVerificationCode(
         .set({ consumedAt: new Date() })
         .where(eq(emailVerificationCodes.id, inserted.id));
     }
-    throw error;
+    return { sent: false, deliveryFailed: true };
   }
   return { sent: true };
 }

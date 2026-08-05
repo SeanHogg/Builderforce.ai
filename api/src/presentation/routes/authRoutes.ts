@@ -51,7 +51,6 @@ import { sanitizePsychometricProfile } from '../../application/persona/psychomet
 import { provisionForHireProfile } from '../../application/freelance/provisionForHire';
 import { invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
-import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 
 /** Parse a stored psychometric JSON column into an object (null when unset/invalid). */
 function parsePsychometric(raw: string | null | undefined): unknown {
@@ -840,22 +839,12 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     // issued until the user enters the 6-digit code we email now. This is what
     // stops fake / unowned-email signups. The client flips to the code-entry step
     // on `verificationRequired` and calls /web/register/verify to obtain a session.
-    let emailDeliveryFailed = false;
-    try {
-      await issueVerificationCode(db, c.env, created, { force: true, anonId, headers: headerHints(c.req) });
-    } catch (error) {
-      emailDeliveryFailed = true;
-      reportCaughtError(error, {
-        source: 'presentation/routes/authRoutes.ts',
-        operation: 'registerVerificationEmail',
-        context: { userId: created.id },
-      });
-    }
+    const issue = await issueVerificationCode(db, c.env, created, { force: true, anonId, headers: headerHints(c.req) });
 
     return c.json({
       verificationRequired: true,
       email: created.email,
-      emailDeliveryFailed,
+      emailDeliveryFailed: issue.deliveryFailed === true,
     }, 201);
   });
 
@@ -973,15 +962,8 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     if (email) {
       const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
       if (user && !user.emailVerifiedAt && !user.isSuspended) {
-        let res;
-        try {
-          res = await issueVerificationCode(db, c.env, user, { headers: headerHints(c.req) });
-        } catch (error) {
-          reportCaughtError(error, {
-            source: 'presentation/routes/authRoutes.ts',
-            operation: 'resendVerificationEmail',
-            context: { userId: user.id },
-          });
+        const res = await issueVerificationCode(db, c.env, user, { headers: headerHints(c.req) });
+        if (res.deliveryFailed) {
           return c.json({ ok: false, error: 'Verification email could not be sent. Please try again.' }, 503);
         }
         if (!res.sent && res.cooldownSeconds) {
@@ -1022,18 +1004,8 @@ export function createAuthRoutes(authService: AuthService, db: Db): Hono<HonoEnv
     // (cooldown-guarded) and route the client into the same code-entry step instead
     // of issuing a session. Keeps a half-finished fake signup from ever logging in.
     if (!user.emailVerifiedAt) {
-      let emailDeliveryFailed = false;
-      try {
-        await issueVerificationCode(db, c.env, user, { headers: headerHints(c.req) });
-      } catch (error) {
-        emailDeliveryFailed = true;
-        reportCaughtError(error, {
-          source: 'presentation/routes/authRoutes.ts',
-          operation: 'loginVerificationEmail',
-          context: { userId: user.id },
-        });
-      }
-      return c.json({ verificationRequired: true, email: user.email, emailDeliveryFailed }, 403);
+      const issue = await issueVerificationCode(db, c.env, user, { headers: headerHints(c.req) });
+      return c.json({ verificationRequired: true, email: user.email, emailDeliveryFailed: issue.deliveryFailed === true }, 403);
     }
 
     if (user.mfaEnabled) {
