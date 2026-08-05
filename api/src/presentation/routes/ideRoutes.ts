@@ -57,6 +57,7 @@ import {
 } from '../../application/ide/workspaceStore';
 import { HOSTING_APEX } from '../../application/ide/siteHosting';
 import { publishStaticSite, assetsFromFormData } from '../../application/ide/publishStaticSite';
+import { validateLoRASafetensors } from '../../domain/training/loraArtifact';
 
 function generateId(): string {
   return crypto.randomUUID();
@@ -798,12 +799,31 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     const projectId = Number(job.projectId);
     const body = await c.req.arrayBuffer();
     if (!body || body.byteLength === 0) return c.json({ error: 'Empty artifact body' }, 400);
-    const r2Key = `artifacts/${String(projectId)}/${jobId}/adapter.bin`;
+    const format = c.req.query('format') === 'safetensors' ? 'safetensors' : 'evermind-lora';
+    if (format === 'safetensors') {
+      try {
+        validateLoRASafetensors(body);
+      } catch (error) {
+        return c.json({ error: error instanceof Error ? error.message : 'Invalid LoRA safetensors artifact' }, 400);
+      }
+    }
+    const extension = format === 'safetensors' ? 'safetensors' : 'bin';
+    const contentType = format === 'safetensors' ? 'application/x-safetensors' : 'application/octet-stream';
+    const r2Key = `artifacts/${String(projectId)}/${jobId}/adapter.${extension}`;
     const bucket = r2(c);
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
     await bucket.put(IDE_PREFIX + r2Key, body, {
-      httpMetadata: { contentType: 'application/octet-stream' },
-      customMetadata: { jobId, projectId: String(projectId), uploadedAt: new Date().toISOString() },
+      httpMetadata: { contentType },
+      customMetadata: {
+        jobId,
+        projectId: String(projectId),
+        format,
+        filename: c.req.header('X-Artifact-Filename') ?? `adapter.${extension}`,
+        baseModel: c.req.header('X-Base-Model') ?? '',
+        loraRank: c.req.header('X-LoRA-Rank') ?? '',
+        loraAlpha: c.req.header('X-LoRA-Alpha') ?? '',
+        uploadedAt: new Date().toISOString(),
+      },
     });
     await db
       .update(ideTrainingJobs)

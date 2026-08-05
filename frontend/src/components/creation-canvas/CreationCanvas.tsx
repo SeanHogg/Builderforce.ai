@@ -33,14 +33,14 @@ import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
 import { EvermindValidationProvider } from '@/components/ide/EvermindValidationContext';
 import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
 import { isAwaitingApprovalExecution } from '@/lib/builderforceApi';
-import { fetchProjects, publishSite } from '@/lib/api';
+import { evaluateModel, fetchProjects, publishSite } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
 import { updateAgent } from '@/lib/api';
 import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData, creationObjectDefinition, sanitizeCreationObjectPatch, type CreationObjectGroup } from './creationObjectRegistry';
 import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
-import { CREATION_CONNECTION_KINDS, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
+import { CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
 import { downloadJson, downloadText, toCsv } from '@/lib/download';
 import { exportCsv, exportDocx, exportPptx } from '@/lib/exportApi';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
@@ -60,6 +60,7 @@ import { ChatInput, type ChatModelOptions, type ChatModelSelection } from '@/com
 import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
 import { buildWebsiteAssets, creationDeliverables, generateEvermindMedia, mediaFrameDataUrl, withCreationDeliverable, type CreationDeliverable } from '@/lib/creationDeliverables';
 import { listEvermindModels } from '@/lib/studioModelsApi';
+import { AITrainingPanel } from '@/components/AITrainingPanel';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
@@ -73,7 +74,10 @@ const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly stri
   website: ['publish'], video: ['generate'],
   workflow: ['run'], dataset: ['visualize'], project: ['expand', 'compare'],
   mockup: ['deliver'], mockupSet: ['expand', 'deliver'], standup: ['start'],
+  evermind: ['train', 'evaluate'],
 };
+const CREATIVE_GENERATOR_KINDS = new Set<CreationObjectKind>(['image', 'animation', 'podcast', 'comic', 'game', 'cad', 'model3d', 'resume', 'template']);
+const CREATIVE_OUTPUTS = Object.fromEntries(CREATIVE_CAPABILITIES.map((capability) => [capability.kind, capability.outputs])) as Partial<Record<CreationObjectKind, readonly string[]>>;
 
 /** True only when an advertised capability has a real Canvas-side adapter. */
 export function canInvokeCreationObjectAction(kind: CreationObjectKind, action: string): boolean {
@@ -340,6 +344,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [branchParentId, setBranchParentId] = useState<string | null>(null);
   const [mergeReview, setMergeReview] = useState<MergeReview | null>(null);
   const [workflowFocus, setWorkflowFocus] = useState<{ nodeId: string; definitionId: string | null } | null>(null);
+  const [trainingFocus, setTrainingFocus] = useState<{ nodeId: string; projectId: number | string; localOnly: boolean } | null>(null);
   const [framePresets, setFramePresets] = useState<FramePreset[]>([]);
   const [serverTemplates, setServerTemplates] = useState<ServerCreationTemplate[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -1495,6 +1500,51 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNotice('Step 1 of 5 — choose a CSV or TSV in the Details panel');
   }, [nodes, selectedNode, setEdges, setNodes]);
 
+  const openEvermindTraining = useCallback(() => {
+    if (!selectedNode || selectedNode.data.kind !== 'evermind') return;
+    expandEvermindPipeline();
+    const attached = selectedNode.data.resourceId?.match(/^evermind:(\d+)$/)?.[1];
+    const projectNode = nodes.find((node) => node.data.kind === 'project' && /^project:\d+$/.test(node.data.resourceId || ''));
+    const projectId = attached ?? projectNode?.data.resourceId?.slice('project:'.length);
+    if (persistence === 'server' && !projectId) {
+      setNotice('Add or attach a saved project before creating a workspace training job');
+      return;
+    }
+    setTrainingFocus({ nodeId: selectedNode.id, projectId: projectId ? Number(projectId) : `local-${sessionId}`, localOnly: persistence === 'local' });
+    setNotice(persistence === 'local' ? 'Local-only adapter studio opened' : 'Adapter studio opened for this Evermind');
+  }, [expandEvermindPipeline, nodes, persistence, selectedNode, sessionId]);
+
+  const evaluateEvermind = useCallback((nodeId?: string) => {
+    const target = nodes.find((node) => node.id === nodeId && node.data.kind === 'evermind')
+      ?? (selectedNode?.data.kind === 'evermind' ? selectedNode : null);
+    if (!target) return;
+    const jobId = typeof target.data.trainingJobId === 'string' ? target.data.trainingJobId : '';
+    if (!jobId) { setNotice('Train a workspace adapter before running the model evaluation'); return; }
+    setNotice('Evaluating the trained adapter against its dataset…');
+    void evaluateModel(jobId).then((result) => {
+      const existing = nodes.find((node) => node.data.kind === 'evaluation' && node.data.modelEvaluationFor === target.id);
+      const evaluation = existing ?? newNode('evaluation', { x: target.position.x + 560, y: target.position.y });
+      evaluation.data = {
+        ...evaluation.data,
+        title: `${target.data.title} evaluation`,
+        status: 'Evaluated',
+        modelEvaluationFor: target.id,
+        verdict: result.score >= .8 ? 'Passed' : result.score >= .6 ? 'Review required' : 'Failed',
+        score: result.score,
+        content: result.details,
+        results: [
+          { label: 'Overall', value: result.score },
+          { label: 'Code correctness', value: result.code_correctness ?? 0 },
+          { label: 'Reasoning quality', value: result.reasoning_quality ?? 0 },
+          { label: 'Hallucination rate', value: result.hallucination_rate ?? 0 },
+        ],
+      };
+      setNodes((current) => existing ? current.map((node) => node.id === existing.id ? evaluation : node) : [...current, evaluation]);
+      setEdges((current) => current.some((edge) => edge.source === target.id && edge.target === evaluation.id) ? current : [...current, { id: crypto.randomUUID(), source: target.id, target: evaluation.id, type: 'smoothstep', label: 'evaluated by', animated: true }]);
+      setNotice(`Evermind evaluation complete: ${(result.score * 100).toFixed(0)}%`);
+    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Evermind evaluation failed'));
+  }, [nodes, selectedNode, setEdges, setNodes]);
+
   const startStandup = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'standup') return;
     if (persistence === 'local') { requireAccount('start', 'Create an account to start a collaborative stand-up', 'A live stand-up needs durable participants, shared activity, follow-up tasks, and tenant permissions.'); return; }
@@ -2257,18 +2307,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     else if (target.data.kind === 'mockupSet' && pending.action === 'expand') expandMockupSet();
     else if ((target.data.kind === 'mockup' || target.data.kind === 'mockupSet') && pending.action === 'deliver') deliverMockup();
     else if (target.data.kind === 'standup' && pending.action === 'start') startStandup();
-    else if (target.data.kind === 'evermind' && pending.action === 'train') expandEvermindPipeline();
-    else if (target.data.kind === 'evermind' && pending.action === 'evaluate') {
-      const evaluation = newNode('evaluation', { x: target.position.x + 560, y: target.position.y });
-      evaluation.data = { ...evaluation.data, title: `${target.data.title} evaluation`, status: 'Ready', content: `Evaluate ${target.data.title} against its connected dataset, training evidence, and quality criteria.` };
-      setNodes((current) => [...current, evaluation]);
-      setEdges((current) => [...current, { id: crypto.randomUUID(), source: target.id, target: evaluation.id, type: 'smoothstep', label: 'evaluates', animated: true }]);
-      setNotice('Evermind evaluation added to the canvas');
-    } else {
+    else if (target.data.kind === 'evermind' && pending.action === 'train') openEvermindTraining();
+    else if (target.data.kind === 'evermind' && pending.action === 'evaluate') evaluateEvermind(target.id);
+    else {
       setNotice(`${pending.action} did not run because this ${creationObjectDefinition(target.data.kind).label} has no connected delivery adapter`);
     }
     finish();
-  }, [compareProjects, deliverMockup, expandEvermindPipeline, expandMockupSet, expandProject, generateVideo, nodes, pendingBrainActions, persistence, publishWebsite, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
+  }, [compareProjects, deliverMockup, evaluateEvermind, expandMockupSet, expandProject, generateVideo, nodes, openEvermindTraining, pendingBrainActions, persistence, publishWebsite, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
 
   const openHistory = useCallback(() => {
     setHistoryOpen(true);
@@ -2527,11 +2572,30 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           })}</div>
         </aside>}
 
-        {!presentMode && selectedNode && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onGenerateVideo={() => generateVideo(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}
+        {!presentMode && selectedNode && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onGenerateVideo={() => generateVideo(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} />}
 
         {workflowFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label="Workflow focus editor">
           <header><div><strong>Edit Workflow on Canvas</strong><small>Changes save to the canonical Workflow definition.</small></div><button type="button" onClick={() => setWorkflowFocus(null)} aria-label="Close workflow editor">×</button></header>
           <div className={styles.workflowFocusBody}><ReactFlowProvider><WorkflowBuilder definitionId={workflowFocus.definitionId} embedded onSaved={(definitionId, name) => { setWorkflowFocus((current) => current ? { ...current, definitionId } : current); setNodes((current) => current.map((node) => node.id === workflowFocus.nodeId ? { ...node, data: { ...node.data, title: name, resourceId: `workflow:${definitionId}`, workflowExecutable: true, resourceSubtype: 'definition', status: 'Saved' } } : node)); setNotice('Workflow saved from this Session'); }} onRunStarted={(workflowId) => { setNodes((current) => current.map((node) => node.id === workflowFocus.nodeId ? { ...node, data: { ...node.data, status: 'Running', workflowRunId: workflowId } } : node)); setNotice(`Workflow run ${workflowId} started`); }} /></ReactFlowProvider></div>
+        </section>}
+
+        {trainingFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label="Evermind adapter studio">
+          <header><div><strong>Train Evermind on Canvas</strong><small>Real frozen-base LoRA, evaluation-ready job evidence, and portable safetensors output.</small></div><button type="button" onClick={() => setTrainingFocus(null)} aria-label="Close adapter studio">×</button></header>
+          <div className={styles.workflowFocusBody} style={{ overflow: 'auto', background: '#111827', justifyContent: 'center', padding: 20 }}>
+            <AITrainingPanel
+              projectId={trainingFocus.projectId}
+              initialDataMode={trainingFocus.localOnly ? 'local-only' : 'workspace'}
+              workspaceEnabled={!trainingFocus.localOnly}
+              onJobCompleted={(job) => {
+                setNodes((current) => current.map((node) => node.id === trainingFocus.nodeId ? { ...node, data: { ...node.data, status: 'Adapter trained', trainingJobId: job.id, adapterArtifact: job.r2_artifact_key, model: job.base_model, loraRank: job.lora_rank } } : node));
+                setNotice('Evermind adapter trained and linked to this canvas object');
+              }}
+              onLocalArtifactCompleted={(artifact) => {
+                setNodes((current) => current.map((node) => node.id === trainingFocus.nodeId ? { ...node, data: { ...node.data, status: 'Local adapter trained', adapterArtifact: `local://${artifact.filename}`, trainableParams: artifact.trainableParams } } : node));
+                setNotice('Local Evermind adapter trained, downloaded, and linked to this canvas object');
+              }}
+            />
+          </div>
         </section>}
 
         {historyOpen && <aside className={styles.historyPanel}><header><div><strong>Version history</strong><small>Restore creates a new revision</small></div><button onClick={() => setHistoryOpen(false)} aria-label="Close history">×</button></header>{persistence === 'local' ? <p>This session is currently stored on this device. Server version history begins after you save it.</p> : <><button className={styles.primaryButton} onClick={createCheckpoint} disabled={!canEdit}>+ Name current checkpoint</button><div>{history.length ? history.map((snapshot) => <button key={snapshot.revision} onClick={() => restoreRevision(snapshot.revision)} disabled={!canEdit}><b>{snapshot.label || `Revision ${snapshot.revision}`}</b><span>Revision {snapshot.revision} · {new Date(snapshot.createdAt).toLocaleString()}</span></button>) : <p>No saved revisions yet.</p>}</div></>}</aside>}
@@ -2639,7 +2703,7 @@ function BrainObjectDetails({ node, nodes, edges, timeline, trace }: { node: Cre
   </div>;
 }
 
-function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onGenerateVideo, onEditWorkflow, onSaveAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onAttachEvermindProject, onExpandEvermindPipeline, onStartStandup }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onGenerateVideo: () => void; onEditWorkflow: () => void; onSaveAgent: () => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onStartStandup: () => void }) {
+function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onGenerateVideo, onEditWorkflow, onSaveAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onGenerateVideo: () => void; onEditWorkflow: () => void; onSaveAgent: () => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void }) {
   const kind = node.data.kind;
   const [tab, setTab] = useState<'details' | 'activity'>('details');
   const [accessStatus, setAccessStatus] = useState('');
@@ -2875,11 +2939,18 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
       {kind === 'projectComparison' && <><p className={styles.inspectorHint}>This portfolio view combines project health with saved quality diagnostics, open gaps, remediation state, and prioritized recommendations.</p><button className={styles.fullButton} onClick={onCompareProjects}>Refresh quality comparison</button><SourceList sources={node.data.sources} /></>}
       {kind === 'mockup' && <><label>Delivery project<select value={mockupProjectValue} onChange={(event) => { const project = mockupProjects.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ deliveryProjectRef: event.target.value, deliveryProjectName: project?.data.title || (event.target.value === 'draft:builderforce-launch' ? 'BuilderForce launch' : 'No project') }); }}><option value="draft:builderforce-launch">BuilderForce launch</option>{mockupProjects.filter((project) => (project.data.resourceId || project.id) !== 'draft:builderforce-launch').map((project) => <option key={project.id} value={project.data.resourceId || project.id}>{project.data.title}</option>)}<option value="">No project</option></select></label><label>Assign agent<select value={mockupAgentValue} onChange={(event) => { const agent = mockupAgents.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ mockupAgentRef: event.target.value, mockupAgentName: agent?.data.title || (event.target.value === 'web-analyst' ? 'Web Analyst' : 'Unassigned') }); }}><option value="campaign-strategist">Campaign Strategist</option>{mockupAgents.filter((agent) => (agent.data.resourceId || agent.id) !== 'campaign-strategist').map((agent) => <option key={agent.id} value={agent.data.resourceId || agent.id}>{agent.data.title}</option>)}<option value="web-analyst">Web Analyst</option><option value="">Unassigned</option></select></label><button className={styles.fullButton} onClick={onDeliverMockup}>Add to project and assign</button></>}
       {kind === 'mockupSet' && <><p className={styles.inspectorHint}>Expand the set into individually reviewable mockups, or deliver the approved set as one project task.</p><button className={styles.fullButton} onClick={onExpandMockupSet}>Expand all mockups</button><button className={styles.fullButton} onClick={onDeliverMockup}>Add to project and assign</button><SourceList sources={node.data.sources} /></>}
-      {kind === 'evermind' && <EvermindInspector node={node} persistence={persistence} onAttach={onAttachEvermindProject} onExpand={onExpandEvermindPipeline} />}
+      {kind === 'evermind' && <EvermindInspector node={node} persistence={persistence} onAttach={onAttachEvermindProject} onExpand={onExpandEvermindPipeline} onTrain={onTrainEvermind} />}
       {kind === 'standup' && <><p className={styles.inspectorHint}>Gather every Staff Member and Agent currently on the canvas. With a saved Project, this starts the canonical stand-up ceremony and keeps its resource link in the session.</p><button className={styles.fullButton} onClick={onStartStandup}>Gather and start stand-up</button></>}
+      {CREATIVE_GENERATOR_KINDS.has(kind) && <>
+        <label>Creative brief<textarea rows={5} value={typeof node.data.prompt === 'string' ? node.data.prompt : typeof node.data.content === 'string' ? node.data.content : ''} onChange={(event) => onChange({ prompt: event.target.value, content: event.target.value })} placeholder={`Describe the ${creationObjectDefinition(kind).label.toLowerCase()} to create`} /></label>
+        <label>Template ID<input value={typeof node.data.templateId === 'string' ? node.data.templateId : ''} onChange={(event) => onChange({ templateId: event.target.value })} placeholder={kind === 'template' ? 'Browse with Brain or enter an ID' : 'Optional template'} /></label>
+        <label>Output format<select value={typeof node.data.outputFormat === 'string' ? node.data.outputFormat : ''} onChange={(event) => onChange({ outputFormat: event.target.value })}><option value="">Choose on export</option>{(CREATIVE_OUTPUTS[kind] || []).map((format) => <option key={format} value={format}>{format}</option>)}</select></label>
+        <section className={styles.taskPrdSummary} aria-label="Native creative capability"><div><span>Creative capability</span><small>{typeof node.data.provider === 'string' ? node.data.provider : 'native'}</small></div><strong>{typeof node.data.capabilityId === 'string' ? node.data.capabilityId : `creative.${kind}`}</strong><p>Builderforce owns this provider-neutral contract. Brain composes it through the built-in MCP catalog; execution providers can be added later without changing the Canvas object.</p></section>
+        {typeof node.data.outputUrl === 'string' && <a href={node.data.outputUrl} target="_blank" rel="noreferrer">Open generated output ↗</a>}
+      </>}
       {kind === 'frame' && <><label>Purpose<input value={typeof node.data.framePurpose === 'string' ? node.data.framePurpose : 'Arrange related objects here'} onChange={(event) => onChange({ framePurpose: event.target.value })} /></label><label>Fill color<input type="color" value={typeof node.data.frameColor === 'string' ? node.data.frameColor : '#f8f6ff'} onChange={(event) => onChange({ frameColor: event.target.value })} /></label><label>Border color<input type="color" value={typeof node.data.frameBorder === 'string' ? node.data.frameBorder : '#9d8bea'} onChange={(event) => onChange({ frameBorder: event.target.value })} /></label><button className={styles.fullButton} onClick={onSaveFramePreset}>Save as reusable frame</button></>}
       {kind === 'drawing' && <><label>Stroke color<input type="color" value={typeof node.data.stroke === 'string' ? node.data.stroke : '#5b5ce2'} onChange={(event) => onChange({ stroke: event.target.value })} /></label><label>Stroke width<input type="range" min="1" max="12" value={typeof node.data.strokeWidth === 'number' ? node.data.strokeWidth : 3} onChange={(event) => onChange({ strokeWidth: Number(event.target.value) })} /></label><p className={styles.inspectorHint}>Resize, annotate, connect, or use this sketch as visual context for Brain.</p></>}
-      {!['chat', 'agent', 'evaluation', 'staff', 'website', 'prototype', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'task', 'mockup', 'evermind', 'standup', 'frame', 'drawing'].includes(kind) && <p className={styles.inspectorHint}>This object is live in the session. Connect it to other objects or ask Brain to transform or evaluate it.</p>}
+      {!['chat', 'agent', 'evaluation', 'staff', 'website', 'prototype', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'task', 'mockup', 'evermind', 'standup', 'frame', 'drawing'].includes(kind) && !CREATIVE_GENERATOR_KINDS.has(kind) && <p className={styles.inspectorHint}>This object is live in the session. Connect it to other objects or ask Brain to transform or evaluate it.</p>}
       </fieldset> : <ActivityInspector sessionId={sessionId} objectId={node.id} persistence={persistence} role={role} members={members} />}
       {tab === 'details' && <section aria-label="Copy and download" style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
         <strong style={{ fontSize: 12 }}>Copy &amp; download</strong>
@@ -2971,12 +3042,13 @@ function CanvasVoiceInspector({ node, persistence, onChange }: { node: CreationF
   </div>;
 }
 
-function EvermindInspector({ node, persistence, onAttach, onExpand }: { node: CreationFlowNode; persistence: 'local' | 'server'; onAttach: () => void; onExpand: () => void }) {
+function EvermindInspector({ node, persistence, onAttach, onExpand, onTrain }: { node: CreationFlowNode; persistence: 'local' | 'server'; onAttach: () => void; onExpand: () => void; onTrain: () => void }) {
   const rawProjectId = node.data.resourceId?.startsWith('evermind:') ? node.data.resourceId.slice('evermind:'.length) : '';
   const projectId = /^\d+$/.test(rawProjectId) ? Number(rawProjectId) : null;
   return <>
     <div className={styles.evermindStartGuide}><span>{node.data.pipelineExpanded === true ? 'Guided setup added' : 'New model'}</span><strong>{node.data.pipelineExpanded === true ? 'Continue from Step 1' : 'Start with training examples'}</strong><p>{node.data.pipelineExpanded === true ? 'The numbered cards show the complete learning path. This button returns you to the first unfinished action.' : 'We’ll add a five-step flow and open the training-data picker first. Each card explains the next action.'}</p></div>
     <button className={styles.fullButton} onClick={onExpand}>{node.data.pipelineExpanded === true ? 'Go to Step 1 · Training data' : 'Start guided setup'}</button>
+    <button className={styles.fullButton} onClick={onTrain}>Train LoRA adapter</button>
     {persistence === 'local' && <p className={styles.inspectorHint}>This blueprint works without an account. Save the session when you want to run training, store versions, or deploy inference.</p>}
     {persistence === 'server' && projectId == null && <button className={styles.fullButton} onClick={onAttach}>Use project on canvas</button>}
     {persistence === 'server' && projectId != null && <div className={styles.evermindConsoleHost}><EvermindValidationProvider><ProjectEvermindPanel projectId={projectId} /></EvermindValidationProvider></div>}

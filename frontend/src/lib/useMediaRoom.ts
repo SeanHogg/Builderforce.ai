@@ -11,7 +11,9 @@ import { meetingsApi } from './builderforceApi';
  * (`/api/meetings/rooms/<roomKey>/ws`) — the same CeremonyRoomDO fan-out used for
  * presence, keyed `media:<roomKey>`. SDP offers/answers and ICE candidates ride
  * that socket peer-to-peer (each frame carries `to`/`from`); the media itself
- * flows directly between browsers (no server relay of audio/video).
+ * normally flows directly between browsers. In relay-fallback mode WebRTC may
+ * use configured TURN for encrypted media when NAT traversal cannot go direct;
+ * direct-only mode strips TURN from the ICE configuration.
  *
  * Glare-free negotiation: for any pair, the peer with the lexicographically
  * greater assigned id is the offerer, so exactly one side initiates regardless of
@@ -52,6 +54,8 @@ export interface UseMediaRoom {
   captions: Record<string, string>;
   /** Member refs currently speaking (drives the tile accent ring). */
   speaking: Set<string>;
+  /** Direct-only excludes TURN; relay-fallback may use TURN for encrypted media. */
+  privacyMode: 'direct-only' | 'relay-fallback';
   toggleCam: () => void;
   toggleMic: () => void;
 }
@@ -61,9 +65,9 @@ const EMPTY: RemoteTile[] = [];
 export function useMediaRoom(
   roomKey: string | null,
   me: { name: string; ref: string },
-  opts: { enabled: boolean; audioOnly?: boolean },
+  opts: { enabled: boolean; audioOnly?: boolean; privacyMode?: 'direct-only' | 'relay-fallback' },
 ): UseMediaRoom {
-  const { enabled, audioOnly = false } = opts;
+  const { enabled, audioOnly = false, privacyMode = 'relay-fallback' } = opts;
   const [tiles, setTiles] = useState<RemoteTile[]>(EMPTY);
   const [connected, setConnected] = useState(false);
   const [camOn, setCamOn] = useState(!audioOnly);
@@ -250,7 +254,7 @@ export function useMediaRoom(
       }
       // 2) ICE config (best-effort; STUN default already set).
       try {
-        const cfg = await meetingsApi.ice();
+        const cfg = await meetingsApi.ice(privacyMode);
         if (!cancelled && cfg.iceServers?.length) iceRef.current = cfg.iceServers as RTCIceServer[];
       } catch { /* keep default STUN */ }
 
@@ -296,7 +300,7 @@ export function useMediaRoom(
       setSpeaking(new Set());
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) { try { window.speechSynthesis.cancel(); } catch { /* ignore */ } }
     };
-  }, [enabled, roomKey, audioOnly, send, handleFrame]);
+  }, [enabled, roomKey, audioOnly, privacyMode, send, handleFrame]);
 
   const toggleCam = useCallback(() => {
     const stream = localRef.current;
@@ -316,5 +320,5 @@ export function useMediaRoom(
     send({ type: 'm-state', camOn, micOn: next });
   }, [camOn, micOn, send]);
 
-  return { localStream, tiles, camOn, micOn, connected, mediaError, captions, speaking, toggleCam, toggleMic };
+  return { localStream, tiles, camOn, micOn, connected, mediaError, captions, speaking, privacyMode, toggleCam, toggleMic };
 }

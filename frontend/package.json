@@ -25,7 +25,7 @@
     "@seanhogg/builderforce-brain-ui": "link:../packages/brain-ui",
     "@seanhogg/builderforce-embedded": "link:../builderforce-embedded",
     "@seanhogg/builderforce-memory": "^2026.7.11",
-    "@seanhogg/builderforce-memory-engine": "^2026.7.11",
+    "@seanhogg/builderforce-memory-engine": "^2026.7.14",
     "@seanhogg/builderforce-quality": "^2026.7.5",
     "@seanhogg/builderforce-sdk": "link:../sdk",
     "@seanhogg/builderforce-studio": "link:../studio",

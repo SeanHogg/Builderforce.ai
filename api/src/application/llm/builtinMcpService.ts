@@ -21,6 +21,7 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 import { and, eq, desc, getTableColumns, isNotNull, sql, type SQL } from 'drizzle-orm';
 import { type ToolSchema } from '@builderforce/agent-tools';
+import { CREATIVE_CAPABILITIES } from '@builderforce/creation-canvas-contract';
 import { advertisedName } from './toolNaming';
 import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import {
@@ -463,6 +464,46 @@ async function salesSettings(ctx: BuiltinCtx, ownerUserId: string) {
   return existing;
 }
 const CATALOG: BuiltinTool[] = [
+  // ---- Native creative platform -----------------------------------------
+  {
+    tool: 'creative.capabilities',
+    mutates: false,
+    description: 'List Builderforce-owned creative artifact capabilities, media kinds, and supported output formats. Provider-neutral: no external service is required or implied.',
+    parameters: obj({}),
+    run: async () => ({
+      capabilities: CREATIVE_CAPABILITIES,
+      contract: 'builderforce.creation-canvas.v1',
+      providerNeutral: true,
+    }),
+  },
+  {
+    tool: 'creative.compose',
+    mutates: false,
+    description: 'Compile a provider-neutral creative brief into a canonical Builderforce Canvas artifact manifest for images, animation, podcasts, comics, games, CAD, 3D models, resumes, templates, video, voice, documents, presentations, or files.',
+    parameters: obj({ kind: S, title: S, brief: S, templateId: S, outputFormat: S }, ['kind', 'title']),
+    run: async (_ctx, a) => {
+      const kind = str(a.kind).trim();
+      const capability = CREATIVE_CAPABILITIES.find((entry) => entry.kind === kind);
+      if (!capability) throw new Error(`Unsupported creative kind '${kind}'.`);
+      const requestedOutput = str(a.outputFormat).trim();
+      if (requestedOutput && !capability.outputs.some((output) => output.toLowerCase() === requestedOutput.toLowerCase())) {
+        throw new Error(`Unsupported ${kind} output '${requestedOutput}'. Supported outputs: ${capability.outputs.join(', ')}.`);
+      }
+      return {
+        manifestVersion: 1,
+        artifactId: crypto.randomUUID(),
+        kind: capability.kind,
+        capabilityId: capability.capabilityId,
+        mediaKind: capability.mediaKind,
+        provider: 'native',
+        title: str(a.title).trim().slice(0, 200),
+        brief: str(a.brief).trim().slice(0, 40_000),
+        templateId: str(a.templateId).trim() || null,
+        outputFormat: requestedOutput || capability.outputs[0],
+        status: 'Draft',
+      };
+    },
+  },
   // ---- Compliance Audit Agent ---------------------------------------------
   {
     tool: 'compliance.requirements',

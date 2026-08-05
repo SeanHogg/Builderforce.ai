@@ -2,6 +2,7 @@
 export const CREATION_OBJECT_KINDS = [
   'workflow', 'project', 'website', 'dashboard', 'chat', 'agent', 'staff', 'evaluation', 'dataset',
   'table', 'spreadsheet', 'chart', 'report', 'kpi', 'prototype', 'code', 'browser', 'llm', 'voice', 'video',
+  'image', 'animation', 'podcast', 'comic', 'game', 'cad', 'model3d', 'resume', 'template',
   'document', 'slides', 'knowledge', 'file', 'url', 'note', 'drawing', 'frame', 'comment', 'timer',
   'roadmap', 'prd', 'release', 'task', 'mockup', 'mockupSet', 'featureSummary', 'team', 'role', 'mcp',
   'evermind', 'projectComparison', 'standup',
@@ -10,6 +11,28 @@ export const CREATION_OBJECT_KINDS = [
 ] as const;
 
 export type CreationObjectKind = typeof CREATION_OBJECT_KINDS[number];
+
+/** Provider-neutral creative capabilities owned by Builderforce. Canvas, Brain,
+ * MCP, web, and VS Code consume this contract; execution providers are adapters
+ * and are never encoded into saved objects. */
+export const CREATIVE_CAPABILITIES = [
+  { kind: 'video', capabilityId: 'creative.video', mediaKind: 'video', outputs: ['MP4', 'WebM'] },
+  { kind: 'voice', capabilityId: 'creative.voice', mediaKind: 'voice', outputs: ['MP3', 'WAV'] },
+  { kind: 'document', capabilityId: 'creative.document', mediaKind: 'document', outputs: ['DOCX', 'PDF', 'Markdown'] },
+  { kind: 'slides', capabilityId: 'creative.presentation', mediaKind: 'presentation', outputs: ['PPTX', 'PDF'] },
+  { kind: 'file', capabilityId: 'creative.file', mediaKind: 'file', outputs: ['Original', 'ZIP'] },
+  { kind: 'image', capabilityId: 'creative.image', mediaKind: 'image', outputs: ['PNG', 'JPG', 'SVG', 'PSD'] },
+  { kind: 'animation', capabilityId: 'creative.animation', mediaKind: 'animation', outputs: ['GIF', 'Animated WebP', 'APNG', 'MP4'] },
+  { kind: 'podcast', capabilityId: 'creative.podcast', mediaKind: 'podcast', outputs: ['MP3', 'M4A', 'OGG', 'WAV', 'MP4'] },
+  { kind: 'comic', capabilityId: 'creative.comic', mediaKind: 'comic', outputs: ['PNG strip', 'PDF', 'CBZ'] },
+  { kind: 'game', capabilityId: 'creative.game', mediaKind: 'game', outputs: ['HTML5 ZIP', 'Web embed'] },
+  { kind: 'cad', capabilityId: 'creative.cad', mediaKind: 'cad', outputs: ['SVG', 'DXF', 'PDF'] },
+  { kind: 'model3d', capabilityId: 'creative.model3d', mediaKind: 'model3d', outputs: ['STL', 'STEP', 'GLB'] },
+  { kind: 'resume', capabilityId: 'creative.resume', mediaKind: 'document', outputs: ['PDF', 'DOCX'] },
+  { kind: 'template', capabilityId: 'creative.template', mediaKind: 'template', outputs: ['Template defaults'] },
+] as const satisfies ReadonlyArray<{ kind: CreationObjectKind; capabilityId: string; mediaKind: string; outputs: readonly string[] }>;
+
+export type CreativeCapability = typeof CREATIVE_CAPABILITIES[number];
 
 export const CREATION_CONNECTION_KINDS = [
   'data', 'control', 'reference', 'presentation', 'delivery', 'membership',

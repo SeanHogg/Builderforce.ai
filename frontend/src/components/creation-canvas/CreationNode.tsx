@@ -55,6 +55,25 @@ function AuthoredContent({ data, fallback }: { data: CreationNodeData; fallback:
   return <p className={styles.authoredContent}>{authoredText(data) || fallback}</p>;
 }
 
+const CREATIVE_STUDIO_KINDS = new Set(['image', 'animation', 'podcast', 'comic', 'game', 'cad', 'model3d', 'resume', 'template']);
+
+function CreativeStudioBody({ data }: { data: CreationNodeData }) {
+  const mediaKind = textValue(data.mediaKind, data.kind === 'model3d' ? 'cad_3d' : data.kind);
+  const template = textValue(data.templateId, data.kind === 'template' ? 'Browse the catalog' : 'Blank canvas');
+  const output = textValue(data.outputFormat, data.kind === 'resume' ? 'PDF / DOCX' : 'Choose on export');
+  const thumbnail = textValue(data.thumbnailUrl, textValue(data.outputUrl));
+  return <div className={styles.creativeStudioBody}>
+    {thumbnail ? <img src={thumbnail} alt={`${data.title} preview`} /> : <div className={styles.creativeStudioPreview} aria-hidden="true"><span>{creationObjectDefinition(data.kind).icon}</span><i /><i /><i /></div>}
+    <AuthoredContent data={data} fallback="Describe what to create, choose a template, then ask Brain to generate it." />
+    <div className={styles.widgetSettings}>
+      <span><small>Studio</small><b>{mediaKind.replaceAll('_', ' ')}</b></span>
+      <span><small>Template</small><b>{template.replaceAll('_', ' ')}</b></span>
+      <span><small>Output</small><b>{output}</b></span>
+    </div>
+    <div className={styles.pills}><span>{textValue(data.capabilityId, `creative.${data.kind}`)}</span><span>MCP · {textValue(data.mcpServer, 'builtin')}</span></div>
+  </div>;
+}
+
 function textValue(value: unknown, fallback = ''): string {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
 }
@@ -585,6 +604,7 @@ export function CreationNode({ id, data, selected, width, height, canRun = true,
         {(data.kind === 'dataset' || data.kind === 'table' || data.kind === 'spreadsheet') && <DataGridBody data={data} />}
         {data.kind === 'kpi' && <KpiBody data={data} />}
         {data.kind === 'voice' && <><div className={styles.waveform}>▂▅▃▆▂▇▅▃▆▂▅▇▃▆▂▅</div><AuthoredContent data={data} fallback="Record or generate a voice note." /></>}
+        {CREATIVE_STUDIO_KINDS.has(data.kind) && <CreativeStudioBody data={data} />}
         {data.kind === 'note' && <AuthoredContent data={data} fallback="Double-click to add a thought." />}
         {data.kind === 'project' && <ProjectBody data={data} />}
         {data.kind === 'roadmap' && <div className={styles.roadmap}>{(Array.isArray(data.items) && data.items.length ? data.items.slice(0, 12) : [{ title: 'Validate narrative', phase: 'Now' }, { title: 'Executive review', phase: 'Next' }, { title: 'Measure adoption', phase: 'Later' }]).map((raw, index) => { const item = asRecord(raw, { title: raw, phase: index < 2 ? 'Now' : 'Next' }); return <div key={`${String(item.title)}-${index}`}><b>{String(item.phase || item.status || `Phase ${index + 1}`)}</b><span>{String(item.title || item.name || `Item ${index + 1}`)}</span>{item.description ? <span>{String(item.description)}</span> : null}</div>; })}</div>}

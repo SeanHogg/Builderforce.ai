@@ -10,7 +10,7 @@ type HackableMode = 'installer' | 'pnpm';
 type Os = 'unix' | 'windows';
 type WinShell = 'powershell' | 'cmd';
 
-const RELEASES_URL = 'https://github.com/seanhogg/agents/releases/latest';
+const MACOS_INSTALL_URL = '/docs/platforms/macos';
 
 const COMMENTS = {
   oneliner: {
@@ -294,13 +294,13 @@ export default function QuickStart() {
               <div className="cc-code-line cc-comment"># You clearly know what you&apos;re doing</div>
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
-                <span className="cc-cmd-text">git clone https://github.com/seanhogg/agents.git</span>
-                <CopyBtn text="git clone https://github.com/seanhogg/agents.git" copyKey="clone" copied={copied} ariaLabel={t('copyCommandAria')} onCopy={copy} />
+                <span className="cc-cmd-text">git clone https://github.com/SeanHogg/Builderforce.ai.git builderforce-agents</span>
+                <CopyBtn text="git clone https://github.com/SeanHogg/Builderforce.ai.git builderforce-agents" copyKey="clone" copied={copied} ariaLabel={t('copyCommandAria')} onCopy={copy} />
               </div>
               <div className="cc-code-line cc-cmd">
                 <span className="cc-prompt">$</span>
-                <span className="cc-cmd-text">cd builderforce-agents &amp;&amp; pnpm install &amp;&amp; pnpm run build</span>
-                <CopyBtn text="cd builderforce-agents && pnpm install && pnpm run build" copyKey="build" copied={copied} ariaLabel={t('copyCommandAria')} onCopy={copy} />
+                <span className="cc-cmd-text">cd builderforce-agents/agent-runtime &amp;&amp; pnpm install &amp;&amp; pnpm run build</span>
+                <CopyBtn text="cd builderforce-agents/agent-runtime && pnpm install && pnpm run build" copyKey="build" copied={copied} ariaLabel={t('copyCommandAria')} onCopy={copy} />
               </div>
               <div className="cc-code-line cc-comment"># You built it, now meet it</div>
               <div className="cc-code-line cc-cmd">
@@ -317,7 +317,7 @@ export default function QuickStart() {
                 <span className="cc-macos-tagline">{t('macosTagline')}</span>
                 <span className="cc-macos-subtitle">{t('macosSubtitle')}</span>
               </div>
-              <a href={RELEASES_URL} className="cc-macos-btn" target="_blank" rel="noopener noreferrer">
+              <a href={MACOS_INSTALL_URL} className="cc-macos-btn" target="_blank" rel="noopener noreferrer">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                   <polyline points="7 10 12 15 17 10" />

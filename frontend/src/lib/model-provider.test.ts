@@ -429,14 +429,14 @@ describe('createInferenceProvider', () => {
 });
 
 // ---------------------------------------------------------------------------
-// WebGPUTrainer — real engine wiring (no synthetic loss / no fake fallback)
+// Browser LoRA — real frozen-base adapter training and portable artifacts
 // ---------------------------------------------------------------------------
 
-describe('WebGPUTrainer (real engine wiring)', () => {
+describe('WebGPUTrainer (exact browser LoRA)', () => {
   function makeTrainer(overrides: Partial<WebGPUTrainerOptions> = {}) {
     const logs: string[] = [];
     const trainer = new WebGPUTrainer({
-      modelId: 'gpt-neox-20m',
+      modelId: 'evermind-browser-test',
       workerUrl: 'http://localhost',
       projectId: 'proj-1',
       onLog: (m) => logs.push(m),
@@ -449,11 +449,10 @@ describe('WebGPUTrainer (real engine wiring)', () => {
     return { trainer, logs };
   }
 
-  it('init() surfaces a REAL error when WebGPU/engine is unavailable (no fake fallback)', async () => {
-    // jsdom has no navigator.gpu, so the underlying MambaModelProvider never
-    // becomes ready — init must throw rather than silently simulate.
-    const { trainer } = makeTrainer();
-    await expect(trainer.init()).rejects.toThrow(/WebGPU training engine unavailable/i);
+  it('initialises the exact CPU path when WebGPU is unavailable', async () => {
+    const { trainer, logs } = makeTrainer();
+    await expect(trainer.init()).resolves.toBeUndefined();
+    expect(logs.join('\n')).toMatch(/exact-gradient browser LoRA/i);
   });
 
   it('train() refuses to run before a successful init() (no synthetic loop)', async () => {
@@ -473,54 +472,45 @@ describe('WebGPUTrainer (real engine wiring)', () => {
     ).rejects.toThrow(/not initialised/i);
   });
 
-  it('drives the REAL MambaModelProvider.train + exportTrainedWeights (real loss + real weights)', async () => {
-    const { trainer, logs } = makeTrainer({ jobId: 'job-1' });
-
-    const realLosses = [2.2, 1.5];
-    const realWeights = new ArrayBuffer(256);
-    const fakeProvider = {
-      isReady: () => true,
-      train: vi.fn().mockImplementation(
-        async (_corpus: string, opts: { onEpochEnd?: (e: number, l: number) => void }) => {
-          realLosses.forEach((l, i) => opts.onEpochEnd?.(i + 1, l));
-          return realLosses;
-        },
-      ),
-      exportTrainedWeights: vi.fn().mockResolvedValue(realWeights),
-      dispose: vi.fn(),
-    };
-
-    const steps: TrainingStep[] = [];
-    (trainer as any).options.onStep = (s: TrainingStep) => steps.push(s);
-
-    // Inject a ready provider (simulating a successful init on a real GPU).
-    (trainer as any).provider = fakeProvider;
-
-    const { uploadArtifact } = await import('./api');
-    (uploadArtifact as ReturnType<typeof vi.fn>).mockResolvedValue({ r2Key: 'adapters/real.bin' });
-
+  it('trains real LoRA matrices locally and emits a valid safetensors adapter without network calls', async () => {
+    const artifacts: Array<{ bytes: ArrayBuffer; filename: string }> = [];
     let completedKey = '';
-    (trainer as any).options.onComplete = (k: string) => { completedKey = k; };
-
+    const steps: TrainingStep[] = [];
+    const { trainer } = makeTrainer({
+      dataMode: 'local-only',
+      modelConfig: { dModel: 8, numLayers: 1, hiddenDim: 16, numExperts: 2, topK: 1 },
+      onStep: (step) => steps.push(step),
+      onArtifact: (artifact) => artifacts.push(artifact),
+      onComplete: (key) => { completedKey = key; },
+    });
+    await trainer.init();
     await trainer.train(
       {
-        epochs: 2,
-        batchSize: 4,
-        learningRate: 3e-4,
+        epochs: 1,
+        batchSize: 1,
+        learningRate: 1e-3,
         gradientAccumulationSteps: 1,
         precision: 'float16',
-        loraConfig: { rank: 8, alpha: 16, targetModules: ['q_proj'] },
+        loraConfig: { rank: 2, alpha: 4, targetModules: ['embed_tokens'] },
       },
-      ['real training text'],
+      ['hello browser adapter', 'hello private training'],
     );
 
-    // Real trainer was driven, real losses surfaced as steps.
-    expect(fakeProvider.train).toHaveBeenCalledOnce();
-    expect(steps.map((s) => s.loss)).toEqual(realLosses);
-    // Real serialised weights were uploaded (not placeholder bytes).
-    expect(fakeProvider.exportTrainedWeights).toHaveBeenCalledOnce();
-    expect(uploadArtifact).toHaveBeenCalledWith('job-1', realWeights);
-    expect(completedKey).toBe('adapters/real.bin');
+    expect(steps).toHaveLength(1);
+    expect(Number.isFinite(steps[0]!.loss)).toBe(true);
+    expect(artifacts).toHaveLength(1);
+    expect(artifacts[0]!.filename).toMatch(/\.safetensors$/);
+    const view = new DataView(artifacts[0]!.bytes);
+    const headerLength = Number(view.getBigUint64(0, true));
+    const header = JSON.parse(new TextDecoder().decode(new Uint8Array(artifacts[0]!.bytes, 8, headerLength)));
+    expect(header.__metadata__.peft_type).toBe('LORA');
+    expect(header['base_model.model.embed_tokens.lora_A.weight'].shape).toEqual([2, 8]);
+    expect(header['base_model.model.embed_tokens.lora_B.weight'].shape[1]).toBe(2);
+    const api = await import('./api');
+    expect(api.downloadDataset).not.toHaveBeenCalled();
+    expect(api.uploadArtifact).not.toHaveBeenCalled();
+    expect(api.updateTrainingJob).not.toHaveBeenCalled();
+    expect(completedKey).toMatch(/^local:\/\//);
   });
 
   it('source contains no synthetic Math.exp / Math.random loss generation', async () => {

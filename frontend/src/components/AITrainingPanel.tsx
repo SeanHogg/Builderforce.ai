@@ -19,8 +19,9 @@ import {
   listTrainingJobs,
 } from '@/lib/api';
 import { getApiBaseUrl } from '@/lib/apiClient';
+import { downloadBlob } from '@/lib/download';
 import { hasWebGPUSupport } from '@seanhogg/builderforce-studio';
-import { WebGPUTrainer, shouldUseWebGPU, type TrainingStep } from '@/lib/webgpu-trainer';
+import { WebGPUTrainer, canTrainInBrowser, type TrainingDataMode, type TrainingStep } from '@/lib/webgpu-trainer';
 import { MambaEngine } from '@/lib/mamba-engine';
 import { MambaModelProvider, type MambaProviderConfig } from '@/lib/model-provider';
 
@@ -28,12 +29,15 @@ interface AITrainingPanelProps {
   projectId: string | number;
   onLog?: (message: string) => void;
   onJobCompleted?: (job: TrainingJob) => void;
+  initialDataMode?: TrainingDataMode;
+  workspaceEnabled?: boolean;
+  onLocalArtifactCompleted?: (artifact: { filename: string; trainableParams: number }) => void;
 }
 
 type PanelTab = 'configure' | 'datasets' | 'jobs';
 
 const DEFAULT_CONFIG: TrainingConfig = {
-  baseModel: 'gpt-neox-20m',
+  baseModel: 'evermind-browser-500k',
   capabilityPrompt: '',
   loraRank: 8,
   epochs: 3,
@@ -51,7 +55,7 @@ const DEFAULT_MAMBA_PROVIDER_CONFIG: MambaProviderConfig = {
   wsla: false,
 };
 
-export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITrainingPanelProps) {
+export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataMode = 'workspace', workspaceEnabled = true, onLocalArtifactCompleted }: AITrainingPanelProps) {
   const t = useTranslations('aiTraining');
   const [tab, setTab] = useState<PanelTab>('configure');
   const [trainingMode, setTrainingMode] = useState<TrainingMode>('behavior');
@@ -61,6 +65,8 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
   const [datasets, setDatasets] = useState<Dataset[]>([]);
   const [jobs, setJobs] = useState<TrainingJob[]>([]);
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
+  const [dataMode, setDataMode] = useState<TrainingDataMode>(initialDataMode);
+  const [localTrainingText, setLocalTrainingText] = useState('');
   /** Optional generation model — e.g. an OpenRouter model id; empty = gateway default pool. */
   const [genModel, setGenModel] = useState<string>('');
   const [logs, setLogs] = useState<string[]>([]);
@@ -77,7 +83,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
   const logsEndRef = useRef<HTMLDivElement>(null);
 
   const selectedModel = SUPPORTED_MODELS.find(m => m.id === config.baseModel);
-  const canUseWebGPU = selectedModel ? shouldUseWebGPU(selectedModel.maxParams) : false;
+  const canUseBrowserTraining = selectedModel ? canTrainInBrowser(selectedModel.maxParams) : false;
 
   const appendLog = useCallback((msg: string) => {
     setLogs(prev => [...prev, msg]);
@@ -90,9 +96,10 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
 
   // Load datasets and jobs when the panel opens
   useEffect(() => {
+    if (!workspaceEnabled) return;
     listDatasets(projectId).then(setDatasets).catch(() => { });
     listTrainingJobs(projectId).then(setJobs).catch(() => { });
-  }, [projectId]);
+  }, [projectId, workspaceEnabled]);
 
   const handleGenerateDataset = useCallback(async () => {
     if (!config.capabilityPrompt.trim()) return;
@@ -123,35 +130,38 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
     appendLog(t('logStartTraining', { model: selectedModel?.name ?? config.baseModel }));
 
     try {
-      // Create a training job record in the backend
-      const job = await createTrainingJob({
-        projectId,
-        datasetId: selectedDatasetId || undefined,
-        baseModel: config.baseModel,
-        loraRank: config.loraRank,
-        epochs: config.epochs,
-        batchSize: config.batchSize,
-        learningRate: config.learningRate,
-      });
-      setActiveJobId(job.id);
-      setJobs(prev => [job, ...prev]);
-      appendLog(t('logJobCreated', { id: job.id }));
+      const job = dataMode === 'workspace' ? await createTrainingJob({
+          projectId,
+          datasetId: selectedDatasetId || undefined,
+          baseModel: config.baseModel,
+          loraRank: config.loraRank,
+          epochs: config.epochs,
+          batchSize: config.batchSize,
+          learningRate: config.learningRate,
+        }) : null;
+      if (job) {
+        setActiveJobId(job.id);
+        setJobs(prev => [job, ...prev]);
+        appendLog(t('logJobCreated', { id: job.id }));
+      } else {
+        appendLog('Local-only mode: no dataset, logs, job record, or adapter will be sent to Builderforce.');
+      }
 
-      if (webgpuAvailable && canUseWebGPU) {
-        // In-browser WebGPU training — REAL Mamba SSM gradient descent.
-        appendLog(t('logWebgpuStart'));
+      if (canUseBrowserTraining) {
+        appendLog('Starting real frozen-base browser LoRA training.');
         const trainer = new WebGPUTrainer({
           modelId: config.baseModel,
           workerUrl: getApiBaseUrl(),
           projectId,
-          jobId: job.id,
-          datasetId: selectedDatasetId || undefined,
-          mambaConfig: mambaProviderConfig,
+          jobId: job?.id,
+          datasetId: dataMode === 'workspace' ? selectedDatasetId || undefined : undefined,
+          dataMode,
+          modelConfig: selectedModel?.modelConfig,
           onLog: appendLog,
           onStep: (step) => {
             setLossHistory(prev => [...prev, step]);
             setJobs(prev => prev.map(j =>
-              j.id === job.id
+              j.id === job?.id
                 ? { ...j, current_epoch: step.epoch, current_loss: step.loss, status: 'running' }
                 : j
             ));
@@ -161,6 +171,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
           },
           onComplete: (artifactKey) => {
             appendLog(t('logTrainingComplete', { key: artifactKey }));
+            if (!job) { setIsTraining(false); return; }
             setJobs(prev => {
               const completedJob = { ...prev.find(j => j.id === job.id)!, status: 'completed' as const, r2_artifact_key: artifactKey };
               onJobCompleted?.(completedJob);
@@ -171,18 +182,27 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
           onError: (err) => {
             appendLog(t('logTrainingError', { error: err.message }));
             setJobs(prev => prev.map(j =>
-              j.id === job.id ? { ...j, status: 'failed', error_message: err.message } : j
+              j.id === job?.id ? { ...j, status: 'failed', error_message: err.message } : j
             ));
             setIsTraining(false);
+          },
+          onArtifact: (artifact) => {
+            if (dataMode === 'local-only') {
+              downloadBlob(new Blob([artifact.bytes], { type: 'application/x-safetensors' }), artifact.filename);
+              appendLog(`Downloaded ${artifact.filename}; ${artifact.trainableParams.toLocaleString()} trainable parameters.`);
+              onLocalArtifactCompleted?.({ filename: artifact.filename, trainableParams: artifact.trainableParams });
+            }
           },
         });
         trainerRef.current = trainer;
 
         await trainer.init();
         // Fallback examples used if no dataset is selected or download fails
-        const fallbackExamples = config.capabilityPrompt
-          ? [`${config.capabilityPrompt} — example 1`, `${config.capabilityPrompt} — example 2`]
-          : ['General coding task example'];
+        const fallbackExamples = dataMode === 'local-only'
+          ? localTrainingText.split(/\n{2,}/).map((text) => text.trim()).filter(Boolean)
+          : config.capabilityPrompt
+            ? [`${config.capabilityPrompt} — example 1`, `${config.capabilityPrompt} — example 2`]
+            : ['General coding task example'];
         const TARGET_EFFECTIVE_BATCH_SIZE = 16;
         await trainer.train(
           {
@@ -200,12 +220,10 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
         // In-browser WebGPU training only runs for models within the WebGPU
         // parameter budget. There is no real cloud-offload training pipeline
         // wired here yet — so rather than fabricate a loss curve, fail honestly.
-        const reason = !webgpuAvailable
-          ? t('reasonNoWebgpu')
-          : t('reasonExceedsBudget', { model: selectedModel?.name ?? config.baseModel });
+        const reason = `The selected model exceeds the ${20}M-parameter exact browser LoRA limit.`;
         appendLog(t('logCannotStart', { reason }));
         setJobs(prev => prev.map(j =>
-          j.id === job.id ? { ...j, status: 'failed', error_message: reason } : j
+          j.id === job?.id ? { ...j, status: 'failed', error_message: reason } : j
         ));
         setIsTraining(false);
       }
@@ -213,7 +231,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
       appendLog(t('logStartFailed', { error: e instanceof Error ? e.message : t('errUnknown') }));
       setIsTraining(false);
     }
-  }, [config, selectedModel, selectedDatasetId, projectId, webgpuAvailable, canUseWebGPU, appendLog, onJobCompleted, mambaProviderConfig, t]);
+  }, [config, selectedModel, selectedDatasetId, projectId, dataMode, localTrainingText, canUseBrowserTraining, appendLog, onJobCompleted, onLocalArtifactCompleted, t]);
 
   const handleStopTraining = useCallback(() => {
     trainerRef.current?.stop();
@@ -494,8 +512,8 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                 </Select>
                 {selectedModel && (
                   <div className="mt-1 text-xs text-gray-500 flex items-center gap-1">
-                    <span className={`w-1.5 h-1.5 rounded-full ${canUseWebGPU ? 'bg-green-400' : 'bg-orange-400'}`} />
-                    {canUseWebGPU ? t('inBrowserWebGPU') : t('cloudOffload')}
+                    <span className={`w-1.5 h-1.5 rounded-full ${canUseBrowserTraining ? 'bg-green-400' : 'bg-orange-400'}`} />
+                    {canUseBrowserTraining ? 'Exact browser LoRA (CPU)' : t('cloudOffload')}
                   </div>
                 )}
               </div>
@@ -517,6 +535,31 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
             {/* Dataset — shown for behavior + hybrid */}
             {(trainingMode === 'behavior' || trainingMode === 'hybrid') && (
               <div>
+                <div className="mb-2 rounded border border-gray-700 bg-gray-900 p-2">
+                  <label className="block text-xs text-gray-400 mb-1">Data boundary</label>
+                  <Select
+                    value={dataMode}
+                    onChange={e => setDataMode(e.target.value as TrainingDataMode)}
+                    className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700"
+                  >
+                    <option value="workspace" disabled={!workspaceEnabled}>Workspace — load and save through Builderforce</option>
+                    <option value="local-only">Local only — never upload data, logs, or adapter</option>
+                  </Select>
+                </div>
+                {dataMode === 'local-only' ? (
+                  <div>
+                    <label className="block text-xs text-gray-400 mb-1">Local training examples</label>
+                    <textarea
+                      value={localTrainingText}
+                      onChange={e => setLocalTrainingText(e.target.value)}
+                      placeholder="Paste examples here. Separate examples with a blank line."
+                      className="w-full bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none resize-y"
+                      rows={6}
+                    />
+                    <div className="mt-1 text-xs text-green-400">Enforced locally: no training API job, dataset request, log stream, or artifact upload.</div>
+                  </div>
+                ) : (
+                <>
                 <div className="flex items-center justify-between mb-1">
                   <label className="text-xs text-gray-400">{t('trainingDataset')}</label>
                   <button
@@ -547,6 +590,8 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
                   className="w-full mt-1 bg-gray-800 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700 focus:border-blue-500 outline-none"
                   title={t('genModelTitle')}
                 />
+                </>
+                )}
               </div>
             )}
 
@@ -630,7 +675,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted }: AITraining
               ) : (
                 <button
                   onClick={handleStartTraining}
-                  disabled={isTraining || isGenerating}
+                  disabled={isTraining || isGenerating || (dataMode === 'local-only' && !localTrainingText.trim())}
                   className="flex-1 bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
                 >
                   {isTraining ? `⏳ ${t('training')}` : `▶ ${t('startTraining')}`}

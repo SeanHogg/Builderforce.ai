@@ -549,11 +549,25 @@ export async function updateTrainingJob(
 
 export async function uploadArtifact(
   jobId: string,
-  data: ArrayBuffer
+  data: ArrayBuffer,
+  metadata?: {
+    format?: 'safetensors' | 'evermind-lora';
+    filename?: string;
+    baseModel?: string;
+    rank?: number;
+    alpha?: number;
+  },
 ): Promise<{ r2Key: string }> {
-  return apiRequest<{ r2Key: string }>(`${IDE}/training/${jobId}/artifact`, {
+  const query = metadata?.format ? `?format=${encodeURIComponent(metadata.format)}` : '';
+  return apiRequest<{ r2Key: string }>(`${IDE}/training/${jobId}/artifact${query}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/octet-stream' },
+    headers: {
+      'Content-Type': metadata?.format === 'safetensors' ? 'application/x-safetensors' : 'application/octet-stream',
+      ...(metadata?.filename ? { 'X-Artifact-Filename': metadata.filename } : {}),
+      ...(metadata?.baseModel ? { 'X-Base-Model': metadata.baseModel } : {}),
+      ...(metadata?.rank != null ? { 'X-LoRA-Rank': String(metadata.rank) } : {}),
+      ...(metadata?.alpha != null ? { 'X-LoRA-Alpha': String(metadata.alpha) } : {}),
+    },
     body: data,
   });
 }

@@ -59,6 +59,10 @@ const nextConfig = {
       { source: '/coderclaw/:path*', destination: '/agents/:path*', permanent: true },
       // The guided demo deck moved from /marketing to /demo.
       { source: '/marketing', destination: '/demo', permanent: true },
+      // Preserve published documentation links to public pages that moved.
+      { source: '/privacy', destination: '/legal/privacy-rights', permanent: true },
+      { source: '/showcase', destination: '/agents/showcase', permanent: true },
+      { source: '/trust', destination: '/legal/compliance', permanent: true },
       // Workforce sub-views replaced the old standalone routes. Keep published
       // blog links and external bookmarks working while preserving the tab.
       { source: '/chats', destination: '/workforce?tab=chats', permanent: true },

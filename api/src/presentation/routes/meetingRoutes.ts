@@ -5,7 +5,8 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * A meeting is a live video/audio gathering: a standup / planning / retrospective
  * bound to a project, an ad-hoc call, or a direct 1:1. It carries a media room key;
  * peers exchange WebRTC offers/answers/ICE candidates over the CeremonyRoomDO relay
- * keyed `media:<roomKey>` (mesh P2P — no media flows through the server). When the
+ * keyed `media:<roomKey>`. Media is direct in direct-only mode; relay-fallback
+ * may use configured TURN for encrypted media when P2P traversal fails. When the
  * organizer has a connected calendar, a scheduled meeting is mirrored as a calendar
  * event (invites go to attendee emails).
  *
@@ -35,6 +36,7 @@ import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import {
   suggestSlots, normalizeWindows, type Availability, type BusyInterval,
 } from '../../application/calendar/availabilitySolver';
+import { applyMediaPrivacyMode } from '../../domain/meetings/mediaPrivacy';
 
 const KINDS = new Set(['standup', 'planning', 'retrospective', 'adhoc', 'direct', 'interview', 'review']);
 /** Team ceremonies default to being backed by a team chat — "the meeting IS the
@@ -108,7 +110,11 @@ export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
   // DO (keyed distinctly per media room). No domain data flows through it.
   r.get('/rooms/:key/ws', (c) => relayToRoom(c, c.env?.CEREMONY_ROOM, `media:${c.req.param('key')}`));
 
-  r.get('/ice', async (c) => c.json({ iceServers: await iceServers(c.env as Env) }));
+  r.get('/ice', async (c) => {
+    const directOnly = c.req.query('mode') === 'direct-only';
+    const servers = await iceServers(c.env as Env);
+    return c.json(applyMediaPrivacyMode(servers, directOnly));
+  });
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
   async function hydrate(tenantId: number, id: string) {

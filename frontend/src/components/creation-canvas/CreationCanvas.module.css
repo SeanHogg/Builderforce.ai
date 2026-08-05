@@ -281,6 +281,16 @@
 .mockupGrid { display:grid; grid-template-columns:1.4fr 1fr 1fr; gap:5px; height:72px; }.mockupGrid i { display:block; border:1px solid #ccd9e9; border-radius:6px; background:linear-gradient(155deg,#edf4ff 0 45%,#3978f6 46% 55%,#fff 56%); }.mockupGrid i:nth-child(2){background:linear-gradient(155deg,#f7efff 0 45%,#7b5be7 46% 55%,#fff 56%)}.mockupGrid i:nth-child(3){background:linear-gradient(155deg,#eafaf5 0 45%,#22ad81 46% 55%,#fff 56%)}
 .featureGrid { display:grid; grid-template-columns:repeat(5,1fr); gap:6px; }.featureGrid span { display:flex; align-items:center; gap:5px; padding:7px 5px; border:1px solid #dfe6ef; border-radius:7px; background:#fbfdff; font-size:7px; }.featureGrid b { width:17px; height:17px; display:grid; place-items:center; flex:none; border-radius:5px; color:#fff; background:#3978f6; font-size:8px; }
 .node_project,.node_mockup,.node_task { width:290px; }.node_roadmap,.node_featureSummary { width:500px; }
+.node_image,.node_animation,.node_podcast,.node_comic,.node_game,.node_cad,.node_model3d,.node_resume,.node_template { width:360px; border-color:#8ab6f0; }
+.creativeStudioBody { display:grid; gap:9px; }
+.creativeStudioBody > img,.creativeStudioPreview { width:100%; height:118px; object-fit:cover; border-radius:8px; border:1px solid var(--canvas-line,#dfe6ef); background:linear-gradient(135deg,#172b49,#7657df); }
+.creativeStudioPreview { position:relative; display:grid; place-items:center; overflow:hidden; }
+.creativeStudioPreview span { color:white; font-size:34px; z-index:1; }
+.creativeStudioPreview i { position:absolute; width:90px; height:90px; border:1px solid rgba(255,255,255,.22); border-radius:18px; transform:rotate(28deg); }
+.creativeStudioPreview i:nth-of-type(2) { width:150px; height:150px; transform:rotate(48deg); }
+.creativeStudioPreview i:nth-of-type(3) { width:220px; height:220px; transform:rotate(68deg); }
+.creativeStudioBody .widgetSettings { grid-template-columns:repeat(3,minmax(0,1fr)); }
+.creativeStudioBody .widgetSettings b { text-transform:capitalize; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .node_evermind { width:560px; border-color:#c8a2e8; background:linear-gradient(145deg,#fff 0%,#fff9fd 55%,#f8f5ff 100%); }
 .node_evermind .nodeIcon { color:#b22c86; background:#fde9f6; }
 .evermindBody { display:grid; gap:9px; }

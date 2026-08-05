@@ -155,7 +155,7 @@ export function CeremonyStage({
   const media = useMediaRoom(
     camerasOn ? mediaRoomKey : null,
     { name: me.name, ref: me.ref },
-    { enabled: camerasOn },
+    { enabled: camerasOn, privacyMode: 'direct-only' },
   );
 
   // Seats that are "live": connected peers matched by identity, plus myself.

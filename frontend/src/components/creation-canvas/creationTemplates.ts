@@ -88,4 +88,39 @@ export const CREATION_TEMPLATES: readonly CreationTemplate[] = [
       { kind: 'slides', title: 'Leadership presentation', x: 420, y: 330 },
     ], connections: [{ source: 0, target: 1, label: 'measures' }, { source: 0, target: 2, label: 'grounds' }, { source: 2, target: 3, label: 'presents' }],
   },
+  {
+    id: 'creative-studio', name: 'Creative studio', category: 'Marketplace template',
+    description: 'Compose video, images, animation, podcasts, and comics through Builderforce native creative capabilities.',
+    objects: [
+      { kind: 'template', title: 'Template library', x: 0, y: 0 },
+      { kind: 'video', title: 'Video generator', x: 430, y: 0 },
+      { kind: 'image', title: 'Image generator', x: 860, y: 0 },
+      { kind: 'animation', title: 'Animation generator', x: 0, y: 310 },
+      { kind: 'podcast', title: 'Podcast generator', x: 430, y: 310 },
+      { kind: 'comic', title: 'Comic generator', x: 860, y: 310 },
+    ],
+    connections: [{ source: 0, target: 1, label: 'templates' }, { source: 0, target: 2, label: 'templates' }, { source: 0, target: 3, label: 'templates' }, { source: 0, target: 4, label: 'templates' }, { source: 0, target: 5, label: 'templates' }],
+  },
+  {
+    id: 'career-documents', name: 'Resume & presentation studio', category: 'Marketplace template',
+    description: 'Build a resume, supporting files, a paged document, and a presentation from one source brief.',
+    objects: [
+      { kind: 'resume', title: 'Resume builder', x: 0, y: 0 },
+      { kind: 'document', title: 'Supporting document', x: 430, y: 0 },
+      { kind: 'slides', title: 'Presentation', x: 900, y: 0 },
+      { kind: 'file', title: 'Exported files', x: 430, y: 330 },
+    ],
+    connections: [{ source: 0, target: 1, label: 'supports' }, { source: 0, target: 2, label: 'presents' }, { source: 1, target: 3, label: 'exports' }, { source: 2, target: 3, label: 'exports' }],
+  },
+  {
+    id: 'interactive-3d', name: 'Games & 3D studio', category: 'Marketplace template',
+    description: 'Design playable games, CAD drawings, and 3D models with MCP-backed project persistence.',
+    objects: [
+      { kind: 'game', title: 'Game builder', x: 0, y: 0 },
+      { kind: 'cad', title: 'CAD drawing', x: 430, y: 0 },
+      { kind: 'model3d', title: '3D model', x: 860, y: 0 },
+      { kind: 'evaluation', title: 'Playable output review', x: 430, y: 330 },
+    ],
+    connections: [{ source: 1, target: 2, label: 'models' }, { source: 0, target: 3, label: 'evaluates' }, { source: 2, target: 3, label: 'evaluates' }],
+  },
 ] as const;

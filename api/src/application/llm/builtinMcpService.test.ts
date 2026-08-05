@@ -113,6 +113,13 @@ describe('chat-scoped agent tool subset (@agent addressed-reply loop)', () => {
 describe('listBuiltinTools', () => {
   const tools = listBuiltinTools();
 
+  it('advertises the provider-neutral native creative contract', () => {
+    const byName = new Map(tools.map((tool) => [tool.name, tool]));
+    expect(byName.get('builtin_creative_capabilities')?.mutates).toBe(false);
+    expect(byName.get('builtin_creative_compose')?.mutates).toBe(false);
+    expect(byName.get('builtin_creative_compose')?.parameters).toMatchObject({ required: ['kind', 'title'] });
+  });
+
   it('advertises the chat-invokable Compliance Audit Agent tools', () => {
     const requirements = tools.find((tool) => tool.tool === 'compliance.requirements');
     const run = tools.find((tool) => tool.tool === 'compliance.run_audit');
@@ -224,6 +231,17 @@ describe('listBuiltinTools', () => {
 });
 
 describe('callBuiltinTool', () => {
+  it('composes a native creative manifest without an external provider', async () => {
+    const res = await callBuiltinTool(db, { tenantId: TENANT, tool: 'creative.compose', arguments: { kind: 'model3d', title: 'Gear housing', brief: 'Parametric enclosure', outputFormat: 'STL' } });
+    expect(res).toMatchObject({ kind: 'model3d', capabilityId: 'creative.model3d', mediaKind: 'model3d', provider: 'native', title: 'Gear housing', outputFormat: 'STL', status: 'Draft' });
+    expect(res).not.toHaveProperty('externalProvider');
+  });
+
+  it('rejects unsupported creative kinds and output formats', async () => {
+    await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'creative.compose', arguments: { kind: 'unknown', title: 'Nope' } })).rejects.toThrow(/Unsupported creative kind/);
+    await expect(callBuiltinTool(db, { tenantId: TENANT, tool: 'creative.compose', arguments: { kind: 'image', title: 'Poster', outputFormat: 'EXE' } })).rejects.toThrow(/Unsupported image output/);
+  });
+
   it('dispatches a read to the service, tenant-scoped', async () => {
     projectSvc.listProjects.mockResolvedValue([{ toPlain: () => ({ id: 1, name: 'P' }) }]);
     const res = await callBuiltinTool(db, { tenantId: TENANT, tool: 'projects.list', arguments: {} });

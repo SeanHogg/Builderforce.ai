@@ -46,6 +46,7 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
   const [agentBusy, setAgentBusy] = useState<Set<string>>(() => new Set());
   const [ask, setAsk] = useState('');
   const [askAgentRef, setAskAgentRef] = useState<string>('');
+  const [directOnly, setDirectOnly] = useState(true);
   const isMobile = useIsMobile();
 
   const meRef = user?.id ?? '';
@@ -67,7 +68,7 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetingId]);
 
-  const media = useMediaRoom(roomKey, me, { enabled: !!roomKey, audioOnly: !videoEnabled });
+  const media = useMediaRoom(roomKey, me, { enabled: !!roomKey, audioOnly: !videoEnabled, privacyMode: directOnly ? 'direct-only' : 'relay-fallback' });
 
   // Live captions from the local mic (browser STT): interim shows on my tile; final
   // lines are persisted + broadcast to peers as captions.
@@ -187,6 +188,10 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <label title={directOnly ? 'TURN is disabled. The call will fail if browsers cannot establish a direct path.' : 'Encrypted media may use a TURN relay when a direct path is unavailable.'} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={directOnly} onChange={(event) => setDirectOnly(event.target.checked)} />
+            Direct media only
+          </label>
           {/* Camera size toggle */}
           <div role="group" aria-label={t('cameraSize')} style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
             {(['small', 'large'] as const).map((s) => (

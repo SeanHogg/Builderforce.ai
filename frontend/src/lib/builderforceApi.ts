@@ -5490,7 +5490,8 @@ export const meetingsApi = {
   start: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}/start`, { method: 'POST' }),
   end: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}/end`, { method: 'POST' }),
   cancel: (id: string): Promise<MeetingDetail> => request(`${MEETINGS_BASE}/${id}/cancel`, { method: 'POST' }),
-  ice: (): Promise<{ iceServers: unknown[] }> => request(`${MEETINGS_BASE}/ice`),
+  ice: (mode: 'direct-only' | 'relay-fallback' = 'relay-fallback'): Promise<{ iceServers: unknown[]; mode: 'direct-only' | 'relay-fallback'; turnEnabled: boolean }> =>
+    request(`${MEETINGS_BASE}/ice?mode=${mode}`),
 
   // Recording / transcription + agent voice (0330).
   transcript: (id: string): Promise<MeetingTranscript> => request(`${MEETINGS_BASE}/${id}/transcript`),

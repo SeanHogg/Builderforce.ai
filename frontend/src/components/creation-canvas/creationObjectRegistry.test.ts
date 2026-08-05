@@ -61,6 +61,18 @@ describe('creation object registry', () => {
     expect(availableCreationObjects(new Set(['evermind'])).map((definition) => definition.kind)).toContain('evermind');
   });
 
+  it('binds every creative widget to the provider-neutral built-in MCP contract', () => {
+    for (const kind of ['image', 'animation', 'podcast', 'comic', 'game', 'cad', 'model3d', 'resume', 'template'] as const) {
+      const data = createDefaultCreationData(kind);
+      expect(data.mcpServer).toBe('builtin');
+      expect(data.provider).toBe('native');
+      expect(data.capabilityId).toBe(`creative.${kind}`);
+      expect(data.mcpTool).toMatch(/^builtin_creative_/);
+    }
+    expect(createDefaultCreationData('model3d').mediaKind).toBe('model3d');
+    expect(createDefaultCreationData('resume')).toMatchObject({ mediaKind: 'document', templateId: 'resume' });
+  });
+
   it('retains bounded evidence samples while excluding full rows, prompts, and secrets from Brain context', () => {
     const context = creationObjectAiContext({
       kind: 'projectComparison', title: 'Alpha vs Beta', status: 'Live evidence', fetchedAt: '2026-08-01T00:00:00.000Z',
