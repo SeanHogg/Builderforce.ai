@@ -114,6 +114,15 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(group).toContainElement(screen.getByRole('button', { name: 'Redo canvas change' }));
   });
 
+  it('keeps the mobile canvas view action rail available when the palette is closed', () => {
+    render(<CreationCanvas sessionId="mobile-canvas-actions-test" persistence="local" />);
+    const controls = screen.getByRole('group', { name: 'Canvas view controls' });
+    expect(controls).toContainElement(screen.getByRole('button', { name: 'Zoom in' }));
+    expect(controls).toContainElement(screen.getByRole('button', { name: 'Zoom out' }));
+    expect(controls).toContainElement(screen.getByRole('button', { name: 'Fit canvas to view' }));
+    expect(controls).toContainElement(screen.getByRole('button', { name: 'Arrange canvas objects' }));
+  });
+
   it('defaults the mobile palette closed and remembers the user preference', async () => {
     const desktopWidth = window.innerWidth;
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 390 });

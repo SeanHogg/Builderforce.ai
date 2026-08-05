@@ -2625,6 +2625,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           />
         </ReactFlow>
 
+        <div className={styles.mobileCanvasActions} role="group" aria-label="Canvas view controls">
+          <button type="button" onClick={() => void flowRef.current?.zoomIn({ duration: 180 })} aria-label="Zoom in">＋</button>
+          <button type="button" onClick={() => void flowRef.current?.zoomOut({ duration: 180 })} aria-label="Zoom out">−</button>
+          <button type="button" onClick={() => void flowRef.current?.fitView({ padding: .18, maxZoom: .9, duration: 260 })} aria-label="Fit canvas to view">⌗</button>
+          <button type="button" onClick={cleanLayout} aria-label="Arrange canvas objects">⌘</button>
+        </div>
+
         <RemoteCursors members={members} currentUserId={currentUserId} instance={flowRef.current} container={flowWrapRef.current} />
         <details className={styles.structuredGraph}><summary>Accessible canvas outline</summary><ol>{nodes.map((node) => <li key={node.id}><button aria-label={`Focus ${node.data.title}`} onClick={() => { setSelectedId(node.id); setSelectedIds([node.id]); }}>{node.data.title} ({node.data.kind})</button><span>{node.data.status || 'Canvas object'}{node.data.placementLocked === true ? ' · placement locked' : ''}</span><ul>{edges.filter((edge) => edge.source === node.id).map((edge) => <li key={edge.id}>{String(edge.data?.connectionKind || 'reference')} connection to {nodes.find((target) => target.id === edge.target)?.data.title || 'object'}{edge.label ? `: ${String(edge.label)}` : ''}</li>)}</ul></li>)}</ol></details>
 
