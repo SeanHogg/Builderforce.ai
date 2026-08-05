@@ -8049,6 +8049,7 @@
     "errExpired": "Este código ha caducado. Solicita uno nuevo.",
     "errTooMany": "Demasiados intentos. Solicita un nuevo código.",
     "errNone": "No hay ningún código activo. Solicita uno nuevo.",
+    "errDelivery": "No pudimos enviar el correo de verificación. Intenta reenviarlo.",
     "errGeneric": "Algo salió mal. Inténtalo de nuevo."
   },
   "admin": {

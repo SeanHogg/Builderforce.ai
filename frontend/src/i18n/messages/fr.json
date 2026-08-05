@@ -8049,6 +8049,7 @@
     "errExpired": "Ce code a expiré. Demandez-en un nouveau.",
     "errTooMany": "Trop de tentatives. Demandez un nouveau code.",
     "errNone": "Aucun code actif. Demandez-en un nouveau.",
+    "errDelivery": "Nous n’avons pas pu envoyer l’e-mail de vérification. Veuillez réessayer.",
     "errGeneric": "Une erreur s’est produite. Veuillez réessayer."
   },
   "admin": {

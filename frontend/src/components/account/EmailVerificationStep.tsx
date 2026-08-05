@@ -12,6 +12,8 @@ interface EmailVerificationStepProps {
   onVerified: () => void | Promise<void>;
   /** Optional "use a different email" escape hatch (e.g. back to the register form). */
   onChangeEmail?: () => void;
+  /** Account creation succeeded, but the provider rejected the initial send. */
+  initialDeliveryFailed?: boolean;
 }
 
 /**
@@ -20,14 +22,14 @@ interface EmailVerificationStepProps {
  * verifies via AuthContext, resends via the API, and handles the "keep me signed in
  * for 30 days" device-trust option. Fully localized + theme/responsive.
  */
-export default function EmailVerificationStep({ email, onVerified, onChangeEmail }: EmailVerificationStepProps) {
+export default function EmailVerificationStep({ email, onVerified, onChangeEmail, initialDeliveryFailed = false }: EmailVerificationStepProps) {
   const t = useTranslations('emailVerify');
   const { verifyEmail } = useAuth();
 
   const [code, setCode] = useState('');
   const [trustDevice, setTrustDevice] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialDeliveryFailed ? t('errDelivery') : null);
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
 
@@ -68,7 +70,7 @@ export default function EmailVerificationStep({ email, onVerified, onChangeEmail
         setResent(true);
       }
     } catch {
-      setError(t('errGeneric'));
+      setError(t('errDelivery'));
     } finally {
       setResending(false);
     }

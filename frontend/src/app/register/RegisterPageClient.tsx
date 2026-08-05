@@ -42,6 +42,7 @@ export default function RegisterPageClient() {
   // Set once the account is created but its email needs verifying — swaps the form
   // for the code-entry step.
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [emailDeliveryFailed, setEmailDeliveryFailed] = useState(false);
 
   // Right-hand marketing panel follows the Build/Hired chooser.
   const marketing = REGISTER_MARKETING[accountType];
@@ -73,6 +74,7 @@ export default function RegisterPageClient() {
       const res = await register(email, password, name.trim() || undefined, agreeToTerms, accountType, referralCode, ageAttested);
       if (res.needsVerification) {
         setPendingEmail(res.email);
+        setEmailDeliveryFailed(res.emailDeliveryFailed === true);
       } else {
         router.push(destination);
       }
@@ -190,6 +192,7 @@ export default function RegisterPageClient() {
               email={pendingEmail}
               onVerified={() => router.push(destination)}
               onChangeEmail={() => setPendingEmail(null)}
+              initialDeliveryFailed={emailDeliveryFailed}
             />
           ) : (
           <>

@@ -200,7 +200,7 @@ export interface AuthSession {
  * first (`needsVerification: true` — flip the UI to the code-entry step for `email`).
  */
 export type AuthStepResult =
-  | { needsVerification: true; email: string }
+  | { needsVerification: true; email: string; emailDeliveryFailed?: boolean }
   | ({ needsVerification: false } & AuthSession);
 
 export interface TenantTokenResponse {
@@ -215,11 +215,11 @@ export async function login(email: string, password: string): Promise<AuthStepRe
   });
   const body = await res.json().catch(() => ({})) as {
     token?: string; user?: AuthUser; error?: string; message?: string;
-    verificationRequired?: boolean; email?: string;
+    verificationRequired?: boolean; email?: string; emailDeliveryFailed?: boolean;
   };
   // 403 + verificationRequired: the account exists but its email isn't verified.
   if (body.verificationRequired) {
-    return { needsVerification: true, email: body.email ?? email };
+    return { needsVerification: true, email: body.email ?? email, emailDeliveryFailed: body.emailDeliveryFailed };
   }
   if (!res.ok || !body.token || !body.user) {
     throw new Error(body.error ?? body.message ?? 'Login failed');
@@ -243,14 +243,14 @@ export async function register(
   });
   const body = await res.json().catch(() => ({})) as {
     token?: string; user?: AuthUser; error?: string; message?: string;
-    verificationRequired?: boolean; email?: string;
+    verificationRequired?: boolean; email?: string; emailDeliveryFailed?: boolean;
   };
   if (!res.ok) {
     throw new Error(body.error ?? body.message ?? 'Registration failed');
   }
   // Normal path: registration never returns a session — the email must be verified.
   if (body.verificationRequired || !body.token || !body.user) {
-    return { needsVerification: true, email: body.email ?? email };
+    return { needsVerification: true, email: body.email ?? email, emailDeliveryFailed: body.emailDeliveryFailed };
   }
   return { needsVerification: false, token: body.token, user: body.user };
 }
@@ -289,7 +289,8 @@ export async function resendVerificationCode(email: string): Promise<{ cooldownS
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
   });
-  const body = await res.json().catch(() => ({})) as { cooldownSeconds?: number };
+  const body = await res.json().catch(() => ({})) as { cooldownSeconds?: number; error?: string };
+  if (!res.ok) throw new Error(body.error ?? 'Verification email could not be sent');
   return { cooldownSeconds: body.cooldownSeconds };
 }
 

@@ -32,6 +32,7 @@ export default function LoginPageClient() {
   // Set when an unverified account tries to sign in — swaps the form for the
   // email-OTP step (a fresh code is emailed by the login endpoint).
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [emailDeliveryFailed, setEmailDeliveryFailed] = useState(false);
 
   const finishAndRedirect = async () => {
     // Open-redirect guard (M5): only same-origin relative paths are honoured.
@@ -71,6 +72,7 @@ export default function LoginPageClient() {
       const res = await login(email, password);
       if (res.needsVerification) {
         setPendingEmail(res.email);
+        setEmailDeliveryFailed(res.emailDeliveryFailed === true);
         return;
       }
       await finishAndRedirect();
@@ -201,6 +203,7 @@ export default function LoginPageClient() {
               email={pendingEmail}
               onVerified={finishAndRedirect}
               onChangeEmail={() => setPendingEmail(null)}
+              initialDeliveryFailed={emailDeliveryFailed}
             />
           ) : (
           <>

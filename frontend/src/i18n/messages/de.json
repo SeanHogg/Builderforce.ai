@@ -8049,6 +8049,7 @@
     "errExpired": "Dieser Code ist abgelaufen. Fordere einen neuen an.",
     "errTooMany": "Zu viele Versuche. Fordere einen neuen Code an.",
     "errNone": "Kein aktiver Code. Fordere einen neuen an.",
+    "errDelivery": "Die Bestätigungs-E-Mail konnte nicht gesendet werden. Bitte versuche es erneut.",
     "errGeneric": "Etwas ist schiefgelaufen. Bitte versuche es erneut."
   },
   "admin": {

@@ -19,7 +19,7 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * POST /api/admin/cron/:target         — force-run a sweep / cadence group / all
  */
 import { Hono } from 'hono';
-import { and, desc, eq, gt, ilike, inArray, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { credentialSecret } from '../../application/integrations/credentialCrypto';
 import { superAdminMiddleware } from '../middleware/superAdminMiddleware';

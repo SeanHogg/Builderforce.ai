@@ -8052,6 +8052,7 @@
     "errExpired": "This code has expired. Request a new one.",
     "errTooMany": "Too many attempts. Request a new code.",
     "errNone": "No active code. Request a new one.",
+    "errDelivery": "We couldn’t send the verification email. Please try resending it.",
     "errGeneric": "Something went wrong. Please try again."
   },
   "admin": {
