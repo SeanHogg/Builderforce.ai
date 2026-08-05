@@ -13,6 +13,7 @@
  */
 
 import type { SemanticCache } from '@seanhogg/builderforce-memory';
+import { AUTH_API_URL, getStoredTenantToken } from './auth';
 
 /** True only where an on-device WebGPU SSM embedder can exist. Shared with
  *  `MambaModelProvider` so the WebGPU gate lives in exactly one place (DRY). */
@@ -41,9 +42,13 @@ async function buildSemanticResponseCache(): Promise<SemanticCache | null> {
     // Browser uses the global WebGPU/IndexedDB automatically; modelSize keeps the
     // embedding model light. Asset/WebGPU failures throw → caught → null (no cache).
     const runtime = await mod.SSM.create({ session: { modelSize: 'small' } });
+    const token = getStoredTenantToken();
+    const l2 = token ? new mod.FetchSemanticCacheBackend({ baseUrl: AUTH_API_URL, apiKey: token, namespace: 'web-model-provider-v1' }) : undefined;
     return new mod.SemanticCache({
       embed: (text: string) => runtime.embed(text),
       threshold: DEFAULT_THRESHOLD,
+      l2,
+      ttlMs: 24 * 60 * 60 * 1_000,
     });
   } catch (err) {
     console.warn('[semantic-cache] unavailable — cloud responses uncached:', err);

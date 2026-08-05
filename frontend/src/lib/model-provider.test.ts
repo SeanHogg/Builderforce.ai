@@ -24,7 +24,8 @@ vi.mock('./api', () => ({
 import { sendAIMessage } from './api';
 const mockSendAIMessage = sendAIMessage as ReturnType<typeof vi.fn>;
 
-import { WebGPUTrainer, type TrainingStep, type WebGPUTrainerOptions } from './webgpu-trainer';
+import { WebGPUTrainer, type BrowserLoRAArtifact, type TrainingStep, type WebGPUTrainerOptions } from './webgpu-trainer';
+import { EvermindModelPackage } from '@seanhogg/builderforce-memory-engine';
 
 // ---------------------------------------------------------------------------
 // MambaModelProvider
@@ -473,7 +474,7 @@ describe('WebGPUTrainer (exact browser LoRA)', () => {
   });
 
   it('trains real LoRA matrices locally and emits a valid safetensors adapter without network calls', async () => {
-    const artifacts: Array<{ bytes: ArrayBuffer; filename: string }> = [];
+    const artifacts: BrowserLoRAArtifact[] = [];
     let completedKey = '';
     const steps: TrainingStep[] = [];
     const { trainer } = makeTrainer({
@@ -506,6 +507,9 @@ describe('WebGPUTrainer (exact browser LoRA)', () => {
     expect(header.__metadata__.peft_type).toBe('LORA');
     expect(header['base_model.model.embed_tokens.lora_A.weight'].shape).toEqual([2, 8]);
     expect(header['base_model.model.embed_tokens.lora_B.weight'].shape[1]).toBe(2);
+    const runtimePackage = EvermindModelPackage.fromBlob(artifacts[0]!.evermindPackage);
+    expect(runtimePackage.validate()).toEqual({ ok: true, errors: [] });
+    expect(runtimePackage.loadLM().config.vocabSize).toBe(Object.keys(artifacts[0]!.tokenizer.vocab).length);
     const api = await import('./api');
     expect(api.downloadDataset).not.toHaveBeenCalled();
     expect(api.uploadArtifact).not.toHaveBeenCalled();

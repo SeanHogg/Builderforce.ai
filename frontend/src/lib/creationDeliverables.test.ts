@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildWebsiteAssets, creationDeliverables, withCreationDeliverable } from './creationDeliverables';
+import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, withCreationDeliverable } from './creationDeliverables';
 
 describe('creation deliverables', () => {
   it('builds a complete escaped static website instead of a status-only publish request', () => {
@@ -18,5 +18,16 @@ describe('creation deliverables', () => {
     const second = withCreationDeliverable({ kind: 'website', title: 'Site', deliverables: first }, completed);
     expect(second).toHaveLength(1);
     expect(creationDeliverables({ kind: 'website', title: 'Site', deliverables: second })[0]).toMatchObject({ status: 'delivered', url: 'https://example.test' });
+  });
+
+  it.each([
+    ['image', 'image/svg+xml', '.svg'], ['animation', 'text/html', '.html'], ['podcast', 'text/markdown', '.md'],
+    ['comic', 'image/svg+xml', '.svg'], ['game', 'text/html', '.html'], ['cad', 'application/dxf', '.dxf'],
+    ['model3d', 'model/stl', '.stl'], ['resume', 'text/markdown', '.md'], ['template', 'application/json', '.json'],
+  ] as const)('creates a real portable %s artifact', (kind, mimeType, extension) => {
+    const artifact = buildBrowserCreativeArtifact({ kind, title: 'Launch artifact', prompt: '<unsafe> brief' });
+    expect(artifact.mimeType).toBe(mimeType);
+    expect(artifact.fileName).toMatch(new RegExp(`\\${extension}$`));
+    expect(artifact.url).toMatch(/^data:/);
   });
 });

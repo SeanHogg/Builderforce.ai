@@ -100,3 +100,12 @@ export async function semanticStore(
   });
   await invalidateCached(env, key);
 }
+
+/** Explicitly purge one security partition from L1 and durable KV. */
+export async function semanticInvalidate(env: Env, tenantId: number, namespace: string): Promise<void> {
+  const key = partitionKey(tenantId, namespace);
+  await env.SEMANTIC_CACHE_KV?.delete(key).catch((error) => {
+    reportCaughtError(error, { source: 'application/llm/semanticCache.ts', operation: 'semanticInvalidate' });
+  });
+  await invalidateCached(env, key);
+}

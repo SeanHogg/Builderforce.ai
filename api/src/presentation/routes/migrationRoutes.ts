@@ -12,6 +12,7 @@
  * PATCH  /api/migrations/:id/mappings Set project/type/user/item maps   (MANAGER+)
  * POST   /api/migrations/:id/stage    Pull items into staging           (MANAGER+)
  * POST   /api/migrations/:id/commit   Promote staged data (import)      (MANAGER+)
+ * POST   /api/migrations/:id/rollback Remove artifacts from this run    (MANAGER+)
  * DELETE /api/migrations/:id          Discard a run                     (MANAGER+)
  */
 
@@ -132,6 +133,18 @@ export function createMigrationRoutes(db: Db): Hono<HonoEnv> {
       return c.json(result);
     } catch (err) {
       return c.json({ error: err instanceof Error ? err.message : 'Import failed' }, 502);
+    }
+  });
+
+  // POST /api/migrations/:id/rollback — lineage-scoped, atomic rollback.
+  router.post('/:id/rollback', manager, async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    try {
+      const result = await service.rollback(c.req.param('id'), tenantId);
+      await bump(c, tenantId);
+      return c.json(result);
+    } catch (err) {
+      return c.json({ error: err instanceof Error ? err.message : 'Rollback failed' }, 400);
     }
   });
 

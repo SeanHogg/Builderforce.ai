@@ -65,7 +65,7 @@ export interface MigrationWizardProps {
 
 /** Map a run's status to the wizard step the operator should resume at. */
 function stepForStatus(status: MigrationRunDetail['run']['status']): Step {
-  if (status === 'completed') return 'import';
+  if (status === 'completed' || status === 'rolled_back') return 'import';
   if (status === 'mapped') return 'review';
   return 'projects';
 }
@@ -167,6 +167,18 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
       onImported?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : t('migration.importFailed'));
+    } finally { setBusy(false); }
+  };
+
+  const rollbackImport = async () => {
+    if (!runId || !window.confirm('Roll back only the projects, tasks, and sync connections created by this import? Later work will be preserved.')) return;
+    setBusy(true); setError(null);
+    try {
+      const run = await migrationsApi.rollback(runId);
+      setDetail((prev) => prev ? { ...prev, run } : prev);
+      onImported?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Rollback failed');
     } finally { setBusy(false); }
   };
 
@@ -359,8 +371,10 @@ export function MigrationWizard({ open, onClose, provider, providerLabel, creden
                     <li>{t('migration.summaryConnections', { count: detail.run.summary?.connectionsCreated ?? 0 })}</li>
                   </ul>
                 </div>
-                <div><button type="button" style={btnPrimary} onClick={close}>{t('migration.finish')}</button></div>
+                <div style={{ display: 'flex', gap: 8 }}><button type="button" style={btnPrimary} onClick={close}>{t('migration.finish')}</button><button type="button" style={btnSubtle} disabled={busy} onClick={rollbackImport}>{busy ? 'Rolling back…' : 'Roll back import'}</button></div>
               </>
+            ) : detail.run.status === 'rolled_back' ? (
+              <><div style={{ fontSize: 15, fontWeight: 700 }}>Import rolled back</div><p style={{ margin: 0, fontSize: 13, color: 'var(--text-muted)' }}>Artifacts created by this import were removed. Projects containing later work were preserved.</p><div><button type="button" style={btnPrimary} onClick={close}>{t('migration.finish')}</button></div></>
             ) : (
               <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('migration.importing')}</div>
             )}

@@ -2456,7 +2456,7 @@ const CATALOG: BuiltinTool[] = [
   },
   {
     tool: 'migrations.commit', mutates: true,
-    description: 'Promote the staged data into real projects/tasks/members (and create ongoing sync connections when mode includes sync). This is the irreversible import step.',
+    description: 'Promote staged data into real projects/tasks/members and optional sync connections. Created artifacts retain run lineage and can be rolled back.',
     parameters: obj({ id: S }, ['id']),
     run: async (ctx, a) => {
       const env = requireEnv(ctx);
@@ -2467,6 +2467,12 @@ const CATALOG: BuiltinTool[] = [
       if (!factory) throw new Error('Could not load integration credentials');
       return svc.commit(str(a.id), ctx.tenantId, factory);
     },
+  },
+  {
+    tool: 'migrations.rollback', mutates: true,
+    description: 'Atomically remove projects, tasks, and sync connections created by a completed migration. Pre-existing mapped projects and unrelated work are preserved.',
+    parameters: obj({ id: S }, ['id']),
+    run: (ctx, a) => new MigrationService(createMigrationStore(ctx.db)).rollback(str(a.id), ctx.tenantId),
   },
 
   // ---- Web (server-side fetch) — read an external URL behind the SSRF guard and return its

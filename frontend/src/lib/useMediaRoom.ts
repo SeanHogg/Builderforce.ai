@@ -31,6 +31,15 @@ export interface RemoteTile {
   micOn: boolean;
 }
 
+export interface MediaPathEvidence {
+  peerId: string;
+  localCandidateType: string;
+  remoteCandidateType: string;
+  protocol?: string;
+  relayed: boolean;
+  observedAt: string;
+}
+
 interface PeerState {
   pc: RTCPeerConnection;
   name: string;
@@ -56,11 +65,26 @@ export interface UseMediaRoom {
   speaking: Set<string>;
   /** Direct-only excludes TURN; relay-fallback may use TURN for encrypted media. */
   privacyMode: 'direct-only' | 'relay-fallback';
+  /** Runtime evidence from the selected ICE candidate pair for each peer. */
+  mediaPaths: MediaPathEvidence[];
   toggleCam: () => void;
   toggleMic: () => void;
 }
 
 const EMPTY: RemoteTile[] = [];
+
+/** Extract the selected ICE path from standard WebRTC stats. */
+export function selectedMediaPath(stats: RTCStatsReport, peerId: string): MediaPathEvidence | null {
+  const rows = new Map<string, Record<string, unknown>>();
+  stats.forEach((value) => rows.set(value.id, value as unknown as Record<string, unknown>));
+  const transport = [...rows.values()].find((row) => row.type === 'transport' && typeof row.selectedCandidatePairId === 'string');
+  const pair = (transport ? rows.get(String(transport.selectedCandidatePairId)) : undefined)
+    ?? [...rows.values()].find((row) => row.type === 'candidate-pair' && row.state === 'succeeded' && (row.nominated === true || row.selected === true));
+  if (!pair) return null;
+  const local = rows.get(String(pair.localCandidateId || '')), remote = rows.get(String(pair.remoteCandidateId || ''));
+  const localCandidateType = String(local?.candidateType || 'unknown'), remoteCandidateType = String(remote?.candidateType || 'unknown');
+  return { peerId, localCandidateType, remoteCandidateType, protocol: typeof local?.protocol === 'string' ? local.protocol : undefined, relayed: localCandidateType === 'relay' || remoteCandidateType === 'relay', observedAt: new Date().toISOString() };
+}
 
 export function useMediaRoom(
   roomKey: string | null,
@@ -76,6 +100,7 @@ export function useMediaRoom(
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [captions, setCaptions] = useState<Record<string, string>>({});
   const [speaking, setSpeaking] = useState<Set<string>>(() => new Set());
+  const [mediaPaths, setMediaPaths] = useState<MediaPathEvidence[]>([]);
 
   const captionTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const wsRef = useRef<WebSocket | null>(null);
@@ -145,6 +170,12 @@ export function useMediaRoom(
       syncTiles();
     };
     pc.onconnectionstatechange = () => {
+      if (pc.connectionState === 'connected') {
+        void pc.getStats().then((stats) => {
+          const path = selectedMediaPath(stats, peer.id);
+          if (path) setMediaPaths((current) => [path, ...current.filter((item) => item.peerId !== peer.id)]);
+        }).catch(() => undefined);
+      }
       if (['failed', 'closed', 'disconnected'].includes(pc.connectionState)) {
         // Leave teardown to the presence-leave frame; a transient disconnect may recover.
       }
@@ -157,6 +188,7 @@ export function useMediaRoom(
     if (!p) return;
     try { p.pc.close(); } catch { /* ignore */ }
     peersRef.current.delete(peerId);
+    setMediaPaths((current) => current.filter((item) => item.peerId !== peerId));
     syncTiles();
   }, [syncTiles]);
 
@@ -298,6 +330,7 @@ export function useMediaRoom(
       captionTimers.current.clear();
       setCaptions({});
       setSpeaking(new Set());
+      setMediaPaths([]);
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) { try { window.speechSynthesis.cancel(); } catch { /* ignore */ } }
     };
   }, [enabled, roomKey, audioOnly, privacyMode, send, handleFrame]);
@@ -320,5 +353,5 @@ export function useMediaRoom(
     send({ type: 'm-state', camOn, micOn: next });
   }, [camOn, micOn, send]);
 
-  return { localStream, tiles, camOn, micOn, connected, mediaError, captions, speaking, privacyMode, toggleCam, toggleMic };
+  return { localStream, tiles, camOn, micOn, connected, mediaError, captions, speaking, privacyMode, mediaPaths, toggleCam, toggleMic };
 }

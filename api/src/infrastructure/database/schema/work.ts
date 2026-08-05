@@ -89,6 +89,8 @@ export const projects = pgTable('projects', {
    *  'ide' (created in the Designer) | 'imported' (created by importing a repo) |
    *  'external' (anything else). NULL on legacy rows = treated as external. */
   origin:          text('origin'),
+  /** Migration lineage: allows a completed external import to be rolled back safely. */
+  importRunId:     uuid('import_run_id'),
   // TRUE when this projects row exists purely as the storage backing of an
   // ide_project (0224) — hidden from the board/PMO project list. Backfilled
   // (pre-existing) projects stay FALSE and continue to appear normally.
@@ -203,6 +205,8 @@ export const tasks = pgTable('tasks', {
   persona:           varchar('persona', { length: 50 }),
   /** Origin board provider label for tickets synced from an external board. */
   source:            varchar('source', { length: 24 }),
+  /** Migration lineage; null for normal/synced work created outside an import commit. */
+  importRunId:       uuid('import_run_id'),
   // PRD/spec link moved to the task_specs junction (0098): a task references 1..N
   // project PRDs (one optional primary) — see `taskSpecs` below.
   archived:          boolean('archived').notNull().default(false),
@@ -987,6 +991,8 @@ export const boardConnections = pgTable('board_connections', {
   credentialId:    uuid('credential_id').references(() => integrationCredentials.id, { onDelete: 'set null' }),
   provider:        varchar('provider', { length: 24 }).notNull(),  // github|jira|freshworks|rally|bitbucket
   externalBoardId: varchar('external_board_id', { length: 255 }),
+  /** Migration lineage; makes a migration-created sync connection reversible. */
+  importRunId:     uuid('import_run_id'),
   status:          varchar('status', { length: 16 }).notNull().default('active'), // active|degraded|disabled
   pollCursor:      text('poll_cursor'),
   webhookSecret:   varchar('webhook_secret', { length: 128 }),

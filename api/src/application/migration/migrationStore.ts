@@ -10,7 +10,7 @@
  * Epic-decomposition hooks on a bulk import.
  */
 
-import { and, eq, desc } from 'drizzle-orm';
+import { and, eq, desc, notExists } from 'drizzle-orm';
 import {
   importRuns,
   importStagedProjects,
@@ -208,6 +208,7 @@ export function createMigrationStore(db: Db): MigrationStore {
         name: input.name,
         description: input.description,
         origin: 'imported',
+        importRunId: input.importRunId,
       }).returning({ id: projects.id });
       if (!row) throw new Error('insertProject returned no row');
       return row.id;
@@ -235,6 +236,7 @@ export function createMigrationStore(db: Db): MigrationStore {
         source: input.source,
         storyPoints: input.storyPoints ?? undefined,
         assignedUserId: input.assignedUserId ?? undefined,
+        importRunId: input.importRunId,
         createdAt: now,
         updatedAt: now,
       }).returning({ id: tasks.id });
@@ -250,6 +252,7 @@ export function createMigrationStore(db: Db): MigrationStore {
         credentialId: input.credentialId,
         provider: input.provider,
         externalBoardId: input.externalBoardId,
+        importRunId: input.importRunId,
       }).returning({ id: boardConnections.id });
       if (!row) throw new Error('insertConnection returned no row');
       return row.id;
@@ -295,6 +298,31 @@ export function createMigrationStore(db: Db): MigrationStore {
         email: input.email,
         invitedByUserId: input.invitedByUserId,
         status: 'pending',
+      });
+    },
+
+    async rollbackImport(runId, tenantId) {
+      return db.transaction(async (tx) => {
+        const removedTasks = await tx.delete(tasks)
+          .where(eq(tasks.importRunId, runId))
+          .returning({ id: tasks.id });
+        const removedConnections = await tx.delete(boardConnections)
+          .where(and(eq(boardConnections.importRunId, runId), eq(boardConnections.tenantId, tenantId)))
+          .returning({ id: boardConnections.id });
+        const removedProjects = await tx.delete(projects)
+          .where(and(
+            eq(projects.importRunId, runId),
+            eq(projects.tenantId, tenantId),
+            // An imported project can receive ordinary work immediately after
+            // commit. Preserve that project (and the later work) on rollback.
+            notExists(tx.select({ id: tasks.id }).from(tasks).where(eq(tasks.projectId, projects.id))),
+          ))
+          .returning({ id: projects.id });
+        const removed = { tasksRemoved: removedTasks.length, connectionsRemoved: removedConnections.length, projectsRemoved: removedProjects.length };
+        const [run] = await tx.select({ summary: importRuns.summary }).from(importRuns).where(and(eq(importRuns.id, runId), eq(importRuns.tenantId, tenantId))).limit(1);
+        await tx.update(importRuns).set({ status: 'rolled_back', summary: { ...((run?.summary as Record<string, number> | null) ?? {}), ...removed }, errorMessage: null, updatedAt: new Date() })
+          .where(and(eq(importRuns.id, runId), eq(importRuns.tenantId, tenantId)));
+        return removed;
       });
     },
   };

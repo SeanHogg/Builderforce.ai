@@ -466,6 +466,7 @@ export function CeremonyStage({
               onLeave={() => setCamerasOn(false)}
             />
           </div>
+          <div title={media.mediaPaths.map((path) => `${path.localCandidateType} ↔ ${path.remoteCandidateType}`).join('\n')} style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-muted)' }}>{media.mediaPaths.length ? `Direct ICE path verified · ${media.mediaPaths.length}` : 'Direct-only media · TURN disabled'}</div>
         </div>
       )}
 

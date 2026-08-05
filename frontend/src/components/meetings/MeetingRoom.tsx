@@ -192,6 +192,7 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
             <input type="checkbox" checked={directOnly} onChange={(event) => setDirectOnly(event.target.checked)} />
             Direct media only
           </label>
+          {media.mediaPaths.length > 0 && <span title={media.mediaPaths.map((path) => `${path.peerId}: ${path.localCandidateType} ↔ ${path.remoteCandidateType}`).join('\n')} style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{media.mediaPaths.some((path) => path.relayed) ? 'Encrypted TURN relay in use' : `Direct ICE path verified · ${media.mediaPaths.length}`}</span>}
           {/* Camera size toggle */}
           <div role="group" aria-label={t('cameraSize')} style={{ display: 'inline-flex', borderRadius: 8, overflow: 'hidden', border: '1px solid var(--border-subtle)' }}>
             {(['small', 'large'] as const).map((s) => (

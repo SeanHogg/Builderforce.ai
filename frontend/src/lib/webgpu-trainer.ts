@@ -5,17 +5,29 @@
  * decorative: the base model is frozen and only the low-rank A/B matrices are
  * optimised. The exported artifact is a standards-compliant safetensors file.
  *
- * The exact-gradient LoRA path currently executes on the CPU. WebGPU is used
- * only as a capability signal until the engine's equivalent WGSL path lands;
- * callers must not describe this class as GPU-accelerated training.
+ * On WebGPU devices the adapter forward projection, exact chain-rule gradient
+ * projection, and AdamW updates execute in WGSL. The compact base LM currently
+ * computes its loss/backward pass on CPU; browsers without WebGPU use the exact
+ * all-CPU reference path.
  */
 
 import {
   BPETokenizer,
   EvermindLM,
   EvermindLMLoRA,
+  EvermindModelPackage,
   importEvermind,
+  tokenizerJson,
   tensorsToSafetensors,
+  initWebGPU,
+  createStorageBuffer,
+  createEmptyStorageBuffer,
+  createComputePipeline,
+  createBindGroup,
+  dispatchKernel,
+  readBuffer,
+  uploadBuffer,
+  cdiv,
   type BaseQuant,
   type EvermindLMConfig,
 } from '@seanhogg/builderforce-memory-engine';
@@ -55,6 +67,9 @@ export interface BrowserLoRAArtifact {
   baseBytes: number;
   trainableParams: number;
   baseParams: number;
+  /** Merged, self-contained runtime package used by the canonical publish route. */
+  evermindPackage: ArrayBuffer;
+  tokenizer: { vocab: Record<string, number>; merges: string[] };
 }
 
 export interface WebGPUTrainerOptions {
@@ -79,6 +94,78 @@ export interface WebGPUTrainerOptions {
 }
 
 const BROWSER_LORA_MAX_PARAMS = 20e6;
+
+const LORA_FORWARD_WGSL = `
+@group(0) @binding(0) var<storage,read> base: array<f32>;
+@group(0) @binding(1) var<storage,read> a: array<f32>;
+@group(0) @binding(2) var<storage,read> b: array<f32>;
+@group(0) @binding(3) var<storage,read_write> merged: array<f32>;
+@group(0) @binding(4) var<storage,read> p: array<f32>;
+@compute @workgroup_size(256) fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let rows=u32(p[0]); let cols=u32(p[1]); let rank=u32(p[2]); let idx=gid.x+gid.y*65535u*256u;
+  if(idx>=rows*cols){return;} let row=idx/cols; let col=idx%cols; var delta=0.0;
+  for(var k=0u;k<rank;k=k+1u){delta=delta+b[row*rank+k]*a[k*cols+col];}
+  merged[idx]=base[idx]+p[3]*delta;
+}`;
+
+const LORA_BACKWARD_WGSL = `
+@group(0) @binding(0) var<storage,read> gw: array<f32>;
+@group(0) @binding(1) var<storage,read> a: array<f32>;
+@group(0) @binding(2) var<storage,read> b: array<f32>;
+@group(0) @binding(3) var<storage,read_write> ga: array<f32>;
+@group(0) @binding(4) var<storage,read_write> gb: array<f32>;
+@group(0) @binding(5) var<storage,read> p: array<f32>;
+@compute @workgroup_size(256) fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let rows=u32(p[0]); let cols=u32(p[1]); let rank=u32(p[2]); let idx=gid.x; let scale=p[3];
+  if(idx<rank*cols){let k=idx/cols;let col=idx%cols;var sum=0.0;for(var row=0u;row<rows;row=row+1u){sum=sum+b[row*rank+k]*gw[row*cols+col];}ga[idx]=ga[idx]+scale*sum;}
+  if(idx<rows*rank){let row=idx/rank;let k=idx%rank;var sum=0.0;for(var col=0u;col<cols;col=col+1u){sum=sum+gw[row*cols+col]*a[k*cols+col];}gb[idx]=gb[idx]+scale*sum;}
+}`;
+
+const ADAMW_WGSL = `
+@group(0) @binding(0) var<storage,read_write> w: array<f32>;
+@group(0) @binding(1) var<storage,read_write> g: array<f32>;
+@group(0) @binding(2) var<storage,read_write> m: array<f32>;
+@group(0) @binding(3) var<storage,read_write> v: array<f32>;
+@group(0) @binding(4) var<storage,read> p: array<f32>;
+@compute @workgroup_size(256) fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let i=gid.x;if(i>=arrayLength(&w)){return;}let grad=g[i]*p[9];let b1=p[5];let b2=p[6];
+  m[i]=b1*m[i]+(1.0-b1)*grad;v[i]=b2*v[i]+(1.0-b2)*grad*grad;
+  let mh=m[i]/(1.0-pow(b1,p[10]));let vh=v[i]/(1.0-pow(b2,p[10]));
+  w[i]=w[i]-p[4]*(mh/(sqrt(vh)+p[7])+p[8]*w[i]);g[i]=0.0;
+}`;
+
+class WebGPULoRAAdapterEngine {
+  private readonly params = new Float32Array(16);
+  private readonly buffers: GPUBuffer[];
+  private readonly base: GPUBuffer; private readonly a: GPUBuffer; private readonly b: GPUBuffer; private readonly merged: GPUBuffer;
+  private readonly gw: GPUBuffer; private readonly ga: GPUBuffer; private readonly gb: GPUBuffer;
+  private readonly ma: GPUBuffer; private readonly va: GPUBuffer; private readonly mb: GPUBuffer; private readonly vb: GPUBuffer; private readonly paramBuffer: GPUBuffer;
+  private readonly forwardPipeline: GPUComputePipeline; private readonly backwardPipeline: GPUComputePipeline; private readonly updatePipeline: GPUComputePipeline;
+  private stepNumber = 0;
+
+  constructor(private readonly device: GPUDevice, private readonly lora: EvermindLMLoRA, frozenBase: Float32Array) {
+    const { adapter } = lora; this.params.set([adapter.rows, adapter.cols, adapter.rank, adapter.scale]);
+    this.base=createStorageBuffer(device,frozenBase);this.a=createStorageBuffer(device,adapter.A,true);this.b=createStorageBuffer(device,adapter.B,true);this.merged=createEmptyStorageBuffer(device,frozenBase.byteLength,true);
+    this.gw=createEmptyStorageBuffer(device,frozenBase.byteLength);this.ga=createEmptyStorageBuffer(device,adapter.A.byteLength);this.gb=createEmptyStorageBuffer(device,adapter.B.byteLength);
+    this.ma=createEmptyStorageBuffer(device,adapter.A.byteLength);this.va=createEmptyStorageBuffer(device,adapter.A.byteLength);this.mb=createEmptyStorageBuffer(device,adapter.B.byteLength);this.vb=createEmptyStorageBuffer(device,adapter.B.byteLength);this.paramBuffer=createStorageBuffer(device,this.params);
+    this.buffers=[this.base,this.a,this.b,this.merged,this.gw,this.ga,this.gb,this.ma,this.va,this.mb,this.vb,this.paramBuffer];
+    this.forwardPipeline=createComputePipeline(device,LORA_FORWARD_WGSL,'main');this.backwardPipeline=createComputePipeline(device,LORA_BACKWARD_WGSL,'main');this.updatePipeline=createComputePipeline(device,ADAMW_WGSL,'main');
+  }
+  async forward(): Promise<Float32Array> {
+    const { adapter }=this.lora;const groups=cdiv(adapter.rows*adapter.cols,256);dispatchKernel(this.device,this.forwardPipeline,createBindGroup(this.device,this.forwardPipeline,[this.base,this.a,this.b,this.merged,this.paramBuffer]),[Math.min(groups,65535),Math.ceil(groups/65535),1]);
+    return readBuffer(this.device,this.merged,adapter.rows*adapter.cols*4);
+  }
+  accumulate(gradient: Float32Array): void {
+    const { adapter }=this.lora;uploadBuffer(this.device,this.gw,gradient);dispatchKernel(this.device,this.backwardPipeline,createBindGroup(this.device,this.backwardPipeline,[this.gw,this.a,this.b,this.ga,this.gb,this.paramBuffer]),[cdiv(Math.max(adapter.A.length,adapter.B.length),256),1,1]);
+  }
+  async step(pending: number, lr: number): Promise<void> {
+    const { adapter }=this.lora;this.stepNumber+=1;this.params.set([lr,.9,.999,1e-8,.01,1/Math.max(1,pending),this.stepNumber],4);uploadBuffer(this.device,this.paramBuffer,this.params);
+    dispatchKernel(this.device,this.updatePipeline,createBindGroup(this.device,this.updatePipeline,[this.a,this.ga,this.ma,this.va,this.paramBuffer]),[cdiv(adapter.A.length,256),1,1]);
+    dispatchKernel(this.device,this.updatePipeline,createBindGroup(this.device,this.updatePipeline,[this.b,this.gb,this.mb,this.vb,this.paramBuffer]),[cdiv(adapter.B.length,256),1,1]);
+    const [a,b]=await Promise.all([readBuffer(this.device,this.a,adapter.A.byteLength),readBuffer(this.device,this.b,adapter.B.byteLength)]);adapter.A.set(a);adapter.B.set(b);
+  }
+  destroy(): void { for(const buffer of this.buffers) buffer.destroy(); }
+}
 
 export function canTrainInBrowser(maxParams: number): boolean {
   return maxParams <= BROWSER_LORA_MAX_PARAMS;
@@ -141,6 +228,7 @@ export function exportLoRASafetensors(
 export class WebGPUTrainer {
   private stopped = false;
   private ready = false;
+  private gpuDevice: GPUDevice | null = null;
   private readonly options: WebGPUTrainerOptions;
 
   constructor(options: WebGPUTrainerOptions) {
@@ -149,10 +237,14 @@ export class WebGPUTrainer {
 
   async init(): Promise<void> {
     this.options.onLog('Initialising exact-gradient browser LoRA engine…');
+    if (hasWebGPUSupport()) {
+      try { this.gpuDevice = (await initWebGPU({ powerPreference: 'high-performance' })).device; }
+      catch { this.gpuDevice = null; }
+    }
     this.ready = true;
     this.options.onLog(
-      hasWebGPUSupport()
-        ? 'Browser LoRA ready (CPU exact gradients; WebGPU adapter kernels are not enabled yet).'
+      this.gpuDevice
+        ? 'Browser LoRA ready (WGSL adapter forward/backward/AdamW; CPU base-model autograd).'
         : 'Browser LoRA ready (CPU exact gradients).',
     );
   }
@@ -210,14 +302,32 @@ export class WebGPUTrainer {
       if (sequences.length === 0) throw new Error('Tokenizer produced no trainable sequences.');
 
       const before = Float32Array.from(model.emb);
+      const gpuAdapter = this.gpuDevice ? new WebGPULoRAAdapterEngine(this.gpuDevice, lora, lora.mergedEmb()) : null;
       this.options.onLog(`Training ${lora.adapter.numParams().toLocaleString()} adapter parameters; base weights are frozen.`);
       for (let epoch = 1; epoch <= params.epochs; epoch += 1) {
-        if (this.stopped) return;
-        const [loss = 0] = lora.fit(sequences, {
-          epochs: 1,
-          lr: params.learningRate,
-          accumSteps: Math.max(1, params.gradientAccumulationSteps),
-        });
+        if (this.stopped) { gpuAdapter?.destroy(); return; }
+        let loss = 0;
+        if (gpuAdapter) {
+          let total = 0, count = 0, pending = 0;
+          const flush = async () => { if (pending) { await gpuAdapter.step(pending, params.learningRate); pending = 0; } };
+          for (const sequence of sequences) {
+            if (this.stopped) break;
+            const merged = await gpuAdapter.forward();
+            const saved = model.emb;
+            try {
+              model.emb = merged;
+              model.zeroGrad();
+              total += model.lossAndBackward(sequence);
+              gpuAdapter.accumulate(Float32Array.from(model.gradients()[0]!.data));
+            } finally { model.emb = saved; }
+            count += 1; pending += 1;
+            if (pending >= Math.max(1, params.gradientAccumulationSteps)) await flush();
+          }
+          await flush();
+          loss = count ? total / count : 0;
+        } else {
+          [loss = 0] = lora.fit(sequences, { epochs: 1, lr: params.learningRate, accumSteps: Math.max(1, params.gradientAccumulationSteps) });
+        }
         const step = { epoch, step: epoch, loss, learningRate: params.learningRate };
         this.options.onStep(step);
         this.options.onEpochEnd(epoch, loss);
@@ -227,6 +337,7 @@ export class WebGPUTrainer {
         }
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
       }
+      gpuAdapter?.destroy();
 
       if (model.emb.some((value, index) => value !== before[index])) {
         throw new Error('Frozen-base invariant failed: base weights changed during LoRA training.');
@@ -235,10 +346,27 @@ export class WebGPUTrainer {
       const bytes = exportLoRASafetensors(lora, this.options.modelId, 'embed_tokens', params.precision === 'float16');
       const footprint = lora.footprint();
       const filename = `${safeModelName(this.options.modelId)}-adapter.safetensors`;
+      const mergedModel = new EvermindLM(model.config);
+      mergedModel.loadWeights(lora.merge({ fp16: false }));
+      const evermindPackage = EvermindModelPackage.fromLM(mergedModel, {
+        name: this.options.modelId,
+        version: `1.0.${Date.now()}`,
+        fp16: params.precision === 'float16',
+        createdAt: new Date().toISOString(),
+        card: {
+          description: `Browser-trained LoRA merge for ${this.options.modelId}`,
+          trainingSummary: `${sequences.length} sequences, ${params.epochs} epochs, rank ${params.loraConfig.rank}`,
+          tags: ['builderforce', 'browser-lora', 'evermind'],
+        },
+      }).toBlob();
+      const portableTokenizer = tokenizerJson(tokenizer) as { model?: { vocab?: Record<string, number>; merges?: string[] } };
+      if (!portableTokenizer.model?.vocab || !portableTokenizer.model.merges) throw new Error('Could not package the trained tokenizer.');
       const artifact: BrowserLoRAArtifact = {
         bytes: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
         filename,
         format: 'safetensors',
+        evermindPackage,
+        tokenizer: { vocab: portableTokenizer.model.vocab, merges: portableTokenizer.model.merges },
         ...footprint,
       };
       this.options.onArtifact?.(artifact);

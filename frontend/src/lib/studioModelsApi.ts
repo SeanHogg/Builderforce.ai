@@ -32,6 +32,54 @@ export async function listEvermindModels(): Promise<PublishedEvermindModel[]> {
     .map((m) => ({ slug: m.slug, name: m.name?.trim() || m.slug }));
 }
 
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunk));
+  }
+  return btoa(binary);
+}
+
+export interface PublishedEvermindResult extends PublishedEvermindModel {
+  ref: string;
+  baseModel: string;
+  evermindRef: string;
+  testEndpoint: string;
+}
+
+/** Publish the same validated `.evermind` package the live gateway executes. */
+export async function publishEvermindModel(input: {
+  name: string;
+  model: ArrayBuffer;
+  tokenizer: { vocab: Record<string, number>; merges: string[] };
+  description?: string;
+  heldOutCorpus: string;
+  qualityGate?: { maxPerplexity?: number; minTop1Accuracy?: number };
+}): Promise<PublishedEvermindResult> {
+  return apiRequest<PublishedEvermindResult>('/api/studio/models/publish', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...input, model: arrayBufferToBase64(input.model) }),
+  });
+}
+
+export async function testPublishedEvermindModel(slug: string, prompt: string): Promise<{ choices?: Array<{ message?: { content?: string } }>; usage?: unknown }> {
+  return apiRequest(`/api/studio/models/${encodeURIComponent(slug)}/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, maxTokens: 64 }),
+  });
+}
+
+/** Promote a prior immutable package behind an existing callable model slug. */
+export async function rollbackPublishedEvermindModel(slug: string, target: { targetSlug?: string; targetEvermindRef?: string }): Promise<{ rolledBack: true; previousBaseModel: string; activeBaseModel: string; rollbackToken: string }> {
+  return apiRequest(`/api/studio/models/${encodeURIComponent(slug)}/rollback`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(target),
+  });
+}
+
 /** Server-computed scorecard for a published model (mirrors api EvermindBenchmarkResult). */
 export interface PublishedBenchmarkResult {
   tokens: number;

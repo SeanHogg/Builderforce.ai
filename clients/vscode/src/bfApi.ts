@@ -528,7 +528,7 @@ export interface BfCreationConnection {
 }
 
 export interface BfCreationSessionDetail {
-  session: { id: string; title: string; canvasRevision: number; viewport?: unknown };
+  session: { id: string; title: string; canvasRevision: number; viewport?: unknown; branchParentSessionId?: string | null; branchBaseRevision?: number | null };
   role: "viewer" | "commenter" | "editor" | "runner" | "owner";
   objects: BfCreationObject[];
   connections: BfCreationConnection[];
@@ -559,6 +559,17 @@ export async function getCreationSession(secrets: vscode.SecretStorage, sessionI
   return result;
 }
 
+export async function getCreationEvents(
+  secrets: vscode.SecretStorage,
+  sessionId: string,
+  afterRevision: number,
+): Promise<{ events: Array<Record<string, unknown>>; revision: number; hasMore: boolean }> {
+  return (await authed<{ events: Array<Record<string, unknown>>; revision: number; hasMore: boolean }>(
+    secrets,
+    `/api/creation-sessions/${encodeURIComponent(sessionId)}/events?after=${Math.max(0, Math.floor(afterRevision))}`,
+  )) ?? { events: [], revision: afterRevision, hasMore: false };
+}
+
 export async function applyCreationCommands(
   secrets: vscode.SecretStorage,
   sessionId: string,
@@ -571,6 +582,32 @@ export async function applyCreationCommands(
     body: JSON.stringify({ commands, atomic: true }),
   });
   if (!result) throw new Error("Canvas change failed");
+  return result;
+}
+
+export async function createCreationBranch(secrets: vscode.SecretStorage, sessionId: string, title: string): Promise<{ session: { id: string; title: string; revision: number; parentSessionId: string; baseRevision: number } }> {
+  const result = await authed<{ session: { id: string; title: string; revision: number; parentSessionId: string; baseRevision: number } }>(secrets, `/api/creation-sessions/${encodeURIComponent(sessionId)}/branches`, { method: "POST", body: JSON.stringify({ title }) });
+  if (!result) throw new Error("Canvas branch could not be created");
+  return result;
+}
+
+export interface BfCreationSnapshot {
+  revision: number; label?: string | null; createdAt: string;
+  graph: { objects: BfCreationObject[]; connections: BfCreationConnection[] };
+}
+
+export async function createCreationCheckpoint(secrets: vscode.SecretStorage, sessionId: string, label: string): Promise<void> {
+  await authed(secrets, `/api/creation-sessions/${encodeURIComponent(sessionId)}/checkpoints`, { method: "POST", body: JSON.stringify({ label }) });
+}
+
+export async function listCreationHistory(secrets: vscode.SecretStorage, sessionId: string): Promise<Array<{ revision: number; label?: string | null; createdAt: string }>> {
+  const result = await authed<{ snapshots: Array<{ revision: number; label?: string | null; createdAt: string }> }>(secrets, `/api/creation-sessions/${encodeURIComponent(sessionId)}/history`);
+  return result?.snapshots ?? [];
+}
+
+export async function getCreationSnapshot(secrets: vscode.SecretStorage, sessionId: string, revision: number): Promise<BfCreationSnapshot> {
+  const result = await authed<BfCreationSnapshot>(secrets, `/api/creation-sessions/${encodeURIComponent(sessionId)}/history/${revision}`);
+  if (!result) throw new Error("Canvas checkpoint not found");
   return result;
 }
 

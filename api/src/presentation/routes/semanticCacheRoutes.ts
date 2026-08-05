@@ -11,7 +11,7 @@
 import { Hono } from 'hono';
 import type { HonoEnv } from '../../env';
 import { requireTenantAccess, respondToAccessError } from './llmRoutes';
-import { semanticLookup, semanticStore } from '../../application/llm/semanticCache';
+import { semanticInvalidate, semanticLookup, semanticStore } from '../../application/llm/semanticCache';
 
 const DEFAULT_THRESHOLD = 0.92;
 
@@ -19,6 +19,12 @@ const DEFAULT_THRESHOLD = 0.92;
 function sanitizeNamespace(ns: unknown): string {
   if (typeof ns !== 'string' || ns.length === 0) return 'default';
   return ns.replace(/[^a-zA-Z0-9_.:-]/g, '_').slice(0, 64);
+}
+
+/** Cache answers never cross an authenticated principal or permission role. */
+function accessNamespace(access: Awaited<ReturnType<typeof requireTenantAccess>>, requested: unknown): string {
+  const principal = access.userId ? `user-${access.userId}` : access.agentHostId != null ? `host-${access.agentHostId}` : access.tenantApiKeyId ? `key-${access.tenantApiKeyId}` : 'anonymous';
+  return `${sanitizeNamespace(requested)}:${access.role}:${principal}`;
 }
 
 export function createSemanticCacheRoutes(): Hono<HonoEnv> {
@@ -42,7 +48,7 @@ export function createSemanticCacheRoutes(): Hono<HonoEnv> {
     }
     const embedding = (body.embedding as unknown[]).map(Number).filter(Number.isFinite);
     const threshold = typeof body.threshold === 'number' ? body.threshold : DEFAULT_THRESHOLD;
-    const namespace = sanitizeNamespace(body.namespace);
+    const namespace = accessNamespace(access, body.namespace);
 
     const hit = await semanticLookup(c.env, access.tenantId, namespace, embedding, threshold);
     return c.json({ hit: hit ?? undefined });
@@ -65,12 +71,21 @@ export function createSemanticCacheRoutes(): Hono<HonoEnv> {
       return c.json({ error: 'embedding (number[]) and response (string) are required' }, 400);
     }
     const embedding = (body.embedding as unknown[]).map(Number).filter(Number.isFinite);
-    const namespace = sanitizeNamespace(body.namespace);
+    const namespace = accessNamespace(access, body.namespace);
 
     // Store off the response path — the client only needs the 2xx ack.
     c.executionCtx.waitUntil(
       semanticStore(c.env, access.tenantId, namespace, embedding, body.response),
     );
+    return c.json({ ok: true });
+  });
+
+  // DELETE /v1/semantic-cache?namespace= — explicit partition invalidation.
+  router.delete('/', async (c) => {
+    let access;
+    try { access = await requireTenantAccess(c); }
+    catch (err) { return respondToAccessError(c, err); }
+    await semanticInvalidate(c.env, access.tenantId, accessNamespace(access, c.req.query('namespace')));
     return c.json({ ok: true });
   });
 

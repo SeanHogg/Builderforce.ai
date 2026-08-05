@@ -6780,7 +6780,7 @@ export interface BoardProviderMeta {
 
 export type MigrationMode = 'migrate' | 'sync' | 'both';
 export type MigrationStatus =
-  | 'discovering' | 'staged' | 'mapped' | 'importing' | 'completed' | 'failed' | 'cancelled';
+  | 'discovering' | 'staged' | 'mapped' | 'importing' | 'completed' | 'rolled_back' | 'failed' | 'cancelled';
 
 export interface MigrationRun {
   id: string;
@@ -6869,6 +6869,9 @@ export const migrationsApi = {
 
   commit: (id: string): Promise<MigrationRun> =>
     request(`/api/migrations/${id}/commit`, { method: 'POST' }),
+
+  rollback: (id: string): Promise<MigrationRun> =>
+    request(`/api/migrations/${id}/rollback`, { method: 'POST' }),
 
   discard: (id: string): Promise<void> =>
     request<void>(`/api/migrations/${id}`, { method: 'DELETE' }),

@@ -18,7 +18,7 @@ import { EvermindModelPackage } from '@seanhogg/builderforce-memory-engine';
 import { authMiddleware } from '../middleware/authMiddleware';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env, HonoEnv } from '../../env';
-import { createTenantModel, resolveTenantModel, TENANT_MODEL_REF_PREFIX } from '../../application/llm/tenantModelService';
+import { createTenantModel, resolveTenantModel, updateTenantModel, TENANT_MODEL_REF_PREFIX } from '../../application/llm/tenantModelService';
 import { zipSync, type Zippable } from 'fflate';
 import {
   EVERMIND_MODEL_ROOT,
@@ -55,6 +55,8 @@ interface PublishBody {
   /** Tokenizer descriptor packaged alongside the model: { vocab, merges }. */
   tokenizer?: unknown;
   description?: unknown;
+  heldOutCorpus?: unknown;
+  qualityGate?: unknown;
 }
 
 function decodeBase64(b64: string): Uint8Array {
@@ -113,6 +115,26 @@ export function createEvermindModelRoutes(db: Db): Hono<HonoEnv> {
       await c.env.UPLOADS.put(`${ref}/tokenizer.json`, JSON.stringify({ vocab: tokenizer!.vocab, merges: tokenizer!.merges }));
     }
 
+    const heldOutCorpus = typeof body.heldOutCorpus === 'string' ? body.heldOutCorpus.trim() : '';
+    if (heldOutCorpus.length < 20) {
+      await Promise.all([c.env.UPLOADS.delete(`${ref}/model.evermind`), c.env.UPLOADS.delete(`${ref}/tokenizer.json`)]);
+      return c.json({ error: 'heldOutCorpus (at least 20 characters) is required before publication' }, 400);
+    }
+    let benchmark;
+    try {
+      benchmark = await benchmarkEvermind(c.env.UPLOADS, ref, heldOutCorpus, { topK: 5 });
+    } catch (err) {
+      await Promise.all([c.env.UPLOADS.delete(`${ref}/model.evermind`), c.env.UPLOADS.delete(`${ref}/tokenizer.json`)]);
+      return c.json({ error: `held-out benchmark failed: ${err instanceof Error ? err.message : String(err)}` }, 422);
+    }
+    const gate = body.qualityGate && typeof body.qualityGate === 'object' ? body.qualityGate as { maxPerplexity?: unknown; minTop1Accuracy?: unknown } : {};
+    const maxPerplexity = typeof gate.maxPerplexity === 'number' && Number.isFinite(gate.maxPerplexity) ? gate.maxPerplexity : Number.POSITIVE_INFINITY;
+    const minTop1Accuracy = typeof gate.minTop1Accuracy === 'number' && Number.isFinite(gate.minTop1Accuracy) ? gate.minTop1Accuracy : 0;
+    if (benchmark.perplexity > maxPerplexity || benchmark.top1Accuracy < minTop1Accuracy) {
+      await Promise.all([c.env.UPLOADS.delete(`${ref}/model.evermind`), c.env.UPLOADS.delete(`${ref}/tokenizer.json`)]);
+      return c.json({ error: 'Model did not pass the publication quality gate', benchmark, qualityGate: { maxPerplexity, minTop1Accuracy } }, 422);
+    }
+
     const model = await createTenantModel(c.env as Env, db, tenantId, userId ?? null, {
       name,
       baseModel: `${EVERMIND_PIN_PREFIX}${ref}`,
@@ -131,9 +153,34 @@ export function createEvermindModelRoutes(db: Db): Hono<HonoEnv> {
           model: model.ref, // tenant_model:<slug>
         },
         testEndpoint: `/api/studio/models/${model.slug}/test`,
+        benchmark,
+        qualityGate: { passed: true, maxPerplexity, minTop1Accuracy },
       },
       201,
     );
+  });
+
+  /**
+   * POST /api/studio/models/:slug/rollback { targetSlug }
+   * Re-point one stable callable model ref at a prior immutable Evermind package.
+   * The previous package is retained and returned, so rollback is itself reversible.
+   */
+  router.post('/:slug/rollback', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const current = await resolveTenantModel(c.env as Env, db, tenantId, `${TENANT_MODEL_REF_PREFIX}${c.req.param('slug')}`);
+    const body = await c.req.json<{ targetSlug?: unknown; targetEvermindRef?: unknown }>().catch(() => ({} as { targetSlug?: unknown; targetEvermindRef?: unknown }));
+    const targetSlug = typeof body.targetSlug === 'string' ? body.targetSlug.trim() : '';
+    if (!current || !current.baseModel?.startsWith(EVERMIND_PIN_PREFIX)) return c.json({ error: 'Published Evermind model not found' }, 404);
+    const explicitRef = typeof body.targetEvermindRef === 'string' ? body.targetEvermindRef.trim() : '';
+    const target = targetSlug ? await resolveTenantModel(c.env as Env, db, tenantId, `${TENANT_MODEL_REF_PREFIX}${targetSlug}`) : null;
+    const nextRef = target?.baseModel?.startsWith(EVERMIND_PIN_PREFIX) ? target.baseModel.slice(EVERMIND_PIN_PREFIX.length) : explicitRef;
+    if (!nextRef || !nextRef.startsWith(`${EVERMIND_MODEL_ROOT}/${tenantId}/`)) return c.json({ error: 'A tenant-owned targetSlug or targetEvermindRef is required' }, 400);
+    if (!c.env.UPLOADS || !(await c.env.UPLOADS.head(`${nextRef}/model.evermind`))) return c.json({ error: 'Rollback target artifact not found' }, 404);
+    const previousBaseModel = current.baseModel;
+    const activeBaseModel = `${EVERMIND_PIN_PREFIX}${nextRef}`;
+    const updated = await updateTenantModel(c.env as Env, db, tenantId, current.id, { baseModel: activeBaseModel, trainedModelRef: nextRef });
+    if (!updated) return c.json({ error: 'Model rollback failed' }, 500);
+    return c.json({ rolledBack: true, model: updated, previousBaseModel, activeBaseModel, rollbackToken: previousBaseModel.slice(EVERMIND_PIN_PREFIX.length) });
   });
 
   /**

@@ -44,7 +44,7 @@ export default function ShowcasePage() {
         </div>
       </section>
       <p className="cc-more">
-        Looking for more? <a href="/docs/start/showcase">More examples in our docs</a>.
+        Looking for more? <Link href="/docs/start/showcase">More examples in our docs</Link>.
       </p>
       <style>{`
         .cc-page {

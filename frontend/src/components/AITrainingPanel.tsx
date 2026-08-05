@@ -21,9 +21,11 @@ import {
 import { getApiBaseUrl } from '@/lib/apiClient';
 import { downloadBlob } from '@/lib/download';
 import { hasWebGPUSupport } from '@seanhogg/builderforce-studio';
-import { WebGPUTrainer, canTrainInBrowser, type TrainingDataMode, type TrainingStep } from '@/lib/webgpu-trainer';
+import { WebGPUTrainer, canTrainInBrowser, type BrowserLoRAArtifact, type TrainingDataMode, type TrainingStep } from '@/lib/webgpu-trainer';
+import { benchmarkPublishedModel, listEvermindModels, publishEvermindModel, rollbackPublishedEvermindModel, testPublishedEvermindModel, type PublishedEvermindModel, type PublishedEvermindResult } from '@/lib/studioModelsApi';
 import { MambaEngine } from '@/lib/mamba-engine';
 import { MambaModelProvider, type MambaProviderConfig } from '@/lib/model-provider';
+import type { HuggingFaceTokenizerSpec } from '@seanhogg/builderforce-memory-engine';
 
 interface AITrainingPanelProps {
   projectId: string | number;
@@ -32,6 +34,7 @@ interface AITrainingPanelProps {
   initialDataMode?: TrainingDataMode;
   workspaceEnabled?: boolean;
   onLocalArtifactCompleted?: (artifact: { filename: string; trainableParams: number }) => void;
+  onModelPublished?: (model: PublishedEvermindResult) => void;
 }
 
 type PanelTab = 'configure' | 'datasets' | 'jobs';
@@ -55,7 +58,7 @@ const DEFAULT_MAMBA_PROVIDER_CONFIG: MambaProviderConfig = {
   wsla: false,
 };
 
-export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataMode = 'workspace', workspaceEnabled = true, onLocalArtifactCompleted }: AITrainingPanelProps) {
+export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataMode = 'workspace', workspaceEnabled = true, onLocalArtifactCompleted, onModelPublished }: AITrainingPanelProps) {
   const t = useTranslations('aiTraining');
   const [tab, setTab] = useState<PanelTab>('configure');
   const [trainingMode, setTrainingMode] = useState<TrainingMode>('behavior');
@@ -67,6 +70,20 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
   const [selectedDatasetId, setSelectedDatasetId] = useState<string>('');
   const [dataMode, setDataMode] = useState<TrainingDataMode>(initialDataMode);
   const [localTrainingText, setLocalTrainingText] = useState('');
+  const [completedArtifact, setCompletedArtifact] = useState<BrowserLoRAArtifact | null>(null);
+  const [publishName, setPublishName] = useState('');
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishedModel, setPublishedModel] = useState<PublishedEvermindResult | null>(null);
+  const [testPrompt, setTestPrompt] = useState('Explain what you learned.');
+  const [testOutput, setTestOutput] = useState('');
+  const [benchmarkCorpus, setBenchmarkCorpus] = useState('Held-out evaluation text that was not included in browser training.');
+  const [benchmarkOutput, setBenchmarkOutput] = useState('');
+  const [publishedVersions, setPublishedVersions] = useState<PublishedEvermindModel[]>([]);
+  const [rollbackTarget, setRollbackTarget] = useState('');
+  const [baseCheckpoint, setBaseCheckpoint] = useState<ArrayBuffer | undefined>();
+  const [baseCheckpointName, setBaseCheckpointName] = useState('');
+  const [tokenizerSpec, setTokenizerSpec] = useState<HuggingFaceTokenizerSpec | undefined>();
+  const [tokenizerName, setTokenizerName] = useState('');
   /** Optional generation model — e.g. an OpenRouter model id; empty = gateway default pool. */
   const [genModel, setGenModel] = useState<string>('');
   const [logs, setLogs] = useState<string[]>([]);
@@ -156,6 +173,8 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
           jobId: job?.id,
           datasetId: dataMode === 'workspace' ? selectedDatasetId || undefined : undefined,
           dataMode,
+          baseCheckpoint,
+          tokenizerSpec,
           modelConfig: selectedModel?.modelConfig,
           onLog: appendLog,
           onStep: (step) => {
@@ -187,6 +206,8 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
             setIsTraining(false);
           },
           onArtifact: (artifact) => {
+            setCompletedArtifact(artifact);
+            setPublishName(`${selectedModel?.name ?? config.baseModel} Adapter`);
             if (dataMode === 'local-only') {
               downloadBlob(new Blob([artifact.bytes], { type: 'application/x-safetensors' }), artifact.filename);
               appendLog(`Downloaded ${artifact.filename}; ${artifact.trainableParams.toLocaleString()} trainable parameters.`);
@@ -231,13 +252,65 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
       appendLog(t('logStartFailed', { error: e instanceof Error ? e.message : t('errUnknown') }));
       setIsTraining(false);
     }
-  }, [config, selectedModel, selectedDatasetId, projectId, dataMode, localTrainingText, canUseBrowserTraining, appendLog, onJobCompleted, onLocalArtifactCompleted, t]);
+  }, [config, selectedModel, selectedDatasetId, projectId, dataMode, localTrainingText, baseCheckpoint, tokenizerSpec, canUseBrowserTraining, appendLog, onJobCompleted, onLocalArtifactCompleted, t]);
 
   const handleStopTraining = useCallback(() => {
     trainerRef.current?.stop();
     setIsTraining(false);
     appendLog(t('logStopped'));
   }, [appendLog, t]);
+
+  const handlePublishModel = useCallback(async () => {
+    if (!completedArtifact || !publishName.trim()) return;
+    setIsPublishing(true);
+    try {
+      const published = await publishEvermindModel({
+        name: publishName.trim(),
+        model: completedArtifact.evermindPackage,
+        tokenizer: completedArtifact.tokenizer,
+        description: `LoRA adapter merged from ${config.baseModel}`,
+        heldOutCorpus: benchmarkCorpus,
+        qualityGate: { maxPerplexity: 1_000, minTop1Accuracy: 0 },
+      });
+      setPublishedModel(published);
+      void listEvermindModels().then((models) => setPublishedVersions(models.filter((model) => model.slug !== published.slug))).catch(() => undefined);
+      appendLog(`Published ${published.name} as ${published.ref}.`);
+      onModelPublished?.(published);
+    } catch (error) {
+      appendLog(`Publish failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setIsPublishing(false);
+    }
+  }, [appendLog, benchmarkCorpus, completedArtifact, config.baseModel, onModelPublished, publishName]);
+
+  const handleTestPublished = useCallback(async () => {
+    if (!publishedModel || !testPrompt.trim()) return;
+    setTestOutput('Testing…');
+    try {
+      const result = await testPublishedEvermindModel(publishedModel.slug, testPrompt.trim());
+      setTestOutput(result.choices?.[0]?.message?.content || 'Model returned no text.');
+    } catch (error) {
+      setTestOutput(error instanceof Error ? error.message : String(error));
+    }
+  }, [publishedModel, testPrompt]);
+
+  const handleBenchmarkPublished = useCallback(async () => {
+    if (!publishedModel || benchmarkCorpus.trim().length < 20) return;
+    setBenchmarkOutput('Benchmarking immutable package…');
+    try {
+      const result = await benchmarkPublishedModel(publishedModel.slug, benchmarkCorpus.trim());
+      setBenchmarkOutput(`Perplexity ${result.perplexity.toFixed(3)} · top-1 ${(result.top1Accuracy * 100).toFixed(1)}% · top-${result.topK} ${(result.topKAccuracy * 100).toFixed(1)}% · ${result.tokensPerSecond?.toFixed(1) ?? '—'} tok/s`);
+    } catch (error) { setBenchmarkOutput(error instanceof Error ? error.message : String(error)); }
+  }, [benchmarkCorpus, publishedModel]);
+
+  const handleRollbackPublished = useCallback(async () => {
+    if (!publishedModel || !rollbackTarget) return;
+    try {
+      const result = await rollbackPublishedEvermindModel(publishedModel.slug, { targetSlug: rollbackTarget });
+      appendLog(`Rolled ${publishedModel.ref} back to ${result.activeBaseModel}. Reversal token: ${result.rollbackToken}`);
+      setBenchmarkOutput('Model version changed. Run the held-out benchmark again before approval.');
+    } catch (error) { appendLog(`Rollback failed: ${error instanceof Error ? error.message : String(error)}`); }
+  }, [appendLog, publishedModel, rollbackTarget]);
 
   /** Memory Training — advance Mamba state through provided sequences */
   const handleMemoryTraining = useCallback(async () => {
@@ -513,9 +586,30 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
                 {selectedModel && (
                   <div className="mt-1 text-xs text-gray-500 flex items-center gap-1">
                     <span className={`w-1.5 h-1.5 rounded-full ${canUseBrowserTraining ? 'bg-green-400' : 'bg-orange-400'}`} />
-                    {canUseBrowserTraining ? 'Exact browser LoRA (CPU)' : t('cloudOffload')}
+                    {canUseBrowserTraining ? (webgpuAvailable ? 'Hybrid WebGPU LoRA · WGSL adapter kernels' : 'Exact browser LoRA · CPU fallback') : t('cloudOffload')}
                   </div>
                 )}
+                <details className="mt-2 rounded border border-gray-700 bg-gray-900 p-2">
+                  <summary className="cursor-pointer text-xs text-gray-300">Warm-start from a compatible Evermind checkpoint</summary>
+                  <div className="mt-2 space-y-2 text-xs text-gray-400">
+                    <label className="block">Base `.safetensors`
+                      <input type="file" accept=".safetensors,application/octet-stream" className="mt-1 block w-full text-xs" onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (!file) { setBaseCheckpoint(undefined); setBaseCheckpointName(''); return; }
+                        void file.arrayBuffer().then((bytes) => { setBaseCheckpoint(bytes); setBaseCheckpointName(file.name); });
+                      }} />
+                    </label>
+                    <label className="block">Matching Hugging Face `tokenizer.json`
+                      <input type="file" accept=".json,application/json" className="mt-1 block w-full text-xs" onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (!file) { setTokenizerSpec(undefined); setTokenizerName(''); return; }
+                        void file.text().then((text) => { setTokenizerSpec(JSON.parse(text) as HuggingFaceTokenizerSpec); setTokenizerName(file.name); }).catch(() => appendLog('Tokenizer JSON could not be parsed.'));
+                      }} />
+                    </label>
+                    <div>{baseCheckpointName || 'No base selected'} · {tokenizerName || 'No tokenizer selected'}</div>
+                    {(baseCheckpoint && !tokenizerSpec) || (!baseCheckpoint && tokenizerSpec) ? <div className="text-amber-400">Select both files; their vocabulary and tensor shapes are verified before training.</div> : null}
+                  </div>
+                </details>
               </div>
             )}
             {/* Capability prompt — shown for behavior + hybrid */}
@@ -675,7 +769,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
               ) : (
                 <button
                   onClick={handleStartTraining}
-                  disabled={isTraining || isGenerating || (dataMode === 'local-only' && !localTrainingText.trim())}
+                  disabled={isTraining || isGenerating || (dataMode === 'local-only' && !localTrainingText.trim()) || (!!baseCheckpoint !== !!tokenizerSpec)}
                   className="flex-1 bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
                 >
                   {isTraining ? `⏳ ${t('training')}` : `▶ ${t('startTraining')}`}
@@ -707,6 +801,33 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
                     />
                   ))}
                 </div>
+              </div>
+            )}
+
+            {completedArtifact && (
+              <div className="rounded border border-emerald-800 bg-emerald-950/30 p-2 space-y-2">
+                <div className="text-xs text-emerald-300">
+                  Runnable package ready · {(completedArtifact.evermindPackage.byteLength / 1024).toFixed(1)} KB · {completedArtifact.trainableParams.toLocaleString()} adapter parameters
+                </div>
+                <input
+                  value={publishName}
+                  onChange={(event) => setPublishName(event.target.value)}
+                  aria-label="Published model name"
+                  className="w-full bg-gray-900 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700"
+                />
+                <button type="button" onClick={handlePublishModel} disabled={isPublishing || !publishName.trim() || benchmarkCorpus.trim().length < 20} className="w-full bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold">
+                  {isPublishing ? 'Publishing…' : publishedModel ? 'Publish new version' : 'Publish callable Evermind model'}
+                </button>
+                {publishedModel && <div className="space-y-2">
+                  <div className="text-xs text-emerald-300">Callable as <code>{publishedModel.ref}</code></div>
+                  <textarea value={testPrompt} onChange={(event) => setTestPrompt(event.target.value)} aria-label="Published model test prompt" rows={2} className="w-full bg-gray-900 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700" />
+                  <button type="button" onClick={handleTestPublished} className="w-full bg-purple-700 hover:bg-purple-600 text-white px-3 py-1.5 rounded text-xs">Test published runtime</button>
+                  {testOutput && <pre className="whitespace-pre-wrap rounded bg-gray-950 p-2 text-xs text-gray-300">{testOutput}</pre>}
+                  <textarea value={benchmarkCorpus} onChange={(event) => setBenchmarkCorpus(event.target.value)} aria-label="Held-out benchmark corpus" rows={3} className="w-full bg-gray-900 text-gray-100 text-xs rounded px-2 py-1.5 border border-gray-700" />
+                  <button type="button" onClick={handleBenchmarkPublished} disabled={benchmarkCorpus.trim().length < 20} className="w-full bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white px-3 py-1.5 rounded text-xs">Benchmark published package</button>
+                  {benchmarkOutput && <div className="rounded bg-gray-950 p-2 text-xs text-gray-300">{benchmarkOutput}</div>}
+                  {publishedVersions.length > 0 && <div className="flex gap-2"><select value={rollbackTarget} onChange={(event) => setRollbackTarget(event.target.value)} aria-label="Rollback model version" className="min-w-0 flex-1 bg-gray-900 text-gray-100 text-xs rounded px-2 border border-gray-700"><option value="">Choose prior published package</option>{publishedVersions.map((model) => <option key={model.slug} value={model.slug}>{model.name}</option>)}</select><button type="button" disabled={!rollbackTarget} onClick={handleRollbackPublished} className="bg-amber-700 disabled:opacity-50 text-white px-2 py-1.5 rounded text-xs">Roll back</button></div>}
+                </div>}
               </div>
             )}
 

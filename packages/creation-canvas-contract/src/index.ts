@@ -22,14 +22,14 @@ export const CREATIVE_CAPABILITIES = [
   { kind: 'slides', capabilityId: 'creative.presentation', mediaKind: 'presentation', outputs: ['PPTX', 'PDF'] },
   { kind: 'file', capabilityId: 'creative.file', mediaKind: 'file', outputs: ['Original', 'ZIP'] },
   { kind: 'image', capabilityId: 'creative.image', mediaKind: 'image', outputs: ['PNG', 'JPG', 'SVG', 'PSD'] },
-  { kind: 'animation', capabilityId: 'creative.animation', mediaKind: 'animation', outputs: ['GIF', 'Animated WebP', 'APNG', 'MP4'] },
-  { kind: 'podcast', capabilityId: 'creative.podcast', mediaKind: 'podcast', outputs: ['MP3', 'M4A', 'OGG', 'WAV', 'MP4'] },
-  { kind: 'comic', capabilityId: 'creative.comic', mediaKind: 'comic', outputs: ['PNG strip', 'PDF', 'CBZ'] },
-  { kind: 'game', capabilityId: 'creative.game', mediaKind: 'game', outputs: ['HTML5 ZIP', 'Web embed'] },
+  { kind: 'animation', capabilityId: 'creative.animation', mediaKind: 'animation', outputs: ['HTML', 'SVG', 'GIF', 'Animated WebP', 'APNG', 'MP4'] },
+  { kind: 'podcast', capabilityId: 'creative.podcast', mediaKind: 'podcast', outputs: ['Markdown script', 'MP3', 'M4A', 'OGG', 'WAV', 'MP4'] },
+  { kind: 'comic', capabilityId: 'creative.comic', mediaKind: 'comic', outputs: ['SVG', 'PNG strip', 'PDF', 'CBZ'] },
+  { kind: 'game', capabilityId: 'creative.game', mediaKind: 'game', outputs: ['HTML', 'HTML5 ZIP', 'Web embed'] },
   { kind: 'cad', capabilityId: 'creative.cad', mediaKind: 'cad', outputs: ['SVG', 'DXF', 'PDF'] },
-  { kind: 'model3d', capabilityId: 'creative.model3d', mediaKind: 'model3d', outputs: ['STL', 'STEP', 'GLB'] },
-  { kind: 'resume', capabilityId: 'creative.resume', mediaKind: 'document', outputs: ['PDF', 'DOCX'] },
-  { kind: 'template', capabilityId: 'creative.template', mediaKind: 'template', outputs: ['Template defaults'] },
+  { kind: 'model3d', capabilityId: 'creative.model3d', mediaKind: 'model3d', outputs: ['STL', 'OBJ', 'STEP', 'GLB'] },
+  { kind: 'resume', capabilityId: 'creative.resume', mediaKind: 'document', outputs: ['HTML', 'Markdown', 'PDF', 'DOCX'] },
+  { kind: 'template', capabilityId: 'creative.template', mediaKind: 'template', outputs: ['JSON', 'Template defaults'] },
 ] as const satisfies ReadonlyArray<{ kind: CreationObjectKind; capabilityId: string; mediaKind: string; outputs: readonly string[] }>;
 
 export type CreativeCapability = typeof CREATIVE_CAPABILITIES[number];
