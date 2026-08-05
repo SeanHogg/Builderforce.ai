@@ -169,6 +169,19 @@ export function associateBrainWithArtifacts(current: Edge[], brainId: string, ar
   return next;
 }
 
+export function scoreAgentTestResponse(response: string, expected: string): { passed: boolean | null; matched: string[]; missing: string[] } {
+  const criteria = expected.split(/[\n,;]+/).map((item) => item.replace(/^[-*\d.)\s]+/, '').trim()).filter(Boolean).slice(0, 20);
+  if (!criteria.length) return { passed: null, matched: [], missing: [] };
+  const haystack = response.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
+  const matches = (criterion: string) => {
+    const words = criterion.toLowerCase().match(/[a-z0-9]+/g)?.filter((word) => word.length > 2) ?? [];
+    return words.length > 0 && words.filter((word) => haystack.includes(word)).length >= Math.ceil(words.length * 0.6);
+  };
+  const matched = criteria.filter(matches);
+  const missing = criteria.filter((criterion) => !matches(criterion));
+  return { passed: missing.length === 0, matched, missing };
+}
+
 function safeDownloadName(value: string): string {
   return value.trim().replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'creation';
 }
@@ -1748,6 +1761,59 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     },
   }], [canEdit, edges, effectiveSelectedIds, nodes, persistence, prompt, requireAccount, resolvedScopeMode, scopedEdges, scopedNodes, sessionId]);
 
+  const addAgentKnowledge = useCallback((agentId: string, content: string) => {
+    const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
+    const authored = content.trim();
+    if (!agent || !authored || !canEdit) return;
+    const knowledge = newNode('knowledge', { x: agent.position.x - 390, y: agent.position.y + 40 });
+    knowledge.data = { ...knowledge.data, title: `${agent.data.title} knowledge`, status: 'Ready', markdown: authored, content: authored, sources: [{ label: 'Authored in Agent inspector', resource: `session:${agent.id}` }] };
+    setNodes((current) => [...current, knowledge]);
+    setEdges((current) => [...current, { id: crypto.randomUUID(), source: knowledge.id, target: agent.id, type: 'smoothstep', label: 'grounds', animated: true, data: { connectionKind: 'reference' } }]);
+    setNotice('Knowledge added and connected to the agent');
+  }, [canEdit, nodes, setEdges, setNodes]);
+
+  const runAgentTest = useCallback(async (agentId: string, testPrompt: string, expected: string) => {
+    const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
+    if (!agent || !testPrompt.trim()) return;
+    const connectedIds = new Set(edges.flatMap((edge) => edge.source === agentId ? [edge.target] : edge.target === agentId ? [edge.source] : []));
+    const knowledge = nodes.filter((node) => connectedIds.has(node.id) && ['knowledge', 'document', 'dataset', 'file', 'url'].includes(node.data.kind));
+    const snapshot = JSON.stringify({
+      testMode: true,
+      agent: { id: agent.id, ...creationObjectDefinition('agent').contextAdapter(agent.data) },
+      knowledge: knowledge.map((node) => ({ id: node.id, ...creationObjectDefinition(node.data.kind).contextAdapter(node.data) })),
+    });
+    setNodes((current) => current.map((node) => node.id === agentId ? { ...node, data: { ...node.data, testPrompt, testExpected: expected, testStatus: 'Running', testResponse: '' } } : node));
+    setNotice(`Testing ${agent.data.title}…`);
+    try {
+      const response = await runCreationCanvasAi({
+        prompt: testPrompt.trim(), canvasSnapshot: snapshot, persistence, canvasActions: [],
+        ...(modelSelection.mode === 'model' ? { model: modelSelection.model, modelStrict: true } : {}),
+        routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
+        participant: { ref: agent.data.resourceId || agent.id, name: agent.data.title, instructions: typeof agent.data.instructions === 'string' ? agent.data.instructions : agent.data.subtitle },
+      });
+      const score = scoreAgentTestResponse(response, expected);
+      const status = score.passed == null ? 'Completed · review response' : score.passed ? 'Passed' : 'Failed';
+      const result = { id: crypto.randomUUID(), prompt: testPrompt.trim(), expected: expected.trim(), response, status, passed: score.passed, matched: score.matched, missing: score.missing, runAt: new Date().toISOString(), knowledgeObjectIds: knowledge.map((node) => node.id) };
+      setNodes((current) => {
+        const evaluation = current.find((node) => node.data.kind === 'evaluation' && connectedIds.has(node.id));
+        const currentAgent = current.find((node) => node.id === agentId);
+        const priorHistory = Array.isArray(currentAgent?.data.testHistory) ? currentAgent.data.testHistory : [];
+        const updated = current.map((node) => node.id === agentId ? { ...node, data: { ...node.data, testPrompt, testExpected: expected, testResponse: response, testStatus: status, testHistory: [result, ...priorHistory].slice(0, 25), status: 'Tested' } } : node);
+        if (!evaluation) return updated;
+        const priorResults = Array.isArray(evaluation.data.testResults) ? evaluation.data.testResults : [];
+        const results = [result, ...priorResults].slice(0, 100);
+        const scored = results.filter((item) => item && typeof item === 'object' && typeof (item as { passed?: unknown }).passed === 'boolean') as Array<{ passed: boolean }>;
+        const passed = scored.filter((item) => item.passed).length;
+        return updated.map((node) => node.id === evaluation.id ? { ...node, data: { ...node.data, testResults: results, runCount: results.length, passRate: scored.length ? Math.round(passed / scored.length * 100) : null, lastRunAt: result.runAt, verdict: status, status: 'Tested', gaps: score.missing, recommendations: score.missing.map((item) => `Improve the response so it demonstrates: ${item}`) } } : node);
+      });
+      setNotice(`${agent.data.title} test ${status.toLowerCase()}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Agent test failed';
+      setNodes((current) => current.map((node) => node.id === agentId ? { ...node, data: { ...node.data, testStatus: `Error · ${message}` } } : node));
+      setNotice(message);
+    }
+  }, [edges, modelSelection, nodes, persistence, setNodes]);
+
   const evaluateCanvas = useCallback((promptOverride?: string) => {
     const requestText = (promptOverride ?? prompt).trim();
     if (!requestText || thinking) return;
@@ -2444,7 +2510,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           })}</div>
         </aside>}
 
-        {!presentMode && selectedNode && <Inspector node={selectedNode} nodes={nodes} edges={edges} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => setSelectedId(null)} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onGenerateVideo={() => generateVideo(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}
+        {!presentMode && selectedNode && <Inspector node={selectedNode} nodes={nodes} edges={edges} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => setSelectedId(null)} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onGenerateVideo={() => generateVideo(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onStartStandup={startStandup} />}
 
         {workflowFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label="Workflow focus editor">
           <header><div><strong>Edit Workflow on Canvas</strong><small>Changes save to the canonical Workflow definition.</small></div><button type="button" onClick={() => setWorkflowFocus(null)} aria-label="Close workflow editor">×</button></header>
@@ -2556,11 +2622,12 @@ function BrainObjectDetails({ node, nodes, edges, timeline, trace }: { node: Cre
   </div>;
 }
 
-function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onGenerateVideo, onEditWorkflow, onSaveAgent, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onAttachEvermindProject, onExpandEvermindPipeline, onStartStandup }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onGenerateVideo: () => void; onEditWorkflow: () => void; onSaveAgent: () => void; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onStartStandup: () => void }) {
+function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onGenerateVideo, onEditWorkflow, onSaveAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onAttachEvermindProject, onExpandEvermindPipeline, onStartStandup }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onGenerateVideo: () => void; onEditWorkflow: () => void; onSaveAgent: () => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onStartStandup: () => void }) {
   const kind = node.data.kind;
   const [tab, setTab] = useState<'details' | 'activity'>('details');
   const [accessStatus, setAccessStatus] = useState('');
   const [actionStatus, setActionStatus] = useState('');
+  const [knowledgeDraft, setKnowledgeDraft] = useState('');
   const [inspectorWidth, setInspectorWidth] = useState(() => {
     if (typeof window === 'undefined') return INSPECTOR_DEFAULT_WIDTH;
     const saved = Number(window.localStorage.getItem(INSPECTOR_WIDTH_STORAGE_KEY));
@@ -2610,6 +2677,7 @@ function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persis
   const taskId = kind === 'task' && /^task:\d+$/.test(node.data.resourceId || '') ? Number(node.data.resourceId!.slice(5)) : null;
   const taskAgents = nodes.filter((candidate) => candidate.data.kind === 'agent');
   const agentTools = Array.isArray(node.data.tools) ? node.data.tools.map(String) : ['Audience Analyzer', 'Copy Optimizer'];
+  const connectedAgentKnowledge = kind === 'agent' ? nodes.filter((candidate) => ['knowledge', 'document', 'dataset', 'file', 'url'].includes(candidate.data.kind) && edges.some((edge) => (edge.source === node.id && edge.target === candidate.id) || (edge.target === node.id && edge.source === candidate.id))) : [];
   const availableAgentTools = ['Audience Analyzer', 'Copy Optimizer', 'Research', 'Browser'];
   const mockupProjects = nodes.filter((candidate) => candidate.data.kind === 'project');
   const mockupAgents = taskAgents;
@@ -2713,7 +2781,26 @@ function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persis
         <label>Instructions<textarea value={typeof node.data.instructions === 'string' ? node.data.instructions : node.data.subtitle || ''} onChange={(event) => onChange({ instructions: event.target.value, subtitle: event.target.value })} rows={5} /></label>
         <label>Tools<div className={styles.inspectorPills}>{agentTools.map((tool) => <button type="button" key={tool} aria-label={`Remove ${tool}`} onClick={() => onChange({ tools: agentTools.filter((candidate) => candidate !== tool) })}>{tool} ×</button>)}<button type="button" disabled={availableAgentTools.every((tool) => agentTools.includes(tool))} onClick={() => { const next = availableAgentTools.find((tool) => !agentTools.includes(tool)); if (next) onChange({ tools: [...agentTools, next] }); }}>+ Add tool</button></div></label>
         <label>Autonomy<select value={typeof node.data.autonomy === 'string' ? node.data.autonomy : 'medium'} onChange={(event) => onChange({ autonomy: event.target.value })}><option value="medium">Medium · request approvals</option><option value="low">Low · suggest only</option><option value="high">High · act within policy</option></select></label>
+        <section className={styles.agentWorkbench} aria-label="Agent knowledge">
+          <div className={styles.workbenchHeading}><strong>Knowledge</strong><span>{connectedAgentKnowledge.length} connected</span></div>
+          {connectedAgentKnowledge.length > 0 && <div className={styles.knowledgeList}>{connectedAgentKnowledge.map((item) => <span key={item.id}>{item.data.kind} · {item.data.title}</span>)}</div>}
+          <label>Add knowledge<textarea rows={4} value={knowledgeDraft} onChange={(event) => setKnowledgeDraft(event.target.value)} placeholder="Paste policies, product facts, escalation rules, or support procedures" /></label>
+          <button type="button" className={styles.fullButton} disabled={!knowledgeDraft.trim()} onClick={() => { onAddAgentKnowledge(knowledgeDraft); setKnowledgeDraft(''); }}>Add &amp; connect knowledge</button>
+        </section>
+        <section className={styles.agentWorkbench} aria-label="Agent test bench">
+          <div className={styles.workbenchHeading}><strong>Test bench</strong><span>{String(node.data.testStatus || 'Not run')}</span></div>
+          <label>Customer message<textarea rows={3} value={typeof node.data.testPrompt === 'string' ? node.data.testPrompt : ''} onChange={(event) => onChange({ testPrompt: event.target.value })} placeholder="I was charged twice. Can you help?" /></label>
+          <label>Expected response signals<textarea rows={2} value={typeof node.data.testExpected === 'string' ? node.data.testExpected : ''} onChange={(event) => onChange({ testExpected: event.target.value })} placeholder="duplicate charge, order number, investigate" /></label>
+          <button type="button" className={styles.fullButton} disabled={!String(node.data.testPrompt || '').trim() || node.data.testStatus === 'Running'} onClick={() => void onRunAgentTest(String(node.data.testPrompt || ''), String(node.data.testExpected || ''))}>{node.data.testStatus === 'Running' ? 'Running test…' : 'Run agent test'}</button>
+          {typeof node.data.testResponse === 'string' && node.data.testResponse && <div className={styles.testResponse}><strong>Agent response</strong><p>{node.data.testResponse}</p></div>}
+        </section>
         <button type="button" className={styles.fullButton} onClick={onSaveAgent}>Save agent settings everywhere</button>
+      </>}
+      {kind === 'evaluation' && <>
+        <div className={styles.evaluationSummary}><strong>{String(node.data.verdict || 'Not run')}</strong><span>{typeof node.data.passRate === 'number' ? `${node.data.passRate}% pass rate` : 'Run an agent test to collect a result'}</span></div>
+        <label>Evaluation criteria<textarea rows={5} value={typeof node.data.criteria === 'string' ? node.data.criteria : typeof node.data.content === 'string' ? node.data.content : ''} onChange={(event) => onChange({ criteria: event.target.value })} placeholder="One expected behavior per line" /></label>
+        <p className={styles.inspectorHint}>Connect this Evaluation to an Agent. Tests run from that Agent’s Test bench are recorded here with pass/fail evidence.</p>
+        {Array.isArray(node.data.testResults) && node.data.testResults.length > 0 && <div className={styles.testResults}>{node.data.testResults.slice(0, 10).map((value, index) => { const result = value as Record<string, unknown>; return <div key={String(result.id || index)}><b>{String(result.status || 'Completed')}</b><span>{String(result.prompt || 'Test case')}</span><small>{String(result.runAt || '')}</small></div>; })}</div>}
       </>}
       {kind === 'staff' && <><label>Role<input value={node.data.role || ''} onChange={(event) => onChange({ role: event.target.value })} /></label><label>Current focus<textarea value={node.data.focus || ''} onChange={(event) => onChange({ focus: event.target.value })} rows={4} /></label></>}
       {(kind === 'website' || kind === 'prototype') && <><label>Headline<input value={typeof node.data.websiteHeadline === 'string' ? node.data.websiteHeadline : 'Fall in love with every look'} onChange={(event) => onChange({ websiteHeadline: event.target.value })} /></label><label>Supporting copy<textarea rows={3} value={typeof node.data.websiteBody === 'string' ? node.data.websiteBody : 'New arrivals for the season ahead.'} onChange={(event) => onChange({ websiteBody: event.target.value })} /></label><label>Call to action<input value={typeof node.data.websiteCta === 'string' ? node.data.websiteCta : 'Shop the collection'} onChange={(event) => onChange({ websiteCta: event.target.value })} /></label><label>Accent color<input type="color" value={typeof node.data.websiteAccent === 'string' ? node.data.websiteAccent : '#3978f6'} onChange={(event) => onChange({ websiteAccent: event.target.value })} /></label><label>Viewport<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onWebsiteViewportChange(event.target.value as 'desktop' | 'tablet' | 'mobile')}><option value="desktop">Desktop · 1440</option><option value="tablet">Tablet · 768</option><option value="mobile">Mobile · 390</option></select></label>{kind === 'website' && <><label>Subdomain<input value={typeof node.data.subdomain === 'string' ? node.data.subdomain : ''} placeholder="uses project name when blank" onChange={(event) => onChange({ subdomain: event.target.value })} /></label><button type="button" className={styles.fullButton} onClick={onPublishWebsite}>Publish live website</button>{typeof node.data.siteUrl === 'string' && <a href={node.data.siteUrl} target="_blank" rel="noreferrer">Open published site ↗</a>}</>}<p className={styles.inspectorHint}>Changes render live in the interactive prototype on the canvas.</p></>}
@@ -2753,7 +2840,7 @@ function Inspector({ node, nodes, edges, timeline, brainTrace, sessionId, persis
       {kind === 'standup' && <><p className={styles.inspectorHint}>Gather every Staff Member and Agent currently on the canvas. With a saved Project, this starts the canonical stand-up ceremony and keeps its resource link in the session.</p><button className={styles.fullButton} onClick={onStartStandup}>Gather and start stand-up</button></>}
       {kind === 'frame' && <><label>Purpose<input value={typeof node.data.framePurpose === 'string' ? node.data.framePurpose : 'Arrange related objects here'} onChange={(event) => onChange({ framePurpose: event.target.value })} /></label><label>Fill color<input type="color" value={typeof node.data.frameColor === 'string' ? node.data.frameColor : '#f8f6ff'} onChange={(event) => onChange({ frameColor: event.target.value })} /></label><label>Border color<input type="color" value={typeof node.data.frameBorder === 'string' ? node.data.frameBorder : '#9d8bea'} onChange={(event) => onChange({ frameBorder: event.target.value })} /></label><button className={styles.fullButton} onClick={onSaveFramePreset}>Save as reusable frame</button></>}
       {kind === 'drawing' && <><label>Stroke color<input type="color" value={typeof node.data.stroke === 'string' ? node.data.stroke : '#5b5ce2'} onChange={(event) => onChange({ stroke: event.target.value })} /></label><label>Stroke width<input type="range" min="1" max="12" value={typeof node.data.strokeWidth === 'number' ? node.data.strokeWidth : 3} onChange={(event) => onChange({ strokeWidth: Number(event.target.value) })} /></label><p className={styles.inspectorHint}>Resize, annotate, connect, or use this sketch as visual context for Brain.</p></>}
-      {!['chat', 'agent', 'staff', 'website', 'prototype', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'task', 'mockup', 'evermind', 'standup', 'frame', 'drawing'].includes(kind) && <p className={styles.inspectorHint}>This object is live in the session. Connect it to other objects or ask Brain to transform or evaluate it.</p>}
+      {!['chat', 'agent', 'evaluation', 'staff', 'website', 'prototype', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'task', 'mockup', 'evermind', 'standup', 'frame', 'drawing'].includes(kind) && <p className={styles.inspectorHint}>This object is live in the session. Connect it to other objects or ask Brain to transform or evaluate it.</p>}
       </fieldset> : <ActivityInspector sessionId={sessionId} objectId={node.id} persistence={persistence} role={role} members={members} />}
       {tab === 'details' && <section aria-label="Copy and download" style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
         <strong style={{ fontSize: 12 }}>Copy &amp; download</strong>

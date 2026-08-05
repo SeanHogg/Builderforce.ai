@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 type Consent = { version: 1; analytics: boolean; marketing: boolean; gpc: boolean; updatedAt: string };
@@ -25,7 +26,8 @@ function enableAnalytics() {
   layer.push({ 'gtm.start': Date.now(), event: 'gtm.js', consent_source: 'explicit_opt_in' });
 }
 
-/** Optional tracking defaults off. GPC overrides a stored opt-in. */
+/** A compact, non-modal consent surface. Optional tracking defaults off and a
+ * browser GPC signal always overrides an older opt-in. */
 export function CookieConsentManager() {
   const [consent, setConsent] = useState<Consent | null | undefined>(undefined);
   const [customizing, setCustomizing] = useState(false);
@@ -42,7 +44,12 @@ export function CookieConsentManager() {
   }, []);
 
   useEffect(() => {
-    const open = () => { setCustomizing(true); setConsent(null); };
+    const open = () => {
+      const saved = readConsent();
+      setAnalytics(saved?.analytics ?? false);
+      setCustomizing(true);
+      setConsent(null);
+    };
     window.addEventListener('builderforce:cookie-preferences', open);
     return () => window.removeEventListener('builderforce:cookie-preferences', open);
   }, []);
@@ -58,17 +65,67 @@ export function CookieConsentManager() {
 
   if (consent === undefined || (consent && !customizing)) return null;
   const gpc = typeof navigator !== 'undefined' && hasGpc();
+
   return (
-    <section role="dialog" aria-modal="false" aria-labelledby="cookie-title" style={{ position: 'fixed', zIndex: 10000, inset: 'auto 16px 16px 16px', maxWidth: 620, margin: 'auto', padding: 18, borderRadius: 14, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', boxShadow: '0 16px 48px rgba(0,0,0,.45)' }}>
-      <h2 id="cookie-title" style={{ margin: '0 0 8px', fontSize: 18 }}>Your privacy choices</h2>
-      <p style={{ margin: '0 0 12px', lineHeight: 1.5 }}>Necessary storage runs the service. Analytics is optional, off by default, and never used to sell your information, chats, or ideas. {gpc && <strong>Your Global Privacy Control signal is active, so analytics remains off.</strong>}</p>
-      {customizing && <label style={{ display: 'flex', gap: 9, marginBottom: 12 }}><input type="checkbox" checked={analytics} disabled={gpc} onChange={(e) => setAnalytics(e.target.checked)} /> Allow privacy-limited analytics</label>}
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        <button type="button" onClick={() => save(false)}>Reject optional</button>
-        <button type="button" onClick={() => setCustomizing(true)}>Customize</button>
-        <button type="button" disabled={gpc} onClick={() => save(customizing ? analytics : true)}>Accept analytics</button>
-        <a href="/legal/cookies">Cookie policy</a>
+    <aside className="privacy-choice-card" aria-labelledby="privacy-choice-title" aria-live="polite">
+      <div className="privacy-choice-heading">
+        <span className="privacy-choice-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.8">
+            <path d="M12 3 5 6v5c0 4.7 2.8 8 7 10 4.2-2 7-5.3 7-10V6l-7-3Z" />
+            <path d="m9.2 12 1.8 1.8 3.8-4" />
+          </svg>
+        </span>
+        <div>
+          <h2 id="privacy-choice-title">Your privacy, your choice</h2>
+          <span>Optional analytics is off by default</span>
+        </div>
+        {gpc && <span className="privacy-choice-gpc">GPC active</span>}
       </div>
-    </section>
+
+      {customizing ? (
+        <div className="privacy-choice-settings">
+          <div className="privacy-choice-setting">
+            <div>
+              <strong>Necessary</strong>
+              <span>Security, sign-in, and saved preferences</span>
+            </div>
+            <span className="privacy-choice-always">Always on</span>
+          </div>
+          <label className="privacy-choice-setting">
+            <div>
+              <strong>Analytics</strong>
+              <span>Helps us understand and improve BuilderForce</span>
+            </div>
+            <input className="privacy-choice-toggle" type="checkbox" role="switch" checked={analytics} disabled={gpc} onChange={(e) => setAnalytics(e.target.checked)} aria-label="Allow analytics" />
+          </label>
+          {gpc && <p className="privacy-choice-gpc-note">Your browser’s Global Privacy Control keeps optional tracking off.</p>}
+        </div>
+      ) : (
+        <p className="privacy-choice-copy">
+          We use necessary storage to run BuilderForce. With permission, analytics helps us improve it. We never sell your personal information, chats, or ideas.
+        </p>
+      )}
+
+      <div className="privacy-choice-actions">
+        {customizing ? (
+          <>
+            <button type="button" className="privacy-choice-button privacy-choice-secondary" onClick={() => save(false)}>Necessary only</button>
+            <button type="button" className="privacy-choice-button privacy-choice-primary" onClick={() => save(analytics)}>Save choices</button>
+          </>
+        ) : (
+          <>
+            <button type="button" className="privacy-choice-button privacy-choice-secondary" onClick={() => save(false)}>Necessary only</button>
+            <button type="button" className="privacy-choice-button privacy-choice-primary" disabled={gpc} onClick={() => save(true)}>Allow analytics</button>
+          </>
+        )}
+      </div>
+
+      <div className="privacy-choice-footer">
+        {!customizing && <button type="button" onClick={() => setCustomizing(true)}>Customize</button>}
+        {customizing && <button type="button" onClick={() => setCustomizing(false)}>Back</button>}
+        <span aria-hidden="true">·</span>
+        <Link href="/legal/cookies">Cookie policy</Link>
+      </div>
+    </aside>
   );
 }

@@ -75,7 +75,7 @@ function CartButton() {
 
 export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
   const t = useTranslations('topbar');
-  const { logout, user, isAuthenticated } = useAuth();
+  const { logout, user, isAuthenticated, hasTenant } = useAuth();
   const { previewRole, startPreview, exitPreview } = useRolePreview();
   const { emulation } = useEmulation();
 
@@ -169,7 +169,9 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
           </div>
         )}
 
-        {isAuthenticated && <ManagerStatusIndicator />}
+        {/* Attention is workspace-scoped, so a person-level login alone is not
+            sufficient while onboarding or before a workspace is selected. */}
+        {hasTenant && <ManagerStatusIndicator />}
 
         {isAuthenticated && <NotificationBell />}
 

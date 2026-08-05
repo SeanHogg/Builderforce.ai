@@ -173,7 +173,7 @@ function AgentBody({ data }: { data: CreationNodeData }) {
   return <>
     <div className={styles.personRow}><span className={styles.presence} /><b>{data.status || 'Online'}</b><span>{data.model || 'gpt-4o'}</span></div>
     <p>{textValue(data.instructions, data.subtitle || '')}</p>
-    <div className={styles.pills}>{tools.map((tool) => <span key={tool}>{tool}</span>)}<span>{autonomy}</span></div>
+    <div className={styles.pills}>{tools.map((tool) => <span key={tool}>{tool}</span>)}<span>{autonomy}</span>{typeof data.testStatus === 'string' && data.testStatus && <span>{data.testStatus}</span>}</div>
   </>;
 }
 

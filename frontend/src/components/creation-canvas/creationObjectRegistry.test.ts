@@ -49,6 +49,11 @@ describe('creation object registry', () => {
     })).toEqual({ operation: 'summarize', arguments: { projectId: 42, nested: { safe: true } } });
   });
 
+  it('retains authored agent tests and evaluation results', () => {
+    expect(sanitizeCreationObjectPatch('agent', { testPrompt: 'Where is my order?', testExpected: 'ask for order number' })).toMatchObject({ testPrompt: 'Where is my order?', testExpected: 'ask for order number' });
+    expect(sanitizeCreationObjectPatch('evaluation', { passRate: 80, runCount: 5, testResults: [{ passed: true }] })).toMatchObject({ passRate: 80, runCount: 5, testResults: [{ passed: true }] });
+  });
+
   it('gates plan capabilities without hiding unrestricted object kinds', () => {
     const base = availableCreationObjects(new Set()).map((definition) => definition.kind);
     expect(base).toContain('workflow');

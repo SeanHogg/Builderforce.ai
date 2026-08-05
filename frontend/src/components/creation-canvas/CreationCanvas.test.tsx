@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { associateBrainWithArtifacts, canInvokeCreationObjectAction, canvasChangesCanAutoApply, CreationCanvas, duplicateAddUpdateTarget, persistCanonicalProjectPrd, projectEvermindNodePatch, shouldAcquireCanvasObjectLock, type ProposedCanvasChange } from './CreationCanvas';
+import { associateBrainWithArtifacts, canInvokeCreationObjectAction, canvasChangesCanAutoApply, CreationCanvas, duplicateAddUpdateTarget, persistCanonicalProjectPrd, projectEvermindNodePatch, scoreAgentTestResponse, shouldAcquireCanvasObjectLock, type ProposedCanvasChange } from './CreationCanvas';
 import { CreationNode } from './CreationNode';
 import { specsApi } from '@/lib/builderforceApi';
 import type { CreationFlowNode } from './CreationNode';
@@ -53,6 +53,11 @@ vi.mock('@/components/workflow-builder/WorkflowBuilder', () => ({
 }));
 
 describe('CreationCanvas', { timeout: 15_000 }, () => {
+  it('scores explicit agent-test criteria and preserves unscored review runs', () => {
+    expect(scoreAgentTestResponse('I understand the duplicate charge. Please share your order number; I will investigate before discussing a refund.', 'duplicate charge, order number, investigate')).toMatchObject({ passed: true, missing: [] });
+    expect(scoreAgentTestResponse('A refund is guaranteed.', 'ask for order number, explain investigation')).toMatchObject({ passed: false, matched: [] });
+    expect(scoreAgentTestResponse('Happy to help.', '')).toEqual({ passed: null, matched: [], missing: [] });
+  });
   it('keeps the mini map action visible while the mini map is opened, closed, and reopened', () => {
     render(<CreationCanvas sessionId="minimap-controls-test" persistence="local" />);
 

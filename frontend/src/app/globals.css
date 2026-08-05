@@ -3361,3 +3361,50 @@ textarea.input { resize: vertical; line-height: 1.5; }
 /* Keyboard users can bypass repeated navigation; hidden only until focused. */
 .skip-to-content { position: fixed; z-index: 20000; top: 8px; left: 8px; transform: translateY(-160%); padding: 10px 14px; border-radius: 8px; background: #fff; color: #111; font-weight: 700; }
 .skip-to-content:focus { transform: translateY(0); outline: 3px solid #2563eb; outline-offset: 2px; }
+
+/* Privacy choices — compact toast-like card that stays clear of the primary
+   bottom-center composer on canvas/chat surfaces. */
+.privacy-choice-card {
+  position: fixed;
+  z-index: 10000;
+  left: 20px;
+  bottom: 20px;
+  width: min(410px, calc(100vw - 32px));
+  padding: 16px;
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 78%, #4d9eff 22%);
+  border-radius: 16px;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, .48), 0 0 0 1px rgba(77, 158, 255, .04) inset;
+  backdrop-filter: blur(18px);
+  font-family: var(--font-body);
+}
+.privacy-choice-heading { display: flex; align-items: center; gap: 10px; }
+.privacy-choice-heading h2 { margin: 0; font: 700 14px/1.3 var(--font-display); letter-spacing: -.01em; }
+.privacy-choice-heading > div > span { display: block; margin-top: 2px; color: var(--text-muted); font-size: 11px; }
+.privacy-choice-icon { display: grid; flex: 0 0 34px; width: 34px; height: 34px; place-items: center; color: #79adff; background: rgba(77, 158, 255, .12); border: 1px solid rgba(77, 158, 255, .2); border-radius: 10px; }
+.privacy-choice-gpc { margin-left: auto; padding: 4px 7px; color: #6ee7b7; background: rgba(16, 185, 129, .1); border: 1px solid rgba(16, 185, 129, .22); border-radius: 999px; font-size: 10px; font-weight: 700; white-space: nowrap; }
+.privacy-choice-copy { margin: 12px 0 14px; color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
+.privacy-choice-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.privacy-choice-button { min-height: 38px; padding: 8px 12px; border-radius: 9px; font: 700 12px/1 var(--font-display); cursor: pointer; transition: border-color .15s, background .15s, transform .15s; }
+.privacy-choice-button:hover:not(:disabled) { transform: translateY(-1px); }
+.privacy-choice-button:focus-visible, .privacy-choice-footer button:focus-visible, .privacy-choice-footer a:focus-visible { outline: 2px solid #79adff; outline-offset: 2px; }
+.privacy-choice-primary { color: #fff; background: linear-gradient(135deg, #4d9eff, #2563eb); border: 1px solid #579fff; box-shadow: 0 5px 16px rgba(37, 99, 235, .24); }
+.privacy-choice-primary:hover:not(:disabled) { background: linear-gradient(135deg, #6aafff, #3474eb); }
+.privacy-choice-primary:disabled { opacity: .45; cursor: not-allowed; }
+.privacy-choice-secondary { color: var(--text-primary); background: var(--bg-base); border: 1px solid var(--border-subtle); }
+.privacy-choice-secondary:hover { border-color: #58749d; background: color-mix(in srgb, var(--bg-base) 82%, #4d9eff 18%); }
+.privacy-choice-footer { display: flex; justify-content: center; align-items: center; gap: 7px; margin-top: 11px; color: var(--text-muted); font-size: 11px; }
+.privacy-choice-footer button, .privacy-choice-footer a { padding: 1px; color: var(--text-muted); background: none; border: 0; font: inherit; text-decoration: none; cursor: pointer; }
+.privacy-choice-footer button:hover, .privacy-choice-footer a:hover { color: #79adff; text-decoration: underline; }
+.privacy-choice-settings { margin: 13px 0 14px; padding: 2px 11px; background: color-mix(in srgb, var(--bg-base) 86%, transparent); border: 1px solid var(--border-subtle); border-radius: 11px; }
+.privacy-choice-setting { display: flex; min-height: 54px; align-items: center; justify-content: space-between; gap: 14px; }
+.privacy-choice-setting + .privacy-choice-setting { border-top: 1px solid var(--border-subtle); }
+.privacy-choice-setting strong { display: block; margin-bottom: 2px; font-size: 12px; }
+.privacy-choice-setting div span { display: block; color: var(--text-muted); font-size: 10px; line-height: 1.35; }
+.privacy-choice-always { flex: none; color: #6ee7b7; font-size: 10px; font-weight: 700; }
+.privacy-choice-toggle { width: 34px; height: 18px; accent-color: #4d9eff; cursor: pointer; }
+.privacy-choice-gpc-note { margin: 0 0 9px; color: #6ee7b7; font-size: 10px; line-height: 1.4; }
+@media (max-width: 600px) {
+  .privacy-choice-card { left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom)); width: auto; padding: 14px; border-radius: 14px; }
+}
