@@ -9,6 +9,7 @@ import { fetchProjects, listIdeProjects, listMyAgents } from '@/lib/api';
 import type { IdeProject, Project, PublishedAgent } from '@/lib/types';
 import { useLocalizedModalities } from '@/lib/useModalityCopy';
 import { getModality } from '@/lib/modality';
+import styles from './DashboardCreationSessions.module.css';
 
 const KIND_COLOR: Record<string, string> = {
   workflow: '#7357ed', website: '#3978f6', chat: '#e94b9b', dashboard: '#08b59d',
@@ -28,9 +29,77 @@ function modalityStarterPrompt(id: string, label: string, tagline: string): stri
   return `Create a ${label} in this Canvas. ${tagline}`;
 }
 
-export function DashboardCreationSessions() {
+export function DashboardCreationLauncher() {
   const t = useTranslations('creationCanvas');
   const modalities = useLocalizedModalities();
+  const router = useRouter();
+  const [creating, setCreating] = useState(false);
+  const [sessionQuota, setSessionQuota] = useState<{ usage: number; limit: number } | null>(null);
+
+  useEffect(() => { void creationSessionsApi.quotas().then((result) => setSessionQuota({ usage: result.usage.sessions, limit: result.limits.sessions })).catch(() => undefined); }, []);
+  const sessionLimitReached = !!sessionQuota && sessionQuota.limit !== -1 && sessionQuota.usage >= sessionQuota.limit;
+
+  const createBlank = async () => {
+    if (creating || sessionLimitReached) return;
+    setCreating(true);
+    try {
+      const result = await creationSessionsApi.create({ title: 'Untitled session' });
+      router.push(`/create/${result.session.id}`);
+    } finally { setCreating(false); }
+  };
+
+  const startTemplate = async (name: string, initialPrompt: string) => {
+    if (creating || sessionLimitReached) return;
+    setCreating(true);
+    try { const result = await creationSessionsApi.create({ title: name, initialPrompt }); router.push(`/create/${result.session.id}`); }
+    finally { setCreating(false); }
+  };
+
+  return <section className={styles.launcher} aria-labelledby="creation-launcher-title">
+    <div className={styles.launcherHeader}>
+      <span className={styles.eyebrow}>Create</span>
+      <h2 id="creation-launcher-title">{t('createTypeTitle')}</h2>
+      <p>{t('createTypeSubtitle')}</p>
+    </div>
+
+    <div className={styles.creationPaths}>
+      <section className={styles.creationPath} aria-labelledby="create-by-type-title">
+        <div className={styles.pathHeader}>
+          <span className={styles.step}>1</span>
+          <div><h3 id="create-by-type-title">Create by type</h3><p>Choose the kind of thing you want to make.</p></div>
+        </div>
+        <div className={styles.typeGrid} aria-label="Create by type">
+          {modalities.map((modality) => <button key={modality.id} type="button" disabled={creating || sessionLimitReached || !!modality.comingSoon} onClick={() => void startTemplate(modality.label, modalityStarterPrompt(modality.id, modality.label, modality.tagline))} className={styles.typeCard}>
+            <span className={styles.typeIcon} aria-hidden>{modality.icon}</span>
+            <span className={styles.cardCopy}><strong>{modality.label}</strong><span>{modality.tagline}</span></span>
+            <span className={styles.cardAction} aria-hidden>{modality.comingSoon ? 'Coming soon' : 'Create'} <b>→</b></span>
+          </button>)}
+        </div>
+      </section>
+
+      <section className={`${styles.creationPath} ${styles.templatePath}`} aria-labelledby="create-from-template-title">
+        <div className={styles.pathHeader}>
+          <span className={styles.step}>2</span>
+          <div><h3 id="create-from-template-title">Use a guided template</h3><p>Start with a complete, connected workflow.</p></div>
+        </div>
+        <div className={styles.templateGrid} aria-label="Guided templates">
+          {CANVAS_STARTERS.map((starter) => { const label = t(starter.labelKey); const description = t(starter.descriptionKey); return <button key={starter.id} type="button" disabled={creating || sessionLimitReached} onClick={() => void startTemplate(label, description)} className={styles.templateCard}>
+            <span className={styles.templateIcon} aria-hidden>{starter.icon}</span>
+            <span className={styles.cardCopy}><strong>{label}</strong><span>{description}</span></span>
+            <span className={styles.templateAction}>Use template <b aria-hidden>→</b></span>
+          </button>; })}
+        </div>
+        <button type="button" onClick={createBlank} disabled={creating || sessionLimitReached} className={styles.blankButton}>
+          <span><b aria-hidden>＋</b> Start with a blank canvas</span><span aria-hidden>→</span>
+        </button>
+      </section>
+    </div>
+    {sessionLimitReached && <p role="alert" className={styles.quotaWarning}>Your saved Session limit is reached. Archive a Session or upgrade before creating another.</p>}
+  </section>;
+}
+
+export function DashboardCreationSessions() {
+  const t = useTranslations('creationCanvas');
   const router = useRouter();
   const searchParams = useSearchParams();
   const [sessions, setSessions] = useState<Array<CreationSessionSummary & { matchingObjectId?: string | null }>>([]);
@@ -104,12 +173,6 @@ export function DashboardCreationSessions() {
   };
 
   const visible = [...sessions].filter((session) => !searchParams.get('filter') || session.preview?.kinds?.includes(searchParams.get('filter')!)).sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned));
-  const startTemplate = async (name: string, initialPrompt: string) => {
-    if (creating || sessionLimitReached) return;
-    setCreating(true);
-    try { const result = await creationSessionsApi.create({ title: name, initialPrompt }); router.push(`/create/${result.session.id}`); }
-    finally { setCreating(false); }
-  };
   const openBuild = async (build: IdeProject) => {
     const result = await creationSessionsApi.openIdeProject(build.id);
     router.push(`/create/${result.sessionId}?focus=${result.objectId}`);
@@ -158,13 +221,6 @@ export function DashboardCreationSessions() {
     </article>; });
 
   return <section style={{ marginBottom: 40 }}>
-    <section style={{ marginBottom: 34 }}>
-      <div style={{ marginBottom: 14 }}><h2 style={{ margin: 0, fontSize: 20 }}>{t('createTypeTitle')}</h2><p style={{ margin: '5px 0 0', color: 'var(--text-secondary)', fontSize: 13 }}>{t('createTypeSubtitle')}</p></div>
-      <div aria-label="Creation starters" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: 12 }}>
-        {modalities.map((modality) => <button key={modality.id} type="button" disabled={creating || sessionLimitReached || !!modality.comingSoon} onClick={() => void startTemplate(modality.label, modalityStarterPrompt(modality.id, modality.label, modality.tagline))} style={{ minHeight: 130, padding: 17, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 14, background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: modality.comingSoon ? 'not-allowed' : 'pointer', opacity: modality.comingSoon ? .55 : 1 }}><span style={{ fontSize: 28 }} aria-hidden>{modality.icon}</span><strong style={{ display: 'block', marginTop: 8 }}>{modality.label}</strong><span style={{ display: 'block', marginTop: 5, color: 'var(--text-secondary)', fontSize: 12, lineHeight: 1.45 }}>{modality.tagline}</span></button>)}
-        {CANVAS_STARTERS.map((starter) => { const label = t(starter.labelKey); const description = t(starter.descriptionKey); return <button key={starter.id} type="button" disabled={creating || sessionLimitReached} onClick={() => void startTemplate(label, description)} style={{ minHeight: 130, padding: 17, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 14, background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}><span style={{ fontSize: 28 }} aria-hidden>{starter.icon}</span><strong style={{ display: 'block', marginTop: 8 }}>{label}</strong><span style={{ display: 'block', marginTop: 5, color: 'var(--text-secondary)', fontSize: 12, lineHeight: 1.45 }}>{description}</span></button>; })}
-      </div>
-    </section>
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, marginBottom: 16 }}>
       <div><h2 style={{ margin: 0, fontSize: 20 }}>{t('dashboardTitle')}</h2><p style={{ margin: '5px 0 0', color: 'var(--text-secondary)', fontSize: 13 }}>{t('dashboardSubtitle')}</p></div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
