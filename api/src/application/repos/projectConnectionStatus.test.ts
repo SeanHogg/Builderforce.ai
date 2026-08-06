@@ -78,6 +78,21 @@ beforeEach(() => {
 let nextTenant = 100;
 const freshTenant = () => nextTenant++;
 
+type Summary = Awaited<ReturnType<typeof buildProjectConnections>>[number];
+
+/** The single summary a case seeds — asserted present so the reads below are typed. */
+function only(rows: Summary[]): Summary {
+  expect(rows).toHaveLength(1);
+  return rows[0]!;
+}
+
+/** That summary's first connection, likewise asserted present. */
+function firstConnection(rows: Summary[]): Summary['connections'][number] {
+  const [connection] = only(rows).connections;
+  expect(connection).toBeDefined();
+  return connection!;
+}
+
 describe('buildProjectConnections — the projects-widget status strip', () => {
   it('reports a healthy repo with its live open-PR count and latest build', async () => {
     const db = makeFakeDb(new Map<TableRef, unknown[]>([
@@ -93,10 +108,10 @@ describe('buildProjectConnections — the projects-widget status strip', () => {
         data: { workflow_runs: [{ status: 'completed', conclusion: 'success', html_url: 'https://gh/run/9', head_branch: 'main', updated_at: '2026-08-06T10:00:00.000Z' }] },
       });
 
-    const [summary] = await buildProjectConnections(ENV, db, freshTenant());
+    const summary = only(await buildProjectConnections(ENV, db, freshTenant()));
     expect(summary.projectId).toBe(1);
     expect(summary.connections).toHaveLength(1);
-    expect(summary.connections[0]).toMatchObject({
+    expect(summary.connections[0]!).toMatchObject({
       kind: 'source_control',
       label: 'acme/site',
       url: 'https://github.com/acme/site',
@@ -122,8 +137,8 @@ describe('buildProjectConnections — the projects-widget status strip', () => {
         ok: true, status: 200, headers: new Headers(),
         data: { workflow_runs: [{ status: 'in_progress', conclusion: null, html_url: null, head_branch: 'main', updated_at: null }] },
       });
-    const [running] = await buildProjectConnections(ENV, db, freshTenant());
-    expect(running.connections[0].buildStatus).toBe('pending');
+    const running = firstConnection(await buildProjectConnections(ENV, db, freshTenant()));
+    expect(running.buildStatus).toBe('pending');
 
     vi.clearAllMocks();
     const redDb = makeFakeDb(new Map<TableRef, unknown[]>([
@@ -136,8 +151,8 @@ describe('buildProjectConnections — the projects-widget status strip', () => {
         ok: true, status: 200, headers: new Headers(),
         data: { workflow_runs: [{ status: 'completed', conclusion: 'timed_out', html_url: null, head_branch: 'main', updated_at: null }] },
       });
-    const [failed] = await buildProjectConnections(ENV, redDb, freshTenant());
-    expect(failed.connections[0].buildStatus).toBe('failure');
+    const failed = firstConnection(await buildProjectConnections(ENV, redDb, freshTenant()));
+    expect(failed.buildStatus).toBe('failure');
   });
 
   it('surfaces a denied credential as a broken connection, never a green tick', async () => {
@@ -147,8 +162,8 @@ describe('buildProjectConnections — the projects-widget status strip', () => {
     mocks.resolveRepoAuth.mockResolvedValue(githubAuth());
     mocks.githubRequest.mockResolvedValue({ ok: false, status: 401, code: 'unauthorized', reason: '401: Bad credentials' });
 
-    const [summary] = await buildProjectConnections(ENV, db, freshTenant());
-    expect(summary.connections[0]).toMatchObject({ health: 'error', reason: 'unauthorized', buildStatus: null });
+    const summary = only(await buildProjectConnections(ENV, db, freshTenant()));
+    expect(summary.connections[0]!).toMatchObject({ health: 'error', reason: 'unauthorized', buildStatus: null });
   });
 
   it('falls back to the recorded open-PR count when the repo cannot be probed', async () => {
@@ -160,9 +175,9 @@ describe('buildProjectConnections — the projects-widget status strip', () => {
       [pullRequests, [{ repoId: 'repo-gitlab', open: 2 }]],
     ]));
 
-    const [summary] = await buildProjectConnections(ENV, db, freshTenant());
+    const summary = only(await buildProjectConnections(ENV, db, freshTenant()));
     expect(mocks.githubRequest).not.toHaveBeenCalled();
-    expect(summary.connections[0]).toMatchObject({
+    expect(summary.connections[0]!).toMatchObject({
       provider: 'gitlab',
       url: 'https://gitlab.com/acme/site',
       health: 'unknown',
@@ -182,7 +197,7 @@ describe('buildProjectConnections — the projects-widget status strip', () => {
       [pullRequests, []],
     ]));
 
-    const [summary] = await buildProjectConnections(ENV, db, freshTenant());
+    const summary = only(await buildProjectConnections(ENV, db, freshTenant()));
     expect(summary.projectId).toBe(2);
     expect(summary.connections).toMatchObject([
       { kind: 'board', provider: 'jira', label: 'ENG', health: 'degraded', lastSyncedAt: '2026-08-06T09:00:00.000Z' },
