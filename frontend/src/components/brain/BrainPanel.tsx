@@ -40,6 +40,8 @@ import { UnreadBadge } from '@/components/UnreadBadge';
 import { useAttention } from '@/lib/useAttention';
 import { RepoContextPicker, type RepoFileSource } from '@/components/brain/RepoContextPicker';
 import { BrainCapabilityPicker } from '@/components/brain/BrainCapabilityPicker';
+import { ChatModeToggle } from '@/components/brain/ChatModeToggle';
+import { WorkOptionsPicker } from '@/components/brain/WorkOptionsPicker';
 import { CapabilityArtifactNotice } from '@/components/brain/CapabilityArtifactNotice';
 import { AllowanceBanner } from '@/components/brain/AllowanceBanner';
 import { ThemeSelect } from '@/components/ThemeSelect';
@@ -61,6 +63,10 @@ import {
   resolveRecipient,
   isStepMessage,
   getBrainCapability,
+  normalizeChatMode,
+  DEFAULT_CHAT_MODE,
+  type ChatMode,
+  type WorkOptionId,
   type BrainCapabilityId,
   type BrainCapabilitySurface,
   type SuggestedAction,

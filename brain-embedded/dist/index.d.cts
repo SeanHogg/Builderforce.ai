@@ -23,6 +23,13 @@ interface BrainChat {
      * forwards it, the host owns the catalogue.
      */
     capability?: string | null;
+    /**
+     * What this chat is FOR — `'chat'` (a conversation: read, reason, answer) or
+     * `'work'` (an execution: create, staff and link the ticket, then dispatch an agent
+     * to run it). Migration 0409. Absent on a host/server that predates the column;
+     * {@link normalizeChatMode} resolves that to the default.
+     */
+    mode?: string | null;
     createdAt: string;
     updatedAt: string;
 }
@@ -474,12 +481,14 @@ interface BrainPersistenceAdapter {
         title?: string;
         projectId?: number | null;
         capability?: string | null;
+        mode?: string | null;
     }): Promise<BrainChat>;
     updateChat(id: number, body: {
         title?: string;
         projectId?: number | null;
         visibility?: 'shared' | 'locked';
         capability?: string | null;
+        mode?: string | null;
     }): Promise<BrainChat>;
     deleteChat(id: number): Promise<unknown>;
     summarizeChat(id: number): Promise<{
@@ -949,6 +958,85 @@ declare function useBrainContext(): BrainContextValue;
  */
 declare function useOptionalBrainContext(): BrainContextValue | null;
 
+/**
+ * Chat MODE — "am I being asked a question, or being asked to get something done?"
+ *
+ * Two modes, one per conversation:
+ *
+ *   • `chat` — CONVERSATIONAL. The Brain reads, reasons and answers. It may look
+ *     anything up, but it does not mint board work, staff it, or start runs off
+ *     its own back. This is the default and the surface's resting state.
+ *
+ *   • `work`  — EXECUTIONAL. The Brain turns what it concludes into real work: it
+ *     creates the ticket, scopes the resources, links it to the conversation,
+ *     advances its status, and DISPATCHES an agent to run it. The conversation is
+ *     the front end of an execution, not a discussion about one.
+ *
+ * ── WHY THIS EXISTS ──────────────────────────────────────────────────────────────
+ * The work-linking directive ({@link chatWorkLinkingDirective}) used to ride EVERY
+ * run unconditionally — so "what does this error mean?" was answered by a model that
+ * had also been instructed to open, staff and status a ticket about it. There was no
+ * way to just ask a question, and no way to tell an execution apart from a chat after
+ * the fact. Mode is the discriminator for both: it gates the directive at runtime and
+ * it is recorded on the conversation, so usage can finally be read as
+ * "conversations vs executions" rather than one undifferentiated pile.
+ *
+ * The value is persisted on the conversation (`brain_chats.mode`, `creation_sessions.mode`,
+ * migration 0409) rather than in the browser, so the choice follows the conversation
+ * across surfaces and devices — the same reasoning as `capability` (0345).
+ *
+ * Kept framework-free (pure strings + unions) so it is safe in every bundle: the web
+ * Brain, the VS Code webview, and the shared agent loop all import from here.
+ */
+/** The modes a conversation can be in. Order is display order. */
+declare const CHAT_MODES: readonly ["chat", "work"];
+type ChatMode = (typeof CHAT_MODES)[number];
+/**
+ * The resting mode. A conversation is a conversation until someone says otherwise —
+ * asking a question must never be the thing that opens a ticket.
+ */
+declare const DEFAULT_CHAT_MODE: ChatMode;
+/** True for a value that is one of the known modes. */
+declare function isChatMode(value: unknown): value is ChatMode;
+/**
+ * Coerce an inbound/stored value to a mode, falling back to {@link DEFAULT_CHAT_MODE}.
+ * Tolerant by design: an unknown value (an older row, a client ahead of the server)
+ * resolves to a conversation rather than silently granting execution authority.
+ */
+declare function normalizeChatMode(value: unknown): ChatMode;
+/**
+ * The system-prompt block for CHAT mode.
+ *
+ * Deliberately a positive instruction rather than only a prohibition: a model told
+ * merely "do not create tickets" tends to hedge and offer to create one every turn,
+ * which is the same interruption in a politer costume. This tells it what its job IS
+ * — answer the question — and makes the ONE escape hatch explicit (the user asking
+ * outright), so the mode is a default rather than a cage.
+ */
+declare function chatConversationDirective(): string;
+/**
+ * The system-prompt block for WORK mode: the existing chat⇄work linking contract
+ * PLUS the dispatch obligation that makes the mode mean execution rather than
+ * paperwork.
+ *
+ * The dispatch half exists because creating a well-staffed ticket and stopping is
+ * indistinguishable, from the user's side, from doing nothing: the measured reality
+ * is that tickets opened and never dispatched sit in backlog indefinitely. So the
+ * mode's closing obligation is to REPORT the dispatch verdict truthfully — `tasks.create`
+ * and `tasks.update` already return `autoRun: { dispatched, reason, detail }`, and
+ * `chats.dispatch_agent` starts a run directly when autonomy declined.
+ *
+ * Tool names here are the ADVERTISED (`builtin_*`) names the model actually sees on
+ * the gateway relay — never the catalog ids, which appear nowhere in its tool list.
+ */
+declare function chatWorkDirective(chatId: number): string;
+/**
+ * The system-prompt block for a mode. This is the ONE place a mode becomes model-facing
+ * behaviour, so the two surfaces (web Brain, VS Code webview) and the shared agent loop
+ * cannot drift on what a mode means.
+ */
+declare function chatModeDirective(mode: ChatMode, chatId: number): string;
+
 /** The placeholder title `create()` stamps on an untitled chat. A chat still carrying
  *  it has never been named, so {@link deriveChatTitle}-based auto-titling may replace it
  *  (a user/seed-provided title never matches this and is left alone). */
@@ -989,11 +1077,16 @@ interface UseBrainChats {
         title?: string;
         projectId?: number | null;
         capability?: string | null;
+        mode?: ChatMode;
     }): Promise<BrainChat | null>;
     rename(id: number, title: string): Promise<void>;
     /** Set (or clear, with null) what the chat is making. Persisted on the chat, so
      *  the choice follows the conversation across surfaces instead of the browser. */
     setCapability(id: number, capability: string | null): Promise<void>;
+    /** Switch the conversation between CHAT (answer) and WORK (execute + dispatch).
+     *  Persisted on the chat for the same reason `capability` is — the choice belongs
+     *  to the conversation, not to the browser it was flipped in. */
+    setMode(id: number, mode: ChatMode): Promise<void>;
     /**
      * Auto-name a still-untitled chat (title === {@link DEFAULT_CHAT_TITLE}) from its
      * first user message, so "New chat" becomes the topic once the conversation begins.
@@ -1551,6 +1644,13 @@ interface UseBrainConversationOptions {
      * personality block is enough.
      */
     augmentSystemPrompt?: (userText: string) => Promise<string | undefined>;
+    /**
+     * The active chat's MODE — `chat` (answer the question) or `work` (create, staff,
+     * link AND dispatch the work). Read from the chat row by the host so the choice
+     * follows the conversation rather than the browser. Omit to keep the pre-mode
+     * always-execute behaviour.
+     */
+    chatMode?: ChatMode;
 }
 interface UseBrainConversation {
     messages: BrainMessage[];
@@ -1760,6 +1860,17 @@ interface BrainRunRequest {
      * failed Evermind recall.
      */
     augmentSystemPrompt?: (userText: string) => Promise<string | undefined>;
+    /**
+     * The conversation's MODE (migration 0409) — whether this run is a CONVERSATION
+     * (`chat`: read, reason, answer) or an EXECUTION (`work`: create + staff + link the
+     * ticket, then dispatch an agent to run it). Decides which directive is folded into
+     * the system prompt; see `chatMode.ts`.
+     *
+     * Optional, and absent means `work`: hosts that predate the mode (the VS Code
+     * webview, any embed) keep the always-execute behaviour they shipped with rather
+     * than silently losing their ticket lineage.
+     */
+    chatMode?: ChatMode;
 }
 /** Live, observable snapshot of a chat's run (what the hook renders). */
 interface BrainRunSnapshot {
@@ -2578,4 +2689,4 @@ declare function handleRouterCall(catalog: BrainToolSpec[], name: string, args: 
     };
 };
 
-export { ADDRESSED_TO_META_KEY, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AllowanceState, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, ChatErrorAction, type ChatInputAttachment, type CompletionMetadata, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_TITLE, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PersistedStep, type PreparedImage, type ProvenanceAccount, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolExposure, type ToolSelection, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, allowanceState, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatWorkLinkingDirective, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, handleRouterCall, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mcpActionsFrom, mentionRecipient, modelFailoversInTrace, modelsUsedInTrace, narratedUnadvertisedInTrace, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parseStepMessage, prepareImageDataUrl, reasoningForRun, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, routerToolSpecs, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolExposureInTrace, toolSpecsFor, traceWithPersistedSteps, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AllowanceState, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, ChatErrorAction, type ChatInputAttachment, type ChatMode, type CompletionMetadata, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_MODE, DEFAULT_CHAT_TITLE, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, NOT_STARTED_TASK_STATUSES, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PersistedStep, type PreparedImage, type ProvenanceAccount, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolExposure, type ToolSelection, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, allowanceState, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, handleRouterCall, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mcpActionsFrom, mentionRecipient, modelFailoversInTrace, modelsUsedInTrace, narratedUnadvertisedInTrace, normalizeChatMode, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parseStepMessage, prepareImageDataUrl, reasoningForRun, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, routerToolSpecs, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolExposureInTrace, toolSpecsFor, traceWithPersistedSteps, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
