@@ -383,6 +383,27 @@ export function highlightToneFor(row: TabularRow, rules: TabularHighlightRule[])
   return null;
 }
 
+export type WorkbookSheetSource = TabularSource & { name: string };
+
+/**
+ * The tabs an imported workbook carries.
+ *
+ * A dropped `.xlsx` keeps every sheet on one object so switching tabs is a card
+ * interaction rather than a re-import; this is the one reader of that shape, so
+ * the card, the inspector, and Brain agree on which sheets exist.
+ */
+export function workbookSheets(data: Record<string, unknown>): WorkbookSheetSource[] {
+  if (!Array.isArray(data.sheets)) return [];
+  return data.sheets.flatMap((value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+    const sheet = value as Record<string, unknown>;
+    const name = typeof sheet.name === 'string' ? sheet.name.trim() : '';
+    if (!name) return [];
+    const source = tabularFromObject(sheet);
+    return source.columns.length ? [{ name, ...source }] : [];
+  });
+}
+
 /** Read any canvas object that carries tabular data into the shared shape. */
 export function tabularFromObject(data: Record<string, unknown>): TabularSource {
   const rawRows = Array.isArray(data.rows) ? data.rows : Array.isArray(data.sampleRows) ? data.sampleRows : [];

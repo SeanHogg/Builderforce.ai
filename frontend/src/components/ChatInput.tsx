@@ -558,7 +558,7 @@ export function ChatInput({
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*,.pdf,.txt,.md,.csv,.json"
+              accept="image/*,.pdf,.txt,.md,.csv,.tsv,.json,.docx,.rtf,.xlsx,.pptx"
               onChange={handleFileChange}
               style={{ display: 'none' }}
             />

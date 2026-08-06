@@ -799,7 +799,8 @@
       "in_progress": "In progress",
       "in_review": "In review",
       "done": "Done",
-      "blocked": "Blocked"
+      "blocked": "Blocked",
+      "shipped": "Shipped"
     },
     "epicPriority": {
       "low": "Low",
@@ -2010,7 +2011,14 @@
         "subtitle": "How value flows across initiatives — and where it's blocked.",
         "criticalPath": "Critical path",
         "cycle": "⚠ dependency cycle",
-        "noDeps": "No initiative dependencies yet — link blockers in the portfolio to map the value stream."
+        "noDeps": "No initiative dependencies yet — link blockers in the portfolio to map the value stream.",
+        "completion": "{pct}% delivered",
+        "status": {
+          "proposed": "Proposed",
+          "active": "Active",
+          "completed": "Completed",
+          "archived": "Archived"
+        }
       }
     },
     "aiImpact": {
@@ -10504,7 +10512,16 @@
     "statusAddNode": "Add at least one node first.",
     "statusRunFailed": "Run failed",
     "statusExportFailed": "Export failed",
-    "statusImportFailed": "Import failed"
+    "statusImportFailed": "Import failed",
+    "nodeGroup": {
+      "trigger": "Trigger",
+      "llmLogic": "LLM logic",
+      "evermindBuild": "Evermind build",
+      "integrations": "Integrations",
+      "agent": "Agent",
+      "etl": "ETL",
+      "output": "Output"
+    }
   },
   "chunkError": {
     "recovering": "Updating to the latest version…",
@@ -12112,10 +12129,36 @@
     "datasetStatusImported": "Imported",
     "roleCannotEdit": "Your session role does not allow editing",
     "fileGeneric": "File",
-    "imageAttached": "Image attached",
-    "fileAttached": "File attached",
-    "datasetAttached": "{name} loaded as a dataset — {rows} rows, {columns} columns",
-    "fileAddedToCanvas": "{name} added to the canvas",
+    "dropFilesTitle": "Drop to add to the canvas",
+    "dropFilesHint": "A Word file opens as pages, a spreadsheet as sheets, a deck as slides — then ask Brain about it.",
+    "import": {
+      "statusImported": "Imported",
+      "statusAttached": "Attached",
+      "statusUnreadable": "Could not be read",
+      "statusTextUnavailable": "Text not extractable",
+      "fileGeneric": "File",
+      "datasetShape": "{rows} rows · {columns} columns",
+      "workbookShape": "{sheets} sheets · {rows} rows · {columns} columns",
+      "deckShape": "{slides, plural, one {# slide} other {# slides}}",
+      "documentShape": "{words} words",
+      "documentPages": "{pages, plural, one {# page} other {# pages}}",
+      "pdfPages": "PDF · {pages, plural, one {# page} other {# pages}}",
+      "codeShape": "{lines} lines",
+      "noticeDataset": "{name} loaded as a dataset — {rows} rows, {columns} columns",
+      "noticeWorkbook": "{name} loaded as a workbook — {sheets, plural, one {# sheet} other {# sheets}}",
+      "noticeDeck": "{name} loaded as a deck — {slides, plural, one {# slide} other {# slides}}",
+      "noticeDocument": "{name} loaded as a document — {pages, plural, one {# page} other {# pages}}",
+      "noticeImage": "{name} added to the canvas",
+      "noticeFile": "{name} added to the canvas",
+      "failed": "{name} could not be read",
+      "tooManyFiles": "Only the first {limit} files were added",
+      "promptData": "Analyse {name}: what stands out, and where are the outliers?",
+      "promptDeck": "Review {name}: is the story clear, and what is missing?",
+      "promptDocument": "Summarise {name}, then tell me what you would change.",
+      "promptImage": "What is in {name}, and what should I do with it?",
+      "promptCode": "Review {name} and explain what it does.",
+      "promptFile": "What can you tell me about {name}?"
+    },
     "datasetImportBeforeVisualizing": "Import data before visualizing it",
     "datasetImportBeforeProfiling": "Import data before profiling it",
     "datasetVisualizationTitle": "{name} visualization",
@@ -12383,6 +12426,11 @@
       "documentPages": "{count, plural, one {# page} other {# pages}}",
       "documentWords": "{count, plural, one {# word} other {# words}}",
       "documentReading": "{minutes} min read",
+      "previousPage": "Previous page",
+      "nextPage": "Next page",
+      "pageOfPages": "Page {page} of {total}",
+      "workbookSheets": "Sheets",
+      "sheetShape": "{name} — {rows} rows, {columns} columns",
       "slidesFallback": "No slides yet. Ask Brain to build the deck.",
       "slideCount": "{count, plural, one {# slide} other {# slides}}",
       "slideUntitled": "Slide {index}",
@@ -13066,7 +13114,17 @@
       "category_code": "Code",
       "category_web": "Site",
       "category_other": "Other"
-    }
+    },
+    "creativeSelectFirst": "Select a creative object first",
+    "creativePreviewOpened": "Preview opened",
+    "creativeDownloaded": "Deliverable downloaded",
+    "creativeGenerating": "Generating…",
+    "creativeGenerated": "{file} generated and validated",
+    "creativeGeneratedOffline": "{file} generated with the offline baseline — the generator was unavailable",
+    "creativeGeneratedStatus": "Generated",
+    "creativeApplied": "Applied",
+    "creativeNoMediaModel": "Publish an Evermind media model to render this object",
+    "creativeNoFrames": "The model returned no readable frames"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -13092,11 +13150,16 @@
       "layerGuidesInactive": "Show the layer guides",
       "dropToLayers": "Settle objects back onto their layers",
       "orbitLabel": "3D canvas. Drag to orbit, scroll to zoom, or use the arrow keys.",
-      "spaceLabel": "3D canvas. Drag an object to move it, shift-drag it to move it through depth, drag the space to turn it, scroll to zoom, or use the arrow keys.",
+      "spaceLabel": "3D canvas. Drag an object to move it, shift-drag it to move it through depth, drag the space to turn it, drag with two fingers or the middle button to travel across it, scroll to zoom, or use the arrow keys.",
       "hint": "Drag to orbit · Scroll to zoom · Arrow keys rotate, + and − zoom, 0 resets · Select an object to open it",
-      "spaceHint": "Drag an object to move it, hold Shift to move it through depth · Drag the space to turn it, hold Shift or use the middle button to pan · Scroll to zoom · Arrow keys turn the space and move a focused object, + and − zoom, 0 resets",
+      "spaceHint": "Drag an object to move it, hold Shift to move it through depth · Drag the space to turn it; two fingers, Shift or the middle button travel across it · Scroll or pinch to zoom · Arrow keys turn the space and move a focused object, + and − zoom, 0 resets",
       "empty": "Add objects to this canvas to see them in 3D.",
       "previewAlt": "{label} preview"
     }
+  },
+  "workspaceCanvas": {
+    "panelLabel": "{title} canvas panel",
+    "removePanel": "Remove {title} from canvas",
+    "defaultGroup": "Panels"
   }
 }

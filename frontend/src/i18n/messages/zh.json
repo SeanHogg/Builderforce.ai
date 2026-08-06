@@ -799,7 +799,8 @@
       "in_progress": "进行中",
       "in_review": "审核中",
       "done": "已完成",
-      "blocked": "受阻"
+      "blocked": "受阻",
+      "shipped": "已发布"
     },
     "epicPriority": {
       "low": "低",
@@ -2010,7 +2011,14 @@
         "subtitle": "价值如何在各项举措间流动——以及在何处受阻。",
         "criticalPath": "关键路径",
         "cycle": "⚠ 依赖循环",
-        "noDeps": "暂无举措依赖——在项目组合中关联阻塞项以绘制价值流。"
+        "noDeps": "暂无举措依赖——在项目组合中关联阻塞项以绘制价值流。",
+        "completion": "已交付 {pct}%",
+        "status": {
+          "proposed": "已提出",
+          "active": "进行中",
+          "completed": "已完成",
+          "archived": "已归档"
+        }
       }
     },
     "aiImpact": {
@@ -10503,7 +10511,16 @@
     "statusAddNode": "请先添加至少一个节点。",
     "statusRunFailed": "运行失败",
     "statusExportFailed": "导出失败",
-    "statusImportFailed": "导入失败"
+    "statusImportFailed": "导入失败",
+    "nodeGroup": {
+      "trigger": "触发器",
+      "llmLogic": "LLM 逻辑",
+      "evermindBuild": "Evermind 构建",
+      "integrations": "集成",
+      "agent": "智能体",
+      "etl": "ETL",
+      "output": "输出"
+    }
   },
   "chunkError": {
     "recovering": "正在更新到最新版本…",
@@ -13065,7 +13082,17 @@
       "category_code": "代码",
       "category_web": "站点",
       "category_other": "其他"
-    }
+    },
+    "creativeSelectFirst": "请先选择一个创作对象",
+    "creativePreviewOpened": "已打开预览",
+    "creativeDownloaded": "交付物已下载",
+    "creativeGenerating": "生成中…",
+    "creativeGenerated": "{file} 已生成并通过校验",
+    "creativeGeneratedOffline": "{file} 由离线基础生成器生成 —— 生成服务当前不可用",
+    "creativeGeneratedStatus": "已生成",
+    "creativeApplied": "已应用",
+    "creativeNoMediaModel": "请先发布一个 Evermind 媒体模型来渲染此对象",
+    "creativeNoFrames": "模型未返回可读取的帧"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -13086,16 +13113,21 @@
       "reset": "重置视图",
       "layerName": "第 {index} 层",
       "layerCount": "{count} 个对象",
-      "layerGuides": "层参考线",
-      "layerGuidesActive": "隐藏层参考线",
-      "layerGuidesInactive": "显示层参考线",
-      "dropToLayers": "让对象回落到各自的层",
+      "layerGuides": "图层参考线",
+      "layerGuidesActive": "隐藏图层参考线",
+      "layerGuidesInactive": "显示图层参考线",
+      "dropToLayers": "让对象回落到各自的图层",
       "orbitLabel": "3D 画布。拖动可旋转，滚动可缩放，也可使用方向键。",
-      "spaceLabel": "3D 画布。拖动对象可移动它，按住 Shift 拖动可沿深度移动；拖动空间可旋转，滚动可缩放，也可使用方向键。",
+      "spaceLabel": "三维画布。拖动对象可移动它，按住 Shift 拖动可沿深度移动；拖动空白处可旋转场景，滚轮缩放，也可使用方向键。",
       "hint": "拖动旋转 · 滚动缩放 · 方向键旋转，+ 与 − 缩放，0 重置 · 选择对象即可打开",
-      "spaceHint": "拖动对象即可移动，按住 Shift 沿深度移动 · 拖动空间可旋转，按住 Shift 或用鼠标中键可平移 · 滚动缩放 · 方向键旋转空间并移动已聚焦的对象，+ 与 − 缩放，0 重置",
+      "spaceHint": "拖动对象可移动它，按住 Shift 可沿深度移动 · 拖动空白处可旋转场景，按住 Shift 或使用中键可平移 · 滚轮缩放 · 方向键旋转场景并移动选中的对象，+ 与 − 缩放，0 重置",
       "empty": "向此画布添加对象后即可在 3D 中查看。",
       "previewAlt": "{label} 预览"
     }
+  },
+  "workspaceCanvas": {
+    "panelLabel": "{title} 画布面板",
+    "removePanel": "从画布中移除 {title}",
+    "defaultGroup": "面板"
   }
 }

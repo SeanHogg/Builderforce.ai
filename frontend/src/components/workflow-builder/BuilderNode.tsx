@@ -12,8 +12,13 @@ export interface BuilderNodeData extends Record<string, unknown> {
   config: Record<string, unknown>;
 }
 
-/** A short one-line summary of the node's key config, shown under the title. */
-function configSummary(kind: WorkflowNodeKind, config: Record<string, unknown>): string {
+/**
+ * A short one-line summary of the node's key config, shown under the title.
+ *
+ * Exported so the 3D reading of the same graph says the same thing about a step
+ * as the flat node does — two summaries of one node would read as two nodes.
+ */
+export function configSummary(kind: WorkflowNodeKind, config: Record<string, unknown>): string {
   switch (kind) {
     case 'agent':
       return [config.role, config.runtime].filter(Boolean).join(' · ') || 'agent';

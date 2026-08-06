@@ -120,6 +120,7 @@ import { createSpecRoutes }         from './presentation/routes/specRoutes';
 import { createWorkflowRoutes }     from './presentation/routes/workflowRoutes';
 import { createWorkflowDefinitionRoutes } from './presentation/routes/workflowDefinitionRoutes';
 import { createCreationSessionRoutes } from './presentation/routes/creationSessionRoutes';
+import { createCreativeRoutes } from './presentation/routes/creativeRoutes';
 import { createWorkflowTriggerRoutes } from './presentation/routes/workflowTriggerRoutes';
 import { createApprovalRoutes }     from './presentation/routes/approvalRoutes';
 import { createApprovalRuleRoutes } from './presentation/routes/approvalRuleRoutes';
@@ -666,6 +667,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/ide-projects', createIdeProjectRoutes(projectService, db));
   app.route('/api/ai',        createIdeAiRoutes(projectService));
   app.route('/api/studio/models', createEvermindModelRoutes(db));
+  // Creative generation — the generator Canvas's `creative.*` capabilities name.
+  // Geometry kinds are authored as a parametric spec and evaluated server-side;
+  // text kinds are authored directly and shape-checked. Free pool only.
+  app.route('/api/creative', createCreativeRoutes());
   app.route('/api/projects',  createProjectEvermindRoutes(db));
   app.route('/api/agent/projects', createProjectEvermindAgentRoutes(db));
   app.route('/api/projects',  createProjectFactsRoutes(db));

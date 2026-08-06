@@ -799,7 +799,8 @@
       "in_progress": "En cours",
       "in_review": "En revue",
       "done": "Terminé",
-      "blocked": "Bloqué"
+      "blocked": "Bloqué",
+      "shipped": "Livré"
     },
     "epicPriority": {
       "low": "Basse",
@@ -2010,7 +2011,14 @@
         "subtitle": "Comment la valeur circule entre les initiatives — et où elle est bloquée.",
         "criticalPath": "Chemin critique",
         "cycle": "⚠ cycle de dépendances",
-        "noDeps": "Aucune dépendance d'initiative pour l'instant — liez des bloqueurs dans le portefeuille pour cartographier le flux de valeur."
+        "noDeps": "Aucune dépendance d'initiative pour l'instant — liez des bloqueurs dans le portefeuille pour cartographier le flux de valeur.",
+        "completion": "{pct}% livré",
+        "status": {
+          "proposed": "Proposée",
+          "active": "Active",
+          "completed": "Terminée",
+          "archived": "Archivée"
+        }
       }
     },
     "aiImpact": {
@@ -10503,7 +10511,16 @@
     "statusAddNode": "Ajoutez d’abord au moins un nœud.",
     "statusRunFailed": "Échec de l’exécution",
     "statusExportFailed": "Échec de l’exportation",
-    "statusImportFailed": "Échec de l’importation"
+    "statusImportFailed": "Échec de l’importation",
+    "nodeGroup": {
+      "trigger": "Déclencheur",
+      "llmLogic": "Logique LLM",
+      "evermindBuild": "Construction Evermind",
+      "integrations": "Intégrations",
+      "agent": "Agent",
+      "etl": "ETL",
+      "output": "Sortie"
+    }
   },
   "chunkError": {
     "recovering": "Mise à jour vers la dernière version…",
@@ -13065,7 +13082,17 @@
       "category_code": "Code",
       "category_web": "Site",
       "category_other": "Autre"
-    }
+    },
+    "creativeSelectFirst": "Sélectionnez d'abord un objet créatif",
+    "creativePreviewOpened": "Aperçu ouvert",
+    "creativeDownloaded": "Livrable téléchargé",
+    "creativeGenerating": "Génération…",
+    "creativeGenerated": "{file} généré et validé",
+    "creativeGeneratedOffline": "{file} généré avec la base hors ligne — le générateur était indisponible",
+    "creativeGeneratedStatus": "Généré",
+    "creativeApplied": "Appliqué",
+    "creativeNoMediaModel": "Publiez un modèle média Evermind pour générer cet objet",
+    "creativeNoFrames": "Le modèle n'a renvoyé aucune image lisible"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",
@@ -13086,16 +13113,21 @@
       "reset": "Réinitialiser la vue",
       "layerName": "Couche {index}",
       "layerCount": "{count, plural, one {# objet} other {# objets}}",
-      "layerGuides": "Repères de couche",
-      "layerGuidesActive": "Masquer les repères de couche",
-      "layerGuidesInactive": "Afficher les repères de couche",
-      "dropToLayers": "Reposer les objets sur leurs couches",
+      "layerGuides": "Repères de plans",
+      "layerGuidesActive": "Masquer les repères de plans",
+      "layerGuidesInactive": "Afficher les repères de plans",
+      "dropToLayers": "Reposer les objets sur leurs plans",
       "orbitLabel": "Canevas 3D. Faites glisser pour pivoter, défilez pour zoomer ou utilisez les touches fléchées.",
-      "spaceLabel": "Canevas 3D. Faites glisser un objet pour le déplacer, avec Maj pour le déplacer en profondeur, faites glisser l’espace pour le pivoter, défilez pour zoomer ou utilisez les touches fléchées.",
+      "spaceLabel": "Canevas 3D. Faites glisser un objet pour le déplacer, Maj+glisser pour le déplacer en profondeur, faites glisser l'espace pour le pivoter, molette pour zoomer, ou utilisez les flèches.",
       "hint": "Glisser pour pivoter · Défiler pour zoomer · Les flèches pivotent, + et − zooment, 0 réinitialise · Sélectionnez un objet pour l’ouvrir",
-      "spaceHint": "Glissez un objet pour le déplacer, maintenez Maj pour le déplacer en profondeur · Glissez l’espace pour le pivoter, maintenez Maj ou utilisez le bouton du milieu pour vous déplacer · Défilez pour zoomer · Les flèches pivotent l’espace et déplacent l’objet ciblé, + et − zooment, 0 réinitialise",
+      "spaceHint": "Faites glisser un objet pour le déplacer, Maj pour le déplacer en profondeur · Faites glisser l'espace pour le pivoter, Maj ou bouton du milieu pour le déplacer · Molette pour zoomer · Les flèches pivotent l'espace et déplacent l'objet sélectionné, + et − zooment, 0 réinitialise",
       "empty": "Ajoutez des objets à ce canevas pour les voir en 3D.",
       "previewAlt": "Aperçu de {label}"
     }
+  },
+  "workspaceCanvas": {
+    "panelLabel": "Panneau de canevas {title}",
+    "removePanel": "Retirer {title} du canevas",
+    "defaultGroup": "Panneaux"
   }
 }

@@ -75,6 +75,8 @@ type PointerAt = { x: number; y: number };
 type Gesture =
   | ({ kind: 'orbit' } & PointerAt)
   | ({ kind: 'pan' } & PointerAt)
+  /** Two fingers on the space: `x`/`y` are their midpoint, `spread` their distance apart. */
+  | ({ kind: 'pinch'; spread: number } & PointerAt)
   | ({
     kind: 'move';
     axis: Canvas3DDragAxis;
@@ -86,6 +88,17 @@ type Gesture =
     /** Board travel already handed to the canvas, so each step sends only the difference. */
     sent: { x: number; y: number; z: number };
   } & PointerAt);
+
+/** The midpoint and separation of the first two pointers, or null if there aren't two. */
+function twoFingerGrip(pointers: ReadonlyMap<number, PointerAt>): { x: number; y: number; spread: number } | null {
+  const [first, second] = [...pointers.values()];
+  if (!first || !second) return null;
+  return {
+    x: (first.x + second.x) / 2,
+    y: (first.y + second.y) / 2,
+    spread: Math.hypot(second.x - first.x, second.y - first.y),
+  };
+}
 
 /**
  * The 3D canvas: the board as a space to turn, travel and rearrange.
@@ -117,6 +130,8 @@ export function Canvas3DView<T extends Canvas3DNode>({
   const [gestureKind, setGestureKind] = useState<Gesture['kind'] | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const gestureRef = useRef<Gesture | null>(null);
+  /** Pointers currently down on the space itself, so a second finger can be noticed. */
+  const touching = useRef(new Map<number, PointerAt>());
   /** True once the current gesture has travelled far enough to not be a click. */
   const movedRef = useRef(false);
 
@@ -193,6 +208,24 @@ export function Canvas3DView<T extends Canvas3DNode>({
     const move = (event: PointerEvent) => {
       const gesture = gestureRef.current;
       if (!gesture) return;
+      if (touching.current.has(event.pointerId)) touching.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+
+      // Two fingers travel and zoom together, which is the only way to reach the
+      // far side of the space on a touch screen: there is no middle button to
+      // hold and no Shift to press, and one finger is already turning the space.
+      if (gesture.kind === 'pinch') {
+        const grip = twoFingerGrip(touching.current);
+        if (!grip) return;
+        movedRef.current = true;
+        userFramed.current = true;
+        const factor = gesture.spread > 0 ? grip.spread / gesture.spread : 1;
+        const travelX = grip.x - gesture.x;
+        const travelY = grip.y - gesture.y;
+        gestureRef.current = { kind: 'pinch', ...grip };
+        setOrbit((current) => canvas3dPanAfterDrag(canvas3dOrbitAfterZoom(current, factor), travelX, travelY));
+        return;
+      }
+
       const dx = event.clientX - gesture.x;
       const dy = event.clientY - gesture.y;
       if (Math.abs(dx) + Math.abs(dy) > CLICK_SLOP) movedRef.current = true;
@@ -225,7 +258,20 @@ export function Canvas3DView<T extends Canvas3DNode>({
       if (!step.x && !step.y && !step.z) return;
       onMoveRef.current?.([...gesture.from.keys()].map((id) => ({ id, dx: step.x, dy: step.y, dz: step.z })));
     };
-    const end = () => { gestureRef.current = null; setGestureKind(null); };
+    const end = (event: PointerEvent) => {
+      touching.current.delete(event.pointerId);
+      // Lifting one finger of a pinch hands the space back to the other one,
+      // rather than ending the gesture halfway through and stranding the user.
+      const remaining = [...touching.current.values()];
+      if (gestureRef.current?.kind === 'pinch' && remaining.length === 1) {
+        gestureRef.current = { kind: 'orbit', ...remaining[0]! };
+        setGestureKind('orbit');
+        return;
+      }
+      if (touching.current.size) return;
+      gestureRef.current = null;
+      setGestureKind(null);
+    };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', end);
     window.addEventListener('pointercancel', end);
@@ -249,9 +295,23 @@ export function Canvas3DView<T extends Canvas3DNode>({
     return () => viewport.removeEventListener('wheel', wheel);
   }, [zoomBy]);
 
-  /** Turning the space, or travelling across it. Middle button and Shift pan. */
+  /**
+   * Turning the space, or travelling across it.
+   *
+   * One pointer turns it. A second one — or the middle button, or Shift — travels
+   * and zooms instead, so every input has a way to reach the far side of a space
+   * the user has zoomed into.
+   */
   const onViewportPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0 && event.button !== 1) return;
+    touching.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    const grip = twoFingerGrip(touching.current);
+    if (grip) {
+      movedRef.current = true;
+      gestureRef.current = { kind: 'pinch', ...grip };
+      setGestureKind('pinch');
+      return;
+    }
     movedRef.current = false;
     const kind: 'orbit' | 'pan' = event.button === 1 || event.shiftKey ? 'pan' : 'orbit';
     gestureRef.current = kind === 'pan'

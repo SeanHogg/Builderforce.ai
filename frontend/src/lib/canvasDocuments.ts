@@ -10,6 +10,7 @@
  */
 import { creationDeliverables } from './creationDeliverables';
 import { tabularFromObject } from './canvasTabularData';
+import { PAGE_BREAK_MARKER } from './officeFormats';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
 
 const WORDS_PER_PAGE = 450;
@@ -45,9 +46,11 @@ function chatTranscript(data: CreationNodeData): string | null {
  * have no authored body yet. Every export and copy path reads this, so a
  * download can never disagree with what the card renders. */
 export function canvasObjectMarkdown(data: CreationNodeData): string {
-  return chatTranscript(data)
-    ?? authoredMarkdown(data)
-    ?? `# ${data.title}\n\n${data.status ? `Status: ${data.status}\n` : ''}`;
+  const body = chatTranscript(data) ?? authoredMarkdown(data);
+  // Page breaks are canvas structure. An exported .docx or .md must not carry
+  // the marker through into the file a person opens.
+  if (body) return body.split(PAGE_BREAK_MARKER).map((page) => page.trim()).filter(Boolean).join('\n\n');
+  return `# ${data.title}\n\n${data.status ? `Status: ${data.status}\n` : ''}`;
 }
 
 export type DocumentHeading = { level: number; text: string };
@@ -56,10 +59,50 @@ export interface CanvasDocument {
   markdown: string;
   headings: DocumentHeading[];
   wordCount: number;
+  /** The document laid out as pages, so a card can turn them the way the file
+   * itself does rather than scrolling one unbroken column of text. */
+  pages: string[];
   /** Printed pages at {@link WORDS_PER_PAGE}, so a card can say "6 pages" rather
    * than showing an unbounded wall of text with no sense of scale. */
   pageCount: number;
   readingMinutes: number;
+}
+
+/** Blocks that must not be split across a page boundary — breaking a table or a
+ * fenced code block mid-way renders as broken syntax on both pages. */
+const BLOCK_SEPARATOR = /\n{2,}/;
+
+/**
+ * Lay markdown out as pages.
+ *
+ * A document imported from Word or PDF carries the breaks its author declared,
+ * and those win: the pages a person sees on the canvas are the pages they would
+ * see in the source file. Anything authored on the canvas has no declared
+ * breaks, so it is flowed at {@link WORDS_PER_PAGE} on block boundaries.
+ */
+export function paginateDocument(markdown: string): string[] {
+  const body = markdown.trim();
+  if (!body) return [];
+  if (body.includes(PAGE_BREAK_MARKER)) {
+    const declared = body.split(PAGE_BREAK_MARKER).map((page) => page.trim()).filter(Boolean);
+    if (declared.length) return declared;
+  }
+  const blocks = body.split(BLOCK_SEPARATOR).map((block) => block.trim()).filter(Boolean);
+  const pages: string[] = [];
+  let current: string[] = [];
+  let words = 0;
+  for (const block of blocks) {
+    const blockWords = block.match(WORD)?.length ?? 0;
+    if (current.length && words + blockWords > WORDS_PER_PAGE) {
+      pages.push(current.join('\n\n'));
+      current = [];
+      words = 0;
+    }
+    current.push(block);
+    words += blockWords;
+  }
+  if (current.length) pages.push(current.join('\n\n'));
+  return pages.length ? pages : [body];
 }
 
 const HEADING_LINE = /^(#{1,6})\s+(.+?)\s*#*$/;
@@ -80,8 +123,12 @@ export function plainText(value: string): string {
 
 /** The rendered document an object carries, or `null` when nothing is authored. */
 export function canvasDocument(data: CreationNodeData): CanvasDocument | null {
-  const markdown = chatTranscript(data) ?? authoredMarkdown(data);
-  if (!markdown?.trim()) return null;
+  const source = chatTranscript(data) ?? authoredMarkdown(data);
+  if (!source?.trim()) return null;
+  const pages = paginateDocument(source);
+  // The break marker is structure, not content: it drives pagination and never
+  // reaches a heading list, a word count, or an exported file.
+  const markdown = pages.join('\n\n');
   const headings = markdown.split('\n').flatMap((line) => {
     const match = HEADING_LINE.exec(line.trim());
     return match ? [{ level: match[1]!.length, text: plainText(match[2]!) }] : [];
@@ -91,7 +138,8 @@ export function canvasDocument(data: CreationNodeData): CanvasDocument | null {
     markdown,
     headings,
     wordCount,
-    pageCount: Math.max(1, Math.ceil(wordCount / WORDS_PER_PAGE)),
+    pages,
+    pageCount: pages.length,
     readingMinutes: Math.max(1, Math.round(wordCount / WORDS_PER_MINUTE)),
   };
 }
@@ -316,10 +364,13 @@ function objectFile(nodeId: string, data: CreationNodeData): CanvasFile | null {
   if (TABULAR_KINDS.has(data.kind)) {
     const { rows, columns, bytes } = tabularCsvSize(data);
     if (!rows && !columns) return null;
-    const name = typeof data.fileName === 'string' && data.fileName.trim() ? data.fileName.trim() : `${stem}.csv`;
-    const extension = fileExtension(name) || 'csv';
+    // A sheet exports as CSV whatever it was imported from, so the row is named
+    // for the bytes it produces — an `.xlsx` label on a CSV download is a lie.
+    const source = typeof data.fileName === 'string' && data.fileName.trim() ? data.fileName.trim() : data.title;
+    const sheet = typeof data.activeSheet === 'string' && data.activeSheet.trim() ? `-${fileStem(data.activeSheet)}` : '';
     return {
-      ...base, name, extension, category: 'spreadsheet', mimeType: fileMimeType(extension, data.mimeType),
+      ...base, name: `${fileStem(source.replace(/\.[a-z0-9]{1,8}$/i, ''))}${sheet}.csv`, extension: 'csv',
+      category: 'spreadsheet', mimeType: 'text/csv',
       sizeBytes: bytes, detail: `${rows}×${columns}`,
     };
   }

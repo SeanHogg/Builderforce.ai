@@ -541,7 +541,12 @@ export async function readPdf(bytes: Uint8Array): Promise<PdfDocument | null> {
     } catch { /* a stream this reader cannot inflate contributes nothing */ }
     if (chunks.length >= pageCount + 8) break;
   }
-  const text = chunks.join('\n\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  // One content stream is one page, so the extracted body keeps the source's
+  // own pagination instead of being re-flowed into pages nobody laid out.
+  const text = chunks.map((chunk) => chunk.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim())
+    .filter(Boolean)
+    .join(`\n\n${PAGE_BREAK_MARKER}\n\n`)
+    .trim();
   return {
     pageCount,
     text: text && legibility(text) > 0.9 && /\p{L}{3}/u.test(text) ? text : null,

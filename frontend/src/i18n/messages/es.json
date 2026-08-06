@@ -799,7 +799,8 @@
       "in_progress": "En curso",
       "in_review": "En revisión",
       "done": "Hecha",
-      "blocked": "Bloqueada"
+      "blocked": "Bloqueada",
+      "shipped": "Entregado"
     },
     "epicPriority": {
       "low": "Baja",
@@ -2010,7 +2011,14 @@
         "subtitle": "Cómo fluye el valor entre iniciativas — y dónde se bloquea.",
         "criticalPath": "Ruta crítica",
         "cycle": "⚠ ciclo de dependencias",
-        "noDeps": "Aún no hay dependencias de iniciativas — vincula bloqueadores en el portafolio para trazar el flujo de valor."
+        "noDeps": "Aún no hay dependencias de iniciativas — vincula bloqueadores en el portafolio para trazar el flujo de valor.",
+        "completion": "{pct}% entregado",
+        "status": {
+          "proposed": "Propuesta",
+          "active": "Activa",
+          "completed": "Completada",
+          "archived": "Archivada"
+        }
       }
     },
     "aiImpact": {
@@ -10503,7 +10511,16 @@
     "statusAddNode": "Añade al menos un nodo primero.",
     "statusRunFailed": "Error en la ejecución",
     "statusExportFailed": "Error al exportar",
-    "statusImportFailed": "Error al importar"
+    "statusImportFailed": "Error al importar",
+    "nodeGroup": {
+      "trigger": "Disparador",
+      "llmLogic": "Lógica LLM",
+      "evermindBuild": "Construcción Evermind",
+      "integrations": "Integraciones",
+      "agent": "Agente",
+      "etl": "ETL",
+      "output": "Salida"
+    }
   },
   "chunkError": {
     "recovering": "Actualizando a la última versión…",
@@ -13065,7 +13082,17 @@
       "category_code": "Código",
       "category_web": "Sitio",
       "category_other": "Otro"
-    }
+    },
+    "creativeSelectFirst": "Selecciona primero un objeto creativo",
+    "creativePreviewOpened": "Vista previa abierta",
+    "creativeDownloaded": "Entregable descargado",
+    "creativeGenerating": "Generando…",
+    "creativeGenerated": "{file} generado y validado",
+    "creativeGeneratedOffline": "{file} generado con la base sin conexión: el generador no estaba disponible",
+    "creativeGeneratedStatus": "Generado",
+    "creativeApplied": "Aplicado",
+    "creativeNoMediaModel": "Publica un modelo multimedia de Evermind para renderizar este objeto",
+    "creativeNoFrames": "El modelo no devolvió fotogramas legibles"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",
@@ -13086,16 +13113,21 @@
       "reset": "Restablecer la vista",
       "layerName": "Capa {index}",
       "layerCount": "{count, plural, one {# objeto} other {# objetos}}",
-      "layerGuides": "Guías de capa",
-      "layerGuidesActive": "Ocultar las guías de capa",
-      "layerGuidesInactive": "Mostrar las guías de capa",
+      "layerGuides": "Guías de capas",
+      "layerGuidesActive": "Ocultar las guías de capas",
+      "layerGuidesInactive": "Mostrar las guías de capas",
       "dropToLayers": "Devolver los objetos a sus capas",
       "orbitLabel": "Lienzo 3D. Arrastra para orbitar, desplázate para hacer zoom o usa las flechas del teclado.",
-      "spaceLabel": "Lienzo 3D. Arrastra un objeto para moverlo, arrástralo con Mayús para moverlo en profundidad, arrastra el espacio para girarlo, desplázate para hacer zoom o usa las flechas del teclado.",
+      "spaceLabel": "Lienzo 3D. Arrastra un objeto para moverlo, arrástralo con Mayús para moverlo en profundidad, arrastra el espacio para girarlo, usa la rueda para acercar o las flechas del teclado.",
       "hint": "Arrastra para orbitar · Desplázate para hacer zoom · Las flechas rotan, + y − hacen zoom, 0 restablece · Selecciona un objeto para abrirlo",
-      "spaceHint": "Arrastra un objeto para moverlo; mantén Mayús para moverlo en profundidad · Arrastra el espacio para girarlo; mantén Mayús o usa el botón central para desplazarte · Desplázate para hacer zoom · Las flechas giran el espacio y mueven el objeto enfocado, + y − hacen zoom, 0 restablece",
+      "spaceHint": "Arrastra un objeto para moverlo, con Mayús para moverlo en profundidad · Arrastra el espacio para girarlo, con Mayús o el botón central para desplazarlo · Rueda para acercar · Las flechas giran el espacio y mueven el objeto enfocado, + y − acercan, 0 restablece",
       "empty": "Añade objetos a este lienzo para verlos en 3D.",
       "previewAlt": "Vista previa de {label}"
     }
+  },
+  "workspaceCanvas": {
+    "panelLabel": "Panel de lienzo {title}",
+    "removePanel": "Quitar {title} del lienzo",
+    "defaultGroup": "Paneles"
   }
 }

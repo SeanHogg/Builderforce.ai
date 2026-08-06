@@ -405,3 +405,20 @@ export const NODE_KIND_MAP: Record<WorkflowNodeKind, NodeKindMeta> = NODE_KINDS.
 );
 
 export const NODE_GROUPS: NodeGroup[] = ['Trigger', 'LLM Logic', 'Evermind Build', 'Integrations', 'Agent', 'ETL', 'Output'];
+
+/**
+ * The translation key each family is named by.
+ *
+ * The catalog's own group names are identifiers, not copy: the palette heading and
+ * the 3D group badge both show a family to a reader, so the catalog says which key
+ * names it rather than either surface shipping its own English.
+ */
+export const NODE_GROUP_KEYS: Record<NodeGroup, string> = {
+  'Trigger': 'trigger',
+  'LLM Logic': 'llmLogic',
+  'Evermind Build': 'evermindBuild',
+  'Integrations': 'integrations',
+  'Agent': 'agent',
+  'ETL': 'etl',
+  'Output': 'output',
+};

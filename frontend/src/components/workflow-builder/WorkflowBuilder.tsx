@@ -30,10 +30,10 @@ import {
 import { fetchProjects } from '@/lib/api';
 import { downloadText } from '@/lib/download';
 import type { Project } from '@/lib/types';
-import { BuilderNode, type BuilderNodeData } from './BuilderNode';
+import { BuilderNode, configSummary, type BuilderNodeData } from './BuilderNode';
 import { NodeConfigPanel } from './NodeConfigPanel';
 import { EvermindBuildPanel } from './EvermindBuildPanel';
-import { NODE_GROUPS, NODE_KINDS, NODE_KIND_MAP } from './nodeKinds';
+import { NODE_GROUPS, NODE_GROUP_KEYS, NODE_KINDS, NODE_KIND_MAP, type NodeGroup } from './nodeKinds';
 import { hasBuildNodes, loadTemplateGraph, EVERMIND_BUILD_TEMPLATES } from '@/lib/evermindBuild';
 import {
   INTEGRATIONS, INTEGRATION_CATEGORIES, integrationAccent, integrationIcon, presetConfig,
@@ -198,6 +198,17 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
 
   const threeD = useCanvasThreeD();
   /**
+   * The one place a node family is named for a reader.
+   *
+   * The palette headings and the 3D group badge are the same seven families, so
+   * they read from one translation rather than each shipping its own copy of the
+   * catalog's internal English.
+   */
+  const nodeGroupLabel = useCallback(
+    (group: NodeGroup) => t(`nodeGroup.${NODE_GROUP_KEYS[group]}` as 'nodeGroup.trigger'),
+    [t],
+  );
+  /**
    * How a step reads in the 3D space.
    *
    * A workflow IS a dependency flow, so the depth axis is the graph's own subject:
@@ -210,13 +221,13 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
     const meta = NODE_KIND_MAP[node.data.kind];
     return {
       label: node.data.label || meta?.label || node.data.kind,
-      sublabel: meta?.blurb,
-      group: meta?.group ?? 'Integrations',
+      sublabel: configSummary(node.data.kind, node.data.config ?? {}),
+      group: nodeGroupLabel(meta?.group ?? 'Integrations'),
       icon: meta?.icon,
       accent: meta?.accent,
       depthOffset: canvas3dDepthOffset(node),
     };
-  }, []);
+  }, [nodeGroupLabel]);
   const moveThreeD = useCallback(
     (moves: readonly Canvas3DMove[]) => setNodes((current) => applyCanvas3DMoves(current, moves)),
     [setNodes],
@@ -549,7 +560,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
             if (!items.length) return null;
             return (
               <div key={group} style={{ marginBottom: 12 }}>
-                <div style={groupLabelStyle}>{group}</div>
+                <div style={groupLabelStyle}>{nodeGroupLabel(group)}</div>
                 {items.map((m) => (
                   <button
                     key={m.kind}
@@ -602,6 +613,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
           onDragOver={onCanvasDragOver}
           onDrop={onCanvasDrop}
         >
+          <Canvas3DControlsProvider>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -621,8 +633,19 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
               setMinimapOpen={setMinimapOpen}
               onCleanLayout={cleanLayout}
               minimapStyle={{ background: 'var(--bg-deep)' }}
+              {...threeD.commandProps}
             />
           </ReactFlow>
+          {threeD.active && <Canvas3DView
+            nodes={nodes}
+            edges={edges.map((edge) => ({ source: edge.source, target: edge.target }))}
+            describe={describeThreeD}
+            selectedIds={selectedId ? [selectedId] : []}
+            onSelect={setSelectedId}
+            onMove={moveThreeD}
+            onExit={threeD.exit}
+          />}
+          </Canvas3DControlsProvider>
           {nodes.length === 0 && (
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
               <div style={{ fontSize: 13, color: 'var(--text-muted)', textAlign: 'center' }}>

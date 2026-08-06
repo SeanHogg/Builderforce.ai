@@ -13,7 +13,7 @@ import { creationObjectDefinition } from './creationObjectRegistry';
 import { BrainActivityBar, brainActivityLine, useBrainActivity } from './BrainActivityView';
 import { BrainSurfaceActions, BrainSurfaceBody } from './BrainDock';
 import { useBrainSurface } from './brainSurfaceContext';
-import { highlightToneFor, tabularFromObject, type TabularCell, type TabularHighlightRule } from '@/lib/canvasTabularData';
+import { highlightToneFor, profileTabular, tabularFromObject, workbookSheets, type TabularCell, type TabularHighlightRule } from '@/lib/canvasTabularData';
 import { creativePreviewImageUrl } from '@/lib/creationDeliverables';
 import { canvasDiagram, canvasDocument, canvasSlides } from '@/lib/canvasDocuments';
 import { drawioLabelLines, drawioShapePolygon, parseDrawioXml, resolveDrawioXml, type DrawioGraph } from '@/lib/drawioDiagram';
@@ -305,8 +305,24 @@ function DataGridBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patc
   const source = tabularFromObject(data as Record<string, unknown>);
   const editable = !!onEdit && Array.isArray(data.rows) && (data.kind === 'spreadsheet' || data.kind === 'table');
   const [draft, setDraft] = useState<{ row: number; column: string; value: string } | null>(null);
+  const sheets = workbookSheets(data as Record<string, unknown>);
+  const activeSheet = textValue(data.activeSheet, sheets[0]?.name ?? '');
   const writeRows = (rows: Array<Record<string, TabularCell>>, columns = source.columns) => {
-    onEdit?.({ columns, rows, rowCount: rows.length, sampleRows: rows.slice(0, 25) });
+    onEdit?.({
+      columns, rows, rowCount: rows.length, sampleRows: rows.slice(0, 25), profile: profileTabular({ columns, rows }),
+      // An edit belongs to the tab it was made on. Without writing it back into
+      // the workbook, switching sheets and returning would discard it.
+      ...(sheets.length ? { sheets: sheets.map((sheet) => sheet.name === activeSheet ? { name: sheet.name, columns, rows } : sheet) } : {}),
+    });
+  };
+  const selectSheet = (name: string) => {
+    const sheet = sheets.find((item) => item.name === name);
+    if (!sheet || name === activeSheet) return;
+    onEdit?.({
+      activeSheet: name, columns: sheet.columns, rows: sheet.rows, rowCount: sheet.rows.length,
+      sampleRows: sheet.rows.slice(0, 25), profile: profileTabular(sheet),
+      subtitle: t('rowsColumns', { rows: sheet.rows.length, columns: sheet.columns.length }),
+    });
   };
   const commitDraft = () => {
     if (!draft) { return; }
@@ -356,6 +372,17 @@ function DataGridBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patc
     }, {})
     : {};
   return <div className={styles.dataGridBody}>
+    {sheets.length > 1 && <div className={`${styles.sheetTabs} nodrag nowheel`} role="tablist" aria-label={t('workbookSheets')}>
+      {sheets.map((sheet) => <button
+        key={sheet.name}
+        type="button"
+        role="tab"
+        aria-selected={sheet.name === activeSheet}
+        disabled={!onEdit}
+        title={t('sheetShape', { name: sheet.name, rows: sheet.rows.length, columns: sheet.columns.length })}
+        onClick={(event) => { event.stopPropagation(); selectSheet(sheet.name); }}
+      >{sheet.name}</button>)}
+    </div>}
     <p className={styles.fileMeta}>
       {t('rowsColumns', { rows: totalRows, columns: source.columns.length })}
       {source.columns.length > columns.length ? ` · ${t('columnsHidden', { hidden: source.columns.length - columns.length })}` : ''}
@@ -407,17 +434,44 @@ function DataGridBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patc
  */
 function DocumentBody({ data }: { data: CreationNodeData }) {
   const t = useTranslations('creationCanvas.node');
+  const [requested, setRequested] = useState(0);
   const document = canvasDocument(data);
+  const pages = document?.pages ?? [];
+  // Editing can shorten a document under a reader who has turned past the new
+  // last page, so the rendered page is always clamped to what exists.
+  const page = Math.min(Math.max(requested, 0), Math.max(0, pages.length - 1));
   if (!document) return <AuthoredContent data={data} fallback={t('documentFallback')} />;
+  const paginated = pages.length > 1;
   return <div className={styles.documentBody}>
     <div className={styles.documentMeta}>
       <span>{t('documentPages', { count: document.pageCount })}</span>
       <span>{t('documentWords', { count: document.wordCount })}</span>
       <span>{t('documentReading', { minutes: document.readingMinutes })}</span>
+      {typeof data.sourceFormat === 'string' && <span>{String(data.sourceFormat)}</span>}
     </div>
     <div className={`${styles.documentSheet} nowheel nodrag`} role="region" aria-label={data.title} tabIndex={0}>
-      <div className={styles.documentMarkdown}><ReactMarkdown remarkPlugins={[remarkGfm]}>{document.markdown}</ReactMarkdown></div>
+      <div className={styles.documentPage} data-paginated={paginated ? 'true' : undefined}>
+        <div className={styles.documentMarkdown}><ReactMarkdown remarkPlugins={[remarkGfm]}>{pages[page] ?? document.markdown}</ReactMarkdown></div>
+        {paginated && <span className={styles.documentPageNumber} aria-hidden>{page + 1}</span>}
+      </div>
     </div>
+    {paginated && <div className={`${styles.documentPager} nodrag nowheel`}>
+      <button
+        type="button"
+        disabled={page === 0}
+        aria-label={t('previousPage')}
+        title={t('previousPage')}
+        onClick={(event) => { event.stopPropagation(); setRequested(page - 1); }}
+      >‹</button>
+      <span aria-live="polite">{t('pageOfPages', { page: page + 1, total: pages.length })}</span>
+      <button
+        type="button"
+        disabled={page >= pages.length - 1}
+        aria-label={t('nextPage')}
+        title={t('nextPage')}
+        onClick={(event) => { event.stopPropagation(); setRequested(page + 1); }}
+      >›</button>
+    </div>}
   </div>;
 }
 
@@ -945,6 +999,18 @@ function BrainObjectBody({ nodeId, data }: { nodeId: string; data: CreationNodeD
 }
 
 /**
+ * The run, read off the Object's own data. The mark and the anchor narrate the same
+ * turn from the same three fields, so they derive it once and can never disagree.
+ */
+function useBrainNodeActivity(data: CreationNodeData) {
+  return useBrainActivity(
+    data.brainRunning === true,
+    Array.isArray(data.trace) ? data.trace as BrainTraceEvent[] : [],
+    typeof data.brainRunStartedAt === 'number' ? data.brainRunStartedAt : null,
+  );
+}
+
+/**
  * The mark: Brain reduced to a single object on the board while the conversation
  * lives in the edge dock.
  *
@@ -959,16 +1025,14 @@ function BrainObjectBody({ nodeId, data }: { nodeId: string; data: CreationNodeD
  */
 function BrainMarkerBody({ data, onOpen }: { data: CreationNodeData; onOpen: () => void }) {
   const t = useTranslations('creationCanvas.node');
-  const running = data.brainRunning === true;
-  const trace = Array.isArray(data.trace) ? data.trace as BrainTraceEvent[] : [];
-  const activity = useBrainActivity(running, trace, typeof data.brainRunStartedAt === 'number' ? data.brainRunStartedAt : null);
+  const activity = useBrainNodeActivity(data);
   const phase = brainActivityLine(activity.live);
   const label = phase ? t('brainMarkerBusy', { phase }) : t('openBrainChat');
 
   return <button
     type="button"
     className={styles.brainMarker}
-    data-state={running ? 'running' : 'idle'}
+    data-state={activity.live ? 'running' : 'idle'}
     aria-label={label}
     title={label}
     onClick={onOpen}
@@ -995,9 +1059,7 @@ function BrainAnchorBody({ data, onOpen }: { data: CreationNodeData; onOpen?: ()
   const lastUser = [...messages].reverse().find((message) => message.role === 'user');
   const lastAssistant = [...messages].reverse().find((message) => message.role !== 'user');
   const reply = lastAssistant?.content || (typeof data.aiResponse === 'string' ? data.aiResponse : '');
-  const running = data.brainRunning === true;
-  const trace = Array.isArray(data.trace) ? data.trace as BrainTraceEvent[] : [];
-  const activity = useBrainActivity(running, trace, typeof data.brainRunStartedAt === 'number' ? data.brainRunStartedAt : null);
+  const activity = useBrainNodeActivity(data);
   // The live phase is narrated ONCE, by the bar below — a turn with no reply yet
   // shows the invitation rather than repeating "Churning…" twice in one card.
   const brainText = reply || t('brainAnchorReplyFallback');

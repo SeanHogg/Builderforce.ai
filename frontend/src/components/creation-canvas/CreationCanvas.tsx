@@ -59,9 +59,10 @@ import { exportCsv, exportDocx, exportPptx } from '@/lib/exportApi';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 import {
   MAX_MATERIALIZED_ROWS, MAX_TABULAR_COLUMNS, TABULAR_AGGREGATE_OPERATORS, TABULAR_FILTER_OPERATORS,
-  isTabularFile, parseTabularText, profileTabular, queryTabular, tabularFromObject,
+  parseTabularText, profileTabular, queryTabular, tabularFromObject,
   type TabularHighlightRule, type TabularQuery, type TabularSource,
 } from '@/lib/canvasTabularData';
+import { datasetObjectData, importCanvasFile, type ImportTranslator } from '@/lib/canvasFileImport';
 import { WorkflowBuilder } from '@/components/workflow-builder/WorkflowBuilder';
 import { VoiceConfigPanel } from '@/components/ide/VoiceConfigPanel';
 import { VoiceOutput } from '@/components/ide/VoiceOutput';
@@ -75,7 +76,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { useLlmModels } from '@/lib/useLlmModels';
 import { ChatInput, type ChatModelOptions, type ChatModelSelection } from '@/components/ChatInput';
 import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
-import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, creativeMeshGeometry, creativePreviewImageUrl, generateEvermindMedia, mediaFrameDataUrl, navigableArtifactUrl, withCreationDeliverable, type CreationDeliverable } from '@/lib/creationDeliverables';
+import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, creativeBrief, creativeMeshGeometry, creativePreviewImageUrl, evermindMediaArtifact, generateEvermindMedia, generateServerCreativeArtifact, mediaFrameDataUrl, navigableArtifactUrl, withCreationDeliverable, EVERMIND_CREATIVE_KINDS, SERVER_CREATIVE_KINDS, type CreationDeliverable, type CreativeArtifact } from '@/lib/creationDeliverables';
 import { canvasDiagram, canvasFiles, canvasObjectMarkdown, type CanvasFile } from '@/lib/canvasDocuments';
 import { listEvermindModels } from '@/lib/studioModelsApi';
 import { AITrainingPanel } from '@/components/AITrainingPanel';
@@ -250,30 +251,19 @@ function artifactCsv(data: CreationNodeData): string | null {
   return toCsv(columns, rows);
 }
 
-/**
- * Canonical Dataset object fields for an imported or attached tabular file.
- * Both the inspector importer and the composer attachment build the object
- * through this helper, so an uploaded file is previewable and queryable no
- * matter which route it arrived by.
- */
-function datasetObjectData(fileName: string, source: TabularSource, options: { mimeType?: string; subtitle: string; status: string }): Partial<CreationNodeData> {
-  return {
-    title: fileName,
-    fileName,
-    ...(options.mimeType ? { mimeType: options.mimeType } : {}),
-    columns: source.columns,
-    rows: source.rows,
-    sampleRows: source.rows.slice(0, 25),
-    rowCount: source.rows.length,
-    profile: profileTabular(source),
-    status: options.status,
-    subtitle: options.subtitle,
-  };
-}
+/** Horizontal gap between objects created by one multi-file drop, so a folder
+ * dropped at once lands as a readable row rather than a single stack. */
+const IMPORT_COLUMN_GAP = 360;
+/** Files read from a single drop. Past this the board stops being legible and
+ * the parse cost stops being worth it, so the rest are reported, not silently
+ * discarded. */
+const MAX_DROPPED_FILES = 12;
 
-/** Text attachments Brain can read directly once they are on the canvas. */
-const READABLE_TEXT_FILE = /\.(txt|md|markdown|log|xml|yaml|yml|html?|sql|ini|conf|env\.example)$/i;
-const MAX_FILE_PREVIEW_CHARS = 20_000;
+/** Whether a drag carries files from outside the browser, as opposed to an
+ * object being dragged off the palette. */
+function dragCarriesFiles(event: React.DragEvent): boolean {
+  return Array.from(event.dataTransfer?.types ?? []).includes('Files');
+}
 
 const SEED = {
   workflow: '00000000-0000-4000-8000-000000000001', website: '00000000-0000-4000-8000-000000000002',
@@ -368,11 +358,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   /** Chrome shared with every other spatial canvas lives in its own namespace. */
   const tCommands = useTranslations('canvasCommands');
   const tFiles = useTranslations('creationCanvas.files');
+  const tImport = useTranslations('creationCanvas.import');
+  /** The import engine is a plain module, so it is handed the catalog rather
+   * than reaching for one — every string it produces stays translated. */
+  const importLabel = useCallback<ImportTranslator>((key, values) => tImport(key as never, values as never), [tImport]);
   const confirm = useConfirm();
   const toast = useToast();
   const storageKey = creationStorageKey(sessionId);
   const [nodes, setNodes, onNodesChange] = useNodesState<CreationFlowNode>(persistence === 'local' ? INITIAL_NODES : []);
   const [evermindLiveByNodeId, setEvermindLiveByNodeId] = useState<Record<string, Partial<CreationNodeData>>>({});
+  /** A file is being dragged over the board from outside the browser. */
+  const [fileDragging, setFileDragging] = useState(false);
+  const fileDragDepth = useRef(0);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(persistence === 'local' ? INITIAL_EDGES : []);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -1456,56 +1453,52 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: 'web', objectKinds: [kind] } });
   }, [canEdit, sessionId, setNodes, timeline]);
 
-  const attachCanvasArtifact = useCallback(async (file: File) => {
+  /**
+   * Files arriving from anywhere — dropped from the desktop, attached in the
+   * composer — become the objects they actually are: a Word file opens as a
+   * document with pages, a workbook as a sheet per tab, a deck as slides, a
+   * data export as a queryable Dataset. The board is the creative starting
+   * space, so the drop also puts the first question in the composer and opens
+   * Brain: a file that lands here starts a conversation, it does not just sit
+   * there as an icon.
+   */
+  const addFilesToCanvas = useCallback(async (files: File[], origin?: { x: number; y: number }, source = 'canvas_drop') => {
     if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
-    const position = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 300 };
-    const isImage = file.type.startsWith('image/');
-    // A dropped data file becomes a real Dataset, not an opaque attachment:
-    // it must be previewable on the canvas and queryable by Brain immediately.
-    const tabular = !isImage && isTabularFile(file.name, file.type) ? parseTabularText(file.name, await file.text()) : null;
-    const parsed = tabular?.columns.length && tabular.rows.length ? tabular : null;
-    const node = newNode(isImage ? 'image' : parsed ? 'dataset' : 'file', position);
-    let dataUrl: string | null = null;
-    if (isImage) {
-      dataUrl = await new Promise<string | null>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : null);
-        reader.onerror = () => resolve(null);
-        reader.readAsDataURL(file);
-      });
-    }
-    const readableText = !isImage && !parsed && (READABLE_TEXT_FILE.test(file.name) || file.type.startsWith('text/'))
-      ? (await file.text()).slice(0, MAX_FILE_PREVIEW_CHARS)
-      : '';
-    node.data = parsed
-      ? {
-        ...node.data,
-        ...datasetObjectData(file.name, parsed, {
-          mimeType: file.type || 'text/csv',
-          subtitle: t('datasetShape', { rows: parsed.rows.length.toLocaleString(), columns: parsed.columns.length }),
-          status: t('datasetStatusImported'),
-        }),
-        fileSize: file.size,
+    if (!files.length) return;
+    const start = origin ?? flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 300 };
+    const created: CreationFlowNode[] = [];
+    const notices: string[] = [];
+    let suggestion = '';
+    for (const file of files.slice(0, MAX_DROPPED_FILES)) {
+      try {
+        const imported = await importCanvasFile(file, importLabel);
+        for (const object of imported.objects) {
+          const node = newNode(object.kind, { x: start.x + created.length * IMPORT_COLUMN_GAP, y: start.y });
+          node.data = { ...node.data, ...object.data } as CreationNodeData;
+          created.push(node);
+        }
+        notices.push(imported.notice);
+        if (!suggestion) suggestion = imported.suggestedPrompt;
+      } catch {
+        notices.push(importLabel('failed', { name: file.name }));
       }
-      : {
-        ...node.data,
-        title: file.name,
-        fileName: file.name,
-        subtitle: `${file.type || t('fileGeneric')} · ${Math.max(1, Math.round(file.size / 1024)).toLocaleString()} KB`,
-        status: isImage ? t('imageAttached') : t('fileAttached'),
-        mimeType: file.type || 'application/octet-stream',
-        fileSize: file.size,
-        ...(readableText ? { content: readableText } : {}),
-        ...(dataUrl ? { thumbnailUrl: dataUrl, outputUrl: dataUrl } : {}),
-      };
-    setNodes((current) => [...current, node]);
-    setSelectedId(node.id);
-    setSelectedIds([node.id]);
-    setNotice(parsed
-      ? t('datasetAttached', { name: file.name, rows: parsed.rows.length.toLocaleString(), columns: parsed.columns.length })
-      : t('fileAddedToCanvas', { name: file.name }));
-    trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: 'web', objectKinds: [node.data.kind], source: 'composer_attachment' } });
-  }, [canEdit, sessionId, setNodes, t]);
+    }
+    if (files.length > MAX_DROPPED_FILES) notices.push(importLabel('tooManyFiles', { limit: MAX_DROPPED_FILES }));
+    if (!created.length) { setNotice(notices.join(' · ')); return; }
+    setNodes((current) => [...current, ...created]);
+    setSelectedId(created[0]!.id);
+    setSelectedIds(created.map((node) => node.id));
+    setNotice(notices.join(' · '));
+    // Never overwrite something the person is part-way through typing.
+    if (suggestion) setPrompt((current) => current.trim() ? current : suggestion);
+    openBrainDock();
+    trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: 'web', objectKinds: created.map((node) => node.data.kind), source } });
+  }, [canEdit, importLabel, openBrainDock, sessionId, setNodes, t]);
+
+  const attachCanvasArtifact = useCallback(
+    (file: File) => addFilesToCanvas([file], undefined, 'composer_attachment'),
+    [addFilesToCanvas],
+  );
 
   const applyTemplate = useCallback((template: CreationTemplate) => {
     if (!canEdit) return;
@@ -1980,13 +1973,33 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   const onDrop = useCallback((event: React.DragEvent) => {
     event.preventDefault();
-    if (!canEdit) { setNotice('Your session role does not allow editing'); return; }
+    fileDragDepth.current = 0;
+    setFileDragging(false);
+    if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
+    const point = flowRef.current?.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    // A file dragged in from the desktop lands where it was dropped and becomes
+    // a real object; a palette drag still carries only an object kind.
+    const files = Array.from(event.dataTransfer.files ?? []);
+    if (files.length) { void addFilesToCanvas(files, point); return; }
     const kind = event.dataTransfer.getData(DND_MIME) as CreationObjectKind;
-    if (!kind || !flowRef.current) return;
-    const node = newNode(kind, flowRef.current.screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+    if (!kind || !point) return;
+    const node = newNode(kind, point);
     setNodes((current) => [...current, node]);
     setSelectedId(node.id); setSelectedIds([node.id]);
-  }, [canEdit, setNodes]);
+  }, [addFilesToCanvas, canEdit, setNodes, t]);
+
+  /** Drag events fire again for every child element the pointer crosses, so the
+   * overlay is held by a depth count rather than by the last event seen. */
+  const onCanvasDragEnter = useCallback((event: React.DragEvent) => {
+    if (!dragCarriesFiles(event)) return;
+    fileDragDepth.current += 1;
+    setFileDragging(true);
+  }, []);
+  const onCanvasDragLeave = useCallback((event: React.DragEvent) => {
+    if (!dragCarriesFiles(event)) return;
+    fileDragDepth.current = Math.max(0, fileDragDepth.current - 1);
+    if (!fileDragDepth.current) setFileDragging(false);
+  }, []);
 
   const canvasActions = useMemo<BrainAction[]>(() => [{
     name: 'canvas_read_snapshot',
@@ -2827,7 +2840,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const runCreativeAction = useCallback((objectId?: string, action = 'generate') => {
     const target = nodes.find((node) => node.id === objectId && CREATIVE_GENERATOR_KINDS.has(node.data.kind))
       ?? (selectedNode && CREATIVE_GENERATOR_KINDS.has(selectedNode.data.kind) ? selectedNode : undefined);
-    if (!target) { setNotice('Select a creative object first'); return; }
+    if (!target) { setNotice(t('creativeSelectFirst')); return; }
     const existingUrl = typeof target.data.outputUrl === 'string' ? target.data.outputUrl : '';
     if ((action === 'preview' || action === 'export') && existingUrl) {
       // A browser refuses to open a `data:` URL in a top-level tab, so both paths
@@ -2841,20 +2854,82 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         anchor.click();
       }
       if (navigable !== existingUrl) window.setTimeout(() => URL.revokeObjectURL(navigable), 60_000);
-      setNotice(action === 'preview' ? 'Preview opened' : 'Deliverable downloaded');
+      setNotice(action === 'preview' ? t('creativePreviewOpened') : t('creativeDownloaded'));
       return;
     }
-    const artifact = buildBrowserCreativeArtifact(target.data);
-    const delivered: CreationDeliverable = {
-      id: crypto.randomUUID(), action, artifactKind: artifact.artifactKind, status: 'delivered', createdAt: new Date().toISOString(), completedAt: new Date().toISOString(),
-      url: artifact.url, mimeType: artifact.mimeType, fileName: artifact.fileName, provider: 'builderforce-browser', validation: { status: 'passed', detail: artifact.validationDetail }, metadata: { outputFormat: artifact.outputFormat, capabilityId: target.data.capabilityId },
+    /**
+     * The generator for this kind, best first.
+     *
+     * A creative brief has to produce the thing described in it, so the object goes
+     * to a real generator: the tenant's own published Evermind model renders the
+     * pixels, and the server generator authors the geometry, the game, the resume,
+     * the script. The browser baseline stays as the LAST answer, not the only one —
+     * it is what a local session, an unavailable model or a failed call falls back
+     * to, so a creative object always ends up with a real, portable file.
+     */
+    const deliveryId = crypto.randomUUID();
+    const correlationId = `deliver:${deliveryId}`;
+    const startedAt = performance.now();
+    const kind = target.data.kind;
+    const started: CreationDeliverable = { id: deliveryId, action, artifactKind: kind, status: 'running', createdAt: new Date().toISOString() };
+    setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: t('creativeGenerating'), deliverables: withCreationDeliverable(node.data, started) } } : node));
+    setNotice(t('creativeGenerating'));
+    if (persistence === 'server') {
+      void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: `creative.${action}`, phase: 'started', artifactId: target.id }).catch(() => undefined);
+    }
+
+    const generate = async (): Promise<CreativeArtifact> => {
+      if (persistence === 'server' && EVERMIND_CREATIVE_KINDS.has(kind)) {
+        const models = await listEvermindModels();
+        const configured = typeof target.data.modelSlug === 'string' ? target.data.modelSlug : '';
+        const model = models.find((candidate) => candidate.slug === configured || candidate.name === configured) ?? models[0];
+        if (!model) throw new Error(t('creativeNoMediaModel'));
+        const media = await generateEvermindMedia(model.slug, {
+          prompt: creativeBrief(target.data),
+          maxFrames: kind === 'animation' ? 24 : 1,
+        });
+        const rendered = evermindMediaArtifact(target.data, media, model.slug);
+        if (!rendered) throw new Error(t('creativeNoFrames'));
+        return rendered;
+      }
+      if (persistence === 'server' && SERVER_CREATIVE_KINDS.has(kind)) return generateServerCreativeArtifact(target.data);
+      return { ...buildBrowserCreativeArtifact(target.data), provider: 'builderforce-browser' };
     };
-    // The tile shows the preview the artifact came with, and nothing when it has
-    // none — a stale thumbnail from an earlier generation would misdescribe the
-    // file that is now attached.
-    setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: action === 'apply' ? 'Applied' : 'Generated', outputUrl: artifact.url, outputFormat: artifact.outputFormat, outputFileName: artifact.fileName, thumbnailUrl: artifact.previewImageUrl ?? '', deliverables: withCreationDeliverable(node.data, delivered) } } : node));
-    setNotice(`${artifact.fileName} generated and validated`);
-  }, [nodes, selectedNode, setNodes]);
+
+    void generate()
+      .then((artifact) => ({ artifact, fellBack: false }))
+      // A generator that is unavailable must not leave the object empty: the
+      // browser baseline is a real file, and saying which one produced it is the
+      // difference between a fallback and a silent downgrade.
+      .catch(() => ({ artifact: { ...buildBrowserCreativeArtifact(target.data), provider: 'builderforce-browser' } as CreativeArtifact, fellBack: true }))
+      .then(({ artifact, fellBack }) => {
+        const delivered: CreationDeliverable = {
+          ...started, artifactKind: artifact.artifactKind, status: 'delivered', completedAt: new Date().toISOString(),
+          url: artifact.url, mimeType: artifact.mimeType, fileName: artifact.fileName, provider: artifact.provider,
+          validation: { status: 'passed', detail: artifact.validationDetail },
+          metadata: { outputFormat: artifact.outputFormat, capabilityId: target.data.capabilityId, ...(artifact.model ? { model: artifact.model } : {}) },
+        };
+        // The tile shows the preview the artifact came with, and nothing when it
+        // has none — a stale thumbnail from an earlier generation would
+        // misdescribe the file that is now attached.
+        setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: {
+          ...node.data,
+          status: action === 'apply' ? t('creativeApplied') : t('creativeGeneratedStatus'),
+          outputUrl: artifact.url,
+          outputFormat: artifact.outputFormat,
+          outputFileName: artifact.fileName,
+          outputMimeType: artifact.mimeType,
+          provider: artifact.provider,
+          ...(artifact.summary ? { subtitle: artifact.summary } : {}),
+          thumbnailUrl: artifact.previewImageUrl ?? '',
+          deliverables: withCreationDeliverable(node.data, delivered),
+        } } : node));
+        setNotice(fellBack ? t('creativeGeneratedOffline', { file: artifact.fileName }) : t('creativeGenerated', { file: artifact.fileName }));
+        if (persistence === 'server') {
+          void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: `creative.${action}`, phase: 'succeeded', actorType: 'system', artifactId: target.id, durationMs: performance.now() - startedAt, metricKey: 'deliverables_completed', metricValue: 1, unit: 'count', metadata: { provider: artifact.provider, outputFormat: artifact.outputFormat } }).catch(() => undefined);
+        }
+      });
+  }, [nodes, persistence, selectedNode, sessionId, setNodes, t]);
 
   /**
    * The one export path for an authored object. The inspector's buttons, Brain's
@@ -3370,7 +3445,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // is an Object on the board and takes no edge, so it must not set this.
         data-brain-open={brainSurfaceOpen && brainDock.mode === 'docked' ? 'true' : 'false'}
         data-view={threeD ? '3d' : 'flat'}
-        data-cursor-mode={drawingMode ? 'draw' : 'pan'} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPoints.current = []; }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
+        data-cursor-mode={drawingMode ? 'draw' : 'pan'} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPoints.current = []; }} onDragEnter={onCanvasDragEnter} onDragLeave={onCanvasDragLeave} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
+        {fileDragging && <div className={styles.fileDropOverlay} role="status" aria-live="polite">
+          <div>
+            <span aria-hidden>⇩</span>
+            <strong>{canEdit ? t('dropFilesTitle') : t('roleCannotEdit')}</strong>
+            {canEdit && <small>{t('dropFilesHint')}</small>}
+          </div>
+        </div>}
         {!presentMode && effectiveSelectedIds.length > 0 && <div className={styles.selectionToolbar} aria-label={t('selectionActions')}>
           <span>{t('selectedCount', { count: effectiveSelectedIds.length })}</span>
           <button onClick={focusSelection}>{t('focus')}</button>

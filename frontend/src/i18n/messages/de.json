@@ -799,7 +799,8 @@
       "in_progress": "In Arbeit",
       "in_review": "In Prüfung",
       "done": "Erledigt",
-      "blocked": "Blockiert"
+      "blocked": "Blockiert",
+      "shipped": "Ausgeliefert"
     },
     "epicPriority": {
       "low": "Niedrig",
@@ -2010,7 +2011,14 @@
         "subtitle": "Wie Wert durch Initiativen fließt — und wo er blockiert ist.",
         "criticalPath": "Kritischer Pfad",
         "cycle": "⚠ Abhängigkeitszyklus",
-        "noDeps": "Noch keine Initiativen-Abhängigkeiten — verknüpfe Blocker im Portfolio, um den Wertstrom abzubilden."
+        "noDeps": "Noch keine Initiativen-Abhängigkeiten — verknüpfe Blocker im Portfolio, um den Wertstrom abzubilden.",
+        "completion": "{pct}% geliefert",
+        "status": {
+          "proposed": "Vorgeschlagen",
+          "active": "Aktiv",
+          "completed": "Abgeschlossen",
+          "archived": "Archiviert"
+        }
       }
     },
     "aiImpact": {
@@ -10503,7 +10511,16 @@
     "statusAddNode": "Fügen Sie zuerst mindestens einen Knoten hinzu.",
     "statusRunFailed": "Ausführung fehlgeschlagen",
     "statusExportFailed": "Export fehlgeschlagen",
-    "statusImportFailed": "Import fehlgeschlagen"
+    "statusImportFailed": "Import fehlgeschlagen",
+    "nodeGroup": {
+      "trigger": "Auslöser",
+      "llmLogic": "LLM-Logik",
+      "evermindBuild": "Evermind-Build",
+      "integrations": "Integrationen",
+      "agent": "Agent",
+      "etl": "ETL",
+      "output": "Ausgabe"
+    }
   },
   "chunkError": {
     "recovering": "Aktualisierung auf die neueste Version…",
@@ -13065,7 +13082,17 @@
       "category_code": "Code",
       "category_web": "Website",
       "category_other": "Sonstige"
-    }
+    },
+    "creativeSelectFirst": "Wählen Sie zuerst ein kreatives Objekt",
+    "creativePreviewOpened": "Vorschau geöffnet",
+    "creativeDownloaded": "Ergebnis heruntergeladen",
+    "creativeGenerating": "Wird erzeugt…",
+    "creativeGenerated": "{file} erzeugt und geprüft",
+    "creativeGeneratedOffline": "{file} mit der Offline-Basis erzeugt — der Generator war nicht verfügbar",
+    "creativeGeneratedStatus": "Erzeugt",
+    "creativeApplied": "Angewendet",
+    "creativeNoMediaModel": "Veröffentlichen Sie ein Evermind-Medienmodell, um dieses Objekt zu erzeugen",
+    "creativeNoFrames": "Das Modell lieferte keine lesbaren Einzelbilder"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
@@ -13089,13 +13116,18 @@
       "layerGuides": "Ebenenhilfslinien",
       "layerGuidesActive": "Ebenenhilfslinien ausblenden",
       "layerGuidesInactive": "Ebenenhilfslinien einblenden",
-      "dropToLayers": "Objekte zurück auf ihre Ebenen setzen",
+      "dropToLayers": "Objekte auf ihre Ebenen zurücksetzen",
       "orbitLabel": "3D-Canvas. Zum Drehen ziehen, zum Zoomen scrollen oder die Pfeiltasten verwenden.",
-      "spaceLabel": "3D-Canvas. Ein Objekt ziehen, um es zu bewegen, mit Umschalt ziehen, um es in der Tiefe zu bewegen, den Raum ziehen, um ihn zu drehen, scrollen zum Zoomen oder die Pfeiltasten verwenden.",
+      "spaceLabel": "3D-Leinwand. Ziehen Sie ein Objekt, um es zu bewegen, mit Umschalt in die Tiefe; ziehen Sie den Raum, um ihn zu drehen, scrollen Sie zum Zoomen oder nutzen Sie die Pfeiltasten.",
       "hint": "Ziehen zum Drehen · Scrollen zum Zoomen · Pfeiltasten drehen, + und − zoomen, 0 setzt zurück · Objekt auswählen, um es zu öffnen",
-      "spaceHint": "Objekt ziehen zum Bewegen, mit Umschalt in der Tiefe bewegen · Raum ziehen zum Drehen, mit Umschalt oder der mittleren Maustaste verschieben · Scrollen zum Zoomen · Pfeiltasten drehen den Raum und bewegen ein fokussiertes Objekt, + und − zoomen, 0 setzt zurück",
+      "spaceHint": "Ein Objekt ziehen bewegt es, mit Umschalt in die Tiefe · Den Raum ziehen dreht ihn, mit Umschalt oder mittlerer Taste verschieben · Scrollen zoomt · Pfeiltasten drehen den Raum und bewegen das fokussierte Objekt, + und − zoomen, 0 setzt zurück",
       "empty": "Füge diesem Canvas Objekte hinzu, um sie in 3D zu sehen.",
       "previewAlt": "Vorschau von {label}"
     }
+  },
+  "workspaceCanvas": {
+    "panelLabel": "Leinwand-Panel {title}",
+    "removePanel": "{title} von der Leinwand entfernen",
+    "defaultGroup": "Panels"
   }
 }

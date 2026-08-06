@@ -19,6 +19,8 @@
   --canvas-panel-muted: #f3f7fc;
   --canvas-hover: #e7effc;
   --canvas-shadow: rgba(24, 43, 74, .12);
+  /* Wash held over the board while a file is dragged in from the desktop. */
+  --canvas-drop-veil: rgba(41, 95, 199, .10);
   /* Accent INK: a tint or a glyph drawn ON a canvas surface. A hue legible on ink
      is invisible on paper, so this is a token with a value per theme rather than a
      literal repeated at each call site. */
@@ -973,6 +975,7 @@
   --canvas-muted:#9eafc6;
   --canvas-line:rgba(148,163,184,.24);
   --canvas-shadow:rgba(0,0,0,.42);
+  --canvas-drop-veil:rgba(114,161,255,.14);
   --canvas-accent-ink:#72a1ff;
   --canvas-positive-ink:#74d8a2;
   /* The same two palettes, restated once for dark. Nothing per-component. */
@@ -1172,6 +1175,65 @@
 .documentMarkdown a { color:var(--canvas-accent-ink,#2a5fc7); text-decoration:underline; }
 .documentMarkdown hr { margin:8px 0; border:0; border-top:1px solid var(--canvas-line,#d7e1ee); }
 .documentMarkdown img { max-width:100%; height:auto; border-radius:5px; }
+
+/* One page of a document, turned rather than scrolled. A file imported from
+   Word or PDF keeps the breaks its author declared, so the page on the card is
+   the page in the source file. */
+.documentPage { position:relative; min-height:0; }
+.documentPage[data-paginated='true'] { padding-bottom:14px; }
+.documentPageNumber {
+  position:absolute; right:0; bottom:0;
+  color:var(--canvas-muted,#5c6e88); font-size:8px; font-variant-numeric:tabular-nums;
+}
+.documentPager { display:flex; align-items:center; justify-content:center; gap:6px; }
+.documentPager span {
+  min-width:74px; color:var(--canvas-muted,#5c6e88);
+  font-size:8px; font-variant-numeric:tabular-nums; text-align:center;
+}
+.documentPager button {
+  display:grid; place-items:center; min-width:22px; min-height:22px; padding:0 6px;
+  border:1px solid var(--canvas-line,#d7e1ee); border-radius:6px;
+  background:var(--canvas-widget-surface,#fff); color:var(--canvas-ink,#142234);
+  font-size:12px; line-height:1; cursor:pointer;
+}
+.documentPager button:hover:not(:disabled) { background:var(--canvas-panel-muted,#f3f7fc); }
+.documentPager button:disabled { opacity:.4; cursor:default; }
+
+/* Workbook tabs. An imported .xlsx carries every sheet on one object, so moving
+   between them is a tab, not a second import of the same file. */
+.sheetTabs { display:flex; flex-wrap:wrap; gap:3px; }
+.sheetTabs button {
+  max-width:120px; padding:2px 8px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  border:1px solid var(--canvas-line,#d7e1ee); border-radius:999px;
+  background:var(--canvas-panel-muted,#f3f7fc); color:var(--canvas-muted,#5c6e88);
+  font-size:8px; cursor:pointer;
+}
+.sheetTabs button[aria-selected='true'] {
+  border-color:var(--canvas-accent-ink,#2a5fc7);
+  background:var(--canvas-widget-surface,#fff); color:var(--canvas-ink,#142234); font-weight:700;
+}
+.sheetTabs button:disabled { cursor:default; opacity:.6; }
+
+/* Held over the board while a file is dragged in from the desktop. It never
+   takes the pointer: an overlay that swallowed dragleave would flicker. */
+.fileDropOverlay {
+  position:absolute; inset:0; z-index:24; display:grid; place-items:center;
+  padding:16px; pointer-events:none;
+  background:var(--canvas-drop-veil,rgba(91,92,226,.09));
+  backdrop-filter:blur(1px);
+}
+.fileDropOverlay > div {
+  display:grid; justify-items:center; gap:5px;
+  max-width:min(320px,calc(100% - 32px)); padding:18px 22px;
+  border:2px dashed var(--canvas-accent-ink,#2a5fc7); border-radius:14px;
+  background:var(--canvas-widget-surface,#fff);
+  box-shadow:0 18px 46px var(--canvas-shadow,rgba(24,43,74,.18));
+  text-align:center;
+}
+.fileDropOverlay span { color:var(--canvas-accent-ink,#2a5fc7); font-size:22px; line-height:1; }
+.fileDropOverlay strong { color:var(--canvas-ink,#142234); font-size:13px; }
+.fileDropOverlay small { color:var(--canvas-muted,#5c6e88); font-size:11px; line-height:1.4; }
 
 .slideDeck {
   display:grid; gap:8px; grid-template-columns:repeat(auto-fill,minmax(126px,1fr));

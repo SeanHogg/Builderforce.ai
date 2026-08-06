@@ -220,6 +220,144 @@ export function buildBrowserCreativeArtifact(data: CreationNodeData): BrowserCre
   return { artifactKind: kind, fileName: `${stem}.json`, mimeType: 'application/json', url: textDataUrl('application/json', template), outputFormat: 'JSON', validationDetail: 'Valid Builderforce creative template manifest generated in the browser' };
 }
 
+/* ---------- generated creative artifacts ---------- */
+
+/**
+ * A creative deliverable and where it came from.
+ *
+ * One shape for all three generators — the server, the tenant's own Evermind model,
+ * and the browser baseline — so the canvas attaches a deliverable the same way
+ * whichever produced it, and the only difference the user sees is `provider`.
+ */
+export interface CreativeArtifact extends BrowserCreativeArtifact {
+  provider: string;
+  /** Which model authored it, when a model did. */
+  model?: string;
+  /** The generator's own account of what it made, when it gave one. */
+  summary?: string;
+}
+
+/**
+ * Kinds the server generator answers for.
+ *
+ * Geometry is authored as a parametric spec and evaluated server-side; the text
+ * kinds are authored directly and shape-checked. See `api/.../creativeRoutes`.
+ */
+export const SERVER_CREATIVE_KINDS = new Set(['cad', 'model3d', 'game', 'resume', 'podcast', 'template']);
+/** Kinds rendered by the tenant's own published Evermind media model. */
+export const EVERMIND_CREATIVE_KINDS = new Set(['image', 'comic', 'animation']);
+
+interface GeneratedCreativeResponse {
+  artifactKind: string;
+  fileName: string;
+  mimeType: string;
+  outputFormat: string;
+  content: string;
+  provider: string;
+  model: string;
+  validationDetail: string;
+  summary: string | null;
+}
+
+/** The brief a creative object was given, wherever the author typed it. */
+export function creativeBrief(data: CreationNodeData): string {
+  for (const candidate of [data.prompt, data.content, data.subtitle]) {
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+  }
+  return String(data.title ?? '').trim();
+}
+
+/**
+ * Generate a creative deliverable with the server generator.
+ *
+ * Rejects rather than degrading: the caller decides whether an unavailable
+ * generator means "try the browser baseline" (it does) — that choice belongs with
+ * the canvas, which is the thing that has to end up with a file either way.
+ */
+export async function generateServerCreativeArtifact(data: CreationNodeData): Promise<CreativeArtifact> {
+  const generated = await apiRequest<GeneratedCreativeResponse>('/api/creative/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      kind: data.kind,
+      title: String(data.title ?? data.kind),
+      brief: creativeBrief(data),
+      ...(typeof data.templateId === 'string' && data.templateId ? { templateId: data.templateId } : {}),
+    }),
+  });
+  // Geometry is not an image, so the file is drawn back rather than pointed at —
+  // the same reader the 3D view uses, so the tile and the space agree.
+  const preview = generated.artifactKind === 'cad'
+    ? dxfPreviewSvg(generated.content)
+    : generated.artifactKind === 'model3d' ? stlPreviewSvg(generated.content) : null;
+  return {
+    artifactKind: generated.artifactKind,
+    fileName: generated.fileName,
+    mimeType: generated.mimeType,
+    outputFormat: generated.outputFormat,
+    url: textDataUrl(generated.mimeType, generated.content),
+    validationDetail: generated.validationDetail,
+    provider: generated.provider,
+    model: generated.model,
+    ...(preview ? { previewImageUrl: svgDataUrl(preview) } : {}),
+    ...(generated.summary ? { summary: generated.summary } : {}),
+  };
+}
+
+/**
+ * Turn frames a published Evermind model rendered into a creative deliverable.
+ *
+ * A still kind keeps the first frame as a PNG. An animation keeps ALL of them in
+ * a self-contained page that plays them back — the point of the kind is motion,
+ * and a single frame of a generated sequence is a screenshot of the deliverable
+ * rather than the deliverable. Null when the frames cannot be decoded here, which
+ * is the caller's signal to fall back.
+ */
+export function evermindMediaArtifact(
+  data: CreationNodeData,
+  media: EvermindMediaResult,
+  modelSlug: string,
+): CreativeArtifact | null {
+  const kind = String(data.kind);
+  const stem = fileSafe(data.title);
+  const frames = media.frames
+    .map((frame) => mediaFrameDataUrl(frame, media.width, media.height, media.channels))
+    .filter((frame): frame is string => !!frame);
+  if (!frames.length) return null;
+
+  const common = { provider: 'evermind', model: modelSlug };
+  if (kind !== 'animation') {
+    return {
+      ...common,
+      artifactKind: kind,
+      fileName: `${stem}.png`,
+      mimeType: 'image/png',
+      url: frames[0]!,
+      outputFormat: 'PNG',
+      validationDetail: `${media.width}×${media.height} frame rendered by ${modelSlug}`,
+      previewImageUrl: frames[0]!,
+    };
+  }
+  const escapedTitle = escapeHtml(data.title);
+  const page = `<!doctype html><meta charset="utf-8"><title>${escapedTitle}</title>`
+    + '<style>html,body{height:100%;margin:0;background:#11152b;display:grid;place-items:center}'
+    + 'img{max-width:100vw;max-height:100vh;image-rendering:pixelated}'
+    + 'h1{position:fixed;left:4vw;bottom:5vh;margin:0;color:#fff;font:700 4vw system-ui}</style>'
+    + `<img id="f" alt="${escapedTitle}"><h1>${escapedTitle}</h1>`
+    + `<script>const frames=${JSON.stringify(frames)};let i=0;const img=document.getElementById('f');`
+    + 'const tick=()=>{img.src=frames[i++%frames.length]};tick();setInterval(tick,1000/12);</script>';
+  return {
+    ...common,
+    artifactKind: kind,
+    fileName: `${stem}.html`,
+    mimeType: 'text/html',
+    url: textDataUrl('text/html', page),
+    outputFormat: 'HTML',
+    validationDetail: `${frames.length} ${media.width}×${media.height} frames rendered by ${modelSlug} and played back at 12 fps`,
+    previewImageUrl: frames[0]!,
+  };
+}
+
 /** Build a complete, dependency-free site from an authored Website object. */
 export function buildWebsiteAssets(data: CreationNodeData): Array<{ path: string; data: Uint8Array }> {
   const title = escapeHtml(data.title || 'Created with Builderforce');

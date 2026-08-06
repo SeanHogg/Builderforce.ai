@@ -31,6 +31,7 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'table', label: 'Table', icon: '▦', group: 'Data', createData: () => ({ kind: 'table', title: 'Data table', status: 'Draft' }) },
   { kind: 'spreadsheet', label: 'Spreadsheet', icon: '▤', group: 'Data', createData: () => ({ kind: 'spreadsheet', title: 'Untitled spreadsheet', status: 'Draft' }) },
   { kind: 'chart', label: 'Chart', icon: '▥', group: 'Data', createData: () => ({ kind: 'chart', title: 'Data visualization', status: 'Connect a dataset' }) },
+  { kind: 'map', label: 'Map', icon: '◍', group: 'Data', createData: () => ({ kind: 'map', title: 'Map', status: 'Plot a dataset' }) },
   { kind: 'kpi', label: 'KPI', icon: '↗', group: 'Data', createData: () => ({ kind: 'kpi', title: 'Key metric', status: 'Live' }) },
   { kind: 'dashboard', label: 'Dashboard', icon: '▥', group: 'Insights', createData: () => ({ kind: 'dashboard', title: 'Performance dashboard' }) },
   { kind: 'report', label: 'Report', icon: '▤', group: 'Insights', createData: () => ({ kind: 'report', title: 'Live report', status: 'Draft' }) },
@@ -95,7 +96,7 @@ const CAPABILITIES: Partial<Record<CreationObjectKind, string>> = {
 };
 const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   workflow: ['edit', 'run'], website: ['edit', 'preview', 'publish'], prototype: ['edit', 'preview'],
-  dataset: ['import', 'profile', 'visualize'], chart: ['refresh', 'drill'], dashboard: ['refresh', 'drill'],
+  dataset: ['import', 'profile', 'visualize'], chart: ['refresh', 'drill'], dashboard: ['refresh', 'drill'], map: ['refresh', 'drill'],
   project: ['expand', 'compare'], task: ['assign', 'deliver'], agent: ['inspect', 'configure', 'assign'],
   evermind: ['teach', 'train', 'evaluate', 'publish'], voice: ['record', 'play'], video: ['generate', 'preview'], mcp: ['authenticate', 'execute'],
   image: ['generate', 'preview', 'export'], animation: ['generate', 'preview', 'export'], podcast: ['generate', 'preview', 'export'],
@@ -115,6 +116,7 @@ const MUTABLE_FIELDS = {
   table: ['content', 'columns', 'rows', 'rowCount', 'sampleRows', 'highlightRules', 'summary', 'sourceDatasetId', 'sources'],
   spreadsheet: ['content', 'columns', 'rows', 'formulas', 'rowCount', 'highlightRules', 'summary'],
   chart: ['content', 'chartType', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'chartLabels', 'chartValues', 'kpis', 'sources', 'summary', 'sourceDatasetId'],
+  map: ['content', 'mapPoints', 'mapTitle', 'mapValueLabel', 'mapRegion', 'mapRegionName', 'mapOutline', 'mapAttribution', 'sources', 'summary', 'sourceDatasetId'],
   kpi: ['content', 'value', 'target', 'unit', 'trend', 'sources', 'summary', 'sourceDatasetId'],
   dashboard: ['content', 'kpis', 'chartLabels', 'chartValues', 'sources', 'fetchedAt', 'dateRange', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'summary', 'sourceDatasetId'],
   report: ['content', 'markdown', 'chartLabels', 'chartValues', 'sources'],
@@ -215,6 +217,10 @@ const CONTEXT_FIELDS = [
   'kind', 'title', 'subtitle', 'status', 'resourceId', 'model', 'role', 'focus',
   'fetchedAt', 'dateRange', 'projectLens', 'columns', 'rowCount', 'sampleRows', 'profile', 'highlightRules', 'sourceDatasetId',
   'fileName', 'mimeType', 'fileSize', 'chartType', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'chartLabels', 'chartValues',
+  // `mapOutline` is deliberately absent: a boundary polygon is thousands of coordinate
+  // pairs, and the snapshot is the model's context budget. Brain needs to know WHAT is
+  // plotted, not the shape of the coastline behind it.
+  'mapPoints', 'mapTitle', 'mapValueLabel', 'mapRegion', 'mapRegionName', 'mapAttribution',
   'projects', 'sources', 'items', 'summary', 'participants', 'evermindVersion',
   'contributions', 'inferenceEnabled', 'teacherModel', 'viewport', 'content', 'markdown',
   'steps', 'websiteHeadline', 'websiteBody', 'websiteCta', 'pages', 'kpis', 'verdict',
@@ -246,6 +252,9 @@ const CONTEXT_ARRAY_LIMITS: Readonly<Partial<Record<string, number>>> = {
   profile: MAX_TABULAR_COLUMNS,
   highlightRules: 20,
   sampleRows: 8,
+  // Enough for Brain to name what is on the map and answer "which one is highest"
+  // without carrying every coordinate of a 500-point plot into the prompt.
+  mapPoints: 12,
 };
 
 function safeContextValue(value: unknown, depth = 0, arrayLimit = DEFAULT_CONTEXT_ARRAY_LIMIT): unknown {
