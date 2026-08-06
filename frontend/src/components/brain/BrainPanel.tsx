@@ -81,6 +81,7 @@ import { loadAgentPoolCached, type PoolAgent } from '@/lib/agentPool';
 import { getModality } from '@/lib/modality';
 import { useModalityCopy, useLocalizedModalities } from '@/lib/useModalityCopy';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
+import { nextSeedPromptStep } from '@/lib/brain/seedPrompt';
 import { usePersonalityBlock, getSessionPsychometric } from '@/lib/usePersonalityBlock';
 import { fetchLimbicBlock } from '@/lib/personalityApi';
 
@@ -209,7 +210,16 @@ export function BrainPanel({
   const [input, setInput] = useState('');
   /** Bumped to pull focus into the composer after something seeds it. */
   const [composerFocusToken, setComposerFocusToken] = useState(0);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  /**
+   * Docked drawer sections. Chat history used to be a collapsible strip stacked
+   * ABOVE the conversation, which squeezed the thread in a ~440px drawer and hid
+   * past chats behind a disclosure; it is now a peer tab of the conversation, so
+   * a returning user can reach any earlier chat without giving up thread height.
+   * The full-page variant keeps its permanent sidebar and ignores this.
+   */
+  const [dockedTab, setDockedTab] = useState<'chat' | 'history'>('chat');
+  /** Which chat row has its rename/summarize/delete/assign actions revealed. */
+  const [actionsChatId, setActionsChatId] = useState<number | null>(null);
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const [summarizingId, setSummarizingId] = useState<number | null>(null);
@@ -345,10 +355,35 @@ export function BrainPanel({
     if (isPage) publishActiveChat?.(chats.activeChatId);
   }, [isPage, publishActiveChat, chats.activeChatId]);
 
+  /**
+   * Start a chat and land the user in it. The ONE "new chat" path for every
+   * surface control (header button, empty-state buttons, capability tiles,
+   * composer-driven creation) — docked, that also has to leave the history tab,
+   * otherwise pressing "+ New" from history silently created a chat the user
+   * never saw.
+   */
+  const startNewChat = useCallback(async (opts?: { title?: string; projectId?: number | null; capability?: string | null }) => {
+    const created = await chats.create(opts);
+    if (!isPage) setDockedTab('chat');
+    return created;
+  }, [chats, isPage]);
+
+  /**
+   * Open an existing chat from the history list. Docked, history is a tab beside
+   * the conversation, so opening a chat has to switch back to it; the page keeps
+   * the list permanently beside the thread and instead reveals that row's
+   * actions (its long-standing behaviour).
+   */
+  const openChat = useCallback((id: number) => {
+    void chats.select(id);
+    if (isPage) setActionsChatId(id);
+    else setDockedTab('chat');
+  }, [chats, isPage]);
+
   const ensureChatId = useCallback(async () => {
-    const c = await chats.create();
+    const c = await startNewChat();
     return c?.id ?? null;
-  }, [chats]);
+  }, [startNewChat]);
 
   // Tell the model which project is in context, so "create a task" / "list
   // specs" without a named project default to it. Chat-FIRST: a chat that belongs
@@ -380,7 +415,7 @@ export function BrainPanel({
     // (same path the "Start new chat" button takes, plus the capability).
     if (chats.activeChatId == null) {
       if (id == null) return;
-      await chats.create({ capability: id });
+      await startNewChat({ capability: id });
     } else {
       await chats.setCapability(chats.activeChatId, id);
     }
@@ -390,7 +425,7 @@ export function BrainPanel({
       // not a finished message. (Sending the raw seed produced stub replies.)
       setComposerFocusToken((n) => n + 1);
     }
-  }, [chats, tBrain]);
+  }, [chats, startNewChat, tBrain]);
   const capabilityPrompt = getBrainCapability(capabilityId)?.systemPrompt;
 
   const ambientSystem = useMemo(() => {
@@ -1112,17 +1147,36 @@ export function BrainPanel({
     })();
   }, [initialTicket, initialChatId, chats, pinnedProjectId, viewingProjectId]);
 
-  // Auto-send a one-shot prompt (e.g. a landing-page prompt replayed after auth).
-  // `conv.send` creates+selects a chat on demand, so the conversation renders and
-  // streams a reply. Ref-guarded so re-renders never re-send; `ticketReady` holds it
-  // until any auto-link has claimed the chat so the prompt lands in the linked one.
+  // Auto-send a one-shot SEED prompt (a home/landing-page prompt replayed after
+  // auth, an IDE `?prompt=`). A seed starts a NEW conversation: the drawer
+  // restores the chat you were last in, so sending straight away appended a
+  // returning visitor's fresh idea to an old thread. `nextSeedPromptStep` decides
+  // — clear the restored selection first, then send, at which point `conv.send`
+  // creates the chat via `ensureChatId`. Refs (not state) so re-renders can never
+  // re-send; `ticketReady` holds it until any auto-link has claimed its chat.
   const initialPromptSentRef = useRef(false);
+  const initialPromptClearedRef = useRef(false);
   useEffect(() => {
-    const text = initialPrompt?.trim();
-    if (!text || initialPromptSentRef.current || !ticketReady) return;
+    const text = initialPrompt?.trim() ?? '';
+    const step = nextSeedPromptStep({
+      prompt: text,
+      ready: ticketReady && !chats.loading,
+      alreadySent: initialPromptSentRef.current,
+      targetChatId: initialChatId,
+      targetTicket: initialTicket,
+      activeChatId: chats.activeChatId,
+      selectionCleared: initialPromptClearedRef.current,
+    });
+    if (step === 'clear-selection') {
+      initialPromptClearedRef.current = true;
+      void chats.select(null);
+      return;
+    }
+    if (step !== 'send') return;
     initialPromptSentRef.current = true;
+    if (!isPage) setDockedTab('chat');
     void conv.send(text);
-  }, [initialPrompt, conv, ticketReady]);
+  }, [initialPrompt, conv, ticketReady, initialChatId, initialTicket, isPage, chats]);
 
   const error = chats.error || conv.error;
   // The banner surfaces either source; dismissing must clear whichever is set.
@@ -1133,6 +1187,13 @@ export function BrainPanel({
   const [dismissedProviderCap, setDismissedProviderCap] = useState('');
   const providerCapKey = conv.providerCap.join(',');
   const showProviderCapBanner = conv.providerCap.length > 0 && dismissedProviderCap !== providerCapKey;
+
+  // Unread messages sitting in chats OTHER than the open one — the reason to go
+  // look at history at all, surfaced on the tab so it isn't a blind switch.
+  const historyUnread = useMemo(
+    () => chats.chats.reduce((n, c) => n + (c.id === chats.activeChatId ? 0 : (attn.chatUnread[c.id] ?? 0)), 0),
+    [chats.chats, chats.activeChatId, attn.chatUnread],
+  );
 
   // ---- Shared sub-renders ---------------------------------------------------
 
@@ -1146,32 +1207,50 @@ export function BrainPanel({
       )}
       {filteredChats.map((chat) => {
         const active = chats.activeChatId === chat.id;
+        // Row actions are revealed per-row rather than "whatever is selected":
+        // docked, opening a chat leaves the history tab, so tying the actions to
+        // the selection put rename/delete somewhere the user can no longer see.
+        const actionsOpen = actionsChatId === chat.id;
         return (
           <div
             key={chat.id}
             className={isPage ? `bs-chat-item ${active ? 'active' : ''}` : undefined}
             role="button"
             tabIndex={0}
-            onClick={() => chats.select(chat.id)}
-            onKeyDown={(e) => e.key === 'Enter' && chats.select(chat.id)}
+            onClick={() => openChat(chat.id)}
+            onKeyDown={(e) => e.key === 'Enter' && openChat(chat.id)}
             style={isPage ? undefined : {
               padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border-subtle)',
               background: active ? 'var(--bg-elevated)' : 'transparent',
               borderLeft: active ? '3px solid var(--coral-bright, #f43f5e)' : '3px solid transparent',
             }}
           >
-            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {renamingId === chat.id ? (
-                <input
-                  autoFocus
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onBlur={submitRename}
-                  onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') submitRename(); if (e.key === 'Escape') { setRenamingId(null); setRenameValue(''); } }}
-                  onClick={(e) => e.stopPropagation()}
-                  style={{ width: '100%', fontSize: 13, padding: 2, border: '1px solid var(--border-subtle)', borderRadius: 4 }}
-                />
-              ) : chat.title}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {renamingId === chat.id ? (
+                  <input
+                    autoFocus
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onBlur={submitRename}
+                    onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Enter') submitRename(); if (e.key === 'Escape') { setRenamingId(null); setRenameValue(''); } }}
+                    onClick={(e) => e.stopPropagation()}
+                    style={{ width: '100%', fontSize: 13, padding: 2, border: '1px solid var(--border-subtle)', borderRadius: 4 }}
+                  />
+                ) : chat.title}
+              </div>
+              {renamingId !== chat.id && (
+                <button
+                  type="button"
+                  aria-expanded={actionsOpen}
+                  aria-label={tBrain('chatActionsAria', { title: chat.title })}
+                  title={tBrain('chatActions')}
+                  onClick={(e) => { e.stopPropagation(); setActionsChatId(actionsOpen ? null : chat.id); }}
+                  style={{ flexShrink: 0, width: 24, height: 24, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, lineHeight: 1, borderRadius: 6, cursor: 'pointer', background: actionsOpen ? 'var(--bg-elevated)' : 'transparent', border: '1px solid', borderColor: actionsOpen ? 'var(--border-subtle)' : 'transparent', color: 'var(--text-muted)' }}
+                >
+                  ⋯
+                </button>
+              )}
             </div>
             <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
               {chat.projectId != null && pinnedProjectId == null && (
@@ -1186,7 +1265,7 @@ export function BrainPanel({
                   never shows one. */}
               <UnreadBadge count={active ? 0 : attn.chatUnread[chat.id]} />
             </div>
-            {active && renamingId !== chat.id && (
+            {actionsOpen && renamingId !== chat.id && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 6 }} onClick={(e) => e.stopPropagation()}>
                 <button type="button" onClick={() => { setRenamingId(chat.id); setRenameValue(chat.title); }} style={{ fontSize: 11, padding: '2px 6px', cursor: 'pointer' }}>{tBrain('rename')}</button>
                 <button type="button" onClick={() => onSummarize(chat.id)} disabled={summarizingId === chat.id} style={{ fontSize: 11, padding: '2px 6px', cursor: 'pointer' }}>{summarizingId === chat.id ? '…' : tBrain('summarize')}</button>
@@ -1346,14 +1425,14 @@ export function BrainPanel({
           <div style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-primary)' }}>{tBrain('brainTitle')}</div>
           <div style={{ fontSize: 13 }}>{tBrain('emptyHint')}</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-            <button type="button" onClick={() => chats.create()} style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer' }}>
+            <button type="button" onClick={() => { void startNewChat(); }} style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer' }}>
               {tBrain('startNewChat')}
             </button>
             {/* Onboarding entry point — starts a chat seeded so the Brain guides a
                 new user (scope, costs, plan recommendation, connecting an AI account). */}
             <button
               type="button"
-              onClick={() => { chats.create(); setInput(tBrain('onboardMePrompt')); setComposerFocusToken((n) => n + 1); }}
+              onClick={() => { void startNewChat(); setInput(tBrain('onboardMePrompt')); setComposerFocusToken((n) => n + 1); }}
               style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'transparent', color: 'var(--coral-bright, #f4726e)', border: '1px solid var(--coral-bright, #f4726e)', borderRadius: 10, cursor: 'pointer' }}
             >
               ✨ {tBrain('onboardMe')}
@@ -1463,7 +1542,7 @@ export function BrainPanel({
                     stated up front rather than after a turn dies on the cap. */}
                 <PlanBadge />
                 {captureButton}
-                <button type="button" onClick={() => chats.create()} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+                <button type="button" onClick={() => { void startNewChat(); }} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
                   {tBrain('newChat')}
                 </button>
               </div>
@@ -1502,7 +1581,7 @@ export function BrainPanel({
           {/* Plan + remaining allowance (see the page header). */}
           <PlanBadge />
           {captureButton}
-          <button type="button" onClick={() => chats.create()} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>{tBrain('newChat')}</button>
+          <button type="button" onClick={() => { void startNewChat(); }} style={{ padding: '4px 10px', fontSize: 12, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>{tBrain('newChat')}</button>
           {/* Expand → full Brain Storm page. Carry the ACTIVE chat id (and the
               project it's scoped to) so the page opens the SAME conversation
               instead of a blank one — otherwise expanding a docked chat (e.g. the
@@ -1524,32 +1603,67 @@ export function BrainPanel({
           )}
         </div>
       </div>
-      <div style={{ flexShrink: 0, padding: '8px 12px', borderBottom: historyOpen ? '1px solid var(--border-subtle)' : 'none' }}>
-        <button type="button" onClick={() => setHistoryOpen((o) => !o)} aria-expanded={historyOpen}
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', padding: '6px 8px', fontSize: 12, borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', cursor: 'pointer' }}>
-          <span style={{ color: 'var(--text-muted)' }}>{tBrain('chatHistory')}</span>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{historyOpen ? '▼' : '▶'}</span>
-        </button>
+      {/* Conversation and history are peers, not a disclosure stacked on top of
+          the thread: in a ~440px drawer the old accordion ate a third of the
+          reading height and still hid past chats one click deep. */}
+      <div role="tablist" aria-label={tBrain('sectionsAria')} style={{ flexShrink: 0, display: 'flex', gap: 6, padding: '8px 12px', borderBottom: '1px solid var(--border-subtle)' }}>
+        {DOCKED_TABS.map(({ id, labelKey }) => {
+          const selected = dockedTab === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              id={`brain-tab-${id}`}
+              aria-selected={selected}
+              aria-controls={`brain-tabpanel-${id}`}
+              onClick={() => setDockedTab(id)}
+              style={{
+                flex: 1, minWidth: 0, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                padding: '6px 10px', fontSize: 12, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
+                border: `1px solid ${selected ? 'var(--coral-bright, #f4726e)' : 'var(--border-subtle)'}`,
+                background: selected ? 'var(--bg-elevated)' : 'var(--bg-base)',
+                color: selected ? 'var(--text-primary)' : 'var(--text-muted)',
+              }}
+            >
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tBrain(labelKey)}</span>
+              {/* History carries the "there is something waiting in another chat"
+                  signal, so switching tabs is worth doing rather than guessing. */}
+              {id === 'history' && <UnreadBadge count={historyUnread} size={16} />}
+            </button>
+          );
+        })}
       </div>
-      {historyOpen && (
-        <div style={{ flex: '0 1 35%', minHeight: 80, maxHeight: 240, overflow: 'auto', borderBottom: '1px solid var(--border-subtle)' }}>
-          <div style={{ padding: '6px 12px' }}>
+      {dockedTab === 'history' ? (
+        <div id="brain-tabpanel-history" role="tabpanel" aria-labelledby="brain-tab-history" style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
+          <div style={{ padding: '8px 12px' }}>
             <input type="search" placeholder={tBrain('searchChats')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
               style={{ width: '100%', padding: '6px 8px', fontSize: 12, borderRadius: 6, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)' }} />
           </div>
           {chatRows}
         </div>
+      ) : (
+        <div id="brain-tabpanel-chat" role="tabpanel" aria-labelledby="brain-tab-chat" style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <AiDisclosure />
+          <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{conversation}</div>
+        </div>
       )}
-      <AiDisclosure />
-      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>{conversation}</div>
     </div>
   );
 }
 
+/** Docked drawer sections. Order is the tab order. */
+const DOCKED_TABS = [
+  { id: 'chat', labelKey: 'tabChat' },
+  { id: 'history', labelKey: 'tabHistory' },
+] as const;
+
 function AiDisclosure() {
+  const tBrain = useTranslations('brain');
   return (
-    <aside aria-label="AI disclosure" style={{ flexShrink: 0, padding: '7px 12px', fontSize: 11, lineHeight: 1.45, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-subtle)' }}>
-      You are interacting with AI agents. Outputs can be inaccurate; review consequential results before relying on them. Mutating actions require your approval unless you explicitly enable auto-approve. <Link href="/legal/ai-transparency">How AI works, explanations, and human review</Link>.
+    <aside aria-label={tBrain('aiDisclosureAria')} style={{ flexShrink: 0, padding: '7px 12px', fontSize: 11, lineHeight: 1.45, color: 'var(--text-muted)', borderBottom: '1px solid var(--border-subtle)' }}>
+      {tBrain('aiDisclosureBody')}{' '}
+      <Link href="/legal/ai-transparency">{tBrain('aiDisclosureLink')}</Link>.
     </aside>
   );
 }

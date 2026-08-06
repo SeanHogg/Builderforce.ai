@@ -14,6 +14,7 @@ import { BrainActivityBar, brainActivityLine, useBrainActivity } from './BrainAc
 import { BrainSurfaceActions, BrainSurfaceBody } from './BrainDock';
 import { useBrainSurface } from './brainSurfaceContext';
 import { highlightToneFor, profileTabular, tabularFromObject, workbookSheets, type TabularCell, type TabularHighlightRule } from '@/lib/canvasTabularData';
+import { outlinePaths, projectMap, sanitizeGeoBounds, sanitizeMapPoints } from '@/lib/canvasGeo';
 import { creativePreviewImageUrl } from '@/lib/creationDeliverables';
 import { canvasDiagram, canvasDocument, canvasSlides } from '@/lib/canvasDocuments';
 import { drawioLabelLines, drawioShapePolygon, parseDrawioXml, resolveDrawioXml, type DrawioGraph } from '@/lib/drawioDiagram';
@@ -276,6 +277,81 @@ function DashboardBody({ data }: { data: CreationNodeData }) {
         <div><small>{labels.length ? t('distribution') : t('channelMix')}</small>{labels.length && total > 0 ? <div className={styles.donutChart}><div className={styles.donut} role="img" aria-label={labels.map((label, index) => `${label}: ${positiveValues[index] ?? 0}`).join(', ')} style={{ background: `conic-gradient(${donutStops})` }} /><div className={styles.donutLegend}>{labels.map((label, index) => <span key={`${label}-legend-${index}`} title={`${label}: ${positiveValues[index] ?? 0}`}><i style={{ background: palette[index % palette.length] }} /><b>{label}</b><em>{positiveValues[index] ?? 0}</em></span>)}</div></div> : <div className={styles.donut} />}</div>
       </div>
     </>
+  );
+}
+
+/**
+ * The Map Object — places plotted where they actually are.
+ *
+ * The card draws its own geography (see `lib/canvasGeo`): a graticule, an optional
+ * boundary the object carries with it, and one marker per plotted row. There is no tile
+ * layer, so the map renders identically online, offline, and in an export, and a private
+ * canvas never announces what it is plotting to a third-party raster host.
+ *
+ * Everything geometric is computed by the pure projection helper and rendered here as a
+ * flat `map()`, so the maths is unit-tested rather than eyeballed at card size.
+ */
+function MapBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.node');
+  const points = useMemo(() => sanitizeMapPoints(data.mapPoints), [data.mapPoints]);
+  const region = useMemo(() => sanitizeGeoBounds(data.mapRegion), [data.mapRegion]);
+  const projection = useMemo(() => projectMap(points, { width: 320, height: 190, region }), [points, region]);
+  const outline = useMemo(
+    () => (projection && data.mapOutline ? outlinePaths(data.mapOutline, projection.project) : []),
+    [projection, data.mapOutline],
+  );
+
+  if (!projection) {
+    return <div className={styles.mapBody}>
+      <p className={styles.mapEmpty}>{t('mapEmpty')}</p>
+      <div className={styles.pills}><span>{data.status || t('mapEmptyStatus')}</span></div>
+    </div>;
+  }
+
+  const valueLabel = typeof data.mapValueLabel === 'string' && data.mapValueLabel.trim() ? data.mapValueLabel.trim() : '';
+  const valued = projection.points.filter((point) => typeof point.value === 'number');
+  // Only the largest few carry a printed name — at card size every label collides, and
+  // a legible map of the top places beats an illegible one of all of them. The rest stay
+  // readable through the marker's own title/aria text.
+  const labelled = new Set([...valued].sort((first, second) => (second.value ?? 0) - (first.value ?? 0)).slice(0, 5).map((point) => point.label));
+  const [south, north, west, east] = projection.bounds;
+  const ariaLabel = t('mapAria', {
+    count: projection.points.length,
+    places: projection.points.slice(0, 12).map((point) => point.value != null ? `${point.label} (${point.value.toLocaleString()})` : point.label).join(', '),
+  });
+
+  return (
+    <div className={styles.mapBody}>
+      <div className={styles.widgetContext}>
+        <span><small>{t('mapPlaces')}</small><b>{projection.points.length.toLocaleString()}</b></span>
+        {typeof data.mapRegionName === 'string' && data.mapRegionName.trim() && <span><small>{t('mapRegion')}</small><b>{data.mapRegionName}</b></span>}
+        {valueLabel && valued.length > 0 && <span><small>{t('mapSizedBy')}</small><b>{valueLabel}</b></span>}
+      </div>
+      <svg className={styles.mapSurface} viewBox={`0 0 ${projection.width} ${projection.height}`} preserveAspectRatio="xMidYMid meet" role="img" aria-label={ariaLabel}>
+        <rect className={styles.mapPlate} x="0" y="0" width={projection.width} height={projection.height} rx="8" />
+        <g className={styles.mapGraticule}>
+          {projection.graticule.verticals.map((line) => <line key={`v${line.lng}`} x1={line.x} y1="0" x2={line.x} y2={projection.height} />)}
+          {projection.graticule.horizontals.map((line) => <line key={`h${line.lat}`} x1="0" y1={line.y} x2={projection.width} y2={line.y} />)}
+        </g>
+        {outline.length > 0 && <g className={styles.mapOutline}>{outline.map((path, index) => <path key={`outline-${index}`} d={path} />)}</g>}
+        <g className={styles.mapMarkers}>
+          {projection.points.map((point, index) => (
+            <circle key={`${point.label}-${index}`} cx={point.x} cy={point.y} r={point.radius} data-tone={point.tone ?? undefined}>
+              <title>{point.value != null ? `${point.label} — ${point.value.toLocaleString()}${valueLabel ? ` ${valueLabel}` : ''}` : point.label}</title>
+            </circle>
+          ))}
+        </g>
+        <g className={styles.mapLabels}>
+          {projection.points.filter((point) => labelled.has(point.label)).map((point, index) => (
+            <text key={`label-${point.label}-${index}`} x={point.x} y={point.y - point.radius - 2.5} textAnchor="middle">{point.label.slice(0, 22)}</text>
+          ))}
+        </g>
+      </svg>
+      <div className={styles.mapFooter}>
+        <small>{t('mapExtent', { south: south.toFixed(1), north: north.toFixed(1), west: west.toFixed(1), east: east.toFixed(1) })}</small>
+        {typeof data.mapAttribution === 'string' && data.mapAttribution.trim() && <small>{data.mapAttribution}</small>}
+      </div>
+    </div>
   );
 }
 
@@ -1100,8 +1176,8 @@ const DOCUMENT_BODY_KINDS = new Set(['document', 'prd', 'knowledge']);
 
 export function CreationNode({ id, data, selected, width, height, canRun = true, onRun, onOpenDetails, onEditData }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
-  const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame'].includes(data.kind);
-  const specialized = new Set(['workflow','website','prototype','dashboard','chart','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram']);
+  const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame'].includes(data.kind);
+  const specialized = new Set(['workflow','website','prototype','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram']);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || '#f8f6ff'), borderColor: String(data.frameBorder || '#9d8bea') } : undefined;
   const measuredStyle = { ...frameStyle, ...(typeof width === 'number' && width > 0 ? { width } : {}), ...(typeof height === 'number' && height > 0 ? { height } : {}) };
   return (
@@ -1127,6 +1203,7 @@ export function CreationNode({ id, data, selected, width, height, canRun = true,
         {data.kind === 'workflow' && <WorkflowBody data={data} />}
         {(data.kind === 'website' || data.kind === 'prototype') && <WebsiteBody data={data} />}
         {(data.kind === 'dashboard' || data.kind === 'chart' || data.kind === 'report') && <DashboardBody data={data} />}
+        {data.kind === 'map' && <MapBody data={data} />}
         {data.kind === 'evaluation' && <EvaluationBody data={data} onOpen={() => onOpenDetails?.(id, 'evaluation')} />}
         {data.kind === 'diagnostics' && <DiagnosticsBody data={data} />}
         {data.kind === 'agent' && <AgentBody data={data} onOpen={(focus) => onOpenDetails?.(id, focus)} />}

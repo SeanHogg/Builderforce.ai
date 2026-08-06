@@ -26,6 +26,15 @@
      literal repeated at each call site. */
   --canvas-accent-ink: #2a5fc7;
   --canvas-positive-ink: #12724e;
+  /* Classification tones, in the TWO roles they are actually used in: `-mark` is a
+     solid fill (a dot, a map marker) and `-ink` is text read ON the `-bg` tint. They
+     were previously only ever referenced as literal fallbacks, which meant one name
+     carried two incompatible values at different call sites and neither had a dark
+     definition — so a tinted chip kept its light-theme ink over a dark plate. */
+  --tone-success-mark: #169566; --tone-success-ink: #0e6b48; --tone-success-bg: rgba(22,149,102,.13);
+  --tone-warning-mark: #d69214; --tone-warning-ink: #8a5c05; --tone-warning-bg: rgba(214,146,20,.15);
+  --tone-danger-mark: #d63a4a; --tone-danger-ink: #9b2231; --tone-danger-bg: rgba(214,58,74,.14);
+  --tone-info-mark: #3978f6; --tone-info-ink: #22509f; --tone-info-bg: rgba(57,120,246,.13);
   /* TWO palettes, not twenty. Brain surfaces (the Brain Object and the prompt it
      owns) share one identity so the conversation reads as a single system; every
      other Object uses the neutral widget palette. Both are theme variables, so
@@ -305,6 +314,29 @@
 .widgetSettings b,.widgetContext b { display:block; overflow:hidden; margin-top:2px; color:#34445a; font-size:8px; text-overflow:ellipsis; white-space:nowrap; }
 .drawingBody { display:grid; gap:7px; height:100%; }
 .strokeSwatch { display:inline-block; width:9px; height:9px; margin-right:5px; border:1px solid currentColor; border-radius:50%; vertical-align:-2px; }
+
+/* Map Object. Every colour here is a canvas theme token, so light and dark are ONE
+   definition — a map is mostly thin lines on a large plate, which is exactly the kind of
+   surface a hardcoded hex leaves invisible in the other theme. The SVG is viewBox-driven
+   with width:100%, so the plot scales with the card instead of overflowing a narrow one. */
+.mapBody { display:grid; align-content:start; gap:7px; min-width:0; height:100%; }
+.mapSurface { display:block; width:100%; height:auto; min-height:120px; }
+.mapPlate { fill:var(--canvas-panel-muted); stroke:var(--canvas-line); stroke-width:1; }
+.mapGraticule line { stroke:var(--canvas-line); stroke-width:.5; }
+.mapOutline path { fill:color-mix(in srgb,var(--canvas-accent-ink) 9%,transparent); stroke:color-mix(in srgb,var(--canvas-accent-ink) 55%,transparent); stroke-width:.8; stroke-linejoin:round; }
+.mapMarkers circle { fill:color-mix(in srgb,var(--canvas-blue) 72%,transparent); stroke:var(--canvas-panel); stroke-width:.9; }
+.mapMarkers circle[data-tone='success'] { fill:color-mix(in srgb,var(--tone-success-mark) 78%,transparent); }
+.mapMarkers circle[data-tone='warning'] { fill:color-mix(in srgb,var(--tone-warning-mark) 78%,transparent); }
+.mapMarkers circle[data-tone='danger'] { fill:color-mix(in srgb,var(--tone-danger-mark) 78%,transparent); }
+.mapMarkers circle[data-tone='info'] { fill:color-mix(in srgb,var(--tone-info-mark) 78%,transparent); }
+/* Paint-order puts the halo BEHIND the glyph, so a name stays readable where it crosses
+   a marker or an outline instead of needing an opaque plate that hides the map. */
+.mapLabels text { fill:var(--canvas-ink); stroke:var(--canvas-panel-muted); stroke-width:2.4px; paint-order:stroke fill; font:7px var(--font-sans); font-weight:650; }
+.mapEmpty { margin:0; color:var(--canvas-ink-soft); font-size:9px; line-height:1.45; }
+.mapFooter { display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 10px; }
+.mapFooter small { color:var(--canvas-muted); font-size:6px; }
+.node_map { width:340px; }
+@media (max-width:760px) { .node_map { width:100%; max-width:340px; } }
 
 .node_website .nodeBody,.node_prototype .nodeBody { display:flex; }
 .websitePreview { width:100%; min-height:0; display:flex; flex:1; flex-direction:column; overflow:auto; border:1px solid #dbe3ed; border-radius:9px; background:#fff; color:#172033; }
@@ -978,6 +1010,12 @@
   --canvas-drop-veil:rgba(114,161,255,.14);
   --canvas-accent-ink:#72a1ff;
   --canvas-positive-ink:#74d8a2;
+  /* The same two roles, restated once for dark: marks brighten, inks invert from
+     "dark ink on a pale tint" to "pale ink on a dark tint". */
+  --tone-success-mark:#3fc78e; --tone-success-ink:#7ee0b0; --tone-success-bg:rgba(63,199,142,.16);
+  --tone-warning-mark:#f0b13c; --tone-warning-ink:#f7cd77; --tone-warning-bg:rgba(240,177,60,.16);
+  --tone-danger-mark:#f2647a; --tone-danger-ink:#ffa0ae; --tone-danger-bg:rgba(242,100,122,.18);
+  --tone-info-mark:#72a1ff; --tone-info-ink:#a9c6ff; --tone-info-bg:rgba(114,161,255,.16);
   /* The same two palettes, restated once for dark. Nothing per-component. */
   --canvas-widget-surface:#111d2f;
   --canvas-widget-header:#16243a;
@@ -1078,10 +1116,10 @@
   overflow:hidden; color:var(--canvas-ink,#243247);
   text-overflow:ellipsis; white-space:nowrap;
 }
-.dataGridScroll .miniTable > span[data-tone='success'] { background:var(--tone-success-bg,rgba(22,149,102,.13)); color:var(--tone-success-fg,#0e6b48); }
-.dataGridScroll .miniTable > span[data-tone='warning'] { background:var(--tone-warning-bg,rgba(214,146,20,.15)); color:var(--tone-warning-fg,#8a5c05); }
-.dataGridScroll .miniTable > span[data-tone='danger'] { background:var(--tone-danger-bg,rgba(214,58,74,.14)); color:var(--tone-danger-fg,#9b2231); }
-.dataGridScroll .miniTable > span[data-tone='info'] { background:var(--tone-info-bg,rgba(57,120,246,.13)); color:var(--tone-info-fg,#22509f); }
+.dataGridScroll .miniTable > span[data-tone='success'] { background:var(--tone-success-bg); color:var(--tone-success-ink); }
+.dataGridScroll .miniTable > span[data-tone='warning'] { background:var(--tone-warning-bg); color:var(--tone-warning-ink); }
+.dataGridScroll .miniTable > span[data-tone='danger'] { background:var(--tone-danger-bg); color:var(--tone-danger-ink); }
+.dataGridScroll .miniTable > span[data-tone='info'] { background:var(--tone-info-bg); color:var(--tone-info-ink); }
 .dataGridTones { display:flex; flex-wrap:wrap; gap:5px; }
 .dataGridTones span {
   display:inline-flex; align-items:center; gap:4px;
@@ -1090,10 +1128,10 @@
 }
 .dataGridTones span b { color:var(--canvas-ink,#1c2b40); font-size:9px; }
 .dataGridTones span i { width:7px; height:7px; border-radius:50%; }
-.dataGridTones span[data-tone='success'] i { background:var(--tone-success-fg,#169566); }
-.dataGridTones span[data-tone='warning'] i { background:var(--tone-warning-fg,#d69214); }
-.dataGridTones span[data-tone='danger'] i { background:var(--tone-danger-fg,#d63a4a); }
-.dataGridTones span[data-tone='info'] i { background:var(--tone-info-fg,#3978f6); }
+.dataGridTones span[data-tone='success'] i { background:var(--tone-success-mark); }
+.dataGridTones span[data-tone='warning'] i { background:var(--tone-warning-mark); }
+.dataGridTones span[data-tone='danger'] i { background:var(--tone-danger-mark); }
+.dataGridTones span[data-tone='info'] i { background:var(--tone-info-mark); }
 .dataGridFooter { color:var(--canvas-muted,#63748c); font-size:8px; }
 
 /* ── File card ───────────────────────────────────────────────────────────────

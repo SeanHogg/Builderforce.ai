@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-08-06 — ✅ RESOLVED: 3D was a picture of the board, not a space you could work in
+
+Operator report: "this is supposed to be a free floating 3-dimensional space where users can rotate the canvas and move objects — the panes/layers are an additional view to help the user visualize the space."
+
+**It read the board; it could not hold it.** `Canvas3DView` bound exactly three gestures — drag to orbit, wheel to zoom, arrows to turn — and every card's only handler was `onSelect`. There was no way to move an object, no way to travel across the space once zoomed in, and the depth planes were the *structure*: an object's place in depth came entirely from `graphLayerRanks`, so the only way to move something between layers was to rewire its dependencies on the flat board. The layers were behaving like a cage. They are a reading aid.
+
+**Objects now hold a real place in the space, and it is the same place the flat board knows.** Across a plane the drag IS the board position, so an object moved in 3D is where the user left it in 2D. Through depth it is `depthOffset` on the object's own content — riding the same `content` round-trip that `placementLocked`/`placementHidden` already use, so it survives reload, share and server persistence with no migration and no second copy of the layout. `Canvas3DCard` gained `layerZ` beside `z`: the layer is still computed from the graph, but it is now the *baseline* an object floats off rather than the coordinate it is pinned to, and restacking the depth axis (flow ⇄ group) moves the baseline while every lift the user chose survives. A lifted card keeps a dashed tether back to its plane, because a card floating in open space otherwise reads as being somewhere it is not.
+
+**The drag is solved, not approximated.** A screen delta cannot be turned back into board units by scaling: under perspective the divisor depends on the answer. `canvas3dUnprojectToPlane` intersects the ray under the cursor with the plane the object travels on, writing `1/foreshortening` as a third unknown so all three fall out of one 3×3 solve — the card stays exactly under the pointer for the whole drag at any angle, zoom or pan, with no drift to accumulate (round-tripped to six decimals in `canvas3d.test.ts`, including 1500px from the origin where a linearised solve visibly slips). It returns `null` edge-on, where the ray meets the plane nowhere in particular, rather than flinging the object across the board. Depth is a single direction on screen, so `canvas3dDepthFromDrag` measures the drag along it, falling back to the vertical head-on where that direction vanishes.
+
+**Panning moves the camera, not the scene.** `Canvas3DOrbit` gained `panX`/`panY`, applied on a new `.camera` element that owns the perspective — outside the projection, so travel is 1:1 with the pointer and, critically, the pan never bends how a drag maps back onto the board (it did when the translate sat inside the stage transform: a 9px move solved as 9.21px). Every input can reach the far side of a space it has zoomed into: Shift or the middle button on a mouse, two fingers on a touch screen (pinch zooms at the same time, and lifting one finger hands the space back to the other instead of stranding the gesture), Shift+arrows from the keyboard.
+
+**And "Focus" stopped being a dead button.** The selection toolbar renders over the 3D scene, and its Focus called `fitView` on the React Flow instance underneath — nothing at all in 3D. `Canvas3DControls` now publishes `focusObjects`, and `focusSelection` routes through it exactly as zoom and fit already did, so one action means the right thing in whichever view is live. `canvas3dPanToCentre` travels to the selection without disturbing where anything sits.
+
+Layer guides are now a toggle on the rail (`layerGuides`) — they are an aid, so they can be put away without moving a single object — and a `dropToLayers` command appears only while something is actually floating. Locked placements are honoured in the space: a locked card is not a handle, and the drag falls through to turn the space instead. `canvasPlacementUnlocked()` in `creationCanvasLayout.ts` is now the one predicate for "may this object be repositioned", with `canvasArrangementTargets`, align, the arrow-key nudge and the 3D drag all reading it — a new way to move an object can no longer forget the lock. Copy for all of it landed in en/zh/es/fr/de.
+
+Guarded by 31 cases in `canvas3d.test.ts` (unprojection round-trip, edge-on refusal, depth direction and magnitude, camera pan, lifted cards, locked cards) and four in `CreationCanvas.test.tsx` (drag moves an object and it stays dropped, shift-drag lifts it and the rail offers to settle it back, the guides toggle without moving anything).
+
+---
+
 ## 2026-08-05 — ✅ RESOLVED: Generate on a CAD or 3D-model object produced a broken image (ui 2026.7.168)
 
 Operator report, with screenshots of both objects: "when you click the generate button on the CAD or 3D model, the output is a broken image. In 3D mode, shouldn't the models render?"

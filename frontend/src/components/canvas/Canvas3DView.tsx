@@ -79,6 +79,8 @@ type Gesture =
   | ({ kind: 'pinch'; spread: number } & PointerAt)
   | ({
     kind: 'move';
+    /** Only the finger that picked the object up may move it. */
+    pointerId: number;
     axis: Canvas3DDragAxis;
     /** Everything travelling with this drag, and where each started. */
     from: ReadonlyMap<string, { x: number; y: number; z: number }>;
@@ -226,6 +228,8 @@ export function Canvas3DView<T extends Canvas3DNode>({
         return;
       }
 
+      // A second finger landing mid-drag must not jerk the object with it.
+      if (gesture.kind === 'move' && gesture.pointerId !== event.pointerId) return;
       const dx = event.clientX - gesture.x;
       const dy = event.clientY - gesture.y;
       if (Math.abs(dx) + Math.abs(dy) > CLICK_SLOP) movedRef.current = true;
@@ -260,10 +264,19 @@ export function Canvas3DView<T extends Canvas3DNode>({
     };
     const end = (event: PointerEvent) => {
       touching.current.delete(event.pointerId);
+      const gesture = gestureRef.current;
+      // A drag ends when the finger that started it lifts — not when some other
+      // pointer that was never part of it happens to come up.
+      if (gesture?.kind === 'move') {
+        if (gesture.pointerId !== event.pointerId) return;
+        gestureRef.current = null;
+        setGestureKind(null);
+        return;
+      }
       // Lifting one finger of a pinch hands the space back to the other one,
       // rather than ending the gesture halfway through and stranding the user.
       const remaining = [...touching.current.values()];
-      if (gestureRef.current?.kind === 'pinch' && remaining.length === 1) {
+      if (gesture?.kind === 'pinch' && remaining.length === 1) {
         gestureRef.current = { kind: 'orbit', ...remaining[0]! };
         setGestureKind('orbit');
         return;
@@ -351,6 +364,7 @@ export function Canvas3DView<T extends Canvas3DNode>({
     userFramed.current = true;
     gestureRef.current = {
       kind: 'move',
+      pointerId: event.pointerId,
       axis,
       from: dragParty(card),
       planeZ: card.z,
@@ -584,8 +598,11 @@ export function Canvas3DView<T extends Canvas3DNode>({
                 data-movable={!!onMove && !card.locked}
                 onPointerDown={(event) => onCardPointerDown(event, card)}
                 onKeyDown={(event) => onCardKeyDown(event, card)}
-                onClick={() => {
-                  if (movedRef.current) return;
+                onClick={(event) => {
+                  // A drag is not a click — but Enter and Space on a focused card
+                  // are (`detail` is 0), and those must still open the object even
+                  // when the last thing the pointer did was move something.
+                  if (event.detail !== 0 && movedRef.current) return;
                   onSelect?.(card.id);
                 }}
               >

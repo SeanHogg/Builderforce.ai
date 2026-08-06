@@ -124,6 +124,7 @@ export function WorkspaceCanvas({
   const [minimapOpen, setMinimapOpen] = useState(true);
   const flowRef = useRef<ReactFlowInstance<WorkspacePanelNode, never> | null>(null);
   const panelIds = panels.map((panel) => panel.id).join('\u0000');
+  const threeD = useCanvasThreeD();
 
   useEffect(() => {
     if (typeof window.matchMedia !== 'function') return;

@@ -62,6 +62,7 @@ import {
   parseTabularText, profileTabular, queryTabular, tabularFromObject,
   type TabularHighlightRule, type TabularQuery, type TabularSource,
 } from '@/lib/canvasTabularData';
+import { detectGeoColumns, mapPointsFromRows, outlineRings, sanitizeGeoBounds } from '@/lib/canvasGeo';
 import { datasetObjectData, importCanvasFile, type ImportTranslator } from '@/lib/canvasFileImport';
 import { WorkflowBuilder } from '@/components/workflow-builder/WorkflowBuilder';
 import { VoiceConfigPanel } from '@/components/ide/VoiceConfigPanel';
@@ -2088,8 +2089,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         aggregate: { type: 'array', items: { type: 'object', required: ['op'], additionalProperties: false, properties: { op: { type: 'string', enum: [...TABULAR_AGGREGATE_OPERATORS] }, column: { type: 'string' }, label: { type: 'string' } } } },
         sort: { type: 'object', additionalProperties: false, properties: { column: { type: 'string' }, direction: { type: 'string', enum: ['asc', 'desc'] } } },
         limit: { type: 'number' },
-        materializeAs: { type: 'string', enum: ['none', 'table', 'chart', 'dashboard', 'kpi'], description: 'Build a canvas object populated with the real query result. Use "table" for a row-level breakdown and "chart" or "dashboard" for a grouped visualization.' },
+        materializeAs: { type: 'string', enum: ['none', 'table', 'chart', 'dashboard', 'kpi', 'map'], description: 'Build a canvas object populated with the real query result. Use "table" for a row-level breakdown, "chart" or "dashboard" for a grouped visualization, and "map" to plot rows geographically — "map" requires latitude and longitude columns, which geo.geocode can add to a dataset of place names.' },
         title: { type: 'string', description: 'Title for the materialized object.' },
+        mapValueColumn: { type: 'string', description: 'For materializeAs "map": the numeric column that sizes each marker.' },
+        mapRegionName: { type: 'string', description: 'For materializeAs "map": the enclosing region shown on the card, e.g. "Michigan".' },
+        mapRegion: { type: 'array', items: { type: 'number' }, description: 'For materializeAs "map": [south, north, west, east] to fit the viewport to, exactly as geo.geocode returns in boundingBox. Omit to fit the plotted points.' },
+        mapOutline: { description: 'For materializeAs "map": a boundary to draw behind the points — pass geo.geocode\'s outline value for the enclosing region straight through.' },
+        mapAttribution: { type: 'string', description: 'For materializeAs "map": the geocoder attribution string to print under the map.' },
         highlight: {
           type: 'array', description: 'Row colouring for a materialized table. The first matching rule wins.',
           items: { type: 'object', required: ['column', 'tone'], additionalProperties: false, properties: { column: { type: 'string' }, op: { type: 'string', enum: [...TABULAR_FILTER_OPERATORS] }, value: {}, tone: { type: 'string', enum: ['success', 'warning', 'danger', 'info'] } } },
@@ -2098,7 +2104,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     },
     mutates: (raw: unknown) => (raw as { materializeAs?: unknown })?.materializeAs != null && (raw as { materializeAs?: unknown }).materializeAs !== 'none',
     run: (raw: unknown) => {
-      const args = raw as TabularQuery & { datasetId?: string; materializeAs?: string; title?: string; highlight?: TabularHighlightRule[] };
+      const args = raw as TabularQuery & {
+        datasetId?: string; materializeAs?: string; title?: string; highlight?: TabularHighlightRule[];
+        mapValueColumn?: string; mapRegionName?: string; mapRegion?: unknown; mapOutline?: unknown; mapAttribution?: string;
+      };
       const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
       const candidates = [...nodes, ...stagedNodes].filter((node) => ['dataset', 'table', 'spreadsheet'].includes(node.data.kind) && Array.isArray(node.data.rows) && node.data.rows.length > 0);
       const target = args.datasetId ? candidates.find((node) => node.id === args.datasetId) : candidates.length === 1 ? candidates[0] : undefined;
@@ -2113,7 +2122,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (result.unknownColumns.length) {
         return { error: `Unknown column(s): ${result.unknownColumns.join(', ')}. Available columns: ${source.columns.join(', ')}` };
       }
-      const materializeAs = ['table', 'chart', 'dashboard', 'kpi'].includes(String(args.materializeAs)) ? String(args.materializeAs) as 'table' | 'chart' | 'dashboard' | 'kpi' : null;
+      const materializeAs = ['table', 'chart', 'dashboard', 'kpi', 'map'].includes(String(args.materializeAs)) ? String(args.materializeAs) as 'table' | 'chart' | 'dashboard' | 'kpi' | 'map' : null;
+      // Resolve geography BEFORE anything is proposed, so a plot with no coordinates
+      // fails with the columns it actually looked at rather than staging an empty map.
+      const geoColumns = materializeAs === 'map' ? detectGeoColumns({ columns: result.columns, rows: result.rows }, args.mapValueColumn) : null;
+      const mapPoints = geoColumns ? mapPointsFromRows({ columns: result.columns, rows: result.rows }, geoColumns, MAX_MATERIALIZED_ROWS) : [];
+      if (materializeAs === 'map' && !mapPoints.length) {
+        return {
+          error: geoColumns?.latitude && geoColumns.longitude
+            ? `No row in this result has a usable coordinate pair in ${geoColumns.latitude}/${geoColumns.longitude}.`
+            : `This result has no latitude/longitude columns, so it cannot be plotted. Available columns: ${result.columns.join(', ')}. Resolve the place names with geo.geocode, write the returned lat/lng back onto the dataset rows with canvas_update_object, then plot it.`,
+        };
+      }
       const payload = {
         datasetId: target.id, datasetTitle: target.data.title,
         columns: result.columns, rows: result.rows.slice(0, 20),
@@ -2146,7 +2166,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             title, value: String(Object.values(result.aggregates ?? { count: result.matchedRows })[0] ?? result.matchedRows),
             status: 'Live', summary: `Computed from ${result.totalRows.toLocaleString()} rows in ${target.data.title}.`, sourceDatasetId: target.id,
           }
-          : {
+          : materializeAs === 'map'
+            ? {
+              title, status: `${mapPoints.length.toLocaleString()} plotted`,
+              mapTitle: title, mapPoints,
+              ...(geoColumns?.value ? { mapValueLabel: geoColumns.value } : {}),
+              ...(sanitizeGeoBounds(args.mapRegion) ? { mapRegion: sanitizeGeoBounds(args.mapRegion) } : {}),
+              ...(typeof args.mapRegionName === 'string' && args.mapRegionName.trim() ? { mapRegionName: args.mapRegionName.trim().slice(0, 120) } : {}),
+              // Stored FLAT — the shared patch sanitizer drops values nested deeper than
+              // four levels, and a GeoJSON MultiPolygon's positions sit past that.
+              ...(outlineRings(args.mapOutline).length ? { mapOutline: outlineRings(args.mapOutline) } : {}),
+              ...(typeof args.mapAttribution === 'string' && args.mapAttribution.trim() ? { mapAttribution: args.mapAttribution.trim().slice(0, 200) } : {}),
+              summary: `${mapPoints.length.toLocaleString()} of ${result.matchedRows.toLocaleString()} matching rows in ${target.data.title} have coordinates and are plotted.`,
+              sourceDatasetId: target.id,
+            }
+            : {
             title, status: 'Live',
             chartTitle: title,
             ...(args.groupBy ? { xAxisLabel: args.groupBy } : {}),
@@ -2165,6 +2199,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const node = newNode(kind, nextCanvasObjectPosition([...nodes, ...stagedNodes], { x: target.position.x + 460, y: target.position.y }, typeof window !== 'undefined' && window.innerWidth <= 760));
       node.data = { ...node.data, ...patch };
       if (kind === 'table') node.style = { width: 720, height: 460 };
+      if (kind === 'map') node.style = { width: 420, height: 380 };
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add ${kind} “${title}”`, node });
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Connect ${target.data.title} to ${title}`, edge: { id: crypto.randomUUID(), source: target.id, target: node.id, type: 'smoothstep', animated: true, label: 'computed from', data: { connectionKind: 'data' } } });
       return { ...payload, proposed: true, materialized: { id: node.id, kind, title, created: true } };
