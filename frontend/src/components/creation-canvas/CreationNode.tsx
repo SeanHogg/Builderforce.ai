@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Handle, NodeResizer, Position, type Node, type NodeProps } from '@xyflow/react';
+import { Handle, NodeResizer, Position, useStore, type Node, type NodeProps } from '@xyflow/react';
 import { useTranslations } from 'next-intl';
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import ReactMarkdown from 'react-markdown';
@@ -378,10 +378,13 @@ const DATA_GRID_VISIBLE_COLUMNS = 10;
  */
 function DataGridBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void }) {
   const t = useTranslations('creationCanvas.node');
-  const source = tabularFromObject(data as Record<string, unknown>);
+  // A card re-renders on selection, drag, and every neighbouring edit. Normalizing
+  // an imported workbook's rows is O(rows × columns) per sheet, so doing it inline
+  // would re-walk a 50,000-row import on each of those renders.
+  const source = useMemo(() => tabularFromObject(data as Record<string, unknown>), [data]);
   const editable = !!onEdit && Array.isArray(data.rows) && (data.kind === 'spreadsheet' || data.kind === 'table');
   const [draft, setDraft] = useState<{ row: number; column: string; value: string } | null>(null);
-  const sheets = workbookSheets(data as Record<string, unknown>);
+  const sheets = useMemo(() => workbookSheets(data as Record<string, unknown>), [data]);
   const activeSheet = textValue(data.activeSheet, sheets[0]?.name ?? '');
   const writeRows = (rows: Array<Record<string, TabularCell>>, columns = source.columns) => {
     onEdit?.({
@@ -513,7 +516,9 @@ function DataGridBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patc
 function DocumentBody({ data }: { data: CreationNodeData }) {
   const t = useTranslations('creationCanvas.node');
   const [requested, setRequested] = useState(0);
-  const document = canvasDocument(data);
+  // Paginating re-splits the whole body; a twenty-page import would do that on
+  // every re-render of a card that is only being dragged.
+  const document = useMemo(() => canvasDocument(data), [data]);
   const pages = document?.pages ?? [];
   // Editing can shorten a document under a reader who has turned past the new
   // last page, so the rendered page is always clamped to what exists.
@@ -1176,14 +1181,50 @@ type CreationNodeProps = NodeProps<CreationFlowNode> & {
  * object is a one-line addition rather than three separate lists. */
 const DOCUMENT_BODY_KINDS = new Set(['document', 'prd', 'knowledge']);
 
-export function CreationNode({ id, data, selected, width, height, canRun = true, onRun, onOpenDetails, onEditData }: CreationNodeProps) {
+/**
+ * The size the USER gave this Object — a resize drag, or an authored width and
+ * height — and nothing else.
+ *
+ * React Flow hands a custom node its MEASURED width and height. Writing those
+ * straight back onto the card is a latch: the card can then only ever be the
+ * size it happened to be measured at, because that measurement is what pins it.
+ * The Brain Object made this visible — it is a 74px mark while the conversation
+ * is docked and a 390px chat inline, so the first placement it rendered in froze
+ * the other one into a sliver, and every edge into it stayed anchored to the box
+ * that sliver reported. Any card whose content grows after it first rendered had
+ * the quieter version of the same bug: it kept the old height and scrolled.
+ *
+ * An authored size is different — React Flow already puts it on the node wrapper,
+ * so passing it down here just lets the card fill the box the user dragged.
+ */
+function useAuthoredNodeSize(id: string): { width?: number; height?: number } {
+  // Packed into a string so the store subscription compares by value: returning a
+  // fresh object from the selector would re-render this node on every store tick.
+  const authored = useStore((state) => {
+    const node = state.nodeLookup.get(id);
+    if (!node) return '';
+    const width = node.width ?? (typeof node.style?.width === 'number' ? node.style.width : undefined);
+    const height = node.height ?? (typeof node.style?.height === 'number' ? node.style.height : undefined);
+    return `${width ?? ''}:${height ?? ''}`;
+  });
+  return useMemo(() => {
+    const [width, height] = authored.split(':');
+    return {
+      ...(width ? { width: Number(width) } : {}),
+      ...(height ? { height: Number(height) } : {}),
+    };
+  }, [authored]);
+}
+
+export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onEditData }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
   const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame'].includes(data.kind);
   const specialized = new Set(['workflow','website','prototype','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram']);
+  const authoredSize = useAuthoredNodeSize(id);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || '#f8f6ff'), borderColor: String(data.frameBorder || '#9d8bea') } : undefined;
-  const measuredStyle = { ...frameStyle, ...(typeof width === 'number' && width > 0 ? { width } : {}), ...(typeof height === 'number' && height > 0 ? { height } : {}) };
+  const cardStyle = { ...frameStyle, ...authoredSize };
   return (
-    <article style={measuredStyle} data-viewport={data.viewport} className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
+    <article style={cardStyle} data-viewport={data.viewport} className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>
       <NodeResizer isVisible={selected} minWidth={240} minHeight={130} lineClassName={styles.resizeLine} handleClassName={styles.resizeHandle} />
       <Handle type="target" position={Position.Left} className={styles.handle} />
       <header className={styles.nodeHeader}>
