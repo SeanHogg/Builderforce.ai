@@ -3,6 +3,7 @@ import { AI_IMPACT_WIDGETS } from '@/components/insights/widgets/aiImpactWidgets
 import { LLM_USAGE_WIDGETS } from '@/components/insights/widgets/llmUsageWidgets';
 import { DELIVERY_WIDGETS } from '@/components/insights/widgets/deliveryWidgets';
 import { AUTONOMY_WIDGETS } from '@/components/insights/widgets/autonomyWidgets';
+import { CHAT_MODE_WIDGETS } from '@/components/insights/widgets/chatModeWidgets';
 import { FINANCE_WIDGETS } from '@/components/insights/widgets/financeWidgets';
 import { FORECAST_WIDGETS } from '@/components/insights/widgets/forecastWidgets';
 import { CORE_WIDGETS } from '@/components/widgets/registry-modules/coreWidgets';
@@ -29,6 +30,7 @@ export const ALL_WIDGETS: WidgetDef[] = [
   ...LLM_USAGE_WIDGETS,
   ...DELIVERY_WIDGETS,
   ...AUTONOMY_WIDGETS,
+  ...CHAT_MODE_WIDGETS,
   ...FINANCE_WIDGETS,
   ...FORECAST_WIDGETS,
   // ── Non-insights surfaces (proves the registry is app-wide) ──

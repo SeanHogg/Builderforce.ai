@@ -2465,6 +2465,33 @@
         "tenant_token_limit": "Der Workspace hat sein Token-Kontingent aufgebraucht, daher ist die Autonomie für ALLE seine Tickets pausiert, bis das Kontingent zurückgesetzt oder der Tarif erhöht wird.",
         "cloud_run_limit": "Der Workspace hat sein monatliches Cloud-Lauf-Kontingent aufgebraucht. Ein erneuter Versuch ändert daran nichts — Tarif erhöhen oder auf die Zurücksetzung warten. On-Prem- und VS-Code-Läufe bleiben unbegrenzt."
       }
+    },
+    "chatModes": {
+      "title": "Unterhaltungen und Ausführungen",
+      "subtitle": "Wie viel von dem, was hier begonnen wird, ist eine Frage, wie viel ist übergebene Arbeit — und wie viel davon hat ein Agent tatsächlich übernommen.",
+      "mode": {
+        "chat": "Chat",
+        "work": "Arbeit"
+      },
+      "verdict": "{work} Arbeits- gegenüber {chat} Chat-Unterhaltungen. Von der eröffneten Arbeit wurden {dispatched} von {linked} Tickets tatsächlich an einen Agenten übergeben.",
+      "verdictNoWork": "{chat} Chat- und {work} Arbeits-Unterhaltungen. In diesem Zeitraum wurden keine Tickets verknüpft, daher gibt es noch keine Ausführungsquote.",
+      "canvasNote": "Canvas-Sitzungen in diesem Zeitraum: {sessions} (davon {work} im Arbeitsmodus).",
+      "workShareSub": "{work} von {total} Unterhaltungen im Modus {mode} begonnen",
+      "executionRateSub": "{dispatched} von {linked} verknüpften Tickets wurden gestartet",
+      "costShareSub": "{cost} im Modus {mode} ausgegeben",
+      "noWorkLinked": "Noch keine Arbeitstickets verknüpft",
+      "noTickets": "In diesem Zeitraum keine Tickets verknüpft",
+      "empty": "Keine Unterhaltungen in diesem Zeitraum",
+      "loadFailed": "Modusnutzung konnte nicht geladen werden",
+      "mixAria": "Begonnene Unterhaltungen nach Modus",
+      "funnelAria": "Übergebene gegenüber verknüpften Tickets nach Modus",
+      "colMode": "Modus",
+      "colConversations": "Unterhaltungen",
+      "colEngaged": "Genutzt",
+      "colLinked": "Verknüpfte Tickets",
+      "colDispatched": "Übergeben",
+      "colExecutionRate": "Ausführungsquote",
+      "colCost": "Kosten"
     }
   },
   "cloudAgentForm": {
@@ -3624,7 +3651,8 @@
       "empPerformers": "Leistung",
       "empInitiatives": "Initiativen-Mix",
       "forecast": "Prognose",
-      "autonomy": "Autonomie"
+      "autonomy": "Autonomie",
+      "chatModes": "Unterhaltungen und Ausführungen"
     },
     "title": {
       "aiProductivity": "KI-Produktivitätswert",
@@ -3740,7 +3768,13 @@
       "autoStallGates": "Wo die Autonomie stehen bleibt",
       "autoOriginMix": "Wer die Arbeit anlegt",
       "autoFunnelTable": "Autonomie-Funnel (Tabelle)",
-      "autoCoverage": "Prüfungsabdeckung"
+      "autoCoverage": "Prüfungsabdeckung",
+      "chatModeWorkShare": "Arbeitsanteil",
+      "chatModeExecutionRate": "Ausführungsquote",
+      "chatModeCostShare": "Anteil der Ausführungskosten",
+      "chatModeMix": "Unterhaltungen nach Modus",
+      "chatModeFunnel": "Übergeben gegenüber verknüpft",
+      "chatModeTable": "Aufschlüsselung nach Modus"
     },
     "loading": "Laden…",
     "overview": {
@@ -3935,6 +3969,11 @@
       "exportCsv": "CSV exportieren",
       "exporting": "Exportiere…",
       "focusMix": "Fokus"
+    },
+    "desc": {
+      "chatModeWorkShare": "Anteil der Unterhaltungen, die als übergebene Arbeit statt als Frage begonnen wurden.",
+      "chatModeExecutionRate": "Von den durch Arbeits-Unterhaltungen eröffneten Tickets: wie viele ein Agent tatsächlich gestartet hat.",
+      "chatModeCostShare": "Anteil der KI-Ausgaben, der auf Ausführung statt auf Unterhaltung entfällt."
     }
   },
   "compile": {

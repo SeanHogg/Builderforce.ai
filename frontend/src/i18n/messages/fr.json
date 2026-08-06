@@ -2465,6 +2465,33 @@
         "tenant_token_limit": "L'espace de travail a épuisé son quota de jetons : l'autonomie est en pause pour tous ses tickets jusqu'à la réinitialisation du quota ou une montée en gamme.",
         "cloud_run_limit": "L'espace de travail a épuisé son quota mensuel d'exécutions cloud. Réessayer n'y changera rien : passez à un forfait supérieur ou attendez la réinitialisation. Les exécutions on-premise et VS Code restent illimitées."
       }
+    },
+    "chatModes": {
+      "title": "Discussions et exécutions",
+      "subtitle": "Quelle part de ce qui démarre ici est une question, quelle part est du travail délégué, et quelle part de ce travail un agent a réellement pris en charge.",
+      "mode": {
+        "chat": "Discussion",
+        "work": "Travail"
+      },
+      "verdict": "{work} conversations de travail contre {chat} de discussion. Sur le travail ouvert, {dispatched} tickets sur {linked} ont réellement été confiés à un agent.",
+      "verdictNoWork": "{chat} conversations de discussion et {work} de travail. Aucun ticket n'a été rattaché sur cette période, il n'y a donc pas encore de taux d'exécution.",
+      "canvasNote": "Sessions de canevas sur cette période : {sessions} (dont {work} en mode Travail).",
+      "workShareSub": "{work} des {total} conversations démarrées en mode {mode}",
+      "executionRateSub": "{dispatched} des {linked} tickets rattachés ont eu une exécution lancée",
+      "costShareSub": "{cost} dépensé en mode {mode}",
+      "noWorkLinked": "Aucun ticket de travail rattaché pour l'instant",
+      "noTickets": "Aucun ticket rattaché sur cette période",
+      "empty": "Aucune conversation sur cette période",
+      "loadFailed": "Impossible de charger l'utilisation par mode",
+      "mixAria": "Conversations démarrées, par mode",
+      "funnelAria": "Tickets lancés par rapport aux tickets rattachés, par mode",
+      "colMode": "Mode",
+      "colConversations": "Conversations",
+      "colEngaged": "Utilisées",
+      "colLinked": "Tickets rattachés",
+      "colDispatched": "Lancés",
+      "colExecutionRate": "Taux d'exécution",
+      "colCost": "Coût"
     }
   },
   "cloudAgentForm": {
@@ -3624,7 +3651,8 @@
       "empPerformers": "Performance",
       "empInitiatives": "Répartition par initiative",
       "forecast": "Prévisions",
-      "autonomy": "Autonomie"
+      "autonomy": "Autonomie",
+      "chatModes": "Discussions et exécutions"
     },
     "title": {
       "aiProductivity": "Score de productivité IA",
@@ -3740,7 +3768,13 @@
       "autoStallGates": "Où l'autonomie se bloque",
       "autoOriginMix": "Qui ouvre le travail",
       "autoFunnelTable": "Entonnoir d'autonomie (tableau)",
-      "autoCoverage": "Couverture de l'audit"
+      "autoCoverage": "Couverture de l'audit",
+      "chatModeWorkShare": "Part de travail",
+      "chatModeExecutionRate": "Taux d'exécution",
+      "chatModeCostShare": "Part du coût d'exécution",
+      "chatModeMix": "Conversations par mode",
+      "chatModeFunnel": "Lancés contre rattachés",
+      "chatModeTable": "Détail par mode"
     },
     "loading": "Chargement…",
     "overview": {
@@ -3935,6 +3969,11 @@
       "exportCsv": "Exporter CSV",
       "exporting": "Exportation…",
       "focusMix": "Focalisation"
+    },
+    "desc": {
+      "chatModeWorkShare": "Part des conversations démarrées comme travail délégué plutôt que comme question.",
+      "chatModeExecutionRate": "Sur les tickets ouverts par les conversations de travail, combien un agent a réellement démarrés.",
+      "chatModeCostShare": "Part des dépenses d'IA consacrée à l'exécution plutôt qu'à la conversation."
     }
   },
   "compile": {

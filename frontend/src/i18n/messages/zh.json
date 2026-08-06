@@ -2465,6 +2465,33 @@
         "tenant_token_limit": "工作区已用完令牌额度，因此其所有工单的自主执行都已暂停，直到额度重置或升级套餐。",
         "cloud_run_limit": "工作区已用完本月云端运行额度。重试无法解除——请升级套餐或等待重置。本地和 VS Code 运行不受限制。"
       }
+    },
+    "chatModes": {
+      "title": "对话与执行",
+      "subtitle": "在这里发起的内容中，有多少是提问，有多少是交办的工作，以及其中有多少确实被代理接手执行。",
+      "mode": {
+        "chat": "对话",
+        "work": "执行"
+      },
+      "verdict": "{work} 个执行对话，{chat} 个普通对话。在其开出的工作中，{linked} 个工单里有 {dispatched} 个实际派发给了代理。",
+      "verdictNoWork": "{chat} 个对话与 {work} 个执行对话。此时间窗内未关联任何工单，因此尚无执行率。",
+      "canvasNote": "此时间窗内的画布会话：{sessions} 个（其中 {work} 个处于执行模式）。",
+      "workShareSub": "已发起的 {total} 个对话中有 {work} 个处于{mode}模式",
+      "executionRateSub": "{linked} 个已关联工单中有 {dispatched} 个已派发执行",
+      "costShareSub": "{mode}模式下花费 {cost}",
+      "noWorkLinked": "尚未关联任何工单",
+      "noTickets": "此时间窗内未关联工单",
+      "empty": "此时间窗内没有对话",
+      "loadFailed": "无法加载模式使用数据",
+      "mixAria": "按模式统计的已发起对话数",
+      "funnelAria": "按模式统计的已派发工单与已关联工单",
+      "colMode": "模式",
+      "colConversations": "对话数",
+      "colEngaged": "已使用",
+      "colLinked": "已关联工单",
+      "colDispatched": "已派发",
+      "colExecutionRate": "执行率",
+      "colCost": "成本"
     }
   },
   "cloudAgentForm": {
@@ -3624,7 +3651,8 @@
       "empPerformers": "绩效",
       "empInitiatives": "战略分布",
       "forecast": "预测",
-      "autonomy": "自主"
+      "autonomy": "自主",
+      "chatModes": "对话与执行"
     },
     "title": {
       "aiProductivity": "AI 生产力评分",
@@ -3740,7 +3768,13 @@
       "autoStallGates": "自主执行停滞之处",
       "autoOriginMix": "谁在创建工作",
       "autoFunnelTable": "自主漏斗（表格）",
-      "autoCoverage": "审计覆盖范围"
+      "autoCoverage": "审计覆盖范围",
+      "chatModeWorkShare": "执行占比",
+      "chatModeExecutionRate": "执行率",
+      "chatModeCostShare": "执行成本占比",
+      "chatModeMix": "按模式统计的对话",
+      "chatModeFunnel": "已派发与已关联",
+      "chatModeTable": "模式明细"
     },
     "loading": "加载中…",
     "overview": {
@@ -3935,6 +3969,11 @@
       "exportCsv": "导出 CSV",
       "exporting": "导出中…",
       "focusMix": "专注度"
+    },
+    "desc": {
+      "chatModeWorkShare": "以交办工作（而非提问）方式发起的对话占比。",
+      "chatModeExecutionRate": "执行对话开出的工单中，实际由代理启动的比例。",
+      "chatModeCostShare": "用于执行（而非对话）的 AI 支出占比。"
     }
   },
   "compile": {

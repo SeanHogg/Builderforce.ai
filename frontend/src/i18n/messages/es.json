@@ -2465,6 +2465,33 @@
         "tenant_token_limit": "El espacio de trabajo agotó su cuota de tokens, así que la autonomía está en pausa para todos sus tickets hasta que la cuota se reinicie o se mejore el plan.",
         "cloud_run_limit": "El espacio de trabajo agotó su cuota mensual de ejecuciones en la nube. Reintentar no lo resuelve: mejora el plan o espera al reinicio. Las ejecuciones on-premise y de VS Code siguen sin límite."
       }
+    },
+    "chatModes": {
+      "title": "Conversaciones frente a ejecuciones",
+      "subtitle": "Qué parte de lo que se inicia aquí es una pregunta, qué parte es trabajo delegado y cuánto de ese trabajo recogió realmente un agente.",
+      "mode": {
+        "chat": "Chat",
+        "work": "Trabajo"
+      },
+      "verdict": "{work} conversaciones de trabajo frente a {chat} de chat. Del trabajo que abrieron, {dispatched} de {linked} tiques se despacharon realmente a un agente.",
+      "verdictNoWork": "{chat} conversaciones de chat y {work} de trabajo. No se vinculó ningún tique en esta ventana, así que aún no hay tasa de ejecución.",
+      "canvasNote": "Sesiones de lienzo en esta ventana: {sessions} ({work} en modo Trabajo).",
+      "workShareSub": "{work} de {total} conversaciones iniciadas en modo {mode}",
+      "executionRateSub": "{dispatched} de {linked} tiques vinculados tuvieron una ejecución despachada",
+      "costShareSub": "{cost} gastado en modo {mode}",
+      "noWorkLinked": "Aún no hay tiques de trabajo vinculados",
+      "noTickets": "No se vincularon tiques en esta ventana",
+      "empty": "No hay conversaciones en esta ventana",
+      "loadFailed": "No se pudo cargar el uso por modo",
+      "mixAria": "Conversaciones iniciadas, por modo",
+      "funnelAria": "Tiques despachados frente a tiques vinculados, por modo",
+      "colMode": "Modo",
+      "colConversations": "Conversaciones",
+      "colEngaged": "Usadas",
+      "colLinked": "Tiques vinculados",
+      "colDispatched": "Despachados",
+      "colExecutionRate": "Tasa de ejecución",
+      "colCost": "Coste"
     }
   },
   "cloudAgentForm": {
@@ -3624,7 +3651,8 @@
       "empPerformers": "Desempeño",
       "empInitiatives": "Mezcla de iniciativas",
       "forecast": "Pronóstico",
-      "autonomy": "Autonomía"
+      "autonomy": "Autonomía",
+      "chatModes": "Conversaciones frente a ejecuciones"
     },
     "title": {
       "aiProductivity": "Puntuación de productividad de IA",
@@ -3740,7 +3768,13 @@
       "autoStallGates": "Dónde se detiene la autonomía",
       "autoOriginMix": "Quién abre el trabajo",
       "autoFunnelTable": "Embudo de autonomía (tabla)",
-      "autoCoverage": "Cobertura de la auditoría"
+      "autoCoverage": "Cobertura de la auditoría",
+      "chatModeWorkShare": "Proporción de trabajo",
+      "chatModeExecutionRate": "Tasa de ejecución",
+      "chatModeCostShare": "Proporción del coste de ejecución",
+      "chatModeMix": "Conversaciones por modo",
+      "chatModeFunnel": "Despachados frente a vinculados",
+      "chatModeTable": "Desglose por modo"
     },
     "loading": "Cargando…",
     "overview": {
@@ -3935,6 +3969,11 @@
       "exportCsv": "Exportar CSV",
       "exporting": "Exportando…",
       "focusMix": "Enfoque"
+    },
+    "desc": {
+      "chatModeWorkShare": "Proporción de conversaciones iniciadas como trabajo delegado en lugar de una pregunta.",
+      "chatModeExecutionRate": "De los tiques que abrieron las conversaciones de trabajo, cuántos inició realmente un agente.",
+      "chatModeCostShare": "Proporción del gasto en IA destinada a ejecución en lugar de conversación."
     }
   },
   "compile": {
