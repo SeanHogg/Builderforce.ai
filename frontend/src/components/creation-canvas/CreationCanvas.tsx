@@ -75,7 +75,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { useLlmModels } from '@/lib/useLlmModels';
 import { ChatInput, type ChatModelOptions, type ChatModelSelection } from '@/components/ChatInput';
 import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
-import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, creativePreviewImageUrl, generateEvermindMedia, mediaFrameDataUrl, navigableArtifactUrl, withCreationDeliverable, type CreationDeliverable } from '@/lib/creationDeliverables';
+import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, creativeMeshGeometry, creativePreviewImageUrl, generateEvermindMedia, mediaFrameDataUrl, navigableArtifactUrl, withCreationDeliverable, type CreationDeliverable } from '@/lib/creationDeliverables';
 import { canvasDiagram, canvasFiles, canvasObjectMarkdown, type CanvasFile } from '@/lib/canvasDocuments';
 import { listEvermindModels } from '@/lib/studioModelsApi';
 import { AITrainingPanel } from '@/components/AITrainingPanel';
@@ -3058,6 +3058,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // A generated object carries a picture of what it produced — a rendered
       // mesh, a drawn profile, an image. In 3D that is the point of the card.
       preview: creativePreviewImageUrl(node.data) ?? undefined,
+      // A model is handed over as geometry, not as a picture of geometry: the 3D
+      // view redraws it from wherever the camera ends up, so turning the scene
+      // turns the object instead of sliding a photograph of it around.
+      geometry: creativeMeshGeometry(node.data) ?? undefined,
       // Where the user has put this object through depth, if they have. It rides
       // in the object's own content, so it survives a reload and a share exactly
       // like its position on the flat board does.

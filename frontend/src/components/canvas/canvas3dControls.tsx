@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { Canvas3DDepthMode } from './canvas3d';
 
 /**
@@ -60,6 +60,37 @@ export function Canvas3DControlsProvider({ children }: { children: ReactNode }) 
 /** The live 3D commands, or `null` while this canvas is being read flat. */
 export function useCanvas3DControls(): Canvas3DControls | null {
   return useContext(Canvas3DControlsContext)?.controls ?? null;
+}
+
+/** Whether a canvas is being read in 3D, and how it says so to its own chrome. */
+export interface CanvasThreeDState {
+  active: boolean;
+  toggle: () => void;
+  exit: () => void;
+  /**
+   * Spread onto `<CanvasCommands>`. The rail shows the 3D control only when a
+   * canvas hands it one, so this is also what makes the button appear — a canvas
+   * opts in by calling the hook, not by repeating the same two props.
+   */
+  commandProps: { threeDActive: boolean; onToggleThreeD: () => void };
+}
+
+/**
+ * The flat-or-3D state every spatial canvas keeps.
+ *
+ * Five canvases each held their own `threeD` boolean, their own toggle, and their
+ * own pair of props for the rail; the state is identical in all of them, so it
+ * lives here once. A canvas still owns what its objects LOOK like in the space
+ * (its `describe` adapter) — only the switching is shared.
+ */
+export function useCanvasThreeD(): CanvasThreeDState {
+  const [active, setActive] = useState(false);
+  const toggle = useCallback(() => setActive((current) => !current), []);
+  const exit = useCallback(() => setActive(false), []);
+  return useMemo(
+    () => ({ active, toggle, exit, commandProps: { threeDActive: active, onToggleThreeD: toggle } }),
+    [active, exit, toggle],
+  );
 }
 
 /** Publishes a scene's commands for as long as that scene is on screen. */

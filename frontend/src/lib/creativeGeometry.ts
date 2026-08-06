@@ -450,7 +450,7 @@ export function parseGltf(json: string, binaryChunk: ArrayBuffer | null = null):
   const buffers = list('buffers').map((buffer) => {
     const uri = typeof buffer.uri === 'string' ? buffer.uri : '';
     if (!uri) return binaryChunk;
-    const match = /^data:[^,]*;base64,(.*)$/s.exec(uri);
+    const match = /^data:[^,]*;base64,([\s\S]*)$/.exec(uri);
     return match ? base64ToBuffer(match[1]!) : null;
   });
   const bufferViews = list('bufferViews');

@@ -8,6 +8,9 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { CanvasCommands, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
+import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
+import { Canvas3DControlsProvider, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
+import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { pmoApi, type ValueStream, type ValueStreamInitiative, type ValueStreamEdge } from '@/lib/builderforceApi';
 import { usePmData } from '@/lib/pm/usePmData';
 import { PmCard, PmEmpty, PmError } from '@/components/pm/pmShared';
@@ -66,6 +69,7 @@ export function ValueStreamGraph() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [minimapOpen, setMinimapOpen] = useState(true);
   const flowRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
+  const threeD = useCanvasThreeD();
 
   const built = useMemo(() => {
     if (!data || data.nodes.length === 0) return null;
@@ -105,6 +109,37 @@ export function ValueStreamGraph() {
     window.setTimeout(() => void flowRef.current?.fitView({ padding: .18, maxZoom: 1, duration: 320 }), 0);
   }, [edges, setNodes]);
 
+  /**
+   * How an initiative reads in the 3D space.
+   *
+   * The depth axis is the one thing a flat value stream cannot show at a glance:
+   * stacked by dependency flow, "what is blocked behind what" is the first thing
+   * the eye gets instead of something traced arrow by arrow. Status is the group
+   * axis, so the same graph can also be read as "where is everything up to".
+   */
+  const initiativeById = useMemo(() => new Map((data?.nodes ?? []).map((initiative) => [initiative.id, initiative])), [data]);
+  const describeThreeD = useCallback((node: Node): Canvas3DDescriptor => {
+    const initiative = initiativeById.get(node.id);
+    if (!initiative) return { label: String((node.data as { label?: string } | undefined)?.label ?? node.id), group: t('deliv.valueStream.status.proposed') };
+    return {
+      label: initiative.name,
+      sublabel: t('deliv.valueStream.completion', { pct: initiative.completionPct }),
+      group: t(`deliv.valueStream.status.${initiative.status}` as 'deliv.valueStream.status.active'),
+      icon: initiative.onCriticalPath ? '⚠' : '◆',
+      accent: initiative.onCriticalPath ? CRITICAL_COLOR : (STATUS_COLOR[initiative.status] ?? STATUS_COLOR.proposed!),
+      depthOffset: canvas3dDepthOffset(node),
+    };
+  }, [initiativeById, t]);
+  /**
+   * The value stream is a computed layout, but where an initiative sits is still
+   * the reader's to arrange while they study it — the same freedom the flat board
+   * already gives, kept rather than dropped when the board is tilted.
+   */
+  const moveThreeD = useCallback(
+    (moves: readonly Canvas3DMove[]) => setNodes((current) => applyCanvas3DMoves(current, moves)),
+    [setNodes],
+  );
+
   if (error) return <PmError message={error} />;
   if (!data) return null;
   if (data.nodes.length === 0) return null; // no initiatives → nothing to stream
@@ -119,19 +154,31 @@ export function ValueStreamGraph() {
       {data.edges.length === 0 ? (
         <PmEmpty message={t('deliv.valueStream.noDeps')} />
       ) : (
-        <div style={{ height: 420, border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
-          <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onInit={(instance) => { flowRef.current = instance; }} fitView proOptions={{ hideAttribution: true }}>
-            <Background color="var(--border-subtle)" gap={18} />
-            <CanvasCommands
-              minimapOpen={minimapOpen}
-              setMinimapOpen={setMinimapOpen}
-              onCleanLayout={cleanLayout}
-              showInteractive={false}
-              minimapNodeColor="var(--coral-bright)"
-              minimapMaskColor="rgba(5, 10, 20, .72)"
-            />
-          </ReactFlow>
-        </div>
+        <Canvas3DControlsProvider>
+          {/* The scene fills this box, so it has to be the box it is positioned
+              against — see `.scene` in Canvas3DView.module.css. */}
+          <div style={{ position: 'relative', height: 420, border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+            <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onInit={(instance) => { flowRef.current = instance; }} fitView proOptions={{ hideAttribution: true }}>
+              <Background color="var(--border-subtle)" gap={18} />
+              <CanvasCommands
+                minimapOpen={minimapOpen}
+                setMinimapOpen={setMinimapOpen}
+                onCleanLayout={cleanLayout}
+                showInteractive={false}
+                minimapNodeColor="var(--coral-bright)"
+                minimapMaskColor="rgba(5, 10, 20, .72)"
+                {...threeD.commandProps}
+              />
+            </ReactFlow>
+            {threeD.active && <Canvas3DView
+              nodes={nodes}
+              edges={edges.map((edge) => ({ source: edge.source, target: edge.target }))}
+              describe={describeThreeD}
+              onMove={moveThreeD}
+              onExit={threeD.exit}
+            />}
+          </div>
+        </Canvas3DControlsProvider>
       )}
     </PmCard>
   );

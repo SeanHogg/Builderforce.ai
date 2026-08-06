@@ -14,6 +14,9 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { CanvasCommands, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
+import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
+import { Canvas3DControlsProvider, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
+import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { tasksApi, type Task, type DependencyEdge, type DepType } from '@/lib/builderforceApi';
 import { usePmScope } from '@/lib/pm/scope';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
@@ -106,6 +109,9 @@ function cycleEdgeKeys(deps: DependencyEdge[]): Set<string> {
 /** The dependency graph for ONE project. `readOnly` hides the editor (rollup use). */
 function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number; readOnly?: boolean }) {
   const t = useTranslations('pm');
+  // The app's own confirmation, not the browser's: `window.confirm` is blocked in
+  // embeds, unstyled, and untranslatable.
+  const confirm = useConfirm();
   const tasksQ = usePmData<Task[]>(() => tasksApi.list(projectId), [projectId]);
   const depsQ = usePmData<DependencyEdge[]>(() => tasksApi.dependencies(projectId), [projectId]);
 
@@ -118,6 +124,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
   const [busy, setBusy] = useState(false);
   const [minimapOpen, setMinimapOpen] = useState(true);
   const flowRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
+  const threeD = useCanvasThreeD();
 
   const tasks = tasksQ.data;
   const deps = depsQ.data;
@@ -175,6 +182,32 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
     setNodes((current) => cleanCanvasLayout(current, edges));
     window.setTimeout(() => void flowRef.current?.fitView({ padding: .18, maxZoom: 1, duration: 320 }), 0);
   }, [edges, setNodes]);
+
+  /**
+   * How a task reads in the 3D space.
+   *
+   * This graph exists to answer "what is blocked behind what", and on a flat board
+   * that answer is traced arrow by arrow. Stacked on the dependency axis it is the
+   * first thing the eye gets: precedence depth becomes distance, and epic children
+   * sit a plane behind their parent. Status is the other axis, for reading the same
+   * graph as "where is everything up to".
+   */
+  const taskById = useMemo(() => new Map((tasks ?? []).map((task) => [String(task.id), task])), [tasks]);
+  const describeThreeD = useCallback((node: Node): Canvas3DDescriptor => {
+    const task = taskById.get(node.id);
+    if (!task) return { label: node.id, group: t('epicStatus.backlog') };
+    return {
+      label: task.title,
+      sublabel: task.key,
+      group: t(`epicStatus.${task.status}` as 'epicStatus.backlog'),
+      accent: STATUS_COLOR[task.status] ?? STATUS_COLOR.backlog!,
+      depthOffset: canvas3dDepthOffset(node),
+    };
+  }, [t, taskById]);
+  const moveThreeD = useCallback(
+    (moves: readonly Canvas3DMove[]) => setNodes((current) => applyCanvas3DMoves(current, moves)),
+    [setNodes],
+  );
 
   if (tasksQ.error || depsQ.error) return <PmError message={tasksQ.error ?? depsQ.error ?? 'error'} />;
   if (!tasks || !deps) return <PmEmpty message={t('depLoading')} />;
@@ -239,27 +272,39 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
           {formError && <span style={{ color: 'var(--danger, #dc2626)', fontSize: 13 }}>{formError}</span>}
         </div>
       )}
-      <div style={{ height: readOnly ? 360 : 520, border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
-        <ReactFlow
-          nodes={nodes}
-          edges={edges}
-          onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onEdgeClick={onEdgeClick}
-          onInit={(instance) => { flowRef.current = instance; }}
-          fitView
-          proOptions={{ hideAttribution: true }}
-        >
-          <Background color="var(--border-subtle)" gap={18} />
-          <CanvasCommands
-            minimapOpen={minimapOpen}
-            setMinimapOpen={setMinimapOpen}
-            onCleanLayout={cleanLayout}
-            minimapNodeColor="var(--coral-bright)"
-            minimapMaskColor="rgba(5, 10, 20, .72)"
-          />
-        </ReactFlow>
-      </div>
+      <Canvas3DControlsProvider>
+        {/* The scene fills this box, so it has to be the box it is positioned
+            against — see `.scene` in Canvas3DView.module.css. */}
+        <div style={{ position: 'relative', height: readOnly ? 360 : 520, border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+          <ReactFlow
+            nodes={nodes}
+            edges={edges}
+            onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
+            onEdgeClick={onEdgeClick}
+            onInit={(instance) => { flowRef.current = instance; }}
+            fitView
+            proOptions={{ hideAttribution: true }}
+          >
+            <Background color="var(--border-subtle)" gap={18} />
+            <CanvasCommands
+              minimapOpen={minimapOpen}
+              setMinimapOpen={setMinimapOpen}
+              onCleanLayout={cleanLayout}
+              minimapNodeColor="var(--coral-bright)"
+              minimapMaskColor="rgba(5, 10, 20, .72)"
+              {...threeD.commandProps}
+            />
+          </ReactFlow>
+          {threeD.active && <Canvas3DView
+            nodes={nodes}
+            edges={edges.map((edge) => ({ source: edge.source, target: edge.target }))}
+            describe={describeThreeD}
+            onMove={moveThreeD}
+            onExit={threeD.exit}
+          />}
+        </div>
+      </Canvas3DControlsProvider>
       {!readOnly && (
         <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>
           {t('depLegend')}
@@ -271,7 +316,6 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
 
 export function DependencyGraph() {
   const t = useTranslations('pm');
-  const confirm = useConfirm();
   const { projectId } = usePmScope();
   // Optional: present in the app shell, absent in embed (which scopes explicitly).
   const scope = useOptionalProjectScope();

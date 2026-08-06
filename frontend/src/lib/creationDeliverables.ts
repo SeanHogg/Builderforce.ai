@@ -1,5 +1,5 @@
 import { apiRequest } from './apiClient';
-import { dxfPreviewSvg, stlPreviewSvg, svgDataUrl } from './creativeGeometry';
+import { dxfPreviewSvg, meshFormatFromHint, stlPreviewSvg, svgDataUrl, type MeshFormat } from './creativeGeometry';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
 
 export type CreationDeliverableStatus = 'running' | 'delivered' | 'failed';
@@ -115,6 +115,25 @@ export function creativePreviewImageUrl(data: CreationNodeData): string | null {
   if (thumbnail) return thumbnail;
   const output = typeof data.outputUrl === 'string' ? data.outputUrl.trim() : '';
   return output && isDisplayableImageUrl(output) ? output : null;
+}
+
+/**
+ * The mesh a creative object exported, when it exported one.
+ *
+ * A picture of a model keeps the angle it was drawn at; the geometry does not, so
+ * a view that can turn the object asks for this instead of the thumbnail. The
+ * format is read from whatever the object recorded about its own export — file
+ * name, media type, or the format label — before falling back to the URL, so a
+ * `data:` deliverable is recognised as readily as a stored file.
+ */
+export function creativeMeshGeometry(data: CreationNodeData): { url: string; format: MeshFormat } | null {
+  const url = typeof data.outputUrl === 'string' ? data.outputUrl.trim() : '';
+  if (!url) return null;
+  const declared = [data.outputFileName, data.outputMimeType, data.outputFormat]
+    .filter((value): value is string => typeof value === 'string')
+    .join(' ');
+  const format = meshFormatFromHint(declared) ?? meshFormatFromHint(url);
+  return format ? { url, format } : null;
 }
 
 /** A closed, manifold box — the smallest solid an STL can honestly claim to be. */

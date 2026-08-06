@@ -369,6 +369,53 @@ export function canvas3dAxes({ yaw, pitch, zoom }: Canvas3DOrbit): Canvas3DAxes 
 /** Which way a drag moves an object: across its plane, or through depth. */
 export type Canvas3DDragAxis = 'plane' | 'depth';
 
+/** One object's movement through the space, in board pixels. */
+export interface Canvas3DMove {
+  id: string;
+  dx: number;
+  dy: number;
+  /** Change in how far the object floats off its depth plane. */
+  dz: number;
+}
+
+/**
+ * Apply a 3D move to the nodes the flat canvas is holding.
+ *
+ * There is ONE set of positions, not a 3D copy of them: across the plane the move
+ * IS the board position, and through depth it is how far the object floats off
+ * the layer its dependencies put it on — which rides in the node's own data, so it
+ * is saved, shared and restored exactly like a board position is. Every canvas
+ * that lets objects be moved in 3D answers the same way, so it is answered here
+ * rather than five times over.
+ */
+export function applyCanvas3DMoves<T extends Canvas3DNode & { data?: unknown }>(
+  nodes: readonly T[],
+  moves: readonly Canvas3DMove[],
+  movable: (node: T) => boolean = () => true,
+): T[] {
+  if (!moves.length) return nodes as T[];
+  const byId = new Map(moves.map((move) => [move.id, move]));
+  return nodes.map((node) => {
+    const move = byId.get(node.id);
+    if (!move || !movable(node)) return node;
+    const data = (node.data ?? {}) as Record<string, unknown>;
+    const depth = (typeof data.depthOffset === 'number' ? data.depthOffset : 0) + move.dz;
+    return {
+      ...node,
+      position: { x: node.position.x + move.dx, y: node.position.y + move.dy },
+      // A zero offset is the ABSENCE of one: an object settled back onto its layer
+      // must not carry a stale field into every future save.
+      data: depth === 0 ? { ...data, depthOffset: undefined } : { ...data, depthOffset: depth },
+    };
+  });
+}
+
+/** The lift a node is carrying, ready to hand back to a `describe()` adapter. */
+export function canvas3dDepthOffset(node: { data?: unknown }): number | undefined {
+  const value = (node.data as { depthOffset?: unknown } | undefined)?.depthOffset;
+  return typeof value === 'number' ? value : undefined;
+}
+
 /**
  * An axis shorter than this on screen is pointing at the camera, and a drag has
  * no direction left to follow along it.

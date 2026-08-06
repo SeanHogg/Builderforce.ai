@@ -40,6 +40,9 @@ import {
   type Integration,
 } from './integrations';
 import { CanvasCommands, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
+import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
+import { Canvas3DControlsProvider, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
+import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 
 /** dataTransfer MIME for palette → canvas drag-and-drop. */
 const DND_MIME = 'application/x-wf-node';
@@ -192,6 +195,32 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
     setNodes((current) => cleanCanvasLayout(current, edges));
     window.setTimeout(() => void rfRef.current?.fitView({ padding: .18, maxZoom: 1, duration: 320 }), 0);
   }, [edges, setNodes]);
+
+  const threeD = useCanvasThreeD();
+  /**
+   * How a step reads in the 3D space.
+   *
+   * A workflow IS a dependency flow, so the depth axis is the graph's own subject:
+   * stacked by it, "what runs after what" is distance rather than a line to follow,
+   * and a branch that rejoins three steps later reads at a glance. The node-kind
+   * catalog already owns each step's icon, accent and family, so the space uses
+   * exactly the vocabulary the palette and the flat node do.
+   */
+  const describeThreeD = useCallback((node: Node<BuilderNodeData>): Canvas3DDescriptor => {
+    const meta = NODE_KIND_MAP[node.data.kind];
+    return {
+      label: node.data.label || meta?.label || node.data.kind,
+      sublabel: meta?.blurb,
+      group: meta?.group ?? 'Integrations',
+      icon: meta?.icon,
+      accent: meta?.accent,
+      depthOffset: canvas3dDepthOffset(node),
+    };
+  }, []);
+  const moveThreeD = useCallback(
+    (moves: readonly Canvas3DMove[]) => setNodes((current) => applyCanvas3DMoves(current, moves)),
+    [setNodes],
+  );
 
   const onConnect = useCallback(
     (c: Connection) => setEdges((eds) => addEdge({ ...c, id: crypto.randomUUID() }, eds)),

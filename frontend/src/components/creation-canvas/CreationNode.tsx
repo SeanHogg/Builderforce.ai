@@ -10,7 +10,7 @@ import { Avatar, evermindLearnedStatus, evermindNextAction } from '@seanhogg/bui
 import type { CreationNodeData } from './types';
 import styles from './CreationCanvas.module.css';
 import { creationObjectDefinition } from './creationObjectRegistry';
-import { BrainActivityBar, useBrainActivity } from './BrainActivityView';
+import { BrainActivityBar, brainActivityLine, useBrainActivity } from './BrainActivityView';
 import { BrainSurfaceActions, BrainSurfaceBody } from './BrainDock';
 import { useBrainSurface } from './brainSurfaceContext';
 import { highlightToneFor, tabularFromObject, type TabularCell, type TabularHighlightRule } from '@/lib/canvasTabularData';
@@ -870,14 +870,23 @@ function DrawingBody({ data }: { data: CreationNodeData }) {
 }
 
 /**
- * The Brain Object — either the conversation itself, or an anchor pointing at it.
+ * The Brain Object — the conversation itself, its mark, or an anchor pointing at it.
  *
  * There is exactly ONE Brain transcript on the canvas at a time. Where it renders is
  * the user's placement choice: docked to an edge, or right here in the graph. When it
- * is docked this Object is an anchor (latest exchange + a way back to the dock); when
- * it is inline the Object IS the chat, because a small chat card hovering over a board
+ * is inline the Object IS the chat, because a small chat card hovering over a board
  * that already carries a Brain Object was two live views of one conversation — the
  * "which one am I actually talking to?" confusion this canvas exists to avoid.
+ *
+ * When it is docked the Object collapses to Brain's MARK. A full card repeating the
+ * latest exchange beside a full-height dock showing that same exchange is the same
+ * confusion in a quieter form: two frames of reference for one Brain. Docked, the
+ * board keeps Brain's place in the graph (its edges are what scope a prompt), shows
+ * that it is working, and sends every reading of the conversation to the dock.
+ *
+ * The anchor — the latest exchange — survives for the cases where there is no visible
+ * surface to defer to: presenting, and a Brain the user has closed. There the Object
+ * is the only reading of the conversation left, so it keeps showing one.
  *
  * Reading the placement from context rather than a prop is deliberate: `nodeTypes` has
  * to keep a stable identity or React Flow remounts the whole board, and consuming the
@@ -887,6 +896,12 @@ function DrawingBody({ data }: { data: CreationNodeData }) {
 function BrainObjectBody({ nodeId, data }: { nodeId: string; data: CreationNodeData }) {
   const t = useTranslations('creationCanvas');
   const surface = useBrainSurface();
+
+  // `open` already excludes presenting, so the mark only ever stands in for a dock
+  // the user can actually see and get back to.
+  if (surface && surface.open && surface.mode === 'docked') {
+    return <BrainMarkerBody data={data} onOpen={() => surface.onOpen(nodeId)} />;
+  }
 
   if (!surface || !surface.open || surface.mode !== 'inline') {
     // No handler while presenting: nothing can reveal Brain there, and an anchor that
@@ -930,8 +945,44 @@ function BrainObjectBody({ nodeId, data }: { nodeId: string; data: CreationNodeD
 }
 
 /**
+ * The mark: Brain reduced to a single object on the board while the conversation
+ * lives in the edge dock.
+ *
+ * It carries the SAME `✦` as the dock header, so the mark on the board and the panel
+ * it opens are visibly one Brain rather than two things that both say "Brain". It
+ * animates from the same activity state every other surface narrates from, so a
+ * working Brain is legible on the board without repeating the dock's words next to
+ * it — the phase is the accessible name and the tooltip, not a second strip of copy.
+ *
+ * The mark is deliberately NOT marked `nodrag`: collapsed, it is the whole Object, so
+ * refusing a drag on it would mean the Brain Object could no longer be moved at all.
+ */
+function BrainMarkerBody({ data, onOpen }: { data: CreationNodeData; onOpen: () => void }) {
+  const t = useTranslations('creationCanvas.node');
+  const running = data.brainRunning === true;
+  const trace = Array.isArray(data.trace) ? data.trace as BrainTraceEvent[] : [];
+  const activity = useBrainActivity(running, trace, typeof data.brainRunStartedAt === 'number' ? data.brainRunStartedAt : null);
+  const phase = brainActivityLine(activity.live);
+  const label = phase ? t('brainMarkerBusy', { phase }) : t('openBrainChat');
+
+  return <button
+    type="button"
+    className={styles.brainMarker}
+    data-state={running ? 'running' : 'idle'}
+    aria-label={label}
+    title={label}
+    onClick={onOpen}
+  >
+    <span className={styles.brainMarkerPulse} aria-hidden />
+    <span className={styles.brainMarkerMark} aria-hidden>✦</span>
+  </button>;
+}
+
+/**
  * The anchor: Brain's place in the graph (its connections are what scope a prompt)
- * plus the latest exchange, shown while the conversation itself lives in the dock.
+ * plus the latest exchange — the reading shown when the board is the ONLY surface
+ * left. That is presenting, where nothing can reveal Brain, and an inline Brain the
+ * user closed, where the Object is where the conversation would come back.
  *
  * It narrates a running turn with the SAME signal as the dock — a Brain that is
  * clearly working on the board, not a card frozen on a stale reply — and keeps the

@@ -732,7 +732,7 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
   it('moves Brain into its Object rather than putting a second chat on the board', () => {
     render(<CreationCanvas sessionId="brain-inline-test" persistence="local" />);
 
-    // Docked: the edge panel holds the conversation and the Object is an anchor.
+    // Docked: the edge panel holds the conversation and the Object is Brain's mark.
     const dock = screen.getByRole('complementary', { name: 'Brain chat' });
     const board = dock.parentElement;
     expect(screen.getByRole('button', { name: 'Open Brain chat' })).toBeInTheDocument();
@@ -755,6 +755,23 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByRole('complementary', { name: 'Brain chat' })).toHaveAttribute('data-mode', 'docked');
     expect(screen.getAllByRole('log', { name: 'Brain chat history' })).toHaveLength(1);
     expect(board?.style.getPropertyValue('--brain-dock-right')).toBe('330px');
+  });
+
+  it('collapses the Brain Object to its mark while the conversation is docked', () => {
+    render(<CreationCanvas sessionId="brain-marker-test" persistence="local" />);
+
+    // ONE frame of reference: with the conversation in a full-height edge panel, the
+    // Object stops being a second reading of it. It keeps Brain's place in the graph
+    // and its state — nothing else. The regression is a board card repeating the same
+    // exchange the dock is already showing a few hundred pixels away.
+    const marker = screen.getByRole('button', { name: 'Open Brain chat' });
+    expect(marker.textContent).toBe('✦');
+    expect(marker).toHaveAttribute('data-state', 'idle');
+
+    // Closed, the board is the only surface left, so the Object goes back to showing
+    // the conversation rather than a mark pointing at a panel that is not there.
+    fireEvent.click(screen.getByRole('button', { name: 'Close Brain chat' }));
+    expect(screen.getByRole('button', { name: 'Open Brain chat' }).textContent).not.toBe('✦');
   });
 
   it('lets the Brain Object reopen an inline Brain without a second launcher', () => {

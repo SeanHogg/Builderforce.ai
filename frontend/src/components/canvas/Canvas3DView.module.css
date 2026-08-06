@@ -153,6 +153,10 @@
   cursor: pointer;
   /* The card is a drag handle, so the browser must not scroll or zoom on it. */
   touch-action: none;
+  /* A rendered mesh stands up off the card rather than lying on it (see
+     `.cardPreview[data-solid='true']`), which needs the card to keep its
+     children in the same 3D space instead of flattening them into its face. */
+  transform-style: preserve-3d;
   transition: box-shadow .16s ease, border-color .16s ease;
 }
 
@@ -205,6 +209,16 @@
   border: 1px solid var(--canvas-line, var(--border-subtle, #d9e2ee));
   border-radius: 12px;
   background: color-mix(in srgb, var(--canvas-3d-accent, #3978f6) 10%, var(--canvas-panel, #fff));
+}
+
+/* A mesh redrawn from its own triangles is a view FROM the camera, so it has to
+   face the camera: the inline transform undoes the stage rotation, standing the
+   object up on the card instead of painting a picture of it onto the floor. The
+   card keeps its own plane, which is what makes the object read as sitting on it. */
+.cardPreview[data-solid='true'] {
+  border-color: transparent;
+  background: none;
+  transform-origin: 50% 100%;
 }
 
 .cardSub {

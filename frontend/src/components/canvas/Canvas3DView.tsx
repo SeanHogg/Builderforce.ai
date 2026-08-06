@@ -28,6 +28,7 @@ import {
 } from './canvas3d';
 import { usePublishCanvas3DControls, type Canvas3DControls } from './canvas3dControls';
 import type { CanvasGraphEdge } from './canvasGraph';
+import { loadMeshTriangles, meshProjectionUrl } from '@/lib/meshPreviewCache';
 import styles from './Canvas3DView.module.css';
 
 /** One object's movement through the space, in board pixels. */
@@ -64,6 +65,8 @@ const KEYBOARD_STEP = 12;
 /** Depth is coarser than the board, so a keyed depth step covers more ground. */
 const KEYBOARD_DEPTH_STEP = 40;
 const ZOOM_STEP = 1.25;
+/** Quiet time after the camera stops before a mesh is re-drawn from its triangles. */
+const SETTLE_DELAY = 160;
 
 /** Where the pointer was last seen, which every gesture measures itself from. */
 type PointerAt = { x: number; y: number };
@@ -353,6 +356,63 @@ export function Canvas3DView<T extends Canvas3DNode>({
     }
   }, [onExit, resetView, zoomBy]);
 
+  /**
+   * The camera angle a mesh preview is drawn from.
+   *
+   * It trails the live orbit on purpose. Re-projecting thousands of facets on
+   * every pointer move would spend the whole frame budget redrawing a thumbnail,
+   * so the mesh is redrawn once the camera has come to rest — and mid-gesture the
+   * card simply keeps the last angle it was drawn at, which is exactly what the
+   * rest of the scene is doing anyway.
+   */
+  const [settled, setSettled] = useState({ yaw: CANVAS_3D_DEFAULT_ORBIT.yaw, pitch: CANVAS_3D_DEFAULT_ORBIT.pitch });
+  useEffect(() => {
+    if (gestureKind) return;
+    const timer = window.setTimeout(
+      () => setSettled({ yaw: Math.round(orbit.yaw), pitch: Math.round(orbit.pitch) }),
+      SETTLE_DELAY,
+    );
+    return () => window.clearTimeout(timer);
+  }, [gestureKind, orbit.pitch, orbit.yaw]);
+
+  /**
+   * Generated meshes, drawn from where the camera actually is.
+   *
+   * Without this a model3d object shows a picture taken at one fixed angle: the
+   * scene turns and the object in it does not, which is a photograph on a card
+   * rather than a thing in a space. The triangles are read once per exported file
+   * and cached (see `meshPreviewCache`); only the projection is redone.
+   */
+  const [meshPreviews, setMeshPreviews] = useState<Record<string, string>>({});
+  const geometryKey = scene.cards.map((card) => card.geometry?.url ?? '').join(' ');
+  useEffect(() => {
+    const withGeometry = sceneRef.current.cards.filter((card) => card.geometry?.url);
+    if (!withGeometry.length) {
+      setMeshPreviews((current) => Object.keys(current).length ? {} : current);
+      return;
+    }
+    let live = true;
+    void Promise.all(withGeometry.map(async (card) => {
+      const geometry = card.geometry!;
+      const triangles = await loadMeshTriangles(geometry.url, geometry.format);
+      // The card lies flat in the space, so the mesh is drawn from the camera's
+      // own direction written in the board's frame: the same turntable angle, and
+      // the opposite elevation, because the board measures Y down the screen.
+      return [card.id, meshProjectionUrl(geometry.url, triangles, settled.yaw, -settled.pitch)] as const;
+    })).then((drawn) => {
+      if (!live) return;
+      const next = Object.fromEntries(drawn.filter((entry): entry is readonly [string, string] => entry[1] !== null));
+      setMeshPreviews((current) => {
+        const unchanged = Object.keys(next).length === Object.keys(current).length
+          && Object.entries(next).every(([id, url]) => current[id] === url);
+        return unchanged ? current : next;
+      });
+    });
+    return () => { live = false; };
+    // Keyed on WHICH files are in the scene rather than on the card objects, so
+    // dragging an object does not re-read every mesh on the board.
+  }, [geometryKey, settled.pitch, settled.yaw]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const layerName = useCallback(
     (index: number, label?: string) => label ?? t('threeD.layerName', { index: index + 1 }),
     [t],
@@ -447,7 +507,9 @@ export function Canvas3DView<T extends Canvas3DNode>({
                 />;
               })}
 
-              {scene.cards.map((card) => <button
+              {scene.cards.map((card) => {
+                const solid = meshPreviews[card.id];
+                return <button
                 key={card.id}
                 type="button"
                 className={styles.card}
@@ -471,16 +533,23 @@ export function Canvas3DView<T extends Canvas3DNode>({
                   {card.icon && <i aria-hidden>{card.icon}</i>}
                   <b>{card.label}</b>
                 </span>
-                {card.preview && <img
+                {(solid ?? card.preview) && <img
                   className={styles.cardPreview}
-                  src={card.preview}
+                  // A mesh is drawn from the camera, so it has to face the camera:
+                  // the card lies flat in the space, and undoing the stage rotation
+                  // here stands the object up on it instead of painting a picture
+                  // of it onto the floor.
+                  data-solid={!!solid}
+                  {...(solid ? { style: { transform: `rotateY(${-orbit.yaw}deg) rotateX(${-orbit.pitch}deg)` } } : {})}
+                  src={solid ?? card.preview}
                   alt={t('threeD.previewAlt', { label: card.label })}
                   loading="lazy"
                   draggable={false}
                 />}
                 {card.sublabel && <span className={styles.cardSub}>{card.sublabel}</span>}
                 <span className={styles.cardGroup}>{card.group}</span>
-              </button>)}
+              </button>;
+              })}
             </div>
           </div>}
       </div>
