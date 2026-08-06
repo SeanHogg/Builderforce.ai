@@ -842,32 +842,32 @@ export class BrainService {
    *  callers must have already verified access. Shared by {@link appendMessages}
    *  and {@link agentReply} so the write path lives once. */
   private async appendRaw(chatId: number, messages: Array<{ role: string; content: string; metadata?: string | null }>) {
-    const inserted: Array<{
-      id: number;
-      role: string;
-      content: string;
-      metadata: string | null;
-      seq: number;
-      createdAt: Date;
-    }> = [];
+    const valid = messages.filter((m) => m.role && typeof m.content === 'string');
+    if (valid.length === 0) return [];
 
-    for (const msg of messages) {
-      if (!msg.role || typeof msg.content !== 'string') continue;
-      const [row] = await this.db
-        .insert(brainChatMessages)
-        .values({
-          chatId,
-          role: msg.role,
-          content: msg.content,
-          metadata: msg.metadata ?? null,
-        })
-        .returning(messageColumns);
-      if (row) {
-        // The generated PK is an atomic database append order. A read-then-write
-        // MAX(seq)+1 races when agents and humans append concurrently.
-        await this.db.update(brainChatMessages).set({ seq: row.id }).where(eq(brainChatMessages.id, row.id));
-        inserted.push({ ...row, seq: row.id });
-      }
+    // ONE insert for the whole batch, not one per message. This used to be two
+    // round-trips per turn in a loop, which is invisible on a 2-message append and
+    // becomes 400 queries when a shared guest room's transcript is claimed into an
+    // account in a single call.
+    const rows = await this.db
+      .insert(brainChatMessages)
+      .values(valid.map((msg) => ({
+        chatId,
+        role: msg.role,
+        content: msg.content,
+        metadata: msg.metadata ?? null,
+      })))
+      .returning(messageColumns);
+
+    // The generated PK is an atomic database append order. A read-then-write
+    // MAX(seq)+1 races when agents and humans append concurrently — so seq simply
+    // BECOMES the id, in one statement for the batch.
+    const ids = rows.map((r) => r.id);
+    if (ids.length > 0) {
+      await this.db
+        .update(brainChatMessages)
+        .set({ seq: sql`${brainChatMessages.id}` })
+        .where(inArray(brainChatMessages.id, ids));
     }
 
     // Touch updatedAt on the chat
@@ -876,7 +876,7 @@ export class BrainService {
       .set({ updatedAt: new Date() })
       .where(eq(brainChats.id, chatId));
 
-    return inserted;
+    return rows.map((row) => ({ ...row, seq: row.id }));
   }
 
   // -----------------------------------------------------------------------

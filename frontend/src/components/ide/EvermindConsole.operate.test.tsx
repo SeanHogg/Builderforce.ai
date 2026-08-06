@@ -117,9 +117,16 @@ describe('EvermindConsole — tabs', () => {
     await openTab(/Maintain/);
 
     // Still visible from the maintenance tab: the badge, the reason, and the version.
-    expect(screen.getByText(/Quarantined/)).toBeInTheDocument();
+    // Matched EXACTLY, because quarantine is now named in two places — this persistent
+    // header pill (the state this test is about) and the next-action card that tells you
+    // what to do about it. A loose /Quarantined/ would be satisfied by either, so it
+    // would stop proving the state survives a tab change, which is the whole assertion.
+    expect(screen.getByText(/^⚠ Quarantined$/)).toBeInTheDocument();
     expect(screen.getByText(/3 incoherent serves/)).toBeInTheDocument();
     expect(screen.getByText('v4')).toBeInTheDocument();
+    // …and the card that acts on it, so the pair stays asserted rather than one of
+    // them silently absorbing the other's coverage.
+    expect(screen.getByText('Quarantined — run readiness first')).toBeInTheDocument();
   });
 
   it('moves between tabs with the arrow keys', async () => {
@@ -164,7 +171,10 @@ describe('EvermindConsole — test bench', () => {
     render(<EvermindConsole adapter={adapterFor({ probe })} canManage refreshMs={0} />);
 
     await openTab(/Test/);
-    fireEvent.click(await screen.findByRole('button', { name: /Readiness check/i }));
+    // Exact name: the next-action card offers its own "Run readiness check" shortcut, so
+    // a loose match would be ambiguous — and could silently start testing the shortcut
+    // instead of the test bench's own control.
+    fireEvent.click(await screen.findByRole('button', { name: 'Readiness check' }));
     await waitFor(() => expect(probe).toHaveBeenCalledWith(undefined));
     expect(await screen.findByText(/coherent enough to serve/i)).toBeInTheDocument();
   });
@@ -307,7 +317,7 @@ describe('EvermindConsole — diagnostics export', () => {
     );
 
     await openTab(/Test/);
-    fireEvent.click(await screen.findByRole('button', { name: /Readiness check/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Readiness check' }));
     await screen.findByText(/Oredionisiing/);
 
     await openTab(/Maintain/);

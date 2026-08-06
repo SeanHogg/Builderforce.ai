@@ -140,6 +140,24 @@ export async function leaveGuestRoom(env: Env, code: string, visitorId: string):
   await call<{ ok: boolean }>(env, code, '/leave', { body: JSON.stringify({ visitorId }) });
 }
 
+/** The transcript a just-signed-up participant is entitled to keep. */
+export interface GuestRoomClaim {
+  /** True when this visitor already converted the room — do not fork a second chat. */
+  alreadyClaimed: boolean;
+  title: string;
+  messages: GuestRoomMessage[];
+}
+
+/**
+ * Claim the room's transcript for a participant who has just created an account.
+ * Null when the room has expired, the DO is unavailable, or the caller was never
+ * in it — a tenant JWT proves who someone is, not that they were ever a member,
+ * so the room is the one that decides.
+ */
+export async function claimGuestRoom(env: Env, code: string, visitorId: string): Promise<GuestRoomClaim | null> {
+  return call<GuestRoomClaim>(env, code, '/claim', { body: JSON.stringify({ visitorId }) });
+}
+
 /**
  * Hand a WebSocket upgrade straight to the room DO, which verifies the guest
  * token's signed `rid` itself before relaying anything. Mirrors `relayToRoom`,

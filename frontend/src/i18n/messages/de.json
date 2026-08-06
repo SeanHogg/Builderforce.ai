@@ -9974,7 +9974,8 @@
     "camOff": "Kamera aus",
     "endMeeting": "Meeting verlassen",
     "mediaBlocked": "Wir konnten deine Kamera oder dein Mikrofon nicht erreichen. Prüfe die Browser-Berechtigungen.",
-    "you": "Du"
+    "you": "Du",
+    "replyingTo": "Antwort an {name}"
   },
   "login": {
     "navSignUp": "Kostenlos registrieren",
@@ -12988,6 +12989,15 @@
     "resizeBrain": "Größe des Brain-Chats ändern",
     "collaboratorJoined": "{name} ist der Unterhaltung beigetreten",
     "collaboratorWriting": "{name} schreibt gerade",
+    "writingPrompt": "schreibt eine Eingabe",
+    "saveCollaborator": "Diesen Mitwirkenden speichern",
+    "saveCollaboratorGate": "Erstellen Sie ein kostenloses Konto, um diesen konfigurierten Agenten in Ihrer Belegschaft zu veröffentlichen und sitzungsübergreifend zu verwenden.",
+    "savingAgentSettings": "Kanonische Agenteneinstellungen werden gespeichert…",
+    "creatingWorkforceAgent": "Belegschaftsagent wird erstellt…",
+    "agentSettingsSaved": "Agenteneinstellungen wurden überall gespeichert",
+    "agentCreatedReady": "Agent wurde erstellt und ist bereit zur Zusammenarbeit",
+    "agentSettingsSaveFailed": "Agenteneinstellungen konnten nicht gespeichert werden",
+    "createInviteAgent": "Agent erstellen und einladen",
     "openingCanvas": "Deine Kreativ-Canvas wird geöffnet…"
   },
   "canvasCommands": {

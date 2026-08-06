@@ -19,7 +19,7 @@
 
 import { apiRequestStream } from './apiClient';
 import { AUTH_API_URL } from './auth';
-import { getVisitorId, getFirstTouch } from './visitor';
+import { getVisitorId, getExistingVisitorId, getFirstTouch } from './visitor';
 import { storeGuestToken, clearGuestToken, getStoredGuestToken, mintGuestSession } from './guestChatApi';
 import type { MediaRoomTransport } from './useMediaRoom';
 
@@ -251,6 +251,38 @@ export async function renameGuestRoom(code: string, title: string): Promise<void
 export async function leaveGuestRoom(code: string): Promise<void> {
   await roomRequest(`/api/guest/rooms/${encodeURIComponent(code)}/leave`, { method: 'POST' });
   clearActiveGuestRoom();
+}
+
+/**
+ * Keep a shared session after signing up: copy the room's transcript into a real
+ * Brain chat owned by the brand-new account, then stop being in the room locally.
+ *
+ * This runs with a TENANT token (the user has an account by now) and passes the
+ * anonymous `visitorId` as the proof of membership — the room checks it against
+ * its own roster, because being signed in says nothing about having been in a
+ * given room. Returns the new chat id, or null when there was nothing to keep
+ * (room expired, already claimed, or nobody said anything).
+ */
+export async function claimGuestRoomIntoAccount(): Promise<number | null> {
+  const code = getActiveGuestRoom();
+  const visitorId = getExistingVisitorId();
+  if (!code || !visitorId) return null;
+  try {
+    const res = await apiRequestStream('/api/brain/chats/claim-guest-room', {
+      method: 'POST',
+      body: JSON.stringify({ code, visitorId }),
+      expectedErrors: [400, 401, 403, 404, 410, 429, 503],
+    });
+    // Whether it converted or the room was already gone, this browser is done with
+    // it — leaving the code behind would keep re-minting guest tokens for a room
+    // the user has now outgrown.
+    clearActiveGuestRoom();
+    if (!res.ok) return null;
+    const data = (await res.json()) as { claimed?: boolean; chat?: { id?: number } };
+    return data.claimed && typeof data.chat?.id === 'number' ? data.chat.id : null;
+  } catch {
+    return null;
+  }
 }
 
 // ── Live channels ────────────────────────────────────────────────────────────

@@ -36,6 +36,8 @@ import { classifyShell } from '@/lib/shellRouting';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { convertVisitor } from '@/lib/marketingApi';
+import { claimGuestRoomIntoAccount } from '@/lib/guestRoomApi';
+import { useOptionalBrainContext } from '@seanhogg/builderforce-brain-embedded';
 import { createLocalCreationSession } from '@/lib/creationSessions';
 import { CanvasRouteArtifact } from './workspace-canvas/CanvasRouteArtifact';
 
@@ -230,12 +232,37 @@ function SalesRouteGuard() {
   return null;
 }
 
-/** Close anonymous Brain/tool attribution as soon as this browser authenticates. */
+/**
+ * Close anonymous attribution as soon as this browser authenticates — and keep
+ * what the visitor made while anonymous.
+ *
+ * Two things convert here. `convertVisitor` closes the marketing lead. The guest
+ * ROOM claim is the one that matters to the person: a shared free session lives in
+ * a Durable Object that expires, so signing up is the only moment its conversation
+ * can be turned into something they keep. The claimed chat is opened straight
+ * away — a conversation silently filed into a history they haven't discovered yet
+ * reads exactly like having lost it.
+ */
 function MarketingConversionTracker() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, hasTenant } = useAuth();
+  const brain = useOptionalBrainContext();
+  const claimed = useRef(false);
+
   useEffect(() => {
     if (isAuthenticated) convertVisitor();
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    // Needs a tenant: the transcript is written into that tenant's Brain chats.
+    if (!isAuthenticated || !hasTenant || claimed.current) return;
+    claimed.current = true;
+    void claimGuestRoomIntoAccount().then((chatId) => {
+      if (!chatId || !brain) return;
+      brain.setActiveChatId(chatId);
+      brain.setOpen(true);
+    });
+  }, [isAuthenticated, hasTenant, brain]);
+
   return null;
 }
 

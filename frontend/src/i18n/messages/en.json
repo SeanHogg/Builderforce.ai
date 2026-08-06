@@ -9975,7 +9975,8 @@
     "camOff": "Camera off",
     "endMeeting": "Leave meeting",
     "mediaBlocked": "We couldn’t reach your camera or microphone. Check your browser permissions.",
-    "you": "You"
+    "you": "You",
+    "replyingTo": "Replying to {name}"
   },
   "login": {
     "navSignUp": "Sign up free",
@@ -12989,6 +12990,15 @@
     "resizeBrain": "Resize Brain chat",
     "collaboratorJoined": "{name} joined the conversation",
     "collaboratorWriting": "{name} is writing",
+    "writingPrompt": "writing a prompt",
+    "saveCollaborator": "Save this collaborator",
+    "saveCollaboratorGate": "Create a free account to publish this configured agent to your workforce and use it across sessions.",
+    "savingAgentSettings": "Saving canonical agent settings…",
+    "creatingWorkforceAgent": "Creating workforce agent…",
+    "agentSettingsSaved": "Agent settings saved everywhere",
+    "agentCreatedReady": "Agent created and ready to collaborate",
+    "agentSettingsSaveFailed": "Agent settings could not be saved",
+    "createInviteAgent": "Create & invite agent",
     "openingCanvas": "Opening your creation canvas…"
   },
   "canvasCommands": {

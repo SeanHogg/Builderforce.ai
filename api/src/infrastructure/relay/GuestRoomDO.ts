@@ -118,6 +118,8 @@ export class GuestRoomDO implements DurableObject {
   private meta: RoomMeta | null = null;
   private messages: RoomMessage[] = [];
   private participants: Participant[] = [];
+  /** Visitors who have already converted this room into a real account chat. */
+  private claimedBy: string[] = [];
 
   constructor(private state: DurableObjectState, private env: { JWT_SECRET?: string }) {
     // Hydrate before ANY request is served — the turn counter must never restart
@@ -126,6 +128,7 @@ export class GuestRoomDO implements DurableObject {
       this.meta = (await this.state.storage.get<RoomMeta>('meta')) ?? null;
       this.messages = (await this.state.storage.get<RoomMessage[]>('messages')) ?? [];
       this.participants = (await this.state.storage.get<Participant[]>('participants')) ?? [];
+      this.claimedBy = (await this.state.storage.get<string[]>('claimed')) ?? [];
       this.seq = this.messages.reduce((max, m) => Math.max(max, m.id), 0);
     });
   }
@@ -149,6 +152,7 @@ export class GuestRoomDO implements DurableObject {
     this.meta = null;
     this.messages = [];
     this.participants = [];
+    this.claimedBy = [];
     this.seq = 0;
     await this.state.storage.deleteAll().catch((error) => {
       reportCaughtError(error, { source: 'infrastructure/relay/GuestRoomDO.ts', operation: 'wipe' });
@@ -231,6 +235,7 @@ export class GuestRoomDO implements DurableObject {
       case '/messages': return request.method === 'POST' ? this.handleAppend(request) : this.handleMessages(request);
       case '/title':  return this.handleTitle(request);
       case '/leave':  return this.handleLeave(request);
+      case '/claim':  return this.handleClaim(request);
       default:        return new Response('Not found', { status: 404 });
     }
   }
@@ -304,6 +309,31 @@ export class GuestRoomDO implements DurableObject {
     await this.state.storage.put('participants', this.participants);
     this.broadcastRoster();
     return Response.json({ ok: true });
+  }
+
+  /**
+   * Hand this room's transcript to a participant who has just created an account,
+   * so the work survives the room instead of expiring with it.
+   *
+   * Membership is checked HERE, against the persisted roster, because the caller
+   * arrives holding a tenant JWT — which proves who they are now, not that they
+   * were ever in this room. Claiming is once per visitor and recorded, so a
+   * repeated sign-in cannot fork the same conversation into a second chat; the
+   * room itself is left alone, since other people may still be talking in it.
+   */
+  private async handleClaim(request: Request): Promise<Response> {
+    const { visitorId } = await this.body<{ visitorId?: string }>(request);
+    const meta = await this.live();
+    if (!meta) return Response.json({ error: 'room_gone' }, { status: 410 });
+    if (!visitorId || !this.participants.some((p) => p.visitorId === visitorId)) {
+      return Response.json({ error: 'not_a_member' }, { status: 403 });
+    }
+    if (this.claimedBy.includes(visitorId)) {
+      return Response.json({ alreadyClaimed: true, title: meta.title, messages: [] });
+    }
+    this.claimedBy = [...this.claimedBy, visitorId];
+    await this.state.storage.put('claimed', this.claimedBy);
+    return Response.json({ alreadyClaimed: false, title: meta.title, messages: this.messages });
   }
 
   /**

@@ -8,6 +8,9 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
 import { Hono } from 'hono';
 import { and, eq } from 'drizzle-orm';
 import { authMiddleware } from '../middleware/authMiddleware';
+import { isValidRoomCode } from '../../application/guest/guestToken';
+import { isValidVisitorId } from '../../application/marketing/MarketingService';
+import { claimGuestRoom } from '../../application/guest/guestRoomClient';
 import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
 import { signUpload } from '../../infrastructure/auth/uploadSign';
 import { fetchWebDocument } from '../../application/web/webFetch';
@@ -412,6 +415,52 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     });
     if ('error' in result) return c.json({ error: result.error }, 400);
     return c.json(result);
+  });
+
+  /**
+   * POST /chats/claim-guest-room — keep a shared GUEST session after signing up.
+   *
+   * A logged-out visitor who invited people into a free room has the conversation
+   * living in that room's Durable Object, which expires. Signing up is exactly the
+   * moment that work should stop being disposable, so this copies the room's
+   * transcript into a real Brain chat owned by the new account — the room-side
+   * twin of the local-canvas `claim` flow.
+   *
+   * Authorization is two-sided on purpose: the tenant JWT says who is asking, and
+   * the ROOM says whether they were ever in it (by the anonymous `visitorId` on
+   * its persisted roster). Neither alone is enough. Claiming is once per visitor,
+   * enforced in the DO, so re-signing in cannot fork a second copy — and the room
+   * is left running, because other people may still be in it.
+   */
+  router.post('/chats/claim-guest-room', async (c) => {
+    const body = await c.req
+      .json<{ code?: string; visitorId?: string }>()
+      .catch((): { code?: string; visitorId?: string } => ({}));
+    if (!isValidRoomCode(body.code)) return c.json({ error: 'Invalid room code' }, 400);
+    if (!isValidVisitorId(body.visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
+
+    const claim = await claimGuestRoom(c.env as Env, body.code, body.visitorId);
+    if (!claim) {
+      return c.json({ error: 'That shared session has ended.', code: 'guest_room_unavailable' }, 410);
+    }
+    // Already converted, or nothing was ever said — either way there is nothing to
+    // create, and creating an empty chat would just be litter in their history.
+    if (claim.alreadyClaimed || claim.messages.length === 0) {
+      return c.json({ claimed: false, reason: claim.alreadyClaimed ? 'already_claimed' : 'empty' });
+    }
+
+    const tenantId = c.get('tenantId') as number;
+    const userId = c.get('userId') as string;
+    const chat = await brainService.createChat({ tenantId, userId, title: claim.title });
+    if (!chat || 'error' in chat) {
+      return c.json({ error: chat && 'error' in chat ? chat.error : 'Could not create the chat' }, 400);
+    }
+
+    const result = await brainService.appendMessages(chat.id, tenantId, userId, {
+      messages: claim.messages.map((m) => ({ role: m.role, content: m.content, metadata: m.metadata ?? undefined })),
+    });
+    if ('error' in result) return c.json({ error: result.error }, 400);
+    return c.json({ claimed: true, chat, messageCount: result.length }, 201);
   });
 
   // GET /chats/:id/agents — agents invited into this chat.

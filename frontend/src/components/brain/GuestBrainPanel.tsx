@@ -109,6 +109,16 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
   const reloadMessages = conv.reloadMessages;
   const room = useGuestRoom(roomCode, { name: displayName }, reloadMessages);
 
+  // Re-broadcast my in-flight reply so the room watches the same answer arrive
+  // rather than staring at a pause and then a finished wall of text. Only the
+  // sender holds the gateway stream, so only the sender can relay it.
+  const { relayStream } = room;
+  const streamingText = conv.streamingText;
+  useEffect(() => {
+    if (!inRoom || !streamingText) return;
+    relayStream(streamingText);
+  }, [inRoom, streamingText, relayStream]);
+
   // Mint the guest token on mount so the first send is authenticated. A null
   // result means guest chat is disabled or unreachable → show the sign-in CTA.
   // A visitor already in a room keeps their room-bound token; re-minting here
@@ -352,11 +362,20 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
                 </div>
               );
             })}
-            {conv.streamingText && (
+            {conv.streamingText ? (
               <div className="gb-msg gb-msg-assistant">
                 <div className="gb-bubble gb-bubble-assistant"><ChatMessageContent content={conv.streamingText} /></div>
               </div>
-            )}
+            ) : room.streamingPeer ? (
+              // Somebody ELSE asked: their relayed deltas, rendered exactly like my
+              // own streaming bubble and captioned with whose turn produced it.
+              <div className="gb-msg gb-msg-assistant">
+                <div className="gb-bubble gb-bubble-assistant">
+                  <span className="gb-author gb-author-muted">{tRoom('replyingTo', { name: room.streamingPeer.name })}</span>
+                  <ChatMessageContent content={room.streamingPeer.text} />
+                </div>
+              </div>
+            ) : null}
             {conv.error && !capReached && <div className="gb-error">{conv.error}</div>}
             {roomError && <div className="gb-error">{roomError}</div>}
           </div>
@@ -424,6 +443,9 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
         /* Who said it — only meaningful in a shared room, where more than one
            person writes into the same transcript. */
         .gb-author { display: block; font-size: 11px; font-weight: 700; opacity: 0.85; margin-bottom: 3px; }
+        /* On an assistant bubble the caption names whose turn this reply answers,
+           so it reads as context rather than as the speaker. */
+        .gb-author-muted { color: var(--text-muted); font-weight: 600; }
         .gb-error { font-size: 13px; color: var(--danger, #dc2626); background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 8px 12px; }
         .gb-composer { flex-shrink: 0; border-top: 1px solid var(--border-subtle); padding: 10px 12px; background: var(--bg-elevated); }
         .gb-textarea { width: 100%; resize: none; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-base); color: var(--text-primary); padding: 9px 11px; font-size: 14px; font-family: inherit; box-sizing: border-box; }

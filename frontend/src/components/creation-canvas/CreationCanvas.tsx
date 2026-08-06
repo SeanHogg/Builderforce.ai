@@ -2544,20 +2544,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const saveAgent = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'agent') return;
     const ref = selectedNode.data.resourceId?.startsWith('agent:') ? selectedNode.data.resourceId.slice('agent:'.length) : '';
-    if (!ref && persistence === 'local') { requireAccount('agent', 'Save this collaborator', 'Create a free account to publish this configured agent to your workforce and use it across sessions.'); return; }
+    if (!ref && persistence === 'local') { requireAccount('agent', t('saveCollaborator'), t('saveCollaboratorGate')); return; }
     const personality = typeof selectedNode.data.personality === 'string' ? selectedNode.data.personality.trim() : '';
     const direction = typeof selectedNode.data.instructions === 'string' ? selectedNode.data.instructions.trim() : selectedNode.data.subtitle || '';
-    const bio = [personality ? `Personality: ${personality}` : '', direction ? `Direction: ${direction}` : ''].filter(Boolean).join('\n\n');
+    const bio = [personality, direction].filter(Boolean).join('\n\n');
     const baseModel = selectedNode.data.model && selectedNode.data.model !== 'auto' ? String(selectedNode.data.model) : undefined;
     const input = { name: selectedNode.data.title, title: selectedNode.data.role || selectedNode.data.title, bio, skills: Array.isArray(selectedNode.data.tools) ? selectedNode.data.tools.map(String) : undefined, baseModel };
-    setNotice(ref ? 'Saving canonical agent settings…' : 'Creating workforce agent…');
+    setNotice(ref ? t('savingAgentSettings') : t('creatingWorkforceAgent'));
     void (ref ? updateAgent(ref, input) : createCloudAgent(input))
       .then((saved) => {
         setNodes((current) => current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, resourceId: `agent:${saved.id}`, status: 'Configured' } } : node));
-        setNotice(ref ? 'Agent settings saved everywhere' : 'Agent created and ready to collaborate');
+        setNotice(ref ? t('agentSettingsSaved') : t('agentCreatedReady'));
       })
-      .catch((error) => setNotice(error instanceof Error ? error.message : 'Agent settings could not be saved'));
-  }, [persistence, requireAccount, selectedNode, setNodes]);
+      .catch((error) => setNotice(error instanceof Error ? error.message : t('agentSettingsSaveFailed')));
+  }, [persistence, requireAccount, selectedNode, setNodes, t]);
 
   const publishWebsite = useCallback((websiteId?: string) => {
     const target = nodes.find((node) => node.id === websiteId && node.data.kind === 'website')
@@ -2888,7 +2888,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         <div className={styles.titleBlock}><span className={styles.spark}>✦</span><input aria-label={t('sessionTitle')} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice(t('titleSaveFailed'))); }} /><span className={styles.saved}>{notice}</span>{persistence === 'server' && <span role="status" aria-live="polite" className={styles.realtimeStatus} data-state={realtimeState}>{realtimeState === 'online' ? t('live') : realtimeState === 'offline' ? t('offlineRetry') : realtimeState === 'reconnecting' ? t('reconnecting') : t('connecting')}</span>}</div>
         <div className={styles.sessionActions}>
           <div className={styles.collaborators} aria-label={t('activeCollaborators')}>
-            {(persistence === 'local' ? [{ userId: 'local', displayName: 'You', role: 'owner' as const }] : members).slice(0, 4).map((member, index) => <button key={member.userId} type="button" data-typing={'typing' in member && member.typing ? 'true' : 'false'} aria-pressed={followingUserId === member.userId} title={`${member.displayName || t('collaborator')} · ${member.role}${'typing' in member && member.typing ? ' · writing a prompt' : ''}${member.userId !== currentUserId ? ` · ${t('clickToFollow')}` : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button>)}
+            {(persistence === 'local' ? [{ userId: 'local', displayName: t('you'), role: 'owner' as const }] : members).slice(0, 4).map((member, index) => <button key={member.userId} type="button" data-typing={'typing' in member && member.typing ? 'true' : 'false'} aria-pressed={followingUserId === member.userId} title={`${member.displayName || t('collaborator')} · ${member.role}${'typing' in member && member.typing ? ` · ${t('writingPrompt')}` : ''}${member.userId !== currentUserId ? ` · ${t('clickToFollow')}` : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button>)}
             <button aria-label={t('inviteCollaborator')} onClick={() => persistence === 'local' ? requireAccount('invite', t('gateInviteTitle'), t('gateInviteBody')) : setShareOpen(true)}>+</button>
           </div>
           <div className={styles.undoRedoGroup} role="group" aria-label={t('canvasHistory')}>
@@ -3362,7 +3362,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
           <button type="button" className={styles.fullButton} disabled={!String(node.data.testPrompt || '').trim() || node.data.testStatus === 'Running'} onClick={() => void onRunAgentTest(String(node.data.testPrompt || ''), String(node.data.testExpected || ''))}>{node.data.testStatus === 'Running' ? t('runningTest') : t('runAgentTest')}</button>
           {typeof node.data.testResponse === 'string' && node.data.testResponse && <div className={styles.testResponse}><strong>{t('agentResponse')}</strong><p>{node.data.testResponse}</p></div>}
         </section>
-        <button type="button" className={styles.fullButton} onClick={onSaveAgent}>{isExistingAgent ? t('saveAgentEverywhere') : 'Create & invite agent'}</button>
+        <button type="button" className={styles.fullButton} onClick={onSaveAgent}>{isExistingAgent ? t('saveAgentEverywhere') : t('createInviteAgent')}</button>
       </>}
       {kind === 'evaluation' && <section data-inspector-section="evaluation">
         <div className={styles.evaluationSummary}><strong>{String(node.data.verdict || t('notRun'))}</strong><span>{typeof node.data.passRate === 'number' ? t('passRate', { rate: node.data.passRate }) : t('runTestForResult')}</span></div>

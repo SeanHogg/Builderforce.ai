@@ -9974,7 +9974,8 @@
     "camOff": "摄像头关",
     "endMeeting": "离开会议",
     "mediaBlocked": "无法访问你的摄像头或麦克风。请检查浏览器权限。",
-    "you": "你"
+    "you": "你",
+    "replyingTo": "正在回复 {name}"
   },
   "login": {
     "navSignUp": "免费注册",
@@ -12988,6 +12989,15 @@
     "resizeBrain": "调整 Brain 聊天宽度",
     "collaboratorJoined": "{name} 加入了对话",
     "collaboratorWriting": "{name} 正在输入",
+    "writingPrompt": "正在编写提示词",
+    "saveCollaborator": "保存此协作者",
+    "saveCollaboratorGate": "创建免费账户，将此已配置的智能体发布到您的团队，并在不同会话中使用。",
+    "savingAgentSettings": "正在保存智能体的规范设置…",
+    "creatingWorkforceAgent": "正在创建团队智能体…",
+    "agentSettingsSaved": "智能体设置已同步保存",
+    "agentCreatedReady": "智能体已创建，可以开始协作",
+    "agentSettingsSaveFailed": "无法保存智能体设置",
+    "createInviteAgent": "创建并邀请智能体",
     "openingCanvas": "正在打开你的创作画布……"
   },
   "canvasCommands": {

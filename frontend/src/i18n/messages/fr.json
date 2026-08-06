@@ -9974,7 +9974,8 @@
     "camOff": "Caméra désactivée",
     "endMeeting": "Quitter la réunion",
     "mediaBlocked": "Impossible d’accéder à votre caméra ou micro. Vérifiez les autorisations du navigateur.",
-    "you": "Vous"
+    "you": "Vous",
+    "replyingTo": "Réponse à {name}"
   },
   "login": {
     "navSignUp": "Inscription gratuite",
@@ -12988,6 +12989,15 @@
     "resizeBrain": "Redimensionner le chat Brain",
     "collaboratorJoined": "{name} a rejoint la conversation",
     "collaboratorWriting": "{name} est en train d’écrire",
+    "writingPrompt": "rédige une invite",
+    "saveCollaborator": "Enregistrer ce collaborateur",
+    "saveCollaboratorGate": "Créez un compte gratuit pour publier cet agent configuré dans votre équipe et l’utiliser entre les sessions.",
+    "savingAgentSettings": "Enregistrement des paramètres canoniques de l’agent…",
+    "creatingWorkforceAgent": "Création de l’agent d’équipe…",
+    "agentSettingsSaved": "Paramètres de l’agent enregistrés partout",
+    "agentCreatedReady": "Agent créé et prêt à collaborer",
+    "agentSettingsSaveFailed": "Les paramètres de l’agent n’ont pas pu être enregistrés",
+    "createInviteAgent": "Créer et inviter l’agent",
     "openingCanvas": "Ouverture de votre canevas de création…"
   },
   "canvasCommands": {

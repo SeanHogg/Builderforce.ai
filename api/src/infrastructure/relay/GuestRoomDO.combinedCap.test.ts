@@ -124,6 +124,59 @@ describe('GuestRoomDO combined turn allowance', () => {
   });
 });
 
+describe('GuestRoomDO transcript claim (surviving sign-up)', () => {
+  let state: Fake;
+  let room: GuestRoomDO;
+
+  beforeEach(async () => {
+    state = fakeState();
+    room = makeRoom(state);
+    await post(room, '/open', { code: newRoomCode(), visitorId: 'host-1', name: 'Ada', title: 'Launch plan' });
+    await post(room, '/join', { visitorId: 'guest-2', name: 'Bo' });
+    await post(room, '/messages', { messages: [{ role: 'user', content: 'what should we build?' }, { role: 'assistant', content: 'start here' }] });
+  });
+
+  it('hands the transcript to a participant — a tenant JWT alone is not membership', async () => {
+    const claim = await post(room, '/claim', { visitorId: 'guest-2' });
+    expect(claim.status).toBe(200);
+    expect(claim.data.alreadyClaimed).toBe(false);
+    expect(claim.data.title).toBe('Launch plan');
+    expect((claim.data.messages as unknown[])).toHaveLength(2);
+
+    // Someone who was never in this room cannot take its conversation, however
+    // legitimately signed-in they are.
+    const stranger = await post(room, '/claim', { visitorId: 'never-here' });
+    expect(stranger.status).toBe(403);
+  });
+
+  it('claims once per visitor, so signing in again cannot fork a second copy', async () => {
+    await post(room, '/claim', { visitorId: 'host-1' });
+    const again = await post(room, '/claim', { visitorId: 'host-1' });
+    expect(again.data.alreadyClaimed).toBe(true);
+    expect(again.data.messages).toEqual([]);
+
+    // …and the record survives eviction, or "again" would just mean "a while later".
+    const revived = makeRoom(fakeState(state.store));
+    const later = await post(revived, '/claim', { visitorId: 'host-1' });
+    expect(later.data.alreadyClaimed).toBe(true);
+  });
+
+  it('leaves the room running — other people may still be talking in it', async () => {
+    await post(room, '/claim', { visitorId: 'host-1' });
+    const stillThere = await post(room, '/claim', { visitorId: 'guest-2' });
+    expect(stillThere.data.alreadyClaimed).toBe(false);
+    expect((stillThere.data.messages as unknown[])).toHaveLength(2);
+  });
+
+  it('answers 410 for an expired room rather than resurrecting a wiped transcript', async () => {
+    const meta = state.store.get('meta') as { createdAt: string };
+    meta.createdAt = new Date(Date.now() - (GUEST_ROOM_LIMITS.ttlMinutes + 1) * 60_000).toISOString();
+    state.store.set('meta', meta);
+    const expired = makeRoom(fakeState(state.store));
+    expect((await post(expired, '/claim', { visitorId: 'host-1' })).status).toBe(410);
+  });
+});
+
 describe('GuestRoomDO shared transcript', () => {
   it('gives every participant the same ordered list, bounded so it cannot grow forever', async () => {
     const state = fakeState();
