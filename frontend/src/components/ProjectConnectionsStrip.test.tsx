@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, within } from '@testing-library/react';
 import { ProjectConnectionsStrip } from './ProjectConnectionsStrip';
 import type { ProjectConnection } from '@/lib/projectConnections';
 
@@ -41,15 +41,17 @@ describe('ProjectConnectionsStrip', () => {
   });
 
   it('sends open PRs to the provider-correct listing path', () => {
+    // Both renders share one document body, so scope each query to its own container.
     const github = render(<ProjectConnectionsStrip connections={[CONN({ openPullRequests: 3 })]} />);
-    expect(github.getByRole('link', { name: /openPrs/ }).getAttribute('href')).toBe('https://github.com/acme/site/pulls');
+    expect(within(github.container).getByRole('link', { name: /openPrs/ }).getAttribute('href'))
+      .toBe('https://github.com/acme/site/pulls');
 
     const bitbucket = render(
       <ProjectConnectionsStrip
         connections={[CONN({ provider: 'bitbucket', url: 'https://bitbucket.org/acme/site', openPullRequests: 3 })]}
       />,
     );
-    expect(bitbucket.getByRole('link', { name: /openPrs/ }).getAttribute('href'))
+    expect(within(bitbucket.container).getByRole('link', { name: /openPrs/ }).getAttribute('href'))
       .toBe('https://bitbucket.org/acme/site/pull-requests');
   });
 
@@ -87,6 +89,7 @@ describe('ProjectConnectionsStrip', () => {
     );
     expect(getByText('a/one')).toBeTruthy();
     expect(queryByText('a/three')).toBeNull();
-    expect(getByText('projectConnections.more')).toBeTruthy();
+    // The passthrough t() renders "<key> <values…>", so match the key, not exact text.
+    expect(getByText(/projectConnections\.more/)).toBeTruthy();
   });
 });

@@ -2842,10 +2842,12 @@ async function runLoop(chatId, c, req) {
   const convo = c.transcript;
   const allTools = toolSpecs && toolSpecs.length > 0 ? toolSpecs : void 0;
   const usedTools = /* @__PURE__ */ new Set();
+  const runMode = normalizeChatMode(req.chatMode ?? "work");
   const metadata = {
     chatId,
     guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
     guestTurnInput: latestUserText(convo),
+    mode: runMode,
     ...req.projectId != null ? { projectId: req.projectId } : {}
   };
   let systemPrompt = resolvedSystemPrompt;
@@ -2922,7 +2924,6 @@ ${extra}`;
     } catch {
     }
   }
-  const runMode = normalizeChatMode(req.chatMode ?? "work");
   systemPrompt = `${systemPrompt}
 
 ${chatModeDirective(runMode, chatId)}`;

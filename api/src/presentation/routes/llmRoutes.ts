@@ -2456,7 +2456,11 @@ export function createLlmRoutes(): Hono<HonoEnv> {
           vendor: result.resolvedVendor,
           account: classifyReplyAccount(byoFunded, byoVendors.size > 0),
           byoFunded,
-          extra: { chatId },
+          // MODE (0409) — conversation vs execution. The caller stamps it on the
+          // completion metadata; carrying it here is what lets the audit timeline (and
+          // the mode rollup) tell a turn that ANSWERED from one that went and did the
+          // work, instead of every agent turn reading identically.
+          extra: { chatId, ...(typeof meta.mode === 'string' ? { mode: meta.mode } : {}) },
         }),
       });
       c.executionCtx?.waitUntil?.(promise);

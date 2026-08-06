@@ -6450,7 +6450,55 @@
     "chatActionsAria": "Actions pour {title}",
     "aiDisclosureAria": "Avis relatif à l’IA",
     "aiDisclosureBody": "Vous interagissez avec des agents d'IA. Les résultats peuvent être inexacts ; vérifiez-les avant de fonder une décision importante dessus. Les actions qui modifient des données nécessitent votre approbation, sauf si vous activez explicitement l'approbation automatique.",
-    "aiDisclosureLink": "Fonctionnement de l'IA, explications et contrôle humain"
+    "aiDisclosureLink": "Fonctionnement de l'IA, explications et contrôle humain",
+    "emptyHintWork": "Décrivez le travail. Je l'ouvrirai comme une tâche suivie, je l'affecterai et je mettrai un agent dessus.",
+    "newChatProjectLabel": "Projet",
+    "newChatProjectAria": "Projet de cette nouvelle conversation",
+    "modes": {
+      "pickerAria": "Mode de conversation",
+      "chat": {
+        "label": "Discussion",
+        "hint": "Posez une question, explorez, obtenez une réponse. Rien n'est ajouté au tableau."
+      },
+      "work": {
+        "label": "Travail",
+        "hint": "Déléguez une mission : elle devient un ticket suivi, affecté et confié à un agent."
+      }
+    },
+    "workOptions": {
+      "pickerAria": "Que voulez-vous faire faire ?",
+      "tilesHint": "…ou déléguez l'une de ces missions",
+      "audit_spreadsheet": {
+        "label": "Auditer un tableur",
+        "hint": "Vérifiez les formules, repérez les erreurs et les fragilités.",
+        "brief": "Auditez un tableur que je vais vous fournir : vérifiez les formules, repérez les erreurs et les parties fragiles, signalez ce qui casserait si une ligne était déplacée ou une valeur modifiée, et corrigez ce que j'approuve. Montrez-moi la liste des problèmes avant de changer quoi que ce soit."
+      },
+      "review_draft": {
+        "label": "Relire un brouillon",
+        "hint": "Lisez-le avant l'envoi et dites-moi ce qui cloche.",
+        "brief": "Relisez un brouillon avant que je l'envoie : dites-moi ce qui manque de clarté, ce qu'un lecteur sceptique contesterait et ce qui manque. Signalez tout ce qui surestime ce que nous pouvons réellement livrer. Donnez-moi les corrections précises, pas des conseils généraux."
+      },
+      "chase_blockers": {
+        "label": "Traquer les blocages",
+        "hint": "Trouvez ce qui bloque, pourquoi, et qui doit agir.",
+        "brief": "Trouvez tout ce qui est actuellement bloqué sur ce projet, déterminez pourquoi chaque élément est bloqué et qui doit agir pour le débloquer, puis ouvrez un ticket pour chaque blocage réel avec la personne responsable. Dites-moi lesquels je dois débloquer personnellement."
+      },
+      "triage_backlog": {
+        "label": "Trier le backlog",
+        "hint": "Classez l'essentiel, fermez le reste.",
+        "brief": "Passez le backlog en revue et triez-le : regroupez les doublons, fermez ce qui n'est plus d'actualité et classez le reste selon ce que cela débloque réellement. Donnez-moi les cinq premiers et pourquoi. Ne supprimez rien sans me le lister au préalable."
+      },
+      "research_and_brief": {
+        "label": "Enquêter et me briefer",
+        "hint": "Allez chercher, puis rédigez avec les sources.",
+        "brief": "Enquêtez sur une question que je vais vous poser : consultez de vraies sources plutôt que de répondre de mémoire, rédigez vos conclusions avec les preuves à l'appui de chaque affirmation, et dites explicitement ce que vous n'avez pas pu établir. Ouvrez ensuite un ticket de suivi pour tout ce qui nécessite une décision de ma part."
+      },
+      "ship_fix": {
+        "label": "Corriger et livrer",
+        "hint": "Menez un défaut jusqu'à une exécution lancée.",
+        "brief": "Prenez un défaut que je vais décrire, trouvez la cause racine plutôt que le symptôme, ouvrez-le comme ticket suivi avec le bon responsable, et mettez un agent dessus. Dites-moi le résultat du lancement — si rien n'a réellement démarré, indiquez précisément ce qui l'a bloqué."
+      }
+    }
   },
   "chatMessage": {
     "copy": "Copier",
@@ -13149,7 +13197,8 @@
     "creativeGeneratedStatus": "Généré",
     "creativeApplied": "Appliqué",
     "creativeNoMediaModel": "Publiez un modèle média Evermind pour générer cet objet",
-    "creativeNoFrames": "Le modèle n'a renvoyé aucune image lisible"
+    "creativeNoFrames": "Le modèle n'a renvoyé aucune image lisible",
+    "modeSaveFailed": "Impossible d'enregistrer le mode de la session"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",

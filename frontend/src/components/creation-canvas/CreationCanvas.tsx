@@ -59,11 +59,11 @@ import { exportCsv, exportDocx, exportPptx } from '@/lib/exportApi';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 import {
   MAX_MATERIALIZED_ROWS, MAX_TABULAR_COLUMNS, TABULAR_AGGREGATE_OPERATORS, TABULAR_FILTER_OPERATORS,
-  parseTabularText, profileTabular, queryTabular, tabularFromObject,
+  profileTabular, queryTabular, tabularFromObject,
   type TabularHighlightRule, type TabularQuery, type TabularSource,
 } from '@/lib/canvasTabularData';
 import { detectGeoColumns, mapPointsFromRows, outlineRings, sanitizeGeoBounds } from '@/lib/canvasGeo';
-import { datasetObjectData, importCanvasFile, type ImportTranslator } from '@/lib/canvasFileImport';
+import { importCanvasFile, type ImportTranslator } from '@/lib/canvasFileImport';
 import { WorkflowBuilder } from '@/components/workflow-builder/WorkflowBuilder';
 import { VoiceConfigPanel } from '@/components/ide/VoiceConfigPanel';
 import { VoiceOutput } from '@/components/ide/VoiceOutput';
@@ -76,6 +76,8 @@ import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useLlmModels } from '@/lib/useLlmModels';
 import { ChatInput, type ChatModelOptions, type ChatModelSelection } from '@/components/ChatInput';
+import { ChatModeToggle } from '@/components/brain/ChatModeToggle';
+import { DEFAULT_CHAT_MODE, normalizeChatMode, type ChatMode } from '@/lib/brain';
 import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
 import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, creativeBrief, creativeMeshGeometry, creativePreviewImageUrl, evermindMediaArtifact, generateEvermindMedia, generateServerCreativeArtifact, mediaFrameDataUrl, navigableArtifactUrl, withCreationDeliverable, EVERMIND_CREATIVE_KINDS, SERVER_CREATIVE_KINDS, type CreationDeliverable, type CreativeArtifact } from '@/lib/creationDeliverables';
 import { canvasDiagram, canvasFiles, canvasObjectMarkdown, type CanvasFile } from '@/lib/canvasDocuments';
@@ -530,6 +532,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [acceptedProposalIds, setAcceptedProposalIds] = useState<Set<string>>(new Set());
   const [autoApply, setAutoApply] = useState(false);
   const [autoApplyPending, setAutoApplyPending] = useState(false);
+  /** Conversation vs execution for this session (0409). Hydrated from the loaded
+   *  session below; `setSessionMode` is the writer that also persists it. */
+  const [sessionMode, setSessionMode_] = useState<ChatMode>(DEFAULT_CHAT_MODE);
   const [pendingBrainActions, setPendingBrainActions] = useState<Array<{ objectId: string; action: string }>>([]);
   const [sessionRole, setSessionRole] = useState<CreationSessionSummary['role']>('owner');
   const [lockBlocked, setLockBlocked] = useState(false);
@@ -626,6 +631,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setBrainAutoApprove(enabled);
   }, []);
 
+  /**
+   * Session MODE (migration 0409) — `chat` (author on the board and answer) or `work`
+   * (leave a tracked, dispatched ticket behind). Persisted on the SESSION rather than
+   * in this browser, so a mode a collaborator armed is the mode everyone's next turn
+   * runs in. A local (unsaved) canvas has nowhere to persist it, so it keeps the value
+   * in state only — the same degradation the rest of the local canvas accepts.
+   */
+  const setSessionMode = useCallback((next: ChatMode) => {
+    setSessionMode_(next);
+    if (persistence !== 'server') return;
+    void creationSessionsApi.update(sessionId, { mode: next })
+      .catch(() => setNotice(t('modeSaveFailed')));
+  }, [persistence, sessionId, t]);
+
   const memoryStorageKey = useMemo(() => {
     const chat = nodes.find((node) => node.data.kind === 'chat');
     const canonicalId = chat?.data.resourceId?.match(/^chat:(\d+)$/)?.[1];
@@ -696,6 +715,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       void Promise.all([creationSessionsApi.get(sessionId), creationSessionsApi.timeline.list(sessionId)]).then(([detail, transcript]) => {
         const { nodes: loadedNodes, edges: loadedEdges } = flowFromSession(detail);
         setTitle(detail.session.title);
+        // Mode is a property of the SESSION (0409), so a collaborator opening this
+        // board inherits the mode it is actually running in rather than the default.
+        setSessionMode_(normalizeChatMode(detail.session.mode));
         setBranchParentId(detail.session.branchParentSessionId ?? null);
         setNodes(loadedNodes);
         setEdges(loadedEdges);
@@ -1159,19 +1181,24 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     };
   }, [canEdit, persistedObjectIds, persistence, selectedId, sessionId]);
 
+  /** Filling an existing Dataset object from a file reads it through the same
+   * engine as a drop, so a workbook picked here loads exactly as one dropped on
+   * the board rather than failing on a format only this path never learned. */
   const importDataset = useCallback(async (file: File) => {
     if (!selectedId) return;
     try {
-      const parsed = parseTabularText(file.name, await file.text());
-      if (parsed.rows.length > datasetRowLimit) throw new Error(t('datasetRowLimit', { limit: datasetRowLimit.toLocaleString() }));
-      if (!parsed.columns.length) throw new Error(t('datasetNoColumns'));
-      const shape = { rows: parsed.rows.length.toLocaleString(), columns: parsed.columns.length };
-      setNodes((current) => current.map((node) => node.id === selectedId ? { ...node, data: { ...node.data, ...datasetObjectData(file.name, parsed, { mimeType: file.type, subtitle: t('datasetShape', shape), status: t('datasetStatusImported') }) } } : node));
-      setNotice(t('datasetImported', { name: file.name, rows: parsed.rows.length.toLocaleString(), columns: parsed.columns.length }));
+      const [imported] = (await importCanvasFile(file, importLabel)).objects;
+      const columns = Array.isArray(imported?.data.columns) ? imported.data.columns as string[] : [];
+      const rows = Array.isArray(imported?.data.rows) ? imported.data.rows as TabularSource['rows'] : [];
+      if (!columns.length) throw new Error(t('datasetNoColumns'));
+      if (rows.length > datasetRowLimit) throw new Error(t('datasetRowLimit', { limit: datasetRowLimit.toLocaleString() }));
+      const { title: _title, ...fields } = imported!.data;
+      setNodes((current) => current.map((node) => node.id === selectedId ? { ...node, data: { ...node.data, ...fields } } : node));
+      setNotice(t('datasetImported', { name: file.name, rows: rows.length.toLocaleString(), columns: columns.length }));
     } catch (error) {
       setNotice(error instanceof Error ? error.message : t('datasetImportFailed'));
     }
-  }, [datasetRowLimit, selectedId, setNodes, t]);
+  }, [datasetRowLimit, importLabel, selectedId, setNodes, t]);
 
   useEffect(() => {
     if (!hydrated.current || historyApplying.current) return;
@@ -2553,6 +2580,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           canvasSnapshot: snapshot, persistence, canvasActions,
           guestTurnId: requestMessageId,
           guestTurnInput: request,
+          // The session's mode + the project the ticket would be filed against, so a
+          // WORK turn has somewhere to put the work it creates.
+          mode: sessionMode,
+          projectId: evermindProjectId,
           ...(modelSelection.mode === 'model' ? { model: modelSelection.model, modelStrict: true } : {}),
           routingMode: modelSelection.mode === 'byo_pool' ? 'byo_pool' : 'auto',
           autoApprove: autoApplyRef.current, confirmAction: confirmCanvasAction,
@@ -2626,7 +2657,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setPrompt('');
       setNotice('Evaluation added to canvas');
     }, 850);
-  }, [appendTimeline, canvasActions, confirm, currentUserId, effectiveSelectedIds, edges, evermindProjectId, members, memoryEnabled, modelSelection, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, setEdges, setNodes, thinking, timeline, title]);
+  }, [appendTimeline, canvasActions, confirm, currentUserId, effectiveSelectedIds, edges, evermindProjectId, members, memoryEnabled, modelSelection, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, thinking, timeline, title]);
 
   useEffect(() => {
     if (!hydrated.current || initialPromptSubmitted.current || thinking) return;
@@ -3343,6 +3374,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     rows={1}
     submitOnEnter
     contextControls={<>
+      {/* Chat | Work — first in the row for the same reason as the Brain composer:
+          it is the control that decides whether this turn can leave dispatched work
+          behind. Shared component, so both surfaces cannot drift on what it looks
+          like or what the two words mean. */}
+      <ChatModeToggle value={sessionMode} onChange={setSessionMode} disabled={thinking} />
       <label className={styles.scopeChip}>⌁ <span className="sr-only">{t('brainScope')}</span><select aria-label={t('brainScope')} value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">{t('entireCanvas')}</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? t('selectedObjects', { count: effectiveSelectedIds.length }) : t('selectedObject')}</option><option value="connected" disabled={!effectiveSelectedIds.length}>{t('connectedScope')}</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>{t('currentFrame')}</option></select></label>
     </>}
     onAttach={attachCanvasArtifact}
@@ -3898,7 +3934,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
       {kind === 'workflow' && <><label>{t('executionTarget')}<select value={typeof node.data.runTarget === 'string' ? node.data.runTarget : 'builderforce'} onChange={(event) => onChange({ runTarget: event.target.value })}><option value="builderforce">BuilderForce.AI</option><option value="campaign-strategist">Campaign Strategist</option></select></label><label>{t('approvalMode')}<select value={typeof node.data.approvalMode === 'string' ? node.data.approvalMode : 'required'} onChange={(event) => onChange({ approvalMode: event.target.value })}><option value="required">{t('approvalRequiredBeforePublish')}</option><option value="autonomous">{t('fullyAutonomous')}</option></select></label><button type="button" className={styles.fullButton} onClick={onEditWorkflow}>{t('editWorkflowOnCanvas')}</button><button className={styles.fullButton} onClick={onRun}>{`▶ ${t('runWorkflow')}`}</button></>}
       {kind === 'dashboard' && <><label>{t('dateRange')}<select value={typeof node.data.dateRange === 'string' ? node.data.dateRange : '30d'} onChange={(event) => onChange({ dateRange: event.target.value })}><option value="30d">{t('last30Days')}</option><option value="7d">{t('last7Days')}</option><option value="qtd">{t('quarterToDate')}</option></select></label><button type="button" className={styles.fullButton} onClick={() => onChange({ fetchedAt: new Date().toISOString(), status: 'Live' })}>{t('refreshLiveData')}</button></>}
       {kind === 'dataset' && <>
-        <label>{t('datasetImportLabel')}<input type="file" accept=".csv,.tsv,.tab,.json,.jsonl,text/csv,text/tab-separated-values,application/json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onImportDataset(file); }} /></label>
+        <label>{t('datasetImportLabel')}<input type="file" accept=".csv,.tsv,.tab,.json,.jsonl,.xlsx,.xlsm,text/csv,text/tab-separated-values,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onImportDataset(file); }} /></label>
         <p className={styles.inspectorHint}>{t('datasetImportHint')}</p>
         <DatasetProfileSummary data={node.data} />
         <button type="button" className={styles.fullButton} onClick={() => onProfileDataset(node.id)}>{t('datasetProfileAction')}</button>

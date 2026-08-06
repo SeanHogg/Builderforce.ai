@@ -6450,7 +6450,55 @@
     "chatActionsAria": "Acciones de {title}",
     "aiDisclosureAria": "Aviso sobre IA",
     "aiDisclosureBody": "Estás interactuando con agentes de IA. Los resultados pueden ser inexactos; revísalos antes de basar decisiones importantes en ellos. Las acciones que modifican datos requieren tu aprobación, salvo que actives explícitamente la aprobación automática.",
-    "aiDisclosureLink": "Cómo funciona la IA, explicaciones y revisión humana"
+    "aiDisclosureLink": "Cómo funciona la IA, explicaciones y revisión humana",
+    "emptyHintWork": "Describe el trabajo. Lo abriré como tarea con seguimiento, le asignaré personal y pondré un agente a ejecutarlo.",
+    "newChatProjectLabel": "Proyecto",
+    "newChatProjectAria": "Proyecto para esta nueva conversación",
+    "modes": {
+      "pickerAria": "Modo de conversación",
+      "chat": {
+        "label": "Chat",
+        "hint": "Pregunta, explora, obtén una respuesta. No se añade nada al tablero."
+      },
+      "work": {
+        "label": "Trabajo",
+        "hint": "Delega un encargo: se convierte en un tique con seguimiento, con personal asignado y despachado a un agente."
+      }
+    },
+    "workOptions": {
+      "pickerAria": "¿Qué quieres que se haga?",
+      "tilesHint": "…o delega uno de estos",
+      "audit_spreadsheet": {
+        "label": "Auditar una hoja de cálculo",
+        "hint": "Revisa las fórmulas y detecta lo erróneo y lo frágil.",
+        "brief": "Audita una hoja de cálculo que te daré: revisa las fórmulas, encuentra los errores y las partes frágiles, señala qué se rompería si se moviera una fila o cambiara un valor, y corrige lo que yo apruebe. Muéstrame la lista de problemas antes de cambiar nada."
+      },
+      "review_draft": {
+        "label": "Revisar un borrador",
+        "hint": "Léelo antes de que salga y dime qué falla.",
+        "brief": "Revisa un borrador antes de que lo envíe: dime qué no se entiende, qué rebatiría un lector escéptico y qué falta. Marca cualquier cosa que exagere lo que realmente podemos entregar. Dame las correcciones concretas, no consejos generales."
+      },
+      "chase_blockers": {
+        "label": "Perseguir los bloqueos",
+        "hint": "Encuentra qué está atascado, por qué y quién debe moverse.",
+        "brief": "Encuentra todo lo que está bloqueado ahora mismo en este proyecto, averigua por qué está atascado cada caso y quién debe actuar para desbloquearlo, y abre un tique por cada bloqueo real con la persona responsable asignada. Dime cuáles tengo que desatascar yo personalmente."
+      },
+      "triage_backlog": {
+        "label": "Depurar el backlog",
+        "hint": "Ordena lo que importa, cierra lo que no.",
+        "brief": "Repasa el backlog y depúralo: agrupa duplicados, cierra lo que ya no es real y ordena el resto según lo que realmente desbloquea. Dime los cinco primeros y por qué. No elimines nada sin listármelo antes."
+      },
+      "research_and_brief": {
+        "label": "Investigar e informarme",
+        "hint": "Averígualo y redáctalo con fuentes.",
+        "brief": "Investiga una pregunta que te daré: consulta fuentes reales en lugar de responder de memoria, redacta lo que encuentres con la evidencia detrás de cada afirmación y sé explícito sobre lo que no has podido establecer. Después abre un tique de seguimiento para todo lo que requiera una decisión mía."
+      },
+      "ship_fix": {
+        "label": "Corregir y entregar",
+        "hint": "Lleva un defecto hasta una ejecución despachada.",
+        "brief": "Toma un defecto que te describiré, encuentra la causa raíz en lugar del síntoma, ábrelo como tique con el responsable adecuado y pon un agente a trabajar en él. Dime el resultado del despacho: si en realidad no arrancó nada, di exactamente qué lo bloqueó."
+      }
+    }
   },
   "chatMessage": {
     "copy": "Copiar",
@@ -13149,7 +13197,8 @@
     "creativeGeneratedStatus": "Generado",
     "creativeApplied": "Aplicado",
     "creativeNoMediaModel": "Publica un modelo multimedia de Evermind para renderizar este objeto",
-    "creativeNoFrames": "El modelo no devolvió fotogramas legibles"
+    "creativeNoFrames": "El modelo no devolvió fotogramas legibles",
+    "modeSaveFailed": "No se pudo guardar el modo de la sesión"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",

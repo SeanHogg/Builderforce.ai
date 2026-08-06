@@ -127,14 +127,18 @@ describe('geocodeBatch', () => {
     expect(result.truncated).toBe(false);
   });
 
-  it('paces uncached calls to the vendor declared interval, and only between them', async () => {
-    const { vendor: fast } = stubVendor({ A: { lat: 1, lng: 2 }, B: { lat: 3, lng: 4 } });
-    const paced: GeocodeVendor = { ...fast, minIntervalMs: 40 };
-    const startedAt = Date.now();
-    await geocodeBatch(undefined, ['A', 'B'], { vendor: paced });
-    // One gap for two calls — the FIRST call is never delayed.
-    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(35);
-    expect(Date.now() - startedAt).toBeLessThan(200);
+  it('leaves at least the vendor declared interval between uncached calls', async () => {
+    const at: number[] = [];
+    const paced: GeocodeVendor = {
+      id: 'paced', label: 'Paced', attribution: '', minIntervalMs: 40,
+      async lookup(query) { at.push(Date.now()); return { query, ok: true, lat: 1, lng: 2, displayName: query, boundingBox: [1, 1, 2, 2], kind: 'place' }; },
+    };
+    await geocodeBatch(undefined, ['A', 'B', 'C'], { vendor: paced });
+    // Only the LOWER bound is asserted. An upper bound would be measuring the CI box's
+    // scheduler, not this code, and that is how a timing test becomes a flake.
+    expect(at).toHaveLength(3);
+    expect(at[1]! - at[0]!).toBeGreaterThanOrEqual(35);
+    expect(at[2]! - at[1]!).toBeGreaterThanOrEqual(35);
   });
 
   it('ignores blank terms', async () => {

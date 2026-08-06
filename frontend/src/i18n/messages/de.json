@@ -6450,7 +6450,55 @@
     "chatActionsAria": "Aktionen für {title}",
     "aiDisclosureAria": "KI-Hinweis",
     "aiDisclosureBody": "Sie interagieren mit KI-Agenten. Ergebnisse können fehlerhaft sein; prüfen Sie sie, bevor Sie wichtige Entscheidungen darauf stützen. Ändernde Aktionen erfordern Ihre Freigabe, sofern Sie die automatische Freigabe nicht ausdrücklich aktivieren.",
-    "aiDisclosureLink": "Wie KI funktioniert, Erklärungen und menschliche Prüfung"
+    "aiDisclosureLink": "Wie KI funktioniert, Erklärungen und menschliche Prüfung",
+    "emptyHintWork": "Beschreiben Sie die Aufgabe. Ich lege sie als nachverfolgte Arbeit an, besetze sie und setze einen Agenten darauf an.",
+    "newChatProjectLabel": "Projekt",
+    "newChatProjectAria": "Projekt für diese neue Unterhaltung",
+    "modes": {
+      "pickerAria": "Unterhaltungsmodus",
+      "chat": {
+        "label": "Chat",
+        "hint": "Fragen, erkunden, eine Antwort bekommen. Dem Board wird nichts hinzugefügt."
+      },
+      "work": {
+        "label": "Arbeit",
+        "hint": "Übergeben Sie eine Aufgabe: Sie wird zum nachverfolgten Ticket, besetzt und an einen Agenten übergeben."
+      }
+    },
+    "workOptions": {
+      "pickerAria": "Was soll erledigt werden?",
+      "tilesHint": "…oder übergeben Sie eine dieser Aufgaben",
+      "audit_spreadsheet": {
+        "label": "Tabelle prüfen",
+        "hint": "Formeln prüfen, Fehler und fragile Stellen finden.",
+        "brief": "Prüfe eine Tabelle, die ich dir gebe — kontrolliere die Formeln, finde die Fehler und die fragilen Stellen, markiere, was brechen würde, wenn eine Zeile verschoben oder ein Wert geändert wird, und behebe, was ich freigebe. Zeig mir die Mängelliste, bevor du etwas änderst."
+      },
+      "review_draft": {
+        "label": "Entwurf prüfen",
+        "hint": "Vor dem Versand lesen und Schwachstellen benennen.",
+        "brief": "Prüfe einen Entwurf, bevor ich ihn versende — sag mir, was unklar ist, wogegen eine skeptische Leserschaft Einspruch erheben würde und was fehlt. Markiere alles, was überzeichnet, was wir tatsächlich liefern können. Gib mir die konkreten Änderungen, keine allgemeinen Ratschläge."
+      },
+      "chase_blockers": {
+        "label": "Blockaden aufspüren",
+        "hint": "Finden, was feststeckt, warum, und wer handeln muss.",
+        "brief": "Finde alles, was in diesem Projekt derzeit blockiert ist, kläre für jeden Fall, warum er feststeckt und wer handeln muss, damit er sich löst, und lege für jede echte Blockade ein Ticket mit der verantwortlichen Person an. Sag mir, welche ich persönlich lösen muss."
+      },
+      "triage_backlog": {
+        "label": "Backlog sichten",
+        "hint": "Wichtiges ordnen, Überholtes schließen.",
+        "brief": "Geh das Backlog durch und sichte es: fasse Duplikate zusammen, schließe, was nicht mehr aktuell ist, und ordne den Rest danach, was es tatsächlich freimacht. Nenn mir die fünf wichtigsten und warum. Lösche nichts, ohne es mir vorher aufzulisten."
+      },
+      "research_and_brief": {
+        "label": "Recherchieren und berichten",
+        "hint": "Nachschlagen und mit Quellen aufschreiben.",
+        "brief": "Recherchiere eine Frage, die ich dir stelle: lies echte Quellen, statt aus dem Gedächtnis zu antworten, schreibe deine Ergebnisse mit den Belegen zu jeder Aussage auf und benenne ausdrücklich, was du nicht klären konntest. Lege danach ein Folgeticket für alles an, das eine Entscheidung von mir braucht."
+      },
+      "ship_fix": {
+        "label": "Beheben und ausliefern",
+        "hint": "Einen Fehler bis zum gestarteten Lauf bringen.",
+        "brief": "Nimm einen Fehler, den ich beschreibe, finde die Grundursache statt des Symptoms, lege ihn als nachverfolgtes Ticket mit der richtigen verantwortlichen Person an und setze einen Agenten darauf an. Sag mir das Ergebnis der Übergabe — wenn tatsächlich nichts gestartet ist, nenne genau, was es blockiert hat."
+      }
+    }
   },
   "chatMessage": {
     "copy": "Kopieren",
@@ -13149,7 +13197,8 @@
     "creativeGeneratedStatus": "Erzeugt",
     "creativeApplied": "Angewendet",
     "creativeNoMediaModel": "Veröffentlichen Sie ein Evermind-Medienmodell, um dieses Objekt zu erzeugen",
-    "creativeNoFrames": "Das Modell lieferte keine lesbaren Einzelbilder"
+    "creativeNoFrames": "Das Modell lieferte keine lesbaren Einzelbilder",
+    "modeSaveFailed": "Sitzungsmodus konnte nicht gespeichert werden"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",

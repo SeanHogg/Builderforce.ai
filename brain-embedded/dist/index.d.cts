@@ -357,6 +357,13 @@ interface CompletionMetadata {
     /** Original text the user submitted. Internal specialist/tool prompts retain
      * this value so the gateway can verify the turn even when their prompts differ. */
     guestTurnInput?: string;
+    /**
+     * The conversation's MODE (0409) — `chat` or `work`. Carried so the usage row this
+     * completion produces records WHICH KIND of turn spent the tokens. Without it,
+     * spend can only be attributed to a chat id, and "what does execution actually
+     * cost us versus conversation" has no answer.
+     */
+    mode?: string;
 }
 interface StreamChatOptions {
     messages: ChatCompletionMessage[];

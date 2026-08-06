@@ -4,6 +4,66 @@
 
 ---
 
+## 2026-08-06 — ✅ RESOLVED: dropping a file on the canvas did nothing, and an office file that got there was an icon
+
+The Creation Canvas is meant to be the creative starting space, but the only way to get a file onto it was the composer's `+ → Upload` menu, and what arrived was an opaque `file` card. `onDrop` read a palette drag (`DND_MIME`) and ignored `event.dataTransfer.files` entirely, so dragging a document off the desktop landed on the board and vanished. A `.docx` had no reader at all, a `.xlsx` failed `isTabularFile`, a `.pptx` and a `.pdf` were bytes with a name.
+
+**Drop is now a first-class way in.** The board accepts an OS drag anywhere on the pane, at the point it was dropped, with a depth-counted overlay (`onDragEnter`/`onDragLeave` fire per child element, so the veil is held by a count, not by the last event seen) and `pointer-events: none` so the overlay can't swallow its own `dragleave`. Multiple files lay out in a row; past `MAX_DROPPED_FILES` (12) the remainder is *reported*, not silently dropped.
+
+**Files become the object they actually are**, via readers built on `DecompressionStream` — no parser dependency, no upload round-trip (`frontend/src/lib/officeFormats.ts`):
+
+- **`.docx` → a document with pages.** `word/document.xml` converts to markdown with headings, per-run bold/italic, lists, blockquotes and tables. Hard breaks (`w:br w:type="page"`, `lastRenderedPageBreak`) become a `<!--page-break-->` marker, tracked per-run as *before* or *after* the text it was written against — collapsing the two put the heading of every new section on the end of the previous page.
+- **`.xlsx` → one editable sheet object carrying every tab.** Shared strings, inline strings, booleans, and date-styled serials (resolved against the workbook's own `numFmt` definitions, 1899-12-30 epoch) all read; cells are placed by their `r` reference so a skipped cell can't shift a row left. Sheet tabs render on the card, and a cell edit writes back into the tab it was made on.
+- **`.pptx` → slides**, in presentation order, preferring the `ctrTitle`/`title` placeholder over "whatever text box came first".
+- **`.pdf` → pages**, where the text is Flate-compressed with a standard encoding: one content stream is one page, so the extracted body keeps the source's pagination. A legibility gate (>0.9 readable characters) refuses to show mojibake.
+- **`.rtf` → text**, through a brace-aware tokenizer. The previous regex approach dropped only `\*` destinations, so an ordinary `{\fonttbl…}` leaked "Arial;Times New Roman;" into the body.
+- **`.md`/`.txt` → document, source files → `code`, CSV/TSV/JSON → Dataset** (unchanged), images → `image`, everything else → an honest attachment.
+
+**And the drop starts a conversation.** After import the objects are selected, Brain opens, and the composer is seeded with a question phrased for what the file turned out to be (`promptData`/`promptDocument`/`promptDeck`/…) — never overwriting text the person is part-way through typing.
+
+**One engine, three callers.** `frontend/src/lib/canvasFileImport.ts` is the single derivation; `attachCanvasArtifact` (composer), `onDrop` (board) and `importDataset` (inspector) all read it. That closed a real inconsistency: the inspector's picker had its own CSV-only parser, so an `.xlsx` chosen there failed while the same file dropped on the board worked.
+
+**Rendering.** `DocumentBody` turns pages instead of scrolling one column (`paginateDocument` honours declared breaks, else flows at 450 words on block boundaries so a table or fence is never split); `DataGridBody` grew workbook tabs. Both themed from `--canvas-*` tokens in light and dark, with a new `--canvas-drop-veil` per theme.
+
+**Correctness fix found on the way:** the Files library named a tabular row after its *source* (`book.xlsx`) while the download path emits CSV. `objectFile` now names the row for the bytes it produces.
+
+Localized across all five catalogs (`creationCanvas.import.*`, `creationCanvas.node.*` pager/sheet keys); dead `imageAttached`/`fileAttached`/`datasetAttached`/`fileAddedToCanvas` keys deleted. 26 new tests (`officeFormats.test.ts`, `canvasFileImport.test.ts`, plus pagination cases in `canvasDocuments.test.ts`). Open follow-ups (scanned/encrypted PDFs, DOCX media, .docx round-trip styling) are in the roadmap's Knowledge & canvas register.
+
+---
+
+## 2026-08-06 — ✅ RESOLVED: 3D was one canvas only, a generated model was a photograph of a model, and a creative brief produced a parameterised primitive
+
+Three roadmap items in the Knowledge & canvas register, closed together because they are one story: the depth view only existed on one board, what it showed of a 3D object was a picture taken at a fixed angle, and the object it was showing had not been generated from the brief in the first place.
+
+**3D is now every graph surface, not just the Creation Canvas.** `Canvas3DView` and `canvas3d.ts` were already generic over React Flow nodes and edges, but only `CreationCanvas` passed `onToggleThreeD`, so four boards that are *entirely about dependency depth* could only be read flat. `WorkflowBuilder`, `DependencyGraph`, `ValueStreamGraph` and `WorkspaceCanvas` each got a `describe()` adapter and a positioned host:
+
+- **WorkflowBuilder** — a workflow IS a dependency flow, so the depth axis is the graph's own subject. Label/icon/accent/family come from `NODE_KIND_MAP`, and the sublabel from `configSummary`, which was hoisted out of `BuilderNode` and exported so the flat node and the 3D card cannot say different things about one step.
+- **DependencyGraph** — precedence depth becomes distance; epic children sit a plane behind their parent. Status is the group axis.
+- **ValueStreamGraph** — blocked-behind-what as depth, delivery status as the group axis, critical path in its own accent.
+- **WorkspaceCanvas** — no edges to stack by, so panels separate by a new optional `group` and the camera travels between full-size panels instead of the reader hunting under one for another.
+
+Rather than five copies of the same boolean, `useCanvasThreeD()` in `canvas3dControls` owns the flat-or-3D state and hands back the two `CanvasCommands` props, and `applyCanvas3DMoves` / `canvas3dDepthOffset` in `canvas3d.ts` own writing a 3D move back onto a flat node — board position for the plane, `data.depthOffset` for the lift, with a settled object dropping the field rather than carrying a zero into every save. `CreationCanvas` was migrated onto both.
+
+**A generated mesh is now geometry the camera turns, not a photograph of geometry.** `creativeGeometry.ts` projected a mesh once, at a fixed three-quarter view, and `Canvas3DView` put that image on the card — so orbiting the scene slid a photograph around. `stlPreviewSvg` was split into `meshPreviewSvg(triangles, {yaw, pitch})`, and the scene now re-projects from the parsed triangles when the camera settles (160 ms after the last gesture, never per pointermove). `meshPreviewCache.ts` reads each file's triangles ONCE per URL and caches projections by angle to the degree, capped and evicted oldest-first; a mesh denser than 4 000 facets is sampled at an even stride rather than cropped. The preview is drawn from the camera's own direction written in the board's frame (same turntable angle, opposite elevation, because the board measures Y down the screen) and the image undoes the stage rotation, so the object stands up on the card instead of being painted onto the floor.
+
+**And a model authored anywhere else now reads.** The reader was ASCII STL only — the one format Canvas itself writes. It now covers binary STL (sniffed from the bytes, not the extension), OBJ (faces of any size fanned, negative indices, `v/vt/vn`), glTF and GLB (embedded and chunk buffers, with every node's placement applied — without it a multi-part model piles at the origin), and the tessellated face sets an AP242 STEP file carries. A STEP part that is pure analytic B-rep returns nothing rather than a guessed shape, because evaluating those surfaces needs a geometry kernel. `canvasFileImport.ts` gained the import surface those readers needed: a dropped `.stl/.obj/.glb/.gltf/.step/.stp` becomes a **model3d** object carrying its own geometry (and a rendered thumbnail), a dropped `.dxf` becomes a **cad** object drawn back from its own paths — both previously landed as a generic attachment icon.
+
+**Creative generation is a real generator with the browser as its fallback, not the only path.** `buildBrowserCreativeArtifact` produced a real, portable file for every creative kind with no model behind it, so a CAD brief got a fixed plate and a 3D brief a fixed box. `creative.*` now routes to a generator and keeps the browser path as the offline answer:
+
+- **Geometry** (`cad`, `model3d`) — new `POST /api/creative/generate` + `application/creative/geometryService.ts`. A model authors a bounded parametric SPEC under a strict JSON schema (a closed outline with bores and construction lines; positioned boxes, cylinders and spheres) and the server evaluates it deterministically into DXF or STL. The split is the point: asking a model for DXF/STL text directly yields files that are plausible and frequently unopenable, so the SHAPE comes from the model and the FILE comes from code that can only emit closed, well-formed geometry — degenerate facets are dropped, the profile is written as a closed polyline, and the validation line quotes the real facet/point counts.
+- **Authored text** (`game`, `resume`, `podcast`, `template`) — the model writes the file and the server checks it is the kind of file it claims to be (HTML that is HTML, JSON that parses, nothing shorter than a stub) before returning it. A refusal or an apology is not an artifact.
+- **Pixels** (`image`, `comic`, `animation`) — the tenant's own published Evermind media model renders the frames. An animation keeps ALL of them in a self-contained page that plays them back at 12 fps; a still keeps the first as a PNG.
+
+Everything runs on the FREE pool (`ideProxy`), so honouring a creative brief never lands on a paid vendor, and any failure falls back to the browser baseline with the notice saying so — a creative object always ends up with a real file, and the deliverable records which generator produced it.
+
+**Fixed in passing:** `OneProjectDependencyGraph` called the global `window.confirm` when deleting a dependency edge — `useConfirm()` was being called in the parent component, where nothing used it. Now wired where it is actually used (blocked in embeds, unstyled and untranslatable otherwise). The seven workflow node families were localized (`evermindBuild.nodeGroup.*`), fixing the palette headings as well as the new 3D badges; the remaining per-kind catalog copy is logged in the roadmap.
+
+Copy for all of it in en/zh/es/fr/de. Covered by 17 cases in `creativeGeometry.test.ts` (binary STL, OBJ, glTF node transforms, STEP tessellation, format sniffing, and that the same mesh projects differently from a different camera) and 9 in `api/.../geometryService.test.ts` (a spec that cannot be built is rejected rather than repaired; a box closes with twelve triangles; an STL's facet count matches what it claims).
+
+Files: `frontend/src/lib/creativeGeometry.ts`, `meshPreviewCache.ts` (new), `creationDeliverables.ts`, `canvasFileImport.ts`, `components/canvas/{canvas3d.ts,canvas3dControls.tsx,Canvas3DView.tsx,Canvas3DView.module.css}`, `components/{workflow-builder,pm,insights,workspace-canvas}/*`, `api/src/application/creative/geometryService.ts` (new), `api/src/presentation/routes/creativeRoutes.ts` (new).
+
+---
+
 ## 2026-08-06 — ✅ RESOLVED: "Visualize the school districts in Michigan" had no path from a question to a map
 
 A user asked the Creation Canvas to visualize Michigan's school districts. The expected shape — **research it → collect the results into a dataset → plot the dataset on a map** — could not happen, and not because the model chose badly: **all three steps were missing from the product.** The turn had nowhere to go, so it answered from weights and drew nothing worth trusting.

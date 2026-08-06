@@ -25,7 +25,7 @@ describe('WorkspaceCanvas', () => {
     ]} />);
 
     expect(screen.getByTestId('workspace-canvas')).toBeInTheDocument();
-    expect(screen.getByLabelText('BuilderForce canvas panel')).toBeInTheDocument();
+    expect(screen.getByLabelText('workspaceCanvas.panelLabel BuilderForce')).toBeInTheDocument();
     expect(screen.getByText('Open project')).toBeInTheDocument();
     expect(screen.getByText('Task board component')).toBeInTheDocument();
   });
@@ -40,7 +40,7 @@ describe('WorkspaceCanvas', () => {
       onRemovePanel={onRemove}
     />);
 
-    fireEvent.click(screen.getByLabelText('Remove Alpha tasks from canvas'));
+    fireEvent.click(screen.getByLabelText('workspaceCanvas.removePanel Alpha tasks'));
     expect(onRemove).toHaveBeenCalledWith('tasks-1');
     expect(screen.getByText('Beta')).toBeInTheDocument();
   });
@@ -63,8 +63,8 @@ describe('WorkspaceCanvas', () => {
     ]} />);
 
     await waitFor(() => expect(screen.getByTestId('workspace-canvas')).toHaveAttribute('data-layout', 'widgets'));
-    expect(screen.getByLabelText('Quality canvas panel')).toBeInTheDocument();
-    expect(screen.getByLabelText('Recommendations canvas panel')).toBeInTheDocument();
+    expect(screen.getByLabelText('workspaceCanvas.panelLabel Quality')).toBeInTheDocument();
+    expect(screen.getByLabelText('workspaceCanvas.panelLabel Recommendations')).toBeInTheDocument();
     expect(screen.getByText('Quality score')).toBeVisible();
     expect(screen.getByText('Fix CI first')).toBeVisible();
     vi.unstubAllGlobals();

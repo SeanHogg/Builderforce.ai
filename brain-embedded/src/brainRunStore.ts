@@ -1193,10 +1193,15 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // model-facing turn of this run. Deliberately NOT passed to the transcript
   // summarizer (`summarizeMiddle`): that is mechanical compaction, not a reply,
   // and auditing it would double-count the turn.
+  // Conversation or execution (0409). Resolved once here because BOTH the usage
+  // metadata below and the system-prompt directive further down need it, and they must
+  // never disagree about which mode this run was.
+  const runMode = normalizeChatMode(req.chatMode ?? 'work');
   const metadata: CompletionMetadata = {
     chatId,
     guestTurnId: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`,
     guestTurnInput: latestUserText(convo),
+    mode: runMode,
     ...(req.projectId != null ? { projectId: req.projectId } : {}),
   };
 
@@ -1307,7 +1312,6 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
   // the VS Code webview Brain, mirroring the server-side @agent reply loop
   // (BrainService.agentReply). `chatMode` is optional and defaults to WORK so any host
   // that has not adopted the mode yet keeps the behaviour it shipped with.
-  const runMode = normalizeChatMode(req.chatMode ?? 'work');
   systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, chatId)}`;
 
   // Read-only tool calls whose (name+args) exactly repeat within a run return a

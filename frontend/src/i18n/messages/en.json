@@ -6451,7 +6451,55 @@
     "chatActionsAria": "Actions for {title}",
     "aiDisclosureAria": "AI disclosure",
     "aiDisclosureBody": "You are interacting with AI agents. Outputs can be inaccurate; review consequential results before relying on them. Mutating actions require your approval unless you explicitly enable auto-approve.",
-    "aiDisclosureLink": "How AI works, explanations, and human review"
+    "aiDisclosureLink": "How AI works, explanations, and human review",
+    "emptyHintWork": "Describe the job. I'll open it as tracked work, staff it, and put an agent on it.",
+    "newChatProjectLabel": "Project",
+    "newChatProjectAria": "Project for this new conversation",
+    "modes": {
+      "pickerAria": "Conversation mode",
+      "chat": {
+        "label": "Chat",
+        "hint": "Ask, explore, get an answer. Nothing is added to the board."
+      },
+      "work": {
+        "label": "Work",
+        "hint": "Hand over a job: it becomes a tracked ticket, staffed and dispatched to an agent."
+      }
+    },
+    "workOptions": {
+      "pickerAria": "What do you want done?",
+      "tilesHint": "…or hand over one of these",
+      "audit_spreadsheet": {
+        "label": "Audit a spreadsheet",
+        "hint": "Check the formulas, find what's wrong and what's fragile.",
+        "brief": "Audit a spreadsheet I give you — check the formulas, find the errors and the fragile parts, flag what would break if a row moved or a value changed, and fix what I approve. Show me the issue list before changing anything."
+      },
+      "review_draft": {
+        "label": "Review a draft",
+        "hint": "Read it before it goes out and tell me what's weak.",
+        "brief": "Review a draft before I send it — tell me what's unclear, what a sceptical reader would push back on, and what's missing. Mark anything that overstates what we can actually deliver. Give me the specific edits, not general advice."
+      },
+      "chase_blockers": {
+        "label": "Chase down blockers",
+        "hint": "Find what's stuck, why, and who has to move.",
+        "brief": "Find everything that's currently blocked on this project, work out why each one is stuck and who has to move for it to unblock, then open a ticket for each real blocker with the accountable person on it. Tell me which ones I personally need to unstick."
+      },
+      "triage_backlog": {
+        "label": "Triage the backlog",
+        "hint": "Sort what matters, close what doesn't.",
+        "brief": "Go through the backlog and triage it: group duplicates, close what's no longer real, and rank what's left by what it actually unblocks. Tell me the top five and why. Don't delete anything without listing it for me first."
+      },
+      "research_and_brief": {
+        "label": "Research and brief me",
+        "hint": "Go find out, then write it up with sources.",
+        "brief": "Research a question I'll give you: go and read real sources rather than answering from memory, write up what you found with the evidence behind each claim, and be explicit about what you couldn't establish. Then open a follow-up ticket for anything that needs a decision from me."
+      },
+      "ship_fix": {
+        "label": "Fix and ship it",
+        "hint": "Take a defect all the way to a dispatched run.",
+        "brief": "Take a defect I'll describe, find the root cause rather than the symptom, open it as a tracked ticket with the right owner, and put an agent on it. Tell me the dispatch outcome — if nothing actually started, say exactly what blocked it."
+      }
+    }
   },
   "chatMessage": {
     "copy": "Copy",
@@ -13150,7 +13198,8 @@
     "creativeGeneratedStatus": "Generated",
     "creativeApplied": "Applied",
     "creativeNoMediaModel": "Publish an Evermind media model to render this object",
-    "creativeNoFrames": "The model returned no readable frames"
+    "creativeNoFrames": "The model returned no readable frames",
+    "modeSaveFailed": "Could not save the session mode"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
