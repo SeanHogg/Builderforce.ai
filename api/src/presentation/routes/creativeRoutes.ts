@@ -94,7 +94,8 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
    * → { artifactKind, fileName, mimeType, outputFormat, content, provider, model, validationDetail, summary? }
    */
   router.post('/generate', async (c) => {
-    const body = await c.req.json<{ kind?: unknown; title?: unknown; brief?: unknown; templateId?: unknown }>().catch(() => ({}));
+    type GenerateBody = { kind?: unknown; title?: unknown; brief?: unknown; templateId?: unknown };
+    const body: GenerateBody = await c.req.json<GenerateBody>().catch(() => ({} as GenerateBody));
     const kind = String(body.kind ?? '') as CreativeKind;
     const target = KINDS[kind];
     if (!target) return c.json({ error: 'Unsupported creative kind', kind: String(body.kind ?? '') }, 400);

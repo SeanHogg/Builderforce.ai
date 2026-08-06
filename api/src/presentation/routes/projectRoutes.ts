@@ -10,6 +10,7 @@ import { DEFAULT_TEMPLATE_ID } from '../../application/kanban/templateCatalog';
 import type { HonoEnv } from '../../env';
 import type { Env } from '../../env';
 import { getCacheVersion, getOrSetCached, bumpCacheVersion, bumpTicketSearchVersion } from '../../infrastructure/cache/readThroughCache';
+import { buildProjectConnections, projectConnectionsKey } from '../../application/repos/projectConnectionStatus';
 import { computeProject360, type Project360Aggregate } from '../../application/project/computeProject360';
 import { computeProjectDeliverySignals } from '../../application/insights/projectDeliverySignals';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
@@ -307,6 +308,26 @@ export function createProjectRoutes(projectService: ProjectService, db: Db): Hon
       () => buildProjectsList(tenantId),
     );
     return c.json({ projects });
+  });
+
+  // GET /api/projects/connections
+  // What every project is wired to (source control, external board) and whether
+  // that wiring is healthy — the status strip on the projects widget. Registered
+  // BEFORE '/:id' so 'connections' is not swallowed as a project id.
+  //
+  // Cached per tenant (60s KV / 30s L1) on top of the per-repo provider probes,
+  // which are themselves cached: a dashboard load costs zero GitHub subrequests
+  // in the steady state. Repo/board writes invalidate it, so attaching a repo
+  // shows up immediately rather than after the TTL.
+  router.get('/connections', async (c) => {
+    const tenantId = c.get('tenantId');
+    const connections = await getOrSetCached(
+      c.env as Env,
+      projectConnectionsKey(tenantId),
+      () => buildProjectConnections(c.env as Env, db, tenantId),
+      { kvTtlSeconds: 60, l1TtlMs: 30_000 },
+    );
+    return c.json({ connections });
   });
 
   /** Window for the per-project delivery-health signals — matches the delivery

@@ -75,6 +75,16 @@ export interface GeocodeVendor {
   readonly id: string;
   readonly label: string;
   readonly attribution: string;
+  /**
+   * Minimum gap the batch loop leaves between two UNCACHED calls to this vendor.
+   *
+   * It lives on the vendor, not on the loop, because it is a fact about the vendor's
+   * usage policy: Nominatim asks for ~1 request/second, and a keyed vendor on a paid
+   * plan would ask for nothing. Defaults to {@link RATE_LIMIT_MS} when a vendor does
+   * not state one, so an adapter added without thinking about it is throttled rather
+   * than let loose.
+   */
+  readonly minIntervalMs?: number;
   /** Resolve one term. Never throws — a vendor outage costs one unplotted row. */
   lookup(query: string, opts: { countryCodes?: string; outline?: boolean }): Promise<GeocodeResult>;
 }
@@ -138,6 +148,7 @@ export const nominatimVendor: GeocodeVendor = {
   id: 'nominatim',
   label: 'OpenStreetMap Nominatim',
   attribution: '© OpenStreetMap contributors',
+  minIntervalMs: RATE_LIMIT_MS,
   async lookup(query, opts): Promise<GeocodeResult> {
     const params = new URLSearchParams({ q: query, format: 'jsonv2', limit: '1', addressdetails: '0' });
     if (opts.countryCodes) params.set('countrycodes', opts.countryCodes);
@@ -228,7 +239,8 @@ export async function geocodeBatch(
         async () => {
           // Pace only the calls that actually leave the isolate. A cached batch is
           // instant; a cold one is paced exactly as the vendor's policy requires.
-          if (networkCalls > 0) await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_MS));
+          const gap = vendor.minIntervalMs ?? RATE_LIMIT_MS;
+          if (networkCalls > 0 && gap > 0) await new Promise((resolve) => setTimeout(resolve, gap));
           networkCalls += 1;
           const hit = await vendor.lookup(search, {
             ...(opts.countryCodes ? { countryCodes: opts.countryCodes } : {}),

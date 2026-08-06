@@ -43,7 +43,8 @@ import { withProvenanceMetadata, type ProvenanceAccount } from './provenance';
 import { selectToolsForTurn } from './selectTools';
 import { routerToolSpecs, isRouterTool, handleRouterCall } from './toolRouter';
 import { setLastResolvedModel } from './lastResolvedModel';
-import { chatWorkLinkingDirective, isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, isReadOnlyPlatformTool } from './chatWorkLinking';
+import { isCodeChangeTool, isTicketRecordingTool, codeChangeFile, workItemLinkFromCreate, linkedTicketsToAdvance, isReadOnlyPlatformTool } from './chatWorkLinking';
+import { chatModeDirective, normalizeChatMode, type ChatMode } from './chatMode';
 import {
   shouldRecoverStalledTurn,
   isExhaustedStall,
@@ -289,6 +290,17 @@ export interface BrainRunRequest {
    * failed Evermind recall.
    */
   augmentSystemPrompt?: (userText: string) => Promise<string | undefined>;
+  /**
+   * The conversation's MODE (migration 0409) — whether this run is a CONVERSATION
+   * (`chat`: read, reason, answer) or an EXECUTION (`work`: create + staff + link the
+   * ticket, then dispatch an agent to run it). Decides which directive is folded into
+   * the system prompt; see `chatMode.ts`.
+   *
+   * Optional, and absent means `work`: hosts that predate the mode (the VS Code
+   * webview, any embed) keep the always-execute behaviour they shipped with rather
+   * than silently losing their ticket lineage.
+   */
+  chatMode?: ChatMode;
 }
 
 /** Live, observable snapshot of a chat's run (what the hook renders). */
@@ -1282,13 +1294,21 @@ async function runLoop(chatId: number, c: RunCell, req: BrainRunRequest): Promis
     }
   }
 
-  // Bind this run's work to the conversation: tell the model its chatId and that
-  // work it identifies or code it changes must become a ticket LINKED to this chat.
-  // This is the enabler the chat-scoped + from_delta tools need — without the id
-  // they are advertised but the model has no chatId to pass. Injected here (with the
-  // guaranteed-resolved id) so it rides BOTH the web Brain and the VS Code webview
-  // Brain, mirroring the server-side @agent reply loop (BrainService.agentReply).
-  systemPrompt = `${systemPrompt}\n\n${chatWorkLinkingDirective(chatId)}`;
+  // Bind this run to the conversation's MODE (migration 0409).
+  //
+  // WORK: tell the model its chatId, that work it identifies or code it changes must
+  // become a ticket LINKED to this chat, and that it must dispatch an agent to run it.
+  // This is the enabler the chat-scoped + from_delta tools need — without the id they
+  // are advertised but the model has no chatId to pass.
+  //
+  // CHAT: answer the question; do not mint board work as a side effect of answering.
+  //
+  // Injected here (with the guaranteed-resolved id) so it rides BOTH the web Brain and
+  // the VS Code webview Brain, mirroring the server-side @agent reply loop
+  // (BrainService.agentReply). `chatMode` is optional and defaults to WORK so any host
+  // that has not adopted the mode yet keeps the behaviour it shipped with.
+  const runMode = normalizeChatMode(req.chatMode ?? 'work');
+  systemPrompt = `${systemPrompt}\n\n${chatModeDirective(runMode, chatId)}`;
 
   // Read-only tool calls whose (name+args) exactly repeat within a run return a
   // "already returned above" stub instead of re-fetching + re-injecting the full

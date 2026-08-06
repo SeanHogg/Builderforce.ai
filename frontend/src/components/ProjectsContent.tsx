@@ -10,6 +10,7 @@ import type { ProjectDiagnosticSummary } from '@/lib/tools';
 import type { AgentHost } from '@/lib/builderforceApi';
 import { toolsApi } from '@/lib/builderforceApi';
 import { fetchProjects, createProject, deleteProject } from '@/lib/api';
+import { fetchProjectConnections, type ProjectConnection } from '@/lib/projectConnections';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { agentHosts } from '@/lib/builderforceApi';
@@ -65,6 +66,11 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   // without an N+1 per-card score fetch. Manager-gated: a 403 leaves the map
   // empty and the strips self-hide.
   const [diagnosticsByProject, setDiagnosticsByProject] = useState<Map<number, ProjectDiagnosticSummary[]>>(new Map());
+  // Per-project connections (repos, external boards) with live health, latest
+  // build verdict and open-PR count — one tenant-wide cached read, so every card
+  // shows its integration status without an N+1 per-card provider probe. Loaded
+  // independently of the project list so a slow provider never delays the grid.
+  const [connectionsByProject, setConnectionsByProject] = useState<Map<number, ProjectConnection[]>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
@@ -89,6 +95,12 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
       .catch(() => setDiagnosticsByProject(new Map()));
   }, []);
 
+  // fetchProjectConnections already resolves to an empty map on failure — the
+  // strips self-hide, and the projects list never surfaces an error for it.
+  const loadConnections = useCallback(() => {
+    void fetchProjectConnections().then(setConnectionsByProject);
+  }, []);
+
   useEffect(() => {
     Promise.all([
       fetchProjects().catch(() => {
@@ -101,6 +113,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
       setAgentHostList(agentHostsData);
     }).finally(() => setIsLoading(false));
     loadRollup();
+    loadConnections();
     // Mount-only fetch; `t` (next-intl) is stable and only used in the error path.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -110,7 +123,8 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
   const reloadProjects = useCallback(() => {
     fetchProjects().then(setProjects).catch(() => {});
     loadRollup();
-  }, [loadRollup]);
+    loadConnections();
+  }, [loadRollup, loadConnections]);
   useBrainDataRefresh(['projects'], reloadProjects);
 
   useEffect(() => {
@@ -352,6 +366,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
               key={project.id}
               project={project}
               diagnostics={diagnosticsByProject.get(project.id)}
+              connections={connectionsByProject.get(project.id)}
               onCardClick={(p) => openDetails(p)}
               onDetailsClick={openDetails}
               onOpenIde={(p) => router.push(`/ide/dashboard?project=${p.id}`)}
@@ -380,6 +395,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
         <ProjectTable
           projects={visibleProjects}
           diagnosticsByProject={diagnosticsByProject}
+          connectionsByProject={connectionsByProject}
           onDetailsClick={openDetails}
           onOpenIde={(p) => router.push(`/ide/dashboard?project=${p.id}`)}
           onAssignedAgentClick={(ac) => {

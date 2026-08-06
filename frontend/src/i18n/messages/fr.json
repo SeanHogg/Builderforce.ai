@@ -626,7 +626,9 @@
     "configPct": "{pct}% configuré",
     "configMissingList": "Reste à configurer : {items}",
     "brainstormGoals": "Réfléchir aux objectifs",
-    "brainstormGoalsPrompt": "Aide-moi à réfléchir à des objectifs clairs pour le projet « {name} ». Pose-moi des questions sur sa portée et ses critères de réussite, puis propose 3 à 5 objectifs concrets que je pourrai transformer en objectifs."
+    "brainstormGoalsPrompt": "Aide-moi à réfléchir à des objectifs clairs pour le projet « {name} ». Pose-moi des questions sur sa portée et ses critères de réussite, puis propose 3 à 5 objectifs concrets que je pourrai transformer en objectifs.",
+    "openOnCanvas": "Ouvrir le projet sur le canevas",
+    "openOnCanvasTitle": "Ouvrir dans le canevas de Création"
   },
   "projectInspection": {
     "title": "Inspection",
@@ -4308,7 +4310,8 @@
     "workflowsWithCount": "Workflows ({count})",
     "openIde": "Ouvrir dans l'Builder",
     "delete": "Supprimer",
-    "openChat": "Ouvrir le chat du projet"
+    "openChat": "Ouvrir le chat du projet",
+    "connections": "Connexions"
   },
   "diagnosticsStrip": {
     "title": "Diagnostics",
@@ -12624,6 +12627,7 @@
     "fullScreenUnavailable": "Le plein écran a été refusé par ce navigateur.",
     "diagnosticsCopied": "Diagnostics copiés dans le presse-papiers",
     "diagnosticsCopyFailed": "Impossible de copier les diagnostics — le presse-papiers était indisponible",
+    "diagnosticsBuildFailed": "Impossible de générer les diagnostics — {reason}",
     "brain": "Brain",
     "brainDock": "Chat Brain",
     "openBrainDock": "Afficher le chat Brain",
@@ -13175,5 +13179,39 @@
     "panelLabel": "Panneau de canevas {title}",
     "removePanel": "Retirer {title} du canevas",
     "defaultGroup": "Panneaux"
+  },
+  "projectConnections": {
+    "title": "Connexions",
+    "defaultRepo": "Dépôt par défaut",
+    "connectionAria": "{provider} {label} — {status}",
+    "lastSynced": "Dernière synchronisation : {date}",
+    "more": "+{count} autre(s)",
+    "moreTitle": "{count} connexion(s) de plus — ouvrir Intégrations",
+    "buildTitle": "Dernier build sur {branch} : {status} ({date})",
+    "buildAria": "Dernier build sur {branch} : {status}",
+    "openPrs": "{count, plural, one {# PR} other {# PR}}",
+    "openPrsTitle": "{count, plural, one {# pull request ouverte} other {# pull requests ouvertes}}",
+    "openPrsRecordedTitle": "{count, plural, one {# pull request ouverte} other {# pull requests ouvertes}} créée(s) par Builderforce",
+    "health": {
+      "ok": "Connecté",
+      "degraded": "Synchronisation avec erreurs",
+      "error": "Échec de la connexion",
+      "unknown": "Non vérifié"
+    },
+    "reason": {
+      "no_credential": "Aucun identifiant lié",
+      "unauthorized": "Accès refusé — vérifiez l’identifiant",
+      "not_found": "Dépôt introuvable",
+      "rate_limited": "Limite de débit du fournisseur atteinte",
+      "provider_error": "Erreur du fournisseur",
+      "disabled": "Connexion désactivée",
+      "not_probed": "Non vérifié"
+    },
+    "build": {
+      "success": "Réussi",
+      "failure": "En échec",
+      "pending": "En cours",
+      "cancelled": "Annulé"
+    }
   }
 }

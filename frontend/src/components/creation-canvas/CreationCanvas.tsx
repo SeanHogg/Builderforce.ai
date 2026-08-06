@@ -21,7 +21,7 @@ import '@xyflow/react/dist/style.css';
 import { AccessibleOutlineIcon, CanvasCommands, CanvasFilesIcon, CanvasRailToggle, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
 import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
-import type { Canvas3DDescriptor } from '@/components/canvas/canvas3d';
+import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { CanvasOutlinePanel } from './CanvasOutlinePanel';
 import { CanvasFilesPanel } from './CanvasFilesPanel';
 import { BrainDock } from './BrainDock';
@@ -3175,7 +3175,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // Where the user has put this object through depth, if they have. It rides
       // in the object's own content, so it survives a reload and a share exactly
       // like its position on the flat board does.
-      depthOffset: typeof node.data.depthOffset === 'number' ? node.data.depthOffset : undefined,
+      depthOffset: canvas3dDepthOffset(node),
       locked: !canvasPlacementUnlocked(node),
     };
   }, [minimapColor, t]);
@@ -3194,22 +3194,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * same autosave that persists any other placement.
    */
   const moveThreeDObjects = useCallback((moves: readonly Canvas3DMove[]) => {
-    if (!canEdit || !moves.length) return;
-    const byId = new Map(moves.map((move) => [move.id, move]));
-    setNodes((current) => current.map((node) => {
-      const move = byId.get(node.id);
-      if (!move || !canvasPlacementUnlocked(node)) return node;
-      const depth = (typeof node.data.depthOffset === 'number' ? node.data.depthOffset : 0) + move.dz;
-      return {
-        ...node,
-        position: { x: node.position.x + move.dx, y: node.position.y + move.dy },
-        // A zero offset is the absence of one: an object settled back onto its
-        // layer must not carry a stale field into every future save.
-        data: depth === 0
-          ? { ...node.data, depthOffset: undefined }
-          : { ...node.data, depthOffset: depth },
-      };
-    }));
+    if (!canEdit) return;
+    setNodes((current) => applyCanvas3DMoves(current, moves, canvasPlacementUnlocked));
   }, [canEdit, setNodes]);
   /**
    * Zoom and fit mean the scene while it is up, and the flat board otherwise —
@@ -3253,12 +3239,25 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * The diagnostics control does the whole job in one click: the report is on the
    * clipboard (ready to paste into a bug report) before the panel finishes opening,
    * so nobody has to find a second "Copy" button to report what they are looking at.
+   *
+   * Assembling the report is a real operation — it reads the board, the transcript and
+   * the build stamp — so it can fail, and a failure used to be swallowed whole: the
+   * rejection escaped into `void`, no toast was raised, and the click looked like a
+   * button that was never wired up. The one control people reach for when something is
+   * already wrong is the last one allowed to fail silently, so a throw is reported as
+   * itself and the panel stays open with the state that is on screen.
    */
   const openDiagnostics = useCallback(async () => {
     setDiagnosticsOpen(true);
     setHistoryOpen(false);
     setOutcomeMetricsOpen(false);
-    const report = await buildDiagnostics();
+    let report: string;
+    try {
+      report = await buildDiagnostics();
+    } catch (error) {
+      toast.error(t('diagnosticsBuildFailed', { reason: error instanceof Error ? error.message : String(error) }));
+      return;
+    }
     if (await copyTextToClipboard(report)) toast.success(t('diagnosticsCopied'));
     else toast.error(t('diagnosticsCopyFailed'));
   }, [buildDiagnostics, t, toast]);

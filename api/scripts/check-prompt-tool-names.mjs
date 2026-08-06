@@ -80,14 +80,16 @@ if (CATALOG.size === 0) {
 }
 
 const files = [];
+/** Skipped wholesale: build output and vendored code are not prompts anyone authored. */
+const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', '.next', '.turbo']);
 function walk(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) walk(full);
+    if (entry.isDirectory()) { if (!SKIP_DIRS.has(entry.name)) walk(full); }
     else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.test.ts')) files.push(full);
   }
 }
-walk(sourceRoot);
+for (const root of TS_ROOTS) walk(root);
 
 const violations = [];
 for (const filePath of files) {
@@ -116,11 +118,33 @@ for (const filePath of files) {
     ts.forEachChild(node, collect);
   })(sourceFile);
 
+  /**
+   * Whether `text` names `id` as a WHOLE token.
+   *
+   * A plain `includes` matched `executions.submit` inside the column name
+   * `executions.submitted_by` and reported a SQL column as a mis-named tool. A false
+   * positive here is not harmless: the "fix" is to rewrite a correct string, and a
+   * checker that cries wolf is one people start overriding. So the id must not be
+   * flanked by a character that would make it part of a longer identifier.
+   */
+  function namesTool(text, id) {
+    const identifier = /[A-Za-z0-9_.]/;
+    let from = 0;
+    for (;;) {
+      const at = text.indexOf(id, from);
+      if (at < 0) return false;
+      const before = at > 0 ? text[at - 1] : '';
+      const after = text[at + id.length] ?? '';
+      if (!identifier.test(before) && !identifier.test(after)) return true;
+      from = at + 1;
+    }
+  }
+
   /** Check one string's TEXT (comments are excluded by construction — this is a literal). */
   function check(node, text) {
     if (!text.includes(' ')) return; // a bare identifier/constant, not prose for a model
     for (const id of CATALOG) {
-      if (!text.includes(id)) continue;
+      if (!namesTool(text, id)) continue;
       if (text.includes(advertisedName(id))) continue; // names both — fine
       const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile));
       violations.push(

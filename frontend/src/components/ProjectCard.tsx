@@ -13,6 +13,8 @@ import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { RunDiagnosticsButton } from './RunDiagnosticsButton';
 import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';
+import { ProjectConnectionsStrip } from './ProjectConnectionsStrip';
+import type { ProjectConnection } from '@/lib/projectConnections';
 import { creationSessionsApi } from '@/lib/builderforceApi';
 
 export interface ProjectCardProps {
@@ -38,6 +40,10 @@ export interface ProjectCardProps {
   /** Latest per-diagnostic scores (SOC 2, Quality, …) for this project, from the
    *  workspace rollup. Rendered as a compact score strip; omit/empty hides it. */
   diagnostics?: ProjectDiagnosticSummary[];
+  /** What this project is connected to (repos, external boards) with live health,
+   *  build verdict and open-PR count, from the tenant-wide connections read.
+   *  Omit/empty hides the strip. */
+  connections?: ProjectConnection[];
 }
 
 const createdDate = (project: Project): string => {
@@ -56,6 +62,7 @@ export function ProjectCard({
   showDeleteButton = !!onDelete,
   onOpenIde,
   diagnostics,
+  connections,
 }: ProjectCardProps) {
   const t = useTranslations('projectCard');
   const openProjectChat = useOpenProjectChat();
@@ -146,8 +153,8 @@ export function ProjectCard({
                 window.location.href = `/create/${sessionId}`;
               });
             }}
-            aria-label="Open project on canvas"
-            title="Open on Create canvas"
+            aria-label={t('openOnCanvas')}
+            title={t('openOnCanvasTitle')}
             style={iconButtonStyle}
           >
             <svg viewBox="0 0 24 24" style={{ width: 18, height: 18, stroke: 'currentColor', fill: 'none', strokeWidth: 2 }}>
@@ -329,6 +336,14 @@ export function ProjectCard({
       <ProjectDiagnosticsStrip
         diagnostics={diagnostics ?? []}
         onOpen={onDetailsClick ? () => onDetailsClick(project, 'diagnostics') : undefined}
+      />
+
+      {/* What this project is connected to — repo(s) and external board(s) — with
+          live health, the latest build verdict and open PRs. Self-hides when the
+          project has nothing wired up; "manage" opens the Integrations tab. */}
+      <ProjectConnectionsStrip
+        connections={connections}
+        onManage={onDetailsClick ? () => onDetailsClick(project, 'integrations') : undefined}
       />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 'auto', flexWrap: 'wrap' }}>

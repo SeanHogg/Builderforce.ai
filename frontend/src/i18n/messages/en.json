@@ -626,7 +626,9 @@
     "configPct": "{pct}% set up",
     "configMissingList": "Still to set up: {items}",
     "brainstormGoals": "Brainstorm goals",
-    "brainstormGoalsPrompt": "Help me brainstorm clear goals for the project \"{name}\". Ask me about its scope and success criteria, then propose 3–5 concrete goals I can turn into objectives."
+    "brainstormGoalsPrompt": "Help me brainstorm clear goals for the project \"{name}\". Ask me about its scope and success criteria, then propose 3–5 concrete goals I can turn into objectives.",
+    "openOnCanvas": "Open project on canvas",
+    "openOnCanvasTitle": "Open on Create canvas"
   },
   "projectInspection": {
     "title": "Inspection",
@@ -4308,7 +4310,8 @@
     "workflowsWithCount": "Workflows ({count})",
     "openIde": "Open in Builder",
     "delete": "Delete",
-    "openChat": "Open project chat"
+    "openChat": "Open project chat",
+    "connections": "Connections"
   },
   "diagnosticsStrip": {
     "title": "Diagnostics",
@@ -12625,6 +12628,7 @@
     "fullScreenUnavailable": "Full screen was refused by this browser.",
     "diagnosticsCopied": "Diagnostics copied to your clipboard",
     "diagnosticsCopyFailed": "Diagnostics could not be copied — the clipboard was unavailable",
+    "diagnosticsBuildFailed": "Diagnostics could not be assembled — {reason}",
     "brain": "Brain",
     "brainDock": "Brain chat",
     "openBrainDock": "Show Brain chat",
@@ -13176,5 +13180,39 @@
     "panelLabel": "{title} canvas panel",
     "removePanel": "Remove {title} from canvas",
     "defaultGroup": "Panels"
+  },
+  "projectConnections": {
+    "title": "Connections",
+    "defaultRepo": "Default repo",
+    "connectionAria": "{provider} {label} — {status}",
+    "lastSynced": "Last synced {date}",
+    "more": "+{count} more",
+    "moreTitle": "{count} more connection(s) — open Integrations",
+    "buildTitle": "Latest build on {branch}: {status} ({date})",
+    "buildAria": "Latest build on {branch}: {status}",
+    "openPrs": "{count, plural, one {# PR} other {# PRs}}",
+    "openPrsTitle": "{count, plural, one {# open pull request} other {# open pull requests}}",
+    "openPrsRecordedTitle": "{count, plural, one {# open pull request} other {# open pull requests}} opened by Builderforce",
+    "health": {
+      "ok": "Connected",
+      "degraded": "Syncing with errors",
+      "error": "Connection failed",
+      "unknown": "Not verified"
+    },
+    "reason": {
+      "no_credential": "No credential linked",
+      "unauthorized": "Access denied — check the credential",
+      "not_found": "Repository not found",
+      "rate_limited": "Provider rate limit reached",
+      "provider_error": "Provider error",
+      "disabled": "Connection disabled",
+      "not_probed": "Not verified"
+    },
+    "build": {
+      "success": "Passing",
+      "failure": "Failing",
+      "pending": "Running",
+      "cancelled": "Cancelled"
+    }
   }
 }

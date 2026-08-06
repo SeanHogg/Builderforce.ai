@@ -175,24 +175,36 @@ function docxParagraphStyle(paragraph: string): { level: number; list: 'bullet' 
 
 const RUN_TOKEN = /<w:t(?:\s[^>]*)?>([\s\S]*?)<\/w:t>|<w:tab\b[^>]*\/?>|<w:br\b([^>]*)\/?>|<w:lastRenderedPageBreak\b[^>]*\/?>/g;
 
-function docxRunText(scope: string): { text: string; pageBreak: boolean } {
+/**
+ * A page break belongs on the side of the text it was written on: Word puts a
+ * break in its own run, and one written before a paragraph's first word starts
+ * that paragraph on a new page while one written after it ends the page there.
+ * Collapsing both into "this paragraph had a break" moves the heading of every
+ * new section onto the end of the previous page.
+ */
+type DocxText = { text: string; breakBefore: boolean; breakAfter: boolean };
+
+function docxRunText(scope: string, hadText: boolean): DocxText {
   let text = '';
-  let pageBreak = false;
+  let breakBefore = false;
+  let breakAfter = false;
+  const noteBreak = () => { if (hadText || text.trim()) breakAfter = true; else breakBefore = true; };
   for (const match of scope.matchAll(RUN_TOKEN)) {
     if (match[1] != null) { text += decodeXmlText(match[1]); continue; }
     if (match[0].startsWith('<w:tab')) { text += '\t'; continue; }
-    if (match[0].startsWith('<w:lastRenderedPageBreak')) { pageBreak = true; continue; }
-    if (/w:type="page"/.test(match[2] ?? '')) { pageBreak = true; continue; }
+    if (match[0].startsWith('<w:lastRenderedPageBreak')) { noteBreak(); continue; }
+    if (/w:type="page"/.test(match[2] ?? '')) { noteBreak(); continue; }
     text += '\n';
   }
-  return { text, pageBreak };
+  return { text, breakBefore, breakAfter };
 }
 
 /** Emphasis is read per run so a bolded phrase inside a sentence survives the
  * conversion — losing it turns a specification's normative words into prose. */
-function docxParagraphText(paragraph: string): { text: string; pageBreak: boolean } {
+function docxParagraphText(paragraph: string): DocxText {
   let text = '';
-  let pageBreak = false;
+  let breakBefore = false;
+  let breakAfter = false;
   const runs = paragraph.matchAll(/<w:r(?:\s[^>]*)?>([\s\S]*?)<\/w:r>/g);
   let sawRun = false;
   for (const run of runs) {
@@ -201,8 +213,9 @@ function docxParagraphText(paragraph: string): { text: string; pageBreak: boolea
     const properties = /<w:rPr\b[^>]*>[\s\S]*?<\/w:rPr>/.exec(body)?.[0] ?? '';
     const bold = /<w:b(?:\s[^>]*)?\/?>/.test(properties) && !/<w:b\b[^>]*w:val="(?:0|false)"/.test(properties);
     const italic = /<w:i(?:\s[^>]*)?\/?>/.test(properties) && !/<w:i\b[^>]*w:val="(?:0|false)"/.test(properties);
-    const run_ = docxRunText(body);
-    pageBreak = pageBreak || run_.pageBreak;
+    const run_ = docxRunText(body, !!text.trim());
+    breakBefore = breakBefore || run_.breakBefore;
+    breakAfter = breakAfter || run_.breakAfter;
     if (!run_.text) continue;
     const trimmed = run_.text.trim();
     const marks = `${bold ? '**' : ''}${italic ? '*' : ''}`;
@@ -210,11 +223,7 @@ function docxParagraphText(paragraph: string): { text: string; pageBreak: boolea
       ? run_.text.replace(trimmed, `${marks}${trimmed}${[...marks].reverse().join('')}`)
       : run_.text;
   }
-  if (!sawRun) {
-    const fallback = docxRunText(paragraph);
-    return { text: fallback.text, pageBreak: fallback.pageBreak };
-  }
-  return { text, pageBreak };
+  return sawRun ? { text, breakBefore, breakAfter } : docxRunText(paragraph, false);
 }
 
 function docxTableMarkdown(table: string): string {
@@ -257,19 +266,25 @@ export function docxXmlToMarkdown(documentXml: string): OfficeDocument {
       continue;
     }
     const { level, list, quote } = docxParagraphStyle(block);
-    const { text, pageBreak } = docxParagraphText(block);
-    if (pending || pageBreak) {
-      // A break declared mid-paragraph belongs before the text that follows it.
+    const { text, breakBefore, breakAfter } = docxParagraphText(block);
+    const content = text.replace(/\s+$/g, '').trim();
+    if ((pending || breakBefore) && content) {
       if (lines[lines.length - 1] !== '') lines.push('');
       lines.push(PAGE_BREAK_MARKER, '');
       authoredPages += 1;
       pending = false;
     }
-    const content = text.replace(/\s+$/g, '');
-    if (!content.trim()) { if (lines[lines.length - 1] !== '') lines.push(''); continue; }
+    if (!content) {
+      // An empty paragraph carrying only a break defers it to the next page's
+      // first line, so the marker never lands after the text it precedes.
+      if (breakBefore || breakAfter) pending = true;
+      if (lines[lines.length - 1] !== '') lines.push('');
+      continue;
+    }
     const prefix = level ? `${'#'.repeat(level)} ` : list === 'bullet' ? '- ' : list === 'number' ? '1. ' : quote ? '> ' : '';
-    lines.push(`${prefix}${content.trim()}`);
+    lines.push(`${prefix}${content}`);
     if (level || !list) lines.push('');
+    if (breakAfter) pending = true;
   }
   const markdown = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
   return { markdown, authoredPages: markdown.includes(PAGE_BREAK_MARKER) ? authoredPages : 1 };
@@ -556,19 +571,74 @@ export async function readPdf(bytes: Uint8Array): Promise<PdfDocument | null> {
 
 /* ------------------------------------------------------------------ RTF --- */
 
-const RTF_UNICODE = /\\u(-?\d+)\s?\??/g;
-const RTF_CONTROL = /\\([a-z]+)(-?\d+)?[ ]?/gi;
+/**
+ * Groups whose contents are metadata rather than body text. These are ordinary
+ * groups, not `\*` destinations, so dropping only the starred ones leaves a
+ * document body reading "Arial;Times New Roman;" before its first sentence.
+ */
+const RTF_DROPPED_DESTINATIONS = new Set([
+  '*', 'fonttbl', 'colortbl', 'stylesheet', 'info', 'pict', 'object', 'filetbl', 'revtbl',
+  'header', 'headerl', 'headerr', 'headerf', 'footer', 'footerl', 'footerr', 'footerf',
+  'listtable', 'listoverridetable', 'rsidtbl', 'generator', 'themedata', 'datastore',
+  'colorschememapping', 'latentstyles', 'xmlnstbl', 'upr',
+]);
+
+const RTF_BREAK_WORDS = new Set(['par', 'line', 'sect', 'page', 'row']);
+const RTF_GROUP_DESTINATION = /^\{\s*\\(\*|[a-zA-Z]+)/;
+/** Sticky, so tokenizing a multi-megabyte file does not re-slice the source on
+ * every control word. */
+const RTF_TOKEN = /\\(?:u(-?\d+)|'([0-9a-fA-F]{2})|([a-zA-Z]+)(-?\d+)?|([\\{}])|([\r\n]))/y;
+
+/** Index just past the group starting at `start`, honouring nesting. */
+function skipRtfGroup(source: string, start: number): number {
+  let depth = 0;
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '\\') { index += 1; continue; }
+    if (char === '{') depth += 1;
+    else if (char === '}' && --depth === 0) return index + 1;
+  }
+  return source.length;
+}
 
 /** Plain text from an RTF file — the paragraph structure survives, the control
- * words do not. */
+ * words and the metadata tables do not. */
 export function rtfToText(source: string): string {
   if (!source.trimStart().startsWith('{\\rtf')) return '';
-  return source
-    .replace(/\{\\\*[\s\S]*?\}/g, '')
-    .replace(RTF_UNICODE, (_match, code: string) => String.fromCharCode(Number(code) < 0 ? Number(code) + 65536 : Number(code)))
-    .replace(/\\'([0-9a-f]{2})/gi, (_match, hex: string) => String.fromCharCode(parseInt(hex, 16)))
-    .replace(RTF_CONTROL, (_match, word: string) => (word === 'par' || word === 'line' || word === 'sect' ? '\n' : word === 'tab' ? '\t' : ''))
-    .replace(/[{}]/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  let text = '';
+  let index = 0;
+  while (index < source.length) {
+    const char = source[index]!;
+    if (char === '{') {
+      const destination = RTF_GROUP_DESTINATION.exec(source.slice(index, index + 32))?.[1]?.toLowerCase();
+      if (destination && RTF_DROPPED_DESTINATIONS.has(destination)) { index = skipRtfGroup(source, index); continue; }
+      index += 1;
+      continue;
+    }
+    if (char === '}') { index += 1; continue; }
+    if (char === '\r' || char === '\n') { index += 1; continue; }
+    if (char !== '\\') { text += char; index += 1; continue; }
+
+    RTF_TOKEN.lastIndex = index;
+    const token = RTF_TOKEN.exec(source);
+    if (!token) { index += 1; continue; }
+    index += token[0].length;
+    if (token[1] != null) {
+      const code = Number(token[1]);
+      text += String.fromCharCode(code < 0 ? code + 65536 : code);
+      // A \uN is followed by the character a non-Unicode reader would show.
+      if (source[index] === ' ') index += 1;
+      if (source[index] === '?') index += 1;
+      continue;
+    }
+    if (token[2] != null) { text += String.fromCharCode(parseInt(token[2], 16)); continue; }
+    if (token[5] != null) { text += token[5]; continue; }
+    if (token[6] != null) { text += '\n'; continue; }
+    const word = token[3]!.toLowerCase();
+    if (RTF_BREAK_WORDS.has(word)) text += '\n';
+    else if (word === 'tab') text += '\t';
+    // One space may delimit a control word; it is syntax, not content.
+    if (source[index] === ' ') index += 1;
+  }
+  return text.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
 }

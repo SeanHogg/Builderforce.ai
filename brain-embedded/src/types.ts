@@ -19,6 +19,13 @@ export interface BrainChat {
    * forwards it, the host owns the catalogue.
    */
   capability?: string | null;
+  /**
+   * What this chat is FOR — `'chat'` (a conversation: read, reason, answer) or
+   * `'work'` (an execution: create, staff and link the ticket, then dispatch an agent
+   * to run it). Migration 0409. Absent on a host/server that predates the column;
+   * {@link normalizeChatMode} resolves that to the default.
+   */
+  mode?: string | null;
   createdAt: string;
   updatedAt: string;
 }

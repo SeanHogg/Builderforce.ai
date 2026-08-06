@@ -626,7 +626,9 @@
     "configPct": "已配置 {pct}%",
     "configMissingList": "尚需配置：{items}",
     "brainstormGoals": "头脑风暴目标",
-    "brainstormGoalsPrompt": "帮我为项目“{name}”头脑风暴出清晰的目标。先询问它的范围和成功标准，然后提出 3–5 个可转化为目标的具体目标。"
+    "brainstormGoalsPrompt": "帮我为项目“{name}”头脑风暴出清晰的目标。先询问它的范围和成功标准，然后提出 3–5 个可转化为目标的具体目标。",
+    "openOnCanvas": "在画布上打开项目",
+    "openOnCanvasTitle": "在「创建」画布中打开"
   },
   "projectInspection": {
     "title": "检查",
@@ -4308,7 +4310,8 @@
     "workflowsWithCount": "工作流（{count}）",
     "openIde": "在 Builder 中打开",
     "delete": "删除",
-    "openChat": "打开项目聊天"
+    "openChat": "打开项目聊天",
+    "connections": "连接"
   },
   "diagnosticsStrip": {
     "title": "诊断",
@@ -12624,6 +12627,7 @@
     "fullScreenUnavailable": "此浏览器拒绝了全屏请求。",
     "diagnosticsCopied": "诊断信息已复制到剪贴板",
     "diagnosticsCopyFailed": "无法复制诊断信息 — 剪贴板不可用",
+    "diagnosticsBuildFailed": "无法生成诊断报告 — {reason}",
     "brain": "Brain",
     "brainDock": "Brain 聊天",
     "openBrainDock": "显示 Brain 聊天",
@@ -13175,5 +13179,39 @@
     "panelLabel": "{title} 画布面板",
     "removePanel": "从画布中移除 {title}",
     "defaultGroup": "面板"
+  },
+  "projectConnections": {
+    "title": "连接",
+    "defaultRepo": "默认仓库",
+    "connectionAria": "{provider} {label} — {status}",
+    "lastSynced": "上次同步于 {date}",
+    "more": "还有 {count} 个",
+    "moreTitle": "还有 {count} 个连接 — 打开「集成」",
+    "buildTitle": "{branch} 上的最新构建：{status}（{date}）",
+    "buildAria": "{branch} 上的最新构建：{status}",
+    "openPrs": "{count, plural, other {# 个 PR}}",
+    "openPrsTitle": "{count, plural, other {# 个待处理的拉取请求}}",
+    "openPrsRecordedTitle": "由 Builderforce 创建的 {count, plural, other {# 个待处理拉取请求}}",
+    "health": {
+      "ok": "已连接",
+      "degraded": "同步中但有错误",
+      "error": "连接失败",
+      "unknown": "未验证"
+    },
+    "reason": {
+      "no_credential": "未关联凭据",
+      "unauthorized": "访问被拒绝 — 请检查凭据",
+      "not_found": "未找到仓库",
+      "rate_limited": "已达到服务商速率限制",
+      "provider_error": "服务商错误",
+      "disabled": "连接已停用",
+      "not_probed": "未验证"
+    },
+    "build": {
+      "success": "通过",
+      "failure": "失败",
+      "pending": "运行中",
+      "cancelled": "已取消"
+    }
   }
 }

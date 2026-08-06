@@ -13,6 +13,8 @@ import type { ProjectPanelTab } from './ProjectDetailsPanel';
 import { DeleteProjectDialog } from './DeleteProjectDialog';
 import { RunDiagnosticsButton } from './RunDiagnosticsButton';
 import { ProjectDiagnosticsStrip } from './ProjectDiagnosticsStrip';
+import { ProjectConnectionsStrip } from './ProjectConnectionsStrip';
+import type { ProjectConnection } from '@/lib/projectConnections';
 import { tableWrapStyle, tableStyle } from './dataTableStyles';
 
 export interface ProjectTableProps {
@@ -20,6 +22,9 @@ export interface ProjectTableProps {
   /** Per-project latest diagnostic scores (SOC 2, Quality, …), keyed by project
    *  id, from the workspace rollup. Rendered as a compact strip; empty hides it. */
   diagnosticsByProject?: Map<number, ProjectDiagnosticSummary[]>;
+  /** Per-project connections (repos, external boards) with live health, build
+   *  verdict and open-PR count, keyed by project id. Empty hides the column cell. */
+  connectionsByProject?: Map<number, ProjectConnection[]>;
   /** Open the project Information panel. The Details button opens the default tab;
    *  the Architecture button opens 'prds' / 'integrations'. A row that can open
    *  details gets the Architecture button — same rule as {@link ProjectCard}. */
@@ -58,6 +63,7 @@ const iconButtonStyle: React.CSSProperties = {
 export function ProjectTable({
   projects,
   diagnosticsByProject,
+  connectionsByProject,
   onDetailsClick,
   onOpenIde,
   onAssignedAgentClick,
@@ -77,6 +83,7 @@ export function ProjectTable({
             <th style={headStyle}>{t('name')}</th>
             <th style={headStyle}>{t('health')}</th>
             <th style={headStyle}>{t('diagnostics')}</th>
+            <th style={headStyle}>{t('connections')}</th>
             <th style={headStyle}>{t('description')}</th>
             <th style={headStyle}>{t('agent')}</th>
             <th style={headStyle}>{t('actions')}</th>
@@ -104,6 +111,19 @@ export function ProjectTable({
                     <ProjectDiagnosticsStrip
                       diagnostics={diags}
                       onOpen={onDetailsClick ? () => onDetailsClick(project, 'diagnostics') : undefined}
+                    />
+                  ) : (
+                    <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>
+                  );
+                })()}
+              </td>
+              <td style={cellStyle}>
+                {(() => {
+                  const conns = connectionsByProject?.get(project.id);
+                  return conns && conns.length > 0 ? (
+                    <ProjectConnectionsStrip
+                      connections={conns}
+                      onManage={onDetailsClick ? () => onDetailsClick(project, 'integrations') : undefined}
                     />
                   ) : (
                     <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>—</span>

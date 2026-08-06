@@ -626,7 +626,9 @@
     "configPct": "{pct}% eingerichtet",
     "configMissingList": "Noch einzurichten: {items}",
     "brainstormGoals": "Ziele entwickeln",
-    "brainstormGoalsPrompt": "Hilf mir, klare Ziele für das Projekt „{name}“ zu entwickeln. Frage mich nach Umfang und Erfolgskriterien und schlage dann 3–5 konkrete Ziele vor, die ich in Objectives umwandeln kann."
+    "brainstormGoalsPrompt": "Hilf mir, klare Ziele für das Projekt „{name}“ zu entwickeln. Frage mich nach Umfang und Erfolgskriterien und schlage dann 3–5 konkrete Ziele vor, die ich in Objectives umwandeln kann.",
+    "openOnCanvas": "Projekt auf der Leinwand öffnen",
+    "openOnCanvasTitle": "In der Create-Leinwand öffnen"
   },
   "projectInspection": {
     "title": "Inspektion",
@@ -4308,7 +4310,8 @@
     "workflowsWithCount": "Workflows ({count})",
     "openIde": "Im Builder öffnen",
     "delete": "Löschen",
-    "openChat": "Projekt-Chat öffnen"
+    "openChat": "Projekt-Chat öffnen",
+    "connections": "Verbindungen"
   },
   "diagnosticsStrip": {
     "title": "Diagnosen",
@@ -12624,6 +12627,7 @@
     "fullScreenUnavailable": "Der Vollbildmodus wurde von diesem Browser abgelehnt.",
     "diagnosticsCopied": "Diagnosedaten in die Zwischenablage kopiert",
     "diagnosticsCopyFailed": "Diagnosedaten konnten nicht kopiert werden — die Zwischenablage war nicht verfügbar",
+    "diagnosticsBuildFailed": "Diagnosedaten konnten nicht erstellt werden — {reason}",
     "brain": "Brain",
     "brainDock": "Brain-Chat",
     "openBrainDock": "Brain-Chat einblenden",
@@ -13175,5 +13179,39 @@
     "panelLabel": "Leinwand-Panel {title}",
     "removePanel": "{title} von der Leinwand entfernen",
     "defaultGroup": "Panels"
+  },
+  "projectConnections": {
+    "title": "Verbindungen",
+    "defaultRepo": "Standard-Repository",
+    "connectionAria": "{provider} {label} — {status}",
+    "lastSynced": "Zuletzt synchronisiert: {date}",
+    "more": "+{count} weitere",
+    "moreTitle": "{count} weitere Verbindung(en) — Integrationen öffnen",
+    "buildTitle": "Letzter Build auf {branch}: {status} ({date})",
+    "buildAria": "Letzter Build auf {branch}: {status}",
+    "openPrs": "{count, plural, one {# PR} other {# PRs}}",
+    "openPrsTitle": "{count, plural, one {# offener Pull Request} other {# offene Pull Requests}}",
+    "openPrsRecordedTitle": "{count, plural, one {# offener Pull Request} other {# offene Pull Requests}} von Builderforce erstellt",
+    "health": {
+      "ok": "Verbunden",
+      "degraded": "Synchronisiert mit Fehlern",
+      "error": "Verbindung fehlgeschlagen",
+      "unknown": "Nicht geprüft"
+    },
+    "reason": {
+      "no_credential": "Keine Zugangsdaten verknüpft",
+      "unauthorized": "Zugriff verweigert — Zugangsdaten prüfen",
+      "not_found": "Repository nicht gefunden",
+      "rate_limited": "Ratenlimit des Anbieters erreicht",
+      "provider_error": "Anbieterfehler",
+      "disabled": "Verbindung deaktiviert",
+      "not_probed": "Nicht geprüft"
+    },
+    "build": {
+      "success": "Erfolgreich",
+      "failure": "Fehlgeschlagen",
+      "pending": "Läuft",
+      "cancelled": "Abgebrochen"
+    }
   }
 }

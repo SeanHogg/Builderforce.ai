@@ -626,7 +626,9 @@
     "configPct": "{pct}% configurado",
     "configMissingList": "Falta configurar: {items}",
     "brainstormGoals": "Idear objetivos",
-    "brainstormGoalsPrompt": "Ayúdame a idear objetivos claros para el proyecto «{name}». Pregúntame por su alcance y criterios de éxito, y luego propón de 3 a 5 objetivos concretos que pueda convertir en objetivos."
+    "brainstormGoalsPrompt": "Ayúdame a idear objetivos claros para el proyecto «{name}». Pregúntame por su alcance y criterios de éxito, y luego propón de 3 a 5 objetivos concretos que pueda convertir en objetivos.",
+    "openOnCanvas": "Abrir el proyecto en el lienzo",
+    "openOnCanvasTitle": "Abrir en el lienzo de Creación"
   },
   "projectInspection": {
     "title": "Inspección",
@@ -4308,7 +4310,8 @@
     "workflowsWithCount": "Flujos de trabajo ({count})",
     "openIde": "Abrir en el Builder",
     "delete": "Eliminar",
-    "openChat": "Abrir chat del proyecto"
+    "openChat": "Abrir chat del proyecto",
+    "connections": "Conexiones"
   },
   "diagnosticsStrip": {
     "title": "Diagnósticos",
@@ -12624,6 +12627,7 @@
     "fullScreenUnavailable": "El navegador rechazó la pantalla completa.",
     "diagnosticsCopied": "Diagnósticos copiados al portapapeles",
     "diagnosticsCopyFailed": "No se pudieron copiar los diagnósticos: el portapapeles no estaba disponible",
+    "diagnosticsBuildFailed": "No se pudieron generar los diagnósticos: {reason}",
     "brain": "Brain",
     "brainDock": "Chat de Brain",
     "openBrainDock": "Mostrar el chat de Brain",
@@ -13175,5 +13179,39 @@
     "panelLabel": "Panel de lienzo {title}",
     "removePanel": "Quitar {title} del lienzo",
     "defaultGroup": "Paneles"
+  },
+  "projectConnections": {
+    "title": "Conexiones",
+    "defaultRepo": "Repositorio predeterminado",
+    "connectionAria": "{provider} {label} — {status}",
+    "lastSynced": "Última sincronización: {date}",
+    "more": "+{count} más",
+    "moreTitle": "{count} conexión(es) más — abrir Integraciones",
+    "buildTitle": "Última compilación en {branch}: {status} ({date})",
+    "buildAria": "Última compilación en {branch}: {status}",
+    "openPrs": "{count, plural, one {# PR} other {# PR}}",
+    "openPrsTitle": "{count, plural, one {# pull request abierto} other {# pull requests abiertos}}",
+    "openPrsRecordedTitle": "{count, plural, one {# pull request abierto} other {# pull requests abiertos}} creados por Builderforce",
+    "health": {
+      "ok": "Conectado",
+      "degraded": "Sincronizando con errores",
+      "error": "Error de conexión",
+      "unknown": "Sin verificar"
+    },
+    "reason": {
+      "no_credential": "Sin credencial vinculada",
+      "unauthorized": "Acceso denegado: revisa la credencial",
+      "not_found": "Repositorio no encontrado",
+      "rate_limited": "Límite de peticiones del proveedor alcanzado",
+      "provider_error": "Error del proveedor",
+      "disabled": "Conexión desactivada",
+      "not_probed": "Sin verificar"
+    },
+    "build": {
+      "success": "Correcta",
+      "failure": "Fallida",
+      "pending": "En curso",
+      "cancelled": "Cancelada"
+    }
   }
 }

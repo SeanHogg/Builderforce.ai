@@ -91,6 +91,21 @@ type Gesture =
     sent: { x: number; y: number; z: number };
   } & PointerAt);
 
+/**
+ * The step an arrow key asks for, or null for any other key.
+ *
+ * The space and a focused object read the same four keys — the space turns, the
+ * object moves — so they read them the same way rather than each spelling the
+ * map out.
+ */
+function arrowStep(key: string): [number, number] | null {
+  if (key === 'ArrowLeft') return [-KEYBOARD_STEP, 0];
+  if (key === 'ArrowRight') return [KEYBOARD_STEP, 0];
+  if (key === 'ArrowUp') return [0, -KEYBOARD_STEP];
+  if (key === 'ArrowDown') return [0, KEYBOARD_STEP];
+  return null;
+}
+
 /** The midpoint and separation of the first two pointers, or null if there aren't two. */
 function twoFingerGrip(pointers: ReadonlyMap<number, PointerAt>): { x: number; y: number; spread: number } | null {
   const [first, second] = [...pointers.values()];
@@ -384,10 +399,7 @@ export function Canvas3DView<T extends Canvas3DNode>({
   }, [dragParty]);
 
   const onCardKeyDown = useCallback((event: ReactKeyboardEvent<HTMLButtonElement>, card: Canvas3DCard) => {
-    const step = ({
-      ArrowLeft: [-KEYBOARD_STEP, 0], ArrowRight: [KEYBOARD_STEP, 0],
-      ArrowUp: [0, -KEYBOARD_STEP], ArrowDown: [0, KEYBOARD_STEP],
-    } as Record<string, [number, number]>)[event.key];
+    const step = arrowStep(event.key);
     if (!step || !onMoveRef.current || card.locked) return;
     // The card owns its arrow keys while it is focused; the viewport keeps them
     // for orbiting, so the gesture must not reach it as well.
@@ -398,10 +410,7 @@ export function Canvas3DView<T extends Canvas3DNode>({
   }, [nudge]);
 
   const onKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const step = ({
-      ArrowLeft: [-KEYBOARD_STEP, 0], ArrowRight: [KEYBOARD_STEP, 0],
-      ArrowUp: [0, -KEYBOARD_STEP], ArrowDown: [0, KEYBOARD_STEP],
-    } as Record<string, [number, number]>)[event.key];
+    const step = arrowStep(event.key);
     if (step) {
       event.preventDefault();
       if (event.shiftKey) {

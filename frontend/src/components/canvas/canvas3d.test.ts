@@ -5,8 +5,10 @@ import {
   CANVAS_3D_MAX_PITCH,
   CANVAS_3D_MAX_ZOOM,
   CANVAS_3D_MIN_ZOOM,
+  applyCanvas3DMoves,
   canvas3dAxes,
   canvas3dCameraTransform,
+  canvas3dDepthOffset,
   canvas3dLinkTransform,
   canvas3dOrbitAfterDrag,
   canvas3dOrbitAfterZoom,
@@ -256,6 +258,51 @@ describe('moving an object in the space', () => {
     expect(project(centred, target).y).toBeCloseTo(0, 6);
     // Only the camera moves — the object keeps its place in the space.
     expect(centred).toMatchObject({ yaw: -40, pitch: 20, zoom: 0.6 });
+  });
+});
+
+describe('applyCanvas3DMoves', () => {
+  const board = () => [
+    { id: 'a', position: { x: 100, y: 200 }, data: { title: 'A' } },
+    { id: 'b', position: { x: 0, y: 0 }, data: { title: 'B', depthOffset: 120 } },
+  ];
+
+  it('writes a move across the plane straight back to the board position', () => {
+    const [moved] = applyCanvas3DMoves(board(), [{ id: 'a', dx: 40, dy: -15, dz: 0 }]);
+    expect(moved).toMatchObject({ position: { x: 140, y: 185 } });
+    // The object keeps everything else it knows about itself.
+    expect(moved!.data).toMatchObject({ title: 'A' });
+  });
+
+  it('accumulates depth onto the lift the object is already carrying', () => {
+    const moved = applyCanvas3DMoves(board(), [{ id: 'b', dx: 0, dy: 0, dz: -45 }]);
+    expect(canvas3dDepthOffset(moved[1]!)).toBe(75);
+  });
+
+  it('drops the field entirely when an object settles back onto its layer', () => {
+    const moved = applyCanvas3DMoves(board(), [{ id: 'b', dx: 0, dy: 0, dz: -120 }]);
+    // Not zero — absent, so a settled object carries no stale lift into a save.
+    expect(canvas3dDepthOffset(moved[1]!)).toBeUndefined();
+    expect(moved[1]!.data.depthOffset).toBeUndefined();
+  });
+
+  it('never moves an object whose placement is locked', () => {
+    const moved = applyCanvas3DMoves(
+      board(),
+      [{ id: 'a', dx: 40, dy: 40, dz: 40 }, { id: 'b', dx: 40, dy: 40, dz: 40 }],
+      (node) => node.id !== 'a',
+    );
+    expect(moved[0]).toMatchObject({ position: { x: 100, y: 200 } });
+    expect(canvas3dDepthOffset(moved[0]!)).toBeUndefined();
+    expect(moved[1]).toMatchObject({ position: { x: 40, y: 40 } });
+  });
+
+  it('leaves objects nothing moved alone, and reads a lift only when it is a real number', () => {
+    const nodes = board();
+    expect(applyCanvas3DMoves(nodes, [])).toBe(nodes);
+    expect(applyCanvas3DMoves(nodes, [{ id: 'missing', dx: 9, dy: 9, dz: 9 }])[0]).toBe(nodes[0]);
+    expect(canvas3dDepthOffset({ data: { depthOffset: 'far' } })).toBeUndefined();
+    expect(canvas3dDepthOffset({})).toBeUndefined();
   });
 });
 

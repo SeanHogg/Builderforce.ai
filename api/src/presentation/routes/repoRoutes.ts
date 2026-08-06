@@ -40,6 +40,7 @@ import { githubStatusMessage } from '../../application/integrations/githubTestEr
 import { mergeRecordedPullRequest } from '../../application/repos/mergeRecordedPr';
 import { getPullRequestDetail } from '../../application/repos/getPullRequestDetail';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
+import { invalidateProjectConnections } from '../../application/repos/projectConnectionStatus';
 import { resolveHostAuth } from '../../infrastructure/auth/agentHostAuth';
 import type { CreatePrMessage } from '../../application/repos/prDispatch';
 import { ensureAgentWorkflow, githubActionsAvailable } from '../../application/runtime/githubActionsDispatch';
@@ -50,6 +51,24 @@ import { ingestOpenAlertsForRepo } from '../../application/security/githubAlerts
  *  this; it changes only on the CRUD routes below, which all invalidate it). */
 function reposCacheKey(tenantId: number, projectId: number): string {
   return `project-repos:${tenantId}:${projectId}`;
+}
+
+/**
+ * Bust everything keyed off a project's repo set: the repo list the picker and
+ * the Integrations tab read, plus the composed connection-status strip on the
+ * projects widget (and, when a specific repo changed, its live provider probe).
+ * One helper so a new repo write can never invalidate half the surfaces.
+ */
+async function invalidateRepoCaches(
+  env: Env,
+  tenantId: number,
+  projectId: number,
+  repoId?: string,
+): Promise<void> {
+  await Promise.all([
+    invalidateCached(env, reposCacheKey(tenantId, projectId)),
+    invalidateProjectConnections(env, tenantId, repoId),
+  ]);
 }
 
 type RepoHonoEnv = HonoEnv & {
@@ -214,7 +233,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       return c.json({ error: 'This repository is already added to the project' }, 409);
     }
 
-    await invalidateCached(c.env as Env, reposCacheKey(tenantId, projectId));
+    await invalidateRepoCaches(c.env as Env, tenantId, projectId, row.id);
     return c.json(row, 201);
   });
 
@@ -276,7 +295,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       .from(projectRepositories)
       .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
     if (!row) return c.json({ error: 'Repository not found' }, 404);
-    await invalidateCached(c.env as Env, reposCacheKey(tenantId, row.projectId));
+    await invalidateRepoCaches(c.env as Env, tenantId, row.projectId, row.id);
     return c.json(row);
   });
 
@@ -311,7 +330,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       .select()
       .from(projectRepositories)
       .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
-    await invalidateCached(c.env as Env, reposCacheKey(tenantId, target.projectId));
+    await invalidateRepoCaches(c.env as Env, tenantId, target.projectId, id);
     return c.json(row);
   });
 
@@ -341,6 +360,10 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
       resolved.repo.repo,
       resolved.token,
     );
+    // An operator re-tests a repo precisely when they have just fixed (or broken)
+    // its access, so drop the cached probe: the projects widget's status strip
+    // re-reads the live verdict rather than showing the pre-fix one for a minute.
+    await invalidateProjectConnections(c.env as Env, tenantId, id);
     return c.json(result);
   });
 
@@ -411,7 +434,7 @@ export function createRepoRoutes(db: Db): Hono<RepoHonoEnv> {
     await db
       .delete(projectRepositories)
       .where(and(eq(projectRepositories.id, id), eq(projectRepositories.tenantId, tenantId)));
-    if (row) await invalidateCached(c.env as Env, reposCacheKey(tenantId, row.projectId));
+    if (row) await invalidateRepoCaches(c.env as Env, tenantId, row.projectId, id);
     return c.body(null, 204);
   });
 
