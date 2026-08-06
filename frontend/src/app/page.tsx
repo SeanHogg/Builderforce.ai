@@ -420,7 +420,7 @@ export default function LandingPage() {
         .lp-create-feature {
           padding: 15px 16px;
           border-left: 2px solid var(--coral-bright);
-          background: rgba(4,10,22,.32);
+          background: color-mix(in srgb, var(--bg-surface) 48%, transparent);
           border-radius: 0 12px 12px 0;
         }
         .lp-create-feature strong {
@@ -436,8 +436,8 @@ export default function LandingPage() {
           overflow: hidden;
           border: 1px solid var(--border-subtle);
           border-radius: 18px;
-          background-color: rgba(5,11,23,.78);
-          background-image: radial-gradient(rgba(126,154,195,.25) 1px, transparent 1px);
+          background-color: color-mix(in srgb, var(--bg-surface) 86%, transparent);
+          background-image: radial-gradient(var(--border-subtle) 1px, transparent 1px);
           background-size: 22px 22px;
           box-shadow: 0 18px 48px rgba(0,0,0,.22);
         }
@@ -448,7 +448,7 @@ export default function LandingPage() {
           height: 38px;
           padding: 0 13px;
           border-bottom: 1px solid var(--border-subtle);
-          background: rgba(7,14,28,.9);
+          background: var(--bg-elevated);
           color: var(--text-muted);
           font-size: .7rem;
         }
@@ -462,7 +462,7 @@ export default function LandingPage() {
           padding: 13px 14px;
           border: 1px solid var(--border-subtle);
           border-radius: 12px;
-          background: rgba(10,17,32,.96);
+          background: var(--surface-card-strong);
           box-shadow: 0 12px 30px rgba(0,0,0,.25);
         }
         .lp-create-object:nth-of-type(2) { left: 5%; top: 22%; }

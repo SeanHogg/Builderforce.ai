@@ -1,5 +1,19 @@
 import '@testing-library/jest-dom';
+import { configure } from '@testing-library/react';
 import { vi } from 'vitest';
+
+/**
+ * `findBy*` / `waitFor` ceiling, raised from the 1s default.
+ *
+ * These queries POLL until the condition holds, so a longer ceiling cannot make a
+ * wrong assertion pass — it only stops a correct one from being cut off. Under the
+ * full suite (100+ jsdom files on a shared thread pool) a component whose first
+ * paint is "loading…" can genuinely take more than a second of wall-clock to reach
+ * its resolved state, which produced failures that vanished when the same file was
+ * run alone. A test that fails for that reason is telling you about the scheduler,
+ * not the code, and it trains people to re-run rather than read failures.
+ */
+configure({ asyncUtilTimeout: 5000 });
 
 /**
  * Global next-intl mock for the test environment.
