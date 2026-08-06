@@ -93,9 +93,3 @@ export function meshProjectionUrl(
   projections.set(key, dataUrl);
   return dataUrl;
 }
-
-/** Drop everything cached for one file — used when its export is replaced. */
-export function forgetMesh(url: string): void {
-  meshes.delete(url);
-  for (const key of [...projections.keys()]) if (key.startsWith(`${url}@`)) projections.delete(key);
-}
