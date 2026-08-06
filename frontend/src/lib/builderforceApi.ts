@@ -340,6 +340,9 @@ export interface BrainChat {
   /** What the chat is making — a capability id (see lib/brain/capabilities.ts).
    *  Shapes the system prompt and the export format; null = no capability. */
   capability?: string | null;
+  /** What the chat is FOR — 'chat' (a conversation) or 'work' (an execution that
+   *  creates, links and dispatches real work). See lib/brain/chatModes.ts. */
+  mode?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -7873,6 +7876,9 @@ export interface CreationSessionSummary {
   unread?: boolean;
   collaboratorCount?: number;
   projectIds?: number[];
+  /** Conversation ('chat') or execution ('work') — the same vocabulary as
+   *  `BrainChat.mode`. See lib/brain/chatModes.ts. */
+  mode?: string | null;
 }
 
 export interface CreationSessionObject {
@@ -8026,7 +8032,7 @@ export const creationSessionsApi = {
   outcomeMetrics: (id: string): Promise<CreationOutcomeMetrics> => request(`/api/creation-sessions/${encodeURIComponent(id)}/outcome-metrics`),
   recordOutcome: (id: string, body: { correlationId: string; action: string; phase: 'started' | 'succeeded' | 'failed' | 'validated' | 'reused'; actorType?: 'user' | 'agent' | 'brain' | 'system'; actorRef?: string; projectId?: number; metricKey?: string; metricValue?: number; unit?: string; artifactId?: string; durationMs?: number; costUsdMillicents?: number; metadata?: unknown }) =>
     request<{ recorded: boolean; duplicate: boolean }>(`/api/creation-sessions/${encodeURIComponent(id)}/outcomes`, { method: 'POST', body: JSON.stringify(body) }),
-  update: (id: string, body: { title?: string; description?: string | null; status?: 'active' | 'archived'; preview?: unknown }) =>
+  update: (id: string, body: { title?: string; description?: string | null; status?: 'active' | 'archived'; preview?: unknown; mode?: string }) =>
     request<CreationSessionSummary>(`/api/creation-sessions/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   remove: (id: string) => request<{ session: { id: string; status: 'deleted' }; recoverable: true }>(`/api/creation-sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   preview: (id: string) => request<{ sessionId: string; title: string; revision: number; preview: CreationSessionSummary['preview']; lastActivityAt: string }>(`/api/creation-sessions/${encodeURIComponent(id)}/preview`),

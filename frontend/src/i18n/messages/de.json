@@ -12166,7 +12166,14 @@
       "promptDocument": "Fasse {name} zusammen und sag mir, was du ändern würdest.",
       "promptImage": "Was ist auf {name} zu sehen und was soll ich damit machen?",
       "promptCode": "Prüfe {name} und erkläre, was der Code macht.",
-      "promptFile": "Was kannst du mir über {name} sagen?"
+      "promptFile": "Was kannst du mir über {name} sagen?",
+      "meshShape": "{facets} Facetten · {format}",
+      "drawingShape": "{format}-Zeichnung",
+      "statusMeshUnreadable": "Geometrie konnte nicht gelesen werden",
+      "promptModel": "Was soll ich an {name} prüfen?",
+      "promptDrawing": "Was soll ich an der Zeichnung {name} prüfen?",
+      "noticeModel": "{name} als 3D-Modell gelesen — {facets} Facetten",
+      "noticeDrawing": "{name} als CAD-Zeichnung gelesen"
     },
     "datasetImportBeforeVisualizing": "Importiere Daten, bevor du sie visualisierst",
     "datasetImportBeforeProfiling": "Importiere Daten, bevor du die Spalten analysierst",

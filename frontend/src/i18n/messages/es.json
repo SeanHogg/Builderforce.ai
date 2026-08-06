@@ -12166,7 +12166,14 @@
       "promptDocument": "Resume {name} y dime qué cambiarías.",
       "promptImage": "¿Qué hay en {name} y qué debería hacer con ello?",
       "promptCode": "Revisa {name} y explica qué hace.",
-      "promptFile": "¿Qué puedes decirme sobre {name}?"
+      "promptFile": "¿Qué puedes decirme sobre {name}?",
+      "meshShape": "{facets} caras · {format}",
+      "drawingShape": "Plano {format}",
+      "statusMeshUnreadable": "No se pudo leer la geometría",
+      "promptModel": "¿Qué quieres que revise de {name}?",
+      "promptDrawing": "¿Qué quieres que revise del plano {name}?",
+      "noticeModel": "{name} leído como modelo 3D: {facets} caras",
+      "noticeDrawing": "{name} leído como plano CAD"
     },
     "datasetImportBeforeVisualizing": "Importa datos antes de visualizarlos",
     "datasetImportBeforeProfiling": "Importa datos antes de analizar sus columnas",

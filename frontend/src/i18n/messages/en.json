@@ -12167,7 +12167,14 @@
       "promptDocument": "Summarise {name}, then tell me what you would change.",
       "promptImage": "What is in {name}, and what should I do with it?",
       "promptCode": "Review {name} and explain what it does.",
-      "promptFile": "What can you tell me about {name}?"
+      "promptFile": "What can you tell me about {name}?",
+      "meshShape": "{facets} facets · {format}",
+      "drawingShape": "{format} drawing",
+      "statusMeshUnreadable": "Geometry could not be read",
+      "promptModel": "What should I check about {name}?",
+      "promptDrawing": "What should I check about the {name} drawing?",
+      "noticeModel": "{name} read as a 3D model — {facets} facets",
+      "noticeDrawing": "{name} read as a CAD drawing"
     },
     "datasetImportBeforeVisualizing": "Import data before visualizing it",
     "datasetImportBeforeProfiling": "Import data before profiling it",

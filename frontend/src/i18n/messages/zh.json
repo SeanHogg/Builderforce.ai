@@ -12166,7 +12166,14 @@
       "promptDocument": "总结 {name}，并说明你会做哪些修改。",
       "promptImage": "{name} 里有什么，我该如何使用它？",
       "promptCode": "审阅 {name} 并说明它的作用。",
-      "promptFile": "关于 {name} 你能告诉我什么？"
+      "promptFile": "关于 {name} 你能告诉我什么？",
+      "meshShape": "{facets} 个面 · {format}",
+      "drawingShape": "{format} 图纸",
+      "statusMeshUnreadable": "无法读取几何体",
+      "promptModel": "关于 {name}，需要我检查什么？",
+      "promptDrawing": "关于 {name} 这张图纸，需要我检查什么？",
+      "noticeModel": "{name} 已读取为三维模型 —— {facets} 个面",
+      "noticeDrawing": "{name} 已读取为 CAD 图纸"
     },
     "datasetImportBeforeVisualizing": "请先导入数据再进行可视化",
     "datasetImportBeforeProfiling": "请先导入数据再分析列结构",

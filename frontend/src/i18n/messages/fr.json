@@ -12166,7 +12166,14 @@
       "promptDocument": "Résume {name}, puis dis-moi ce que tu changerais.",
       "promptImage": "Que contient {name} et qu'en faire ?",
       "promptCode": "Relis {name} et explique ce qu'il fait.",
-      "promptFile": "Que peux-tu me dire à propos de {name} ?"
+      "promptFile": "Que peux-tu me dire à propos de {name} ?",
+      "meshShape": "{facets} facettes · {format}",
+      "drawingShape": "Plan {format}",
+      "statusMeshUnreadable": "La géométrie n'a pas pu être lue",
+      "promptModel": "Que dois-je vérifier à propos de {name} ?",
+      "promptDrawing": "Que dois-je vérifier à propos du plan {name} ?",
+      "noticeModel": "{name} lu comme modèle 3D — {facets} facettes",
+      "noticeDrawing": "{name} lu comme plan CAO"
     },
     "datasetImportBeforeVisualizing": "Importez des données avant de les visualiser",
     "datasetImportBeforeProfiling": "Importez des données avant d’analyser leurs colonnes",
