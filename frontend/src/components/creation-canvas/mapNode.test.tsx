@@ -44,7 +44,11 @@ function renderMap(data: Partial<CreationNodeData> = {}) {
         isConnectable={false}
         positionAbsoluteX={0}
         positionAbsoluteY={0}
-        {...({} as Record<string, never>)}
+        // React Flow's NodeProps requires the full interaction triple; the empty
+        // spread below cannot supply them, so they are passed explicitly.
+        draggable={false}
+        selectable={false}
+        deletable={false}
       />
     </ReactFlowProvider>,
   );

@@ -70,9 +70,3 @@ const WORK_OPTIONS: readonly WorkOptionDef[] = [
 export function workOptions(): readonly WorkOptionDef[] {
   return WORK_OPTIONS;
 }
-
-/** Resolve an id (possibly stale/unknown) to its definition, or null. */
-export function getWorkOption(id: string | null | undefined): WorkOptionDef | null {
-  if (!id) return null;
-  return WORK_OPTIONS.find((o) => o.id === id) ?? null;
-}

@@ -99,7 +99,6 @@ export {
   isChatMode,
   normalizeChatMode,
   workOptions,
-  getWorkOption,
   type ChatMode,
   type WorkOptionId,
   type WorkOptionDef,
