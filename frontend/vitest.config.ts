@@ -23,6 +23,22 @@ export default defineConfig({
     // Use worker threads, not child-process forks: the default `forks` pool
     // fails to spawn workers in constrained/sandboxed CI environments
     // (`Timeout waiting for worker to respond`); threads run the suite cleanly.
+    /**
+     * The worker heap is NOT raised here — it is raised on the runner, by the
+     * `test` script (`node --max-old-space-size=…`). A worker thread inherits the
+     * parent's heap ceiling, and none of the levers this file has reach it:
+     * vitest 4 deleted `poolOptions.threads.resourceLimits` (silently — it just
+     * warns and raises nothing), and `execArgv` is rejected outright by Node,
+     * which refuses V8 flags on a worker and then fails to start ANY worker.
+     *
+     * It has to be raised somewhere because of how this fails: with the default
+     * ceiling, `CreationCanvas.test.tsx` (a ~12,700-line component mounted ~77
+     * times in one worker, each mount retained by jsdom) dies with
+     * `ERR_WORKER_OUT_OF_MEMORY` partway through, the cases it never reached go
+     * unrun, and vitest still prints a mostly-green summary — so the run LOOKS
+     * like coverage while ~73 cases were skipped. The durable fix is splitting
+     * both the component and its test file.
+     */
     pool: 'threads',
   },
   resolve: {

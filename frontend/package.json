@@ -11,8 +11,8 @@
     "start": "next start",
     "lint": "eslint .",
     "check:api-transport": "node scripts/check-api-transport.mjs",
-    "test": "npm run check:api-transport && vitest run",
-    "test:watch": "vitest",
+    "test": "npm run check:api-transport && node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs run",
+    "test:watch": "node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs",
     "typecheck:native": "tsgo --noEmit",
     "type-check": "tsgo --noEmit && tsc --noEmit"
   },
