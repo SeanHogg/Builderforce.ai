@@ -34,6 +34,7 @@ import {
   resolveChatAccess, syncPendingMemberships as syncPendingMembershipsShared,
 } from './chatAccess';
 import { markChatRead } from './chatReadState';
+import { normalizeChatMode, resolveChatMode, DEFAULT_CHAT_MODE } from './chatMode';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -764,7 +765,13 @@ export class BrainService {
     userId: string,
     dto: UpdateChatDto,
   ) {
-    const existing = await this.verifyChatOwnership(chatId, tenantId, userId);
+    // `mode` is read alongside the ownership check so the caller can tell an actual
+    // mode SWITCH from a PATCH that merely restated the current one — the audit row is
+    // about the moment authority changed hands, and a no-op must not manufacture one.
+    const existing = await this.verifyChatOwnership(chatId, tenantId, userId, {
+      mode: brainChats.mode,
+      origin: brainChats.origin,
+    });
     if (!existing) return { error: 'Chat not found' as const };
 
     if (dto.projectId != null) {
@@ -777,6 +784,11 @@ export class BrainService {
     if (dto.projectId !== undefined) updates.projectId = dto.projectId;
     if (dto.visibility === 'shared' || dto.visibility === 'locked') updates.visibility = dto.visibility;
     if (dto.capability !== undefined) updates.capability = normalizeCapability(dto.capability);
+    // An unrecognised mode is IGNORED rather than coerced: coercing would quietly
+    // demote a running execution back to a conversation (and strip its dispatch
+    // authority) because a stale client sent a value this build does not know.
+    const nextMode = normalizeChatMode(dto.mode);
+    if (nextMode) updates.mode = nextMode;
 
     const [updated] = await this.db
       .update(brainChats)
@@ -784,7 +796,12 @@ export class BrainService {
       .where(eq(brainChats.id, chatId))
       .returning(chatColumns);
 
-    return updated;
+    // `modeChangedTo` is transient provenance for the CALLER (the route writes the audit
+    // row — it owns `env` and the waitUntil budget), never a persisted column. Null when
+    // the mode was not touched or the PATCH restated the value it already had.
+    const previousMode = resolveChatMode(existing as { origin?: string | null; mode?: string | null });
+    const modeChangedTo = nextMode && nextMode !== previousMode ? nextMode : null;
+    return { ...updated, modeChangedTo };
   }
 
   async archiveChat(chatId: number, tenantId: number, userId: string) {
@@ -972,9 +989,12 @@ export class BrainService {
   ) {
     // `origin` is read alongside the access check because the MANAGER chat (0376) asks a
     // different KIND of question than a team chat does — see `accountabilityFraming`.
+    // `mode` (0409) decides whether this reply may turn its conclusions into dispatched
+    // work or must stop at answering; both are resolved together by `resolveChatMode`.
     const chat = await this.canAccessChat(chatId, tenantId, userId, {
       projectId: brainChats.projectId,
       origin: brainChats.origin,
+      mode: brainChats.mode,
     });
     if (!chat) return { error: 'Chat not found' as const };
     const apiKey = env.OPENROUTER_API_KEY;
@@ -1014,6 +1034,9 @@ export class BrainService {
 
     const projectHint = (chat as unknown as { projectId?: number | null }).projectId ?? null;
     const isManagerChat = (chat as unknown as { origin?: string | null }).origin === MANAGER_ORIGIN;
+    // Conversation or execution (0409). Team + manager chats resolve to 'work' by origin
+    // whatever the column says — driving work IS what those conversations are for.
+    const chatMode = resolveChatMode(chat as { origin?: string | null; mode?: string | null });
 
     // Curated, non-destructive platform tools (the same allowlist an autonomous cloud
     // agent gets) PLUS the chat-scoped read/link tools that only make sense with a live
@@ -1055,9 +1078,15 @@ export class BrainService {
       // tell it the id so it can tie work items to THIS conversation. Named by ADVERTISED
       // name for the same reason as above; dropped entirely when the tools are not offered.
       `You are participating in Brain chat #${chatId}. `,
-      linkTicket && listTickets
-        ? `When you create or discuss a work item that belongs to this conversation, tie it to the chat with ${linkTicket}(chatId=${chatId}); use ${listTickets}(chatId=${chatId}) to see what is already linked. `
-        : '',
+      // MODE (0409). In a CONVERSATION the agent answers and stops; in an EXECUTION it
+      // ties what it concludes to the chat as real, tracked work. Without this an
+      // addressed agent opened tickets off the back of a question, which is the same
+      // defect the client-side loop had.
+      chatMode === 'work'
+        ? (linkTicket && listTickets
+            ? `This conversation is in WORK mode: turn what you conclude into real work rather than describing it. Tie every work item you create or discuss to the chat with ${linkTicket}(chatId=${chatId}), and use ${listTickets}(chatId=${chatId}) to see what is already linked so you never duplicate one. `
+            : '')
+        : `This conversation is in CHAT mode: answer the question. Read and investigate freely, but do not create, re-status or dispatch board work as a side effect of answering — unless the user explicitly asks you to in this message. If something clearly ought to be tracked, say so in one line at the end and leave it to the user. `,
       `When you need the user to make a decision before you can proceed (an owner, an approach, one target vs another), call the ${ASK_USER_TOOL} tool with labelled options INSTEAD of asking in prose — do not end your reply with unanswered questions when ${ASK_USER_TOOL} would let the user just click a choice.`,
     ].join('');
 
@@ -1528,7 +1557,10 @@ export class BrainService {
         account: provenance.account,
         byoFunded: lastByoFunded,
         evermind: provenance.evermind,
-        extra: { chatId },
+        // `mode` is what makes this row readable as execution-vs-conversation after
+        // the fact: without it every agent turn looks alike and the mode rollup can
+        // only count chats, never what happened inside them.
+        extra: { chatId, mode: resolveChatMode(chat as { origin?: string | null; mode?: string | null }) },
       }),
     });
 

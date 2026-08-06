@@ -467,7 +467,7 @@ export function Canvas3DView<T extends Canvas3DNode>({
    * and cached (see `meshPreviewCache`); only the projection is redone.
    */
   const [meshPreviews, setMeshPreviews] = useState<Record<string, string>>({});
-  const geometryKey = scene.cards.map((card) => card.geometry?.url ?? '').join(' ');
+  const geometryKey = scene.cards.map((card) => card.geometry?.url ?? '').join('\u0000');
   useEffect(() => {
     const withGeometry = sceneRef.current.cards.filter((card) => card.geometry?.url);
     if (!withGeometry.length) {

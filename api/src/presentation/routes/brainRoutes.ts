@@ -80,13 +80,14 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
 
   // POST /chats
   router.post('/chats', async (c) => {
-    const body = await c.req.json<{ title?: string; projectId?: number | null; capability?: string | null }>();
+    const body = await c.req.json<{ title?: string; projectId?: number | null; capability?: string | null; mode?: string | null }>();
     const result = await brainService.createChat({
       tenantId: c.get('tenantId') as number,
       userId: c.get('userId') as string,
       title: body.title,
       projectId: body.projectId,
       capability: body.capability,
+      mode: body.mode,
     });
     if (result && 'error' in result) return c.json({ error: result.error }, 404);
     return c.json(result, 201);
@@ -135,10 +136,11 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const id = parseId(c.req.param('id'));
     if (!id) return c.json({ error: 'Invalid chat id' }, 400);
 
-    const body = await c.req.json<{ title?: string; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null }>();
+    const body = await c.req.json<{ title?: string; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null; mode?: string | null }>();
+    const tenantId = c.get('tenantId') as number;
     const result = await brainService.updateChat(
       id,
-      c.get('tenantId') as number,
+      tenantId,
       c.get('userId') as string,
       body,
     );
@@ -146,7 +148,31 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
       const status = result.error === 'Chat not found' ? 404 : 404;
       return c.json({ error: result.error }, status);
     }
-    return c.json(result);
+    // A mode switch is the moment a conversation gains (or gives up) the authority to
+    // open and dispatch work, so it belongs on the audit timeline rather than only in a
+    // column — "who turned this chat into an execution, and when". `modeChangedTo` is
+    // null for a PATCH that did not touch the mode or merely restated it, so a no-op
+    // never manufactures an audit row. Off the response path; best-effort.
+    const { modeChangedTo, ...chat } = result;
+    if (modeChangedTo) {
+      c.executionCtx.waitUntil((async () => {
+        const actor = await resolveActorFromContext(c.env as Env, db, c);
+        await recordActivity(c.env as Env, db, {
+          tenantId,
+          projectId: chat.projectId ?? null,
+          actor,
+          verb: 'chat.mode.set',
+          targetType: 'chat',
+          targetId: String(id),
+          targetLabel: chat.title ?? null,
+          summary: `Chat #${id} switched to ${modeChangedTo} mode`,
+          metadata: { chatId: id, mode: modeChangedTo },
+        }).catch((error) => {
+          reportCaughtError(error, { source: 'presentation/routes/brainRoutes.ts', operation: 'recordChatModeSwitch' });
+        });
+      })());
+    }
+    return c.json(chat);
   });
 
   // DELETE /chats/:id

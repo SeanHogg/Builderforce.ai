@@ -53,6 +53,7 @@ import { broadcastRoom, creationSessionRoomName } from '../../infrastructure/rel
 import { sendTransactionalEmail } from '../email/sendEmail';
 import { sendCreationSessionInviteEmail } from '../../infrastructure/email/EmailService';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { normalizeChatMode } from '../brain/chatMode';
 
 type SessionRole = 'viewer' | 'commenter' | 'editor' | 'runner' | 'owner';
 const ROLE_RANK: Record<SessionRole, number> = { viewer: 0, commenter: 1, editor: 2, runner: 3, owner: 4 };
@@ -84,7 +85,7 @@ type GraphConnectionInput = {
   metadata?: unknown;
 };
 type CreateSessionBody = { title?: string; description?: string; initialPrompt?: string; projectIds?: number[] };
-type PatchSessionBody = { title?: string; description?: string | null; status?: string; preview?: unknown };
+type PatchSessionBody = { title?: string; description?: string | null; status?: string; preview?: unknown; mode?: string };
 type SaveGraphBody = { objects?: GraphObjectInput[]; connections?: GraphConnectionInput[]; viewport?: unknown; expectedRevision?: number };
 type InviteBody = { userId?: string; email?: string; role?: string; expiresInHours?: number };
 type CommentBody = { body?: string; objectId?: string | null; parentCommentId?: string | null; mentions?: string[] };
@@ -1186,6 +1187,11 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       patch.archivedAt = body.status === 'archived' ? new Date() : null;
     }
     if (body.preview !== undefined) patch.preview = body.preview;
+    // Conversation (`chat`) vs execution (`work`) — migration 0409, same vocabulary as
+    // `brain_chats.mode`. An unrecognised value leaves the column untouched rather than
+    // silently demoting a session that is mid-execution.
+    const nextMode = normalizeChatMode(body.mode);
+    if (nextMode) patch.mode = nextMode;
     const [updated] = await db.update(creationSessions).set(patch).where(and(
       eq(creationSessions.id, access.session.id),
       eq(creationSessions.tenantId, access.session.tenantId),

@@ -4,6 +4,28 @@
 
 ---
 
+## 2026-08-06 — ✅ SHIPPED: Share on a free canvas opened a sign-up gate instead of sharing it (api 2026.7.209 · ui 2026.7.165)
+
+Pressing **Share** on an account-less Creation Canvas showed a login/create-account modal. That answers a question nobody asked — they wanted to show someone the board, not to file paperwork — and it was the last place the free product still treated collaboration as a paid act.
+
+**A local canvas now opens the same guest ROOM the free Brain chat uses.** "Share this canvas" mints a room, seeds it with the board the host already has (inviting people to a canvas that starts them on an EMPTY one would be a different and worse feature), and hands back a copyable link. Anyone with the link joins — no account — and everyone edits the same board, sees the real roster in the session bar, and spends ONE combined free-message allowance. Signing up is offered as the way to KEEP it, not as the price of sharing it.
+
+**Board sync is last-writer-wins over the room's Durable Object**, on the save debounce the canvas already had. Deliberately not a CRDT: this is a short-lived ≤8-person free session, and an operational-transform stack has failure modes far worse than "whoever moved a card most recently won". The writer pushes one serialized snapshot and relays a `canvas` frame over its own socket; peers pull. The stored snapshot is what lets a LATE joiner see the board at all — a relay-only design would show them an empty canvas until somebody happened to move something. localStorage stays the local cache, so a dropped connection still leaves the board on the device that was editing it.
+
+**Two races that would have destroyed a board, closed before they shipped.** (1) An invitee mounts on the DEFAULT starter board and the save debounce fires ~300 ms later — before the first pull can land — which would have pushed that empty board over the host's real one. Pushes are now gated on `roomHydrated` until the pull settles (or reports the room has no board yet, in which case this device's board legitimately becomes the shared one). (2) Applying a peer's board sets `lastSavedGraph`/`lastRoomSnapshot` BEFORE the state lands, so both save debounces bail — otherwise adopting a peer's board reads as a local edit and gets pushed straight back, and two people turn into an infinite sync loop.
+
+**`ensureGuestToken` was silently room-hostile.** It minted a plain guest token when none existed, which for a guest in a shared session meant being moved off the room's combined allowance and out of its relay — with no symptom except that everyone else stopped seeing their work. It moved from `guestChatApi` to `guestRoomApi` (the only module that can see both halves) and now re-joins the room instead.
+
+**Invite links became surface-aware.** A room records whether it was opened from the chat or the canvas, so a shared board's link lands people on a board (`/create/new?room=`) rather than in an empty chat.
+
+**DRY, in both directions.** The invite link + copy + confirmation is now ONE `GuestInviteLink` (the chat's room bar had inlined its own clipboard handling, duplicating the canonical `useCopyToClipboard`); the join card is ONE `GuestRoomJoinCard` used by both entry points; and the canvas's three inlined `localStorage.setItem(storageKey, …)` writes collapsed into `writeLocalCreationSession`. Six i18n keys orphaned by removing the share gate were deleted from all five catalogs.
+
+**A test-fake fidelity bug, found on the way.** `GuestRoomDO`'s test harness did not model the runtime's guarantee that no `fetch` is delivered until `blockConcurrencyWhile` settles, so every "survives eviction" assertion was passing on microtask timing rather than on rehydration. The fake now exposes its hydration promise and `makeRoom` awaits it.
+
+Guarded by 4 new `GuestRoomDO.combinedCap.test.ts` cases (the room remembers its surface; the board reaches a late joiner and survives eviction; an oversized board is REFUSED rather than silently dropped, leaving the previous one intact; an expired room 410s). API 4500+/4500+ and 11/11 structural checks green; `tsgo`/`tsc` clean in both packages.
+
+---
+
 ## 2026-08-06 — ✅ RESOLVED: Researched documents, decks, and diagrams were never visualized, and there was no collection of your files
 
 Operator report: "when I ask for research to be conducted — for example: market analysis of competitors — and to create a MD file with all the details, the actual document isn't visualized in the canvas. The same issue with PowerPoint/presentations. As well as DRAW.IO diagrams. We need to show the user a collection of their files. They can interact with an excel doc."

@@ -88,6 +88,22 @@ export {
   type BrainCapabilityDef,
   type BrainCapabilitySurface,
 } from './capabilities';
+
+// Chat MODE: is this conversation a CONVERSATION (`chat`) or an EXECUTION (`work`)?
+// Re-exported from the model-facing package alongside the UI-only work-option catalogue,
+// so a surface imports one thing rather than reaching into two.
+export {
+  CHAT_MODES,
+  DEFAULT_CHAT_MODE,
+  CHAT_MODE_ICON,
+  isChatMode,
+  normalizeChatMode,
+  workOptions,
+  getWorkOption,
+  type ChatMode,
+  type WorkOptionId,
+  type WorkOptionDef,
+} from './chatModes';
 export { extractCsv, exportFilenameStem, replyHasArtifact } from './messageExport';
 
 // Model-authored "next step" buttons parsed out of a Brain reply.

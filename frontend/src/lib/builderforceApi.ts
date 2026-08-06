@@ -366,7 +366,7 @@ export const brain = {
     return request<{ chats: BrainChat[] }>(`/api/brain/chats${query ? `?${query}` : ''}`).then((r) => r.chats);
   },
 
-  createChat: (body: { title?: string; projectId?: number | null; capability?: string | null }) =>
+  createChat: (body: { title?: string; projectId?: number | null; capability?: string | null; mode?: string | null }) =>
     request<BrainChat>('/api/brain/chats', { method: 'POST', body: JSON.stringify(body) }),
 
   /** Resolve-or-create the canonical TEAM chat for a scope: a project when
@@ -384,7 +384,7 @@ export const brain = {
 
   getChat: (id: number) => request<BrainChat>(`/api/brain/chats/${id}`),
 
-  updateChat: (id: number, body: { title?: string; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null }) =>
+  updateChat: (id: number, body: { title?: string; projectId?: number | null; visibility?: 'shared' | 'locked'; capability?: string | null; mode?: string | null }) =>
     request<BrainChat>(`/api/brain/chats/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
 
   deleteChat: (id: number) =>

@@ -14,6 +14,9 @@ import {
   MAX_PARSEABLE_BYTES, PAGE_BREAK_MARKER, readDocx, readPdf, readPptx, readXlsx, rtfToText,
   type OfficeSlide, type WorkbookSheet,
 } from './officeFormats';
+import {
+  dxfPreviewSvg, meshFormatFromHint, meshPreviewSvg, parseMeshTriangles, svgDataUrl,
+} from './creativeGeometry';
 import type { CreationObjectKind } from '@builderforce/creation-canvas-contract';
 
 /** Text attachments Brain can read directly once they are on the canvas. */
@@ -175,7 +178,9 @@ function promptFor(kind: CreationObjectKind, file: File, t: ImportTranslator): s
     : kind === 'slides' ? 'promptDeck'
       : kind === 'document' ? 'promptDocument'
         : kind === 'image' ? 'promptImage'
-          : kind === 'code' ? 'promptCode' : 'promptFile';
+          : kind === 'model3d' ? 'promptModel'
+            : kind === 'cad' ? 'promptDrawing'
+              : kind === 'code' ? 'promptCode' : 'promptFile';
   return t(key, { name: file.name });
 }
 
@@ -191,6 +196,8 @@ function noticeFor(objects: ImportedCanvasObject[], file: File, t: ImportTransla
   if (kind === 'slides') return t('noticeDeck', { name: file.name, slides: Array.isArray(data.items) ? data.items.length : 0 });
   if (kind === 'document') return t('noticeDocument', { name: file.name, pages: Number(data.pageCount ?? 1) });
   if (kind === 'image') return t('noticeImage', { name: file.name });
+  if (kind === 'model3d') return t('noticeModel', { name: file.name, facets: Number(data.facetCount ?? 0).toLocaleString() });
+  if (kind === 'cad') return t('noticeDrawing', { name: file.name });
   return t('noticeFile', { name: file.name });
 }
 
@@ -229,6 +236,63 @@ async function deriveObjects(file: File, t: ImportTranslator): Promise<ImportedC
         ...(url ? { thumbnailUrl: url, outputUrl: url } : {}),
       },
     }];
+  }
+
+  // Geometry authored somewhere else — a slicer, a modeller, a CAD seat. Landing
+  // it as a generic attachment made a model an icon with a file name; read as the
+  // object it is, it carries its own geometry, so the card shows the shape and the
+  // 3D view turns the real mesh rather than a picture of one.
+  const meshFormat = !oversized ? meshFormatFromHint(file.name) : null;
+  if (meshFormat) {
+    const triangles = parseMeshTriangles(await file.arrayBuffer(), meshFormat);
+    const url = await dataUrl(file);
+    const preview = triangles.length ? meshPreviewSvg(triangles) : null;
+    if (url && triangles.length) {
+      return [{
+        kind: 'model3d',
+        data: {
+          title: fileStem(file.name),
+          fileName: file.name,
+          status: t('statusImported'),
+          subtitle: t('meshShape', { facets: triangles.length.toLocaleString(), format: meshFormat.toUpperCase() }),
+          mimeType: file.type || 'model/stl',
+          fileSize: file.size,
+          facetCount: triangles.length,
+          outputUrl: url,
+          outputFileName: file.name,
+          outputFormat: meshFormat.toUpperCase(),
+          outputMimeType: file.type || 'model/stl',
+          ...(preview ? { thumbnailUrl: svgDataUrl(preview) } : {}),
+        },
+      }];
+    }
+    // A container this cannot tessellate (a pure B-rep STEP part, say) is still
+    // the person's file: it lands honestly rather than claiming to be a model.
+    return [attachmentObject(file, t, { status: t('statusMeshUnreadable') })];
+  }
+
+  if (!oversized && extension === 'dxf') {
+    const source = await file.text();
+    const preview = dxfPreviewSvg(source);
+    const url = await dataUrl(file);
+    if (preview && url) {
+      return [{
+        kind: 'cad',
+        data: {
+          title: fileStem(file.name),
+          fileName: file.name,
+          status: t('statusImported'),
+          subtitle: t('drawingShape', { format: 'DXF' }),
+          mimeType: file.type || 'application/dxf',
+          fileSize: file.size,
+          outputUrl: url,
+          outputFileName: file.name,
+          outputFormat: 'DXF',
+          outputMimeType: file.type || 'application/dxf',
+          thumbnailUrl: svgDataUrl(preview),
+        },
+      }];
+    }
   }
 
   try {
