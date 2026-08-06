@@ -374,8 +374,10 @@ export function BrainPanel({
    * otherwise pressing "+ New" from history silently created a chat the user
    * never saw.
    */
-  const startNewChat = useCallback(async (opts?: { title?: string; projectId?: number | null; capability?: string | null }) => {
-    const created = await chats.create(opts);
+  const startNewChat = useCallback(async (opts?: { title?: string; projectId?: number | null; capability?: string | null; mode?: ChatMode }) => {
+    // The mode chosen in the empty state rides EVERY creation path — including the one
+    // that fires implicitly when the user just types and hits send (`ensureChatId`).
+    const created = await chats.create({ ...opts, mode: opts?.mode ?? pendingModeRef.current });
     if (!isPage) setDockedTab('chat');
     return created;
   }, [chats, isPage]);
@@ -1364,6 +1366,9 @@ export function BrainPanel({
       onMention={setRecipientChoice}
       focusToken={composerFocusToken}
       contextControls={<>
+        {/* Chat | Work. First control in the row because it is the one that decides
+            whether this turn can open and dispatch real work. */}
+        <ChatModeToggle value={chatMode} onChange={selectMode} disabled={conv.sending} />
         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{tBrain('actingAs')}</span>
         <Select
           value={personaSel}
