@@ -45,9 +45,19 @@ import { GUEST_CHAT_LIMITS, GUEST_ROOM_LIMITS } from '../../domain/tenant/PlanLi
 
 type Channel = 'chat' | 'media';
 
+/** Which surface a room was opened from — see {@link RoomMeta.surface}. */
+export type RoomSurface = 'chat' | 'canvas';
+
 interface RoomMeta {
   code: string;
   title: string;
+  /**
+   * What this room IS, which decides where its invite link points. A room opened
+   * from the Brain chat drops invitees into the chat; one opened from the Creation
+   * Canvas drops them onto the canvas. Getting this wrong means someone shares
+   * their board and their friend lands in an empty chat.
+   */
+  surface: RoomSurface;
   /** ISO timestamp — the TTL clock starts here. */
   createdAt: string;
   hostVisitorId: string;
@@ -87,6 +97,7 @@ interface Peer {
 interface RoomState {
   code: string;
   title: string;
+  surface: RoomSurface;
   createdAt: string;
   expiresAt: string;
   isHost: boolean;
@@ -184,6 +195,7 @@ export class GuestRoomDO implements DurableObject {
     return {
       code: meta.code,
       title: meta.title,
+      surface: meta.surface,
       createdAt: meta.createdAt,
       expiresAt: new Date(this.expiresAtMs(meta)).toISOString(),
       isHost: meta.hostVisitorId === visitorId,
@@ -236,6 +248,7 @@ export class GuestRoomDO implements DurableObject {
       case '/title':  return this.handleTitle(request);
       case '/leave':  return this.handleLeave(request);
       case '/claim':  return this.handleClaim(request);
+      case '/canvas': return request.method === 'POST' ? this.handlePutCanvas(request) : this.handleGetCanvas();
       default:        return new Response('Not found', { status: 404 });
     }
   }
@@ -246,13 +259,14 @@ export class GuestRoomDO implements DurableObject {
 
   /** Create the room if it does not exist yet, then admit the caller as host. */
   private async handleOpen(request: Request): Promise<Response> {
-    const { code, visitorId, name, title } = await this.body<{ code?: string; visitorId?: string; name?: string; title?: string }>(request);
+    const { code, visitorId, name, title, surface } = await this.body<{ code?: string; visitorId?: string; name?: string; title?: string; surface?: string }>(request);
     if (!code || !visitorId) return Response.json({ error: 'code and visitorId are required' }, { status: 400 });
     let meta = await this.live();
     if (!meta) {
       meta = {
         code,
         title: clean(title, 120) || 'Guest session',
+        surface: surface === 'canvas' ? 'canvas' : 'chat',
         createdAt: new Date().toISOString(),
         hostVisitorId: visitorId,
         day: utcDay(),
@@ -397,6 +411,41 @@ export class GuestRoomDO implements DurableObject {
     await this.state.storage.put('messages', this.messages);
     this.broadcast('chat', JSON.stringify({ type: 'changed' }), null);
     return Response.json({ created: this.messages.slice(-created.length) });
+  }
+
+  // ── Shared canvas ──────────────────────────────────────────────────────────
+
+  /**
+   * The Creation Canvas board everyone in the room is editing, stored as one
+   * opaque serialized snapshot.
+   *
+   * Deliberately last-writer-wins rather than a CRDT: this is a free, short-lived,
+   * ≤8-person session, and the alternative is an operational-transform stack whose
+   * failure modes are far worse than "the person who moved a card most recently
+   * won". Writers debounce and relay a `canvas` frame over their own socket, so
+   * peers pull the new snapshot; this slot exists so a LATE joiner sees the board
+   * at all, which a relay-only design could never give them.
+   */
+  private async handleGetCanvas(): Promise<Response> {
+    const meta = await this.live();
+    if (!meta) return Response.json({ error: 'room_gone' }, { status: 410 });
+    const stored = await this.state.storage.get<{ snapshot: string; updatedAt: string }>('canvas');
+    return Response.json({ snapshot: stored?.snapshot ?? null, updatedAt: stored?.updatedAt ?? null });
+  }
+
+  private async handlePutCanvas(request: Request): Promise<Response> {
+    const { snapshot } = await this.body<{ snapshot?: string }>(request);
+    const meta = await this.live();
+    if (!meta) return Response.json({ error: 'room_gone' }, { status: 410 });
+    if (typeof snapshot !== 'string') return Response.json({ error: 'snapshot must be a string' }, { status: 400 });
+    // A board that has outgrown the slot must SAY so. Silently dropping the write
+    // would leave everyone editing happily while late joiners load a stale board
+    // and nobody is told the session stopped syncing.
+    if (snapshot.length > GUEST_ROOM_LIMITS.maxCanvasChars) {
+      return Response.json({ stored: false, reason: 'too_large', limit: GUEST_ROOM_LIMITS.maxCanvasChars });
+    }
+    await this.state.storage.put('canvas', { snapshot, updatedAt: new Date().toISOString() });
+    return Response.json({ stored: true });
   }
 
   // ── Relay ──────────────────────────────────────────────────────────────────

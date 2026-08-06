@@ -12985,7 +12985,7 @@
     "modelAuto": "Auto · choose the best model",
     "agentDirection": "Direction",
     "agentDirectionPlaceholder": "What should this agent own, optimize for, and hand back to the team?",
-    "floatBrainOnCanvas": "Float Brain on the canvas",
+    "showBrainInObject": "Show the chat in the Brain object",
     "dockBrainToEdge": "Dock Brain to the edge",
     "resizeBrain": "Resize Brain chat",
     "collaboratorJoined": "{name} joined the conversation",

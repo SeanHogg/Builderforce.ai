@@ -12984,7 +12984,7 @@
     "modelAuto": "Automatisch · bestes Modell wählen",
     "agentDirection": "Richtung",
     "agentDirectionPlaceholder": "Wofür soll dieser Agent zuständig sein, worauf soll er optimieren und was gibt er ans Team zurück?",
-    "floatBrainOnCanvas": "Brain auf der Leinwand schweben lassen",
+    "showBrainInObject": "Chat im Brain-Objekt anzeigen",
     "dockBrainToEdge": "Brain am Rand andocken",
     "resizeBrain": "Größe des Brain-Chats ändern",
     "collaboratorJoined": "{name} ist der Unterhaltung beigetreten",

@@ -671,20 +671,47 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByRole('complementary', { name: 'Brain chat' })).not.toContainElement(prompt);
   });
 
-  it('floats Brain on the canvas, which then reserves no board width', () => {
-    render(<CreationCanvas sessionId="brain-float-test" persistence="local" />);
+  it('moves Brain into its Object rather than putting a second chat on the board', () => {
+    render(<CreationCanvas sessionId="brain-inline-test" persistence="local" />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Float Brain on the canvas' }));
-
+    // Docked: the edge panel holds the conversation and the Object is an anchor.
     const dock = screen.getByRole('complementary', { name: 'Brain chat' });
-    expect(dock).toHaveAttribute('data-mode', 'floating');
-    // A floating Brain sits ON the board, so the board gives up nothing to it.
-    expect(dock.parentElement?.style.getPropertyValue('--brain-dock-right')).toBe('0px');
-    expect(JSON.parse(localStorage.getItem('builderforce:create:brain-dock')!)).toMatchObject({ mode: 'floating' });
+    const board = dock.parentElement;
+    expect(screen.getByRole('button', { name: 'Open Brain chat' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show the chat in the Brain object' }));
+
+    // THE invariant: one conversation, one transcript. The small placement used to be
+    // a card floating over a board that already carried the Brain Object, so the same
+    // chat was on screen twice and nobody could tell which one they were talking to.
+    expect(screen.queryByRole('complementary', { name: 'Brain chat' })).not.toBeInTheDocument();
+    expect(screen.getAllByRole('log', { name: 'Brain chat history' })).toHaveLength(1);
+    expect(screen.getByRole('region', { name: 'Brain chat' })).toBeInTheDocument();
+    // The Object IS the chat now, so the anchor's way back to a panel is gone too.
+    expect(screen.queryByRole('button', { name: 'Open Brain chat' })).not.toBeInTheDocument();
+    // An inline Brain is an Object on the board, so the board gives up no width.
+    expect(board?.style.getPropertyValue('--brain-dock-right')).toBe('0px');
+    expect(JSON.parse(localStorage.getItem('builderforce:create:brain-dock')!)).toMatchObject({ mode: 'inline' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Dock Brain to the edge' }));
     expect(screen.getByRole('complementary', { name: 'Brain chat' })).toHaveAttribute('data-mode', 'docked');
-    expect(dock.parentElement?.style.getPropertyValue('--brain-dock-right')).toBe('330px');
+    expect(screen.getAllByRole('log', { name: 'Brain chat history' })).toHaveLength(1);
+    expect(board?.style.getPropertyValue('--brain-dock-right')).toBe('330px');
+  });
+
+  it('lets the Brain Object reopen an inline Brain without a second launcher', () => {
+    render(<CreationCanvas sessionId="brain-inline-reopen-test" persistence="local" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Show the chat in the Brain object' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close Brain chat' }));
+
+    // The Object is back to its anchor and offers the only way back — the floating
+    // launcher pill would be a second control for the same job on the same board.
+    expect(screen.queryByRole('region', { name: 'Brain chat' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show Brain chat' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Brain chat' }));
+    expect(screen.getByRole('region', { name: 'Brain chat' })).toBeInTheDocument();
+    expect(screen.queryByRole('complementary', { name: 'Brain chat' })).not.toBeInTheDocument();
   });
 
   it('resizes Brain from the keyboard and remembers the width', () => {

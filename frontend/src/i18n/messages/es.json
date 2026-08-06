@@ -12984,7 +12984,7 @@
     "modelAuto": "Automático · elegir el mejor modelo",
     "agentDirection": "Dirección",
     "agentDirectionPlaceholder": "¿De qué debe encargarse este agente, qué debe optimizar y qué debe devolver al equipo?",
-    "floatBrainOnCanvas": "Flotar Brain sobre el lienzo",
+    "showBrainInObject": "Mostrar el chat en el objeto Brain",
     "dockBrainToEdge": "Anclar Brain al borde",
     "resizeBrain": "Cambiar el tamaño del chat de Brain",
     "collaboratorJoined": "{name} se unió a la conversación",

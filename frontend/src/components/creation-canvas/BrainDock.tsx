@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
+import { useCallback, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { Avatar, BrainTimeline } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
@@ -10,14 +10,8 @@ import type { Edge } from '@xyflow/react';
 import styles from './CreationCanvas.module.css';
 import { creationObjectDefinition } from './creationObjectRegistry';
 import type { CreationFlowNode } from './CreationNode';
-import {
-  brainActivityPhase,
-  brainActivityTokens,
-  brainRunSummary,
-  formatElapsed,
-  formatTokenCount,
-  type BrainRunSummary,
-} from './brainActivity';
+import { BrainActivityBar, brainActivityLine, useBrainActivity } from './BrainActivityView';
+import type { BrainSurfaceCollaborator } from './brainSurfaceContext';
 import {
   BRAIN_DOCK_MAX_WIDTH,
   BRAIN_DOCK_MIN_WIDTH,
@@ -28,30 +22,52 @@ import {
 } from './brainDockPreferences';
 
 /**
- * BrainDock — the ONE Brain surface on the Canvas.
+ * The ONE Brain surface on the Canvas — this file owns both of its placements.
  *
  * The Canvas used to show a transcript inside the Brain Object, a second transcript
  * in the details panel, and a floating prompt at the bottom; people could not tell
  * which one they were talking to. The conversation, what Brain is doing right now,
- * what the turn cost, and its connected work all live here.
+ * what the turn cost, and its connected work were consolidated into one surface.
  *
- * It takes three placements: floating ON the canvas (small, claims no board width),
- * or docked full-height to the left or the right edge. Either one is dragged to any
- * width. The prompt is NOT in here — it stays in the centre of the page where every
- * chat product people already use puts it.
+ * That surface has two placements, and both render the SAME body:
+ *   - docked  (`BrainDock`)  — a full-height panel on the left or right edge
+ *   - inline  (the Brain Object on the graph, via `BrainSurfaceBody` in CreationNode)
+ *
+ * There is no small floating card any more. A card hovering over a board that
+ * already carries a Brain Object put two live transcripts of one conversation on
+ * screen at once — the very confusion this consolidation exists to remove. When the
+ * surface is small it is now simply the Object, where Brain's connections already are.
+ *
+ * The prompt is NOT in here — it stays in the centre of the page where every chat
+ * product people already use puts it.
  */
 
 /** How far one arrow-key press resizes the surface. */
 const RESIZE_STEP = 24;
 
-export interface BrainDockProps {
+/** The live conversation, identical wherever the surface is placed. */
+export interface BrainSurfaceBodyProps {
+  /** When false the transcript narrates progress only and hides the step list. */
+  showExecutionDetail: boolean;
+  messages: BrainMessage[];
+  trace: BrainTraceEvent[];
+  running: boolean;
+  /** Epoch ms the in-flight turn began, so every surface narrates the same phase. */
+  runStartedAt?: number | null;
+  /** The Brain Object this surface is bound to, when the canvas has one yet. */
+  node: CreationFlowNode | null;
+  nodes: CreationFlowNode[];
+  edges: Edge[];
+  collaborators?: BrainSurfaceCollaborator[];
+  joinedCollaborator?: BrainSurfaceCollaborator | null;
+}
+
+export interface BrainDockProps extends BrainSurfaceBodyProps {
   mode: BrainDockMode;
   side: BrainDockSide;
   size: BrainDockSize;
   /** Current rendered width in px, preset or dragged. */
   width: number;
-  /** When false the transcript narrates progress only and hides the step list. */
-  showExecutionDetail: boolean;
   onModeChange: (mode: BrainDockMode) => void;
   onSideChange: (side: BrainDockSide) => void;
   onSizeChange: (size: BrainDockSize) => void;
@@ -59,28 +75,147 @@ export interface BrainDockProps {
   onWidthChange: (width: number, commit: boolean) => void;
   onExecutionDetailChange: (show: boolean) => void;
   onClose: () => void;
-  messages: BrainMessage[];
-  trace: BrainTraceEvent[];
-  running: boolean;
-  /** The Brain Object this dock is bound to, when the canvas has one yet. */
-  node: CreationFlowNode | null;
-  nodes: CreationFlowNode[];
-  edges: Edge[];
-  collaborators?: Array<{ userId: string; displayName: string | null; typing?: boolean }>;
-  joinedCollaborator?: { userId: string; displayName: string | null } | null;
 }
 
+/**
+ * Tabs, presence, transcript, and the activity bar — everything below the title.
+ * Shared verbatim by the edge dock and the Brain Object so the two placements can
+ * never drift into two subtly different chats.
+ */
+export function BrainSurfaceBody({
+  showExecutionDetail, messages, trace, running, runStartedAt = null,
+  node, nodes, edges, collaborators = [], joinedCollaborator = null,
+}: BrainSurfaceBodyProps) {
+  const t = useTranslations('creationCanvas');
+  const [tab, setTab] = useState<'chat' | 'context'>('chat');
+  // Derived ONCE and shared: the transcript's live node and the footer strip are two
+  // views of the same moment, so they must never narrate it in different words.
+  const activity = useBrainActivity(running, trace, runStartedAt);
+  const liveLine = brainActivityLine(activity.live);
+  const timelineLabels = useMemo(() => ({
+    you: t('you'),
+    assistant: t('brain'),
+    empty: t('brainEmpty'),
+    thinking: liveLine ?? t('brainPhase.thinking'),
+    thoughtFor: t('thoughtFor', { duration: '{duration}' }),
+  }), [liveLine, t]);
+  const typingCollaborators = collaborators.filter((member) => member.typing);
+  const showPresence = joinedCollaborator != null || typingCollaborators.length > 0;
+
+  return <>
+    <div className={styles.brainDockTabs} role="tablist" aria-label={t('brainDock')}>
+      <button type="button" role="tab" aria-selected={tab === 'chat'} className={tab === 'chat' ? styles.activeTab : ''} onClick={() => setTab('chat')}>{t('chat')}</button>
+      <button type="button" role="tab" aria-selected={tab === 'context'} className={tab === 'context' ? styles.activeTab : ''} onClick={() => setTab('context')}>{t('context')}</button>
+    </div>
+    {showPresence && <div className={styles.humanChatActivity} aria-live="polite">
+      {joinedCollaborator && <span data-state="joined">
+        <Avatar name={joinedCollaborator.displayName || t('collaborator')} kind="human" size={22} />
+        <b>{t('collaboratorJoined', { name: joinedCollaborator.displayName || t('collaborator') })}</b>
+      </span>}
+      {typingCollaborators.map((member) => <span key={member.userId} data-state="typing">
+        <Avatar name={member.displayName || t('collaborator')} kind="human" size={22} />
+        <b>{t('collaboratorWriting', { name: member.displayName || t('collaborator') })}</b>
+        <i aria-hidden>•••</i>
+      </span>)}
+    </div>}
+    {tab === 'chat'
+      ? <div className={styles.brainDockTimeline} role="log" aria-label={t('brainChatHistory')} tabIndex={0}>
+        <BrainTimeline
+          messages={messages}
+          trace={showExecutionDetail ? trace : []}
+          streamingText=""
+          isRunning={running}
+          assistantName={t('brain')}
+          labels={timelineLabels}
+        />
+      </div>
+      : <div className={styles.brainDockContext}>
+        <BrainContextPanel node={node} nodes={nodes} edges={edges} />
+      </div>}
+    <BrainActivityBar state={activity} />
+  </>;
+}
+
+export interface BrainSurfaceActionsProps {
+  mode: BrainDockMode;
+  showExecutionDetail: boolean;
+  onModeChange: (mode: BrainDockMode) => void;
+  onExecutionDetailChange: (show: boolean) => void;
+  onClose: () => void;
+  /** Edge-only placement controls; an inline surface is sized by its Object. */
+  side?: BrainDockSide;
+  size?: BrainDockSize;
+  onSideChange?: (side: BrainDockSide) => void;
+  onSizeChange?: (size: BrainDockSize) => void;
+}
+
+/**
+ * The surface's controls. It decides for itself which of them apply: which edge and
+ * how wide are meaningless for a surface that lives in an Object on the graph, where
+ * the Object's own resize handles already do that job.
+ */
+export function BrainSurfaceActions({
+  mode, showExecutionDetail, onModeChange, onExecutionDetailChange, onClose,
+  side, size, onSideChange, onSizeChange,
+}: BrainSurfaceActionsProps) {
+  const t = useTranslations('creationCanvas');
+  const inline = mode === 'inline';
+  const expanded = size === 'expanded';
+  const docked = !inline && !!side && !!onSideChange && !!onSizeChange;
+
+  return (
+    <div className={styles.brainDockActions}>
+      <button
+        type="button"
+        aria-pressed={showExecutionDetail}
+        aria-label={showExecutionDetail ? t('hideExecutionSteps') : t('showExecutionSteps')}
+        title={showExecutionDetail ? t('hideExecutionSteps') : t('showExecutionSteps')}
+        onClick={() => onExecutionDetailChange(!showExecutionDetail)}
+      >⋮⋮</button>
+      <button
+        type="button"
+        aria-pressed={inline}
+        aria-label={inline ? t('dockBrainToEdge') : t('showBrainInObject')}
+        title={inline ? t('dockBrainToEdge') : t('showBrainInObject')}
+        onClick={() => onModeChange(inline ? 'docked' : 'inline')}
+      >{inline ? '▤' : '▣'}</button>
+      {/* data-dock-side, not the label, is what the stylesheet hides on a phone:
+          a selector keyed on English copy would stop matching in every other locale. */}
+      {docked && <button
+        type="button"
+        data-dock-side="left"
+        aria-pressed={side === 'left'}
+        aria-label={t('dockBrainLeft')}
+        title={t('dockBrainLeft')}
+        onClick={() => onSideChange!('left')}
+      >⇤</button>}
+      {docked && <button
+        type="button"
+        data-dock-side="right"
+        aria-pressed={side === 'right'}
+        aria-label={t('dockBrainRight')}
+        title={t('dockBrainRight')}
+        onClick={() => onSideChange!('right')}
+      >⇥</button>}
+      {docked && <button
+        type="button"
+        aria-pressed={expanded}
+        aria-label={expanded ? t('slimBrain') : t('expandBrain')}
+        title={expanded ? t('slimBrain') : t('expandBrain')}
+        onClick={() => onSizeChange!(expanded ? 'slim' : 'expanded')}
+      >{expanded ? '⤡' : '⤢'}</button>}
+      <button type="button" aria-label={t('closeBrain')} title={t('closeBrain')} onClick={onClose}>×</button>
+    </div>
+  );
+}
+
+/** The edge placement: a full-height panel the board reserves width for. */
 export function BrainDock({
   mode, side, size, width, showExecutionDetail,
   onModeChange, onSideChange, onSizeChange, onWidthChange, onExecutionDetailChange, onClose,
-  messages, trace, running, node, nodes, edges, collaborators = [], joinedCollaborator = null,
+  messages, trace, running, runStartedAt = null, node, nodes, edges, collaborators = [], joinedCollaborator = null,
 }: BrainDockProps) {
   const t = useTranslations('creationCanvas');
-  const [tab, setTab] = useState<'chat' | 'context'>('chat');
-  const expanded = size === 'expanded';
-  const floating = mode === 'floating';
-  const typingCollaborators = collaborators.filter((member) => member.typing);
-  const showPresence = joinedCollaborator != null || typingCollaborators.length > 0;
 
   // Dragging the inner edge. The delta is inverted for a right-hand surface, where
   // pulling left makes it wider. Only the settled width is persisted, so a drag
@@ -123,48 +258,17 @@ export function BrainDock({
       <header className={styles.brainDockHeader}>
         <span className={styles.brainDockMark} aria-hidden>✦</span>
         <strong>{t('brain')}</strong>
-        <div className={styles.brainDockActions}>
-          <button
-            type="button"
-            aria-pressed={showExecutionDetail}
-            aria-label={showExecutionDetail ? t('hideExecutionSteps') : t('showExecutionSteps')}
-            title={showExecutionDetail ? t('hideExecutionSteps') : t('showExecutionSteps')}
-            onClick={() => onExecutionDetailChange(!showExecutionDetail)}
-          >⋮⋮</button>
-          <button
-            type="button"
-            aria-pressed={floating}
-            aria-label={floating ? t('dockBrainToEdge') : t('floatBrainOnCanvas')}
-            title={floating ? t('dockBrainToEdge') : t('floatBrainOnCanvas')}
-            onClick={() => onModeChange(floating ? 'docked' : 'floating')}
-          >{floating ? '▤' : '▣'}</button>
-          {/* data-dock-side, not the label, is what the stylesheet hides on a phone:
-              a selector keyed on English copy would stop matching in every other locale. */}
-          <button
-            type="button"
-            data-dock-side="left"
-            aria-pressed={side === 'left'}
-            aria-label={t('dockBrainLeft')}
-            title={t('dockBrainLeft')}
-            onClick={() => onSideChange('left')}
-          >⇤</button>
-          <button
-            type="button"
-            data-dock-side="right"
-            aria-pressed={side === 'right'}
-            aria-label={t('dockBrainRight')}
-            title={t('dockBrainRight')}
-            onClick={() => onSideChange('right')}
-          >⇥</button>
-          <button
-            type="button"
-            aria-pressed={expanded}
-            aria-label={expanded ? t('slimBrain') : t('expandBrain')}
-            title={expanded ? t('slimBrain') : t('expandBrain')}
-            onClick={() => onSizeChange(expanded ? 'slim' : 'expanded')}
-          >{expanded ? '⤡' : '⤢'}</button>
-          <button type="button" aria-label={t('closeBrain')} title={t('closeBrain')} onClick={onClose}>×</button>
-        </div>
+        <BrainSurfaceActions
+          mode={mode}
+          side={side}
+          size={size}
+          showExecutionDetail={showExecutionDetail}
+          onModeChange={onModeChange}
+          onSideChange={onSideChange}
+          onSizeChange={onSizeChange}
+          onExecutionDetailChange={onExecutionDetailChange}
+          onClose={onClose}
+        />
       </header>
       <div
         className={styles.brainDockResizer}
@@ -182,96 +286,19 @@ export function BrainDock({
         onPointerCancel={endResize}
         onKeyDown={keyResize}
       />
-      <div className={styles.brainDockTabs} role="tablist" aria-label={t('brainDock')}>
-        <button type="button" role="tab" aria-selected={tab === 'chat'} className={tab === 'chat' ? styles.activeTab : ''} onClick={() => setTab('chat')}>{t('chat')}</button>
-        <button type="button" role="tab" aria-selected={tab === 'context'} className={tab === 'context' ? styles.activeTab : ''} onClick={() => setTab('context')}>{t('context')}</button>
-      </div>
-      {showPresence && <div className={styles.humanChatActivity} aria-live="polite">
-        {joinedCollaborator && <span data-state="joined">
-          <Avatar name={joinedCollaborator.displayName || t('collaborator')} kind="human" size={22} />
-          <b>{t('collaboratorJoined', { name: joinedCollaborator.displayName || t('collaborator') })}</b>
-        </span>}
-        {typingCollaborators.map((member) => <span key={member.userId} data-state="typing">
-          <Avatar name={member.displayName || t('collaborator')} kind="human" size={22} />
-          <b>{t('collaboratorWriting', { name: member.displayName || t('collaborator') })}</b>
-          <i aria-hidden>•••</i>
-        </span>)}
-      </div>}
-      {tab === 'chat'
-        ? <div className={styles.brainDockTimeline} role="log" aria-label={t('brainChatHistory')} tabIndex={0}>
-          <BrainTimeline
-            messages={messages}
-            trace={showExecutionDetail ? trace : []}
-            streamingText=""
-            isRunning={running}
-            assistantName={t('brain')}
-            labels={{ you: t('you'), assistant: t('brain'), empty: t('brainEmpty') }}
-          />
-        </div>
-        : <div className={styles.brainDockContext}>
-          <BrainContextPanel node={node} nodes={nodes} edges={edges} />
-        </div>}
-      <BrainActivityStrip running={running} trace={trace} />
+      <BrainSurfaceBody
+        showExecutionDetail={showExecutionDetail}
+        messages={messages}
+        trace={trace}
+        running={running}
+        runStartedAt={runStartedAt}
+        node={node}
+        nodes={nodes}
+        edges={edges}
+        collaborators={collaborators}
+        joinedCollaborator={joinedCollaborator}
+      />
     </aside>
-  );
-}
-
-/**
- * The live "what is it doing" strip: an animated mark, the current phase word, the
- * tool it is running, and the tokens spent so far — then, once the turn settles, a
- * receipt of how long it took and what it cost. This is the feedback people asked
- * for INSTEAD of a wall of steps; the step list stays behind the toggle above.
- */
-export function BrainActivityStrip({ running, trace }: { running: boolean; trace: BrainTraceEvent[] }) {
-  const t = useTranslations('creationCanvas');
-  const [elapsedMs, setElapsedMs] = useState(0);
-  const [summary, setSummary] = useState<BrainRunSummary | null>(null);
-  const startedAt = useRef(0);
-  const elapsedRef = useRef(0);
-  const traceRef = useRef<BrainTraceEvent[]>(trace);
-  traceRef.current = trace;
-
-  useEffect(() => {
-    if (!running) {
-      // Settle the receipt from the run that just ended rather than clearing it:
-      // "Thought for 52s" is the answer to "did that actually do anything?".
-      if (elapsedRef.current > 0) setSummary(brainRunSummary(traceRef.current, elapsedRef.current));
-      elapsedRef.current = 0;
-      setElapsedMs(0);
-      return;
-    }
-    setSummary(null);
-    startedAt.current = Date.now();
-    elapsedRef.current = 0;
-    setElapsedMs(0);
-    const timer = window.setInterval(() => {
-      elapsedRef.current = Date.now() - startedAt.current;
-      setElapsedMs(elapsedRef.current);
-    }, 400);
-    return () => window.clearInterval(timer);
-  }, [running]);
-
-  if (running) {
-    const phase = brainActivityPhase(trace, elapsedMs);
-    const tokens = brainActivityTokens(trace);
-    return (
-      <div className={styles.brainActivity} role="status" aria-live="polite" data-state="running">
-        <span className={styles.brainActivitySpark} aria-hidden>✳</span>
-        <b>{t(`brainPhase.${phase.id}`)}</b>
-        {phase.detail && <small>{phase.detail}</small>}
-        <em>{tokens > 0 ? t('tokensSpent', { count: formatTokenCount(tokens) }) : formatElapsed(elapsedMs)}</em>
-      </div>
-    );
-  }
-
-  if (!summary) return null;
-  return (
-    <div className={styles.brainActivity} role="status" data-state="settled">
-      <span className={styles.brainActivitySpark} aria-hidden>✓</span>
-      <b>{t('thoughtFor', { duration: formatElapsed(summary.durationMs) })}</b>
-      {summary.toolCount > 0 && <small>{t('ranActions', { count: summary.toolCount })}</small>}
-      {summary.tokens > 0 && <em>{t('tokensSpent', { count: formatTokenCount(summary.tokens) })}</em>}
-    </div>
   );
 }
 

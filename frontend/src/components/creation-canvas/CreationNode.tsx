@@ -1,13 +1,18 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { Handle, NodeResizer, Position, type Node, type NodeProps } from '@xyflow/react';
 import { useTranslations } from 'next-intl';
+import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Avatar, evermindLearnedStatus, evermindNextAction } from '@seanhogg/builderforce-brain-ui';
 import type { CreationNodeData } from './types';
 import styles from './CreationCanvas.module.css';
 import { creationObjectDefinition } from './creationObjectRegistry';
+import { BrainActivityBar, useBrainActivity } from './BrainActivityView';
+import { BrainSurfaceActions, BrainSurfaceBody } from './BrainDock';
+import { useBrainSurface } from './brainSurfaceContext';
 import { highlightToneFor, tabularFromObject, type TabularHighlightRule } from '@/lib/canvasTabularData';
 
 export type CreationFlowNode = Node<CreationNodeData, 'creation'>;
@@ -647,12 +652,63 @@ function DrawingBody({ data }: { data: CreationNodeData }) {
 }
 
 /**
- * The Brain Object is now an ANCHOR, not a second transcript.
+ * The Brain Object — either the conversation itself, or an anchor pointing at it.
  *
- * It keeps Brain's place in the graph (its connections are what scope a prompt) and
- * shows the latest exchange, but the conversation itself lives in exactly one place:
- * the Brain dock. Three competing chat surfaces were the single biggest source of
- * "which one am I actually talking to?" confusion on this canvas.
+ * There is exactly ONE Brain transcript on the canvas at a time. Where it renders is
+ * the user's placement choice: docked to an edge, or right here in the graph. When it
+ * is docked this Object is an anchor (latest exchange + a way back to the dock); when
+ * it is inline the Object IS the chat, because a small chat card hovering over a board
+ * that already carries a Brain Object was two live views of one conversation — the
+ * "which one am I actually talking to?" confusion this canvas exists to avoid.
+ *
+ * Reading the placement from context rather than a prop is deliberate: `nodeTypes` has
+ * to keep a stable identity or React Flow remounts the whole board, and consuming the
+ * context HERE (not in CreationNode) means a streaming reply re-renders this node
+ * alone rather than every Object on the canvas.
+ */
+function BrainObjectBody({ nodeId, data }: { nodeId: string; data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas');
+  const surface = useBrainSurface();
+
+  if (!surface || !surface.open || surface.mode !== 'inline') {
+    return <BrainAnchorBody data={data} onOpen={() => surface?.onOpen(nodeId)} />;
+  }
+
+  return (
+    <section className={`${styles.brainObjectChat} nodrag nowheel`} aria-label={t('brainDock')}>
+      <div className={styles.brainObjectChatBar}>
+        <BrainSurfaceActions
+          mode={surface.mode}
+          showExecutionDetail={surface.showExecutionDetail}
+          onModeChange={surface.onModeChange}
+          onExecutionDetailChange={surface.onExecutionDetailChange}
+          onClose={surface.onClose}
+        />
+      </div>
+      <BrainSurfaceBody
+        showExecutionDetail={surface.showExecutionDetail}
+        messages={surface.messages}
+        trace={surface.trace}
+        running={surface.running}
+        runStartedAt={surface.runStartedAt}
+        node={surface.nodes.find((candidate) => candidate.id === nodeId) ?? null}
+        nodes={surface.nodes}
+        edges={surface.edges}
+        collaborators={surface.collaborators}
+        joinedCollaborator={surface.joinedCollaborator}
+      />
+    </section>
+  );
+}
+
+/**
+ * The anchor: Brain's place in the graph (its connections are what scope a prompt)
+ * plus the latest exchange, shown while the conversation itself lives in the dock.
+ *
+ * It narrates a running turn with the SAME signal as the dock — a Brain that is
+ * clearly working on the board, not a card frozen on a stale reply — and keeps the
+ * newest exchange scrolled into view, since the anchor is short and the reply that
+ * just landed is the only one worth reading.
  */
 function BrainAnchorBody({ data, onOpen }: { data: CreationNodeData; onOpen?: () => void }) {
   const t = useTranslations('creationCanvas.node');
@@ -660,11 +716,30 @@ function BrainAnchorBody({ data, onOpen }: { data: CreationNodeData; onOpen?: ()
   const lastUser = [...messages].reverse().find((message) => message.role === 'user');
   const lastAssistant = [...messages].reverse().find((message) => message.role !== 'user');
   const reply = lastAssistant?.content || (typeof data.aiResponse === 'string' ? data.aiResponse : '');
+  const running = data.brainRunning === true;
+  const trace = Array.isArray(data.trace) ? data.trace as BrainTraceEvent[] : [];
+  const activity = useBrainActivity(running, trace, typeof data.brainRunStartedAt === 'number' ? data.brainRunStartedAt : null);
+  // The live phase is narrated ONCE, by the bar below — a turn with no reply yet
+  // shows the invitation rather than repeating "Churning…" twice in one card.
+  const brainText = reply || t('brainAnchorReplyFallback');
+
+  const exchangeRef = useRef<HTMLDivElement>(null);
+  const latestRef = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const scroller = exchangeRef.current;
+    const latest = latestRef.current;
+    if (!scroller || !latest) return;
+    const top = latest.offsetTop - scroller.offsetTop;
+    // Scroll WITHIN the anchor only — scrollIntoView would drag the board viewport.
+    scroller.scrollTop = Math.max(0, Math.min(top, scroller.scrollHeight - scroller.clientHeight));
+  }, [brainText, lastUser?.content]);
+
   return <div className={styles.brainAnchorBody}>
-    <div className={styles.brainAnchorExchange}>
+    <div className={`${styles.brainAnchorExchange} nowheel`} ref={exchangeRef}>
       <span><small>{t('brainAnchorYou')}</small><p>{lastUser?.content || data.subtitle || t('brainAnchorPromptFallback')}</p></span>
-      <span><small>{t('brainAnchorBrain')}</small><p>{reply || t('brainAnchorReplyFallback')}</p></span>
+      <span ref={latestRef}><small>{t('brainAnchorBrain')}</small><p>{brainText}</p></span>
     </div>
+    <BrainActivityBar state={activity} variant="inline" />
     <div className={`${styles.nodeActionBar} nodrag nowheel`}><button type="button" onClick={(event) => { event.stopPropagation(); onOpen?.(); }}>{t('openBrainChat')}</button></div>
   </div>;
 }
@@ -673,11 +748,9 @@ type CreationNodeProps = NodeProps<CreationFlowNode> & {
   canRun?: boolean;
   onRun?: (nodeId: string) => void;
   onOpenDetails?: (nodeId: string, focus?: 'knowledge' | 'test' | 'evaluation' | 'delivery') => void;
-  /** Reveal the single Brain dock — the Brain Object's only conversation surface. */
-  onOpenBrain?: (nodeId: string) => void;
 };
 
-export function CreationNode({ id, data, selected, width, height, canRun = true, onRun, onOpenDetails, onOpenBrain }: CreationNodeProps) {
+export function CreationNode({ id, data, selected, width, height, canRun = true, onRun, onOpenDetails }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
   const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'prd', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame'].includes(data.kind);
   const specialized = new Set(['workflow','website','prototype','dashboard','chart','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file']);
@@ -710,7 +783,7 @@ export function CreationNode({ id, data, selected, width, height, canRun = true,
         {data.kind === 'diagnostics' && <DiagnosticsBody data={data} />}
         {data.kind === 'agent' && <AgentBody data={data} onOpen={(focus) => onOpenDetails?.(id, focus)} />}
         {data.kind === 'staff' && <><div className={styles.personRow}><span className={styles.avatar} style={{ background: data.accent }}>{data.title.slice(0, 1)}</span><b>{data.role}</b><span className={styles.presence} /></div><small>{t('currentFocus')}</small><p>{data.focus}</p></>}
-        {data.kind === 'chat' && <BrainAnchorBody data={data} onOpen={() => onOpenBrain?.(id)} />}
+        {data.kind === 'chat' && <BrainObjectBody nodeId={id} data={data} />}
         {(data.kind === 'dataset' || data.kind === 'table' || data.kind === 'spreadsheet') && <DataGridBody data={data} />}
         {data.kind === 'file' && <FileBody data={data} />}
         {data.kind === 'kpi' && <KpiBody data={data} />}

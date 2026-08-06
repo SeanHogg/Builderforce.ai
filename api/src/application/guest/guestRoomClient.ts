@@ -20,10 +20,14 @@ export interface GuestRoomParticipant {
   joinedAt: string;
 }
 
+/** Which surface a room was opened from — decides where its invite link points. */
+export type GuestRoomSurface = 'chat' | 'canvas';
+
 /** Public room state — what a participant's UI renders. */
 export interface GuestRoomState {
   code: string;
   title: string;
+  surface: GuestRoomSurface;
   createdAt: string;
   expiresAt: string;
   isHost: boolean;
@@ -84,10 +88,10 @@ async function call<T>(env: Env, code: string, path: string, init?: RequestInit)
  * admit them when it already exists. Null when the room is full or unavailable.
  */
 export async function openGuestRoom(
-  env: Env, code: string, visitorId: string, name: string, title: string,
+  env: Env, code: string, visitorId: string, name: string, title: string, surface: GuestRoomSurface,
 ): Promise<GuestRoomState | null> {
   const out = await call<{ state: GuestRoomState }>(env, code, '/open', {
-    body: JSON.stringify({ code, visitorId, name, title }),
+    body: JSON.stringify({ code, visitorId, name, title, surface }),
   });
   return out?.state ?? null;
 }
@@ -166,6 +170,4 @@ export async function claimGuestRoom(env: Env, code: string, visitorId: string):
  */
 export async function relayToGuestRoom(env: Env, code: string, request: Request): Promise<Response> {
   const room = stub(env, code);
-  if (!room) return new Response('Realtime unavailable', { status: 503 });
-  return room.fetch(request);
-}
+  if (!room) return new Response('Realtime unavailable', { status: 503 

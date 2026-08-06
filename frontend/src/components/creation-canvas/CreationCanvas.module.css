@@ -311,11 +311,24 @@
 .node_evaluation { width:650px; }.node_agent { width:285px; }.node_staff { width:245px; }.node_chat { width:290px; height:auto; min-height:180px; border-color:var(--canvas-brain-border); background:var(--canvas-brain-surface); }
 .node_chat .nodeHeader { border-color:var(--canvas-brain-border); background:var(--canvas-brain-header); }
 .node_chat .nodeIcon { color:var(--canvas-brain-accent); background:var(--canvas-brain-icon-bg); }
-.brainAnchorBody { display:grid; gap:8px; }
-.brainAnchorExchange { display:grid; gap:6px; }
+/* The anchor owns its own scrolling: the exchange scrolls to the newest turn while
+   the activity bar and the "Open Brain chat" button stay pinned in view. Letting the
+   node body scroll instead pushed the button off the card the moment a reply landed. */
+.node_chat .nodeBody { display:flex; flex-direction:column; overflow:hidden; }
+.brainAnchorBody { display:grid; grid-template-rows:minmax(0,1fr) auto auto; gap:8px; flex:1; min-height:0; }
+.brainAnchorExchange { display:grid; align-content:start; gap:6px; min-height:0; overflow:auto; overscroll-behavior:contain; }
 .brainAnchorExchange > span { display:grid; gap:2px; padding:7px 8px; border:1px solid var(--canvas-brain-border); border-radius:8px; background:color-mix(in srgb,var(--canvas-brain-header) 55%,var(--canvas-panel)); }
 .brainAnchorExchange small { color:var(--canvas-brain-accent); font-size:8px; font-weight:750; letter-spacing:.07em; text-transform:uppercase; }
-.brainAnchorExchange p { display:-webkit-box; overflow:hidden; margin:0; color:var(--canvas-ink); font-size:10px; line-height:1.45; -webkit-line-clamp:3; -webkit-box-orient:vertical; }
+.brainAnchorExchange p { margin:0; color:var(--canvas-ink); font-size:10px; line-height:1.45; overflow-wrap:anywhere; }
+/* Inline placement: the Object IS the Brain surface. It needs the room a conversation
+   actually takes, so the Object grows past its anchor size — unless the user has
+   dragged it, in which case their inline width/height wins (React Flow writes those
+   as element styles, which beat these rules). :has keeps the decision in CSS so
+   CreationNode never has to read the placement and re-render every Object with it. */
+.node_chat:has(.brainObjectChat) { width:390px; min-height:420px; }
+.brainObjectChat { display:flex; flex-direction:column; flex:1; min-height:0; margin:-11px; }
+/* The surface's own controls sit on the Object's header line, not in a second bar. */
+.brainObjectChatBar { display:flex; flex:none; justify-content:flex-end; padding:5px 7px; border-bottom:1px solid var(--canvas-brain-border); background:var(--canvas-brain-header); }
 .node_diagnostics { width:720px; min-height:260px; }
 .canvasDiagnosticsBody { display:grid; min-height:0; gap:9px; }
 .diagnosticOverview { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
@@ -557,11 +570,9 @@
 .brainDock { position:absolute; z-index:17; top:0; bottom:0; box-sizing:border-box; display:flex; flex-direction:column; width:var(--brain-dock-size,330px); border:1px solid var(--canvas-brain-border); background:var(--canvas-brain-surface); color:var(--canvas-ink); box-shadow:0 0 44px var(--canvas-shadow); }
 .brainDock[data-side='left'] { left:0; border-left:0; border-radius:0 14px 14px 0; }
 .brainDock[data-side='right'] { right:0; border-right:0; border-radius:14px 0 0 14px; }
-/* Floating: inset from the edge and stopped above the prompt, so the card sits IN
-   the canvas rather than walling it off. */
-.brainDock[data-mode='floating'] { top:auto; bottom:calc(var(--composer-space) + 12px); height:min(58%, 460px); border-width:1px; border-radius:14px; box-shadow:0 18px 48px var(--canvas-shadow); }
-.brainDock[data-mode='floating'][data-side='left'] { left:16px; border-left-width:1px; }
-.brainDock[data-mode='floating'][data-side='right'] { right:16px; border-right-width:1px; }
+/* There is no small floating placement: a card hovering over a board that already
+   carries a Brain Object showed the same conversation twice. Small is now inline —
+   see .brainObjectChat, which renders this surface inside the Object itself. */
 /* The drag edge always faces the board, so pulling inward always narrows Brain. */
 .brainDockResizer { position:absolute; top:0; bottom:0; z-index:2; width:9px; padding:0; border:0; background:transparent; cursor:ew-resize; touch-action:none; }
 .brainDockResizer[data-side='left'] { right:-4px; }
@@ -595,6 +606,10 @@
 .brainActivity small { min-width:0; overflow:hidden; color:var(--canvas-muted); font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
 .brainActivity em { margin-left:auto; flex:none; color:var(--canvas-muted); font-size:9px; font-style:normal; }
 .brainActivitySpark { flex:none; color:var(--canvas-brain-accent); font-size:12px; line-height:1; }
+/* Same signal, board-sized: inside the Brain Object it is a card, not a footer. */
+.brainActivity[data-variant='inline'] { gap:6px; padding:6px 8px; border:1px solid var(--canvas-brain-border); border-radius:8px; font-size:9px; }
+.brainActivity[data-variant='inline'] small,.brainActivity[data-variant='inline'] em { font-size:8px; }
+.brainActivity[data-variant='inline'] .brainActivitySpark { font-size:10px; }
 .brainActivity[data-state='running'] .brainActivitySpark { animation:brainSpark 1.1s ease-in-out infinite; }
 .brainActivity[data-state='running'] b { background:linear-gradient(90deg,var(--canvas-muted) 0%,var(--canvas-ink) 45%,var(--canvas-muted) 90%); background-size:220% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; animation:brainShimmer 1.9s linear infinite; }
 .brainActivity[data-state='settled'] .brainActivitySpark { color:#2bb879; }
@@ -653,11 +668,11 @@
   .iconButton { width:32px; height:32px; }
   .flowWrap :global(.react-flow__minimap) { display:none; }
   .flowWrap :global(.react-flow__controls) { display:none; }
-  /* A phone has no side to choose and no room to drag, so every placement collapses
-     to one sheet that sits ABOVE the prompt — the prompt keeps the bottom edge. */
-  .brainDock,
-  .brainDock[data-mode='floating'][data-side='left'],
-  .brainDock[data-mode='floating'][data-side='right'] { top:auto; left:0; right:0; bottom:var(--mobile-composer-space); width:auto; height:min(58%, 420px); max-height:none; border-radius:14px 14px 0 0; border-left:0; border-right:0; border-bottom:0; box-shadow:0 -10px 34px var(--canvas-shadow); }
+  /* A phone has no side to choose and no room to drag, so the docked placement
+     collapses to one sheet that sits ABOVE the prompt — the prompt keeps the bottom
+     edge. An inline Brain needs nothing here: it is an Object, and Objects already
+     size themselves to the board. */
+  .brainDock { top:auto; left:0; right:0; bottom:var(--mobile-composer-space); width:auto; height:min(58%, 420px); max-height:none; border-radius:14px 14px 0 0; border-left:0; border-right:0; border-bottom:0; box-shadow:0 -10px 34px var(--canvas-shadow); }
   .brainDock[data-size='expanded'] { height:72%; }
   .brainDockActions button[data-dock-side] { display:none; }
   .brainDockResizer { display:none; }

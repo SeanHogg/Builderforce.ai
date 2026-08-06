@@ -25,6 +25,7 @@ import type { Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { CanvasOutlinePanel } from './CanvasOutlinePanel';
 import { BrainDock } from './BrainDock';
 import { brainDockReservedWidth, brainDockWidth, DEFAULT_BRAIN_DOCK_PREFERENCES, readBrainDockPreferences, writeBrainDockPreferences, type BrainDockPreferences } from './brainDockPreferences';
+import { BrainSurfaceProvider, type BrainSurfaceContextValue } from './brainSurfaceContext';
 import { useToast } from '@/components/ToastProvider';
 import { CreationNode, type CreationFlowNode } from './CreationNode';
 import type { CreationNodeData, CreationObjectKind } from './types';
@@ -402,6 +403,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [inviteRole, setInviteRole] = useState<CreationSessionSummary['role']>('editor');
   const [prompt, setPrompt] = useState('');
   const [thinking, setThinking] = useState(false);
+  // When the in-flight turn began. Shared with every Brain surface (dock strip,
+  // transcript, board anchor) so they narrate the same phase at the same instant.
+  const [brainRunStartedAt, setBrainRunStartedAt] = useState<number | null>(null);
   const [activeAgentIds, setActiveAgentIds] = useState<Set<string>>(() => new Set());
   const [modelSelection, setModelSelection] = useState<ChatModelSelection>({ mode: 'auto' });
   const llmModels = useLlmModels();
@@ -944,10 +948,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     return clientMessageId;
   }, [persistence, sessionId]);
 
+  // The Brain Object mirrors the live turn — messages, trace, and the run state that
+  // drives its activity bar — so a working Brain reads as working on the board too,
+  // not only inside the dock (which the user may have closed).
   useEffect(() => {
     const messages = timeline.map((message) => ({ role: message.messageRole, content: message.body, createdAt: message.createdAt }));
-    setNodes((current) => current.map((node) => node.data.kind === 'chat' ? { ...node, data: { ...node.data, messages, ...(brainTrace.length ? { trace: brainTrace } : {}), aiResponse: [...timeline].reverse().find((message) => message.messageRole === 'assistant')?.body || node.data.aiResponse } } : node));
-  }, [brainTrace, setNodes, timeline]);
+    setNodes((current) => current.map((node) => node.data.kind === 'chat' ? { ...node, data: { ...node.data, messages, ...(brainTrace.length ? { trace: brainTrace } : {}), brainRunning: thinking, brainRunStartedAt, aiResponse: [...timeline].reverse().find((message) => message.messageRole === 'assistant')?.body || node.data.aiResponse } } : node));
+  }, [brainRunStartedAt, brainTrace, setNodes, thinking, timeline]);
 
   useEffect(() => {
     if (!shouldAcquireCanvasObjectLock(persistence, selectedId, canEdit, persistedObjectIds)) { setLockBlocked(false); return; }
@@ -2190,6 +2197,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!requestText || thinking) return;
     trackActivity('creation_prompt_submitted', { sessionId, metadata: { clientSurface: 'web', scope: resolvedScopeMode, objectKinds: [...new Set(scopedNodes.map((node) => node.data.kind))] } });
     setThinking(true);
+    setBrainRunStartedAt(Date.now());
     setNotice('Brain is evaluating connected objects…');
     const initialMessage = initialPromptSubmitted.current ? timeline.find((message) => (message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:')) && message.body === requestText) : undefined;
     const promptAuthor = persistence === 'server' ? members.find((member) => member.userId === currentUserId) : null;
@@ -2793,14 +2801,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const fitViewAction = useCallback(() => {
     if (threeDControls) threeDControls.resetView(); else void flowRef.current?.fitView({ padding: .18, maxZoom: .9, duration: 260 });
   }, [threeDControls]);
+  // Brain reaches its Object through BrainSurfaceProvider, not through this memo:
+  // a per-token dependency here would hand React Flow a new nodeTypes object and
+  // remount every Object on the board on every streamed word.
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
-    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={(nodeId) => runWorkflow(nodeId)} onOpenBrain={(nodeId) => {
-      setSelectedId(nodeId); setSelectedIds([nodeId]); openBrainDock();
-    }} onOpenDetails={(nodeId, focus) => {
+    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={(nodeId) => runWorkflow(nodeId)} onOpenDetails={(nodeId, focus) => {
       setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
       setInspectorFocus(focus || null); setSelectedId(nodeId); setSelectedIds([nodeId]);
     }} />,
-  }), [canRun, openBrainDock, runWorkflow]);
+  }), [canRun, runWorkflow]);
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
     sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
     objectCount: nodes.length, connectionCount: edges.length,
@@ -2851,7 +2860,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, []);
 
   const brainNode = nodes.find((node) => node.data.kind === 'chat') ?? null;
-  // A floating Brain overlays the board, so only a docked one is reserved against it.
+  // An inline Brain IS an Object on the board, so only a docked one is reserved.
   const brainDockReserved = brainDockReservedWidth(brainDock);
   const brainMessages = useMemo<BrainMessage[]>(() => timeline.map((message, index) => ({
     id: index + 1,
@@ -2862,11 +2871,42 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     createdAt: message.createdAt,
   })), [timeline]);
 
+  const brainSurfaceOpen = !presentMode && brainDock.open;
+  const brainCollaborators = useMemo(
+    () => members.filter((member) => member.userId !== currentUserId),
+    [currentUserId, members],
+  );
+  /**
+   * Exactly one surface renders the conversation. When it is inline, the Brain Object
+   * reads this and becomes the chat; the edge dock is not rendered at all. Feeding both
+   * placements from ONE value is what guarantees the board can never show two.
+   */
+  const brainSurface = useMemo<BrainSurfaceContextValue>(() => ({
+    open: brainSurfaceOpen,
+    mode: brainDock.mode,
+    showExecutionDetail: brainDock.showExecutionDetail,
+    running: thinking,
+    runStartedAt: brainRunStartedAt,
+    messages: brainMessages,
+    trace: brainTrace,
+    nodes,
+    edges,
+    collaborators: brainCollaborators,
+    joinedCollaborator,
+    onOpen: (nodeId) => { setSelectedId(nodeId); setSelectedIds([nodeId]); openBrainDock(); },
+    onModeChange: (mode) => updateBrainDock({ mode }),
+    onExecutionDetailChange: (showExecutionDetail) => updateBrainDock({ showExecutionDetail }),
+    onClose: () => updateBrainDock({ open: false }),
+  }), [
+    brainCollaborators, brainDock.mode, brainDock.showExecutionDetail, brainMessages, brainRunStartedAt,
+    brainSurfaceOpen, brainTrace, edges, joinedCollaborator, nodes, openBrainDock, thinking, updateBrainDock,
+  ]);
+
   /**
    * The prompt lives in the centre of the board, bottom-aligned — where ChatGPT and
    * every other chat product people already use puts it. It is deliberately NOT part
-   * of the Brain surface: it stays put and stays reachable whether Brain is floating,
-   * docked to either edge, or closed entirely.
+   * of the Brain surface: it stays put and stays reachable whether Brain is inline in
+   * its Object, docked to either edge, or closed entirely.
    */
   const composer = !presentMode && <ChatInput
     className={styles.composer}
@@ -3008,6 +3048,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <p style={{ margin: '7px 0 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{t(`tourBody${tourStep}` as 'tourBody1')}</p>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><small>{t('tourStep', { step: tourStep })}</small><span style={{ display: 'flex', gap: 7 }}><button className={styles.secondaryButton} onClick={() => { localStorage.setItem(tourStorageKey, '1'); setTourStep(0); }}>{t('dismiss')}</button><button className={styles.primaryButton} onClick={() => { trackActivity('creation_tutorial_step_completed', { sessionId, metadata: { clientSurface: 'web', step: tourStep } }); if (tourStep < 6) setTourStep((step) => step + 1); else { localStorage.setItem(tourStorageKey, '1'); setTourStep(0); } }}>{tourStep < 6 ? t('next') : t('startCreating')}</button></span></div>
         </div>}
+        <BrainSurfaceProvider value={brainSurface}>
         <ReactFlow<CreationFlowNode, Edge>
           nodes={renderedNodes}
           edges={edges}
@@ -3051,6 +3092,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             ><AccessibleOutlineIcon /></CanvasRailToggle>}
           />
         </ReactFlow>
+        </BrainSurfaceProvider>
 
         <div className={styles.mobileCanvasActions} role="group" aria-label={t('canvasViewControls')}>
           <button type="button" onClick={zoomInAction} aria-label={t('zoomIn')}>＋</button>
@@ -3147,7 +3189,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         {!!proposedChanges.length && <aside className={styles.changeSetPanel}><header><div><strong>{t('reviewBrainChanges')}</strong><small>{t('reviewBrainChangesHint')}</small></div><button onClick={rejectProposedChanges} aria-label={t('closeChangeSet')}>×</button></header><div>{proposedChanges.map((change) => <label key={change.id}><input type="checkbox" checked={acceptedProposalIds.has(change.id)} onChange={() => setAcceptedProposalIds((current) => { const next = new Set(current); if (next.has(change.id)) next.delete(change.id); else next.add(change.id); return next; })} /><span><b>{change.label}</b><small>{change.type.replace('.', ' ')}</small></span></label>)}</div><footer><button className={styles.secondaryButton} onClick={rejectProposedChanges}>{t('rejectAll')}</button><button className={styles.secondaryButton} disabled={!acceptedProposalIds.size} onClick={applyAndEnableAutoApply} title={t('applyAutoApplyHint')}>{t('applyAutoApply')}</button><button className={styles.primaryButton} disabled={!acceptedProposalIds.size} onClick={applyProposedChanges}>{t('applySelected', { count: acceptedProposalIds.size })}</button></footer></aside>}
         {mergeReview && <aside className={styles.mergePanel}><header><div><strong>{t('mergeBranch')}</strong><p>{t('mergeBranchHint')}</p></div><button onClick={() => setMergeReview(null)} aria-label={t('closeMergeReview')}>×</button></header>{mergeReview.items.map((item) => <label key={item.key}><b>{item.source.data.title}</b><small>{item.target ? t('mergeBothContain', { kind: item.source.data.kind }) : t('mergeNewFromBranch', { kind: item.source.data.kind })}</small>{item.target && <span><select aria-label={t('mergeChoiceFor', { title: item.source.data.title })} value={item.choice} onChange={(event) => setMergeReview((current) => current ? { ...current, items: current.items.map((candidate) => candidate.key === item.key ? { ...candidate, choice: event.target.value as 'branch' | 'parent' } : candidate) } : current)}><option value="branch">{t('useBranchVersion')}</option><option value="parent">{t('keepParentVersion')}</option></select></span>}</label>)}<button className={styles.primaryButton} onClick={applyMerge}>{t('applyReviewedMerge')}</button></aside>}
 
-        {!presentMode && brainDock.open && <BrainDock
+        {/* Docked ONLY. An inline Brain renders inside its Object on the graph, so
+            rendering the edge panel here too would put the same live conversation on
+            screen twice — the duplicate this placement model exists to prevent. */}
+        {brainSurfaceOpen && brainDock.mode === 'docked' && <BrainDock
           mode={brainDock.mode}
           side={brainDock.side}
           size={brainDock.size}
@@ -3163,6 +3208,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           messages={brainMessages}
           trace={brainTrace}
           running={thinking}
+          runStartedAt={brainRunStartedAt}
           node={brainNode}
           nodes={nodes}
           edges={edges}
@@ -3170,7 +3216,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           joinedCollaborator={joinedCollaborator}
         />}
         {composer}
-        {!presentMode && !brainDock.open && <button
+        {/* The way back to a closed Brain. An inline Brain that still has its Object on
+            the board already offers one ("Open Brain chat"), so the pill would be a
+            second control for the same thing — it appears only when there is no Object
+            to click, which is exactly when the board has no other route back. */}
+        {!presentMode && !brainDock.open && (brainDock.mode === 'docked' || !brainNode) && <button
           type="button"
           className={styles.brainDockLauncher}
           data-side={brainDock.side}

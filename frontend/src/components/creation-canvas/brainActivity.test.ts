@@ -115,8 +115,15 @@ describe('sanitizeBrainDockPreferences', () => {
   });
 
   it('keeps a stored layout the user actually chose', () => {
-    expect(sanitizeBrainDockPreferences({ mode: 'floating', side: 'left', size: 'expanded', width: 480, showExecutionDetail: true, open: false }))
-      .toEqual({ mode: 'floating', side: 'left', size: 'expanded', width: 480, showExecutionDetail: true, open: false });
+    expect(sanitizeBrainDockPreferences({ mode: 'inline', side: 'left', size: 'expanded', width: 480, showExecutionDetail: true, open: false }))
+      .toEqual({ mode: 'inline', side: 'left', size: 'expanded', width: 480, showExecutionDetail: true, open: false });
+  });
+
+  it('migrates the retired floating placement to inline instead of dropping it', () => {
+    // Someone who chose "floating" wanted a small Brain ON the board. That is now the
+    // Brain Object itself — snapping them back to a full edge panel would silently
+    // undo a layout choice they made on purpose.
+    expect(sanitizeBrainDockPreferences({ mode: 'floating' }).mode).toBe('inline');
   });
 
   it('clamps a stored width so a bad value cannot swallow or hide the board', () => {
@@ -126,14 +133,14 @@ describe('sanitizeBrainDockPreferences', () => {
 });
 
 describe('brainDockReservedWidth', () => {
-  it('reserves board width for a docked Brain and none for a floating or closed one', () => {
+  it('reserves board width for a docked Brain and none for an inline or closed one', () => {
     const docked = { ...DEFAULT_BRAIN_DOCK_PREFERENCES };
     expect(brainDockReservedWidth(docked)).toBe(BRAIN_DOCK_WIDTH.slim);
     expect(brainDockReservedWidth({ ...docked, size: 'expanded' })).toBe(BRAIN_DOCK_WIDTH.expanded);
     // A dragged width wins over the preset it started from.
     expect(brainDockReservedWidth({ ...docked, width: 412 })).toBe(412);
-    // Floating sits ON the board and closed is not there at all.
-    expect(brainDockReservedWidth({ ...docked, mode: 'floating' })).toBe(0);
+    // Inline IS an Object on the board and closed is not there at all.
+    expect(brainDockReservedWidth({ ...docked, mode: 'inline' })).toBe(0);
     expect(brainDockReservedWidth({ ...docked, open: false })).toBe(0);
   });
 });

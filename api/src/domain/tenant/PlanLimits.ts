@@ -240,6 +240,13 @@ export const GUEST_ROOM_LIMITS = {
   maxMessages: 200,
   /** Characters retained per room message. */
   maxMessageChars: 8_000,
+  /**
+   * Serialized size of the shared Creation Canvas board. Comfortably above a
+   * real free-session board and comfortably below the Durable Object per-value
+   * storage ceiling; a board that exceeds it stops syncing LOUDLY (the writer is
+   * told), because a silently-stale board is worse than a refused save.
+   */
+  maxCanvasChars: 512_000,
   /** Sockets one room will hold open across all channels (chat + media). */
   maxSockets: 24,
 } as const;

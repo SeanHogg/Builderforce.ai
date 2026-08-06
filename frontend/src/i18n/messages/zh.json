@@ -12984,7 +12984,7 @@
     "modelAuto": "自动 · 选择最合适的模型",
     "agentDirection": "方向",
     "agentDirectionPlaceholder": "这个智能体应负责什么、优化什么，并向团队交付什么？",
-    "floatBrainOnCanvas": "让 Brain 悬浮在画布上",
+    "showBrainInObject": "在“大脑”对象中显示对话",
     "dockBrainToEdge": "将 Brain 停靠到边缘",
     "resizeBrain": "调整 Brain 聊天宽度",
     "collaboratorJoined": "{name} 加入了对话",
