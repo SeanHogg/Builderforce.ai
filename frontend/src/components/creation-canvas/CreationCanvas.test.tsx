@@ -27,9 +27,23 @@ vi.mock('next-intl', async (importOriginal) => {
 
 vi.mock('@/components/ConfirmProvider', () => ({ useConfirm: () => vi.fn(async () => true) }));
 
-vi.mock('@/components/ToastProvider', () => ({
-  useToast: () => ({ show: vi.fn(), success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }),
-}));
+/** Stable across renders so a test can assert what the board actually TOLD the user —
+ *  a fresh set of spies per `useToast()` call could only ever assert "nothing". */
+const toasts = vi.hoisted(() => ({ show: vi.fn(), success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }));
+vi.mock('@/components/ToastProvider', () => ({ useToast: () => toasts }));
+
+/** Delegates to the real capture unless a test asks it to fail, so the success path
+ *  keeps exercising the genuine builder. */
+const capture = vi.hoisted(() => ({ failWith: null as string | null }));
+vi.mock('@/lib/diagnosticsCapture', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/diagnosticsCapture')>();
+  return {
+    captureDiagnosticsContext: async () => {
+      if (capture.failWith) throw new Error(capture.failWith);
+      return actual.captureDiagnosticsContext();
+    },
+  };
+});
 
 vi.mock('@xyflow/react', async () => {
   const React = await import('react');
@@ -241,6 +255,8 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
 
   beforeEach(() => {
     localStorage.clear();
+    capture.failWith = null;
+    for (const spy of Object.values(toasts)) spy.mockClear();
   });
 
   it('automatically executes the prompt carried from the homepage', async () => {
@@ -1191,5 +1207,23 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByLabelText('Canvas diagnostics')).toBeInTheDocument();
     await waitFor(() => expect(writeText).toHaveBeenCalled());
     expect(String(writeText.mock.calls[0]![0])).toContain('Creation Canvas diagnostics');
+    expect(toasts.success).toHaveBeenCalledWith('Diagnostics copied to your clipboard');
+  });
+
+  it('says so when the diagnostics report cannot be assembled, instead of failing silently', async () => {
+    // The rejection used to escape into `void openDiagnostics()`: no report, no toast,
+    // no console — indistinguishable from a button that was never wired up.
+    const writeText = vi.fn(async (_text: string) => undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    capture.failWith = 'version probe exploded';
+    render(<CreationCanvas sessionId="diagnostics-failure-test" persistence="local" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Canvas diagnostics' }));
+
+    // The panel still opens: the state on screen is itself half the diagnosis.
+    expect(screen.getByLabelText('Canvas diagnostics')).toBeInTheDocument();
+    await waitFor(() => expect(toasts.error).toHaveBeenCalled());
+    expect(String(toasts.error.mock.calls[0]![0])).toContain('version probe exploded');
+    expect(writeText).not.toHaveBeenCalled();
   });
 });

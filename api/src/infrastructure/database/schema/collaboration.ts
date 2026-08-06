@@ -991,6 +991,11 @@ export const creationSessions = pgTable('creation_sessions', {
   title:          varchar('title', { length: 255 }).notNull().default('Untitled session'),
   description:    text('description'),
   status:         varchar('status', { length: 16 }).notNull().default('active'),
+  /** What this canvas session is FOR (0409) — 'chat' (a conversation: read, reason,
+   *  answer, author objects) or 'work' (an execution: turn the conclusion into a
+   *  ticket and dispatch an agent to run it). Same vocabulary as `brain_chats.mode`
+   *  (brain-embedded/src/chatMode.ts); an unknown value resolves to the default. */
+  mode:           varchar('mode', { length: 16 }).notNull().default('chat'),
   createdBy:      varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   updatedBy:      varchar('updated_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
   canvasRevision: bigint('canvas_revision', { mode: 'number' }).notNull().default(0),

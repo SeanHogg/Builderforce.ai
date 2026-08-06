@@ -195,6 +195,20 @@ export {
 } from './chatWorkLinking';
 export type { CreatedWorkItemLink, LinkedTicketToAdvance } from './chatWorkLinking';
 
+// Chat MODE — conversation (`chat`) vs execution (`work`). The single source for what
+// a mode MEANS to the model, shared by the web Brain, the VS Code webview and the
+// shared agent loop (migration 0409).
+export {
+  CHAT_MODES,
+  DEFAULT_CHAT_MODE,
+  isChatMode,
+  normalizeChatMode,
+  chatModeDirective,
+  chatConversationDirective,
+  chatWorkDirective,
+} from './chatMode';
+export type { ChatMode } from './chatMode';
+
 // Landing-page → auth → replay handoff
 export { savePendingPrompt, takePendingPrompt } from './pendingPrompt';
 

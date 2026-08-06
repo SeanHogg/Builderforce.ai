@@ -52,6 +52,13 @@ const ALLOWED = new Map([
       'calls carry no credential.',
   ],
   [
+    'meshPreviewCache.ts',
+    'Reads an artifact\'s own output URL (R2/blob/data) to parse its triangles. ' +
+      'Not the Builderforce API — attaching our auth headers to a storage or ' +
+      'third-party origin would leak the token, and the transport\'s JSON/redirect ' +
+      'handling is wrong for an arrayBuffer read that must degrade to [] silently.',
+  ],
+  [
     'model-provider.ts',
     'HEAD probes against arbitrary model-asset URLs (tokenizer vocab/merges on a ' +
       'third-party host). Not the Builderforce API at all — sending our auth ' +

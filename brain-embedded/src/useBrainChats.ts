@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useBrainConfig } from './config';
+import { DEFAULT_CHAT_MODE, normalizeChatMode, type ChatMode } from './chatMode';
 import type { BrainChat } from './types';
 
 /** The placeholder title `create()` stamps on an untitled chat. A chat still carrying
@@ -56,11 +57,15 @@ export interface UseBrainChats {
   setError(msg: string): void;
   select(id: number | null): Promise<BrainChat | null>;
   /** Create a chat (defaults project to the active filter/pin) and select it. */
-  create(opts?: { title?: string; projectId?: number | null; capability?: string | null }): Promise<BrainChat | null>;
+  create(opts?: { title?: string; projectId?: number | null; capability?: string | null; mode?: ChatMode }): Promise<BrainChat | null>;
   rename(id: number, title: string): Promise<void>;
   /** Set (or clear, with null) what the chat is making. Persisted on the chat, so
    *  the choice follows the conversation across surfaces instead of the browser. */
   setCapability(id: number, capability: string | null): Promise<void>;
+  /** Switch the conversation between CHAT (answer) and WORK (execute + dispatch).
+   *  Persisted on the chat for the same reason `capability` is — the choice belongs
+   *  to the conversation, not to the browser it was flipped in. */
+  setMode(id: number, mode: ChatMode): Promise<void>;
   /**
    * Auto-name a still-untitled chat (title === {@link DEFAULT_CHAT_TITLE}) from its
    * first user message, so "New chat" becomes the topic once the conversation begins.
@@ -160,11 +165,11 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     }
   }, [persistence, chats, setActiveChatId]);
 
-  const create = useCallback(async (opts?: { title?: string; projectId?: number | null; capability?: string | null }): Promise<BrainChat | null> => {
+  const create = useCallback(async (opts?: { title?: string; projectId?: number | null; capability?: string | null; mode?: ChatMode }): Promise<BrainChat | null> => {
     setError('');
     try {
       const projectId = opts?.projectId !== undefined ? opts.projectId : defaultProjectId();
-      const chat = await persistence.createChat({ title: opts?.title ?? 'New chat', projectId, capability: opts?.capability ?? null });
+      const chat = await persistence.createChat({ title: opts?.title ?? 'New chat', projectId, capability: opts?.capability ?? null, mode: opts?.mode ?? DEFAULT_CHAT_MODE });
       setChats((prev) => [chat, ...prev]);
       setActiveChatId(chat.id);
       return chat;
@@ -185,6 +190,21 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     } catch (e) {
       setChats((prev) => prev.map((c) => (c.id === id ? { ...c, capability: prevValue } : c)));
       setError(e instanceof Error ? e.message : 'Failed to set capability');
+    }
+  }, [persistence]);
+
+  // Optimistic for the same reason setCapability is: the toggle IS the mode switch,
+  // so the control must not lag the click. Reconciled from the server echo, reverted
+  // on failure so the UI never claims an authority the chat does not have.
+  const setMode = useCallback(async (id: number, mode: ChatMode) => {
+    const prevValue = normalizeChatMode(chatsRef.current.find((c) => c.id === id)?.mode);
+    setChats((prev) => prev.map((c) => (c.id === id ? { ...c, mode } : c)));
+    try {
+      const updated = await persistence.updateChat(id, { mode });
+      setChats((prev) => prev.map((c) => (c.id === id ? { ...c, mode: normalizeChatMode(updated.mode) } : c)));
+    } catch (e) {
+      setChats((prev) => prev.map((c) => (c.id === id ? { ...c, mode: prevValue } : c)));
+      setError(e instanceof Error ? e.message : 'Failed to switch mode');
     }
   }, [persistence]);
 
@@ -279,6 +299,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     create,
     rename,
     setCapability,
+    setMode,
     autoTitle,
     summarize,
     remove,

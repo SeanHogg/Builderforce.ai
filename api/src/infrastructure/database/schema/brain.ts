@@ -103,6 +103,13 @@ export const brainChats = pgTable('brain_chats', {
    *  mobile / animation / game3d). Shapes the system prompt and the export format.
    *  NULL = no capability ("anything"). Free-form: an unknown id reads as NULL. */
   capability: varchar('capability', { length: 64 }),
+  /** What this chat is FOR (0409) — 'chat' (a CONVERSATION: read, reason, answer)
+   *  or 'work' (an EXECUTION: create + staff + link the ticket, then dispatch an
+   *  agent to run it). Gates the chat⇄work linking directive at runtime and is the
+   *  dimension the mode usage rollup buckets on. Free-form varchar for the same
+   *  reason `capability` is: the vocabulary lives in brain-embedded/src/chatMode.ts
+   *  and an unknown value resolves to the default on read. */
+  mode: varchar('mode', { length: 16 }).notNull().default('chat'),
   /** Consolidation pointer (0266): when this chat was merged into another, the
    *  surviving chat's id. Set with isArchived=true so the source drops out of the
    *  list but any ticket still resolves to the one surviving conversation. */

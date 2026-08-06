@@ -6,7 +6,15 @@ import { PAGE_BREAK_MARKER } from './officeFormats';
  * rather than on English that a translator is free to change. */
 const t: ImportTranslator = (key, values) => `${key}(${Object.entries(values ?? {}).map(([name, value]) => `${name}=${value}`).join(',')})`;
 
-const file = (name: string, body: BlobPart, type = '') => new File([body], name, { type });
+/**
+ * `BlobPart` narrowed to `ArrayBufferView<ArrayBuffer>`, so a `Uint8Array` built by the
+ * ZIP helper below is accepted. The DOM lib's `Uint8Array` is generic over
+ * `ArrayBufferLike` (it may sit on a `SharedArrayBuffer`), which `BlobPart` will not
+ * take — a `Blob` cannot be backed by shared memory. Every buffer here is a plain
+ * `ArrayBuffer`, so the copy is what proves it rather than a cast that asserts it.
+ */
+const file = (name: string, body: string | Uint8Array, type = '') =>
+  new File([typeof body === 'string' ? body : new Uint8Array(body)], name, { type });
 
 const encoder = new TextEncoder();
 

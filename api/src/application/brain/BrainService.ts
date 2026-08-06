@@ -114,6 +114,9 @@ export interface CreateChatDto {
   title?: string;
   projectId?: number | null;
   capability?: string | null;
+  /** Conversation (`chat`) or execution (`work`) — migration 0409. Omitted/invalid
+   *  falls back to {@link DEFAULT_CHAT_MODE}. */
+  mode?: string | null;
 }
 
 export interface UpdateChatDto {
@@ -124,6 +127,10 @@ export interface UpdateChatDto {
   /** What the chat is making (migration 0345) — a client-registry capability id,
    *  or null to clear it. See {@link normalizeCapability}. */
   capability?: string | null;
+  /** Switch the conversation between `chat` and `work` (migration 0409). An
+   *  unrecognised value is IGNORED (the column is left as-is) rather than silently
+   *  resetting a running execution back to a conversation. */
+  mode?: string | null;
 }
 
 /**
@@ -236,6 +243,7 @@ const chatColumns = {
   ownerId: brainChats.userId,
   visibility: brainChats.visibility,
   capability: brainChats.capability,
+  mode: brainChats.mode,
   createdAt: brainChats.createdAt,
   updatedAt: brainChats.updatedAt,
 } as const;
@@ -562,6 +570,7 @@ export class BrainService {
         projectId: dto.projectId ?? null,
         title,
         capability: normalizeCapability(dto.capability),
+        mode: normalizeChatMode(dto.mode) ?? DEFAULT_CHAT_MODE,
       })
       .returning(chatColumns);
 
