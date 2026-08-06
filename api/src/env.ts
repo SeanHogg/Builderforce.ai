@@ -483,6 +483,18 @@ export interface Env {
    *  CLOUDFLARE_TURN_API_TOKEN */
   CLOUDFLARE_TURN_KEY_ID?: string;
   CLOUDFLARE_TURN_API_TOKEN?: string;
+
+  // ---------------------------------------------------------------------------
+  // Security & Deprecation Flags
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Deprecation flag for query string JWT authentication (?token=).
+   * Set to "true" to reject query string tokens with 400 Bad Request.
+   * When unset or any other value, query string tokens are accepted but emit
+   * a deprecation warning log. Toggle via `wrangler secret put AUTH_QUERY_STRING_DEPRECATED`.
+   */
+  AUTH_QUERY_STRING_DEPRECATED?: string;
 }
 
 /**
