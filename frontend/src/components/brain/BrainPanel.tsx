@@ -1461,7 +1461,32 @@ export function BrainPanel({
         <div className={isPage ? 'bs-empty' : undefined} style={isPage ? undefined : { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--text-muted)', padding: 24, textAlign: 'center' }}>
           <div style={{ fontSize: 40 }}>🧠</div>
           <div style={{ fontSize: 16, fontWeight: 500, color: 'var(--text-primary)' }}>{tBrain('brainTitle')}</div>
-          <div style={{ fontSize: 13 }}>{tBrain('emptyHint')}</div>
+          <div style={{ fontSize: 13 }}>{tBrain(chatMode === 'work' ? 'emptyHintWork' : 'emptyHint')}</div>
+          {/* The mode goes ABOVE the composer, at full size: it decides what the very
+              first turn is allowed to do, so it has to be a visible choice rather than
+              a toolbar control the user finds afterwards. Choosing here rides into the
+              chat `startNewChat` creates (see `pendingMode`). */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'center' }}>
+            <ChatModeToggle value={chatMode} onChange={selectMode} layout="full" />
+            {/* File the conversation as it starts. New chats otherwise inherit the
+                global scope silently, so a user with no project in scope had no way to
+                put THIS conversation somewhere without first creating it. */}
+            {pinnedProjectId == null && (
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--text-muted)' }}>
+                {tBrain('newChatProjectLabel')}
+                <ThemeSelect
+                  ariaLabel={tBrain('newChatProjectAria')}
+                  value={filterProjectId ?? ''}
+                  onChange={setFilterProjectId}
+                  options={[
+                    { value: '', label: tBrain('noProject') },
+                    ...projects.map((p) => ({ value: String(p.id), label: p.name })),
+                  ]}
+                  style={{ minWidth: 140, padding: '4px 8px', fontSize: 12 }}
+                />
+              </label>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
             <button type="button" onClick={() => { void startNewChat(); }} style={{ padding: '10px 18px', fontSize: 14, fontWeight: 600, background: 'var(--accent, #3b82f6)', color: '#fff', border: 'none', borderRadius: 10, cursor: 'pointer' }}>
               {tBrain('startNewChat')}
@@ -1477,14 +1502,20 @@ export function BrainPanel({
             </button>
           </div>
           <div style={{ width: '100%', maxWidth: 720, marginTop: 12 }}>{promptComposer}</div>
-          {/* …or start from what you want to make. Picking one opens a chat
-              already in that mode. */}
-          <BrainCapabilityPicker
-            surface={capabilitySurface}
-            value={capabilityId}
-            onSelect={selectCapability}
-            layout="tiles"
-          />
+          {/* WORK: the jobs people actually hand over. Picking one fills the composer
+              with a complete brief to edit. Self-gating on the mode. */}
+          <WorkOptionsPicker mode={chatMode} onPick={pickWorkOption} />
+          {/* CHAT: …or start from what you want to make. Picking one opens a chat
+              already in that capability. The two are alternatives, not a stack — a
+              user in Work mode is delegating a job, not choosing an export format. */}
+          {chatMode !== 'work' && (
+            <BrainCapabilityPicker
+              surface={capabilitySurface}
+              value={capabilityId}
+              onSelect={selectCapability}
+              layout="tiles"
+            />
+          )}
         </div>
       ) : (
         <>
