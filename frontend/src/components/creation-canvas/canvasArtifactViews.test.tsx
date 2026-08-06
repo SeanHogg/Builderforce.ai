@@ -11,9 +11,13 @@ import type { CreationNodeData } from './types';
  * was nowhere to see the files a session had actually produced.
  */
 
+/** The real catalogs, resolved the way next-intl resolves them — including the
+ * `plural` forms the file-count and slide-count labels are written in, so these
+ * assert the string a person actually reads. */
 vi.mock('next-intl', async (importOriginal) => {
   const actual = await importOriginal<typeof import('next-intl')>();
   const messages = (await import('@/i18n/messages/en.json')).default as Record<string, unknown>;
+  const PLURAL = /\{(\w+),\s*plural,\s*one \{([^}]*)\} other \{([^}]*)\}\}/g;
   return {
     ...actual,
     useTranslations: (namespace?: string) => (key: string, values?: Record<string, unknown>) => {
@@ -22,7 +26,11 @@ vi.mock('next-intl', async (importOriginal) => {
         ? (current as Record<string, unknown>)[segment]
         : undefined, messages);
       const copy = typeof value === 'string' ? value : namespace ? `${namespace}.${key}` : key;
-      return Object.entries(values ?? {}).reduce((result, [name, replacement]) => result.replace(`{${name}}`, String(replacement)), copy);
+      const pluralized = copy.replace(PLURAL, (_match, name: string, one: string, other: string) => {
+        const count = Number(values?.[name]);
+        return (count === 1 ? one : other).replace('#', String(count));
+      });
+      return Object.entries(values ?? {}).reduce((result, [name, replacement]) => result.replaceAll(`{${name}}`, String(replacement)), pluralized);
     },
   };
 });
@@ -49,8 +57,7 @@ describe('document objects render the document', () => {
     });
     expect(screen.getByRole('heading', { level: 1, name: 'Market analysis' })).toBeTruthy();
     expect(screen.getByRole('heading', { level: 2, name: 'Competitors' })).toBeTruthy();
-    expect(screen.getByRole('listitem', { name: '' })).toBeTruthy();
-    expect(screen.getByText('Acme holds 42%')).toBeTruthy();
+    expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual(['Acme holds 42%', 'Globex is growing']);
     expect(screen.getByRole('table')).toBeTruthy();
   });
 

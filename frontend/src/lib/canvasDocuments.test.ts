@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { canvasDiagram, canvasDocument, canvasFiles, canvasObjectMarkdown, canvasSlides, formatBytes, plainText } from './canvasDocuments';
+import { canvasDiagram, canvasDocument, canvasFiles, canvasObjectMarkdown, canvasSlides, formatBytes, paginateDocument, plainText } from './canvasDocuments';
+import { PAGE_BREAK_MARKER } from './officeFormats';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
 
 const object = (data: Partial<CreationNodeData> & { kind: CreationNodeData['kind'] }): CreationNodeData => ({ title: 'Untitled', ...data } as CreationNodeData);
@@ -26,6 +27,34 @@ describe('canvasDocument', () => {
 
   it('falls back to a title stub only for export, never for the preview', () => {
     expect(canvasObjectMarkdown(object({ kind: 'note', title: 'Empty', status: 'Draft' }))).toContain('# Empty');
+  });
+
+  it('honours the pages an imported file declared', () => {
+    const markdown = `# Cover\n\n${PAGE_BREAK_MARKER}\n\n## Detail\n\nBody`;
+    const document = canvasDocument(object({ kind: 'document', title: 'Imported', markdown }));
+    expect(document?.pages).toEqual(['# Cover', '## Detail\n\nBody']);
+    expect(document?.pageCount).toBe(2);
+  });
+
+  it('keeps the break marker out of the outline, the word count, and the export', () => {
+    const data = object({ kind: 'document', title: 'Imported', markdown: `Page one\n\n${PAGE_BREAK_MARKER}\n\nPage two` });
+    const document = canvasDocument(data);
+    expect(document?.markdown).not.toContain(PAGE_BREAK_MARKER);
+    expect(document?.wordCount).toBe(4);
+    expect(canvasObjectMarkdown(data)).toBe('Page one\n\nPage two');
+  });
+});
+
+describe('paginateDocument', () => {
+  it('flows authored markdown at a page budget, never splitting a block', () => {
+    const table = '| a | b |\n| --- | --- |\n| 1 | 2 |';
+    const pages = paginateDocument(`${'word '.repeat(460)}\n\n${table}`);
+    expect(pages).toHaveLength(2);
+    expect(pages[1]).toBe(table);
+  });
+
+  it('is empty for an empty body, so a card can say nothing was written', () => {
+    expect(paginateDocument('   ')).toEqual([]);
   });
 });
 

@@ -12450,7 +12450,14 @@
       "addColumn": "+ 列",
       "columnName": "第 {index} 列",
       "editCell": "编辑 {column}，第 {row} 行",
-      "editColumnName": "重命名列 {column}"
+      "editColumnName": "重命名列 {column}",
+      "mapEmpty": "尚未绘制任何内容。请绘制包含纬度和经度的数据集——若行中只有地名，请先用地理编码器解析。",
+      "mapEmptyStatus": "绘制数据集",
+      "mapPlaces": "地点",
+      "mapRegion": "区域",
+      "mapSizedBy": "大小依据",
+      "mapAria": "包含 {count} 个已绘制地点的地图：{places}",
+      "mapExtent": "纬度 {south}° 至 {north}° · 经度 {west}° 至 {east}°"
     },
     "sessionTitle": "会话标题",
     "saved": "会话已保存",
@@ -12601,7 +12608,8 @@
       "targetMarket": "目标市场",
       "salesGoal": "每周销售目标",
       "salesMeeting": "销售会议",
-      "diagram": "图表"
+      "diagram": "图表",
+      "map": "地图"
     },
     "canvasOutline": "无障碍画布大纲",
     "closeCanvasOutline": "关闭画布大纲",

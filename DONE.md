@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-08-06 — ✅ RESOLVED: Researched documents, decks, and diagrams were never visualized, and there was no collection of your files
+
+Operator report: "when I ask for research to be conducted — for example: market analysis of competitors — and to create a MD file with all the details, the actual document isn't visualized in the canvas. The same issue with PowerPoint/presentations. As well as DRAW.IO diagrams. We need to show the user a collection of their files. They can interact with an excel doc."
+
+**Every knowledge object fell through to the same grey paragraph.** `document`, `slides`, `prd`, and `knowledge` were absent from `CreationNode`'s specialized set, so a twenty-page market analysis, an executive deck, and a requirements doc all rendered through `AuthoredContent` — one `<p>` of raw source text, truncated. Draw.io had no representation at all: no object kind, no reader, nothing. And the artifacts a session produced existed only as `deliverables` buried six-deep in one object's details tab, so there was no way to see what had actually been made.
+
+**Objects now render as the artifact they are.** `DocumentBody` renders the document — headings, lists, tables, code, quotes — on a paper sheet that scrolls inside the card. `SlidesBody` renders the deck as numbered 16:9 thumbnails, read from authored slide items or split out of a markdown outline (`---` rules first, then headings). A new `diagram` object kind renders the drawing: `drawioDiagram.ts` reads an mxGraph scene into geometry the canvas draws itself as SVG — vertices with shape, fill, stroke and wrapped labels, edges clipped to box boundaries with waypoints and arrowheads — with no editor embed, no CDN and no network, and `resolveDrawioXml` handles both plain and deflate-compressed `<diagram>` payloads. Mermaid goes through the shared `MermaidDiagram`, which was hardcoded to a dark palette and is now theme-aware (it re-renders on `data-theme` and `prefers-color-scheme` changes) — it was illegible on the light canvas.
+
+**A sheet you can work in, not a screenshot of one.** `DataGridBody` takes edits on the card for Table and Spreadsheet objects: click a cell or a header to edit it, Enter or blur commits, Escape cancels, plus add-row and add-column. Writes go through a new `updateNodeData(nodeId, patch)` — the one writer the inspector now delegates to as well, so an edit made on a card and an edit made in the panel take the same path. Datasets stay read-only: an import is a snapshot of a file.
+
+**And the files are in one place.** `canvasDocuments.ts` derives, from the objects themselves, what file each object IS (name, extension, category, size, editability) plus every delivered export — one derivation, so the library, the cards, and the inspector cannot disagree, and a new document appears the moment Brain authors it with no registration step to forget. `CanvasFilesPanel` lists them on the command rail with search and type filters; opening a row selects and frames the object on the board, and downloading either opens the delivered artifact or exports the object.
+
+`exportArtifact` was hoisted out of the inspector into the canvas as the single export path — the inspector buttons, Brain's `export` action (now a real adapter for document/deck/diagram/sheet rather than a "no connected delivery adapter" notice), and the Files library all call it, so the downloaded file, the recorded deliverable, and the listed row are produced once. `artifactMarkdown` was deleted in favour of the shared `canvasObjectMarkdown`. Document, deck, and diagram-source editors landed in the inspector so these objects are writable, not just Brain-authored.
+
+Contract: `diagram` added to `CREATION_OBJECT_KINDS` and `CREATIVE_CAPABILITIES` (`creative.diagram`), which flows to Brain's authoring enum, server-side validation, and the VSIX palette for free. Copy for all of it in en/zh/es/fr/de. Covered by 38 cases across `canvasDocuments.test.ts`, `drawioDiagram.test.ts`, and `canvasArtifactViews.test.tsx` (document/deck/diagram rendering, cell editing writing back, the library listing, filtering, opening and downloading). Also fixed in passing: `creativeGeometry.ts` used a regex `s` flag that fails the ES2017 target and was breaking `tsgo`.
+
+---
+
 ## 2026-08-06 — ✅ RESOLVED: 3D was a picture of the board, not a space you could work in
 
 Operator report: "this is supposed to be a free floating 3-dimensional space where users can rotate the canvas and move objects — the panes/layers are an additional view to help the user visualize the space."

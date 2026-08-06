@@ -12450,7 +12450,14 @@
       "addColumn": "+ Spalte",
       "columnName": "Spalte {index}",
       "editCell": "{column}, Zeile {row} bearbeiten",
-      "editColumnName": "Spalte {column} umbenennen"
+      "editColumnName": "Spalte {column} umbenennen",
+      "mapEmpty": "Es ist noch nichts eingezeichnet. Zeichnen Sie einen Datensatz ein, dessen Zeilen Breiten- und Längengrad enthalten – liegen nur Ortsnamen vor, lösen Sie diese zuerst mit dem Geocoder auf.",
+      "mapEmptyStatus": "Datensatz einzeichnen",
+      "mapPlaces": "Orte",
+      "mapRegion": "Region",
+      "mapSizedBy": "Größe nach",
+      "mapAria": "Karte mit {count} eingezeichneten Orten: {places}",
+      "mapExtent": "{south}° bis {north}° N · {west}° bis {east}° O"
     },
     "sessionTitle": "Sessiontitel",
     "saved": "Session gespeichert",
@@ -12601,7 +12608,8 @@
       "targetMarket": "Zielmarkt",
       "salesGoal": "Wöchentliches Vertriebsziel",
       "salesMeeting": "Vertriebsgespräch",
-      "diagram": "Diagramm"
+      "diagram": "Diagramm",
+      "map": "Karte"
     },
     "canvasOutline": "Barrierefreie Leinwandübersicht",
     "closeCanvasOutline": "Leinwandübersicht schließen",

@@ -12450,7 +12450,14 @@
       "addColumn": "+ Colonne",
       "columnName": "Colonne {index}",
       "editCell": "Modifier {column}, ligne {row}",
-      "editColumnName": "Renommer la colonne {column}"
+      "editColumnName": "Renommer la colonne {column}",
+      "mapEmpty": "Rien n'est encore tracé. Tracez un jeu de données dont les lignes comportent latitude et longitude ; si vous n'avez que des noms de lieux, résolvez-les d'abord avec le géocodeur.",
+      "mapEmptyStatus": "Tracer un jeu de données",
+      "mapPlaces": "Lieux",
+      "mapRegion": "Région",
+      "mapSizedBy": "Taille selon",
+      "mapAria": "Carte de {count} lieux tracés : {places}",
+      "mapExtent": "{south}° à {north}° N · {west}° à {east}° E"
     },
     "sessionTitle": "Titre de la Session",
     "saved": "Session enregistrée",
@@ -12601,7 +12608,8 @@
       "targetMarket": "Marché cible",
       "salesGoal": "Objectif commercial hebdomadaire",
       "salesMeeting": "Réunion commerciale",
-      "diagram": "Diagramme"
+      "diagram": "Diagramme",
+      "map": "Carte"
     },
     "canvasOutline": "Plan accessible de la toile",
     "closeCanvasOutline": "Fermer le plan de la toile",

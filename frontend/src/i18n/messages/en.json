@@ -12451,7 +12451,14 @@
       "addColumn": "+ Column",
       "columnName": "Column {index}",
       "editCell": "Edit {column}, row {row}",
-      "editColumnName": "Rename column {column}"
+      "editColumnName": "Rename column {column}",
+      "mapEmpty": "Nothing is plotted yet. Plot a dataset whose rows carry latitude and longitude — resolve place names with the geocoder first if they are only names.",
+      "mapEmptyStatus": "Plot a dataset",
+      "mapPlaces": "Places",
+      "mapRegion": "Region",
+      "mapSizedBy": "Sized by",
+      "mapAria": "Map of {count} plotted places: {places}",
+      "mapExtent": "{south}° to {north}° N · {west}° to {east}° E"
     },
     "sessionTitle": "Session title",
     "saved": "Session saved",
@@ -12602,7 +12609,8 @@
       "targetMarket": "Target market",
       "salesGoal": "Weekly sales goal",
       "salesMeeting": "Sales meeting",
-      "diagram": "Diagram"
+      "diagram": "Diagram",
+      "map": "Map"
     },
     "canvasOutline": "Accessible canvas outline",
     "closeCanvasOutline": "Close canvas outline",

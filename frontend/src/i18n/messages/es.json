@@ -12450,7 +12450,14 @@
       "addColumn": "+ Columna",
       "columnName": "Columna {index}",
       "editCell": "Editar {column}, fila {row}",
-      "editColumnName": "Cambiar el nombre de la columna {column}"
+      "editColumnName": "Cambiar el nombre de la columna {column}",
+      "mapEmpty": "Aún no hay nada trazado. Traza un conjunto de datos cuyas filas incluyan latitud y longitud; si solo tienes nombres de lugares, resuélvelos antes con el geocodificador.",
+      "mapEmptyStatus": "Trazar un conjunto de datos",
+      "mapPlaces": "Lugares",
+      "mapRegion": "Región",
+      "mapSizedBy": "Tamaño según",
+      "mapAria": "Mapa con {count} lugares trazados: {places}",
+      "mapExtent": "{south}° a {north}° N · {west}° a {east}° E"
     },
     "sessionTitle": "Título de la sesión",
     "saved": "Sesión guardada",
@@ -12601,7 +12608,8 @@
       "targetMarket": "Mercado objetivo",
       "salesGoal": "Objetivo semanal de ventas",
       "salesMeeting": "Reunión de ventas",
-      "diagram": "Diagrama"
+      "diagram": "Diagrama",
+      "map": "Mapa"
     },
     "canvasOutline": "Esquema accesible del lienzo",
     "closeCanvasOutline": "Cerrar el esquema del lienzo",
