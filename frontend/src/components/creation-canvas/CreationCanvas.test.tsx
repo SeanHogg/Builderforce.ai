@@ -734,7 +734,10 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByLabelText('Ask Brain about this canvas')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Show Brain chat' }));
     expect(screen.getByRole('complementary', { name: 'Brain chat' })).toBeInTheDocument();
-  });
+    // Four placement changes re-render the whole board, which runs ~20s on a loaded
+    // box — past the default. A timeout here would read as "the dock broke" when it
+    // only means "slow runner".
+  }, 60_000);
 
   it('keeps the prompt in the centre of the page instead of inside the Brain surface', () => {
     render(<CreationCanvas sessionId="brain-prompt-placement-test" persistence="local" />);
