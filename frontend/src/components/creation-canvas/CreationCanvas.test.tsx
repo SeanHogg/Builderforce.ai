@@ -112,16 +112,38 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
     const scene = screen.getByTestId('canvas-3d-view');
     expect(scene).toBeInTheDocument();
-    // The mini map is a map of the flat board, so it stands down in 3D.
+    // The mini map is a map of the flat board, so it — and its button — stand
+    // down in 3D.
     expect(screen.queryByRole('button', { name: 'Close mini map' })).not.toBeInTheDocument();
-    // The rail owns the way out: the scene carries no exit control of its own.
+    expect(screen.queryByRole('button', { name: 'Toggle mini map' })).not.toBeInTheDocument();
+    // The rail owns every 3D command, so the scene carries no toolbar at all —
+    // no exit, no depth control, no zoom. A second header stacked over the board
+    // is what this replaced.
     expect(within(scene).queryByRole('button', { name: /3D/ })).not.toBeInTheDocument();
+    expect(within(scene).queryByRole('combobox')).not.toBeInTheDocument();
+    expect(within(scene).queryAllByRole('button', { name: 'Zoom in' })).toHaveLength(0);
     expect(toggle).toHaveAttribute('title', 'Exit 3D');
+
+    // The scene's own commands ride the chrome the board already had — the rail
+    // and the phone-sized stack both drive the scene, so each is offered twice.
+    expect(screen.getAllByRole('button', { name: 'Zoom in' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Zoom out' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Reset view' })).toHaveLength(2);
+    // Both read one controller: flipping the axis on the rail flips it everywhere.
+    const depth = screen.getAllByRole('button', { name: 'Stack layers by object group' });
+    expect(depth).toHaveLength(2);
+    expect(depth.map((button) => button.getAttribute('aria-pressed'))).toEqual(['false', 'false']);
+    fireEvent.click(depth[0]!);
+    expect(screen.getAllByRole('button', { name: 'Stack layers by object group' })
+      .map((button) => button.getAttribute('aria-pressed'))).toEqual(['true', 'true']);
 
     fireEvent.click(toggle!);
     expect(screen.queryByTestId('canvas-3d-view')).not.toBeInTheDocument();
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
     expect(toggle).toHaveAttribute('title', 'View this canvas in 3D');
+    // Leaving hands the rail back: the 3D commands go, the flat ones return.
+    expect(screen.queryAllByRole('button', { name: 'Stack layers by object group' })).toHaveLength(0);
+    expect(screen.getByRole('button', { name: 'Toggle mini map' })).toBeInTheDocument();
   });
 
   it('selects the same object in 3D that the flat board would', () => {

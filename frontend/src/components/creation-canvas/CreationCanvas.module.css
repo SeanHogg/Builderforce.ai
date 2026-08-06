@@ -157,13 +157,15 @@
 .flowWrap[data-cursor-mode='draw'] :global(.react-flow__pane) { cursor: crosshair; }
 
 /* 3D view: the board hands the surface over to the 3D scene.
-   React Flow sets `z-index: 0` on its root, which traps its command rail inside
-   its own stacking context — an overlay would bury the very button that turns 3D
-   off. So the flat graph is hidden and its root is lifted ABOVE the scene with
-   pointer events off, leaving only the rail (and the mini map close) clickable.
-   Remote cursors are hidden too: they are projected from the 2D viewport and
-   would otherwise float over the scene pointing at nothing. */
-.flowWrap[data-view='3d'] :global(.react-flow) { z-index: 9; pointer-events: none; background: transparent; }
+   React Flow's own stylesheet leaves its root UNPOSITIONED, so a bare `z-index`
+   on it is inert — the scene (positioned, z-index 7) painted straight over the
+   command rail and the board lost every control it had the moment 3D opened.
+   `position: relative` is what makes the lift real. The flat graph is hidden and
+   the root is raised ABOVE the scene with pointer events off, leaving only the
+   rail (and the mini map close) clickable. Remote cursors are hidden too: they
+   are projected from the 2D viewport and would float over the scene pointing at
+   nothing. */
+.flowWrap[data-view='3d'] :global(.react-flow) { position: relative; z-index: 9; pointer-events: none; background: transparent; }
 /* The palette drops objects onto the flat board, so it stands down in 3D rather
    than sitting on top of the scene's own heading. */
 .flowWrap[data-view='3d'] .paletteToggle,

@@ -14,12 +14,12 @@ import {
   canvas3dStageTransform,
   canvas3dTranslate,
   canvas3dZoomFactorFromWheel,
-  isCanvas3DDepthMode,
   type Canvas3DDepthMode,
   type Canvas3DDescriptor,
   type Canvas3DNode,
   type Canvas3DOrbit,
 } from './canvas3d';
+import { usePublishCanvas3DControls, type Canvas3DControls } from './canvas3dControls';
 import type { CanvasGraphEdge } from './canvasGraph';
 import styles from './Canvas3DView.module.css';
 
@@ -49,6 +49,10 @@ const ZOOM_STEP = 1.25;
  * usable from the keyboard and by assistive tech, and it costs no new runtime.
  * Selection is shared with the flat canvas, so opening an object in 3D shows the
  * same inspector the board would.
+ *
+ * The scene owns no chrome. Depth, zoom and reset are published to the canvas
+ * command rail (see `canvas3dControls`), so 3D adds buttons to the bar the board
+ * already has rather than stacking a second toolbar over it.
  */
 export function Canvas3DView<T extends Canvas3DNode>({
   nodes,
@@ -182,32 +186,19 @@ export function Canvas3DView<T extends Canvas3DNode>({
     [t],
   );
 
+  // Everything the rail can drive, in one object so the rail and the phone-sized
+  // action stack share the behaviour rather than each re-deriving it.
+  const controls = useMemo<Canvas3DControls>(() => ({
+    depthMode,
+    toggleDepth: () => setDepthMode((current) => CANVAS_3D_DEPTH_MODES[(CANVAS_3D_DEPTH_MODES.indexOf(current) + 1) % CANVAS_3D_DEPTH_MODES.length]!),
+    zoomIn: () => zoomBy(ZOOM_STEP),
+    zoomOut: () => zoomBy(1 / ZOOM_STEP),
+    resetView,
+  }), [depthMode, resetView, zoomBy]);
+  usePublishCanvas3DControls(controls);
+
   return (
     <section className={styles.scene} aria-label={t('threeD.title')} data-testid="canvas-3d-view">
-      <header className={styles.hud}>
-        <div className={styles.hudTitle}>
-          <span className={styles.hudMark} aria-hidden>◱</span>
-          <strong>{t('threeD.title')}</strong>
-          <small>{t('threeD.summary', { objects: scene.cards.length, layers: scene.layers.length })}</small>
-        </div>
-        <div className={styles.hudActions}>
-          <label className={styles.hudField}>
-            <span>{t('threeD.depth')}</span>
-            <select
-              value={depthMode}
-              onChange={(event) => setDepthMode(isCanvas3DDepthMode(event.target.value) ? event.target.value : 'flow')}
-            >
-              {CANVAS_3D_DEPTH_MODES.map((mode) => <option key={mode} value={mode}>{t(`threeD.depth_${mode}`)}</option>)}
-            </select>
-          </label>
-          <div className={styles.hudGroup} role="group" aria-label={t('threeD.viewControls')}>
-            <button type="button" onClick={() => zoomBy(ZOOM_STEP)} aria-label={t('threeD.zoomIn')} title={t('threeD.zoomIn')}>＋</button>
-            <button type="button" onClick={() => zoomBy(1 / ZOOM_STEP)} aria-label={t('threeD.zoomOut')} title={t('threeD.zoomOut')}>−</button>
-            <button type="button" onClick={resetView} aria-label={t('threeD.reset')} title={t('threeD.reset')}>⟳</button>
-          </div>
-        </div>
-      </header>
-
       <div
         ref={viewportRef}
         className={styles.viewport}

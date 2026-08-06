@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-08-05 — ✅ RESOLVED: a shared guest session evaporated on sign-up, and its reply arrived as a wall of text (api 2026.7.209 · ui 2026.7.165)
+
+Three follow-ups from the guest-rooms pass, closed in one go.
+
+**A room's conversation could not be kept.** A solo guest's chat lives in their browser and their lead converts on sign-up, but a ROOM's transcript lived only in `GuestRoomDO` and expired with it — so the highest-intent anonymous path we have (several people who liked it enough to invite each other) ended with the work vanishing. `POST /api/brain/chats/claim-guest-room` now copies the room's transcript into a real Brain chat owned by the new account, and `MarketingConversionTracker` fires it the moment the browser authenticates, then OPENS the claimed chat (`setActiveChatId` + `setOpen`) — a conversation silently filed into a history they have not discovered yet reads exactly like having lost it. Authorization is deliberately two-sided: the tenant JWT says who is asking, the room's own persisted roster says whether they were ever in it, and neither alone is enough. The DO records `claimedBy` so re-signing in cannot fork a second copy, and the room keeps running because other people may still be in it.
+
+**Everyone but the sender watched a pause.** Only the sender holds the gateway stream, so peers saw nothing until the finished turn was persisted. The sender now re-broadcasts its delta buffer on the room's `chat` channel (`relayStream`, leading edge + a 250 ms trailing window that always drains the LAST delta), and every other participant renders it as a trailing bubble captioned with whose turn it answers. Relayed deltas are display-only and never persisted; `changed` retires the live bubble when the real message lands, and a sender who disconnects mid-turn is timed out rather than leaving a half-finished reply on screen forever.
+
+**`appendRaw` was an N+1 on the chat write path.** It inserted one row per message and then issued a second UPDATE per row — invisible on a 2-message turn, 400 queries when a 200-message room transcript is claimed in one call. Now one batched insert plus a single `seq = id` update for the batch, which also speeds up every ordinary append. Behaviour is unchanged (invalid messages are filtered up front instead of skipped in the loop).
+
+**`EvermindConsole.operate.test.tsx` — three deterministic failures, and the UI was right.** The console gained a next-action card that names quarantine (`Quarantined — run readiness first`) and offers its own `Run readiness check`, so the tests' unscoped `getByText(/Quarantined/)` and `getByRole('button', {name: /Readiness check/i})` became ambiguous against affordances that are both legitimately present. The queries are now exact — and the test additionally asserts the next-action card, so the pair stays covered instead of one silently absorbing the other's coverage. (An earlier read of this called it a product decision about a duplicate badge; reading both matching elements showed it was neither duplicated nor a decision.)
+
+**Frontend suite flakiness, same pass.** `ProviderKeysSettings.authAlert` and others failed intermittently under the full suite and passed alone: `findBy*` defaults to a 1 s ceiling, and 107 jsdom files on a shared thread pool can genuinely take longer than that to get from "loading…" to resolved. `src/test/setup.ts` now sets `asyncUtilTimeout: 5000`. These queries POLL, so a longer ceiling cannot make a wrong assertion pass — it only stops a correct one being cut off by the scheduler.
+
+Guarded by four new `GuestRoomDO.combinedCap.test.ts` cases (claim requires roster membership; once per visitor and survives eviction; the room keeps running for everyone else; an expired room 410s rather than resurrecting a wiped transcript). API 4500/4500, structural checks 11/11, frontend **107/107 files · 997/997 tests, twice consecutively** (was 1–2 files failing per run), `tsgo`/`tsc` clean both packages.
+
+---
+
 ## 2026-08-05 — ✅ RESOLVED: a docked Brain painted over the canvas command rail, and its context rows were unreadable (ui 2026.7.163)
 
 Operator report: with Brain docked full-height on the **left**, the canvas action bar was simply gone — and the Connected-objects rows were hard to read in both themes.

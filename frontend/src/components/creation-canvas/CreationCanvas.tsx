@@ -20,6 +20,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { AccessibleOutlineIcon, CanvasCommands, CanvasRailToggle, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
 import { Canvas3DView } from '@/components/canvas/Canvas3DView';
+import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import type { Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { CanvasOutlinePanel } from './CanvasOutlinePanel';
 import { BrainDock } from './BrainDock';
@@ -2776,6 +2777,22 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setSelectedId(id);
     setSelectedIds([id]);
   }, []);
+  /**
+   * Zoom and fit mean the scene while it is up, and the flat board otherwise —
+   * the phone-sized action stack keeps the same buttons in both views instead of
+   * leaving three dead controls behind whenever 3D opens. `null` until the scene
+   * publishes, which is exactly the flat case.
+   */
+  const threeDControls = useCanvas3DControls();
+  const zoomInAction = useCallback(() => {
+    if (threeDControls) threeDControls.zoomIn(); else void flowRef.current?.zoomIn({ duration: 180 });
+  }, [threeDControls]);
+  const zoomOutAction = useCallback(() => {
+    if (threeDControls) threeDControls.zoomOut(); else void flowRef.current?.zoomOut({ duration: 180 });
+  }, [threeDControls]);
+  const fitViewAction = useCallback(() => {
+    if (threeDControls) threeDControls.resetView(); else void flowRef.current?.fitView({ padding: .18, maxZoom: .9, duration: 260 });
+  }, [threeDControls]);
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
     creation: (props) => <CreationNode {...props} canRun={canRun} onRun={(nodeId) => runWorkflow(nodeId)} onOpenBrain={(nodeId) => {
       setSelectedId(nodeId); setSelectedIds([nodeId]); openBrainDock();
@@ -3036,11 +3053,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         </ReactFlow>
 
         <div className={styles.mobileCanvasActions} role="group" aria-label={t('canvasViewControls')}>
-          <button type="button" onClick={() => void flowRef.current?.zoomIn({ duration: 180 })} aria-label={t('zoomIn')}>＋</button>
-          <button type="button" onClick={() => void flowRef.current?.zoomOut({ duration: 180 })} aria-label={t('zoomOut')}>−</button>
-          <button type="button" onClick={() => void flowRef.current?.fitView({ padding: .18, maxZoom: .9, duration: 260 })} aria-label={t('fitCanvas')}>⌗</button>
+          <button type="button" onClick={zoomInAction} aria-label={t('zoomIn')}>＋</button>
+          <button type="button" onClick={zoomOutAction} aria-label={t('zoomOut')}>−</button>
+          <button type="button" onClick={fitViewAction} aria-label={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')}>⌗</button>
           <button type="button" onClick={cleanLayout} aria-label={t('arrangeObjects')}>⌘</button>
           <button type="button" onClick={() => setThreeD((value) => !value)} aria-pressed={threeD} aria-label={tCommands('threeD.toggle')}>◱</button>
+          {threeDControls && <button type="button" onClick={threeDControls.toggleDepth} aria-pressed={threeDControls.depthMode !== 'flow'} aria-label={tCommands('threeD.depthGroup')}>⧉</button>}
           <button type="button" onClick={() => setOutlineOpen((value) => !value)} aria-pressed={outlineOpen} aria-label={t('canvasOutline')}><AccessibleOutlineIcon /></button>
         </div>
 
@@ -3637,5 +3655,7 @@ function ActivityInspector({ sessionId, objectId, persistence, role, members }: 
 }
 
 export function CreationCanvas({ sessionId, persistence = 'server', initialFocusId, initialShareOpen, initialPresent }: { sessionId: string; persistence?: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialPresent?: boolean }) {
-  return <ReactFlowProvider><CanvasInner sessionId={sessionId} persistence={persistence} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialPresent={initialPresent} /></ReactFlowProvider>;
+  // The 3D scene publishes its view commands to the canvas rail rather than
+  // carrying a toolbar of its own, so both live under one provider.
+  return <ReactFlowProvider><Canvas3DControlsProvider><CanvasInner sessionId={sessionId} persistence={persistence} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialPresent={initialPresent} /></Canvas3DControlsProvider></ReactFlowProvider>;
 }

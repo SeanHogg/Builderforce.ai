@@ -28,101 +28,6 @@
   color: var(--canvas-ink, var(--text-primary, #152033));
 }
 
-/* ---------- heads-up controls ---------- */
-
-.hud {
-  position: relative;
-  z-index: 2;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  /* Anchored left, not spread: a host canvas can open an inspector over the right
-     edge of the board, and controls pushed to that edge would vanish behind it. */
-  justify-content: flex-start;
-  gap: 8px 14px;
-  padding: 9px 12px;
-  border-bottom: 1px solid var(--canvas-line, var(--border-subtle, #d9e2ee));
-  background: color-mix(in srgb, var(--canvas-panel, var(--bg-elevated, #fff)) 92%, transparent);
-}
-
-.hudTitle {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-}
-
-.hudTitle strong { font-size: 12px; font-weight: 700; }
-.hudTitle small { color: var(--canvas-muted, var(--text-secondary, #6d7d94)); font-size: 10px; white-space: nowrap; }
-
-.hudMark {
-  display: grid;
-  width: 22px;
-  height: 22px;
-  flex: none;
-  place-items: center;
-  border-radius: 7px;
-  background: color-mix(in srgb, var(--canvas-blue, #3978f6) 16%, var(--canvas-panel, #fff));
-  color: var(--canvas-blue, #3978f6);
-  font-size: 13px;
-}
-
-.hudActions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 7px;
-}
-
-.hudField {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  color: var(--canvas-muted, var(--text-secondary, #6d7d94));
-  font-size: 10px;
-}
-
-.hudField select {
-  border: 1px solid var(--canvas-line, var(--border-subtle, #d9e2ee));
-  border-radius: 7px;
-  padding: 4px 6px;
-  background: var(--canvas-panel, var(--bg-elevated, #fff));
-  color: var(--canvas-ink, var(--text-primary, #152033));
-  font: 600 10px var(--font-sans, inherit);
-  cursor: pointer;
-}
-
-/* Native option lists are painted by the OS and do not inherit the control's
-   colours, so they need their own opaque pair or dark mode renders them unreadable. */
-.hudField select option {
-  background: var(--canvas-panel, var(--bg-elevated, #fff));
-  color: var(--canvas-ink, var(--text-primary, #152033));
-}
-
-.hudGroup {
-  display: flex;
-  overflow: hidden;
-  border: 1px solid var(--canvas-line, var(--border-subtle, #d9e2ee));
-  border-radius: 8px;
-}
-
-.hudGroup button {
-  min-width: 30px;
-  min-height: 28px;
-  padding: 0 7px;
-  border: 0;
-  border-right: 1px solid var(--canvas-line, var(--border-subtle, #d9e2ee));
-  background: var(--canvas-panel, var(--bg-elevated, #fff));
-  color: var(--canvas-ink, var(--text-primary, #152033));
-  font: 600 13px var(--font-sans, inherit);
-  line-height: 1;
-  cursor: pointer;
-}
-
-.hudGroup button:last-child { border-right: 0; }
-.hudGroup button:hover,
-.hudGroup button:focus-visible { background: var(--canvas-hover, #f1f6ff); outline: none; }
-
 /* ---------- the projected scene ---------- */
 
 .viewport {
@@ -277,10 +182,12 @@
   font-weight: 700;
 }
 
+/* The one line of chrome the scene keeps. The command rail floats over this same
+   bottom-left corner, so the text starts clear of it rather than underneath. */
 .hint {
   position: relative;
   z-index: 2;
-  padding: 7px 12px;
+  padding: 7px 12px 7px 62px;
   border-top: 1px solid var(--canvas-line, var(--border-subtle, #d9e2ee));
   background: color-mix(in srgb, var(--canvas-panel, var(--bg-elevated, #fff)) 92%, transparent);
   color: var(--canvas-muted, var(--text-secondary, #6d7d94));
@@ -288,9 +195,6 @@
 }
 
 @media (max-width: 760px) {
-  .hud { padding: 7px 8px; }
-  .hudTitle small { display: none; }
-  .hudField span { display: none; }
   .hint { display: none; }
 }
 

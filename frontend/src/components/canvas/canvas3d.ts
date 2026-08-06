@@ -52,10 +52,6 @@ const DEGREES = 180 / Math.PI;
 export const CANVAS_3D_DEPTH_MODES = ['flow', 'group'] as const;
 export type Canvas3DDepthMode = (typeof CANVAS_3D_DEPTH_MODES)[number];
 
-export function isCanvas3DDepthMode(value: unknown): value is Canvas3DDepthMode {
-  return CANVAS_3D_DEPTH_MODES.includes(value as Canvas3DDepthMode);
-}
-
 /** What a canvas tells the 3D view about one of its objects. */
 export interface Canvas3DDescriptor {
   label: string;

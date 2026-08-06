@@ -3,6 +3,7 @@
 import { ControlButton, Controls, MiniMap, type Edge, type Node } from '@xyflow/react';
 import { useTranslations } from 'next-intl';
 import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from 'react';
+import { useCanvas3DControls } from './canvas3dControls';
 import { canvasNodeFootprint, graphLayerRanks } from './canvasGraph';
 import styles from './CanvasCommands.module.css';
 
@@ -27,6 +28,32 @@ function ThreeDIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">
     <path d="M8 1.4 14 4.6v6.8L8 14.6 2 11.4V4.6z" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
     <path d="M2 4.6 8 7.9l6-3.3M8 7.9v6.7" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+  </svg>;
+}
+
+function DepthIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M8 1.6 14.4 5 8 8.4 1.6 5z" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+    <path d="M2.4 8.2 8 11.1l5.6-2.9M2.4 11.4 8 14.3l5.6-2.9" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+  </svg>;
+}
+
+function ZoomInIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M8 3.2v9.6M3.2 8h9.6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>;
+}
+
+function ZoomOutIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M3.2 8h9.6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>;
+}
+
+function ResetViewIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M13 8a5 5 0 1 1-1.6-3.7" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    <path d="M13.2 1.9v3h-3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
   </svg>;
 }
 
@@ -93,9 +120,12 @@ type CanvasCommandsProps = {
 /**
  * The common command rail and dismissible mini map used by every spatial canvas.
  *
- * The mini map is a map OF the flat board, so it stands down while a canvas is
- * being read in 3D — the scene is the map at that point, and leaving a stale
- * top-down thumbnail on screen would describe a view nobody is looking at.
+ * The mini map is a map OF the flat board, so it — and the button that opens it —
+ * stand down while a canvas is being read in 3D: the scene is the map at that
+ * point, and a stale top-down thumbnail would describe a view nobody is looking
+ * at. For the same reason the flat zoom, fit and lock commands hand over to the
+ * scene's own depth, zoom and reset while 3D is on. This is the ONLY command bar
+ * a canvas has in either view, so a mode never has to grow a toolbar of its own.
  *
  * Both are pinned to the bottom corners of the board, so a canvas that lets a
  * full-height panel claim an edge (the Brain dock) must say so by setting
@@ -116,8 +146,16 @@ export function CanvasCommands({
   threeDActive = false,
 }: CanvasCommandsProps) {
   const t = useTranslations('canvasCommands');
+  // Published by the scene while it is on screen; null in the flat view.
+  const threeD = useCanvas3DControls();
   return <>
-    <Controls position="bottom-left" className={styles.boardChrome} showInteractive={showInteractive}>
+    <Controls
+      position="bottom-left"
+      className={styles.boardChrome}
+      showZoom={!threeDActive}
+      showFitView={!threeDActive}
+      showInteractive={showInteractive && !threeDActive}
+    >
       <ControlButton onClick={onCleanLayout} aria-label={t('cleanLayout')} title={t('cleanLayout')}>
         <CleanLayoutIcon />
       </ControlButton>
@@ -130,7 +168,27 @@ export function CanvasCommands({
       >
         <ThreeDIcon />
       </CanvasRailToggle>}
-      <CanvasRailToggle
+      {threeDActive && threeD && <>
+        <CanvasRailToggle
+          pressed={threeD.depthMode !== 'flow'}
+          onClick={threeD.toggleDepth}
+          label={t('threeD.depthGroup')}
+          activeTitle={t('threeD.depthGroupActive')}
+          inactiveTitle={t('threeD.depthGroupInactive')}
+        >
+          <DepthIcon />
+        </CanvasRailToggle>
+        <ControlButton onClick={threeD.zoomIn} aria-label={t('threeD.zoomIn')} title={t('threeD.zoomIn')}>
+          <ZoomInIcon />
+        </ControlButton>
+        <ControlButton onClick={threeD.zoomOut} aria-label={t('threeD.zoomOut')} title={t('threeD.zoomOut')}>
+          <ZoomOutIcon />
+        </ControlButton>
+        <ControlButton onClick={threeD.resetView} aria-label={t('threeD.reset')} title={t('threeD.reset')}>
+          <ResetViewIcon />
+        </ControlButton>
+      </>}
+      {!threeDActive && <CanvasRailToggle
         pressed={minimapOpen}
         onClick={() => setMinimapOpen((open) => !open)}
         label={t('toggleMiniMap')}
@@ -138,7 +196,7 @@ export function CanvasCommands({
         inactiveTitle={t('showMiniMap')}
       >
         <MinimapIcon />
-      </CanvasRailToggle>
+      </CanvasRailToggle>}
       {extraControls}
     </Controls>
     {minimapOpen && !threeDActive && <>
