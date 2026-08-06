@@ -60,7 +60,7 @@ Operator report: "this is supposed to be a free floating 3-dimensional space whe
 
 Layer guides are now a toggle on the rail (`layerGuides`) — they are an aid, so they can be put away without moving a single object — and a `dropToLayers` command appears only while something is actually floating. Locked placements are honoured in the space: a locked card is not a handle, and the drag falls through to turn the space instead. `canvasPlacementUnlocked()` in `creationCanvasLayout.ts` is now the one predicate for "may this object be repositioned", with `canvasArrangementTargets`, align, the arrow-key nudge and the 3D drag all reading it — a new way to move an object can no longer forget the lock. Copy for all of it landed in en/zh/es/fr/de.
 
-Guarded by 31 cases in `canvas3d.test.ts` (unprojection round-trip, edge-on refusal, depth direction and magnitude, camera pan, lifted cards, locked cards) and four in `CreationCanvas.test.tsx` (drag moves an object and it stays dropped, shift-drag lifts it and the rail offers to settle it back, the guides toggle without moving anything).
+Guarded by 36 cases in `canvas3d.test.ts` (unprojection round-trip, edge-on refusal, depth direction and magnitude, camera pan, lifted cards, locked cards, and `applyCanvas3DMoves` itself — accumulating a lift, dropping the field when an object settles, and never moving a locked placement) and three in `CreationCanvas.test.tsx` (drag moves an object and it stays dropped, shift-drag lifts it and the rail offers to settle it back, the guides toggle without moving anything).
 
 ---
 

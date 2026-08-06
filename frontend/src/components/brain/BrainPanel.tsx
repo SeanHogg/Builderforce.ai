@@ -211,6 +211,18 @@ export function BrainPanel({
   /** Bumped to pull focus into the composer after something seeds it. */
   const [composerFocusToken, setComposerFocusToken] = useState(0);
   /**
+   * The mode a NOT-YET-CREATED chat will be born in (migration 0409). Declared here,
+   * above `startNewChat`, because every creation path has to carry it: a user who
+   * picks Work in the empty state and then types must get a WORK conversation, not a
+   * chat one that silently declines to do the thing they asked for. Mirrored into a
+   * ref so `startNewChat` reads the current value without being re-created (it is a
+   * dependency of `ensureChatId`, which is captured into every run).
+   */
+  const [pendingMode, setPendingMode] = useState<ChatMode>(DEFAULT_CHAT_MODE);
+  const pendingModeRef = useRef<ChatMode>(DEFAULT_CHAT_MODE);
+  // eslint-disable-next-line react-hooks/refs
+  pendingModeRef.current = pendingMode;
+  /**
    * Docked drawer sections. Chat history used to be a collapsible strip stacked
    * ABOVE the conversation, which squeezed the thread in a ~440px drawer and hid
    * past chats behind a disclosure; it is now a peer tab of the conversation, so
@@ -428,6 +440,26 @@ export function BrainPanel({
   }, [chats, startNewChat, tBrain]);
   const capabilityPrompt = getBrainCapability(capabilityId)?.systemPrompt;
 
+  // ---- Mode ("am I asking, or delegating?") --------------------------------
+  // A property of the CHAT (migration 0409), like `capability`, so the choice follows
+  // the conversation rather than the browser. `pendingMode` (declared above, beside the
+  // composer state, because `startNewChat` reads it) covers the pre-chat empty state:
+  // without it, picking Work and then typing would silently mint a `chat`-mode chat.
+  const chatMode: ChatMode = chats.activeChat
+    ? normalizeChatMode(chats.activeChat.mode)
+    : pendingMode;
+  const selectMode = useCallback(async (mode: ChatMode) => {
+    setPendingMode(mode);
+    const id = chats.activeChatId;
+    if (id != null) await chats.setMode(id, mode);
+  }, [chats]);
+  // A work option is a STARTING POINT, not a message: seed the composer and drop the
+  // caret at the end so the user finishes the brief instead of sending the template.
+  const pickWorkOption = useCallback((_id: WorkOptionId, brief: string) => {
+    setInput((prev) => (prev.trim() ? prev : brief));
+    setComposerFocusToken((n) => n + 1);
+  }, []);
+
   const ambientSystem = useMemo(() => {
     const parts: string[] = [];
     if (extraSystem) parts.push(extraSystem);
@@ -555,6 +587,7 @@ export function BrainPanel({
     onFirstUserTurn: chats.autoTitle,
     evermind: gatedEvermind,
     augmentSystemPrompt,
+    chatMode,
   });
 
   const { pendingConfirm, resolveConfirm } = conv;
