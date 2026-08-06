@@ -6424,7 +6424,6 @@
     "openInIde": "Abrir en el Builder →",
     "brainModality": "Brain — {modality}",
     "brainAs": "Brain como {name}",
-    "chatHistory": "Historial de chats",
     "upgrade": "Mejorar plan",
     "upgradeToPlan": "Mejorar a {plan}",
     "addCard": "Añadir una tarjeta",
@@ -6440,7 +6439,15 @@
     "onboardMe": "Ayúdame a empezar",
     "onboardMePrompt": "Soy nuevo aquí: ayúdame a empezar. Pregúntame qué quiero construir, explícame cómo funcionan el uso y los costes, recomiéndame si el plan Free o Pro se ajusta a mi plazo y ayúdame a conectar mi cuenta de IA existente si tengo una.",
     "providerCapBanner": "Tu clave de API de {providers} alcanzó su límite de uso; esta ejecución recurrió al grupo de modelos compartido.",
-    "manageApiKeys": "Gestionar tus claves de API →"
+    "manageApiKeys": "Gestionar tus claves de API →",
+    "tabChat": "Chat",
+    "tabHistory": "Historial",
+    "sectionsAria": "Secciones de Brain",
+    "chatActions": "Acciones del chat",
+    "chatActionsAria": "Acciones de {title}",
+    "aiDisclosureAria": "Aviso sobre IA",
+    "aiDisclosureBody": "Estás interactuando con agentes de IA. Los resultados pueden ser inexactos; revísalos antes de basar decisiones importantes en ellos. Las acciones que modifican datos requieren tu aprobación, salvo que actives explícitamente la aprobación automática.",
+    "aiDisclosureLink": "Cómo funciona la IA, explicaciones y revisión humana"
   },
   "chatMessage": {
     "copy": "Copiar",

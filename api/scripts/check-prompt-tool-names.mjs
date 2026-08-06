@@ -49,7 +49,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 
-const sourceRoot = path.resolve('src');
+/**
+ * Roots scanned for TypeScript prompts.
+ *
+ * The FRONTEND is here for the same reason the SQL migrations are: the rule is about
+ * text that reaches a model, and text that reaches a model is not confined to this
+ * package. The Creation Canvas system prompt lives in
+ * `frontend/src/lib/creationCanvasAi.ts` and is compiled into every Canvas turn — and
+ * when this root was added it was naming four catalog ids (`creative.capabilities`,
+ * `creative.compose`, `sales.workspace_get`, `meetings.schedule`) that appear nowhere in
+ * the model's tool list, the fourth instance of this defect.
+ */
+const TS_ROOTS = [path.resolve('src'), path.resolve('..', 'frontend', 'src')].filter((dir) => fs.existsSync(dir));
 const CATALOG_FILE = path.join('src', 'application', 'llm', 'builtinMcpService.ts');
 
 const advertisedName = (tool) => `builtin_${tool.replace(/[^a-zA-Z0-9]+/g, '_')}`;

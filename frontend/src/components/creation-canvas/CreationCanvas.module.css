@@ -402,8 +402,10 @@
 /* Resize handles on a mark would offer a size the placement does not have. */
 .node_chat:has(.brainMarker) .resizeLine,
 .node_chat:has(.brainMarker) .resizeHandle { display:none!important; }
-.brainMarker { position:relative; display:grid; flex:1; place-items:center; padding:0; border:0; border-radius:50%; background:var(--canvas-brain-icon-bg); color:var(--canvas-brain-accent); cursor:pointer; }
-.brainMarker:hover,.brainMarker:focus-visible { outline:none; background:color-mix(in srgb,var(--canvas-brain-accent) 22%,var(--canvas-brain-icon-bg)); }
+/* The Object's own disc is the mark's background — a second filled circle inside it
+   reads as two rings rather than one Brain. */
+.brainMarker { position:relative; display:grid; flex:1; place-items:center; padding:0; border:0; border-radius:50%; background:transparent; color:var(--canvas-brain-accent); cursor:pointer; }
+.brainMarker:hover,.brainMarker:focus-visible { outline:none; background:var(--canvas-brain-icon-bg); }
 .brainMarker:focus-visible { box-shadow:0 0 0 2px var(--canvas-brain-accent); }
 .brainMarkerMark { position:relative; z-index:1; font-size:26px; line-height:1; }
 /* The working signal: a ring that breathes out of the mark, so a running turn reads

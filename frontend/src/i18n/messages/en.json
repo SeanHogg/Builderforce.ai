@@ -6427,7 +6427,6 @@
     "openInIde": "Open in Builder →",
     "brainModality": "Brain — {modality}",
     "brainAs": "Brain as {name}",
-    "chatHistory": "Chat history",
     "upgrade": "Upgrade",
     "upgradeToPlan": "Upgrade to {plan}",
     "addCard": "Add a card",
@@ -6441,7 +6440,15 @@
     },
     "queuedCount": "{count, plural, one {# message queued} other {# messages queued}}",
     "onboardMe": "Help me get started",
-    "onboardMePrompt": "I'm new here — help me get started. Ask me about what I want to build, explain how usage and costs work, recommend whether the Free or Pro plan fits my timeframe, and help me connect my existing AI account if I have one."
+    "onboardMePrompt": "I'm new here — help me get started. Ask me about what I want to build, explain how usage and costs work, recommend whether the Free or Pro plan fits my timeframe, and help me connect my existing AI account if I have one.",
+    "tabChat": "Chat",
+    "tabHistory": "History",
+    "sectionsAria": "Brain sections",
+    "chatActions": "Chat actions",
+    "chatActionsAria": "Actions for {title}",
+    "aiDisclosureAria": "AI disclosure",
+    "aiDisclosureBody": "You are interacting with AI agents. Outputs can be inaccurate; review consequential results before relying on them. Mutating actions require your approval unless you explicitly enable auto-approve.",
+    "aiDisclosureLink": "How AI works, explanations, and human review"
   },
   "chatMessage": {
     "copy": "Copy",

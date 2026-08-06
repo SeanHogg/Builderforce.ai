@@ -6424,7 +6424,6 @@
     "openInIde": "在 Builder 中打开 →",
     "brainModality": "Brain — {modality}",
     "brainAs": "以 {name} 身份运行的 Brain",
-    "chatHistory": "会话历史",
     "upgrade": "升级",
     "upgradeToPlan": "升级到 {plan}",
     "addCard": "添加银行卡",
@@ -6440,7 +6439,15 @@
     "onboardMe": "帮我快速上手",
     "onboardMePrompt": "我是新用户——帮我快速上手。询问我想构建什么，说明用量和费用的运作方式，根据我的时间安排推荐免费版还是专业版，并在我有现成的 AI 账户时帮我连接。",
     "providerCapBanner": "你的 {providers} API 密钥已达用量上限——本次运行已回退到共享模型池。",
-    "manageApiKeys": "管理你的 API 密钥 →"
+    "manageApiKeys": "管理你的 API 密钥 →",
+    "tabChat": "对话",
+    "tabHistory": "历史记录",
+    "sectionsAria": "Brain 版块",
+    "chatActions": "对话操作",
+    "chatActionsAria": "“{title}”的操作",
+    "aiDisclosureAria": "AI 声明",
+    "aiDisclosureBody": "您正在与 AI 智能体互动。输出结果可能不准确；在依据重要结果采取行动前请先复核。除非您明确启用自动批准，否则更改数据的操作都需要您的批准。",
+    "aiDisclosureLink": "AI 的工作方式、解释说明与人工复核"
   },
   "chatMessage": {
     "copy": "复制",

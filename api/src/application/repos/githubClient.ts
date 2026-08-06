@@ -47,7 +47,10 @@ export type GitHubErrorCode =
   | 'provider_error';
 
 export type GitHubResponse<T> =
-  | { ok: true; status: number; data: T }
+  /** `headers` is the live Response's headers — the only way to read GitHub's
+   *  `Link` pagination header, which is how an exact result count is obtained
+   *  without downloading every page (see projectConnectionStatus). */
+  | { ok: true; status: number; data: T; headers: Headers }
   | { ok: false; status: number; code: GitHubErrorCode; reason: string };
 
 export function githubHeaders(token: string, extra?: Record<string, string>): Record<string, string> {
@@ -126,13 +129,13 @@ export async function githubRequest<T>(args: {
   }
 
   // 204 No Content is a success with no body (e.g. some DELETE endpoints).
-  if (res.status === 204) return { ok: true, status: 204, data: undefined as T };
+  if (res.status === 204) return { ok: true, status: 204, data: undefined as T, headers: res.headers };
 
   const data = (await res.json().catch(() => null)) as T | null;
   if (data === null) {
     return { ok: false, status: res.status, code: 'provider_error', reason: 'response body was not JSON' };
   }
-  return { ok: true, status: res.status, data };
+  return { ok: true, status: res.status, data, headers: res.headers };
 }
 
 /** Build a `/repos/{owner}/{repo}{suffix}` path with segments safely encoded. */

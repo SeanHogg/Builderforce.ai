@@ -6424,7 +6424,6 @@
     "openInIde": "In der Builder öffnen →",
     "brainModality": "Brain — {modality}",
     "brainAs": "Brain als {name}",
-    "chatHistory": "Chat-Verlauf",
     "upgrade": "Upgrade",
     "upgradeToPlan": "Auf {plan} upgraden",
     "addCard": "Karte hinzufügen",
@@ -6440,7 +6439,15 @@
     "onboardMe": "Hilf mir beim Einstieg",
     "onboardMePrompt": "Ich bin neu hier – hilf mir beim Einstieg. Frag mich, was ich bauen möchte, erkläre, wie Nutzung und Kosten funktionieren, empfiehl, ob der Free- oder Pro-Plan zu meinem Zeitrahmen passt, und hilf mir, mein vorhandenes KI-Konto zu verbinden, falls ich eines habe.",
     "providerCapBanner": "Dein {providers}-API-Schlüssel hat sein Nutzungslimit erreicht — dieser Lauf ist auf den gemeinsamen Modell-Pool zurückgefallen.",
-    "manageApiKeys": "API-Schlüssel verwalten →"
+    "manageApiKeys": "API-Schlüssel verwalten →",
+    "tabChat": "Chat",
+    "tabHistory": "Verlauf",
+    "sectionsAria": "Brain-Bereiche",
+    "chatActions": "Chat-Aktionen",
+    "chatActionsAria": "Aktionen für {title}",
+    "aiDisclosureAria": "KI-Hinweis",
+    "aiDisclosureBody": "Sie interagieren mit KI-Agenten. Ergebnisse können fehlerhaft sein; prüfen Sie sie, bevor Sie wichtige Entscheidungen darauf stützen. Ändernde Aktionen erfordern Ihre Freigabe, sofern Sie die automatische Freigabe nicht ausdrücklich aktivieren.",
+    "aiDisclosureLink": "Wie KI funktioniert, Erklärungen und menschliche Prüfung"
   },
   "chatMessage": {
     "copy": "Kopieren",

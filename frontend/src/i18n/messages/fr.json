@@ -6424,7 +6424,6 @@
     "openInIde": "Ouvrir dans l'Builder →",
     "brainModality": "Brain — {modality}",
     "brainAs": "Brain en tant que {name}",
-    "chatHistory": "Historique des discussions",
     "upgrade": "Mettre à niveau",
     "upgradeToPlan": "Passer à {plan}",
     "addCard": "Ajouter une carte",
@@ -6440,7 +6439,15 @@
     "onboardMe": "Aidez-moi à démarrer",
     "onboardMePrompt": "Je suis nouveau ici — aidez-moi à démarrer. Demandez-moi ce que je veux créer, expliquez comment fonctionnent l'usage et les coûts, recommandez si le plan Free ou Pro convient à mon échéance, et aidez-moi à connecter mon compte IA existant si j'en ai un.",
     "providerCapBanner": "Votre clé API {providers} a atteint sa limite d’utilisation — cette exécution est repassée sur le pool de modèles partagé.",
-    "manageApiKeys": "Gérer vos clés API →"
+    "manageApiKeys": "Gérer vos clés API →",
+    "tabChat": "Discussion",
+    "tabHistory": "Historique",
+    "sectionsAria": "Sections de Brain",
+    "chatActions": "Actions de la discussion",
+    "chatActionsAria": "Actions pour {title}",
+    "aiDisclosureAria": "Avis relatif à l’IA",
+    "aiDisclosureBody": "Vous interagissez avec des agents d'IA. Les résultats peuvent être inexacts ; vérifiez-les avant de fonder une décision importante dessus. Les actions qui modifient des données nécessitent votre approbation, sauf si vous activez explicitement l'approbation automatique.",
+    "aiDisclosureLink": "Fonctionnement de l'IA, explications et contrôle humain"
   },
   "chatMessage": {
     "copy": "Copier",
