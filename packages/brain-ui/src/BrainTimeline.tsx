@@ -412,14 +412,15 @@ function BrainTimelineInner({
             // A message addressed to a participant (not the BRAIN) shows a "→ Name"
             // badge so the transcript makes clear who it was spoken to.
             const to = parseDirectedRecipient(node.message);
+            const author = parseMessageAuthor(node.message);
             return (
               <li key={node.key} className="bf-tl__item bf-tl__item--user">
                 <span className="bf-tl__gutter">
-                  <span className="bf-tl__dot">{dotIcon('user')}</span>
+                  <span className="bf-tl__dot">{author ? <Avatar name={author.name} kind={author.kind} size={16} /> : dotIcon('user')}</span>
                 </span>
                 <div className="bf-tl__body">
                   <div className="bf-tl__role" style={to ? { display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' } : undefined}>
-                    <span>{labels.you}</span>
+                    <span>{author ? author.name : labels.you}</span>
                     {to && (
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, opacity: 0.9 }}>
                         <span aria-hidden style={{ opacity: 0.6 }}>→</span>

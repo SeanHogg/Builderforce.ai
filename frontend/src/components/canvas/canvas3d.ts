@@ -31,14 +31,19 @@ export interface Canvas3DOrbit {
 }
 
 /** Enough tilt to read the depth axis, little enough to still read the cards. */
-export const CANVAS_3D_DEFAULT_ORBIT: Canvas3DOrbit = { yaw: -26, pitch: 16, zoom: 0.42 };
+export const CANVAS_3D_DEFAULT_ORBIT: Canvas3DOrbit = { yaw: -24, pitch: 14, zoom: 0.42 };
 export const CANVAS_3D_MIN_ZOOM = 0.08;
 export const CANVAS_3D_MAX_ZOOM = 1.6;
 /** Beyond this the planes are edge-on and nothing is legible, so orbiting stops. */
 export const CANVAS_3D_MAX_PITCH = 84;
 /** Distance between depth planes, in board pixels. */
-export const CANVAS_3D_LAYER_GAP = 460;
-export const CANVAS_3D_PERSPECTIVE = 2200;
+export const CANVAS_3D_LAYER_GAP = 340;
+/**
+ * A long focal length. A short one exaggerates depth so violently that the back
+ * plane becomes unreadable next to the front one — the view has to show depth,
+ * not caricature it.
+ */
+export const CANVAS_3D_PERSPECTIVE = 3400;
 /** Board padding around the outermost card, so planes read as surfaces. */
 const PLANE_MARGIN = 260;
 const DEGREES = 180 / Math.PI;
@@ -228,6 +233,19 @@ export function canvas3dOrbitAfterDrag(orbit: Canvas3DOrbit, dx: number, dy: num
     yaw: wrapDegrees(orbit.yaw + dx * sensitivity),
     pitch: clamp(orbit.pitch - dy * sensitivity, -CANVAS_3D_MAX_PITCH, CANVAS_3D_MAX_PITCH),
   };
+}
+
+/**
+ * The zoom that brings the whole board into view.
+ *
+ * A fixed default cannot serve both a three-card sketch and a hundred-object
+ * board — one opens microscopic, the other opens off screen. The margin absorbs
+ * the extra footprint the tilt adds, since a rotated plane projects wider than
+ * it measures.
+ */
+export function canvas3dFitZoom(plane: { width: number; height: number }, viewport: { width: number; height: number } | null): number {
+  if (!plane.width || !plane.height || !viewport?.width || !viewport?.height) return CANVAS_3D_DEFAULT_ORBIT.zoom;
+  return clamp(Math.min(viewport.width / plane.width, viewport.height / plane.height) * 0.82, CANVAS_3D_MIN_ZOOM, 1);
 }
 
 /** Multiplicative zoom, so each step feels the same at any distance. */

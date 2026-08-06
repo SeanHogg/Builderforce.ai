@@ -1034,7 +1034,16 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       eq(creationSessionTimeline.sessionId, access.session.id),
       after ? gt(creationSessionTimeline.id, after) : undefined,
     )).orderBy(asc(creationSessionTimeline.id)).limit(limit);
-    return c.json({ messages, lastId: messages.at(-1)?.id ?? after, hasMore: messages.length === limit });
+    const humanIds = [...new Set(messages.filter((message) => message.messageRole === 'user' && message.createdBy).map((message) => message.createdBy!))];
+    const humanRows = humanIds.length ? await db.select({ id: users.id, name: users.displayName }).from(users).where(inArray(users.id, humanIds)) : [];
+    const humanNames = new Map(humanRows.map((human) => [human.id, human.name || 'Collaborator']));
+    const attributed = messages.map((message) => {
+      const raw = message.metadata && typeof message.metadata === 'object' && !Array.isArray(message.metadata) ? message.metadata as Record<string, unknown> : {};
+      return message.messageRole === 'user' && message.createdBy && !raw.authoredBy
+        ? { ...message, metadata: { ...raw, authoredBy: { kind: 'human', ref: message.createdBy, name: humanNames.get(message.createdBy) || 'Collaborator' } } }
+        : message;
+    });
+    return c.json({ messages: attributed, lastId: messages.at(-1)?.id ?? after, hasMore: messages.length === limit });
   });
 
   router.post('/:id/timeline', async (c) => {
@@ -1046,12 +1055,14 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const body = typeof input.body === 'string' ? input.body.trim().slice(0, 50_000) : '';
     if (!clientMessageId || !body) return c.json({ error: 'clientMessageId and body are required' }, 400);
     const rawMeta = input.metadata && typeof input.metadata === 'object' && !Array.isArray(input.metadata) ? input.metadata as Record<string, unknown> : {};
+    const userId = c.get('userId') as string;
+    const [human] = role === 'user' ? await db.select({ name: users.displayName }).from(users).where(eq(users.id, userId)).limit(1) : [];
     const metadata = {
       ...(typeof rawMeta.scope === 'string' ? { scope: rawMeta.scope.slice(0, 32) } : {}),
       ...(Array.isArray(rawMeta.objectIds) ? { objectIds: rawMeta.objectIds.filter((id): id is string => typeof id === 'string' && UUID_RE.test(id)).slice(0, 100) } : {}),
       ...(typeof rawMeta.model === 'string' ? { model: rawMeta.model.slice(0, 120) } : {}),
       ...(typeof rawMeta.error === 'boolean' ? { error: rawMeta.error } : {}),
-      ...(rawMeta.authoredBy && typeof rawMeta.authoredBy === 'object' && !Array.isArray(rawMeta.authoredBy) ? {
+      ...(role === 'user' ? { authoredBy: { kind: 'human', ref: userId, name: human?.name || 'Collaborator' } } : rawMeta.authoredBy && typeof rawMeta.authoredBy === 'object' && !Array.isArray(rawMeta.authoredBy) ? {
         authoredBy: {
           kind: (rawMeta.authoredBy as Record<string, unknown>).kind === 'agent' ? 'agent' : 'brain',
           ref: String((rawMeta.authoredBy as Record<string, unknown>).ref || '').slice(0, 128),
@@ -1060,7 +1071,7 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       } : {}),
     };
     const [inserted] = await db.insert(creationSessionTimeline).values({
-      sessionId: access.session.id, clientMessageId, messageRole: role, body, metadata, createdBy: c.get('userId') as string,
+      sessionId: access.session.id, clientMessageId, messageRole: role, body, metadata, createdBy: userId,
     }).onConflictDoNothing({ target: [creationSessionTimeline.sessionId, creationSessionTimeline.clientMessageId] }).returning();
     const message = inserted ?? (await db.select().from(creationSessionTimeline).where(and(
       eq(creationSessionTimeline.sessionId, access.session.id), eq(creationSessionTimeline.clientMessageId, clientMessageId),

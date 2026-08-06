@@ -32,11 +32,12 @@ import { loadProjectTeamMembers } from '../../application/metrics/assigneeRecomm
 import { findActiveCeremonyForMeeting } from '../../application/ceremony/ceremonyMeeting';
 import { recordCeremonyPresence } from '../../application/ceremony/concludeCeremony';
 import { BrainService } from '../../application/brain/BrainService';
-import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import {
   suggestSlots, normalizeWindows, type Availability, type BusyInterval,
 } from '../../application/calendar/availabilitySolver';
 import { applyMediaPrivacyMode } from '../../domain/meetings/mediaPrivacy';
+
+import { iceServers } from '../../application/meetings/iceServers';
 
 const KINDS = new Set(['standup', 'planning', 'retrospective', 'adhoc', 'direct', 'interview', 'review']);
 /** Team ceremonies default to being backed by a team chat — "the meeting IS the
@@ -44,62 +45,6 @@ const KINDS = new Set(['standup', 'planning', 'retrospective', 'adhoc', 'direct'
 const TEAM_CEREMONY_KINDS = new Set(['standup', 'planning', 'retrospective', 'review']);
 
 interface AttendeeInput { kind?: string; ref: string; name: string; email?: string; role?: string; }
-
-/** WebRTC ICE server descriptor (the DOM `RTCIceServer` type is absent in the
- *  Workers lib, so declare the shape we serialize to the client). */
-interface IceServer { urls: string | string[]; username?: string; credential?: string; }
-
-/**
- * Short-lived TURN credentials minted from Cloudflare's TURN service, when a
- * Cloudflare TURN key is configured (`CLOUDFLARE_TURN_KEY_ID` +
- * `CLOUDFLARE_TURN_API_TOKEN`). This turns "provision a TURN relay" into setting
- * two secrets instead of standing up coturn. Cached (creds outlive the cache TTL),
- * best-effort — a failure just omits TURN and mesh falls back to STUN.
- */
-async function cloudflareTurn(env: Env): Promise<IceServer | null> {
-  const keyId = env.CLOUDFLARE_TURN_KEY_ID;
-  const token = env.CLOUDFLARE_TURN_API_TOKEN;
-  if (!keyId || !token) return null;
-  try {
-    return await getOrSetCached<IceServer>(
-      env,
-      `turn:cf:${keyId}`,
-      async () => {
-        const res = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${encodeURIComponent(keyId)}/credentials/generate`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ttl: 86_400 }),
-        });
-        if (!res.ok) throw new Error(`cloudflare turn ${res.status}`);
-        const d = (await res.json()) as { iceServers?: { urls?: string | string[]; username?: string; credential?: string } };
-        const ice = d.iceServers;
-        if (!ice?.urls) throw new Error('cloudflare turn: no urls');
-        return { urls: ice.urls, username: ice.username, credential: ice.credential };
-      },
-      { kvTtlSeconds: 43_200, l1TtlMs: 3_600_000 },
-    );
-  } catch {
-    return null;
-  }
-}
-
-/** ICE servers for mesh P2P — public STUN, plus a TURN relay when configured
- *  (static `TURN_URL`, and/or Cloudflare-minted short-lived credentials). */
-async function iceServers(env: Env): Promise<IceServer[]> {
-  const servers: IceServer[] = [
-    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-  ];
-  if (env.TURN_URL) {
-    servers.push({
-      urls: env.TURN_URL.split(',').map((u) => u.trim()).filter(Boolean),
-      username: env.TURN_USERNAME,
-      credential: env.TURN_CREDENTIAL,
-    });
-  }
-  const cf = await cloudflareTurn(env);
-  if (cf) servers.push(cf);
-  return servers;
-}
 
 export function createMeetingRoutes(db: Db): Hono<HonoEnv> {
   const r = new Hono<HonoEnv>();

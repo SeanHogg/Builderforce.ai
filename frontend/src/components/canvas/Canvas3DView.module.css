@@ -10,7 +10,13 @@
 
 .scene {
   position: absolute;
-  inset: 0;
+  top: var(--canvas-3d-inset-top, 0px);
+  bottom: var(--canvas-3d-inset-bottom, 0px);
+  /* A host canvas that parks a dock over one edge of the board publishes the
+     space it takes; without this the scene — and its own controls — would render
+     underneath that dock. Defaults to the full surface when nothing is docked. */
+  left: var(--canvas-3d-inset-left, 0px);
+  right: var(--canvas-3d-inset-right, 0px);
   z-index: 7;
   display: flex;
   flex-direction: column;
@@ -29,8 +35,10 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  /* Anchored left, not spread: a host canvas can open an inspector over the right
+     edge of the board, and controls pushed to that edge would vanish behind it. */
+  justify-content: flex-start;
+  gap: 8px 14px;
   padding: 9px 12px;
   border-bottom: 1px solid var(--canvas-line, var(--border-subtle, #d9e2ee));
   background: color-mix(in srgb, var(--canvas-panel, var(--bg-elevated, #fff)) 92%, transparent);
@@ -113,19 +121,6 @@
 .hudGroup button:last-child { border-right: 0; }
 .hudGroup button:hover,
 .hudGroup button:focus-visible { background: var(--canvas-hover, #f1f6ff); outline: none; }
-
-.exit {
-  min-height: 28px;
-  padding: 5px 10px;
-  border: 1px solid var(--canvas-line, var(--border-subtle, #d9e2ee));
-  border-radius: 8px;
-  background: var(--canvas-panel, var(--bg-elevated, #fff));
-  color: var(--canvas-ink, var(--text-primary, #152033));
-  font: 700 10px var(--font-sans, inherit);
-  cursor: pointer;
-}
-
-.exit:hover { background: var(--canvas-hover, #f1f6ff); }
 
 /* ---------- the projected scene ---------- */
 
@@ -295,7 +290,6 @@
   .hud { padding: 7px 8px; }
   .hudTitle small { display: none; }
   .hudField span { display: none; }
-  .exit { padding: 5px 8px; }
   .hint { display: none; }
 }
 

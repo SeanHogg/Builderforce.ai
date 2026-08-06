@@ -238,6 +238,7 @@ configureCaughtErrorReporter(persistCaughtError);
 export { AgentHostRelayDO } from './infrastructure/relay/AgentHostRelayDO';
 export { SessionRoomDO } from './infrastructure/relay/SessionRoomDO';
 export { CeremonyRoomDO } from './infrastructure/relay/CeremonyRoomDO';
+export { GuestRoomDO } from './infrastructure/relay/GuestRoomDO';
 export { AnalysisRunnerDO } from './infrastructure/relay/AnalysisRunnerDO';
 export { CloudRunnerDO } from './infrastructure/relay/CloudRunnerDO';
 export { ProjectEvermindCoordinatorDO } from './infrastructure/relay/ProjectEvermindCoordinatorDO';

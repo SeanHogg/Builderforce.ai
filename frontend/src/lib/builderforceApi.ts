@@ -7972,7 +7972,7 @@ export interface CreationTimelineMessage {
   clientMessageId: string;
   messageRole: 'user' | 'assistant' | 'system';
   body: string;
-  metadata: { scope?: string; objectIds?: string[]; model?: string; error?: boolean; authoredBy?: { kind: 'agent' | 'brain'; ref: string; name: string } };
+  metadata: { scope?: string; objectIds?: string[]; model?: string; error?: boolean; authoredBy?: { kind: 'agent' | 'brain' | 'human'; ref: string; name: string } };
   createdBy: string | null;
   createdAt: string;
 }

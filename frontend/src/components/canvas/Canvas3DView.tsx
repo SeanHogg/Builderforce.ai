@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   CANVAS_3D_DEFAULT_ORBIT,
@@ -9,6 +9,7 @@ import {
   canvas3dLinkTransform,
   canvas3dOrbitAfterDrag,
   canvas3dOrbitAfterZoom,
+  canvas3dFitZoom,
   canvas3dScene,
   canvas3dStageTransform,
   canvas3dTranslate,
@@ -31,6 +32,7 @@ export interface Canvas3DViewProps<T extends Canvas3DNode> {
   measure?: (node: T) => { width: number; height: number };
   selectedIds?: readonly string[];
   onSelect?: (id: string) => void;
+  /** Leave 3D. The visible control lives on the canvas rail; this is the Escape key. */
   onExit: () => void;
 }
 
@@ -70,6 +72,46 @@ export function Canvas3DView<T extends Canvas3DNode>({
   );
   const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
 
+  const fitZoom = useCallback(
+    () => canvas3dFitZoom(scene.plane, viewportRef.current?.getBoundingClientRect() ?? null),
+    [scene.plane],
+  );
+  /** Once the user zooms, the view stops re-framing itself behind their back. */
+  const userZoomed = useRef(false);
+  const zoomBy = useCallback((factor: number) => {
+    userZoomed.current = true;
+    setOrbit((current) => canvas3dOrbitAfterZoom(current, factor));
+  }, []);
+  const resetView = useCallback(() => {
+    userZoomed.current = false;
+    setOrbit({ ...CANVAS_3D_DEFAULT_ORBIT, zoom: fitZoom() });
+  }, [fitZoom]);
+
+  // Frame the board once per shape of the scene — on open, and again when the
+  // depth axis restacks it. Re-fitting on every render would fight the user's
+  // own orbit, so a key guards it.
+  const fittedKey = useRef<string | null>(null);
+  useLayoutEffect(() => {
+    const key = `${depthMode}:${Math.round(scene.plane.width)}x${Math.round(scene.plane.height)}:${scene.layers.length}`;
+    if (fittedKey.current === key) return;
+    fittedKey.current = key;
+    resetView();
+  }, [depthMode, resetView, scene.layers.length, scene.plane]);
+
+  // The surface it is framed against moves: a dock opens, a phone rotates, the
+  // window resizes. Re-fit while the framing is still ours to choose.
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(() => {
+      if (userZoomed.current) return;
+      const zoom = fitZoom();
+      setOrbit((current) => current.zoom === zoom ? current : { ...current, zoom });
+    });
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [fitZoom]);
+
   useEffect(() => {
     if (!dragging) return;
     const move = (event: PointerEvent) => {
@@ -98,11 +140,11 @@ export function Canvas3DView<T extends Canvas3DNode>({
     if (!viewport) return;
     const wheel = (event: WheelEvent) => {
       event.preventDefault();
-      setOrbit((current) => canvas3dOrbitAfterZoom(current, canvas3dZoomFactorFromWheel(event.deltaY)));
+      zoomBy(canvas3dZoomFactorFromWheel(event.deltaY));
     };
     viewport.addEventListener('wheel', wheel, { passive: false });
     return () => viewport.removeEventListener('wheel', wheel);
-  }, []);
+  }, [zoomBy]);
 
   const onPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
@@ -119,15 +161,21 @@ export function Canvas3DView<T extends Canvas3DNode>({
     }
     if (event.key === '+' || event.key === '=') {
       event.preventDefault();
-      setOrbit((current) => canvas3dOrbitAfterZoom(current, ZOOM_STEP));
+      zoomBy(ZOOM_STEP);
     } else if (event.key === '-' || event.key === '_') {
       event.preventDefault();
-      setOrbit((current) => canvas3dOrbitAfterZoom(current, 1 / ZOOM_STEP));
+      zoomBy(1 / ZOOM_STEP);
     } else if (event.key === '0') {
       event.preventDefault();
-      setOrbit(CANVAS_3D_DEFAULT_ORBIT);
+      resetView();
+    } else if (event.key === 'Escape') {
+      // The canvas rail owns the visible way out, so the scene carries no exit
+      // chrome of its own — but a keyboard user inside it still needs one, and
+      // Escape is what every other mode on this surface answers to.
+      event.preventDefault();
+      onExit();
     }
-  }, []);
+  }, [onExit, resetView, zoomBy]);
 
   const layerName = useCallback(
     (index: number, label?: string) => label ?? t('threeD.layerName', { index: index + 1 }),
@@ -153,11 +201,10 @@ export function Canvas3DView<T extends Canvas3DNode>({
             </select>
           </label>
           <div className={styles.hudGroup} role="group" aria-label={t('threeD.viewControls')}>
-            <button type="button" onClick={() => setOrbit((current) => canvas3dOrbitAfterZoom(current, ZOOM_STEP))} aria-label={t('threeD.zoomIn')} title={t('threeD.zoomIn')}>＋</button>
-            <button type="button" onClick={() => setOrbit((current) => canvas3dOrbitAfterZoom(current, 1 / ZOOM_STEP))} aria-label={t('threeD.zoomOut')} title={t('threeD.zoomOut')}>−</button>
-            <button type="button" onClick={() => setOrbit(CANVAS_3D_DEFAULT_ORBIT)} aria-label={t('threeD.reset')} title={t('threeD.reset')}>⟳</button>
+            <button type="button" onClick={() => zoomBy(ZOOM_STEP)} aria-label={t('threeD.zoomIn')} title={t('threeD.zoomIn')}>＋</button>
+            <button type="button" onClick={() => zoomBy(1 / ZOOM_STEP)} aria-label={t('threeD.zoomOut')} title={t('threeD.zoomOut')}>−</button>
+            <button type="button" onClick={resetView} aria-label={t('threeD.reset')} title={t('threeD.reset')}>⟳</button>
           </div>
-          <button type="button" className={styles.exit} onClick={onExit}>{t('threeD.exit')}</button>
         </div>
       </header>
 

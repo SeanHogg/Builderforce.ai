@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslations } from 'next-intl';
-import { BrainTimeline } from '@seanhogg/builderforce-brain-ui';
+import { Avatar, BrainTimeline } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
@@ -49,12 +49,14 @@ export interface BrainDockProps {
   edges: Edge[];
   /** The shared ChatInput, rendered as the dock footer. */
   composer: ReactNode;
+  collaborators?: Array<{ userId: string; displayName: string | null; typing?: boolean }>;
+  joinedCollaborator?: { userId: string; displayName: string | null } | null;
 }
 
 export function BrainDock({
   side, size, showExecutionDetail,
   onSideChange, onSizeChange, onExecutionDetailChange, onClose,
-  messages, trace, running, node, nodes, edges, composer,
+  messages, trace, running, node, nodes, edges, composer, collaborators = [], joinedCollaborator = null,
 }: BrainDockProps) {
   const t = useTranslations('creationCanvas');
   const [tab, setTab] = useState<'chat' | 'context'>('chat');
@@ -104,13 +106,17 @@ export function BrainDock({
         <button type="button" role="tab" aria-selected={tab === 'chat'} className={tab === 'chat' ? styles.activeTab : ''} onClick={() => setTab('chat')}>{t('chat')}</button>
         <button type="button" role="tab" aria-selected={tab === 'context'} className={tab === 'context' ? styles.activeTab : ''} onClick={() => setTab('context')}>{t('context')}</button>
       </div>
+      {(joinedCollaborator || collaborators.some((member) => member.typing)) && <div className={styles.humanChatActivity} aria-live="polite">
+        {joinedCollaborator && <span data-state="joined"><Avatar name={joinedCollaborator.displayName || 'Collaborator'} kind="human" size={22} /><b>{joinedCollaborator.displayName || 'A collaborator'} joined the conversation</b></span>}
+        {collaborators.filter((member) => member.typing).map((member) => <span key={member.userId} data-state="typing"><Avatar name={member.displayName || 'Collaborator'} kind="human" size={22} /><b>{member.displayName || 'A collaborator'} is writing</b><i aria-hidden>•••</i></span>)}
+      </div>}
       {tab === 'chat'
         ? <div className={styles.brainDockTimeline} role="log" aria-label={t('brainChatHistory')} tabIndex={0}>
           <BrainTimeline
             messages={messages}
             trace={showExecutionDetail ? trace : []}
             streamingText=""
-            isRunning={false}
+            isRunning={running}
             assistantName={t('brain')}
             labels={{ you: t('you'), assistant: t('brain'), empty: t('brainEmpty') }}
           />

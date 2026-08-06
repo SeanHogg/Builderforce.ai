@@ -4,6 +4,33 @@
 
 ---
 
+## 2026-08-05 — ✅ SHIPPED: a 3D reading of the canvas — objects, widgets and connections on depth planes (ui 2026.7.158)
+
+A flat board answers "what is here"; it answers "what depends on what" only by tracing arrows across a crowded surface. The canvas rail gained a **3D** command that lifts every Object onto a depth plane and lets the whole stack be turned, so structure is the first thing you see.
+
+**Depth means something, and you choose what.** `Dependency flow` (default) stacks by longest-path graph layer — sources at the back, everything they feed one plane closer. `Object group` stacks by the palette group (Build / Data / Work / Agents …). Layers are normalised to contiguous indices, so a gap in the ranking never shows as an empty plane, and objects inside a cycle each get their own layer instead of piling at zero.
+
+**No new runtime.** The scene is real DOM under CSS 3D transforms — no WebGL, no `three`, no bundle cost. Every card stays a focusable `<button>` with its own text, so the view is keyboard- and screen-reader-usable; connections that cross planes are drawn as rotated bars (`rotateZ(atan2(dy,dx)) rotateY(-asin(dz/len))`, derived and unit-tested rather than eyeballed). Orbit by drag or arrow keys, zoom by wheel / `+` / `−`, `0` re-frames. Pitch is clamped rather than wrapped, because passing over the pole flips the scene mid-gesture.
+
+**It frames itself.** A fixed zoom cannot serve both a three-card sketch and a hundred-object board, so the view fits the plane to its viewport on open, on restack, and on resize — and stops re-framing the moment the user takes over the zoom.
+
+**One canvas, one selection.** Clicking a card in 3D selects the same object the flat board would and opens the same inspector. Hidden objects stay hidden; the mini map — a map *of* the flat board — stands down while 3D is on, as do the palette and the remote cursors (they project from the 2D viewport and would point at nothing).
+
+**Fixed along the way** (found while wiring this):
+- **`cleanCanvasLayout` and the 3D view had forked layering.** Both now read `graphLayerRanks` / `canvasNodeFootprint` from a new `components/canvas/canvasGraph.ts`, so arranging the board and tilting it can never tell different stories about dependencies.
+- **The scene rendered underneath the Brain dock, hiding its own controls.** React Flow sets `z-index: 0` on its root, which traps the command rail in its own stacking context — so the flat graph is hidden and its root is lifted *above* the scene with pointer events off, leaving only the rail clickable. Host docks publish their footprint through `--canvas-3d-inset-*`; on phones the side inset is dropped for a bottom one (keeping it left the scene a 30px ribbon on a 360px screen).
+- **HUD controls sat behind the inspector.** The heads-up row is anchored left, not spread, so a right-docked panel can never swallow them.
+- **Dead `.minimapClose` CSS** in `CreationCanvas.module.css` (the live rule lives in `CanvasCommands.module.css`) — deleted.
+- **Palette group headings were the last unlocalized Canvas strings** — `creationCanvas.group.*` added in all five catalogs and used by both the palette and the 3D group axis; palette search now matches the translated group name too.
+
+Verified in a real browser at 1440×900 light **and** dark and at 360×740: scene fitted, no horizontal overflow, rail reachable, depth switch restacks, card click opens the inspector. 154 tests pass across the canvas, workspace-canvas, creation-canvas and i18n suites (18 new geometry tests + 2 new canvas tests); `tsgo --noEmit` exit 0.
+
+Files: `frontend/src/components/canvas/{canvas3d.ts,canvas3d.test.ts,Canvas3DView.tsx,Canvas3DView.module.css,canvasGraph.ts,CanvasCommands.tsx}`, `frontend/src/components/creation-canvas/{CreationCanvas.tsx,CreationCanvas.module.css,CreationCanvas.test.tsx}`, `frontend/src/i18n/messages/{en,zh,es,fr,de}.json`.
+
+Open follow-up (roadmap, group 10): the other four canvases don't opt in yet, and the scene is read-and-select only.
+
+---
+
 ## 2026-08-05 — ✅ RESOLVED: three competing Brain surfaces, an undismissable outline, and a per-widget colour zoo on the Creation Canvas (ui 2026.7.157)
 
 Six usability findings from watching people use the Canvas, fixed together because most of them are the same problem: chrome that could not be put away.
@@ -21,6 +48,18 @@ Six usability findings from watching people use the Canvas, fixed together becau
 **6. ONE Brain chat.** The Object transcript, the details-panel transcript, and the floating composer are consolidated into a `BrainDock` that parks left OR right (never both), slim or expanded, holding the conversation, the activity strip, its connected work (Context tab), and the prompt. The Brain Object became an anchor card showing the latest exchange plus "Open Brain chat"; selecting it reveals the dock instead of rendering a second transcript. The board reserves the dock's width through `--brain-dock-left` / `--brain-dock-right`, so the palette, inspector, history, diagnostics, and change-set panels are pushed inward rather than hidden underneath it. Layout choices persist to `builderforce:create:brain-dock` and emit a `creation_brain_dock_preference` activity signal, so the shipped default can be set from what people actually pick rather than from a guess. On phones the dock becomes a bottom sheet (slim = composer + status, expanded = 70% sheet) and the left/right controls hide, because a phone has no side to choose.
 
 Also in this pass: `CreationNode.tsx`, `CreationCanvas.tsx`, and `CanvasCommands.tsx` are now fully localized — 393 `creationCanvas.*` keys, 224 `creationCanvas.node.*` keys, and a new `canvasCommands.*` namespace, with real translations in all five catalogs.
+
+---
+
+## 2026-08-05 — ✅ RESOLVED: Creation Canvas i18n catalogs caught up with the component localization (ui 2026.7.156)
+
+Logged earlier the same day as blocked: `CreationCanvas.tsx` (486 `t()` keys) and `CreationNode.tsx` (220 `creationCanvas.node.*` keys) had been routed through next-intl by a concurrent pass, but 381 + 211 of those keys were absent from the five message catalogs — so the Canvas rendered raw key strings like `creationCanvas.undoCanvasChange`, and ~30 `CreationCanvas.test.tsx` assertions failed on label text. The stated blocker was that the catalog entries had to match that pass's final key set.
+
+That pass has since landed its catalogs. Verified by resolving every `t('…')` call in both components against `{en,zh,es,fr,de}.json`: **0 missing keys in all five locales**. The zh/es/fr/de files carry real translations, not English copies — the only entries identical to English are cognates and non-translatable tokens ("Status", "Instructions", "Diagnostic", "Hippocampus", "PRD", "Brain", "{width} px", "name@company.com"), 6 in zh, 11 in es, 30 in fr, 36 in de.
+
+`CreationCanvas.test.tsx` is green at **64 tests**; the creation-canvas directory plus `canvasTabularData` and `creationCanvasAi` run **120 passed**. `tsgo --noEmit` exit 0. The 55 data/analysis keys added by the canvas analytics work are included in that count and were already present in all five catalogs.
+
+Files: `frontend/src/i18n/messages/{en,zh,es,fr,de}.json`.
 
 ---
 

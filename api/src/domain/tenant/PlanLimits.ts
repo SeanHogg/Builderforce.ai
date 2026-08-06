@@ -222,6 +222,28 @@ export const GUEST_CHAT_LIMITS = {
   maxTokensPerRequest: 700,
 } as const;
 
+/**
+ * Shared guest ROOMS — a logged-out visitor can invite others into their free
+ * session (chat + camera). The room's turn allowance is exactly
+ * `GUEST_CHAT_LIMITS.messagesDailyLimit`, spent COMBINED by everyone in it: five
+ * people in one room still share ten free turns. That is deliberate — inviting
+ * people must never be a way to multiply anonymous LLM spend. Each participant's
+ * own per-visitor and per-IP counters keep running underneath, so joining a
+ * second room cannot refill an individual's exhausted allowance either.
+ */
+export const GUEST_ROOM_LIMITS = {
+  /** Simultaneous participants. Mesh WebRTC is ~N² bandwidth — keep it small. */
+  maxParticipants: 8,
+  /** Room lifetime from creation; afterwards the room is gone (with its transcript). */
+  ttlMinutes: 240,
+  /** Transcript messages retained in the room (oldest drop off). */
+  maxMessages: 200,
+  /** Characters retained per room message. */
+  maxMessageChars: 8_000,
+  /** Sockets one room will hold open across all channels (chat + media). */
+  maxSockets: 24,
+} as const;
+
 /** Returns the limits for the tenant's effective plan. */
 export function getLimits(plan: TenantPlan): PlanLimits {
   return PLAN_LIMITS[plan];

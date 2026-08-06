@@ -143,6 +143,7 @@ import { evaluateFrontierAccess, evaluatePremiumModelAccess, premiumModelGateBod
 import { isCardValidated } from '../../application/tenant/cardValidationService';
 import { GuestChatService } from '../../application/guest/GuestChatService';
 import { verifyGuestToken, guestBrainEnabled, GUEST_TOKEN_PREFIX } from '../../application/guest/guestToken';
+import { guestRoomTurn } from '../../application/guest/guestRoomClient';
 import { restrictGuestTools } from '../../application/guest/guestCanvasTools';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import {
@@ -1043,6 +1044,14 @@ function proxyForCompletion(
  *     touches `llm_usage_log` or any tenant meter.
  * Cap exhaustion returns a 402 the UI turns into a "sign up free to keep going"
  * wall — the whole point of the funnel.
+ *
+ * A guest token may also carry a signed room code (`rid`) — a SHARED session the
+ * guest invited other people into. Then a THIRD axis applies, and it is the one
+ * the UI counts down: the room's COMBINED allowance. It is the same ten turns a
+ * lone guest gets, spent by everybody in the room together, so an invite link can
+ * never multiply anonymous spend. The per-visitor and per-IP counters keep running
+ * underneath it, so joining a fresh room cannot refill an exhausted individual
+ * either — a turn must clear ALL THREE to be dispatched.
  */
 async function guestTurnFingerprint(messages: ChatCompletionRequest['messages'], originalUserInput?: string): Promise<string> {
   // Tool-loop continuations append assistant/tool messages, while the system and
@@ -1061,10 +1070,11 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   }
   const authHeader = c.req.header('Authorization') ?? '';
   const token = authHeader.slice(7); // strip "Bearer "
-  const visitorId = await verifyGuestToken(token, c.env.JWT_SECRET);
-  if (!visitorId) {
+  const identity = await verifyGuestToken(token, c.env.JWT_SECRET);
+  if (!identity) {
     return c.json({ error: 'Invalid or expired guest session.', code: 'guest_token_invalid' }, 401);
   }
+  const { visitorId, roomCode } = identity;
 
   const body = await c.req.json<ChatCompletionRequest>().catch(() => null);
   if (!body || !Array.isArray(body.messages) || body.messages.length === 0) {
@@ -1082,6 +1092,21 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   // Fingerprint fallback keeps older clients from charging each appended tool
   // continuation during a rolling deploy. New clients always send a unique id.
   const turnId = suppliedTurnId ?? turnFingerprint;
+
+  // The room's COMBINED allowance is checked first, and its numbers are the ones
+  // the shared UI counts down — "3 free messages left" must mean the same thing to
+  // everyone looking at the same conversation. A room that has vanished (expired,
+  // or the DO binding is gone) degrades to the solo path rather than blocking.
+  const roomTurn = roomCode ? await guestRoomTurn(c.env as Env, roomCode, turnId, false) : null;
+  if (roomTurn && !roomTurn.allowed) {
+    return c.json({
+      error: `This shared session has used its ${roomTurn.limit} free messages for today. Sign up free to keep going.`,
+      code: 'guest_limit_reached',
+      reason: 'room',
+      limit: roomTurn.limit,
+      terminal: true,
+    }, 429);
+  }
 
   const cap = await guest.checkCap(c.env as Env, visitorId, ip, turnId, turnFingerprint);
   if (!cap.allowed) {
@@ -1125,8 +1150,22 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   // this still happens before the response body is handed to the browser, so an
   // aborted stream counts; gateway/vendor failures do not burn a guest turn.
   let remaining = cap.remaining;
+  let limit = cap.limit;
   if (result.response.ok && !cap.alreadyConsumed) {
     remaining = await guest.consumeMessage(c.env as Env, visitorId, ip, turnId, turnFingerprint);
+  }
+  // Charge the room on the same condition, and report ITS numbers — the shared
+  // counter is what every participant sees. The DO makes this idempotent per
+  // turnId, so a tool-loop continuation costs the room nothing extra.
+  if (roomCode && result.response.ok) {
+    const charged = await guestRoomTurn(c.env as Env, roomCode, turnId, true);
+    if (charged) {
+      remaining = charged.remaining;
+      limit = charged.limit;
+    }
+  } else if (roomTurn) {
+    remaining = roomTurn.remaining;
+    limit = roomTurn.limit;
   }
 
   const headers = new Headers();
@@ -1140,7 +1179,7 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   headers.set('x-builderforce-retries', String(result.retries));
   headers.set('x-builderforce-guest', 'true');
   headers.set('x-builderforce-guest-remaining', String(remaining));
-  headers.set('x-builderforce-guest-limit', String(cap.limit));
+  headers.set('x-builderforce-guest-limit', String(limit));
 
   if (body.stream && result.response.body) {
     headers.set('cache-control', 'no-cache');
@@ -1160,7 +1199,7 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   if (result.response.ok) {
     c.executionCtx.waitUntil(guest.addTokens(visitorId, result.usage?.totalTokens ?? 0));
   }
-  return c.json({ ...upstream, _builderforce: { guest: true, remaining, limit: cap.limit } }, result.response.status as 200);
+  return c.json({ ...upstream, _builderforce: { guest: true, remaining, limit } }, result.response.status as 200);
 }
 
 // ---------------------------------------------------------------------------

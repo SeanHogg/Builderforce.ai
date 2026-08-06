@@ -77,6 +77,10 @@ name = "CEREMONY_ROOM"
 class_name = "CeremonyRoomDO"
 
 [[durable_objects.bindings]]
+name = "GUEST_ROOM"
+class_name = "GuestRoomDO"
+
+[[durable_objects.bindings]]
 name = "ANALYSIS_RUNNER"
 class_name = "AnalysisRunnerDO"
 
@@ -182,6 +186,14 @@ tag = "v9"
 # self-learning Evermind model — it batches concurrent learning pushes via a
 # storage alarm and FedAvg-merges weight deltas. Alarms require SQLite-backed DOs.
 new_sqlite_classes = ["ProjectEvermindCoordinatorDO"]
+
+[[migrations]]
+tag = "v10"
+# GuestRoomDO backs a SHARED logged-out session (the free chat a visitor invites
+# others into). Unlike the other relay DOs it PERSISTS state — the combined turn
+# counter, the roster and a bounded transcript — so an eviction between two sends
+# cannot silently reset the allowance. Storage requires a SQLite-backed class.
+new_sqlite_classes = ["GuestRoomDO"]
 
 # Cron triggers — see scheduled() in src/index.ts
 #   "0 9 * * *"   09:00 UTC daily: probe every LLM vendor; email superadmins on status change.

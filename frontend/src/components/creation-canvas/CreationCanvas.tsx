@@ -40,7 +40,7 @@ import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectE
 import { isAwaitingApprovalExecution } from '@/lib/builderforceApi';
 import { evaluateModel, fetchProjects, publishSite } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
-import { updateAgent } from '@/lib/api';
+import { createCloudAgent, updateAgent } from '@/lib/api';
 import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData, creationObjectDefinition, sanitizeCreationObjectPatch, type CreationObjectGroup } from './creationObjectRegistry';
 import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
 import { trackActivity } from '@/lib/activity/tracker';
@@ -402,6 +402,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [inviteRole, setInviteRole] = useState<CreationSessionSummary['role']>('editor');
   const [prompt, setPrompt] = useState('');
   const [thinking, setThinking] = useState(false);
+  const [activeAgentIds, setActiveAgentIds] = useState<Set<string>>(() => new Set());
   const [modelSelection, setModelSelection] = useState<ChatModelSelection>({ mode: 'auto' });
   const llmModels = useLlmModels();
   const canvasModelOptions = useMemo<ChatModelOptions>(() => ({
@@ -419,6 +420,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [loadingSession, setLoadingSession] = useState(persistence === 'server');
   const [realtimeState, setRealtimeState] = useState<'local' | 'connecting' | 'online' | 'reconnecting' | 'offline'>(persistence === 'local' ? 'local' : 'connecting');
   const [members, setMembers] = useState<CreationSessionDetail['members']>([]);
+  const [joinedCollaborator, setJoinedCollaborator] = useState<CreationSessionDetail['members'][number] | null>(null);
   const [allMembers, setAllMembers] = useState<CreationSessionDetail['members']>([]);
   const [pendingInvitations, setPendingInvitations] = useState<CreationSessionInvitation[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -454,6 +456,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [datasetRowLimit, setDatasetRowLimit] = useState(500);
   const canEdit = persistence === 'local' || sessionRole === 'editor' || sessionRole === 'runner' || sessionRole === 'owner';
   const canRun = persistence === 'local' || sessionRole === 'runner' || sessionRole === 'owner';
+  const isComposingPrompt = prompt.trim().length > 0;
   const requireAccount = useCallback((action: string, title: string, description: string) => {
     setAccountGate({ action, title, description });
     trackActivity('creation_account_gate_shown', { sessionId, metadata: { clientSurface: 'web', action } });
@@ -473,6 +476,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const sessionOpenCorrelation = useRef(crypto.randomUUID());
   const currentGraph = useRef('');
   const saveInFlight = useRef(false);
+  const activePresenceInitialized = useRef(false);
+  const activeMemberIds = useRef<Set<string>>(new Set());
   const pendingSave = useRef<{ serialized: string; key: string } | null>(null);
   const viewportRef = useRef({ x: 0, y: 0, zoom: 1 });
   const cursorRef = useRef<{ x: number; y: number } | null>(null);
@@ -762,8 +767,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     let stopped = false;
     const reconcile = async () => {
       try {
-        const presence = await creationSessionsApi.presence(sessionId, { revision: revision.current, viewport: viewportRef.current, cursor: cursorRef.current, selection: selectedIds, typing: thinking, followingUserId });
+        const presence = await creationSessionsApi.presence(sessionId, { revision: revision.current, viewport: viewportRef.current, cursor: cursorRef.current, selection: selectedIds, typing: isComposingPrompt, followingUserId });
         if (stopped) return;
+        const nextActiveIds = new Set(presence.members.map((member) => member.userId));
+        if (activePresenceInitialized.current) {
+          const joined = presence.members.find((member) => member.userId !== (presence.currentUserId || currentUserId) && !activeMemberIds.current.has(member.userId));
+          if (joined) setJoinedCollaborator(joined);
+        } else activePresenceInitialized.current = true;
+        activeMemberIds.current = nextActiveIds;
         setMembers(presence.members);
         const followed = presence.members.find((member) => member.userId === followingUserId && member.viewport && typeof member.viewport.x === 'number' && typeof member.viewport.y === 'number' && typeof member.viewport.zoom === 'number');
         if (followed?.viewport) void flowRef.current?.setViewport({ x: Number(followed.viewport.x), y: Number(followed.viewport.y), zoom: Number(followed.viewport.zoom) }, { duration: 350 });
@@ -788,7 +799,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     void reconcile();
     const timer = window.setInterval(() => void reconcile(), 8_000);
     return () => { stopped = true; window.clearInterval(timer); };
-  }, [followingUserId, persistence, selectedIds, sessionId, setEdges, setNodes, thinking]);
+  }, [currentUserId, followingUserId, isComposingPrompt, persistence, selectedIds, sessionId, setEdges, setNodes]);
+
+  useEffect(() => {
+    if (!joinedCollaborator) return;
+    const timer = window.setTimeout(() => setJoinedCollaborator(null), 4_500);
+    return () => window.clearTimeout(timer);
+  }, [joinedCollaborator]);
 
   useEffect(() => {
     if (persistence !== 'server') return;
@@ -2171,7 +2188,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setThinking(true);
     setNotice('Brain is evaluating connected objects…');
     const initialMessage = initialPromptSubmitted.current ? timeline.find((message) => (message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:')) && message.body === requestText) : undefined;
-    const requestMessageId = appendTimeline('user', requestText, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds] }, initialMessage?.clientMessageId);
+    const promptAuthor = persistence === 'server' ? members.find((member) => member.userId === currentUserId) : null;
+    const requestMessageId = appendTimeline('user', requestText, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'human', ref: currentUserId || 'local', name: promptAuthor?.displayName || 'You' } }, initialMessage?.clientMessageId);
     const promptStartedAt = performance.now();
     if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'started', metadata: { scope: resolvedScopeMode } }).catch(() => undefined);
     // A composer submission is a chat interaction, so reveal its Brain object
@@ -2203,6 +2221,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         effectiveSelectedIds.includes(node.id)
         || edges.some((edge) => (edge.source === brainId && edge.target === node.id) || (edge.target === brainId && edge.source === node.id))
       )).slice(0, 3);
+      setActiveAgentIds(new Set(connectedAgentNodes.map((agent) => agent.id)));
       const confirmCanvasAction = ({ name, args }: { name: string; args: unknown }) => {
         let preview = '';
         try { const serialized = JSON.stringify(args ?? {}); preview = serialized === '{}' ? '' : serialized.length > 320 ? `${serialized.slice(0, 320)}…` : serialized; } catch { preview = ''; }
@@ -2233,6 +2252,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 authoredBy: { kind: 'agent', ref: agent.ref, name: agent.name },
               }, `${requestMessageId}:agent:${agent.ref}`);
               groupConversation.push({ role: 'assistant', content: `${agent.name}: ${message.content}` });
+              setActiveAgentIds((current) => {
+                const next = new Set(current);
+                const canvasAgent = connectedAgentNodes.find((candidate) => candidate.data.resourceId === `agent:${agent.ref}`);
+                if (canvasAgent) next.delete(canvasAgent.id);
+                return next;
+              });
             }
           } catch (error) {
             const detail = error instanceof Error ? error.message : 'Canonical agent turn failed';
@@ -2259,6 +2284,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 groupConversation.push({ role: 'assistant', content: `${name}: ${contribution.trim()}` });
               }
             } catch { /* Brain synthesis still runs with the available transcript. */ }
+            finally {
+              setActiveAgentIds((current) => {
+                const next = new Set(current);
+                next.delete(agent.id);
+                return next;
+              });
+            }
           }
         }
         return runCreationCanvasAi({
@@ -2298,12 +2330,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           setAutoApplyPending(shouldAutoApply);
         }
         setThinking(false);
+        setActiveAgentIds(new Set());
         setNotice(changes.length ? shouldAutoApply ? `Applying ${changes.length} Brain changes…` : `${changes.length} Brain changes await review` : 'Brain finished evaluating the canvas');
         trackActivity('creation_ai_evaluation_completed', { sessionId, metadata: { clientSurface: 'web', proposedChangeCount: changes.length, objectKinds: [...new Set(nodes.map((node) => node.data.kind))] } });
         if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'succeeded', actorType: 'brain', durationMs: performance.now() - promptStartedAt, metricKey: 'artifacts_proposed', metricValue: changes.length, unit: 'count' }).catch(() => undefined);
       }).catch((error) => {
         appendTimeline('system', error instanceof Error ? error.message : 'Brain could not complete this request', { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:error`);
         setThinking(false);
+        setActiveAgentIds(new Set());
         setNotice(error instanceof Error ? error.message : 'Brain could not complete this request');
         if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'failed', actorType: 'brain', durationMs: performance.now() - promptStartedAt }).catch(() => undefined);
       });
@@ -2339,7 +2373,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setPrompt('');
       setNotice('Evaluation added to canvas');
     }, 850);
-  }, [appendTimeline, canvasActions, confirm, effectiveSelectedIds, edges, evermindProjectId, memoryEnabled, modelSelection, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, setEdges, setNodes, thinking, timeline, title]);
+  }, [appendTimeline, canvasActions, confirm, currentUserId, effectiveSelectedIds, edges, evermindProjectId, members, memoryEnabled, modelSelection, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, setEdges, setNodes, thinking, timeline, title]);
 
   useEffect(() => {
     if (!hydrated.current || initialPromptSubmitted.current || thinking) return;
@@ -2507,12 +2541,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const saveAgent = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'agent') return;
     const ref = selectedNode.data.resourceId?.startsWith('agent:') ? selectedNode.data.resourceId.slice('agent:'.length) : '';
-    if (!ref) { setNotice('This is a canvas draft. Link or create the agent before publishing settings.'); return; }
-    setNotice('Saving canonical agent settings…');
-    void updateAgent(ref, { name: selectedNode.data.title, title: selectedNode.data.role || selectedNode.data.title, bio: typeof selectedNode.data.instructions === 'string' ? selectedNode.data.instructions : selectedNode.data.subtitle || '', baseModel: selectedNode.data.model || 'gpt-4o' })
-      .then(() => setNotice('Agent settings saved everywhere'))
+    if (!ref && persistence === 'local') { requireAccount('agent', 'Save this collaborator', 'Create a free account to publish this configured agent to your workforce and use it across sessions.'); return; }
+    const personality = typeof selectedNode.data.personality === 'string' ? selectedNode.data.personality.trim() : '';
+    const direction = typeof selectedNode.data.instructions === 'string' ? selectedNode.data.instructions.trim() : selectedNode.data.subtitle || '';
+    const bio = [personality ? `Personality: ${personality}` : '', direction ? `Direction: ${direction}` : ''].filter(Boolean).join('\n\n');
+    const baseModel = selectedNode.data.model && selectedNode.data.model !== 'auto' ? String(selectedNode.data.model) : undefined;
+    const input = { name: selectedNode.data.title, title: selectedNode.data.role || selectedNode.data.title, bio, skills: Array.isArray(selectedNode.data.tools) ? selectedNode.data.tools.map(String) : undefined, baseModel };
+    setNotice(ref ? 'Saving canonical agent settings…' : 'Creating workforce agent…');
+    void (ref ? updateAgent(ref, input) : createCloudAgent(input))
+      .then((saved) => {
+        setNodes((current) => current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, resourceId: `agent:${saved.id}`, status: 'Configured' } } : node));
+        setNotice(ref ? 'Agent settings saved everywhere' : 'Agent created and ready to collaborate');
+      })
       .catch((error) => setNotice(error instanceof Error ? error.message : 'Agent settings could not be saved'));
-  }, [selectedNode]);
+  }, [persistence, requireAccount, selectedNode, setNodes]);
 
   const publishWebsite = useCallback((websiteId?: string) => {
     const target = nodes.find((node) => node.id === websiteId && node.data.kind === 'website')
@@ -2693,15 +2735,23 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const attachedEvermind = node.data.kind === 'evermind' && typeof node.data.resourceId === 'string' && /^evermind:\d+$/.test(node.data.resourceId);
     const live = evermindLiveByNodeId[node.id];
     const liveNode = attachedEvermind ? { ...node, data: { ...node.data, ...(live ?? { evermindLoading: true, status: 'Syncing project…' }) } } : node;
-    const hasDatasetConnection = ['chart', 'dashboard', 'report'].includes(liveNode.data.kind) && edges.some((edge) => {
-      const otherId = edge.source === liveNode.id ? edge.target : edge.target === liveNode.id ? edge.source : null;
+    const agentRef = liveNode.data.kind === 'agent' ? liveNode.data.resourceId?.match(/^agent:(.+)$/)?.[1] : undefined;
+    const latestAgentReply = liveNode.data.kind === 'agent' ? [...timeline].reverse().find((message) => {
+      const author = message.metadata?.authoredBy;
+      return author?.kind === 'agent' && (author.ref === agentRef || author.ref === liveNode.id || author.name === liveNode.data.title);
+    }) : undefined;
+    const withCollaboration = liveNode.data.kind === 'agent' && (activeAgentIds.has(liveNode.id) || latestAgentReply)
+      ? { ...liveNode, data: { ...liveNode.data, ...(activeAgentIds.has(liveNode.id) ? { collaborationState: 'thinking' } : {}), ...(latestAgentReply ? { collaborationReply: latestAgentReply.body, collaborationReplyAt: latestAgentReply.createdAt } : {}) } }
+      : liveNode;
+    const hasDatasetConnection = ['chart', 'dashboard', 'report'].includes(withCollaboration.data.kind) && edges.some((edge) => {
+      const otherId = edge.source === withCollaboration.id ? edge.target : edge.target === withCollaboration.id ? edge.source : null;
       return otherId != null && nodes.some((candidate) => candidate.id === otherId && ['dataset', 'table', 'spreadsheet'].includes(candidate.data.kind));
     });
-    const withLiveData = hasDatasetConnection && /connect a dataset/i.test(String(liveNode.data.status || ''))
-      ? { ...liveNode, data: { ...liveNode.data, status: 'Dataset connected' } }
-      : liveNode;
+    const withLiveData = hasDatasetConnection && /connect a dataset/i.test(String(withCollaboration.data.status || ''))
+      ? { ...withCollaboration, data: { ...withCollaboration.data, status: 'Dataset connected' } }
+      : withCollaboration;
     return withLiveData.data.placementHidden === true ? { ...withLiveData, hidden: !showHidden, style: showHidden ? { ...withLiveData.style, opacity: .42 } : withLiveData.style } : withLiveData;
-  }), [edges, evermindLiveByNodeId, nodes, showHidden]);
+  }), [activeAgentIds, edges, evermindLiveByNodeId, nodes, showHidden, timeline]);
   /**
    * The 3D view reads the SAME nodes the board renders, minus the ones the board
    * is currently hiding — a mode that quietly resurrects hidden objects would
@@ -2828,7 +2878,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         <div className={styles.titleBlock}><span className={styles.spark}>✦</span><input aria-label={t('sessionTitle')} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice(t('titleSaveFailed'))); }} /><span className={styles.saved}>{notice}</span>{persistence === 'server' && <span role="status" aria-live="polite" className={styles.realtimeStatus} data-state={realtimeState}>{realtimeState === 'online' ? t('live') : realtimeState === 'offline' ? t('offlineRetry') : realtimeState === 'reconnecting' ? t('reconnecting') : t('connecting')}</span>}</div>
         <div className={styles.sessionActions}>
           <div className={styles.collaborators} aria-label={t('activeCollaborators')}>
-            {(persistence === 'local' ? [{ userId: 'local', displayName: 'You', role: 'owner' as const }] : members).slice(0, 4).map((member, index) => <button key={member.userId} type="button" aria-pressed={followingUserId === member.userId} title={`${member.displayName || t('collaborator')} · ${member.role}${member.userId !== currentUserId ? ` · ${t('clickToFollow')}` : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button>)}
+            {(persistence === 'local' ? [{ userId: 'local', displayName: 'You', role: 'owner' as const }] : members).slice(0, 4).map((member, index) => <button key={member.userId} type="button" data-typing={'typing' in member && member.typing ? 'true' : 'false'} aria-pressed={followingUserId === member.userId} title={`${member.displayName || t('collaborator')} · ${member.role}${'typing' in member && member.typing ? ' · writing a prompt' : ''}${member.userId !== currentUserId ? ` · ${t('clickToFollow')}` : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button>)}
             <button aria-label={t('inviteCollaborator')} onClick={() => persistence === 'local' ? requireAccount('invite', t('gateInviteTitle'), t('gateInviteBody')) : setShareOpen(true)}>+</button>
           </div>
           <div className={styles.undoRedoGroup} role="group" aria-label={t('canvasHistory')}>
@@ -2963,12 +3013,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             minimapMaskColor="var(--creation-minimap-mask, rgba(244,248,253,.72))"
             threeDActive={threeD}
             onToggleThreeD={() => setThreeD((value) => !value)}
-            extraControls={<ControlButton
+            extraControls={<CanvasRailToggle
+              pressed={outlineOpen}
               onClick={() => setOutlineOpen((value) => !value)}
-              aria-label={t('canvasOutline')}
-              aria-pressed={outlineOpen}
-              title={t('canvasOutline')}
-            ><AccessibleOutlineIcon /></ControlButton>}
+              label={t('canvasOutline')}
+            ><AccessibleOutlineIcon /></CanvasRailToggle>}
           />
         </ReactFlow>
 
@@ -3081,6 +3130,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           nodes={nodes}
           edges={edges}
           composer={composer}
+          collaborators={members.filter((member) => member.userId !== currentUserId)}
+          joinedCollaborator={joinedCollaborator}
         />}
         {!presentMode && !brainDock.open && <button
           type="button"
@@ -3165,6 +3216,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
   const taskId = kind === 'task' && /^task:\d+$/.test(node.data.resourceId || '') ? Number(node.data.resourceId!.slice(5)) : null;
   const taskAgents = nodes.filter((candidate) => candidate.data.kind === 'agent');
   const agentTools = Array.isArray(node.data.tools) ? node.data.tools.map(String) : ['Audience Analyzer', 'Copy Optimizer'];
+  const isExistingAgent = kind === 'agent' && typeof node.data.resourceId === 'string' && node.data.resourceId.startsWith('agent:');
   const connectedAgentKnowledge = kind === 'agent' ? nodes.filter((candidate) => ['knowledge', 'document', 'dataset', 'file', 'url'].includes(candidate.data.kind) && edges.some((edge) => (edge.source === node.id && edge.target === candidate.id) || (edge.target === node.id && edge.source === candidate.id))) : [];
   const connectedAgentEvaluation = kind === 'agent' ? nodes.find((candidate) => candidate.data.kind === 'evaluation' && edges.some((edge) => (edge.source === node.id && edge.target === candidate.id) || (edge.target === node.id && edge.source === candidate.id))) : undefined;
   const connectedAgentRelease = kind === 'agent' ? nodes.find((candidate) => candidate.data.kind === 'release' && edges.some((edge) => (edge.source === node.id && edge.target === candidate.id) || (edge.target === node.id && edge.source === candidate.id))) : undefined;
@@ -3268,13 +3320,14 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
       <label>{t('name')}<input value={node.data.title} onChange={(event) => onChange({ title: event.target.value })} /></label>
       {typeof node.data.pipelineStep === 'number' && <section className={styles.pipelineInspectorGuide} aria-label={t('evermindSetupStep', { step: node.data.pipelineStep })}><span>{t('evermindSetupOf5', { step: node.data.pipelineStep })}</span><strong>{node.data.pipelineStart === true ? t('startHere') : node.data.title}</strong><p>{String(node.data.pipelineInstruction || t('pipelineStageHint'))}</p>{node.data.pipelineStep === 1 && node.data.status !== 'Imported' && <small>{t('useFilePicker')}</small>}{node.data.pipelineStep === 1 && node.data.status === 'Imported' && <small>{t('dataReadyNext')}</small>}</section>}
       {kind === 'agent' && <>
-        <section className={styles.agentSetupGuide} aria-label={t('agentSetupProgress')}>
-          <strong>{t('buildTestEvaluateDeliver')}</strong>
-          <p>{t('agentStepsHint')}</p>
-          <div className={styles.agentSetupSteps}><span data-done={connectedAgentKnowledge.length > 0}>{t('stepKnowledge', { state: connectedAgentKnowledge.length ? t('stateAdded') : t('stateNeeded') })}</span><span data-done={!!node.data.testResponse}>{t('stepTest', { state: node.data.testResponse ? t('stateRun') : t('stateNeeded') })}</span><span data-done={!!connectedAgentEvaluation?.data.testResults}>{t('stepEvaluation', { state: connectedAgentEvaluation?.data.testResults ? t('stateRecorded') : t('statePending') })}</span><span data-done={!!node.data.resourceId}>{t('stepDelivery', { state: node.data.resourceId ? t('stateConnected') : connectedAgentRelease ? t('stateReadyNext') : t('statePending') })}</span></div>
+        <section className={styles.agentSetupGuide} data-existing={isExistingAgent} aria-label={t('agentSetupProgress')}>
+          <strong>{isExistingAgent ? t('agentExisting') : t('agentPrepareNew')}</strong>
+          <p>{isExistingAgent ? t('agentExistingHint') : t('agentPrepareHint')}</p>
+          {!isExistingAgent && <div className={styles.agentSetupSteps}><span data-done={!!String(node.data.personality || '').trim()}>{t('agentStepPersonality')}</span><span data-done={connectedAgentKnowledge.length > 0}>{connectedAgentKnowledge.length ? t('agentStepTrainingAdded') : t('agentStepTrainingNeeded')}</span><span data-done={!!String(node.data.instructions || '').trim()}>{t('agentStepDirection')}</span><span data-done={!!node.data.testResponse}>{node.data.testResponse ? t('agentStepTestRun') : t('agentStepTestNeeded')}</span></div>}
         </section>
-        <label>{t('model')}<select value={node.data.model || 'gpt-4o'} onChange={(event) => onChange({ model: event.target.value })}><option>gpt-4o</option><option>claude-3.5-sonnet</option><option>Evermind</option></select></label>
-        <label>{t('instructions')}<textarea value={typeof node.data.instructions === 'string' ? node.data.instructions : node.data.subtitle || ''} onChange={(event) => onChange({ instructions: event.target.value, subtitle: event.target.value })} rows={5} /></label>
+        {!isExistingAgent && <label>{t('personality')}<textarea aria-label={t('personality')} value={typeof node.data.personality === 'string' ? node.data.personality : ''} onChange={(event) => onChange({ personality: event.target.value })} rows={3} placeholder={t('personalityPlaceholder')} /></label>}
+        <label>{t('model')}<select value={node.data.model || 'auto'} onChange={(event) => onChange({ model: event.target.value })}><option value="auto">{t('modelAuto')}</option><option value="gpt-4o">gpt-4o</option><option value="claude-3.5-sonnet">claude-3.5-sonnet</option><option value="Evermind">Evermind</option></select></label>
+        <label>{isExistingAgent ? t('instructions') : t('agentDirection')}<textarea aria-label={t('instructions')} value={typeof node.data.instructions === 'string' ? node.data.instructions : node.data.subtitle || ''} onChange={(event) => onChange({ instructions: event.target.value, subtitle: event.target.value })} rows={5} placeholder={isExistingAgent ? undefined : t('agentDirectionPlaceholder')} /></label>
         <label>{t('tools')}<div className={styles.inspectorPills}>{agentTools.map((tool) => <button type="button" key={tool} aria-label={t('removeTool', { tool })} onClick={() => onChange({ tools: agentTools.filter((candidate) => candidate !== tool) })}>{tool} ×</button>)}<button type="button" disabled={availableAgentTools.every((tool) => agentTools.includes(tool))} onClick={() => { const next = availableAgentTools.find((tool) => !agentTools.includes(tool)); if (next) onChange({ tools: [...agentTools, next] }); }}>{t('addTool')}</button></div></label>
         <label>{t('autonomy')}<select value={typeof node.data.autonomy === 'string' ? node.data.autonomy : 'medium'} onChange={(event) => onChange({ autonomy: event.target.value })}><option value="medium">{t('autonomyMedium')}</option><option value="low">{t('autonomyLow')}</option><option value="high">{t('autonomyHigh')}</option></select></label>
         <section className={styles.agentWorkbench} aria-label={t('agentKnowledge')} data-inspector-section="knowledge">
@@ -3290,7 +3343,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
           <button type="button" className={styles.fullButton} disabled={!String(node.data.testPrompt || '').trim() || node.data.testStatus === 'Running'} onClick={() => void onRunAgentTest(String(node.data.testPrompt || ''), String(node.data.testExpected || ''))}>{node.data.testStatus === 'Running' ? t('runningTest') : t('runAgentTest')}</button>
           {typeof node.data.testResponse === 'string' && node.data.testResponse && <div className={styles.testResponse}><strong>{t('agentResponse')}</strong><p>{node.data.testResponse}</p></div>}
         </section>
-        <button type="button" className={styles.fullButton} onClick={onSaveAgent}>{t('saveAgentEverywhere')}</button>
+        <button type="button" className={styles.fullButton} onClick={onSaveAgent}>{isExistingAgent ? t('saveAgentEverywhere') : 'Create & invite agent'}</button>
       </>}
       {kind === 'evaluation' && <section data-inspector-section="evaluation">
         <div className={styles.evaluationSummary}><strong>{String(node.data.verdict || t('notRun'))}</strong><span>{typeof node.data.passRate === 'number' ? t('passRate', { rate: node.data.passRate }) : t('runTestForResult')}</span></div>

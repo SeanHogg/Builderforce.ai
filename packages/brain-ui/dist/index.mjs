@@ -667,11 +667,12 @@ function BrainTimelineInner({
       nodes.map((node) => {
         if (node.kind === "user") {
           const to = parseDirectedRecipient(node.message);
+          const author = parseMessageAuthor(node.message);
           return /* @__PURE__ */ jsxs4("li", { className: "bf-tl__item bf-tl__item--user", children: [
-            /* @__PURE__ */ jsx4("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx4("span", { className: "bf-tl__dot", children: dotIcon("user") }) }),
+            /* @__PURE__ */ jsx4("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ jsx4("span", { className: "bf-tl__dot", children: author ? /* @__PURE__ */ jsx4(Avatar, { name: author.name, kind: author.kind, size: 16 }) : dotIcon("user") }) }),
             /* @__PURE__ */ jsxs4("div", { className: "bf-tl__body", children: [
               /* @__PURE__ */ jsxs4("div", { className: "bf-tl__role", style: to ? { display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" } : void 0, children: [
-                /* @__PURE__ */ jsx4("span", { children: labels.you }),
+                /* @__PURE__ */ jsx4("span", { children: author ? author.name : labels.you }),
                 to && /* @__PURE__ */ jsxs4("span", { style: { display: "inline-flex", alignItems: "center", gap: 4, opacity: 0.9 }, children: [
                   /* @__PURE__ */ jsx4("span", { "aria-hidden": true, style: { opacity: 0.6 }, children: "\u2192" }),
                   /* @__PURE__ */ jsx4(Avatar, { name: to.name, kind: to.kind, size: 15 }),

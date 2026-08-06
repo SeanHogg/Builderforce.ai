@@ -63,6 +63,7 @@
   border: 2px solid var(--bg-elevated, #fff); color: #fff; font-size: 10px; font-weight: 750;
 }
 .collaborators button { color: var(--text-secondary, var(--canvas-muted)); background: var(--bg-elevated, #fff); border: 1px dashed #aebbd0; cursor: pointer; }
+.collaborators button[data-typing="true"] { border:2px solid var(--canvas-blue); box-shadow:0 0 0 3px color-mix(in srgb,var(--canvas-blue) 20%,transparent); animation:collaboratorTyping 1.4s ease-in-out infinite; }
 .avatarPink { background: #e94b9b; }.avatarOrange { background: #ff9827; }.avatarGreen { background: #43b77d; }
 .primaryButton, .secondaryButton, .fullButton {
   border-radius: 8px; padding: 8px 13px; border: 1px solid var(--border, var(--canvas-line)); cursor: pointer; font-family:inherit; font-size:12px; font-weight:650;
@@ -130,7 +131,16 @@
    pointer events off, leaving only the rail (and the mini map close) clickable.
    Remote cursors are hidden too: they are projected from the 2D viewport and
    would otherwise float over the scene pointing at nothing. */
+.flowWrap[data-view='3d'] {
+  /* Hand the dock's footprint to the scene so its own controls stay reachable. */
+  --canvas-3d-inset-left: var(--brain-dock-left, 0px);
+  --canvas-3d-inset-right: var(--brain-dock-right, 0px);
+}
 .flowWrap[data-view='3d'] :global(.react-flow) { z-index: 9; pointer-events: none; background: transparent; }
+/* The palette drops objects onto the flat board, so it stands down in 3D rather
+   than sitting on top of the scene's own heading. */
+.flowWrap[data-view='3d'] .paletteToggle,
+.flowWrap[data-view='3d'] .palette { display: none; }
 .flowWrap[data-view='3d'] :global(.react-flow__viewport),
 .flowWrap[data-view='3d'] :global(.react-flow__background),
 .flowWrap[data-view='3d'] .remoteCursors { display: none; }
@@ -289,6 +299,13 @@
 .diagnosticSteps { list-style:none; }.diagnosticSteps li { display:grid; grid-template-columns:18px minmax(0,1fr); gap:6px; align-items:start; }.diagnosticSteps li > span { display:grid; place-items:center; width:18px; height:18px; border-radius:5px; background:#efeafd; color:#6848cf; font-size:8px; font-weight:800; }.diagnosticSteps p { margin:1px 0 0; color:#4c5e74; font-size:8px; line-height:1.4; overflow-wrap:anywhere; }
 .diagnosticEmpty { margin:0!important; padding:7px; color:#8b98a9!important; font-size:8px!important; font-style:italic; list-style:none; }
 .personRow { display:flex; align-items:center; gap:7px; font-size:9px; }.personRow > span:last-child:not(.presence) { margin-left:auto; padding:3px 6px; border-radius:999px; background:#f1f4f8; }.avatar { display:grid!important; place-items:center; width:25px!important; height:25px!important; color:#fff; font-weight:700; }
+.agentIdentity { display:grid; grid-template-columns:34px minmax(0,1fr) auto; align-items:center; gap:8px; }
+.agentIdentity > span { display:grid; min-width:0; gap:2px; }.agentIdentity b { overflow:hidden; color:var(--canvas-ink); font-size:9px; text-overflow:ellipsis; white-space:nowrap; }.agentIdentity small { overflow:hidden; color:var(--canvas-muted); font-size:7px; text-overflow:ellipsis; white-space:nowrap; }
+.agentIdentity em { max-width:88px; padding:4px 6px; overflow:hidden; border:1px solid var(--canvas-line); border-radius:999px; background:var(--canvas-panel-muted); color:var(--canvas-muted); font-size:7px; font-style:normal; text-overflow:ellipsis; white-space:nowrap; }
+.agentThinking,.agentLatestReply { display:grid; grid-template-columns:auto minmax(0,1fr); gap:2px 7px; margin-top:9px; padding:8px; border:1px solid color-mix(in srgb,var(--canvas-blue) 30%,var(--canvas-line)); border-radius:8px; background:color-mix(in srgb,var(--canvas-blue) 8%,var(--canvas-panel)); }
+.agentThinking i { grid-row:1/3; align-self:center; color:var(--canvas-blue); font-size:14px; font-style:normal; animation:brainSpark 1.1s ease-in-out infinite; }.agentThinking b { color:var(--canvas-ink); font-size:9px; }.agentThinking span { color:var(--canvas-muted); font-size:7px; }
+.agentLatestReply { display:block; }.agentLatestReply small { color:var(--canvas-blue); font-size:7px; font-weight:750; letter-spacing:.06em; text-transform:uppercase; }.agentLatestReply p { display:-webkit-box; overflow:hidden; margin:3px 0 0; color:var(--canvas-ink); font-size:8px; line-height:1.45; -webkit-box-orient:vertical; -webkit-line-clamp:3; }
+@media (prefers-reduced-motion:reduce) { .agentThinking i { animation:none; } }
 .taskBody { display:grid; gap:9px; }
 .taskFacts { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,.65fr); gap:7px; }
 .taskFacts span,.taskContext { min-width:0; padding:7px 8px; border:1px solid #dfe6ef; border-radius:7px; background:#fafcff; }
@@ -411,6 +428,7 @@
 .releaseBody p { margin:0; color:var(--text-secondary, #53647a); font-size:11px; line-height:1.5; }
 .agentSetupGuide { display:grid; gap:7px; margin-bottom:14px; padding:11px; border:1px solid #cfe0fb; border-radius:9px; background:#f3f7ff; }
 .agentSetupGuide > strong { color:#243348; font-size:12px; }.agentSetupGuide > p { margin:0; color:#5f7390; font-size:10px; line-height:1.45; }
+.agentSetupGuide[data-existing="true"] { border-color:color-mix(in srgb,#2faf70 38%,var(--canvas-line)); background:color-mix(in srgb,#2faf70 9%,var(--canvas-panel)); }
 .agentSetupSteps { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:5px; }
 .agentSetupSteps span { padding:6px; border-radius:6px; background:#fff; color:#65758b; font-size:9px; }.agentSetupSteps span[data-done="true"] { background:#e4f7ed; color:#27764b; }
 .deliveryChecklist { display:grid; gap:7px; padding:11px; border:1px solid #d9e2ed; border-radius:9px; background:#f8fbff; }
@@ -504,6 +522,9 @@
 .brainDockTabs button { padding:6px 10px; border:0; border-bottom:2px solid transparent; background:transparent; color:var(--canvas-muted); font:650 10px var(--font-sans); cursor:pointer; }
 .brainDockTabs button:hover { color:var(--canvas-ink); }
 .brainDockTabs .activeTab { border-bottom-color:var(--canvas-brain-accent); color:var(--canvas-brain-accent); }
+.humanChatActivity { display:grid; flex:none; gap:5px; padding:7px 9px; border-bottom:1px solid var(--canvas-brain-border); background:color-mix(in srgb,var(--canvas-brain-accent) 6%,var(--canvas-panel)); }
+.humanChatActivity > span { display:grid; grid-template-columns:22px minmax(0,1fr) auto; align-items:center; gap:7px; min-width:0; }
+.humanChatActivity b { overflow:hidden; color:var(--canvas-ink); font-size:9px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }.humanChatActivity i { color:var(--canvas-brain-accent); font-size:10px; font-style:normal; letter-spacing:2px; animation:collaboratorTyping 1.2s ease-in-out infinite; }
 .brainDockTimeline,.brainDockContext { min-height:0; flex:1; overflow:auto; padding:10px; }
 .brainDockComposer { flex:none; padding:9px 10px 11px; border-top:1px solid var(--canvas-brain-border); }
 .brainDockLauncher { position:absolute; z-index:16; bottom:20px; display:flex; align-items:center; gap:6px; padding:9px 13px; border:1px solid var(--canvas-brain-border); border-radius:999px; background:var(--canvas-brain-surface); color:var(--canvas-brain-accent); box-shadow:0 10px 28px var(--canvas-shadow); font:700 11px var(--font-sans); cursor:pointer; }
@@ -522,9 +543,11 @@
 .brainActivity[data-state='settled'] .brainActivitySpark { color:#2bb879; }
 @keyframes brainSpark { 0%,100% { opacity:.45; transform:rotate(0deg) scale(.9); } 50% { opacity:1; transform:rotate(90deg) scale(1.1); } }
 @keyframes brainShimmer { to { background-position:-220% 0; } }
+@keyframes collaboratorTyping { 0%,100% { opacity:.55; } 50% { opacity:1; } }
 @media (prefers-reduced-motion: reduce) {
   .brainActivity[data-state='running'] .brainActivitySpark { animation:none; opacity:1; }
   .brainActivity[data-state='running'] b { animation:none; background:none; -webkit-text-fill-color:currentColor; color:var(--canvas-ink); }
+  .collaborators button[data-typing="true"],.humanChatActivity i { animation:none; }
 }
 .mobileCanvasActions { display:none; }
 
@@ -571,6 +594,14 @@
   .brainDockActions button[data-dock-side] { display:none; }
   .brainDockLauncher { bottom:12px; }
   .canvasOutline { left:8px; right:8px; bottom:calc(var(--mobile-composer-space) + 8px); width:auto; max-height:min(46%,300px); }
+  /* On a phone the Brain dock is a bottom sheet rather than a side panel, so the
+     3D scene gives up the bottom edge instead of the side. Keeping the side
+     inset here would leave the scene a ~30px ribbon on a 360px screen. */
+  .flowWrap[data-view='3d'] {
+    --canvas-3d-inset-left: 0px;
+    --canvas-3d-inset-right: 0px;
+    --canvas-3d-inset-bottom: var(--mobile-composer-space, 0px);
+  }
   .mobileCanvasActions { position:absolute; z-index:13; left:10px; bottom:calc(var(--mobile-composer-space) + 8px); display:flex; flex-direction:column; overflow:hidden; border:1px solid var(--canvas-line); border-radius:9px; background:var(--canvas-panel); box-shadow:0 7px 20px var(--canvas-shadow); }
   .mobileCanvasActions button { width:32px; height:32px; display:grid; place-items:center; padding:0; border:0; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); color:var(--canvas-ink); font:600 16px var(--font-sans); cursor:pointer; }
   .mobileCanvasActions button:last-child { border-bottom:0; }

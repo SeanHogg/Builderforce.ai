@@ -746,11 +746,12 @@ function BrainTimelineInner({
       nodes.map((node) => {
         if (node.kind === "user") {
           const to = (0, import_builderforce_brain_embedded2.parseDirectedRecipient)(node.message);
+          const author = (0, import_builderforce_brain_embedded2.parseMessageAuthor)(node.message);
           return /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("li", { className: "bf-tl__item bf-tl__item--user", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__dot", children: dotIcon("user") }) }),
+            /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__gutter", children: /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { className: "bf-tl__dot", children: author ? /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Avatar, { name: author.name, kind: author.kind, size: 16 }) : dotIcon("user") }) }),
             /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "bf-tl__body", children: [
               /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("div", { className: "bf-tl__role", style: to ? { display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" } : void 0, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: labels.you }),
+                /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { children: author ? author.name : labels.you }),
                 to && /* @__PURE__ */ (0, import_jsx_runtime4.jsxs)("span", { style: { display: "inline-flex", alignItems: "center", gap: 4, opacity: 0.9 }, children: [
                   /* @__PURE__ */ (0, import_jsx_runtime4.jsx)("span", { "aria-hidden": true, style: { opacity: 0.6 }, children: "\u2192" }),
                   /* @__PURE__ */ (0, import_jsx_runtime4.jsx)(Avatar, { name: to.name, kind: to.kind, size: 15 }),

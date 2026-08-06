@@ -8,12 +8,17 @@
  * tid-less anonymous branch. So guest auth is a separate, self-contained scheme:
  *
  *   Format:  bfguest_<b64url(payload)>.<b64url(hmac-sha256)>
- *   Payload: { vid: <visitorId>, exp: <unix seconds> }
+ *   Payload: { vid: <visitorId>, exp: <unix seconds>, rid?: <room code> }
  *
  * The `bfguest_` prefix lets the gateway detect a guest token and route it to the
  * guest handler before it ever touches the tenant auth path. Signed with
  * HMAC-SHA-256 under JWT_SECRET (same key material, distinct token shape), so a
  * guest token can never be replayed as a tenant token and vice-versa.
+ *
+ * `rid` binds the token to a SHARED guest room (an invited, multi-person free
+ * session — see GuestRoomDO). It is part of the signed payload precisely so room
+ * membership cannot be claimed by editing a query string: the combined per-room
+ * turn allowance and the room's WebSocket relay both trust `rid` and nothing else.
  */
 
 export const GUEST_TOKEN_PREFIX = 'bfguest_';
@@ -23,6 +28,15 @@ interface GuestTokenPayload {
   vid: string;
   /** Expiry, unix seconds. */
   exp: number;
+  /** Shared guest-room code this token is a member of (absent = solo guest). */
+  rid?: string;
+}
+
+/** The identity a verified guest token resolves to. */
+export interface GuestIdentity {
+  visitorId: string;
+  /** The shared room this guest belongs to, or null for a solo guest session. */
+  roomCode: string | null;
 }
 
 function b64urlEncodeBytes(data: ArrayBuffer): string {
@@ -51,14 +65,23 @@ async function importKey(secret: string): Promise<CryptoKey> {
   );
 }
 
-/** Mint a signed guest token for `visitorId`, valid for `expiresInSeconds`. */
+/**
+ * Mint a signed guest token for `visitorId`, valid for `expiresInSeconds`.
+ * Pass `roomCode` to bind the token to a shared guest room, so every call it
+ * makes is metered against that room's COMBINED allowance.
+ */
 export async function signGuestToken(
   visitorId: string,
   secret: string,
   expiresInSeconds = 3600,
+  roomCode?: string | null,
 ): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
-  const payload: GuestTokenPayload = { vid: visitorId, exp: now + expiresInSeconds };
+  const payload: GuestTokenPayload = {
+    vid: visitorId,
+    exp: now + expiresInSeconds,
+    ...(roomCode ? { rid: roomCode } : {}),
+  };
   const body = b64urlEncodeStr(JSON.stringify(payload));
   const key = await importKey(secret);
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body));
@@ -67,11 +90,11 @@ export async function signGuestToken(
 
 /**
  * Verify a guest token: constant-shape parse, HMAC check, expiry check. Returns
- * the visitorId on success, or null on ANY failure (bad prefix/shape, bad
- * signature, expired). Never throws — the gateway treats null as "not a valid
- * guest" and returns 401.
+ * the guest's identity (visitorId + bound room, if any) on success, or null on
+ * ANY failure (bad prefix/shape, bad signature, expired). Never throws — the
+ * gateway treats null as "not a valid guest" and returns 401.
  */
-export async function verifyGuestToken(token: string, secret: string): Promise<string | null> {
+export async function verifyGuestToken(token: string, secret: string): Promise<GuestIdentity | null> {
   if (!token.startsWith(GUEST_TOKEN_PREFIX)) return null;
   const rest = token.slice(GUEST_TOKEN_PREFIX.length);
   const dot = rest.indexOf('.');
@@ -86,10 +109,34 @@ export async function verifyGuestToken(token: string, secret: string): Promise<s
     const payload = JSON.parse(b64urlDecodeStr(body)) as GuestTokenPayload;
     if (typeof payload.vid !== 'string' || typeof payload.exp !== 'number') return null;
     if (payload.exp < Math.floor(Date.now() / 1000)) return null;
-    return payload.vid;
+    return {
+      visitorId: payload.vid,
+      roomCode: isValidRoomCode(payload.rid) ? payload.rid : null,
+    };
   } catch {
     return null;
   }
+}
+
+/**
+ * Shared guest-room code: an unguessable 12-char Crockford-ish base32 string.
+ * The code IS the invite credential (anyone holding the link may join while the
+ * room has space), so it must never be short enough to enumerate.
+ */
+const ROOM_CODE_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
+const ROOM_CODE_LENGTH = 12;
+const ROOM_CODE_RE = /^[a-z2-9]{12}$/;
+
+export function isValidRoomCode(value: unknown): value is string {
+  return typeof value === 'string' && ROOM_CODE_RE.test(value);
+}
+
+/** Mint a fresh, unguessable room code (CSPRNG-backed). */
+export function newRoomCode(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(ROOM_CODE_LENGTH));
+  let out = '';
+  for (const byte of bytes) out += ROOM_CODE_ALPHABET[byte % ROOM_CODE_ALPHABET.length];
+  return out;
 }
 
 /** True unless the guest Brain has been explicitly disabled via the kill switch. */

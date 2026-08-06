@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { associateBrainWithArtifacts, canInvokeCreationObjectAction, canvasChangesCanAutoApply, CreationCanvas, duplicateAddUpdateTarget, persistCanonicalProjectPrd, projectEvermindNodePatch, scoreAgentTestResponse, shouldAcquireCanvasObjectLock, type ProposedCanvasChange } from './CreationCanvas';
 import { CreationNode } from './CreationNode';
+import { BrainDock } from './BrainDock';
 import { specsApi } from '@/lib/builderforceApi';
 import type { CreationFlowNode } from './CreationNode';
 import type { ProjectEvermindContributions, ProjectEvermindHead } from '@/lib/projectEvermindApi';
@@ -424,6 +425,40 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getAllByText('Investigate customer friction.').length).toBeGreaterThan(1);
     expect(screen.getByText('High autonomy')).toBeInTheDocument();
     expect(screen.getByText('Research')).toBeInTheDocument();
+  });
+
+  it('visualizes an agent collaborator avatar, thinking state, and latest response', () => {
+    const base = {
+      id: 'agent-collaborator', type: 'creation' as const, selected: false, dragging: false, zIndex: 0,
+      selectable: true, deletable: true, draggable: true, isConnectable: true,
+      positionAbsoluteX: 0, positionAbsoluteY: 0,
+    };
+    const view = render(<CreationNode {...base} data={{ kind: 'agent', title: 'Research Partner', model: 'auto', collaborationState: 'thinking' }} />);
+    expect(screen.getByText('RP')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Thinking');
+    expect(screen.getByText('Auto model')).toBeInTheDocument();
+
+    view.rerender(<CreationNode {...base} data={{ kind: 'agent', title: 'Research Partner', resourceId: 'agent:research', model: 'Evermind', collaborationReply: 'The interviews point to onboarding friction.' }} />);
+    expect(screen.getByText('Configured agent')).toBeInTheDocument();
+    expect(screen.getByText('Latest response')).toBeInTheDocument();
+    expect(screen.getByText('The interviews point to onboarding friction.')).toBeInTheDocument();
+  });
+
+  it('visualizes a person joining, composing, and authoring a shared prompt', () => {
+    render(<BrainDock
+      side="right" size="slim" showExecutionDetail={false}
+      onSideChange={vi.fn()} onSizeChange={vi.fn()} onExecutionDetailChange={vi.fn()} onClose={vi.fn()}
+      messages={[{ id: 1, seq: 1, role: 'user', content: 'Let us compare the research themes.', metadata: JSON.stringify({ authoredBy: { kind: 'human', ref: 'user-ada', name: 'Ada Rivera' } }), createdAt: new Date().toISOString() }]}
+      trace={[]} running={false} node={null} nodes={[]} edges={[]} composer={<div>Prompt</div>}
+      joinedCollaborator={{ userId: 'user-ada', displayName: 'Ada Rivera' }}
+      collaborators={[{ userId: 'user-ada', displayName: 'Ada Rivera', typing: true }]}
+    />);
+
+    expect(screen.getByText('Ada Rivera joined the conversation')).toBeInTheDocument();
+    expect(screen.getByText('Ada Rivera is writing')).toBeInTheDocument();
+    expect(screen.getByText('Let us compare the research themes.')).toBeInTheDocument();
+    expect(screen.getAllByText('Ada Rivera').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('AR').length).toBeGreaterThan(1);
   });
 
   it('renders workflow target and approval changes live', () => {

@@ -241,6 +241,15 @@ export interface Env {
    *    [[durable_objects.bindings]] name = "CEREMONY_ROOM" class_name = "CeremonyRoomDO" */
   CEREMONY_ROOM?: DurableObjectNamespace;
 
+  /** Durable Object namespace for a SHARED logged-out guest session — the free
+   *  chat a visitor can invite other people into. One instance per room
+   *  (`guestroom:<code>`); owns the room's COMBINED turn allowance, its bounded
+   *  transcript, and the relay for both presence and the camera meeting's WebRTC
+   *  signaling. Optional: when unset, guest chat still works solo (rooms return
+   *  503 and the invite affordance is hidden). Bind in wrangler.toml:
+   *    [[durable_objects.bindings]] name = "GUEST_ROOM" class_name = "GuestRoomDO" */
+  GUEST_ROOM?: DurableObjectNamespace;
+
   /** Durable Object namespace for the Architect / Digital-Transformation
    *  repo-analysis pipeline. One instance per analysis run (`idFromName(runId)`),
    *  advancing one stage per alarm() tick. Optional: when unset, the

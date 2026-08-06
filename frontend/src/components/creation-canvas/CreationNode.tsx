@@ -4,7 +4,7 @@ import { Handle, NodeResizer, Position, type Node, type NodeProps } from '@xyflo
 import { useTranslations } from 'next-intl';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { evermindLearnedStatus, evermindNextAction } from '@seanhogg/builderforce-brain-ui';
+import { Avatar, evermindLearnedStatus, evermindNextAction } from '@seanhogg/builderforce-brain-ui';
 import type { CreationNodeData } from './types';
 import styles from './CreationCanvas.module.css';
 import { creationObjectDefinition } from './creationObjectRegistry';
@@ -183,9 +183,18 @@ function AgentBody({ data, onOpen }: { data: CreationNodeData; onOpen?: (focus: 
   const t = useTranslations('creationCanvas.node');
   const tools = Array.isArray(data.tools) ? data.tools.map(String) : ['Audience Analyzer', 'Copy Optimizer'];
   const autonomy = optionLabel(data.autonomy, { low: t('lowAutonomy'), medium: t('mediumAutonomy'), high: t('highAutonomy') }, t('mediumAutonomy'));
+  const existing = typeof data.resourceId === 'string' && data.resourceId.startsWith('agent:');
+  const thinking = data.collaborationState === 'thinking' || data.testStatus === 'Running';
+  const latestReply = textValue(data.collaborationReply, textValue(data.testResponse));
   return <>
-    <div className={styles.personRow}><span className={styles.presence} /><b>{data.status || t('online')}</b><span>{data.model || 'gpt-4o'}</span></div>
-    <p>{textValue(data.instructions, data.subtitle || '')}</p>
+    <div className={styles.agentIdentity}>
+      <Avatar name={data.title} kind="agent" size={34} />
+      <span><b>{existing ? t('configuredAgent') : t('newAgent')}</b><small>{textValue(data.role, data.status || t('online'))}</small></span>
+      <em>{data.model === 'auto' || !data.model ? t('autoModel') : data.model}</em>
+    </div>
+    {thinking && <div className={styles.agentThinking} role="status"><i aria-hidden>✦</i><b>{data.testStatus === 'Running' ? t('testing') : t('thinking')}</b><span>{t('contributing')}</span></div>}
+    {!thinking && latestReply && <div className={styles.agentLatestReply}><small>{t('latestResponse')}</small><p>{latestReply}</p></div>}
+    {!latestReply && !thinking && <p>{textValue(data.personality, textValue(data.instructions, data.subtitle || ''))}</p>}
     <div className={styles.pills}>{tools.map((tool) => <span key={tool}>{tool}</span>)}<span>{autonomy}</span>{typeof data.testStatus === 'string' && data.testStatus && <span>{data.testStatus}</span>}</div>
     <div className={`${styles.nodeActionBar} nodrag nowheel`}><button type="button" onClick={(event) => { event.stopPropagation(); onOpen?.('knowledge'); }}>{t('addKnowledgeStep')}</button><button type="button" onClick={(event) => { event.stopPropagation(); onOpen?.('test'); }}>{t('testAgentStep')}</button></div>
   </>;
