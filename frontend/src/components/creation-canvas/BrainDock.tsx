@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from 'react';
 import { useTranslations } from 'next-intl';
 import { Avatar, BrainTimeline } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
@@ -18,26 +18,45 @@ import {
   formatTokenCount,
   type BrainRunSummary,
 } from './brainActivity';
-import type { BrainDockSide, BrainDockSize } from './brainDockPreferences';
+import {
+  BRAIN_DOCK_MAX_WIDTH,
+  BRAIN_DOCK_MIN_WIDTH,
+  clampBrainDockWidth,
+  type BrainDockMode,
+  type BrainDockSide,
+  type BrainDockSize,
+} from './brainDockPreferences';
 
 /**
  * BrainDock — the ONE Brain surface on the Canvas.
  *
  * The Canvas used to show a transcript inside the Brain Object, a second transcript
  * in the details panel, and a floating prompt at the bottom; people could not tell
- * which one they were talking to. Everything Brain now lives here: the conversation,
- * what it is doing right now, what the turn cost, its connected work, and the prompt.
- * The dock parks on the left OR the right (never both) and is slim or expanded, and
- * the chosen layout is remembered.
+ * which one they were talking to. The conversation, what Brain is doing right now,
+ * what the turn cost, and its connected work all live here.
+ *
+ * It takes three placements: floating ON the canvas (small, claims no board width),
+ * or docked full-height to the left or the right edge. Either one is dragged to any
+ * width. The prompt is NOT in here — it stays in the centre of the page where every
+ * chat product people already use puts it.
  */
 
+/** How far one arrow-key press resizes the surface. */
+const RESIZE_STEP = 24;
+
 export interface BrainDockProps {
+  mode: BrainDockMode;
   side: BrainDockSide;
   size: BrainDockSize;
+  /** Current rendered width in px, preset or dragged. */
+  width: number;
   /** When false the transcript narrates progress only and hides the step list. */
   showExecutionDetail: boolean;
+  onModeChange: (mode: BrainDockMode) => void;
   onSideChange: (side: BrainDockSide) => void;
   onSizeChange: (size: BrainDockSize) => void;
+  /** commit=false during a drag (live reflow only); true when the user settles. */
+  onWidthChange: (width: number, commit: boolean) => void;
   onExecutionDetailChange: (show: boolean) => void;
   onClose: () => void;
   messages: BrainMessage[];
@@ -47,22 +66,60 @@ export interface BrainDockProps {
   node: CreationFlowNode | null;
   nodes: CreationFlowNode[];
   edges: Edge[];
-  /** The shared ChatInput, rendered as the dock footer. */
-  composer: ReactNode;
   collaborators?: Array<{ userId: string; displayName: string | null; typing?: boolean }>;
   joinedCollaborator?: { userId: string; displayName: string | null } | null;
 }
 
 export function BrainDock({
-  side, size, showExecutionDetail,
-  onSideChange, onSizeChange, onExecutionDetailChange, onClose,
-  messages, trace, running, node, nodes, edges, composer, collaborators = [], joinedCollaborator = null,
+  mode, side, size, width, showExecutionDetail,
+  onModeChange, onSideChange, onSizeChange, onWidthChange, onExecutionDetailChange, onClose,
+  messages, trace, running, node, nodes, edges, collaborators = [], joinedCollaborator = null,
 }: BrainDockProps) {
   const t = useTranslations('creationCanvas');
   const [tab, setTab] = useState<'chat' | 'context'>('chat');
   const expanded = size === 'expanded';
+  const floating = mode === 'floating';
+  const typingCollaborators = collaborators.filter((member) => member.typing);
+  const showPresence = joinedCollaborator != null || typingCollaborators.length > 0;
+
+  // Dragging the inner edge. The delta is inverted for a right-hand surface, where
+  // pulling left makes it wider. Only the settled width is persisted, so a drag
+  // does not write localStorage (or a preference signal) on every pointer move.
+  const drag = useRef<{ pointerX: number; width: number } | null>(null);
+  const startResize = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    drag.current = { pointerX: event.clientX, width };
+  }, [width]);
+  const moveResize = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    const active = drag.current;
+    if (!active) return;
+    const delta = event.clientX - active.pointerX;
+    onWidthChange(clampBrainDockWidth(active.width + (side === 'left' ? delta : -delta)), false);
+  }, [onWidthChange, side]);
+  const endResize = useCallback((event: PointerEvent<HTMLDivElement>) => {
+    if (!drag.current) return;
+    drag.current = null;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+    onWidthChange(width, true);
+  }, [onWidthChange, width]);
+  const keyResize = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    const towardsBoard = event.key === (side === 'left' ? 'ArrowLeft' : 'ArrowRight');
+    const awayFromBoard = event.key === (side === 'left' ? 'ArrowRight' : 'ArrowLeft');
+    if (!towardsBoard && !awayFromBoard) return;
+    event.preventDefault();
+    onWidthChange(clampBrainDockWidth(width + (awayFromBoard ? RESIZE_STEP : -RESIZE_STEP)), true);
+  }, [onWidthChange, side, width]);
+
   return (
-    <aside className={styles.brainDock} data-side={side} data-size={size} aria-label={t('brainDock')}>
+    <aside
+      className={styles.brainDock}
+      data-mode={mode}
+      data-side={side}
+      data-size={size}
+      style={{ '--brain-dock-size': `${width}px` } as CSSProperties}
+      aria-label={t('brainDock')}
+    >
       <header className={styles.brainDockHeader}>
         <span className={styles.brainDockMark} aria-hidden>✦</span>
         <strong>{t('brain')}</strong>
@@ -74,6 +131,13 @@ export function BrainDock({
             title={showExecutionDetail ? t('hideExecutionSteps') : t('showExecutionSteps')}
             onClick={() => onExecutionDetailChange(!showExecutionDetail)}
           >⋮⋮</button>
+          <button
+            type="button"
+            aria-pressed={floating}
+            aria-label={floating ? t('dockBrainToEdge') : t('floatBrainOnCanvas')}
+            title={floating ? t('dockBrainToEdge') : t('floatBrainOnCanvas')}
+            onClick={() => onModeChange(floating ? 'docked' : 'floating')}
+          >{floating ? '▤' : '▣'}</button>
           {/* data-dock-side, not the label, is what the stylesheet hides on a phone:
               a selector keyed on English copy would stop matching in every other locale. */}
           <button
@@ -102,13 +166,36 @@ export function BrainDock({
           <button type="button" aria-label={t('closeBrain')} title={t('closeBrain')} onClick={onClose}>×</button>
         </div>
       </header>
+      <div
+        className={styles.brainDockResizer}
+        data-side={side}
+        role="separator"
+        aria-orientation="vertical"
+        aria-label={t('resizeBrain')}
+        aria-valuenow={width}
+        aria-valuemin={BRAIN_DOCK_MIN_WIDTH}
+        aria-valuemax={BRAIN_DOCK_MAX_WIDTH}
+        tabIndex={0}
+        onPointerDown={startResize}
+        onPointerMove={moveResize}
+        onPointerUp={endResize}
+        onPointerCancel={endResize}
+        onKeyDown={keyResize}
+      />
       <div className={styles.brainDockTabs} role="tablist" aria-label={t('brainDock')}>
         <button type="button" role="tab" aria-selected={tab === 'chat'} className={tab === 'chat' ? styles.activeTab : ''} onClick={() => setTab('chat')}>{t('chat')}</button>
         <button type="button" role="tab" aria-selected={tab === 'context'} className={tab === 'context' ? styles.activeTab : ''} onClick={() => setTab('context')}>{t('context')}</button>
       </div>
-      {(joinedCollaborator || collaborators.some((member) => member.typing)) && <div className={styles.humanChatActivity} aria-live="polite">
-        {joinedCollaborator && <span data-state="joined"><Avatar name={joinedCollaborator.displayName || 'Collaborator'} kind="human" size={22} /><b>{joinedCollaborator.displayName || 'A collaborator'} joined the conversation</b></span>}
-        {collaborators.filter((member) => member.typing).map((member) => <span key={member.userId} data-state="typing"><Avatar name={member.displayName || 'Collaborator'} kind="human" size={22} /><b>{member.displayName || 'A collaborator'} is writing</b><i aria-hidden>•••</i></span>)}
+      {showPresence && <div className={styles.humanChatActivity} aria-live="polite">
+        {joinedCollaborator && <span data-state="joined">
+          <Avatar name={joinedCollaborator.displayName || t('collaborator')} kind="human" size={22} />
+          <b>{t('collaboratorJoined', { name: joinedCollaborator.displayName || t('collaborator') })}</b>
+        </span>}
+        {typingCollaborators.map((member) => <span key={member.userId} data-state="typing">
+          <Avatar name={member.displayName || t('collaborator')} kind="human" size={22} />
+          <b>{t('collaboratorWriting', { name: member.displayName || t('collaborator') })}</b>
+          <i aria-hidden>•••</i>
+        </span>)}
       </div>}
       {tab === 'chat'
         ? <div className={styles.brainDockTimeline} role="log" aria-label={t('brainChatHistory')} tabIndex={0}>
@@ -125,7 +212,6 @@ export function BrainDock({
           <BrainContextPanel node={node} nodes={nodes} edges={edges} />
         </div>}
       <BrainActivityStrip running={running} trace={trace} />
-      <div className={styles.brainDockComposer}>{composer}</div>
     </aside>
   );
 }

@@ -1,13 +1,29 @@
 .canvasShell {
   --canvas-blue: #3978f6;
-  --canvas-ink: var(--text-primary, #152033);
-  --canvas-muted: var(--text-secondary, #6d7d94);
-  --canvas-line: var(--border-subtle, #d9e2ee);
-  --canvas-board: var(--bg-deep, #f7faff);
-  --canvas-panel: var(--bg-elevated, #fff);
-  --canvas-panel-muted: var(--bg-surface, #fbfdff);
-  --canvas-hover: var(--surface-interactive, #f1f6ff);
-  --canvas-shadow: rgba(0, 0, 0, .28);
+  /* The Canvas owns its palette in BOTH themes — light here, dark in the block
+     near the end of this file — rather than inheriting the application shell's.
+     A board is a tinted surface CARRYING white objects, but the shell's light
+     tokens all sit within two percent of white, so deriving from them collapsed
+     the board, the cards and every panel into one flat sheet separated by nothing
+     but a hairline, made the recessed surface brighter than the raised one, and
+     handed hovers a grey wash whose translucency was meant for dark ink. */
+  --canvas-ink: #142234;
+  --canvas-muted: #5c6e88;
+  /* Secondary text that still has to be READ — a caption under a title, an empty
+     state. Muted ink pulled a quarter of the way back toward the primary ink, so
+     it clears contrast at small sizes in both themes from this one definition. */
+  --canvas-ink-soft: color-mix(in srgb, var(--canvas-muted) 74%, var(--canvas-ink));
+  --canvas-line: #d7e1ee;
+  --canvas-board: #e9eef6;
+  --canvas-panel: #ffffff;
+  --canvas-panel-muted: #f3f7fc;
+  --canvas-hover: #e7effc;
+  --canvas-shadow: rgba(24, 43, 74, .12);
+  /* Accent INK: a tint or a glyph drawn ON a canvas surface. A hue legible on ink
+     is invisible on paper, so this is a token with a value per theme rather than a
+     literal repeated at each call site. */
+  --canvas-accent-ink: #2a5fc7;
+  --canvas-positive-ink: #12724e;
   /* TWO palettes, not twenty. Brain surfaces (the Brain Object and the prompt it
      owns) share one identity so the conversation reads as a single system; every
      other Object uses the neutral widget palette. Both are theme variables, so
@@ -22,7 +38,7 @@
   --canvas-brain-border: #c3b4f2;
   --canvas-brain-icon-bg: #e6dcff;
   --canvas-brain-accent: #6d4ee9;
-  --creation-dot: color-mix(in srgb, var(--text-muted, #6d7d94) 42%, transparent);
+  --creation-dot: #c3d1e4;
   --creation-minimap-mask: color-mix(in srgb, var(--canvas-board) 76%, transparent);
   height: calc(100vh - var(--topbar-height, 58px));
   min-height: 620px;
@@ -43,7 +59,7 @@
   gap: 16px;
   padding: 0 14px;
   border-bottom: 1px solid var(--canvas-line);
-  background: color-mix(in srgb, var(--bg-elevated, #fff) 94%, #eef5ff);
+  background: color-mix(in srgb, var(--canvas-panel) 94%, #eef5ff);
   position: relative;
   z-index: 20;
 }
@@ -53,43 +69,43 @@
 .spark { color: #7257ec; font-size: 18px; }
 .titleBlock input {
   width: min(270px, 34vw); border: 1px solid transparent; border-radius: 8px; padding: 7px 9px;
-  background: transparent; color: var(--text-primary, var(--canvas-ink)); font-family:inherit; font-size:14px; font-weight:650;
+  background: transparent; color: var(--canvas-ink); font-family:inherit; font-size:14px; font-weight:650;
 }
-.titleBlock input:hover, .titleBlock input:focus { border-color: var(--border, var(--canvas-line)); background: var(--bg-elevated, #fff); outline: none; }
-.saved { color: var(--text-muted, var(--canvas-muted)); font-size: 11px; white-space: nowrap; }
+.titleBlock input:hover, .titleBlock input:focus { border-color: var(--canvas-line); background: var(--canvas-panel); outline: none; }
+.saved { color: var(--canvas-muted); font-size: 11px; white-space: nowrap; }
 .sessionActions { gap: 8px; position: relative; }
 .collaborators span, .collaborators button {
   width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; margin-left: -5px;
-  border: 2px solid var(--bg-elevated, #fff); color: #fff; font-size: 10px; font-weight: 750;
+  border: 2px solid var(--canvas-panel); color: #fff; font-size: 10px; font-weight: 750;
 }
-.collaborators button { color: var(--text-secondary, var(--canvas-muted)); background: var(--bg-elevated, #fff); border: 1px dashed #aebbd0; cursor: pointer; }
+.collaborators button { color: var(--canvas-muted); background: var(--canvas-panel); border: 1px dashed var(--canvas-line); cursor: pointer; }
 .collaborators button[data-typing="true"] { border:2px solid var(--canvas-blue); box-shadow:0 0 0 3px color-mix(in srgb,var(--canvas-blue) 20%,transparent); animation:collaboratorTyping 1.4s ease-in-out infinite; }
 .avatarPink { background: #e94b9b; }.avatarOrange { background: #ff9827; }.avatarGreen { background: #43b77d; }
 .primaryButton, .secondaryButton, .fullButton {
-  border-radius: 8px; padding: 8px 13px; border: 1px solid var(--border, var(--canvas-line)); cursor: pointer; font-family:inherit; font-size:12px; font-weight:650;
+  border-radius: 8px; padding: 8px 13px; border: 1px solid var(--canvas-line); cursor: pointer; font-family:inherit; font-size:12px; font-weight:650;
 }
 .primaryButton, .fullButton { background: var(--canvas-blue); color: #fff; border-color: var(--canvas-blue); }
-.secondaryButton { background: var(--bg-elevated, #fff); color: var(--text-primary, var(--canvas-ink)); }
-.undoRedoGroup { display:inline-flex; gap:0; overflow:hidden; border:1px solid var(--border,var(--canvas-line)); border-radius:8px; }
+.secondaryButton { background: var(--canvas-panel); color: var(--canvas-ink); }
+.undoRedoGroup { display:inline-flex; gap:0; overflow:hidden; border:1px solid var(--canvas-line); border-radius:8px; }
 .undoRedoGroup .secondaryButton { width:36px; height:34px; display:grid; place-items:center; padding:0; border:0; border-radius:0; }
-.undoRedoGroup .secondaryButton + .secondaryButton { border-left:1px solid var(--border,var(--canvas-line)); }
+.undoRedoGroup .secondaryButton + .secondaryButton { border-left:1px solid var(--canvas-line); }
 .undoRedoGroup .secondaryButton:hover,.undoRedoGroup .secondaryButton:focus-visible { z-index:1; background:var(--canvas-hover); outline:none; }
 .saveButtonShort { display:none; }
 .iconAction { width:34px; min-width:34px; height:34px; display:inline-grid; place-items:center; padding:0; font-size:14px; line-height:1; }
 .iconAction[aria-pressed='true'] { border-color:var(--canvas-blue); color:var(--canvas-blue); background:color-mix(in srgb,var(--canvas-blue) 12%,var(--canvas-panel)); }
 .shareMenu {
-  position: absolute; right: 76px; top: 42px; width: 300px; padding: 15px; background: var(--bg-elevated, #fff);
-  color: var(--text-primary, var(--canvas-ink)); border: 1px solid var(--border, var(--canvas-line)); border-radius: 12px; box-shadow: 0 18px 55px rgba(28, 51, 84, .18);
+  position: absolute; right: 76px; top: 42px; width: 300px; padding: 15px; background: var(--canvas-panel);
+  color: var(--canvas-ink); border: 1px solid var(--canvas-line); border-radius: 12px; box-shadow: 0 18px 55px var(--canvas-shadow);
 }
 .shareMenu .shareMenuHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.shareMenu .shareMenuClose { width: 28px; height: 28px; display: grid; flex: none; place-items: center; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted, var(--canvas-muted)); font-size: 20px; line-height: 1; cursor: pointer; }
-.shareMenu .shareMenuClose:hover { background: var(--canvas-hover); color: var(--text-primary, var(--canvas-ink)); }
+.shareMenu .shareMenuClose { width: 28px; height: 28px; display: grid; flex: none; place-items: center; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--canvas-muted); font-size: 20px; line-height: 1; cursor: pointer; }
+.shareMenu .shareMenuClose:hover { background: var(--canvas-hover); color: var(--canvas-ink); }
 .shareMenu .shareMenuClose:focus-visible { outline: 2px solid var(--canvas-blue); outline-offset: 2px; }
-.shareMenu p { margin: 6px 0 12px; color: var(--text-muted, var(--canvas-muted)); font-size: 12px; line-height: 1.45; }
+.shareMenu p { margin: 6px 0 12px; color: var(--canvas-muted); font-size: 12px; line-height: 1.45; }
 .shareMenu div { display: flex; gap: 6px; }
-.shareMenu input { min-width: 0; flex: 1; padding: 8px; border: 1px solid var(--border, var(--canvas-line)); border-radius: 7px; background: var(--bg-deep, #fff); color: var(--text-primary, var(--canvas-ink)); }
+.shareMenu input { min-width: 0; flex: 1; padding: 8px; border: 1px solid var(--canvas-line); border-radius: 7px; background: var(--canvas-panel-muted); color: var(--canvas-ink); }
 .shareMenu button { padding: 7px 10px; background: var(--canvas-blue); color: #fff; border: 0; border-radius: 7px; }
-.shareMenu small { display: block; margin-top: 10px; color: var(--text-muted, var(--canvas-muted)); }
+.shareMenu small { display: block; margin-top: 10px; color: var(--canvas-muted); }
 .accountGateBackdrop { position:fixed; z-index:80; inset:0; display:grid; place-items:center; padding:20px; background:rgba(3,8,18,.58); backdrop-filter:blur(5px); }
 .accountGate { position:relative; box-sizing:border-box; width:min(440px,100%); display:grid; justify-items:center; padding:30px; border:1px solid var(--canvas-line); border-radius:18px; background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:0 28px 90px rgba(0,0,0,.4); text-align:center; }
 .accountGateClose { position:absolute; top:11px; right:12px; width:30px; height:30px; border:0; border-radius:8px; background:transparent; color:var(--canvas-muted); font-size:21px; cursor:pointer; }.accountGateClose:hover { background:var(--canvas-hover); }
@@ -100,16 +116,32 @@
 .accountGateLater { margin-top:12px; border:0; background:transparent; color:var(--canvas-muted); font:600 10px var(--font-sans); cursor:pointer; }.accountGateLater:hover { color:var(--canvas-ink); text-decoration:underline; }
 .moreMenu {
   position:absolute; right:150px; top:42px; width:250px; display:grid; grid-template-columns:1fr 1fr; gap:4px; padding:9px;
-  border:1px solid var(--border, var(--canvas-line)); border-radius:13px; background:var(--bg-elevated, #fff); box-shadow:0 20px 60px rgba(28,51,84,.2);
+  border:1px solid var(--canvas-line); border-radius:13px; background:var(--canvas-panel); box-shadow:0 20px 60px var(--canvas-shadow);
 }
-.moreMenu button,.moreMenu label { min-width:0; padding:7px 8px; border:0; border-radius:8px; background:transparent; color:var(--text-primary, var(--canvas-ink)); font:600 11px var(--font-sans); text-align:left; cursor:pointer; }
-.moreMenu button { display:flex; align-items:center; gap:8px; }.moreMenu button > span { width:22px; height:22px; flex:none; display:grid; place-items:center; border-radius:6px; background:#f0f4fa; color:#526681; font-size:12px; }
-.moreMenu button:hover,.moreMenu button:focus-visible { outline:none; background:var(--bg-subtle, #f3f7fc); color:var(--canvas-blue); }.moreMenu button:hover > span,.moreMenu button:focus-visible > span { background:#e7efff; color:var(--canvas-blue); }
-.moreMenuHeading { grid-column:1 / -1; margin:5px 5px 1px; color:#8491a3; font-size:8px; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }.moreMenuHeading:first-child { margin-top:1px; }
-.moreMenu label { grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between; margin-top:3px; border-top:1px solid var(--border-subtle, #e4eaf2); border-radius:0; cursor:default; }.moreMenu label > span { display:flex; align-items:center; gap:8px; }.moreMenu label i { width:22px; height:22px; display:grid; place-items:center; border-radius:6px; background:#f0f4fa; color:#526681; font-style:normal; }
-.moreMenu select { max-width:105px; border:1px solid var(--border, var(--canvas-line)); border-radius:6px; padding:4px; background:var(--bg-elevated, #fff); color:inherit; font:inherit; }
+.moreMenu button,.moreMenu label { min-width:0; padding:7px 8px; border:0; border-radius:8px; background:transparent; color:var(--canvas-ink); font:600 11px var(--font-sans); text-align:left; cursor:pointer; }
+.moreMenu button { display:flex; align-items:center; gap:8px; }.moreMenu button > span { width:22px; height:22px; flex:none; display:grid; place-items:center; border-radius:6px; font-size:12px; }
+.moreMenu button:hover,.moreMenu button:focus-visible { outline:none; background:var(--canvas-hover); color:var(--canvas-blue); }.moreMenu button:hover > span,.moreMenu button:focus-visible > span { background:color-mix(in srgb,var(--canvas-blue) 24%,var(--canvas-panel)); color:var(--canvas-blue); }
+.moreMenuHeading { grid-column:1 / -1; margin:5px 5px 1px; color:var(--canvas-muted); font-size:8px; font-weight:750; letter-spacing:.1em; text-transform:uppercase; }.moreMenuHeading:first-child { margin-top:1px; }
+.moreMenu label { grid-column:1 / -1; display:flex; align-items:center; justify-content:space-between; margin-top:3px; border-top:1px solid var(--canvas-line); border-radius:0; cursor:default; }.moreMenu label > span { display:flex; align-items:center; gap:8px; }.moreMenu label i { width:22px; height:22px; display:grid; place-items:center; border-radius:6px; font-style:normal; }
+.moreMenu select { max-width:105px; border:1px solid var(--canvas-line); border-radius:6px; padding:4px; background:var(--canvas-panel); color:var(--canvas-ink); font:inherit; }
+/* Native option lists are painted by the OS and inherit nothing from the control,
+   so every select on the canvas states its own opaque pair. */
+.moreMenu select option,
+.inspector select option,
+.scopeChip select option,
+.mergePanel select option { background:var(--canvas-panel); color:var(--canvas-ink); }
 
-.flowWrap { height: calc(100% - 54px); position: relative; background: var(--canvas-board); }
+/* --composer-space is the band the centred prompt owns at the bottom of the board.
+   Anything else that sits low (the outline, the Brain launcher, a floating Brain)
+   clears it from this ONE number instead of each guessing its own offset. */
+.flowWrap {
+  height: calc(100% - 54px); position: relative; background: var(--canvas-board); --composer-space: 112px;
+  /* The dock's footprint, restated under the name the shared canvas chrome reads
+     (see CanvasCommands.module.css). One source, so the command rail and the mini
+     map move out from under a docked Brain exactly like every panel above. */
+  --canvas-reserved-left: var(--brain-dock-left, 0px);
+  --canvas-reserved-right: var(--brain-dock-right, 0px);
+}
 /* Do not rely on the OS grab cursor: some Windows/Chrome combinations render it as
    an almost solid white shape on this board. The outlined SVG stays legible on both
    the canvas and cards while retaining the familiar whiteboard hand affordance. */
@@ -131,11 +163,6 @@
    pointer events off, leaving only the rail (and the mini map close) clickable.
    Remote cursors are hidden too: they are projected from the 2D viewport and
    would otherwise float over the scene pointing at nothing. */
-.flowWrap[data-view='3d'] {
-  /* Hand the dock's footprint to the scene so its own controls stay reachable. */
-  --canvas-3d-inset-left: var(--brain-dock-left, 0px);
-  --canvas-3d-inset-right: var(--brain-dock-right, 0px);
-}
 .flowWrap[data-view='3d'] :global(.react-flow) { z-index: 9; pointer-events: none; background: transparent; }
 /* The palette drops objects onto the flat board, so it stands down in 3D rather
    than sitting on top of the scene's own heading. */
@@ -145,7 +172,10 @@
 .flowWrap[data-view='3d'] :global(.react-flow__background),
 .flowWrap[data-view='3d'] .remoteCursors { display: none; }
 .flowWrap[data-view='3d'] :global(.react-flow__controls) { pointer-events: auto; }
-.selectionToolbar { position:absolute; z-index:13; top:14px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:4px; padding:5px; border:1px solid #d7e0ed; border-radius:10px; background:rgba(255,255,255,.98); box-shadow:0 9px 28px rgba(31,55,88,.13); }
+/* Centred on the OPEN board, not on the viewport: with Brain docked to one edge a
+   plain 50% puts the actions for the thing you just selected underneath it. Same
+   arithmetic as the composer, which centres on the board the dock leaves behind. */
+.selectionToolbar { position:absolute; z-index:13; top:14px; left:calc(50% + (var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)) / 2); transform:translateX(-50%); display:flex; align-items:center; gap:4px; padding:5px; border:1px solid #d7e0ed; border-radius:10px; background:rgba(255,255,255,.98); box-shadow:0 9px 28px rgba(31,55,88,.13); }
 .selectionToolbar span { padding:0 7px; color:#6b7a90; font-size:10px; white-space:nowrap; }
 .selectionToolbar button { border:0; border-radius:6px; padding:6px 8px; background:transparent; color:#2d3c51; font:600 10px var(--font-sans); cursor:pointer; }
 .selectionToolbar button:hover { background:#f1f5fa; }.selectionToolbar button:disabled { opacity:.4; cursor:not-allowed; }
@@ -157,10 +187,13 @@
 .realtimeStatus::before { content:''; width:6px; height:6px; border-radius:50%; background:#f59e0b; }
 .realtimeStatus[data-state='online']::before { background:#10b981; }
 .realtimeStatus[data-state='offline']::before { background:#ef4444; }
-.canvasSkeleton { position:absolute; inset:0; z-index:25; display:grid; place-items:center; background:rgba(247,250,254,.88); color:#65758b; }
-.canvasSkeleton span { position:absolute; width:260px; height:150px; border:1px solid #dce5ef; border-radius:12px; background:linear-gradient(100deg,#eef3f8 25%,#f8fafc 45%,#eef3f8 65%); background-size:220% 100%; animation:canvasShimmer 1.3s infinite linear; }
+/* The loading state is the board with its objects not yet drawn, so it is painted
+   from the board and card tokens — pinned to light greys it flashed a white sheet
+   over a dark canvas on every load. */
+.canvasSkeleton { position:absolute; inset:0; z-index:25; display:grid; place-items:center; background:color-mix(in srgb,var(--canvas-board) 88%,transparent); color:var(--canvas-muted); }
+.canvasSkeleton span { position:absolute; width:260px; height:150px; border:1px solid var(--canvas-widget-border); border-radius:12px; background:linear-gradient(100deg,var(--canvas-panel-muted) 25%,var(--canvas-widget-surface) 45%,var(--canvas-panel-muted) 65%); background-size:220% 100%; animation:canvasShimmer 1.3s infinite linear; }
 .canvasSkeleton span:nth-child(1){ transform:translate(-320px,-120px); }.canvasSkeleton span:nth-child(2){ transform:translate(0,-30px); }.canvasSkeleton span:nth-child(3){ transform:translate(320px,100px); }.canvasSkeleton b{ transform:translateY(140px); }
-.performanceNotice { position:absolute; z-index:14; top:14px; left:50%; transform:translateX(-50%); display:flex; align-items:center; gap:8px; max-width:min(660px,calc(100% - 500px)); padding:8px 10px; border:1px solid #f3cf82; border-radius:9px; background:#fff9e8; color:#704f10; box-shadow:0 8px 22px rgba(76,55,14,.1); font-size:10px; }.performanceNotice span{flex:1}.performanceNotice button{border:1px solid #d9ad54;border-radius:6px;background:#fff;color:inherit;padding:4px 7px;cursor:pointer}
+.performanceNotice { position:absolute; z-index:14; top:14px; left:calc(50% + (var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)) / 2); transform:translateX(-50%); display:flex; align-items:center; gap:8px; max-width:min(660px,max(240px,calc(100% - 500px - var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)))); padding:8px 10px; border:1px solid #f3cf82; border-radius:9px; background:#fff9e8; color:#704f10; box-shadow:0 8px 22px rgba(76,55,14,.1); font-size:10px; }.performanceNotice span{flex:1}.performanceNotice button{border:1px solid #d9ad54;border-radius:6px;background:#fff;color:inherit;padding:4px 7px;cursor:pointer}
 @keyframes canvasShimmer { to { background-position:-220% 0; } }
 @media (prefers-reduced-motion: reduce) { .canvasSkeleton span { animation:none; } }
 .flowWrap :global(.react-flow__controls-button) { background: #fff; border-color: #e2e8f0; color: #3f5068; }
@@ -169,7 +202,7 @@
 .remoteCursors i { font-size:17px; line-height:1; font-style:normal; }.remoteCursors b { margin:12px 0 0 2px; padding:3px 6px; border-radius:5px; background:currentColor; color:#fff; font-size:8px; white-space:nowrap; }
 .historyPanel { position:absolute; z-index:14; top:14px; right:calc(14px + var(--brain-dock-right, 0px)); bottom:86px; width:280px; border:1px solid #d7e0ed; border-radius:13px; background:rgba(255,255,255,.98); box-shadow:0 14px 42px rgba(31,55,88,.14); color:var(--canvas-ink); overflow:auto; }
 .historyPanel header { position:sticky; top:0; display:flex; justify-content:space-between; padding:14px; border-bottom:1px solid #e2e8f0; background:#fff; }.historyPanel header div { display:grid; gap:3px; }.historyPanel header strong { font-size:12px; }.historyPanel header small { color:#7f8da1; font-size:9px; }.historyPanel header button { border:0; background:transparent; color:#77869b; font-size:17px; cursor:pointer; }
-.panelHeaderActions { display:flex; align-items:center; gap:5px; }.panelHeaderActions > button:first-child { min-height:27px!important; padding:3px 7px!important; border:1px solid var(--border-subtle)!important; font-size:9px!important; }
+.panelHeaderActions { display:flex; align-items:center; gap:5px; }.panelHeaderActions > button:first-child { min-height:27px!important; padding:3px 7px!important; border:1px solid var(--canvas-line)!important; font-size:9px!important; }
 .diagnosticsPanel { right:calc(14px + var(--brain-dock-right, 0px)); }.diagnosticsSummary { padding:12px!important; }.diagnosticsSummary dl { display:grid; gap:7px; margin:0; }.diagnosticsSummary dl div { display:flex; justify-content:space-between; gap:12px; padding-bottom:6px; border-bottom:1px solid #edf1f5; }.diagnosticsSummary dt { color:#718097; font-size:9px; }.diagnosticsSummary dd { margin:0; color:#28384d; font-size:9px; font-weight:650; text-align:right; }
 .outcomeMetricsPanel { width:360px; display:flex; flex-direction:column; }
 .outcomeMetricsPanel > header { flex:none; }
@@ -425,7 +458,7 @@
 .nodeActionBar { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
 .nodeActionBar button { flex:1 1 auto; min-width:92px; padding:7px 9px; border:1px solid color-mix(in srgb, var(--canvas-blue) 55%, #d9e2ed); border-radius:7px; background:color-mix(in srgb, var(--canvas-blue) 10%, transparent); color:var(--canvas-blue); font:inherit; font-size:10px; font-weight:700; cursor:pointer; }
 .nodeActionBar button:hover { background:color-mix(in srgb, var(--canvas-blue) 18%, transparent); }
-.releaseBody p { margin:0; color:var(--text-secondary, #53647a); font-size:11px; line-height:1.5; }
+.releaseBody p { margin:0; color:var(--canvas-muted); font-size:11px; line-height:1.5; }
 .agentSetupGuide { display:grid; gap:7px; margin-bottom:14px; padding:11px; border:1px solid #cfe0fb; border-radius:9px; background:#f3f7ff; }
 .agentSetupGuide > strong { color:#243348; font-size:12px; }.agentSetupGuide > p { margin:0; color:#5f7390; font-size:10px; line-height:1.45; }
 .agentSetupGuide[data-existing="true"] { border-color:color-mix(in srgb,#2faf70 38%,var(--canvas-line)); background:color-mix(in srgb,#2faf70 9%,var(--canvas-panel)); }
@@ -443,23 +476,28 @@
 .brainDetails > section { display:grid; gap:7px; }
 .brainSectionHeading { display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .brainSectionHeading h3 { margin:0; color:var(--canvas-ink); font-size:10px; text-transform:uppercase; letter-spacing:.06em; }
-.brainSectionHeading span { min-width:20px; padding:2px 6px; border-radius:999px; background:#edf3fb; color:#607188; font-size:8px; text-align:center; }
+.brainSectionHeading span { min-width:20px; padding:2px 7px; border-radius:999px; background:var(--canvas-brain-icon-bg); color:var(--canvas-ink-soft); font:700 10px var(--font-sans); text-align:center; }
 .brainInspectorTimeline { height:310px; min-height:0; overflow:hidden; --bf-surface:var(--canvas-panel); --bf-text:var(--canvas-ink); --bf-text-muted:var(--canvas-muted); --bf-border:var(--canvas-line); --bf-accent:var(--canvas-blue); }
 .brainInspectorTimeline :global(.bf-tl-scroll) { overscroll-behavior:contain; padding:8px 2px; scrollbar-gutter:stable; }
 .brainCanonicalAssociations { min-width:0; overflow:hidden; padding-top:4px; border-top:1px solid var(--canvas-line); }.brainCanonicalAssociations > :global(div) { margin:0!important; }
-.brainAssociationList { display:grid; gap:6px; }.brainAssociationList > div { display:flex; align-items:center; gap:8px; padding:8px; border:1px solid #e0e7f0; border-radius:8px; background:#fbfdff; }.brainAssociationList > div > span { display:grid; place-items:center; width:25px; height:25px; flex:none; border-radius:7px; background:#f0edff; color:#7257df; }.brainAssociationList p { display:grid; gap:2px; margin:0; min-width:0; }.brainAssociationList b { overflow:hidden; font-size:10px; text-overflow:ellipsis; white-space:nowrap; }.brainAssociationList small { color:#7d8b9e; font-size:8px; }
-.brainEmpty { margin:0; padding:8px; border:1px dashed #d5deea; border-radius:8px; color:#75849a; font-size:9px; line-height:1.45; }
+/* The Brain dock paints its own surface (--canvas-brain-*), so the rows inside it
+   are drawn from those variables rather than from fixed light-mode hexes: a card
+   pinned to #fbfdff put near-white --canvas-ink text on a near-white background in
+   dark mode, and the 8px secondary line missed contrast in light. Sizes are up a
+   step for the same reason — this list is read, not decorative. */
+.brainAssociationList { display:grid; gap:6px; }.brainAssociationList > div { display:flex; align-items:center; gap:8px; padding:8px; border:1px solid var(--canvas-brain-border); border-radius:8px; background:var(--canvas-brain-header); color:var(--canvas-ink); }.brainAssociationList > div > span { display:grid; place-items:center; width:25px; height:25px; flex:none; border-radius:7px; background:var(--canvas-brain-icon-bg); color:var(--canvas-brain-accent); }.brainAssociationList p { display:grid; gap:2px; margin:0; min-width:0; }.brainAssociationList b { overflow:hidden; color:var(--canvas-ink); font-size:12px; text-overflow:ellipsis; white-space:nowrap; }.brainAssociationList small { overflow:hidden; color:var(--canvas-ink-soft); font-size:10px; text-overflow:ellipsis; white-space:nowrap; }
+.brainEmpty { margin:0; padding:9px; border:1px dashed var(--canvas-brain-border); border-radius:8px; color:var(--canvas-ink-soft); font-size:11px; line-height:1.45; }
 .primaryButton:disabled,.fullButton:disabled { opacity:.45; cursor:not-allowed; }
 
 .evermindConsoleHost { margin:14px -8px 0; padding-top:12px; border-top:1px solid #eadce6; font-size:11px; }
 .evermindConsoleHost :global(button),.evermindConsoleHost :global(input),.evermindConsoleHost :global(select),.evermindConsoleHost :global(textarea) { max-width:100%; }
-.workflowFocus { position:absolute; z-index:40; inset:10px; display:flex; flex-direction:column; overflow:hidden; border:1px solid var(--border-subtle); border-radius:14px; background:var(--bg-elevated,#fff); box-shadow:0 24px 80px rgba(20,35,60,.28); color:var(--text-primary); }
-.workflowFocus > header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 15px; border-bottom:1px solid var(--border-subtle); background:var(--bg-elevated,#fff); }
-.workflowFocus > header div { display:grid; gap:2px; }.workflowFocus > header small { color:var(--text-secondary); font-size:11px; }.workflowFocus > header button { width:32px; height:32px; border:1px solid var(--border-subtle); border-radius:8px; background:var(--bg-surface,#fff); color:inherit; font-size:20px; cursor:pointer; }
+.workflowFocus { position:absolute; z-index:40; inset:10px; display:flex; flex-direction:column; overflow:hidden; border:1px solid var(--canvas-line); border-radius:14px; background:var(--canvas-panel); box-shadow:0 24px 80px var(--canvas-shadow); color:var(--canvas-ink); }
+.workflowFocus > header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 15px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); }
+.workflowFocus > header div { display:grid; gap:2px; }.workflowFocus > header small { color:var(--canvas-muted); font-size:11px; }.workflowFocus > header button { width:32px; height:32px; border:1px solid var(--canvas-line); border-radius:8px; background:var(--canvas-panel-muted); color:inherit; font-size:20px; cursor:pointer; }
 .workflowFocusBody { display:flex; flex:1; min-height:0; }
 .canvasVoiceStudio { display:grid; gap:10px; }
 .canvasVoiceStudio > :global(div) { min-height:0; }
-.canvasVoiceOutput { height:260px; overflow:hidden; border:1px solid var(--border-subtle); border-radius:10px; }
+.canvasVoiceOutput { height:260px; overflow:hidden; border:1px solid var(--canvas-line); border-radius:10px; }
 .canvasVoiceOutput > :global(div) { box-sizing:border-box; height:100%; padding:14px!important; }
 .activityEmpty { padding:14px; border:1px dashed #cfd9e6; border-radius:9px; background:#fbfdff; }
 .activityEmpty strong { font-size:12px; }.activityEmpty p { color:#6d7d94; font-size:10px; line-height:1.5; }
@@ -481,7 +519,12 @@
 .sourceList > div { display:flex; gap:7px; align-items:flex-start; }.sourceList > div > span { display:grid; place-items:center; width:18px; height:18px; flex:none; border-radius:50%; background:#e7f9f6; color:#087d71; font-size:8px; font-weight:700; }
 .sourceList p { display:grid; gap:2px; margin:0; min-width:0; }.sourceList b { font-size:9px; }.sourceList code { overflow:hidden; color:#77869b; font-size:7px; text-overflow:ellipsis; }
 
-.composer { width:100%; --chat-ctl-size:32px; --prompt-panel-gap:4px; --prompt-panel-action-gap:6px; --prompt-panel-pad-y:8px; --prompt-panel-pad-x:10px; --prompt-panel-radius:14px; --prompt-panel-bg:var(--canvas-widget-surface); --prompt-panel-border:var(--canvas-brain-border); --prompt-panel-shadow:none; --chat-input-text:var(--canvas-ink); --chat-input-icon:var(--canvas-muted); --chat-input-bg:var(--canvas-brain-surface); --chat-input-border:var(--canvas-brain-border); }
+/* The prompt is a page fixture, not part of the Brain surface: centred on the board
+   and bottom-aligned, which is where every chat product people already use puts it.
+   It shifts by exactly the width a docked Brain reserved, so it stays centred on
+   whatever board is left — and it never moves when Brain floats, docks, or closes.
+   The 300px reserve keeps it clear of the zoom rail and the minimap. */
+.composer { position:absolute; z-index:16; bottom:16px; left:calc(50% + (var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)) / 2); transform:translateX(-50%); box-sizing:border-box; width:min(700px, max(320px, calc(100% - 600px - var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)))); --chat-ctl-size:32px; --prompt-panel-gap:4px; --prompt-panel-action-gap:6px; --prompt-panel-pad-y:8px; --prompt-panel-pad-x:10px; --prompt-panel-radius:14px; --prompt-panel-bg:var(--canvas-brain-surface); --prompt-panel-border:var(--canvas-brain-border); --prompt-panel-shadow:none; --chat-input-text:var(--canvas-ink); --chat-input-icon:var(--canvas-muted); --chat-input-bg:var(--canvas-brain-header); --chat-input-border:var(--canvas-brain-border); }
 .composer textarea { box-sizing:border-box; height:34px; min-height:34px; padding:4px 2px; font-size:14px; line-height:1.35; }
 .composer :global(.bf-prompt-panel__actions) { flex-wrap:nowrap!important; width:100%; overflow:visible; }
 .composer :global(.bf-chat-auto-mode) { width:32px; min-width:32px; padding:0!important; justify-content:center; }
@@ -492,7 +535,7 @@
 .memoryButton { display:inline-flex; flex:none; align-items:center; gap:4px; padding:5px 7px; border:1px solid #dce4ee; border-radius:7px; background:#fafcff; color:#65758b; font:600 9px var(--font-sans); white-space:nowrap; cursor:pointer; }.memoryButtonActive { border-color:#d493c1; background:#fff0f9; color:#9b276e; }.memoryButton:disabled { opacity:.45; cursor:not-allowed; }.memoryButton:focus-visible { outline:2px solid var(--canvas-blue); outline-offset:2px; }
 /* The accessible outline is opened from the command rail and closes like any other
    panel, instead of living permanently on the board with no way to dismiss it. */
-.canvasOutline { position:absolute; z-index:16; left:calc(62px + var(--brain-dock-left, 0px)); bottom:16px; box-sizing:border-box; width:270px; max-height:46%; overflow:auto; border:1px solid var(--canvas-line); border-radius:11px; background:var(--canvas-panel); color:var(--canvas-muted); box-shadow:0 12px 34px var(--canvas-shadow); font-size:12px; }
+.canvasOutline { position:absolute; z-index:16; left:calc(62px + var(--brain-dock-left, 0px)); bottom:calc(var(--composer-space) + 8px); box-sizing:border-box; width:270px; max-height:46%; overflow:auto; border:1px solid var(--canvas-line); border-radius:11px; background:var(--canvas-panel); color:var(--canvas-muted); box-shadow:0 12px 34px var(--canvas-shadow); font-size:12px; }
 .canvasOutline header { position:sticky; top:0; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 10px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); }
 .canvasOutline header strong { color:var(--canvas-ink); font-size:11px; }
 .canvasOutline header button { width:24px; height:24px; display:grid; place-items:center; padding:0; border:0; border-radius:6px; background:transparent; color:var(--canvas-muted); font-size:17px; line-height:1; cursor:pointer; }
@@ -504,13 +547,26 @@
 .canvasOutline ul { padding-left:14px; }
 .canvasOutlineEmpty { margin:0; padding:12px 10px; font-size:11px; }
 
-/* ONE Brain surface. It parks on the left OR the right — never both — and the
-   board reserves exactly its width (see --brain-dock-left/right) so no other
-   panel can sit underneath it. */
+/* ONE Brain surface, in three placements. Docked it parks on the left OR the right
+   — never both — and the board reserves exactly its width (see --brain-dock-left/
+   right) so no other panel can sit underneath it. Floating it is a small card ON the
+   canvas that reserves nothing. Either way the user drags it to any width, which
+   arrives as an inline --brain-dock-size. */
 .brainDock { position:absolute; z-index:17; top:0; bottom:0; box-sizing:border-box; display:flex; flex-direction:column; width:var(--brain-dock-size,330px); border:1px solid var(--canvas-brain-border); background:var(--canvas-brain-surface); color:var(--canvas-ink); box-shadow:0 0 44px var(--canvas-shadow); }
-.brainDock[data-size='expanded'] { --brain-dock-size:520px; }
 .brainDock[data-side='left'] { left:0; border-left:0; border-radius:0 14px 14px 0; }
 .brainDock[data-side='right'] { right:0; border-right:0; border-radius:14px 0 0 14px; }
+/* Floating: inset from the edge and stopped above the prompt, so the card sits IN
+   the canvas rather than walling it off. */
+.brainDock[data-mode='floating'] { top:auto; bottom:calc(var(--composer-space) + 12px); height:min(58%, 460px); border-width:1px; border-radius:14px; box-shadow:0 18px 48px var(--canvas-shadow); }
+.brainDock[data-mode='floating'][data-side='left'] { left:16px; border-left-width:1px; }
+.brainDock[data-mode='floating'][data-side='right'] { right:16px; border-right-width:1px; }
+/* The drag edge always faces the board, so pulling inward always narrows Brain. */
+.brainDockResizer { position:absolute; top:0; bottom:0; z-index:2; width:9px; padding:0; border:0; background:transparent; cursor:ew-resize; touch-action:none; }
+.brainDockResizer[data-side='left'] { right:-4px; }
+.brainDockResizer[data-side='right'] { left:-4px; }
+.brainDockResizer::after { content:''; position:absolute; top:50%; left:50%; width:3px; height:40px; transform:translate(-50%,-50%); border-radius:3px; background:var(--canvas-brain-accent); opacity:0; transition:opacity .15s ease; }
+.brainDockResizer:hover::after,.brainDockResizer:focus-visible::after { opacity:.85; }
+.brainDockResizer:focus-visible { outline:2px solid var(--canvas-brain-accent); outline-offset:-2px; }
 .brainDockHeader { display:flex; flex:none; align-items:center; gap:8px; padding:10px 11px; border-bottom:1px solid var(--canvas-brain-border); background:var(--canvas-brain-header); }
 .brainDockHeader strong { flex:1; min-width:0; overflow:hidden; color:var(--canvas-ink); font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
 .brainDockMark { display:grid; place-items:center; width:22px; height:22px; flex:none; border-radius:7px; background:var(--canvas-brain-icon-bg); color:var(--canvas-brain-accent); font-size:12px; }
@@ -526,8 +582,7 @@
 .humanChatActivity > span { display:grid; grid-template-columns:22px minmax(0,1fr) auto; align-items:center; gap:7px; min-width:0; }
 .humanChatActivity b { overflow:hidden; color:var(--canvas-ink); font-size:9px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }.humanChatActivity i { color:var(--canvas-brain-accent); font-size:10px; font-style:normal; letter-spacing:2px; animation:collaboratorTyping 1.2s ease-in-out infinite; }
 .brainDockTimeline,.brainDockContext { min-height:0; flex:1; overflow:auto; padding:10px; }
-.brainDockComposer { flex:none; padding:9px 10px 11px; border-top:1px solid var(--canvas-brain-border); }
-.brainDockLauncher { position:absolute; z-index:16; bottom:20px; display:flex; align-items:center; gap:6px; padding:9px 13px; border:1px solid var(--canvas-brain-border); border-radius:999px; background:var(--canvas-brain-surface); color:var(--canvas-brain-accent); box-shadow:0 10px 28px var(--canvas-shadow); font:700 11px var(--font-sans); cursor:pointer; }
+.brainDockLauncher { position:absolute; z-index:16; bottom:calc(var(--composer-space) + 8px); display:flex; align-items:center; gap:6px; padding:9px 13px; border:1px solid var(--canvas-brain-border); border-radius:999px; background:var(--canvas-brain-surface); color:var(--canvas-brain-accent); box-shadow:0 10px 28px var(--canvas-shadow); font:700 11px var(--font-sans); cursor:pointer; }
 .brainDockLauncher[data-side='left'] { left:16px; }
 .brainDockLauncher[data-side='right'] { right:16px; }
 .brainDockLauncher:hover,.brainDockLauncher:focus-visible { outline:none; filter:brightness(1.04); box-shadow:0 12px 32px var(--canvas-shadow); }
@@ -554,6 +609,9 @@
 @media (max-width: 1100px) {
   .inspector { width:240px; }
   .palette { width:195px; }
+  /* Narrower side panels leave a narrower centre; the prompt stays centred but
+     stops short of the palette and the inspector rather than sliding under them. */
+  .composer { width:min(520px, max(280px, calc(100% - 520px - var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)))); }
 }
 @media (max-width: 760px) {
   .canvasShell { flex:1; height:100%; min-height:0; }
@@ -562,6 +620,13 @@
   .sessionBar { height:50px; gap:7px; padding:0 8px; }.sessionActions { flex:none; gap:5px; }.titleBlock { flex:1; gap:3px; min-width:0; }.titleBlock input { width:100%; min-width:0; padding-inline:5px; font-size:13px; }.spark,.collaborators { display:none; }
   .flowWrap {
     --mobile-composer-space: 112px;
+    --composer-space: var(--mobile-composer-space);
+    /* On a phone the dock is a bottom sheet, so it claims NO side. The width is
+       written inline by the component, and !important is what lets the phone
+       layout win against it — otherwise the palette toggle and the board chrome
+       are pushed a dock's width off a 360px screen. */
+    --brain-dock-left: 0px !important;
+    --brain-dock-right: 0px !important;
     height:calc(100% - 50px);
   }
   /* The composer is a dock on phones, so the interactive viewport must end
@@ -578,34 +643,43 @@
   .inspector { left:8px; right:8px; top:8px; bottom:calc(var(--mobile-composer-space) + 8px); width:auto; height:auto; }
   .canvasShell[data-fullscreen='true'] { height:100vh; }
   .inspectorResizeHandle,.inspectorHeaderActions button:first-child { display:none; }
-  .composer { box-sizing:border-box; width:100%; min-width:0; --prompt-panel-action-gap:4px; }
+  /* The prompt is still the bottom-of-the-page fixture, just edge to edge. */
+  .composer { left:8px; right:8px; bottom:8px; width:auto; min-width:0; transform:none; --prompt-panel-action-gap:4px; }
   .scopeChip { min-width:48px; max-width:110px; flex:1 1 84px; padding:4px 5px; overflow:hidden; }
   .scopeChip select { width:100%; max-width:none; }
   .composer :global(.bf-model-picker) [role='dialog'] { left:-40px!important; }
   .iconButton { width:32px; height:32px; }
   .flowWrap :global(.react-flow__minimap) { display:none; }
   .flowWrap :global(.react-flow__controls) { display:none; }
-  .brainDock { top:auto; left:0; right:0; width:auto; max-height:78%; border-radius:14px 14px 0 0; border-left:0; border-right:0; border-bottom:0; }
-  .brainDock[data-size='slim'] { height:var(--mobile-composer-space); }
-  .brainDock[data-size='slim'] .brainDockTabs,
-  .brainDock[data-size='slim'] .brainDockTimeline,
-  .brainDock[data-size='slim'] .brainDockContext { display:none; }
-  .brainDock[data-size='expanded'] { height:70%; }
+  /* A phone has no side to choose and no room to drag, so every placement collapses
+     to one sheet that sits ABOVE the prompt — the prompt keeps the bottom edge. */
+  .brainDock,
+  .brainDock[data-mode='floating'][data-side='left'],
+  .brainDock[data-mode='floating'][data-side='right'] { top:auto; left:0; right:0; bottom:var(--mobile-composer-space); width:auto; height:min(58%, 420px); max-height:none; border-radius:14px 14px 0 0; border-left:0; border-right:0; border-bottom:0; box-shadow:0 -10px 34px var(--canvas-shadow); }
+  .brainDock[data-size='expanded'] { height:72%; }
   .brainDockActions button[data-dock-side] { display:none; }
-  .brainDockLauncher { bottom:12px; }
-  .canvasOutline { left:8px; right:8px; bottom:calc(var(--mobile-composer-space) + 8px); width:auto; max-height:min(46%,300px); }
-  /* On a phone the Brain dock is a bottom sheet rather than a side panel, so the
-     3D scene gives up the bottom edge instead of the side. Keeping the side
-     inset here would leave the scene a ~30px ribbon on a 360px screen. */
+  .brainDockResizer { display:none; }
+  .canvasOutline { left:8px; right:8px; width:auto; max-height:min(46%,300px); }
+  /* The bottom sheet claims no side (the side insets zero out with the dock width
+     above), so the 3D scene gives up the bottom edge instead. */
   .flowWrap[data-view='3d'] {
-    --canvas-3d-inset-left: 0px;
-    --canvas-3d-inset-right: 0px;
-    --canvas-3d-inset-bottom: var(--mobile-composer-space, 0px);
+    --canvas-reserved-bottom: var(--mobile-composer-space, 0px);
   }
   .mobileCanvasActions { position:absolute; z-index:13; left:10px; bottom:calc(var(--mobile-composer-space) + 8px); display:flex; flex-direction:column; overflow:hidden; border:1px solid var(--canvas-line); border-radius:9px; background:var(--canvas-panel); box-shadow:0 7px 20px var(--canvas-shadow); }
   .mobileCanvasActions button { width:32px; height:32px; display:grid; place-items:center; padding:0; border:0; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel); color:var(--canvas-ink); font:600 16px var(--font-sans); cursor:pointer; }
   .mobileCanvasActions button:last-child { border-bottom:0; }
+  /* Same rule as the desktop rail, applied to the edge a phone actually loses:
+     the Brain sheet covers the bottom of the board, so the board's controls move
+     to the free strip at the top and lie down in a row to fit a 360px screen. */
+  .flowWrap[data-brain-open='true'] .mobileCanvasActions { top:56px; bottom:auto; flex-direction:row; }
+  .flowWrap[data-brain-open='true'] .mobileCanvasActions button { border-bottom:0; border-right:1px solid var(--canvas-line); }
+  .flowWrap[data-brain-open='true'] .mobileCanvasActions button:last-child { border-right:0; }
+  /* The palette is the phone's own full-board sheet and owns that top strip while
+     it is open, so the row stands down rather than hiding under it. */
+  .flowWrap[data-brain-open='true']:has(.palette) .mobileCanvasActions { display:none; }
   .mobileCanvasActions button:hover,.mobileCanvasActions button:focus-visible { background:var(--canvas-hover); outline:none; }
+  /* A mode that is ON is lit here exactly as it is on the desktop rail. */
+  .mobileCanvasActions button[aria-pressed='true'] { background:color-mix(in srgb,var(--accent,#3978f6) 88%,#000); color:#fff; }
   .historyPanel,.diagnosticsPanel { top:8px; right:8px; bottom:calc(var(--mobile-composer-space) + 8px); left:8px; width:auto; }
   .changeSetPanel { top:8px; right:8px; bottom:calc(var(--mobile-composer-space) + 8px); left:8px; width:auto; max-height:none; display:flex; flex-direction:column; }
   .changeSetPanel > div { flex:1; min-height:0; max-height:none; }
@@ -615,9 +689,13 @@
 .resizeLine { border-color: var(--accent, #3978f6) !important; }
 .resizeHandle { width: 9px !important; height: 9px !important; border-radius: 3px !important; border: 2px solid white !important; background: var(--accent, #3978f6) !important; }
 
-/* Canvas chrome follows the application theme. Artifact previews (for example the
-   website mockup) intentionally keep their authored colors so dark mode does not
-   alter what the user is designing. */
+/* Canvas CHROME follows the application theme: the panels, menus and rails around
+   the board. Objects ON the board are not listed here — they are painted by the two
+   object palettes declared at the top of this file, and listing `.node` here quietly
+   overrode both (it is declared later, at equal specificity), so every card fell
+   back to the panel colour and the Brain object lost its identity entirely.
+   Artifact previews (for example the website mockup) keep their authored colors so
+   dark mode does not alter what the user is designing. */
 .selectionToolbar,
 .realtimeStatus,
 .historyPanel,
@@ -632,7 +710,6 @@
 .composer,
 .iconButton,
 .scopeChip,
-.node,
 .workflowStep,
 .kpis div,
 .charts > div,
@@ -682,8 +759,8 @@
 .agentSetupGuide > strong,.workbenchHeading strong,.deliveryChecklist > strong,.testResponse strong,.evaluationSummary strong,.testResults b { color:var(--canvas-ink); }
 .agentSetupGuide > p,.workbenchHeading span,.deliveryChecklist span,.testResponse p,.evaluationSummary span,.testResults span,.testResults small,.releaseBody p { color:var(--canvas-muted); }
 .agentSetupSteps span,.testResponse,.testResults div,.evaluationSummary { border-color:var(--canvas-line); background:var(--canvas-panel); color:var(--canvas-muted); }
-.agentSetupSteps span[data-done="true"] { background:color-mix(in srgb, #2faf70 18%, var(--canvas-panel)); color:#74d8a2; }
-.knowledgeList span { background:color-mix(in srgb, var(--canvas-blue) 15%, var(--canvas-panel)); color:#72a1ff; }
+.agentSetupSteps span[data-done="true"] { background:color-mix(in srgb, #2faf70 18%, var(--canvas-panel)); color:var(--canvas-positive-ink); }
+.knowledgeList span { background:color-mix(in srgb, var(--canvas-blue) 15%, var(--canvas-panel)); color:var(--canvas-accent-ink); }
 .taskFacts small,.taskContext small,.taskPrdSummary span,.widgetSettings small,.widgetContext small,.projectOverview small,.projectFeedback small,.evermindMapHeading > span,.evermindRecent article p,.evermindRecent article small,.evermindSignals small { color:var(--canvas-muted); }
 .taskFacts b,.taskContext b,.taskPrdSummary strong,.widgetSettings b,.widgetContext b,.projectOverview b,.evermindMapHeading b,.evermindRecent article b,.evermindSignals b,.evermindEmpty b { color:var(--canvas-ink); }
 .evermindBrain { background:radial-gradient(circle at 35% 40%,rgba(226,129,194,.22),transparent 34%),radial-gradient(circle at 70% 48%,rgba(123,91,231,.21),transparent 35%),var(--canvas-panel-muted); }
@@ -693,7 +770,9 @@
 .paletteSectionToggle:focus-visible,
 .paletteGrid button:hover,
 .paletteGrid button:focus-visible { background:var(--canvas-hover); }
-.nodeHeader,
+/* `.nodeHeader` is absent for the same reason `.node` is: a card's rule is its
+   object palette's, and a chrome border here overrode the widget/Brain border on
+   every card header. */
 .inspector header,
 .inspectorTabs,
 .inspector footer,
@@ -723,7 +802,7 @@
 .paletteSectionToggle small { background:var(--canvas-panel-muted); color:var(--canvas-muted); }
 .paletteGroupIcon,
 .moreMenu button > span,
-.moreMenu label i { background:color-mix(in srgb, var(--canvas-blue) 15%, var(--canvas-panel)); color:#72a1ff; }
+.moreMenu label i { background:color-mix(in srgb, var(--canvas-blue) 15%, var(--canvas-panel)); color:var(--canvas-accent-ink); }
 .message { background:color-mix(in srgb, var(--canvas-blue) 11%, var(--canvas-panel)); }
 .aiMessage { background:color-mix(in srgb, #7657df 12%, var(--canvas-panel)); }
 .personRow > span:last-child:not(.presence),
@@ -732,9 +811,7 @@
 .comparisonBody p,
 .standupSummary,
 .commentList .commentResolved { background:var(--canvas-panel-muted); color:var(--canvas-ink); }
-.node_evermind,
-.node_standup { background:var(--canvas-panel); }
-.donut:after { background:var(--canvas-panel); }
+.donut:after { background:var(--canvas-widget-surface); }
 .node_drawing .nodeHeader,
 .node_frame .nodeHeader { background:color-mix(in srgb, var(--canvas-panel) 88%, transparent); }
 .flowWrap :global(.react-flow__controls-button),
@@ -763,6 +840,8 @@
   --canvas-muted:#9eafc6;
   --canvas-line:rgba(148,163,184,.24);
   --canvas-shadow:rgba(0,0,0,.42);
+  --canvas-accent-ink:#72a1ff;
+  --canvas-positive-ink:#74d8a2;
   /* The same two palettes, restated once for dark. Nothing per-component. */
   --canvas-widget-surface:#111d2f;
   --canvas-widget-header:#16243a;

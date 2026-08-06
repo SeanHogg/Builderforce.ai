@@ -153,7 +153,15 @@ export class GuestRoomDO implements DurableObject {
     await this.state.storage.deleteAll().catch((error) => {
       reportCaughtError(error, { source: 'infrastructure/relay/GuestRoomDO.ts', operation: 'wipe' });
     });
-    for (const [ws] of this.peers) { try { ws.close(1000, 'room expired'); } catch { /* already gone */ } }
+    for (const [ws] of this.peers) {
+      try {
+        ws.close(1000, 'room expired');
+      } catch (error) {
+        // The socket was already torn down by the client — the room is closing
+        // either way, so this is nothing to recover from, only to record.
+        reportCaughtError(error, { source: 'infrastructure/relay/GuestRoomDO.ts', operation: 'wipe' });
+      }
+    }
     this.peers.clear();
   }
 
@@ -187,8 +195,13 @@ export class GuestRoomDO implements DurableObject {
 
   // ── Roster ─────────────────────────────────────────────────────────────────
 
-  /** Record (or refresh) a participant. Returns false when the room is full. */
-  private async admit(meta: RoomMeta, visitorId: string, name: string): Promise<boolean> {
+  /**
+   * Record (or refresh) a participant. Returns false when the room is full.
+   * Re-admitting an existing visitor is deliberately idempotent: that is also the
+   * path a participant takes when their short-lived guest token is renewed
+   * mid-session, and renewing a token must never cost them their seat.
+   */
+  private async admit(visitorId: string, name: string): Promise<boolean> {
     const now = new Date().toISOString();
     const existing = this.participants.find((p) => p.visitorId === visitorId);
     if (existing) {
@@ -199,7 +212,6 @@ export class GuestRoomDO implements DurableObject {
       this.participants.push({ visitorId, name: name || 'Guest', joinedAt: now, lastSeenAt: now });
     }
     await this.state.storage.put('participants', this.participants);
-    void meta;
     return true;
   }
 
@@ -245,7 +257,7 @@ export class GuestRoomDO implements DurableObject {
       this.meta = meta;
       await this.state.storage.put('meta', meta);
     }
-    if (!(await this.admit(meta, visitorId, clean(name, 40)))) {
+    if (!(await this.admit(visitorId, clean(name, 40)))) {
       return Response.json({ error: 'room_full' }, { status: 409 });
     }
     this.broadcastRoster();
@@ -257,7 +269,7 @@ export class GuestRoomDO implements DurableObject {
     if (!visitorId) return Response.json({ error: 'visitorId is required' }, { status: 400 });
     const meta = await this.live();
     if (!meta) return Response.json({ error: 'room_gone' }, { status: 410 });
-    if (!(await this.admit(meta, visitorId, clean(name, 40)))) {
+    if (!(await this.admit(visitorId, clean(name, 40)))) {
       return Response.json({ error: 'room_full' }, { status: 409 });
     }
     this.broadcastRoster();

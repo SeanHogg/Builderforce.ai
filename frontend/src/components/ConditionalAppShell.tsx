@@ -1,6 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import AppShell from './AppShell';
 import AppFooter from './AppFooter';
 import PublicShell from './PublicShell';
@@ -22,6 +23,7 @@ import { DevexPanelBrainBridge } from './insights/DevexPanelBrainBridge';
 import { CanvasPanelProvider } from './canvas/CanvasPanelProvider';
 import { CanvasPanelBrainBridge } from './canvas/CanvasPanelBrainBridge';
 import { FloatingBrain } from './brain/FloatingBrain';
+import { GuestBrainPanel } from './brain/GuestBrainPanel';
 import { FeedbackTab } from './feedback/FeedbackTab';
 import ActivityTracker from './ActivityTracker';
 import { McpExtensionsBridge } from './brain/McpExtensionsBridge';
@@ -32,13 +34,14 @@ import { useIsFreelancer, useIsSalesAssociate } from '@/lib/rbac';
 import { findActiveGroup, isFreelancerAllowedPath, isSalesAllowedPath } from '@/lib/navGroups';
 import { classifyShell } from '@/lib/shellRouting';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { convertVisitor } from '@/lib/marketingApi';
 import { createLocalCreationSession } from '@/lib/creationSessions';
 import { CanvasRouteArtifact } from './workspace-canvas/CanvasRouteArtifact';
 
 /** Preserve old campaign links while moving prompt-led creation onto Canvas. */
 function LegacyPromptCanvasRedirect() {
+  const t = useTranslations('creationCanvas');
   const router = useRouter();
   const started = useRef(false);
   useEffect(() => {
@@ -47,7 +50,28 @@ function LegacyPromptCanvasRedirect() {
     const prompt = new URLSearchParams(window.location.search).get('prompt')?.trim() ?? '';
     router.replace(`/create/${createLocalCreationSession(prompt)}`);
   }, [router]);
-  return <div style={{ minHeight: '60vh', display: 'grid', placeItems: 'center' }}>Opening your creation canvas…</div>;
+  return <div style={{ minHeight: '60vh', display: 'grid', placeItems: 'center' }}>{t('openingCanvas')}</div>;
+}
+
+/**
+ * The guest-room code on an invite link (`?room=`), read from the live URL.
+ *
+ * Deliberately not `useSearchParams`: that opts the whole tree into a Suspense
+ * requirement at build time, and this is a logged-out-only branch of the shell.
+ * Reading on mount is enough — the shell is client-rendered and an invite link is
+ * always a fresh navigation.
+ */
+function useGuestInviteCode(): string | null {
+  const pathname = usePathname() || '';
+  const [code, setCode] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      setCode(new URLSearchParams(window.location.search).get('room')?.trim() || null);
+    } catch {
+      setCode(null);
+    }
+  }, [pathname]);
+  return code;
 }
 
 /** Footer-only chrome for the standalone auth screens (login/register/activate). */
@@ -71,6 +95,7 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
   const { isAuthenticated } = useAuth();
   const isFreelancer = useIsFreelancer();
   const isSales = useIsSalesAssociate();
+  const guestRoomCode = useGuestInviteCode();
 
   const kind = classifyShell(pathname);
   if (kind === 'none') return <>{children}</>;
@@ -106,6 +131,12 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
     // teaser; it runs inside the guest-configured BrainProvider (see AppBrainShell).
     // Every other app route still shows the per-route teaser + login CTA.
     if (pathname.startsWith('/brainstorm')) {
+      // `?room=` is a guest INVITE link — the landing surface for a shared free
+      // session. It must render the guest room, not bounce through the legacy
+      // prompt→canvas redirect, which would drop the code and the invitee with it.
+      if (guestRoomCode) {
+        return <MarketingShell><GuestBrainPanel variant="page" inviteCode={guestRoomCode} /></MarketingShell>;
+      }
       return <MarketingShell><LegacyPromptCanvasRedirect /></MarketingShell>;
     }
     // Anonymous Create sessions are real, editable local-first canvases. They

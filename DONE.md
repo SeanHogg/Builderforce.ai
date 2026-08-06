@@ -4,6 +4,72 @@
 
 ---
 
+## 2026-08-05 — ✅ RESOLVED: a docked Brain painted over the canvas command rail, and its context rows were unreadable (ui 2026.7.163)
+
+Operator report: with Brain docked full-height on the **left**, the canvas action bar was simply gone — and the Connected-objects rows were hard to read in both themes.
+
+**The board's chrome had no idea an edge was taken.** Every floating panel on the Creation Canvas already steps aside for the dock (`--brain-dock-left` / `--brain-dock-right`, "the dock owns one edge of the board"), but React Flow's own `Controls` rail and `MiniMap` are pinned to the bottom corners *inside* React Flow and were never part of that contract. The dock paints at `z-index:17` over React Flow's `z-index:5` panels, so a left dock erased zoom, fit, arrange, 3D and the mini-map toggle outright — and, less visibly, the DEFAULT right dock had been sitting on top of the mini map and its close button the whole time. `CanvasCommands` now publishes the contract for every canvas that mounts it: a canvas that lets a panel claim an edge sets `--canvas-reserved-left` / `--canvas-reserved-right`, and the rail, the mini map and the close button add that width to their margin — so the bar lands on the free side of the dock instead of underneath it. `Canvas3DView` reads the same two variables (its old `--canvas-3d-inset-*` pair was the same idea under a second name, now gone), and `.flowWrap` derives them from the dock width in one place. Canvases with no dock resolve the fallback `0px` and are untouched.
+
+**Two more surfaces were centred on the viewport instead of the board.** The selection toolbar — the actions for the thing you just clicked — and the large-session performance notice both used a plain `left:50%`, which slides under a wide dock. Both now use the composer's arithmetic (`50% + (left - right) / 2`) so they centre on the board the dock leaves behind.
+
+**The Brain context rows were painted in fixed light-mode hexes.** The Connected-objects / Agents / Tickets cards were `background:#fbfdff` with a title inheriting `--canvas-ink` — in dark mode that is near-white text on a near-white card, i.e. invisible; the icon chip was a light lavender pair on ink; and the 8px secondary line missed contrast in light (~3.3:1). Rows are now drawn from the Brain surface tokens the dock already owns (`--canvas-brain-header` / `-border` / `-icon-bg` / `-accent`), and secondary text uses one new token, `--canvas-ink-soft` (muted ink pulled a quarter back toward primary), which clears AA in both themes from a single definition: measured 5.0:1 light and 8.7:1 dark, was 3.3:1 and ~1:1. Title 10px→12px, captions 8px→10px, empty state 9px→11px — this list is read, not decorative.
+
+**The phone had the same bug on the edge a phone actually loses.** The dock's side width was still written inline on a phone, where every placement collapses to a bottom sheet claiming no side at all — pushing the palette toggle a dock's width off a 360px screen. The phone layout now zeroes both, and the board's mobile control column moves to a row in the free strip at the top while the Brain sheet is open (standing down while the palette owns that strip), instead of hiding beneath it.
+
+Guarded by a new `CreationCanvas.test.tsx` case asserting the board publishes the footprint on whichever edge Brain claims and takes its full width back when Brain closes. `CreationCanvas.test.tsx` 71/71, canvas + creation-canvas suites 116/116, `tsgo --noEmit` clean.
+
+---
+
+## 2026-08-05 — ✅ RESOLVED: the Canvas had no light theme, only an absent dark one (ui 2026.7.161)
+
+Light mode read as a flat white sheet: the board, every card, the palette, the inspector and the selection toolbar all landed within two percent of white, so nothing sat *on* anything.
+
+**Root cause: the Canvas derived its light palette from the application shell.** `--canvas-board`, `--canvas-panel` and `--canvas-panel-muted` were `var(--bg-deep)` / `var(--bg-elevated)` / `var(--bg-surface)`, which in the light theme are `#fcfeff` / `#f5f9ff` / `#ffffff`. A whiteboard is a *tinted surface carrying white objects*, and those three tokens describe an application chrome instead — so depth collapsed, and the "recessed" surface (inputs, table headers, panel footers) came out **brighter** than the raised one it sat in. `--canvas-hover` inherited `--surface-interactive` (`rgba(15,23,42,.1)`), a translucency meant for washing over dark ink, which turned every hover into a grey smear; `--canvas-shadow` was a flat 28%-black at 42px blur, a dirty halo under each panel. The Canvas now owns its palette in **both** themes — light declared on `.canvasShell`, dark restated in the block near the end of the file — exactly as the two object palettes already were.
+
+**A chrome rule was overriding the object palettes.** The shared "Canvas chrome follows the application theme" block listed `.node` and `.nodeHeader`. Declared later at equal specificity, it beat both `--canvas-widget-surface` and `.node_chat`'s Brain surface, so every card fell back to the panel colour and the Brain object lost its identity outright — invisible in dark (where the two values coincide), fatal in light. Cards are painted by their object palette again; `.node_evermind` / `.node_standup` re-asserting the panel colour were dead once that was true and are gone.
+
+**Dark-tuned literals were being applied in light.** `#72a1ff` (knowledge chips, palette group icons, the More menu glyphs) and `#74d8a2` (completed setup steps) are legible on ink and near-invisible on paper — roughly 2.3:1 and 1.7:1 against the surfaces they landed on. Both are now `--canvas-accent-ink` / `--canvas-positive-ink`, one token with a value per theme rather than a literal at each call site.
+
+Also in this pass: the loading skeleton was pinned to light greys and flashed a white sheet over a dark canvas on every load (now drawn from the board and card tokens); the session bar, share menu, More menu, title field and collaborator chips read the application shell rather than the canvas palette they sit in; `CanvasCommands`' mini-map close button did the same; and no `<select>` on the canvas gave its native `<option>` list an opaque pair, so the More menu's options were OS-painted in dark mode.
+
+Verified by rendering the real stylesheet in both themes and reading back computed colours — board `#e9eef6` under white cards, recessed `#f3f7fc` inside raised `#ffffff`, primary ink 16:1 on a card, and the two accent inks ~5:1 on the tinted chips they sit in (was ~2.3:1 and ~1.7:1). `CreationCanvas.test.tsx` 70/70.
+
+---
+
+## 2026-08-05 — ✅ RESOLVED: the prompt left the page centre, and Brain had only two placements (ui 2026.7.159)
+
+Follow-up to the Creation Canvas consolidation below, from watching people use it.
+
+**The prompt goes back where people expect it.** Consolidating Brain into one surface swept the prompt into that side panel with it. That was wrong: people type at the bottom-CENTRE of the page because that is what ChatGPT and every other chat product trained them to do. The composer is a page fixture again — absolutely positioned, bottom-aligned, horizontally centred on whatever board is left after a docked Brain reserves its edge (`left:calc(50% + (--brain-dock-left - --brain-dock-right) / 2)`). It no longer belongs to the Brain surface at all: it stays put and stays usable whether Brain is floating, docked either side, or closed. A single `--composer-space` on `.flowWrap` is the one number everything low on the board (the outline, the Brain launcher, a floating Brain) clears itself against, instead of each guessing its own offset.
+
+**Brain has three placements and a drag handle.** Left-or-right was too blunt — at some zoom levels people want Brain present but not walling off a third of the board. `mode: 'floating' | 'docked'` joins side and size: floating is a small card sitting ON the canvas that reserves NO board width, docked is the full-height edge panel that does. `brainDockReservedWidth()` is the single place that decides what the board gives up (docked ⇒ its width; floating or closed ⇒ zero), so the reserved-width contract has one owner rather than a condition repeated at each call site. Either placement drags to any width between 260 and 760px from a `role="separator"` handle on the edge facing the board — pointer-captured, and arrow-key resizable for anyone not using a mouse. A drag passes `persist=false` so the board reflows live without writing localStorage or firing a preference signal on every pointer move; only the settled width is stored. Choosing a size preset clears a stale drag width, so "expand" always actually expands.
+
+On a phone all three placements collapse to one bottom sheet that sits ABOVE the prompt — a phone has no side to choose and no room to drag, and the prompt keeps the bottom edge.
+
+Also localized in this pass: the collaborator presence line in the Brain surface ("X joined the conversation" / "X is writing") was still hardcoded English; it now runs through `creationCanvas.collaboratorJoined` / `collaboratorWriting` with real translations in all five catalogs, alongside the three new placement controls.
+
+---
+
+## 2026-08-05 — ✅ RESOLVED: the 3D mode is driven from the canvas rail, and a rail mode now looks like what it is (ui 2026.7.162)
+
+Operator feedback on the 3D view shipped earlier the same day: the scene carried its own **Exit 3D** button while the rail's 3D icon looked identical whether the mode was on or off — two ways in, two places to look, and no way to tell from the rail which view you were in.
+
+**The rail owns the mode.** The scene's exit button is gone (and its dead `.exit` styles with it). The rail toggle is the way in and the way out; `Escape` does the same for a keyboard user inside the scene, which is why `onExit` still exists as a prop rather than as chrome.
+
+**A mode that is on is lit.** New `CanvasRailToggle` in `CanvasCommands.tsx` — one primitive that carries BOTH halves of a toggle: `aria-pressed` for assistive tech and a lit fill for everyone else, so a future mode cannot ship with one and not the other. The 3D control, the mini map, and the creation canvas's accessible outline all render through it (the outline's hand-rolled `ControlButton` is gone, along with the now-unused `ControlButton` import). The phone action stack gets the same treatment from `[aria-pressed='true']`, so the two surfaces cannot drift.
+
+The lit fill is the accent **deepened to 88%**, not the raw accent: `--accent` resolves lighter in dark mode, where a white glyph on it falls under the 3:1 contrast floor for non-text UI. Measured on the real stylesheets: **4.60:1 light, 3.49:1 dark**, and the on/off states are visibly distinct in both.
+
+**One vocabulary for a claimed edge.** The 3D scene had grown its own `--canvas-3d-inset-*` for "space a docked panel takes" while the rail and mini map gained `--canvas-reserved-*` for the same thing. The scene now reads `--canvas-reserved-{top,bottom,left,right}`; the duplicate names are deleted. The phone case maps `--canvas-reserved-bottom` to the composer band, since a bottom sheet claims no side.
+
+**Also closed** (was a blocked Gap Register item, unblocked once the concurrent agent-personality pass landed): the last hardcoded strings on the Canvas. `creationCanvas.agent*` / `personality*` / `modelAuto` (15 keys) and `creationCanvas.node.{configuredAgent,newAgent,autoModel,thinking,testing,contributing,latestResponse}` (7 keys) now exist with real translations in all five catalogs. `localize-guard` runs clean on `CreationCanvas.tsx`, `CreationNode.tsx`, `Canvas3DView.tsx` and `CanvasCommands.tsx`.
+
+160 tests pass across the canvas, workspace-canvas, creation-canvas and i18n suites; `tsgo --noEmit` exit 0; eslint clean apart from pre-existing `<img>` warnings. The lit state was verified by rendering the REAL `CanvasCommands.module.css` + React Flow stylesheet in a browser at both themes — the live app could not be used for this because three `next dev` servers from concurrent sessions were sharing (and corrupting) one `.next`.
+
+Files: `frontend/src/components/canvas/{CanvasCommands.tsx,CanvasCommands.module.css,Canvas3DView.tsx,Canvas3DView.module.css}`, `frontend/src/components/creation-canvas/{CreationCanvas.tsx,CreationCanvas.module.css,CreationNode.tsx,CreationCanvas.test.tsx}`, `frontend/src/i18n/messages/{en,zh,es,fr,de}.json`.
+
+---
+
 ## 2026-08-05 — ✅ SHIPPED: a 3D reading of the canvas — objects, widgets and connections on depth planes (ui 2026.7.158)
 
 A flat board answers "what is here"; it answers "what depends on what" only by tracing arrows across a crowded surface. The canvas rail gained a **3D** command that lifts every Object onto a depth plane and lets the whole stack be turned, so structure is the first thing you see.

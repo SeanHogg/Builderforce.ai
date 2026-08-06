@@ -18,13 +18,12 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AccessibleOutlineIcon, CanvasCommands, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
-import { ControlButton } from '@xyflow/react';
+import { AccessibleOutlineIcon, CanvasCommands, CanvasRailToggle, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
 import { Canvas3DView } from '@/components/canvas/Canvas3DView';
 import type { Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { CanvasOutlinePanel } from './CanvasOutlinePanel';
 import { BrainDock } from './BrainDock';
-import { BRAIN_DOCK_WIDTH, DEFAULT_BRAIN_DOCK_PREFERENCES, readBrainDockPreferences, writeBrainDockPreferences, type BrainDockPreferences } from './brainDockPreferences';
+import { brainDockReservedWidth, brainDockWidth, DEFAULT_BRAIN_DOCK_PREFERENCES, readBrainDockPreferences, writeBrainDockPreferences, type BrainDockPreferences } from './brainDockPreferences';
 import { useToast } from '@/components/ToastProvider';
 import { CreationNode, type CreationFlowNode } from './CreationNode';
 import type { CreationNodeData, CreationObjectKind } from './types';
@@ -506,12 +505,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   /**
    * Persist AND report the layout the user chose. The signal is what lets the
    * shipped default become the layout people actually prefer instead of a guess.
+   * A resize drag passes persist=false so the board reflows live without writing
+   * storage — and firing a preference signal — on every pointer move.
    */
-  const updateBrainDock = useCallback((patch: Partial<BrainDockPreferences>) => {
+  const updateBrainDock = useCallback((patch: Partial<BrainDockPreferences>, persist = true) => {
     setBrainDock((current) => {
       const next = { ...current, ...patch };
-      writeBrainDockPreferences(next);
-      trackActivity('creation_brain_dock_preference', { sessionId, metadata: { clientSurface: 'web', ...next } });
+      if (persist) {
+        writeBrainDockPreferences(next);
+        trackActivity('creation_brain_dock_preference', { sessionId, metadata: { clientSurface: 'web', ...next } });
+      }
       return next;
     });
   }, [sessionId]);
@@ -2831,7 +2834,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, []);
 
   const brainNode = nodes.find((node) => node.data.kind === 'chat') ?? null;
-  const brainDockWidth = brainDock.open ? BRAIN_DOCK_WIDTH[brainDock.size] : 0;
+  // A floating Brain overlays the board, so only a docked one is reserved against it.
+  const brainDockReserved = brainDockReservedWidth(brainDock);
   const brainMessages = useMemo<BrainMessage[]>(() => timeline.map((message, index) => ({
     id: index + 1,
     seq: index + 1,
@@ -2841,6 +2845,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     createdAt: message.createdAt,
   })), [timeline]);
 
+  /**
+   * The prompt lives in the centre of the board, bottom-aligned — where ChatGPT and
+   * every other chat product people already use puts it. It is deliberately NOT part
+   * of the Brain surface: it stays put and stays reachable whether Brain is floating,
+   * docked to either edge, or closed entirely.
+   */
   const composer = !presentMode && <ChatInput
     className={styles.composer}
     value={prompt}
@@ -2955,10 +2965,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         style={{
           // The dock owns one edge of the board; every other floating panel is
           // pushed in by exactly its width so nothing can ever sit underneath it.
-          '--brain-dock-left': `${brainDock.side === 'left' ? brainDockWidth : 0}px`,
-          '--brain-dock-right': `${brainDock.side === 'right' ? brainDockWidth : 0}px`,
+          '--brain-dock-left': `${brainDock.side === 'left' ? brainDockReserved : 0}px`,
+          '--brain-dock-right': `${brainDock.side === 'right' ? brainDockReserved : 0}px`,
         } as CSSProperties}
-        data-brain-side={brainDock.open ? brainDock.side : 'none'}
+        data-brain-side={brainDockReserved > 0 ? brainDock.side : 'none'}
+        // A phone renders every Brain placement as one bottom sheet, so what the
+        // board loses there is the bottom edge — not a side. The phone layout
+        // moves the board controls off that edge from this, not from the side.
+        data-brain-open={!presentMode && brainDock.open ? 'true' : 'false'}
         data-view={threeD ? '3d' : 'flat'}
         data-cursor-mode={drawingMode ? 'draw' : 'pan'} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPoints.current = []; }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
         {!presentMode && effectiveSelectedIds.length > 0 && <div className={styles.selectionToolbar} aria-label={t('selectionActions')}>
@@ -3116,11 +3130,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         {mergeReview && <aside className={styles.mergePanel}><header><div><strong>{t('mergeBranch')}</strong><p>{t('mergeBranchHint')}</p></div><button onClick={() => setMergeReview(null)} aria-label={t('closeMergeReview')}>×</button></header>{mergeReview.items.map((item) => <label key={item.key}><b>{item.source.data.title}</b><small>{item.target ? t('mergeBothContain', { kind: item.source.data.kind }) : t('mergeNewFromBranch', { kind: item.source.data.kind })}</small>{item.target && <span><select aria-label={t('mergeChoiceFor', { title: item.source.data.title })} value={item.choice} onChange={(event) => setMergeReview((current) => current ? { ...current, items: current.items.map((candidate) => candidate.key === item.key ? { ...candidate, choice: event.target.value as 'branch' | 'parent' } : candidate) } : current)}><option value="branch">{t('useBranchVersion')}</option><option value="parent">{t('keepParentVersion')}</option></select></span>}</label>)}<button className={styles.primaryButton} onClick={applyMerge}>{t('applyReviewedMerge')}</button></aside>}
 
         {!presentMode && brainDock.open && <BrainDock
+          mode={brainDock.mode}
           side={brainDock.side}
           size={brainDock.size}
+          width={brainDockWidth(brainDock)}
           showExecutionDetail={brainDock.showExecutionDetail}
+          onModeChange={(mode) => updateBrainDock({ mode })}
           onSideChange={(side) => updateBrainDock({ side })}
-          onSizeChange={(size) => updateBrainDock({ size })}
+          // Switching preset clears a stale drag width, so "expand" always expands.
+          onSizeChange={(size) => updateBrainDock({ size, width: null })}
+          onWidthChange={(width, commit) => updateBrainDock({ width }, commit)}
           onExecutionDetailChange={(showExecutionDetail) => updateBrainDock({ showExecutionDetail })}
           onClose={() => updateBrainDock({ open: false })}
           messages={brainMessages}
@@ -3129,10 +3148,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           node={brainNode}
           nodes={nodes}
           edges={edges}
-          composer={composer}
           collaborators={members.filter((member) => member.userId !== currentUserId)}
           joinedCollaborator={joinedCollaborator}
         />}
+        {composer}
         {!presentMode && !brainDock.open && <button
           type="button"
           className={styles.brainDockLauncher}

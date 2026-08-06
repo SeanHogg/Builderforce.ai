@@ -10,13 +10,14 @@
 
 .scene {
   position: absolute;
-  top: var(--canvas-3d-inset-top, 0px);
-  bottom: var(--canvas-3d-inset-bottom, 0px);
-  /* A host canvas that parks a dock over one edge of the board publishes the
-     space it takes; without this the scene — and its own controls — would render
-     underneath that dock. Defaults to the full surface when nothing is docked. */
-  left: var(--canvas-3d-inset-left, 0px);
-  right: var(--canvas-3d-inset-right, 0px);
+  /* The same edges the rail and the mini map step aside for (see
+     `--canvas-reserved-*` in CanvasCommands.module.css). Without it the scene —
+     and its own controls — render underneath a docked panel. Defaults to the
+     full surface when nothing is docked. */
+  top: var(--canvas-reserved-top, 0px);
+  bottom: var(--canvas-reserved-bottom, 0px);
+  left: var(--canvas-reserved-left, 0px);
+  right: var(--canvas-reserved-right, 0px);
   z-index: 7;
   display: flex;
   flex-direction: column;

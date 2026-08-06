@@ -19,6 +19,13 @@ import { meetingsApi } from './builderforceApi';
  * greater assigned id is the offerer, so exactly one side initiates regardless of
  * join ordering.
  *
+ * The `transport` option is the ONLY thing that differs between surfaces. Standup,
+ * Planning and ad-hoc meetings use the default (tenant token → the meetings relay);
+ * a free logged-out guest room supplies its own (guest token → the room DO's
+ * `media` channel). Everything below — negotiation, tiles, captions, ICE stats — is
+ * one implementation, because a second WebRTC stack is how two surfaces start
+ * disagreeing about what "on camera" means.
+ *
  * NOTE: mesh scales to a handful of simultaneous cameras (bandwidth is ~N²). For
  * a whole-team broadcast an SFU would be swapped in behind this same hook.
  */
@@ -50,6 +57,28 @@ interface PeerState {
 }
 
 interface RoomPeer { id: string; name: string; kind: string; ref: string; }
+
+/**
+ * How a surface authenticates and reaches its signaling relay + ICE config.
+ * Swappable so the guest room can reuse this hook verbatim; omit for the tenant
+ * meetings relay (the default).
+ */
+export interface MediaRoomTransport {
+  /** Credential for the signaling socket; null means "not ready yet, don't connect". */
+  getToken: () => string | null;
+  /** Signaling WebSocket URL for this room. */
+  signalingUrl: (roomKey: string, token: string) => string;
+  /** ICE servers for this surface, honouring the privacy mode. */
+  ice: (mode: 'direct-only' | 'relay-fallback') => Promise<{ iceServers?: unknown[] }>;
+}
+
+/** The tenant meetings relay — what Standup, Planning and ad-hoc calls use. */
+const meetingsTransport: MediaRoomTransport = {
+  getToken: getStoredTenantToken,
+  signalingUrl: (roomKey, token) =>
+    `${AUTH_API_URL.replace(/^http/, 'ws')}/api/meetings/rooms/${encodeURIComponent(roomKey)}/ws?token=${encodeURIComponent(token)}`,
+  ice: (mode) => meetingsApi.ice(mode),
+};
 
 export interface UseMediaRoom {
   localStream: MediaStream | null;
@@ -89,9 +118,15 @@ export function selectedMediaPath(stats: RTCStatsReport, peerId: string): MediaP
 export function useMediaRoom(
   roomKey: string | null,
   me: { name: string; ref: string },
-  opts: { enabled: boolean; audioOnly?: boolean; privacyMode?: 'direct-only' | 'relay-fallback' },
+  opts: {
+    enabled: boolean;
+    audioOnly?: boolean;
+    privacyMode?: 'direct-only' | 'relay-fallback';
+    /** Override auth + signaling endpoint (e.g. a free guest room). */
+    transport?: MediaRoomTransport;
+  },
 ): UseMediaRoom {
-  const { enabled, audioOnly = false, privacyMode = 'relay-fallback' } = opts;
+  const { enabled, audioOnly = false, privacyMode = 'relay-fallback', transport = meetingsTransport } = opts;
   const [tiles, setTiles] = useState<RemoteTile[]>(EMPTY);
   const [connected, setConnected] = useState(false);
   const [camOn, setCamOn] = useState(!audioOnly);
@@ -265,7 +300,7 @@ export function useMediaRoom(
   // Acquire media + open the socket while enabled.
   useEffect(() => {
     if (!enabled || !roomKey) return;
-    const token = getStoredTenantToken();
+    const token = transport.getToken();
     if (!token) return;
     let cancelled = false;
     let ws: WebSocket | null = null;
@@ -286,13 +321,12 @@ export function useMediaRoom(
       }
       // 2) ICE config (best-effort; STUN default already set).
       try {
-        const cfg = await meetingsApi.ice(privacyMode);
+        const cfg = await transport.ice(privacyMode);
         if (!cancelled && cfg.iceServers?.length) iceRef.current = cfg.iceServers as RTCIceServer[];
       } catch { /* keep default STUN */ }
 
       // 3) Signaling socket.
-      const base = AUTH_API_URL.replace(/^http/, 'ws');
-      const url = `${base}/api/meetings/rooms/${encodeURIComponent(roomKey)}/ws?token=${encodeURIComponent(token)}`;
+      const url = transport.signalingUrl(roomKey, token);
       const connect = () => {
         if (cancelled) return;
         try { ws = new WebSocket(url); } catch { retry = setTimeout(connect, 2000); return; }
@@ -333,7 +367,7 @@ export function useMediaRoom(
       setMediaPaths([]);
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) { try { window.speechSynthesis.cancel(); } catch { /* ignore */ } }
     };
-  }, [enabled, roomKey, audioOnly, privacyMode, send, handleFrame]);
+  }, [enabled, roomKey, audioOnly, privacyMode, transport, send, handleFrame]);
 
   const toggleCam = useCallback(() => {
     const stream = localRef.current;

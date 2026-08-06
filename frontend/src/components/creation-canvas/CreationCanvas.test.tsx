@@ -76,6 +76,31 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByRole('button', { name: 'Close mini map' })).toBeInTheDocument();
   });
 
+  it('publishes the docked Brain footprint on whichever edge it claims', () => {
+    // The command rail, the mini map and the 3D scene are pinned to the board's
+    // edges and step aside from these two numbers. A dock that claims an edge
+    // without publishing it is painted straight over the only canvas controls
+    // there are, which is exactly how the rail disappeared under a left dock.
+    const { container } = render(<CreationCanvas sessionId="brain-dock-footprint-test" persistence="local" />);
+    const board = () => container.querySelector<HTMLElement>('[data-brain-side]')!;
+
+    expect(board()).toHaveAttribute('data-brain-side', 'right');
+    expect(board()).toHaveAttribute('data-brain-open', 'true');
+    expect(board().style.getPropertyValue('--brain-dock-right')).toBe('330px');
+    expect(board().style.getPropertyValue('--brain-dock-left')).toBe('0px');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dock Brain to the left' }));
+    expect(board()).toHaveAttribute('data-brain-side', 'left');
+    expect(board().style.getPropertyValue('--brain-dock-left')).toBe('330px');
+    expect(board().style.getPropertyValue('--brain-dock-right')).toBe('0px');
+
+    // A closed Brain claims nothing, so the board takes its full width back.
+    fireEvent.click(screen.getByRole('button', { name: 'Close Brain chat' }));
+    expect(board()).toHaveAttribute('data-brain-side', 'none');
+    expect(board()).toHaveAttribute('data-brain-open', 'false');
+    expect(board().style.getPropertyValue('--brain-dock-left')).toBe('0px');
+  });
+
   it('opens the 3D view from the canvas rail, then hands the board back', () => {
     render(<CreationCanvas sessionId="three-d-controls-test" persistence="local" />);
 
@@ -89,10 +114,14 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(scene).toBeInTheDocument();
     // The mini map is a map of the flat board, so it stands down in 3D.
     expect(screen.queryByRole('button', { name: 'Close mini map' })).not.toBeInTheDocument();
+    // The rail owns the way out: the scene carries no exit control of its own.
+    expect(within(scene).queryByRole('button', { name: /3D/ })).not.toBeInTheDocument();
+    expect(toggle).toHaveAttribute('title', 'Exit 3D');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Exit 3D' }));
+    fireEvent.click(toggle!);
     expect(screen.queryByTestId('canvas-3d-view')).not.toBeInTheDocument();
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    expect(toggle).toHaveAttribute('title', 'View this canvas in 3D');
   });
 
   it('selects the same object in 3D that the flat board would', () => {
@@ -446,10 +475,11 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
 
   it('visualizes a person joining, composing, and authoring a shared prompt', () => {
     render(<BrainDock
-      side="right" size="slim" showExecutionDetail={false}
-      onSideChange={vi.fn()} onSizeChange={vi.fn()} onExecutionDetailChange={vi.fn()} onClose={vi.fn()}
+      mode="docked" side="right" size="slim" width={330} showExecutionDetail={false}
+      onModeChange={vi.fn()} onSideChange={vi.fn()} onSizeChange={vi.fn()} onWidthChange={vi.fn()}
+      onExecutionDetailChange={vi.fn()} onClose={vi.fn()}
       messages={[{ id: 1, seq: 1, role: 'user', content: 'Let us compare the research themes.', metadata: JSON.stringify({ authoredBy: { kind: 'human', ref: 'user-ada', name: 'Ada Rivera' } }), createdAt: new Date().toISOString() }]}
-      trace={[]} running={false} node={null} nodes={[]} edges={[]} composer={<div>Prompt</div>}
+      trace={[]} running={false} node={null} nodes={[]} edges={[]}
       joinedCollaborator={{ userId: 'user-ada', displayName: 'Ada Rivera' }}
       collaborators={[{ userId: 'user-ada', displayName: 'Ada Rivera', typing: true }]}
     />);
@@ -592,6 +622,7 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     const dock = screen.getByRole('complementary', { name: 'Brain chat' });
     expect(dock).toHaveAttribute('data-side', 'right');
     expect(dock).toHaveAttribute('data-size', 'slim');
+    expect(dock).toHaveAttribute('data-mode', 'docked');
 
     fireEvent.click(screen.getByRole('button', { name: 'Dock Brain to the left' }));
     fireEvent.click(screen.getByRole('button', { name: 'Expand Brain chat' }));
@@ -600,11 +631,54 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByRole('complementary', { name: 'Brain chat' })).toHaveAttribute('data-size', 'expanded');
     expect(JSON.parse(localStorage.getItem('builderforce:create:brain-dock')!)).toMatchObject({ side: 'left', size: 'expanded' });
 
-    // Closing the dock must leave a way back to it, not strand the user without a prompt.
+    // Closing Brain must leave a way back to it — and must NOT take the prompt with
+    // it, because the prompt belongs to the page, not to the Brain surface.
     fireEvent.click(screen.getByRole('button', { name: 'Close Brain chat' }));
-    expect(screen.queryByLabelText('Ask Brain about this canvas')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Show Brain chat' }));
+    expect(screen.queryByRole('complementary', { name: 'Brain chat' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Ask Brain about this canvas')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show Brain chat' }));
+    expect(screen.getByRole('complementary', { name: 'Brain chat' })).toBeInTheDocument();
+  });
+
+  it('keeps the prompt in the centre of the page instead of inside the Brain surface', () => {
+    render(<CreationCanvas sessionId="brain-prompt-placement-test" persistence="local" />);
+
+    // People expect to type at the bottom-centre of the page, the way every other
+    // chat product works. Nesting the prompt in the side panel is what broke that.
+    const prompt = screen.getByLabelText('Ask Brain about this canvas');
+    expect(screen.getByRole('complementary', { name: 'Brain chat' })).not.toContainElement(prompt);
+  });
+
+  it('floats Brain on the canvas, which then reserves no board width', () => {
+    render(<CreationCanvas sessionId="brain-float-test" persistence="local" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Float Brain on the canvas' }));
+
+    const dock = screen.getByRole('complementary', { name: 'Brain chat' });
+    expect(dock).toHaveAttribute('data-mode', 'floating');
+    // A floating Brain sits ON the board, so the board gives up nothing to it.
+    expect(dock.parentElement?.style.getPropertyValue('--brain-dock-right')).toBe('0px');
+    expect(JSON.parse(localStorage.getItem('builderforce:create:brain-dock')!)).toMatchObject({ mode: 'floating' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dock Brain to the edge' }));
+    expect(screen.getByRole('complementary', { name: 'Brain chat' })).toHaveAttribute('data-mode', 'docked');
+    expect(dock.parentElement?.style.getPropertyValue('--brain-dock-right')).toBe('330px');
+  });
+
+  it('resizes Brain from the keyboard and remembers the width', () => {
+    render(<CreationCanvas sessionId="brain-resize-test" persistence="local" />);
+
+    const resizer = screen.getByRole('separator', { name: 'Resize Brain chat' });
+    expect(resizer).toHaveAttribute('aria-valuenow', '330');
+
+    // Brain is docked right, so widening it means dragging its edge leftwards.
+    fireEvent.keyDown(resizer, { key: 'ArrowLeft' });
+    expect(screen.getByRole('separator', { name: 'Resize Brain chat' })).toHaveAttribute('aria-valuenow', '354');
+    expect(JSON.parse(localStorage.getItem('builderforce:create:brain-dock')!)).toMatchObject({ width: 354 });
+
+    // Presets clear a stale drag width, so "expand" always actually expands.
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Brain chat' }));
+    expect(screen.getByRole('separator', { name: 'Resize Brain chat' })).toHaveAttribute('aria-valuenow', '520');
   });
 
   it('hides Brain execution steps until the user turns that feedback on', () => {

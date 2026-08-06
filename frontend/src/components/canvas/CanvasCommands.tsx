@@ -96,6 +96,12 @@ type CanvasCommandsProps = {
  * The mini map is a map OF the flat board, so it stands down while a canvas is
  * being read in 3D — the scene is the map at that point, and leaving a stale
  * top-down thumbnail on screen would describe a view nobody is looking at.
+ *
+ * Both are pinned to the bottom corners of the board, so a canvas that lets a
+ * full-height panel claim an edge (the Brain dock) must say so by setting
+ * `--canvas-reserved-left` / `--canvas-reserved-right` to that panel's width —
+ * see `.boardChrome` in the stylesheet. Without it the rail is painted over and
+ * the board loses every control it has.
  */
 export function CanvasCommands({
   minimapOpen,
@@ -111,7 +117,7 @@ export function CanvasCommands({
 }: CanvasCommandsProps) {
   const t = useTranslations('canvasCommands');
   return <>
-    <Controls position="bottom-left" showInteractive={showInteractive}>
+    <Controls position="bottom-left" className={styles.boardChrome} showInteractive={showInteractive}>
       <ControlButton onClick={onCleanLayout} aria-label={t('cleanLayout')} title={t('cleanLayout')}>
         <CleanLayoutIcon />
       </ControlButton>
@@ -138,6 +144,7 @@ export function CanvasCommands({
     {minimapOpen && !threeDActive && <>
       <MiniMap
         position="bottom-right"
+        className={styles.boardChrome}
         pannable
         zoomable
         nodeColor={minimapNodeColor}

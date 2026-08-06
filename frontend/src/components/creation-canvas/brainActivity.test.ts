@@ -10,7 +10,14 @@ import {
   formatTokenCount,
   humanizeTraceLabel,
 } from './brainActivity';
-import { DEFAULT_BRAIN_DOCK_PREFERENCES, sanitizeBrainDockPreferences } from './brainDockPreferences';
+import {
+  BRAIN_DOCK_MAX_WIDTH,
+  BRAIN_DOCK_MIN_WIDTH,
+  BRAIN_DOCK_WIDTH,
+  brainDockReservedWidth,
+  DEFAULT_BRAIN_DOCK_PREFERENCES,
+  sanitizeBrainDockPreferences,
+} from './brainDockPreferences';
 
 const event = (over: Partial<BrainTraceEvent> & Pick<BrainTraceEvent, 'category' | 'label'>): BrainTraceEvent =>
   ({ ts: '2026-08-05T00:00:00.000Z', ...over });
@@ -104,11 +111,29 @@ describe('brainRunSummary', () => {
 describe('sanitizeBrainDockPreferences', () => {
   it('falls back to the shipped default for anything unrecognized', () => {
     expect(sanitizeBrainDockPreferences(null)).toEqual(DEFAULT_BRAIN_DOCK_PREFERENCES);
-    expect(sanitizeBrainDockPreferences({ side: 'top', size: 'huge' })).toEqual(DEFAULT_BRAIN_DOCK_PREFERENCES);
+    expect(sanitizeBrainDockPreferences({ side: 'top', size: 'huge', mode: 'popup', width: 'wide' })).toEqual(DEFAULT_BRAIN_DOCK_PREFERENCES);
   });
 
   it('keeps a stored layout the user actually chose', () => {
-    expect(sanitizeBrainDockPreferences({ side: 'left', size: 'expanded', showExecutionDetail: true, open: false }))
-      .toEqual({ side: 'left', size: 'expanded', showExecutionDetail: true, open: false });
+    expect(sanitizeBrainDockPreferences({ mode: 'floating', side: 'left', size: 'expanded', width: 480, showExecutionDetail: true, open: false }))
+      .toEqual({ mode: 'floating', side: 'left', size: 'expanded', width: 480, showExecutionDetail: true, open: false });
+  });
+
+  it('clamps a stored width so a bad value cannot swallow or hide the board', () => {
+    expect(sanitizeBrainDockPreferences({ width: 40 }).width).toBe(BRAIN_DOCK_MIN_WIDTH);
+    expect(sanitizeBrainDockPreferences({ width: 99_999 }).width).toBe(BRAIN_DOCK_MAX_WIDTH);
+  });
+});
+
+describe('brainDockReservedWidth', () => {
+  it('reserves board width for a docked Brain and none for a floating or closed one', () => {
+    const docked = { ...DEFAULT_BRAIN_DOCK_PREFERENCES };
+    expect(brainDockReservedWidth(docked)).toBe(BRAIN_DOCK_WIDTH.slim);
+    expect(brainDockReservedWidth({ ...docked, size: 'expanded' })).toBe(BRAIN_DOCK_WIDTH.expanded);
+    // A dragged width wins over the preset it started from.
+    expect(brainDockReservedWidth({ ...docked, width: 412 })).toBe(412);
+    // Floating sits ON the board and closed is not there at all.
+    expect(brainDockReservedWidth({ ...docked, mode: 'floating' })).toBe(0);
+    expect(brainDockReservedWidth({ ...docked, open: false })).toBe(0);
   });
 });
