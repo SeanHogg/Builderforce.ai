@@ -92,13 +92,11 @@ export async function mintGuestSession(): Promise<GuestUsage | null> {
   }
 }
 
-/** Ensure a valid guest token exists (mint on demand). Returns the token or null. */
-export async function ensureGuestToken(): Promise<string | null> {
-  const existing = getStoredGuestToken();
-  if (existing) return existing;
-  await mintGuestSession();
-  return getStoredGuestToken();
-}
+// NOTE: `ensureGuestToken` lives in `guestRoomApi`, not here. A guest may be in a
+// SHARED room, and re-minting a plain token for them would silently drop them out
+// of it — out of the room's combined allowance and out of its relay. Only that
+// module can see both halves, so the "make sure I can call the gateway" helper
+// belongs there.
 
 /** The guest's current remaining allowance (for the composer's "N left"). */
 export async function getGuestUsage(): Promise<GuestUsage | null> {

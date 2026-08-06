@@ -49,6 +49,32 @@ function textDataUrl(mimeType: string, value: string): string {
   return `data:${mimeType};charset=utf-8,${encodeURIComponent(value)}`;
 }
 
+/**
+ * A URL a new tab is actually allowed to open.
+ *
+ * Browsers block a top-level navigation to a `data:` URL, so opening a generated
+ * artifact by its own URL lands on a blank tab. The conversion is deliberately
+ * synchronous — going through `fetch` would put an await between the click and
+ * `window.open`, which costs the user gesture and trades a blocked navigation for
+ * a blocked popup. Returns the URL unchanged when it is already navigable, so the
+ * caller has one code path.
+ */
+export function navigableArtifactUrl(url: string): string {
+  const match = /^data:([^,]*),/.exec(url);
+  if (!match || typeof Blob === 'undefined' || typeof URL?.createObjectURL !== 'function') return url;
+  const parameters = match[1]!.split(';');
+  const mimeType = parameters[0] || 'application/octet-stream';
+  const payload = url.slice(match[0].length);
+  try {
+    const body = parameters.includes('base64')
+      ? Uint8Array.from(atob(payload), (character) => character.charCodeAt(0))
+      : decodeURIComponent(payload);
+    return URL.createObjectURL(new Blob([body], { type: mimeType }));
+  } catch {
+    return url;
+  }
+}
+
 export interface BrowserCreativeArtifact {
   artifactKind: string;
   fileName: string;

@@ -6,22 +6,38 @@ import {
   CANVAS_3D_DEFAULT_ORBIT,
   CANVAS_3D_DEPTH_MODES,
   CANVAS_3D_PERSPECTIVE,
+  canvas3dCameraTransform,
+  canvas3dDepthFromDrag,
   canvas3dLinkTransform,
   canvas3dOrbitAfterDrag,
   canvas3dOrbitAfterZoom,
   canvas3dFitZoom,
+  canvas3dPanAfterDrag,
+  canvas3dPanToCentre,
   canvas3dScene,
   canvas3dStageTransform,
   canvas3dTranslate,
+  canvas3dUnprojectToPlane,
   canvas3dZoomFactorFromWheel,
+  type Canvas3DCard,
   type Canvas3DDepthMode,
   type Canvas3DDescriptor,
+  type Canvas3DDragAxis,
   type Canvas3DNode,
   type Canvas3DOrbit,
 } from './canvas3d';
 import { usePublishCanvas3DControls, type Canvas3DControls } from './canvas3dControls';
 import type { CanvasGraphEdge } from './canvasGraph';
 import styles from './Canvas3DView.module.css';
+
+/** One object's movement through the space, in board pixels. */
+export interface Canvas3DMove {
+  id: string;
+  dx: number;
+  dy: number;
+  /** Change in how far the object floats off its depth plane. */
+  dz: number;
+}
 
 export interface Canvas3DViewProps<T extends Canvas3DNode> {
   nodes: readonly T[];
@@ -32,27 +48,54 @@ export interface Canvas3DViewProps<T extends Canvas3DNode> {
   measure?: (node: T) => { width: number; height: number };
   selectedIds?: readonly string[];
   onSelect?: (id: string) => void;
+  /**
+   * Put objects where the user drags them. Omit it and the space becomes a
+   * read-only reading of the board — which is what a viewer without edit rights
+   * gets, without the caller having to disable anything.
+   */
+  onMove?: (moves: readonly Canvas3DMove[]) => void;
   /** Leave 3D. The visible control lives on the canvas rail; this is the Escape key. */
   onExit: () => void;
 }
 
-/** Pointer travel, in pixels, past which a gesture is an orbit and not a click. */
+/** Pointer travel, in pixels, past which a gesture is a drag and not a click. */
 const CLICK_SLOP = 3;
 const KEYBOARD_STEP = 12;
+/** Depth is coarser than the board, so a keyed depth step covers more ground. */
+const KEYBOARD_DEPTH_STEP = 40;
 const ZOOM_STEP = 1.25;
 
+/** Where the pointer was last seen, which every gesture measures itself from. */
+type PointerAt = { x: number; y: number };
+
+/** What the pointer is currently doing to the scene. */
+type Gesture =
+  | ({ kind: 'orbit' } & PointerAt)
+  | ({ kind: 'pan' } & PointerAt)
+  | ({
+    kind: 'move';
+    axis: Canvas3DDragAxis;
+    /** Everything travelling with this drag, and where each started. */
+    from: ReadonlyMap<string, { x: number; y: number; z: number }>;
+    /** The plane the drag is solved on, and the point the cursor grabbed on it. */
+    planeZ: number;
+    grab: { x: number; y: number };
+    /** Board travel already handed to the canvas, so each step sends only the difference. */
+    sent: { x: number; y: number; z: number };
+  } & PointerAt);
+
 /**
- * The 3D reading of a canvas: the same objects, lifted onto depth planes.
+ * The 3D canvas: the board as a space to turn, travel and rearrange.
  *
  * Rendered as real DOM under CSS 3D transforms rather than a WebGL scene, which
  * is what keeps every card a focusable button with its own text — the view stays
  * usable from the keyboard and by assistive tech, and it costs no new runtime.
  * Selection is shared with the flat canvas, so opening an object in 3D shows the
- * same inspector the board would.
+ * same inspector the board would, and moving one here moves it there.
  *
- * The scene owns no chrome. Depth, zoom and reset are published to the canvas
- * command rail (see `canvas3dControls`), so 3D adds buttons to the bar the board
- * already has rather than stacking a second toolbar over it.
+ * The scene owns no chrome. Depth, layers, zoom and reset are published to the
+ * canvas command rail (see `canvas3dControls`), so 3D adds buttons to the bar the
+ * board already has rather than stacking a second toolbar over it.
  */
 export function Canvas3DView<T extends Canvas3DNode>({
   nodes,
@@ -61,14 +104,18 @@ export function Canvas3DView<T extends Canvas3DNode>({
   measure,
   selectedIds = [],
   onSelect,
+  onMove,
   onExit,
 }: Canvas3DViewProps<T>) {
   const t = useTranslations('canvasCommands');
   const [orbit, setOrbit] = useState<Canvas3DOrbit>(CANVAS_3D_DEFAULT_ORBIT);
   const [depthMode, setDepthMode] = useState<Canvas3DDepthMode>('flow');
-  const [dragging, setDragging] = useState(false);
+  const [layersVisible, setLayersVisible] = useState(true);
+  const [gestureKind, setGestureKind] = useState<Gesture['kind'] | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const gestureRef = useRef<Gesture | null>(null);
+  /** True once the current gesture has travelled far enough to not be a click. */
+  const movedRef = useRef(false);
 
   const scene = useMemo(
     () => canvas3dScene({ nodes, edges, describe, depthMode, ...(measure ? { measure } : {}) }),
@@ -76,57 +123,106 @@ export function Canvas3DView<T extends Canvas3DNode>({
   );
   const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
 
+  // Gestures read the live orbit and scene from refs: a pointer listener that
+  // re-subscribed on every frame of its own drag would drop events mid-move.
+  const orbitRef = useRef(orbit);
+  orbitRef.current = orbit;
+  const sceneRef = useRef(scene);
+  sceneRef.current = scene;
+  const onMoveRef = useRef(onMove);
+  onMoveRef.current = onMove;
+
   const fitZoom = useCallback(
     () => canvas3dFitZoom(scene.plane, viewportRef.current?.getBoundingClientRect() ?? null),
     [scene.plane],
   );
-  /** Once the user zooms, the view stops re-framing itself behind their back. */
-  const userZoomed = useRef(false);
+  const fitZoomRef = useRef(fitZoom);
+  fitZoomRef.current = fitZoom;
+  /**
+   * Once the user frames the space themselves — zooming, panning, or moving an
+   * object — the view stops re-framing itself behind their back.
+   */
+  const userFramed = useRef(false);
   const zoomBy = useCallback((factor: number) => {
-    userZoomed.current = true;
+    userFramed.current = true;
     setOrbit((current) => canvas3dOrbitAfterZoom(current, factor));
   }, []);
   const resetView = useCallback(() => {
-    userZoomed.current = false;
-    setOrbit({ ...CANVAS_3D_DEFAULT_ORBIT, zoom: fitZoom() });
+    userFramed.current = false;
+    setOrbit({ ...CANVAS_3D_DEFAULT_ORBIT, zoom: fitZoomRef.current() });
+  }, []);
+
+  // Frame the space on open, and again when the depth axis restacks it into a
+  // different shape. Anything finer would fight the user's own camera.
+  useLayoutEffect(() => { resetView(); }, [depthMode, resetView]);
+
+  // The scene grows as objects are added and moved, and the surface it is framed
+  // against moves too — a dock opens, a phone rotates. Re-fit the zoom only, and
+  // only while the framing is still ours to choose: resetting the whole camera
+  // here would throw away the angle the user turned to.
+  useEffect(() => {
+    if (userFramed.current) return;
+    const zoom = fitZoom();
+    setOrbit((current) => current.zoom === zoom ? current : { ...current, zoom });
   }, [fitZoom]);
 
-  // Frame the board once per shape of the scene — on open, and again when the
-  // depth axis restacks it. Re-fitting on every render would fight the user's
-  // own orbit, so a key guards it.
-  const fittedKey = useRef<string | null>(null);
-  useLayoutEffect(() => {
-    const key = `${depthMode}:${Math.round(scene.plane.width)}x${Math.round(scene.plane.height)}:${scene.layers.length}`;
-    if (fittedKey.current === key) return;
-    fittedKey.current = key;
-    resetView();
-  }, [depthMode, resetView, scene.layers.length, scene.plane]);
-
-  // The surface it is framed against moves: a dock opens, a phone rotates, the
-  // window resizes. Re-fit while the framing is still ours to choose.
   useEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport || typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(() => {
-      if (userZoomed.current) return;
-      const zoom = fitZoom();
+      if (userFramed.current) return;
+      const zoom = fitZoomRef.current();
       setOrbit((current) => current.zoom === zoom ? current : { ...current, zoom });
     });
     observer.observe(viewport);
     return () => observer.disconnect();
-  }, [fitZoom]);
+  }, []);
+
+  /** Pointer position measured from the middle of the viewport, where the scene is centred. */
+  const fromCentre = useCallback((event: { clientX: number; clientY: number }) => {
+    const box = viewportRef.current?.getBoundingClientRect();
+    if (!box) return { x: 0, y: 0 };
+    return { x: event.clientX - (box.left + box.width / 2), y: event.clientY - (box.top + box.height / 2) };
+  }, []);
 
   useEffect(() => {
-    if (!dragging) return;
+    if (!gestureKind) return;
     const move = (event: PointerEvent) => {
-      const drag = dragRef.current;
-      if (!drag) return;
-      const dx = event.clientX - drag.x;
-      const dy = event.clientY - drag.y;
-      dragRef.current = { x: event.clientX, y: event.clientY, moved: drag.moved || Math.abs(dx) + Math.abs(dy) > CLICK_SLOP };
-      setOrbit((current) => canvas3dOrbitAfterDrag(current, dx, dy));
+      const gesture = gestureRef.current;
+      if (!gesture) return;
+      const dx = event.clientX - gesture.x;
+      const dy = event.clientY - gesture.y;
+      if (Math.abs(dx) + Math.abs(dy) > CLICK_SLOP) movedRef.current = true;
+
+      if (gesture.kind === 'orbit') {
+        gestureRef.current = { ...gesture, x: event.clientX, y: event.clientY };
+        setOrbit((current) => canvas3dOrbitAfterDrag(current, dx, dy));
+        return;
+      }
+      if (gesture.kind === 'pan') {
+        userFramed.current = true;
+        gestureRef.current = { ...gesture, x: event.clientX, y: event.clientY };
+        setOrbit((current) => canvas3dPanAfterDrag(current, dx, dy));
+        return;
+      }
+
+      // Moving objects. Depth is measured step by step along the one screen
+      // direction depth runs in; across the plane the pointer is read straight
+      // back into the space, so the object stays exactly under the cursor
+      // however long the drag runs.
+      const travelled = gesture.axis === 'depth'
+        ? { x: 0, y: 0, z: gesture.sent.z + canvas3dDepthFromDrag(orbitRef.current, { dx, dy }, { x: gesture.grab.x, y: gesture.grab.y, z: gesture.planeZ }) }
+        : (() => {
+          const at = canvas3dUnprojectToPlane(orbitRef.current, fromCentre(event), gesture.planeZ);
+          return at ? { x: at.x - gesture.grab.x, y: at.y - gesture.grab.y, z: 0 } : gesture.sent;
+        })();
+
+      const step = { x: travelled.x - gesture.sent.x, y: travelled.y - gesture.sent.y, z: travelled.z - gesture.sent.z };
+      gestureRef.current = { ...gesture, x: event.clientX, y: event.clientY, sent: travelled };
+      if (!step.x && !step.y && !step.z) return;
+      onMoveRef.current?.([...gesture.from.keys()].map((id) => ({ id, dx: step.x, dy: step.y, dz: step.z })));
     };
-    const end = () => setDragging(false);
+    const end = () => { gestureRef.current = null; setGestureKind(null); };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', end);
     window.addEventListener('pointercancel', end);
@@ -135,7 +231,7 @@ export function Canvas3DView<T extends Canvas3DNode>({
       window.removeEventListener('pointerup', end);
       window.removeEventListener('pointercancel', end);
     };
-  }, [dragging]);
+  }, [fromCentre, gestureKind]);
 
   // React attaches wheel passively at the root, so zooming has to come from a
   // non-passive listener — otherwise the page scrolls behind the scene.
@@ -150,17 +246,93 @@ export function Canvas3DView<T extends Canvas3DNode>({
     return () => viewport.removeEventListener('wheel', wheel);
   }, [zoomBy]);
 
-  const onPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.pointerType === 'mouse' && event.button !== 0) return;
-    dragRef.current = { x: event.clientX, y: event.clientY, moved: false };
-    setDragging(true);
+  /** Turning the space, or travelling across it. Middle button and Shift pan. */
+  const onViewportPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0 && event.button !== 1) return;
+    movedRef.current = false;
+    const kind: 'orbit' | 'pan' = event.button === 1 || event.shiftKey ? 'pan' : 'orbit';
+    gestureRef.current = kind === 'pan'
+      ? { kind: 'pan', x: event.clientX, y: event.clientY }
+      : { kind: 'orbit', x: event.clientX, y: event.clientY };
+    setGestureKind(kind);
   }, []);
 
+  /**
+   * Everything this drag carries. Dragging a selected object moves the whole
+   * selection, which is how the flat board behaves and the only way to keep a
+   * group of objects together while rearranging the space.
+   */
+  const dragParty = useCallback((card: Canvas3DCard): Map<string, { x: number; y: number; z: number }> => {
+    const travelling = selected.has(card.id)
+      ? sceneRef.current.cards.filter((entry) => selected.has(entry.id) && !entry.locked)
+      : [card];
+    return new Map(travelling.map((entry) => [entry.id, { x: entry.x, y: entry.y, z: entry.z }]));
+  }, [selected]);
+
+  const onCardPointerDown = useCallback((event: ReactPointerEvent<HTMLButtonElement>, card: Canvas3DCard) => {
+    // A locked or read-only card is not a handle: the drag falls through to the
+    // viewport underneath and turns the space instead, which is more useful than
+    // a gesture that silently does nothing.
+    if (!onMoveRef.current || card.locked) return;
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    // Shift pans the space, so on an object it lifts instead — the same modifier
+    // meaning "the other axis" in both places.
+    const axis: Canvas3DDragAxis = event.shiftKey ? 'depth' : 'plane';
+    const grab = axis === 'depth'
+      ? { x: card.x, y: card.y }
+      : canvas3dUnprojectToPlane(orbitRef.current, fromCentre(event), card.z);
+    if (!grab) return;
+
+    event.stopPropagation();
+    movedRef.current = false;
+    userFramed.current = true;
+    gestureRef.current = {
+      kind: 'move',
+      axis,
+      from: dragParty(card),
+      planeZ: card.z,
+      grab,
+      x: event.clientX,
+      y: event.clientY,
+      sent: { x: 0, y: 0, z: 0 },
+    };
+    setGestureKind('move');
+  }, [dragParty, fromCentre]);
+
+  /** Nudge whatever this card is carrying, in board units, from the keyboard. */
+  const nudge = useCallback((card: Canvas3DCard, dx: number, dy: number, dz: number) => {
+    if (!onMoveRef.current || card.locked) return;
+    userFramed.current = true;
+    onMoveRef.current([...dragParty(card).keys()].map((id) => ({ id, dx, dy, dz })));
+  }, [dragParty]);
+
+  const onCardKeyDown = useCallback((event: ReactKeyboardEvent<HTMLButtonElement>, card: Canvas3DCard) => {
+    const step = ({
+      ArrowLeft: [-KEYBOARD_STEP, 0], ArrowRight: [KEYBOARD_STEP, 0],
+      ArrowUp: [0, -KEYBOARD_STEP], ArrowDown: [0, KEYBOARD_STEP],
+    } as Record<string, [number, number]>)[event.key];
+    if (!step || !onMoveRef.current || card.locked) return;
+    // The card owns its arrow keys while it is focused; the viewport keeps them
+    // for orbiting, so the gesture must not reach it as well.
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.shiftKey) nudge(card, 0, 0, -step[1] * (KEYBOARD_DEPTH_STEP / KEYBOARD_STEP));
+    else nudge(card, step[0], step[1], 0);
+  }, [nudge]);
+
   const onKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const drag = ({ ArrowLeft: [-KEYBOARD_STEP, 0], ArrowRight: [KEYBOARD_STEP, 0], ArrowUp: [0, -KEYBOARD_STEP], ArrowDown: [0, KEYBOARD_STEP] } as Record<string, [number, number]>)[event.key];
-    if (drag) {
+    const step = ({
+      ArrowLeft: [-KEYBOARD_STEP, 0], ArrowRight: [KEYBOARD_STEP, 0],
+      ArrowUp: [0, -KEYBOARD_STEP], ArrowDown: [0, KEYBOARD_STEP],
+    } as Record<string, [number, number]>)[event.key];
+    if (step) {
       event.preventDefault();
-      setOrbit((current) => canvas3dOrbitAfterDrag(current, drag[0], drag[1]));
+      if (event.shiftKey) {
+        userFramed.current = true;
+        setOrbit((current) => canvas3dPanAfterDrag(current, -step[0], -step[1]));
+      } else {
+        setOrbit((current) => canvas3dOrbitAfterDrag(current, step[0], step[1]));
+      }
       return;
     }
     if (event.key === '+' || event.key === '=') {
@@ -186,6 +358,33 @@ export function Canvas3DView<T extends Canvas3DNode>({
     [t],
   );
 
+  /** Objects the user has lifted off their plane, and by how much. */
+  const lifted = useMemo(
+    () => scene.cards.filter((card) => card.z !== card.layerZ),
+    [scene.cards],
+  );
+  const dropToLayers = useCallback(() => {
+    if (!onMoveRef.current || !lifted.length) return;
+    onMoveRef.current(lifted.filter((card) => !card.locked).map((card) => ({ id: card.id, dx: 0, dy: 0, dz: card.layerZ - card.z })));
+  }, [lifted]);
+
+  /**
+   * Travel to a chosen object. Only the camera moves — focusing on something is
+   * a question about where the user is looking from, never about where the
+   * object sits.
+   */
+  const focusObjects = useCallback((ids: readonly string[]) => {
+    const wanted = new Set(ids);
+    const chosen = sceneRef.current.cards.filter((card) => wanted.has(card.id));
+    if (!chosen.length) return;
+    userFramed.current = true;
+    setOrbit((current) => canvas3dPanToCentre(current, {
+      x: chosen.reduce((total, card) => total + card.x, 0) / chosen.length,
+      y: chosen.reduce((total, card) => total + card.y, 0) / chosen.length,
+      z: chosen.reduce((total, card) => total + card.z, 0) / chosen.length,
+    }));
+  }, []);
+
   // Everything the rail can drive, in one object so the rail and the phone-sized
   // action stack share the behaviour rather than each re-deriving it.
   const controls = useMemo<Canvas3DControls>(() => ({
@@ -194,7 +393,11 @@ export function Canvas3DView<T extends Canvas3DNode>({
     zoomIn: () => zoomBy(ZOOM_STEP),
     zoomOut: () => zoomBy(1 / ZOOM_STEP),
     resetView,
-  }), [depthMode, resetView, zoomBy]);
+    focusObjects,
+    layersVisible,
+    toggleLayers: () => setLayersVisible((visible) => !visible),
+    ...(onMove && lifted.some((card) => !card.locked) ? { dropToLayers } : {}),
+  }), [depthMode, dropToLayers, focusObjects, layersVisible, lifted, onMove, resetView, zoomBy]);
   usePublishCanvas3DControls(controls);
 
   return (
@@ -202,71 +405,87 @@ export function Canvas3DView<T extends Canvas3DNode>({
       <div
         ref={viewportRef}
         className={styles.viewport}
-        style={{ perspective: `${CANVAS_3D_PERSPECTIVE}px` }}
-        data-dragging={dragging}
+        data-gesture={gestureKind ?? 'idle'}
         tabIndex={0}
-        aria-label={t('threeD.orbitLabel')}
-        onPointerDown={onPointerDown}
+        aria-label={t(onMove ? 'threeD.spaceLabel' : 'threeD.orbitLabel')}
+        onPointerDown={onViewportPointerDown}
         onKeyDown={onKeyDown}
       >
         {scene.cards.length === 0
           ? <p className={styles.empty}>{t('threeD.empty')}</p>
-          : <div className={styles.stage} style={{ transform: canvas3dStageTransform(orbit) }}>
-            {scene.layers.map((layer) => <div
-              key={layer.index}
-              className={styles.plane}
-              aria-hidden
-              style={{ width: scene.plane.width, height: scene.plane.height, transform: canvas3dTranslate({ x: 0, y: 0, z: layer.z }) }}
-            >
-              <span className={styles.planeTag}>{layerName(layer.index, layer.label)}<i>{t('threeD.layerCount', { count: layer.count })}</i></span>
-            </div>)}
-
-            {scene.links.map((link) => {
-              const { transform, length } = canvas3dLinkTransform(link.from, link.to);
-              return <i
-                key={link.id}
-                className={styles.link}
+          : <div className={styles.camera} style={{ perspective: `${CANVAS_3D_PERSPECTIVE}px`, transform: canvas3dCameraTransform(orbit) }}>
+            <div className={styles.stage} style={{ transform: canvas3dStageTransform(orbit) }}>
+              {layersVisible && scene.layers.map((layer) => <div
+                key={layer.index}
+                className={styles.plane}
                 aria-hidden
-                data-spans={link.spansLayers}
-                style={{ width: Math.max(1, length), transform }}
-              />;
-            })}
+                style={{ width: scene.plane.width, height: scene.plane.height, transform: canvas3dTranslate({ x: 0, y: 0, z: layer.z }) }}
+              >
+                <span className={styles.planeTag}>{layerName(layer.index, layer.label)}<i>{t('threeD.layerCount', { count: layer.count })}</i></span>
+              </div>)}
 
-            {scene.cards.map((card) => <button
-              key={card.id}
-              type="button"
-              className={styles.card}
-              style={{
-                width: card.width,
-                minHeight: card.height,
-                transform: canvas3dTranslate(card),
-                ...(card.accent ? { ['--canvas-3d-accent' as string]: card.accent } : {}),
-              }}
-              aria-pressed={selected.has(card.id)}
-              data-selected={selected.has(card.id)}
-              onClick={() => {
-                if (dragRef.current?.moved) return;
-                onSelect?.(card.id);
-              }}
-            >
-              <span className={styles.cardHead}>
-                {card.icon && <i aria-hidden>{card.icon}</i>}
-                <b>{card.label}</b>
-              </span>
-              {card.preview && <img
-                className={styles.cardPreview}
-                src={card.preview}
-                alt={t('threeD.previewAlt', { label: card.label })}
-                loading="lazy"
-                draggable={false}
-              />}
-              {card.sublabel && <span className={styles.cardSub}>{card.sublabel}</span>}
-              <span className={styles.cardGroup}>{card.group}</span>
-            </button>)}
+              {scene.links.map((link) => {
+                const { transform, length } = canvas3dLinkTransform(link.from, link.to);
+                return <i
+                  key={link.id}
+                  className={styles.link}
+                  aria-hidden
+                  data-spans={link.spansLayers}
+                  style={{ width: Math.max(1, length), transform }}
+                />;
+              })}
+
+              {/* A lifted object keeps a line back to the plane it belongs to, so
+                  depth stays readable once the stack is no longer flat. */}
+              {layersVisible && lifted.map((card) => {
+                const { transform, length } = canvas3dLinkTransform({ x: card.x, y: card.y, z: card.layerZ }, card);
+                return <i
+                  key={`tether:${card.id}`}
+                  className={styles.tether}
+                  aria-hidden
+                  style={{ width: Math.max(1, length), transform }}
+                />;
+              })}
+
+              {scene.cards.map((card) => <button
+                key={card.id}
+                type="button"
+                className={styles.card}
+                style={{
+                  width: card.width,
+                  minHeight: card.height,
+                  transform: canvas3dTranslate(card),
+                  ...(card.accent ? { ['--canvas-3d-accent' as string]: card.accent } : {}),
+                }}
+                aria-pressed={selected.has(card.id)}
+                data-selected={selected.has(card.id)}
+                data-movable={!!onMove && !card.locked}
+                onPointerDown={(event) => onCardPointerDown(event, card)}
+                onKeyDown={(event) => onCardKeyDown(event, card)}
+                onClick={() => {
+                  if (movedRef.current) return;
+                  onSelect?.(card.id);
+                }}
+              >
+                <span className={styles.cardHead}>
+                  {card.icon && <i aria-hidden>{card.icon}</i>}
+                  <b>{card.label}</b>
+                </span>
+                {card.preview && <img
+                  className={styles.cardPreview}
+                  src={card.preview}
+                  alt={t('threeD.previewAlt', { label: card.label })}
+                  loading="lazy"
+                  draggable={false}
+                />}
+                {card.sublabel && <span className={styles.cardSub}>{card.sublabel}</span>}
+                <span className={styles.cardGroup}>{card.group}</span>
+              </button>)}
+            </div>
           </div>}
       </div>
 
-      <footer className={styles.hint}>{t('threeD.hint')}</footer>
+      <footer className={styles.hint}>{t(onMove ? 'threeD.spaceHint' : 'threeD.hint')}</footer>
     </section>
   );
 }

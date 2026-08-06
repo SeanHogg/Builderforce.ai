@@ -12526,7 +12526,8 @@
       "salesContact": "Sales contact",
       "targetMarket": "Target market",
       "salesGoal": "Weekly sales goal",
-      "salesMeeting": "Sales meeting"
+      "salesMeeting": "Sales meeting",
+      "diagram": "Diagram"
     },
     "canvasOutline": "Accessible canvas outline",
     "closeCanvasOutline": "Close canvas outline",
@@ -12909,7 +12910,6 @@
     "creativeCapabilityHint": "Builderforce owns this provider-neutral contract. Brain composes it through the built-in MCP catalog; execution providers can be added later without changing the Canvas object.",
     "applyTemplate": "Apply template",
     "generateLabel": "Generate {label}",
-    "openGeneratedOutput": "Open generated output ↗",
     "saveReusableFrame": "Save as reusable frame",
     "drawingHint": "Resize, annotate, connect, or use this sketch as visual context for Brain.",
     "objectLiveHint": "This object is live in the session. Connect it to other objects or ask Brain to transform or evaluate it.",
@@ -13033,8 +13033,14 @@
       "reset": "Reset view",
       "layerName": "Layer {index}",
       "layerCount": "{count, plural, one {# object} other {# objects}}",
+      "layerGuides": "Layer guides",
+      "layerGuidesActive": "Hide the layer guides",
+      "layerGuidesInactive": "Show the layer guides",
+      "dropToLayers": "Settle objects back onto their layers",
       "orbitLabel": "3D canvas. Drag to orbit, scroll to zoom, or use the arrow keys.",
+      "spaceLabel": "3D canvas. Drag an object to move it, shift-drag it to move it through depth, drag the space to turn it, scroll to zoom, or use the arrow keys.",
       "hint": "Drag to orbit · Scroll to zoom · Arrow keys rotate, + and − zoom, 0 resets · Select an object to open it",
+      "spaceHint": "Drag an object to move it, hold Shift to move it through depth · Drag the space to turn it, hold Shift or use the middle button to pan · Scroll to zoom · Arrow keys turn the space and move a focused object, + and − zoom, 0 resets",
       "empty": "Add objects to this canvas to see them in 3D.",
       "previewAlt": "{label} preview"
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, creativePreviewImageUrl, isDisplayableImageUrl, withCreationDeliverable } from './creationDeliverables';
+import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, creativePreviewImageUrl, isDisplayableImageUrl, navigableArtifactUrl, withCreationDeliverable } from './creationDeliverables';
 
 describe('creation deliverables', () => {
   it('builds a complete escaped static website instead of a status-only publish request', () => {
@@ -53,6 +53,14 @@ describe('creation deliverables', () => {
   it('shows an image export directly, because it is one', () => {
     const artifact = buildBrowserCreativeArtifact({ kind: 'image', title: 'Hero' });
     expect(creativePreviewImageUrl({ kind: 'image', title: 'Hero', outputUrl: artifact.url })).toBe(artifact.url);
+  });
+
+  it('hands a new tab a URL it is allowed to navigate to', () => {
+    const artifact = buildBrowserCreativeArtifact({ kind: 'game', title: 'Runner' });
+    // A browser refuses to open a data: URL in a top-level tab.
+    expect(artifact.url.startsWith('data:')).toBe(true);
+    expect(navigableArtifactUrl(artifact.url)).toMatch(/^blob:/);
+    expect(navigableArtifactUrl('https://cdn.test/report.html')).toBe('https://cdn.test/report.html');
   });
 
   it.each([

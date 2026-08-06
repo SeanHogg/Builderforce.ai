@@ -12525,7 +12525,8 @@
       "salesContact": "Contacto de ventas",
       "targetMarket": "Mercado objetivo",
       "salesGoal": "Objetivo semanal de ventas",
-      "salesMeeting": "Reunión de ventas"
+      "salesMeeting": "Reunión de ventas",
+      "diagram": "Diagrama"
     },
     "canvasOutline": "Esquema accesible del lienzo",
     "closeCanvasOutline": "Cerrar el esquema del lienzo",
@@ -12908,7 +12909,6 @@
     "creativeCapabilityHint": "Builderforce es dueño de este contrato neutral respecto al proveedor. Brain lo compone mediante el catálogo MCP integrado; se pueden añadir proveedores de ejecución más adelante sin cambiar el objeto del lienzo.",
     "applyTemplate": "Aplicar plantilla",
     "generateLabel": "Generar {label}",
-    "openGeneratedOutput": "Abrir la salida generada ↗",
     "saveReusableFrame": "Guardar como marco reutilizable",
     "drawingHint": "Redimensiona, anota, conecta o usa este boceto como contexto visual para Brain.",
     "objectLiveHint": "Este objeto está activo en la sesión. Conéctalo a otros objetos o pide a Brain que lo transforme o evalúe.",
@@ -13032,8 +13032,14 @@
       "reset": "Restablecer la vista",
       "layerName": "Capa {index}",
       "layerCount": "{count, plural, one {# objeto} other {# objetos}}",
+      "layerGuides": "Guías de capa",
+      "layerGuidesActive": "Ocultar las guías de capa",
+      "layerGuidesInactive": "Mostrar las guías de capa",
+      "dropToLayers": "Devolver los objetos a sus capas",
       "orbitLabel": "Lienzo 3D. Arrastra para orbitar, desplázate para hacer zoom o usa las flechas del teclado.",
+      "spaceLabel": "Lienzo 3D. Arrastra un objeto para moverlo, arrástralo con Mayús para moverlo en profundidad, arrastra el espacio para girarlo, desplázate para hacer zoom o usa las flechas del teclado.",
       "hint": "Arrastra para orbitar · Desplázate para hacer zoom · Las flechas rotan, + y − hacen zoom, 0 restablece · Selecciona un objeto para abrirlo",
+      "spaceHint": "Arrastra un objeto para moverlo; mantén Mayús para moverlo en profundidad · Arrastra el espacio para girarlo; mantén Mayús o usa el botón central para desplazarte · Desplázate para hacer zoom · Las flechas giran el espacio y mueven el objeto enfocado, + y − hacen zoom, 0 restablece",
       "empty": "Añade objetos a este lienzo para verlos en 3D.",
       "previewAlt": "Vista previa de {label}"
     }

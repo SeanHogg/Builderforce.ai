@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Handle, NodeResizer, Position, type Node, type NodeProps } from '@xyflow/react';
 import { useTranslations } from 'next-intl';
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
@@ -13,8 +13,11 @@ import { creationObjectDefinition } from './creationObjectRegistry';
 import { BrainActivityBar, useBrainActivity } from './BrainActivityView';
 import { BrainSurfaceActions, BrainSurfaceBody } from './BrainDock';
 import { useBrainSurface } from './brainSurfaceContext';
-import { highlightToneFor, tabularFromObject, type TabularHighlightRule } from '@/lib/canvasTabularData';
+import { highlightToneFor, tabularFromObject, type TabularCell, type TabularHighlightRule } from '@/lib/canvasTabularData';
 import { creativePreviewImageUrl } from '@/lib/creationDeliverables';
+import { canvasDiagram, canvasDocument, canvasSlides } from '@/lib/canvasDocuments';
+import { drawioLabelLines, drawioShapePolygon, parseDrawioXml, resolveDrawioXml, type DrawioGraph } from '@/lib/drawioDiagram';
+import { MermaidDiagram } from '@/components/MermaidDiagram';
 
 export type CreationFlowNode = Node<CreationNodeData, 'creation'>;
 
@@ -291,9 +294,48 @@ function MockupBody({ data }: { data: CreationNodeData }) {
 const DATA_GRID_VISIBLE_ROWS = 40;
 const DATA_GRID_VISIBLE_COLUMNS = 10;
 
-function DataGridBody({ data }: { data: CreationNodeData }) {
+/**
+ * Rows, columns, and — for authored Table and Spreadsheet objects — direct
+ * editing. A sheet a person can only look at is a screenshot; this one takes a
+ * value, a renamed header, a new row, or a new column straight back into the
+ * object, so the canvas holds a working sheet rather than a picture of one.
+ */
+function DataGridBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void }) {
   const t = useTranslations('creationCanvas.node');
   const source = tabularFromObject(data as Record<string, unknown>);
+  const editable = !!onEdit && Array.isArray(data.rows) && (data.kind === 'spreadsheet' || data.kind === 'table');
+  const [draft, setDraft] = useState<{ row: number; column: string; value: string } | null>(null);
+  const writeRows = (rows: Array<Record<string, TabularCell>>, columns = source.columns) => {
+    onEdit?.({ columns, rows, rowCount: rows.length, sampleRows: rows.slice(0, 25) });
+  };
+  const commitDraft = () => {
+    if (!draft) { return; }
+    const value = draft.value;
+    if (draft.row < 0) {
+      const name = value.trim() || draft.column;
+      if (name !== draft.column && !source.columns.includes(name)) {
+        writeRows(
+          source.rows.map((row) => Object.fromEntries(source.columns.map((column) => [column === draft.column ? name : column, row[column] ?? ''])) as Record<string, TabularCell>),
+          source.columns.map((column) => column === draft.column ? name : column),
+        );
+      }
+    } else if (String(source.rows[draft.row]?.[draft.column] ?? '') !== value) {
+      writeRows(source.rows.map((row, index) => index === draft.row ? { ...row, [draft.column]: value } : row));
+    }
+    setDraft(null);
+  };
+  const editorProps = (row: number, column: string) => ({
+    className: styles.dataGridEditor,
+    autoFocus: true,
+    value: draft?.value ?? '',
+    'aria-label': row < 0 ? t('editColumnName', { column }) : t('editCell', { column, row: row + 1 }),
+    onChange: (event: React.ChangeEvent<HTMLInputElement>) => setDraft({ row, column, value: event.target.value }),
+    onBlur: commitDraft,
+    onKeyDown: (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Enter') { event.preventDefault(); commitDraft(); }
+      if (event.key === 'Escape') { event.preventDefault(); setDraft(null); }
+    },
+  });
   const highlightRules = Array.isArray(data.highlightRules)
     ? (data.highlightRules as unknown[]).flatMap((value) => {
       const rule = asRecord(value, {});
@@ -302,7 +344,7 @@ function DataGridBody({ data }: { data: CreationNodeData }) {
         : [];
     })
     : [];
-  if (!source.columns.length && !source.rows.length) return <AuthoredContent data={data} fallback={t('dataFallback')} />;
+  if (!source.columns.length && !source.rows.length && !editable) return <AuthoredContent data={data} fallback={t('dataFallback')} />;
   const columns = source.columns.slice(0, DATA_GRID_VISIBLE_COLUMNS);
   const rows = source.rows.slice(0, DATA_GRID_VISIBLE_ROWS);
   const totalRows = typeof data.rowCount === 'number' ? data.rowCount : source.rows.length;
@@ -322,15 +364,190 @@ function DataGridBody({ data }: { data: CreationNodeData }) {
       {Object.entries(toneCounts).map(([tone, count]) => <span key={tone} data-tone={tone}><i />{t(`tone_${tone}` as 'tone_success')}<b>{count.toLocaleString()}</b></span>)}
     </div>}
     <div className={`${styles.dataGridScroll} nowheel nodrag`} role="region" aria-label={data.title} tabIndex={0}>
-      <div className={styles.miniTable} style={{ gridTemplateColumns: `repeat(${Math.max(1, columns.length)}, minmax(84px, 1fr))` }}>
-        {columns.map((column) => <b key={column}>{column}</b>)}
+      <div className={styles.miniTable} data-editable={editable ? 'true' : undefined} style={{ gridTemplateColumns: `repeat(${Math.max(1, columns.length)}, minmax(84px, 1fr))` }}>
+        {columns.map((column) => <b key={column}>
+          {editable && draft?.row === -1 && draft.column === column
+            ? <input {...editorProps(-1, column)} />
+            : editable
+              ? <button type="button" className={styles.dataGridCellButton} onClick={() => setDraft({ row: -1, column, value: column })}>{column}</button>
+              : column}
+        </b>)}
         {rows.flatMap((row, rowIndex) => {
           const tone = highlightToneFor(row, highlightRules);
-          return columns.map((column) => <span key={`${rowIndex}-${column}`} data-tone={tone ?? undefined}>{String(row[column] ?? '')}</span>);
+          return columns.map((column) => {
+            const value = String(row[column] ?? '');
+            return <span key={`${rowIndex}-${column}`} data-tone={tone ?? undefined}>
+              {editable && draft?.row === rowIndex && draft.column === column
+                ? <input {...editorProps(rowIndex, column)} />
+                : editable
+                  ? <button type="button" className={styles.dataGridCellButton} onClick={() => setDraft({ row: rowIndex, column, value })}>{value || ' '}</button>
+                  : value}
+            </span>;
+          });
         })}
       </div>
     </div>
+    {editable && <div className={`${styles.dataGridActions} nodrag nowheel`}>
+      <button type="button" onClick={() => writeRows([...source.rows, Object.fromEntries(source.columns.map((column) => [column, ''])) as Record<string, TabularCell>])}>{t('addRow')}</button>
+      <button type="button" onClick={() => {
+        const name = t('columnName', { index: source.columns.length + 1 });
+        const column = source.columns.includes(name) ? `${name}-${source.columns.length + 1}` : name;
+        writeRows(source.rows.map((row) => ({ ...row, [column]: '' })), [...source.columns, column]);
+      }}>{t('addColumn')}</button>
+    </div>}
     {totalRows > rows.length && <small className={styles.dataGridFooter}>{t('rowsShown', { shown: rows.length, total: totalRows })}</small>}
+  </div>;
+}
+
+/**
+ * A document object rendered AS a document — the pages, headings, tables and
+ * lists that were written — instead of the first paragraph of its source text.
+ * The sheet scrolls inside the card, so a twenty-page market analysis is
+ * readable on the board without opening anything.
+ */
+function DocumentBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.node');
+  const document = canvasDocument(data);
+  if (!document) return <AuthoredContent data={data} fallback={t('documentFallback')} />;
+  return <div className={styles.documentBody}>
+    <div className={styles.documentMeta}>
+      <span>{t('documentPages', { count: document.pageCount })}</span>
+      <span>{t('documentWords', { count: document.wordCount })}</span>
+      <span>{t('documentReading', { minutes: document.readingMinutes })}</span>
+    </div>
+    <div className={`${styles.documentSheet} nowheel nodrag`} role="region" aria-label={data.title} tabIndex={0}>
+      <div className={styles.documentMarkdown}><ReactMarkdown remarkPlugins={[remarkGfm]}>{document.markdown}</ReactMarkdown></div>
+    </div>
+  </div>;
+}
+
+/** A deck rendered as slides. Authored slide items win; a deck written as
+ * markdown is split on rules, then on headings. */
+function SlidesBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.node');
+  const slides = canvasSlides(data);
+  if (!slides.length) return <AuthoredContent data={data} fallback={t('slidesFallback')} />;
+  return <div className={styles.slidesBody}>
+    <div className={styles.documentMeta}>
+      <span>{t('slideCount', { count: slides.length })}</span>
+      <span>{textValue(data.outputFormat, 'PPTX')}</span>
+    </div>
+    <div className={`${styles.slideDeck} nowheel nodrag`} role="region" aria-label={data.title} tabIndex={0}>
+      {slides.map((slide, index) => <article key={`${slide.title}-${index}`} className={styles.slideThumb}>
+        <span className={styles.slideNumber}>{index + 1}</span>
+        <b>{slide.title || t('slideUntitled', { index: index + 1 })}</b>
+        {!!slide.bullets.length && <ul>{slide.bullets.slice(0, 5).map((bullet, bulletIndex) => <li key={`${bullet}-${bulletIndex}`}>{bullet}</li>)}</ul>}
+      </article>)}
+    </div>
+  </div>;
+}
+
+/** Ink that stays readable on a fill the diagram file chose, in either theme. */
+function readableInk(fill: string | undefined): string {
+  const hex = fill?.trim().replace('#', '');
+  if (!hex || (hex.length !== 3 && hex.length !== 6)) return 'var(--canvas-ink, #142234)';
+  const expanded = hex.length === 3 ? hex.split('').map((character) => character + character).join('') : hex;
+  const [red, green, blue] = [0, 2, 4].map((offset) => parseInt(expanded.slice(offset, offset + 2), 16) / 255);
+  const luminance = 0.2126 * red! + 0.7152 * green! + 0.0722 * blue!;
+  return luminance > 0.55 ? '#10203a' : '#f7faff';
+}
+
+function DrawioCanvas({ graph, title }: { graph: DrawioGraph; title: string }) {
+  const markerId = `arrow-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+  return <svg
+    className={styles.diagramCanvas}
+    viewBox={`${graph.x} ${graph.y} ${graph.width} ${graph.height}`}
+    preserveAspectRatio="xMidYMid meet"
+    role="img"
+    aria-label={title}
+  >
+    <defs>
+      <marker id={markerId} markerWidth="10" markerHeight="10" refX="9" refY="3.2" orient="auto" markerUnits="strokeWidth">
+        <path d="M0,0 L9,3.2 L0,6.4 z" fill="currentColor" />
+      </marker>
+    </defs>
+    {graph.edges.map((edge) => <g key={edge.id} style={{ color: edge.stroke ?? 'var(--canvas-muted, #5c6e88)' }}>
+      <polyline
+        points={edge.points.map((point) => `${point.x},${point.y}`).join(' ')}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.6}
+        strokeLinejoin="round"
+        {...(edge.dashed ? { strokeDasharray: '6 4' } : {})}
+        {...(edge.arrow ? { markerEnd: `url(#${markerId})` } : {})}
+      />
+      {edge.label && <text
+        x={(edge.points[0]!.x + edge.points[edge.points.length - 1]!.x) / 2}
+        y={(edge.points[0]!.y + edge.points[edge.points.length - 1]!.y) / 2 - 4}
+        textAnchor="middle"
+        fontSize={11}
+        fill="var(--canvas-muted, #5c6e88)"
+      >{edge.label}</text>}
+    </g>)}
+    {graph.vertices.map((vertex) => {
+      const polygon = drawioShapePolygon(vertex);
+      const fill = vertex.fill ?? 'var(--canvas-widget-surface, #fff)';
+      const stroke = vertex.stroke ?? 'var(--canvas-widget-border, #ccd8e7)';
+      const ink = vertex.fontColor ?? (vertex.fill ? readableInk(vertex.fill) : 'var(--canvas-ink, #142234)');
+      const lines = drawioLabelLines(vertex.label, vertex.width, vertex.fontSize);
+      const shapeProps = { fill: vertex.shape === 'text' ? 'none' : fill, stroke: vertex.shape === 'text' ? 'none' : stroke, strokeWidth: 1.4, ...(vertex.dashed ? { strokeDasharray: '6 4' } : {}) };
+      return <g key={vertex.id}>
+        {polygon
+          ? <polygon points={polygon} {...shapeProps} />
+          : vertex.shape === 'ellipse'
+            ? <ellipse cx={vertex.x + vertex.width / 2} cy={vertex.y + vertex.height / 2} rx={vertex.width / 2} ry={vertex.height / 2} {...shapeProps} />
+            : vertex.shape === 'cylinder'
+              ? <g {...shapeProps}><rect x={vertex.x} y={vertex.y + 8} width={vertex.width} height={Math.max(vertex.height - 16, 1)} /><ellipse cx={vertex.x + vertex.width / 2} cy={vertex.y + 8} rx={vertex.width / 2} ry={8} /><ellipse cx={vertex.x + vertex.width / 2} cy={vertex.y + vertex.height - 8} rx={vertex.width / 2} ry={8} /></g>
+              : <rect x={vertex.x} y={vertex.y} width={vertex.width} height={vertex.height} rx={vertex.shape === 'rounded' ? 10 : 0} {...shapeProps} />}
+        {lines.map((line, index) => <text
+          key={`${vertex.id}-${index}`}
+          x={vertex.x + vertex.width / 2}
+          y={vertex.y + vertex.height / 2 + (index - (lines.length - 1) / 2) * (vertex.fontSize * 1.25) + vertex.fontSize * 0.35}
+          textAnchor="middle"
+          fontSize={vertex.fontSize}
+          fill={ink}
+        >{line}</text>)}
+      </g>;
+    })}
+  </svg>;
+}
+
+/**
+ * A diagram object rendered as a diagram. Draw.io scenes are drawn from their
+ * own geometry — no editor embed, no network — and Mermaid goes through the
+ * shared renderer, so both notations land on the board as pictures.
+ */
+function DiagramBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.node');
+  const diagram = canvasDiagram(data);
+  const source = diagram?.source ?? '';
+  const format = diagram?.format;
+  const [graph, setGraph] = useState<DrawioGraph | null>(null);
+  const [unreadable, setUnreadable] = useState(false);
+  useEffect(() => {
+    if (format !== 'drawio') { setGraph(null); setUnreadable(false); return; }
+    let cancelled = false;
+    void resolveDrawioXml(source).then((xml) => {
+      if (cancelled) return;
+      const parsed = xml ? parseDrawioXml(xml) : null;
+      setGraph(parsed);
+      setUnreadable(!parsed);
+    });
+    return () => { cancelled = true; };
+  }, [format, source]);
+  if (!diagram) return <AuthoredContent data={data} fallback={t('diagramFallback')} />;
+  return <div className={styles.diagramBody}>
+    <div className={styles.documentMeta}>
+      <span>{diagram.format === 'drawio' ? t('diagramDrawio') : t('diagramMermaid')}</span>
+      {graph && <span>{t('diagramShapes', { count: graph.vertices.length, connections: graph.edges.length })}</span>}
+    </div>
+    <div className={`${styles.diagramSurface} nowheel nodrag`} role="region" aria-label={data.title} tabIndex={0}>
+      {diagram.format === 'mermaid'
+        ? <MermaidDiagram code={diagram.source} />
+        : graph
+          ? <DrawioCanvas graph={graph} title={data.title} />
+          : <p className={styles.filePreviewEmpty}>{unreadable ? t('diagramUnreadable') : t('diagramLoading')}</p>}
+    </div>
   </div>;
 }
 
@@ -759,12 +976,19 @@ type CreationNodeProps = NodeProps<CreationFlowNode> & {
   canRun?: boolean;
   onRun?: (nodeId: string) => void;
   onOpenDetails?: (nodeId: string, focus?: 'knowledge' | 'test' | 'evaluation' | 'delivery') => void;
+  /** Direct edits made on the card itself — a spreadsheet cell, a renamed
+   * column — written back through the same path the inspector uses. */
+  onEditData?: (nodeId: string, patch: Partial<CreationNodeData>) => void;
 };
 
-export function CreationNode({ id, data, selected, width, height, canRun = true, onRun, onOpenDetails }: CreationNodeProps) {
+/** Object kinds whose body IS a document. Registry kinds, so a new document-like
+ * object is a one-line addition rather than three separate lists. */
+const DOCUMENT_BODY_KINDS = new Set(['document', 'prd', 'knowledge']);
+
+export function CreationNode({ id, data, selected, width, height, canRun = true, onRun, onOpenDetails, onEditData }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
-  const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'prd', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame'].includes(data.kind);
-  const specialized = new Set(['workflow','website','prototype','dashboard','chart','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file']);
+  const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame'].includes(data.kind);
+  const specialized = new Set(['workflow','website','prototype','dashboard','chart','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram']);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || '#f8f6ff'), borderColor: String(data.frameBorder || '#9d8bea') } : undefined;
   const measuredStyle = { ...frameStyle, ...(typeof width === 'number' && width > 0 ? { width } : {}), ...(typeof height === 'number' && height > 0 ? { height } : {}) };
   return (
@@ -795,7 +1019,10 @@ export function CreationNode({ id, data, selected, width, height, canRun = true,
         {data.kind === 'agent' && <AgentBody data={data} onOpen={(focus) => onOpenDetails?.(id, focus)} />}
         {data.kind === 'staff' && <><div className={styles.personRow}><span className={styles.avatar} style={{ background: data.accent }}>{data.title.slice(0, 1)}</span><b>{data.role}</b><span className={styles.presence} /></div><small>{t('currentFocus')}</small><p>{data.focus}</p></>}
         {data.kind === 'chat' && <BrainObjectBody nodeId={id} data={data} />}
-        {(data.kind === 'dataset' || data.kind === 'table' || data.kind === 'spreadsheet') && <DataGridBody data={data} />}
+        {(data.kind === 'dataset' || data.kind === 'table' || data.kind === 'spreadsheet') && <DataGridBody data={data} {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})} />}
+        {DOCUMENT_BODY_KINDS.has(data.kind) && <DocumentBody data={data} />}
+        {data.kind === 'slides' && <SlidesBody data={data} />}
+        {data.kind === 'diagram' && <DiagramBody data={data} />}
         {data.kind === 'file' && <FileBody data={data} />}
         {data.kind === 'kpi' && <KpiBody data={data} />}
         {data.kind === 'voice' && <><div className={styles.waveform}>▂▅▃▆▂▇▅▃▆▂▅▇▃▆▂▅</div><AuthoredContent data={data} fallback={t('voiceFallback')} /></>}

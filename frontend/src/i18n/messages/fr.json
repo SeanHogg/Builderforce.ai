@@ -12525,7 +12525,8 @@
       "salesContact": "Contact commercial",
       "targetMarket": "Marché cible",
       "salesGoal": "Objectif commercial hebdomadaire",
-      "salesMeeting": "Réunion commerciale"
+      "salesMeeting": "Réunion commerciale",
+      "diagram": "Diagramme"
     },
     "canvasOutline": "Plan accessible de la toile",
     "closeCanvasOutline": "Fermer le plan de la toile",
@@ -12908,7 +12909,6 @@
     "creativeCapabilityHint": "Builderforce détient ce contrat neutre vis-à-vis des fournisseurs. Brain le compose via le catalogue MCP intégré ; des fournisseurs d’exécution peuvent être ajoutés plus tard sans modifier l’objet de la toile.",
     "applyTemplate": "Appliquer le modèle",
     "generateLabel": "Générer {label}",
-    "openGeneratedOutput": "Ouvrir la sortie générée ↗",
     "saveReusableFrame": "Enregistrer comme cadre réutilisable",
     "drawingHint": "Redimensionnez, annotez, connectez ou utilisez ce croquis comme contexte visuel pour Brain.",
     "objectLiveHint": "Cet objet est actif dans la session. Connectez-le à d’autres objets ou demandez à Brain de le transformer ou de l’évaluer.",
@@ -13032,8 +13032,14 @@
       "reset": "Réinitialiser la vue",
       "layerName": "Couche {index}",
       "layerCount": "{count, plural, one {# objet} other {# objets}}",
+      "layerGuides": "Repères de couche",
+      "layerGuidesActive": "Masquer les repères de couche",
+      "layerGuidesInactive": "Afficher les repères de couche",
+      "dropToLayers": "Reposer les objets sur leurs couches",
       "orbitLabel": "Canevas 3D. Faites glisser pour pivoter, défilez pour zoomer ou utilisez les touches fléchées.",
+      "spaceLabel": "Canevas 3D. Faites glisser un objet pour le déplacer, avec Maj pour le déplacer en profondeur, faites glisser l’espace pour le pivoter, défilez pour zoomer ou utilisez les touches fléchées.",
       "hint": "Glisser pour pivoter · Défiler pour zoomer · Les flèches pivotent, + et − zooment, 0 réinitialise · Sélectionnez un objet pour l’ouvrir",
+      "spaceHint": "Glissez un objet pour le déplacer, maintenez Maj pour le déplacer en profondeur · Glissez l’espace pour le pivoter, maintenez Maj ou utilisez le bouton du milieu pour vous déplacer · Défilez pour zoomer · Les flèches pivotent l’espace et déplacent l’objet ciblé, + et − zooment, 0 réinitialise",
       "empty": "Ajoutez des objets à ce canevas pour les voir en 3D.",
       "previewAlt": "Aperçu de {label}"
     }

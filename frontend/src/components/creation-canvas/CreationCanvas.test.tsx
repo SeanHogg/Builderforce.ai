@@ -7,6 +7,7 @@ import { specsApi } from '@/lib/builderforceApi';
 import type { CreationFlowNode } from './CreationNode';
 import type { ProjectEvermindContributions, ProjectEvermindHead } from '@/lib/projectEvermindApi';
 import { createLocalCreationSession } from '@/lib/creationSessions';
+import { buildBrowserCreativeArtifact } from '@/lib/creationDeliverables';
 
 vi.mock('next-intl', async (importOriginal) => {
   const actual = await importOriginal<typeof import('next-intl')>();
@@ -155,6 +156,63 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
 
     fireEvent.click(cards[0]!);
     expect(cards[0]).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  /** The x of `translate3d(x, y, z)`, which is where the space has put a card. */
+  const cardX = (card: HTMLElement) => Number(/translate3d\((-?[\d.]+)px/.exec(card.style.transform)?.[1]);
+
+  it('moves an object across the space and leaves it where it was dropped', () => {
+    render(<CreationCanvas sessionId="three-d-move-test" persistence="local" />);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Toggle 3D view' })[0]!);
+    const card = screen.getByTestId('canvas-3d-view').querySelector<HTMLElement>('[data-movable="true"]')!;
+    const before = cardX(card);
+
+    fireEvent.pointerDown(card, { clientX: 40, clientY: 40, button: 0 });
+    fireEvent.pointerMove(window, { clientX: 190, clientY: 40 });
+    fireEvent.pointerUp(window);
+
+    // Dragging right carries the object right, and it stays there once dropped.
+    expect(cardX(card)).toBeGreaterThan(before);
+    const dropped = cardX(card);
+    fireEvent.pointerMove(window, { clientX: 600, clientY: 600 });
+    expect(cardX(card)).toBe(dropped);
+  });
+
+  it('lifts an object off its layer with shift, and settles it back on request', () => {
+    render(<CreationCanvas sessionId="three-d-depth-test" persistence="local" />);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Toggle 3D view' })[0]!);
+    const card = screen.getByTestId('canvas-3d-view').querySelector<HTMLElement>('[data-movable="true"]')!;
+    // Nothing is floating yet, so the rail does not offer to tidy anything up.
+    expect(screen.queryAllByRole('button', { name: 'Settle objects back onto their layers' })).toHaveLength(0);
+
+    fireEvent.pointerDown(card, { clientX: 40, clientY: 200, button: 0, shiftKey: true });
+    fireEvent.pointerMove(window, { clientX: 40, clientY: 80 });
+    fireEvent.pointerUp(window);
+
+    const settle = screen.getAllByRole('button', { name: 'Settle objects back onto their layers' });
+    expect(settle.length).toBeGreaterThan(0);
+    fireEvent.click(settle[0]!);
+    expect(screen.queryAllByRole('button', { name: 'Settle objects back onto their layers' })).toHaveLength(0);
+  });
+
+  it('puts the layer guides away without moving a single object', () => {
+    render(<CreationCanvas sessionId="three-d-guides-test" persistence="local" />);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Toggle 3D view' })[0]!);
+    const scene = screen.getByTestId('canvas-3d-view');
+    const card = scene.querySelector<HTMLElement>('[data-movable="true"]')!;
+    const placed = cardX(card);
+    expect(scene.textContent).toContain('Layer 1');
+
+    // The guides are a reading aid over the space, so putting them away is a
+    // question about the view and never about where anything sits.
+    const guides = screen.getAllByRole('button', { name: 'Layer guides' });
+    expect(guides.map((button) => button.getAttribute('aria-pressed'))).toEqual(['true', 'true']);
+    fireEvent.click(guides[0]!);
+
+    expect(screen.getByTestId('canvas-3d-view').textContent).not.toContain('Layer 1');
+    expect(screen.getAllByRole('button', { name: 'Layer guides' })
+      .map((button) => button.getAttribute('aria-pressed'))).toEqual(['false', 'false']);
+    expect(cardX(card)).toBe(placed);
   });
 
   it('auto-applies basic canvas output but keeps consequential changes in review', () => {
@@ -926,6 +984,25 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByText('text/markdown')).toBeInTheDocument();
     expect(screen.getByText('2.0 KB')).toBeInTheDocument();
     expect(screen.getByText(/Shipment portal export/)).toBeInTheDocument();
+  });
+
+  it('draws a generated mesh on the object instead of pointing an image at the STL', () => {
+    const props = {
+      type: 'creation' as const, selected: false, dragging: false, zIndex: 0,
+      selectable: true, deletable: true, draggable: true, isConnectable: true,
+      positionAbsoluteX: 0, positionAbsoluteY: 0,
+    };
+    const artifact = buildBrowserCreativeArtifact({ kind: 'model3d', title: 'Bracket' });
+    const { rerender } = render(<CreationNode {...props} id="model-card" data={{
+      kind: 'model3d', title: 'Bracket', status: 'Generated', outputUrl: artifact.url,
+    }} />);
+    // An STL is not an image, so the tile must not try to load it as one.
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+
+    rerender(<CreationNode {...props} id="model-card" data={{
+      kind: 'model3d', title: 'Bracket', status: 'Generated', outputUrl: artifact.url, thumbnailUrl: artifact.previewImageUrl,
+    }} />);
+    expect(screen.getByRole('img', { name: 'Bracket preview' })).toHaveAttribute('src', artifact.previewImageUrl);
   });
 
   it('imports tabular data and creates a connected visualization', async () => {

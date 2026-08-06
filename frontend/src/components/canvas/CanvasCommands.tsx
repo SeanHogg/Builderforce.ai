@@ -38,6 +38,20 @@ function DepthIcon() {
   </svg>;
 }
 
+function LayerGuidesIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M8 1.7 14.2 5 8 8.3 1.8 5z" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+    <path d="M2.4 8.6 8 11.6l5.6-3" fill="none" stroke="currentColor" strokeWidth="1.1" strokeDasharray="1.6 1.4" strokeLinejoin="round" />
+  </svg>;
+}
+
+function DropToLayersIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M8 1.6v6.2m0 0L5.7 5.6M8 7.8l2.3-2.2" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M8 9.6 14.2 12.6 8 15.6 1.8 12.6z" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+  </svg>;
+}
+
 function ZoomInIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">
     <path d="M8 3.2v9.6M3.2 8h9.6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -54,6 +68,14 @@ function ResetViewIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">
     <path d="M13 8a5 5 0 1 1-1.6-3.7" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     <path d="M13.2 1.9v3h-3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
+}
+
+/** The stacked-sheets glyph for a canvas that publishes a file library. */
+export function CanvasFilesIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M5.4 2.2h4l2.4 2.4v7a1 1 0 0 1-1 1H5.4a1 1 0 0 1-1-1v-8.4a1 1 0 0 1 1-1Z" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+    <path d="M9.2 2.4v2.4h2.4M6.4 8.2h3.2M6.4 10.2h3.2" fill="none" stroke="currentColor" strokeWidth="1.15" strokeLinecap="round" strokeLinejoin="round" />
   </svg>;
 }
 
@@ -178,6 +200,18 @@ export function CanvasCommands({
         >
           <DepthIcon />
         </CanvasRailToggle>
+        <CanvasRailToggle
+          pressed={threeD.layersVisible}
+          onClick={threeD.toggleLayers}
+          label={t('threeD.layerGuides')}
+          activeTitle={t('threeD.layerGuidesActive')}
+          inactiveTitle={t('threeD.layerGuidesInactive')}
+        >
+          <LayerGuidesIcon />
+        </CanvasRailToggle>
+        {threeD.dropToLayers && <ControlButton onClick={threeD.dropToLayers} aria-label={t('threeD.dropToLayers')} title={t('threeD.dropToLayers')}>
+          <DropToLayersIcon />
+        </ControlButton>}
         <ControlButton onClick={threeD.zoomIn} aria-label={t('threeD.zoomIn')} title={t('threeD.zoomIn')}>
           <ZoomInIcon />
         </ControlButton>

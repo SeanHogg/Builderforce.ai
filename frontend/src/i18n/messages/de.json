@@ -12525,7 +12525,8 @@
       "salesContact": "Vertriebskontakt",
       "targetMarket": "Zielmarkt",
       "salesGoal": "Wöchentliches Vertriebsziel",
-      "salesMeeting": "Vertriebsgespräch"
+      "salesMeeting": "Vertriebsgespräch",
+      "diagram": "Diagramm"
     },
     "canvasOutline": "Barrierefreie Leinwandübersicht",
     "closeCanvasOutline": "Leinwandübersicht schließen",
@@ -12908,7 +12909,6 @@
     "creativeCapabilityHint": "Builderforce besitzt diesen anbieterneutralen Vertrag. Brain komponiert ihn über den eingebauten MCP-Katalog; Ausführungsanbieter können später ohne Änderung des Leinwandobjekts ergänzt werden.",
     "applyTemplate": "Vorlage anwenden",
     "generateLabel": "{label} generieren",
-    "openGeneratedOutput": "Generierte Ausgabe öffnen ↗",
     "saveReusableFrame": "Als wiederverwendbaren Rahmen speichern",
     "drawingHint": "Ändern Sie die Größe, annotieren, verbinden Sie oder nutzen Sie diese Skizze als visuellen Kontext für Brain.",
     "objectLiveHint": "Dieses Objekt ist in der Sitzung aktiv. Verbinden Sie es mit anderen Objekten oder lassen Sie Brain es umwandeln oder bewerten.",
@@ -13032,8 +13032,14 @@
       "reset": "Ansicht zurücksetzen",
       "layerName": "Ebene {index}",
       "layerCount": "{count, plural, one {# Objekt} other {# Objekte}}",
+      "layerGuides": "Ebenenhilfslinien",
+      "layerGuidesActive": "Ebenenhilfslinien ausblenden",
+      "layerGuidesInactive": "Ebenenhilfslinien einblenden",
+      "dropToLayers": "Objekte zurück auf ihre Ebenen setzen",
       "orbitLabel": "3D-Canvas. Zum Drehen ziehen, zum Zoomen scrollen oder die Pfeiltasten verwenden.",
+      "spaceLabel": "3D-Canvas. Ein Objekt ziehen, um es zu bewegen, mit Umschalt ziehen, um es in der Tiefe zu bewegen, den Raum ziehen, um ihn zu drehen, scrollen zum Zoomen oder die Pfeiltasten verwenden.",
       "hint": "Ziehen zum Drehen · Scrollen zum Zoomen · Pfeiltasten drehen, + und − zoomen, 0 setzt zurück · Objekt auswählen, um es zu öffnen",
+      "spaceHint": "Objekt ziehen zum Bewegen, mit Umschalt in der Tiefe bewegen · Raum ziehen zum Drehen, mit Umschalt oder der mittleren Maustaste verschieben · Scrollen zum Zoomen · Pfeiltasten drehen den Raum und bewegen ein fokussiertes Objekt, + und − zoomen, 0 setzt zurück",
       "empty": "Füge diesem Canvas Objekte hinzu, um sie in 3D zu sehen.",
       "previewAlt": "Vorschau von {label}"
     }

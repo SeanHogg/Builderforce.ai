@@ -580,6 +580,69 @@
 .canvasOutline header strong { color:var(--canvas-ink); font-size:11px; }
 .canvasOutline header button { width:24px; height:24px; display:grid; place-items:center; padding:0; border:0; border-radius:6px; background:transparent; color:var(--canvas-muted); font-size:17px; line-height:1; cursor:pointer; }
 .canvasOutline header button:hover,.canvasOutline header button:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+/* ── Files library ───────────────────────────────────────────────────────────
+   Everything the session produced, in one dismissible panel that sits where the
+   outline sits. Colours are canvas tokens, so light, dark, and a phone-width
+   board are one definition. */
+.filesPanel {
+  position:absolute; z-index:16;
+  left:calc(62px + var(--brain-dock-left, 0px)); bottom:calc(var(--composer-space) + 8px);
+  box-sizing:border-box; width:296px; max-width:calc(100vw - 96px); max-height:52%; overflow:auto;
+  border:1px solid var(--canvas-line); border-radius:11px;
+  background:var(--canvas-panel); color:var(--canvas-muted);
+  box-shadow:0 12px 34px var(--canvas-shadow); font-size:12px;
+}
+.filesPanel header {
+  position:sticky; top:0; z-index:1; display:flex; align-items:center; gap:8px;
+  padding:9px 10px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel);
+}
+.filesPanel header strong { color:var(--canvas-ink); font-size:11px; }
+.filesPanel header small { flex:1; color:var(--canvas-muted); font-size:10px; }
+.filesPanel header button {
+  width:24px; height:24px; display:grid; place-items:center; padding:0;
+  border:0; border-radius:6px; background:transparent; color:var(--canvas-muted); font-size:17px; line-height:1; cursor:pointer;
+}
+.filesPanel header button:hover,.filesPanel header button:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.filesControls { display:grid; gap:6px; padding:8px 10px; border-bottom:1px solid var(--canvas-line); }
+.filesSearch {
+  width:100%; box-sizing:border-box; padding:5px 8px;
+  border:1px solid var(--canvas-line); border-radius:7px;
+  background:var(--canvas-panel-muted); color:var(--canvas-ink); font:inherit; font-size:11px;
+}
+.filesFilters { display:flex; flex-wrap:wrap; gap:4px; }
+.filesFilters button {
+  padding:2px 8px; border:1px solid var(--canvas-line); border-radius:999px;
+  background:transparent; color:var(--canvas-muted); font-size:10px; cursor:pointer;
+}
+.filesFilters button[aria-pressed='true'] { border-color:var(--canvas-accent-ink); background:var(--canvas-hover); color:var(--canvas-ink); }
+.filesEmpty { margin:0; padding:14px 12px; color:var(--canvas-ink-soft); font-size:11px; line-height:1.5; }
+.filesList { margin:0; padding:6px; list-style:none; display:grid; gap:3px; }
+.fileRow { display:flex; align-items:center; gap:4px; border-radius:8px; }
+.fileRow:hover { background:var(--canvas-hover); }
+.fileOpen {
+  flex:1; min-width:0; display:flex; align-items:center; gap:8px;
+  padding:6px; border:0; border-radius:8px; background:none; color:inherit; font:inherit; text-align:left; cursor:pointer;
+}
+.fileOpen:focus-visible,.fileDownload:focus-visible { outline:2px solid var(--canvas-accent-ink); outline-offset:-2px; }
+.fileOpen img { width:30px; height:30px; border-radius:6px; object-fit:cover; }
+.fileIcon {
+  width:30px; height:30px; display:grid; place-items:center; flex:none;
+  border-radius:6px; background:var(--canvas-widget-icon-bg); color:var(--canvas-widget-icon); font-size:13px;
+}
+.fileText { min-width:0; display:grid; gap:1px; }
+.fileText b { color:var(--canvas-ink); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fileText small { color:var(--canvas-muted); font-size:10px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fileDownload {
+  width:28px; height:28px; flex:none; display:grid; place-items:center;
+  border:1px solid var(--canvas-line); border-radius:7px;
+  background:var(--canvas-panel); color:var(--canvas-ink); font-size:13px; cursor:pointer;
+}
+.fileDownload:hover { background:var(--canvas-hover); }
+
+@media (max-width:760px) {
+  .filesPanel { left:12px; right:12px; width:auto; max-width:none; max-height:56%; }
+}
+
 .canvasOutline ol { margin:0; padding:8px 10px 10px 26px; }
 .canvasOutline li { margin-bottom:5px; }
 .canvasOutline button { padding:2px 0; border:0; background:none; color:var(--canvas-ink); font:inherit; font-weight:650; text-align:left; cursor:pointer; }
@@ -1015,6 +1078,103 @@
 }
 .filePreviewImage { width:100%; max-height:220px; border-radius:7px; object-fit:contain; }
 .filePreviewEmpty { color:var(--canvas-muted,#63748c); font-size:9px; }
+
+/* ── Editable sheet ──────────────────────────────────────────────────────────
+   A Table or Spreadsheet object takes edits on the card. The cell button fills
+   its grid cell so the whole cell is the target, not just the text inside it. */
+.dataGridCellButton {
+  width:100%; min-height:15px; padding:0; border:0;
+  background:none; color:inherit; font:inherit; text-align:left; cursor:text;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.dataGridCellButton:focus-visible { outline:2px solid var(--canvas-accent-ink,#2a5fc7); outline-offset:-2px; border-radius:3px; }
+.miniTable[data-editable='true'] > span:hover { background:var(--canvas-hover,#e7effc); }
+.dataGridEditor {
+  width:100%; min-width:0; box-sizing:border-box; padding:1px 3px;
+  border:1px solid var(--canvas-accent-ink,#2a5fc7); border-radius:3px;
+  background:var(--canvas-widget-surface,#fff); color:var(--canvas-ink,#142234);
+  font:inherit;
+}
+.dataGridActions { display:flex; flex-wrap:wrap; gap:5px; }
+.dataGridActions button {
+  padding:3px 8px; border:1px solid var(--canvas-line,#d7e1ee); border-radius:999px;
+  background:var(--canvas-panel,#fff); color:var(--canvas-ink,#142234); font-size:9px; cursor:pointer;
+}
+.dataGridActions button:hover,.dataGridActions button:focus-visible { background:var(--canvas-hover,#e7effc); outline:none; }
+
+/* ── Document, deck, and diagram cards ───────────────────────────────────────
+   A document object renders the DOCUMENT, a deck renders SLIDES, and a diagram
+   renders the drawing — the artifact itself, on the board, not a one-line
+   description of it. All three share the meta strip and the canvas palette, so
+   both themes and a phone-width board are covered by one definition. */
+.documentBody,.slidesBody,.diagramBody { display:grid; gap:6px; min-height:0; }
+.documentMeta { display:flex; flex-wrap:wrap; gap:5px; }
+.documentMeta span {
+  padding:2px 7px; border:1px solid var(--canvas-line,#d7e1ee); border-radius:999px;
+  background:var(--canvas-panel-muted,#f3f7fc); color:var(--canvas-muted,#5c6e88); font-size:8px; white-space:nowrap;
+}
+.documentSheet {
+  overflow:auto; max-height:340px; padding:12px 14px;
+  border:1px solid var(--canvas-line,#d7e1ee); border-radius:7px;
+  background:var(--canvas-widget-surface,#fff);
+  box-shadow:inset 0 1px 0 var(--canvas-panel-muted,#f3f7fc);
+}
+.documentMarkdown { color:var(--canvas-ink,#142234); font-size:9px; line-height:1.55; overflow-wrap:anywhere; }
+.documentMarkdown > :first-child { margin-top:0; }
+.documentMarkdown > :last-child { margin-bottom:0; }
+.documentMarkdown h1 { margin:0 0 6px; font-size:15px; letter-spacing:-.02em; }
+.documentMarkdown h2 { margin:10px 0 4px; font-size:12px; }
+.documentMarkdown h3,.documentMarkdown h4 { margin:8px 0 3px; font-size:10px; }
+.documentMarkdown p { margin:5px 0; }
+.documentMarkdown ul,.documentMarkdown ol { margin:5px 0; padding-left:16px; }
+.documentMarkdown li { margin:2px 0; }
+.documentMarkdown blockquote {
+  margin:6px 0; padding:2px 0 2px 8px;
+  border-left:2px solid var(--canvas-line,#d7e1ee); color:var(--canvas-muted,#5c6e88);
+}
+.documentMarkdown code {
+  padding:1px 3px; border-radius:3px;
+  background:var(--canvas-panel-muted,#f3f7fc); font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:8px;
+}
+.documentMarkdown pre { overflow:auto; margin:6px 0; padding:7px; border-radius:5px; background:var(--canvas-panel-muted,#f3f7fc); }
+.documentMarkdown pre code { padding:0; background:none; }
+.documentMarkdown table { width:100%; border-collapse:collapse; margin:6px 0; font-size:8px; }
+.documentMarkdown th,.documentMarkdown td { padding:3px 5px; border:1px solid var(--canvas-line,#d7e1ee); text-align:left; }
+.documentMarkdown th { background:var(--canvas-panel-muted,#f3f7fc); }
+.documentMarkdown a { color:var(--canvas-accent-ink,#2a5fc7); text-decoration:underline; }
+.documentMarkdown hr { margin:8px 0; border:0; border-top:1px solid var(--canvas-line,#d7e1ee); }
+.documentMarkdown img { max-width:100%; height:auto; border-radius:5px; }
+
+.slideDeck {
+  display:grid; gap:8px; grid-template-columns:repeat(auto-fill,minmax(126px,1fr));
+  overflow:auto; max-height:340px; padding:4px;
+}
+.slideThumb {
+  position:relative; display:grid; gap:3px; align-content:start;
+  min-height:74px; padding:9px 9px 9px 10px;
+  border:1px solid var(--canvas-line,#d7e1ee); border-radius:6px;
+  background:var(--canvas-widget-surface,#fff); box-shadow:0 1px 3px var(--canvas-shadow,rgba(24,43,74,.12));
+  aspect-ratio:16/9;
+}
+.slideThumb b { color:var(--canvas-ink,#142234); font-size:9px; line-height:1.25; overflow-wrap:anywhere; }
+.slideThumb ul { margin:0; padding-left:11px; color:var(--canvas-muted,#5c6e88); font-size:7px; line-height:1.4; }
+.slideThumb li { margin:1px 0; overflow:hidden; text-overflow:ellipsis; }
+.slideNumber {
+  position:absolute; top:5px; right:6px;
+  color:var(--canvas-muted,#5c6e88); font-size:7px; font-variant-numeric:tabular-nums;
+}
+
+.diagramSurface {
+  display:grid; place-items:center; overflow:auto; max-height:360px; padding:8px;
+  border:1px solid var(--canvas-line,#d7e1ee); border-radius:7px;
+  background:var(--canvas-widget-surface,#fff);
+}
+.diagramCanvas { width:100%; max-height:340px; font-family:var(--font-sans); }
+
+@media (max-width:760px) {
+  .documentSheet,.slideDeck,.diagramSurface { max-height:220px; }
+  .slideDeck { grid-template-columns:repeat(auto-fill,minmax(108px,1fr)); }
+}
 
 :global(html:not([data-theme='light'])) .dataGridScroll .miniTable > span[data-tone='success'] { background:rgba(45,212,160,.16); color:#7ceac4; }
 :global(html:not([data-theme='light'])) .dataGridScroll .miniTable > span[data-tone='warning'] { background:rgba(245,183,49,.16); color:#f6cd75; }

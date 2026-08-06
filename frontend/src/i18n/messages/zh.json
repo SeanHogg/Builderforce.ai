@@ -12525,7 +12525,8 @@
       "salesContact": "销售联系人",
       "targetMarket": "目标市场",
       "salesGoal": "每周销售目标",
-      "salesMeeting": "销售会议"
+      "salesMeeting": "销售会议",
+      "diagram": "图表"
     },
     "canvasOutline": "无障碍画布大纲",
     "closeCanvasOutline": "关闭画布大纲",
@@ -12908,7 +12909,6 @@
     "creativeCapabilityHint": "Builderforce 拥有这份与供应商无关的契约。Brain 通过内置 MCP 目录调用它；之后可以在不改变画布对象的情况下接入执行提供方。",
     "applyTemplate": "应用模板",
     "generateLabel": "生成{label}",
-    "openGeneratedOutput": "打开生成的输出 ↗",
     "saveReusableFrame": "保存为可复用框架",
     "drawingHint": "调整大小、批注、连接，或将此草图用作 Brain 的视觉上下文。",
     "objectLiveHint": "此对象在会话中是活动的。将它连接到其他对象，或让 Brain 转换或评估它。",
@@ -13032,8 +13032,14 @@
       "reset": "重置视图",
       "layerName": "第 {index} 层",
       "layerCount": "{count} 个对象",
+      "layerGuides": "层参考线",
+      "layerGuidesActive": "隐藏层参考线",
+      "layerGuidesInactive": "显示层参考线",
+      "dropToLayers": "让对象回落到各自的层",
       "orbitLabel": "3D 画布。拖动可旋转，滚动可缩放，也可使用方向键。",
+      "spaceLabel": "3D 画布。拖动对象可移动它，按住 Shift 拖动可沿深度移动；拖动空间可旋转，滚动可缩放，也可使用方向键。",
       "hint": "拖动旋转 · 滚动缩放 · 方向键旋转，+ 与 − 缩放，0 重置 · 选择对象即可打开",
+      "spaceHint": "拖动对象即可移动，按住 Shift 沿深度移动 · 拖动空间可旋转，按住 Shift 或用鼠标中键可平移 · 滚动缩放 · 方向键旋转空间并移动已聚焦的对象，+ 与 − 缩放，0 重置",
       "empty": "向此画布添加对象后即可在 3D 中查看。",
       "previewAlt": "{label} 预览"
     }

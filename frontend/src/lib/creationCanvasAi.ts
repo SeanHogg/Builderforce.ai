@@ -12,7 +12,7 @@ import {
 } from '@seanhogg/builderforce-brain-embedded';
 import { brainConfig } from '@/lib/brain/runtime';
 import { guestBrainConfig } from '@/lib/brain/guestRuntime';
-import { ensureGuestToken } from '@/lib/guestChatApi';
+import { ensureGuestToken } from '@/lib/guestRoomApi';
 
 type CanvasAiOptions = {
   prompt: string;

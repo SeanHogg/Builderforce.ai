@@ -1,17 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CANVAS_3D_DEFAULT_ORBIT,
   CANVAS_3D_LAYER_GAP,
   CANVAS_3D_MAX_PITCH,
   CANVAS_3D_MAX_ZOOM,
   CANVAS_3D_MIN_ZOOM,
+  canvas3dAxes,
+  canvas3dCameraTransform,
   canvas3dLinkTransform,
   canvas3dOrbitAfterDrag,
   canvas3dOrbitAfterZoom,
+  canvas3dPanAfterDrag,
+  canvas3dPanToCentre,
+  canvas3dDepthFromDrag,
+  canvas3dPerspectiveFactor,
   canvas3dScene,
+  canvas3dUnprojectToPlane,
   canvas3dStageTransform,
   canvas3dZoomFactorFromWheel,
   wrapDegrees,
   type Canvas3DNode,
+  type Canvas3DOrbit,
+  type Canvas3DPoint,
 } from './canvas3d';
 import { graphLayerRanks } from './canvasGraph';
 
@@ -23,6 +33,20 @@ const node = (id: string, x: number, y: number, width = 200, height = 100): Canv
 });
 
 const describe3D = (candidate: Canvas3DNode & { group: string }) => ({ label: candidate.id, group: candidate.group });
+
+/**
+ * Where a point in the scene actually lands on screen — the CSS pipeline the
+ * stage transform drives, written out so the drag solve can be checked against
+ * the projection it claims to invert rather than against itself.
+ */
+const project = (orbit: Canvas3DOrbit, point: Canvas3DPoint): { x: number; y: number } => {
+  const { u, v, w } = canvas3dAxes(orbit);
+  const foreshorten = canvas3dPerspectiveFactor(u.z * point.x + v.z * point.y + w.z * point.z);
+  return {
+    x: orbit.panX + foreshorten * (u.x * point.x + v.x * point.y + w.x * point.z),
+    y: orbit.panY + foreshorten * (u.y * point.x + v.y * point.y + w.y * point.z),
+  };
+};
 
 describe('canvas3dScene', () => {
   it('stacks connected objects by dependency depth and centres the stack', () => {
@@ -121,7 +145,7 @@ describe('canvas3dLinkTransform', () => {
 });
 
 describe('orbit', () => {
-  const orbit = { yaw: 0, pitch: 0, zoom: 1 };
+  const orbit: Canvas3DOrbit = { yaw: 0, pitch: 0, zoom: 1, panX: 0, panY: 0 };
 
   it('turns with a horizontal drag and raises the camera with an upward drag', () => {
     expect(canvas3dOrbitAfterDrag(orbit, 100, 0).yaw).toBeGreaterThan(0);
@@ -153,7 +177,133 @@ describe('orbit', () => {
   });
 
   it('applies scale before rotation so perspective stays constant', () => {
-    expect(canvas3dStageTransform({ yaw: -26, pitch: 16, zoom: 0.42 }))
+    expect(canvas3dStageTransform({ yaw: -26, pitch: 16, zoom: 0.42, panX: 0, panY: 0 }))
       .toBe('scale(0.42) rotateX(16deg) rotateY(-26deg)');
+  });
+
+  it('pans the camera rather than the scene, so travel stays 1:1 with the pointer', () => {
+    expect(canvas3dCameraTransform(canvas3dPanAfterDrag({ ...orbit, zoom: 0.2 }, 40, -25)))
+      .toBe('translate3d(40px, -25px, 0px)');
+    expect(canvas3dPanAfterDrag(canvas3dPanAfterDrag(orbit, 10, 10), -4, 6)).toMatchObject({ panX: 6, panY: 16 });
+    expect(canvas3dPanAfterDrag(orbit, Number.NaN, 5)).toMatchObject({ panX: 0, panY: 5 });
+  });
+});
+
+describe('moving an object in the space', () => {
+  const origin: Canvas3DPoint = { x: 0, y: 0, z: 0 };
+  const flat: Canvas3DOrbit = { yaw: 0, pitch: 0, zoom: 1, panX: 0, panY: 0 };
+
+  it('reads the pointer one board pixel per screen pixel, face on', () => {
+    expect(canvas3dUnprojectToPlane(flat, { x: 30, y: -12 }, 0)).toMatchObject({ x: 30, y: -12 });
+  });
+
+  it('covers more board per pixel the further the user has zoomed out', () => {
+    expect(canvas3dUnprojectToPlane({ ...flat, zoom: 0.5 }, { x: 30, y: 0 }, 0)!.x).toBeCloseTo(60, 6);
+  });
+
+  it('keeps the object exactly under the pointer at a turned, tilted, panned orbit', () => {
+    const orbit: Canvas3DOrbit = { yaw: -37, pitch: 22, zoom: 0.55, panX: 120, panY: -60 };
+    const plane = CANVAS_3D_LAYER_GAP;
+
+    // Every one of these is a place an object could be dragged to. Projecting it
+    // and reading it back has to return the same point, or the card slides out
+    // from under the cursor as the drag goes on.
+    for (const point of [{ x: 220, y: -140 }, { x: -680, y: 410 }, { x: 0, y: 0 }, { x: 1500, y: 1200 }]) {
+      const at: Canvas3DPoint = { ...point, z: plane };
+      const read = canvas3dUnprojectToPlane(orbit, project(orbit, at), plane);
+
+      expect(read!.x).toBeCloseTo(point.x, 6);
+      expect(read!.y).toBeCloseTo(point.y, 6);
+    }
+  });
+
+  it('gives up rather than guessing when the plane is edge on to the pointer', () => {
+    // Turned side on with no tilt, the plane projects to a line: the ray under
+    // the cursor runs along it and meets it nowhere in particular.
+    expect(canvas3dUnprojectToPlane({ yaw: 90, pitch: 0, zoom: 1, panX: 0, panY: 0 }, { x: 0, y: 40 }, 0)).toBeNull();
+  });
+
+  it('sends a depth drag toward the viewer when pulled up-screen, and away when pushed down', () => {
+    expect(canvas3dDepthFromDrag(CANVAS_3D_DEFAULT_ORBIT, { dx: 0, dy: -40 }, origin)).toBeGreaterThan(0);
+    expect(canvas3dDepthFromDrag(CANVAS_3D_DEFAULT_ORBIT, { dx: 0, dy: 40 }, origin)).toBeLessThan(0);
+  });
+
+  it('still moves through depth head on, where the depth axis has no screen direction', () => {
+    // Face on, depth points straight at the camera: there is nothing to project
+    // a drag onto, so the gesture falls back to the vertical rather than dying.
+    expect(canvas3dDepthFromDrag(flat, { dx: 0, dy: -40 }, origin)).toBeCloseTo(40, 6);
+  });
+
+  it('measures a depth drag against how far depth actually runs on screen', () => {
+    const orbit: Canvas3DOrbit = { yaw: -30, pitch: 18, zoom: 1, panX: 0, panY: 0 };
+    const at: Canvas3DPoint = { x: 40, y: 40, z: 0 };
+    const from = project(orbit, at);
+    const to = project(orbit, { ...at, z: at.z + 60 });
+
+    expect(canvas3dDepthFromDrag(orbit, { dx: to.x - from.x, dy: to.y - from.y }, at)).toBeCloseTo(60, 0);
+  });
+
+  it('reports no movement for a pointer that has not moved', () => {
+    expect(canvas3dDepthFromDrag(CANVAS_3D_DEFAULT_ORBIT, { dx: 0, dy: 0 }, origin)).toBeCloseTo(0, 12);
+  });
+
+  it('pans so a chosen object lands in the middle of the viewport', () => {
+    const orbit: Canvas3DOrbit = { yaw: -40, pitch: 20, zoom: 0.6, panX: 300, panY: 90 };
+    const target: Canvas3DPoint = { x: -420, y: 260, z: CANVAS_3D_LAYER_GAP };
+    const centred = canvas3dPanToCentre(orbit, target);
+
+    expect(project(centred, target).x).toBeCloseTo(0, 6);
+    expect(project(centred, target).y).toBeCloseTo(0, 6);
+    // Only the camera moves — the object keeps its place in the space.
+    expect(centred).toMatchObject({ yaw: -40, pitch: 20, zoom: 0.6 });
+  });
+});
+
+describe('objects lifted off their layer', () => {
+  const lifted = (offsets: Record<string, number>) => canvas3dScene({
+    nodes: [node('a', 0, 0), node('b', 400, 0), node('c', 800, 0)],
+    edges: [{ source: 'a', target: 'b' }, { source: 'b', target: 'c' }],
+    describe: (candidate) => ({ label: candidate.id, group: candidate.group, depthOffset: offsets[candidate.id] }),
+  });
+
+  it('keeps the object where the user put it, with its layer left behind as a reference', () => {
+    const card = lifted({ b: 120 }).cards.find((entry) => entry.id === 'b')!;
+
+    expect(card.layerZ).toBe(0);
+    expect(card.z).toBe(120);
+    expect(card.layer).toBe(1);
+  });
+
+  it('sits an object with no offset of its own exactly on its layer', () => {
+    for (const card of lifted({}).cards) expect(card.z).toBe(card.layerZ);
+  });
+
+  it('reads a connection between two lifted objects as travelling through depth', () => {
+    const scene = canvas3dScene({
+      nodes: [node('a', 0, 0), node('b', 400, 0)],
+      edges: [{ source: 'a', target: 'b' }],
+      // Same group, no dependency ordering to separate them: only the lift does.
+      describe: (candidate) => ({ label: candidate.id, group: 'Build', depthOffset: candidate.id === 'b' ? 200 : 0 }),
+      depthMode: 'group',
+    });
+
+    expect(scene.layers).toHaveLength(1);
+    expect(scene.links[0]!.spansLayers).toBe(true);
+  });
+
+  it('ignores an offset that is not a real number', () => {
+    const card = lifted({ b: Number.NaN }).cards.find((entry) => entry.id === 'b')!;
+    expect(card.z).toBe(0);
+  });
+
+  it('carries a locked placement through to the card, so the space cannot move it', () => {
+    const scene = canvas3dScene({
+      nodes: [node('a', 0, 0), node('b', 400, 0)],
+      edges: [],
+      describe: (candidate) => ({ label: candidate.id, group: candidate.group, locked: candidate.id === 'a' }),
+    });
+
+    expect(scene.cards.find((card) => card.id === 'a')!.locked).toBe(true);
+    expect(scene.cards.find((card) => card.id === 'b')!.locked).toBe(false);
   });
 });

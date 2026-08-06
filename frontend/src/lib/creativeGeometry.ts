@@ -183,7 +183,7 @@ export function dxfPreviewSvg(source: string, options: GeometryPreviewOptions = 
 
 /* ---------- STL ---------- */
 
-/** Read the facets of an ASCII STL. Binary STL is not produced by Canvas, so it is not read here. */
+/** Read the facets of an ASCII STL — the form Canvas itself writes. */
 export function parseAsciiStl(source: string): GeometryTriangle[] {
   const triangles: GeometryTriangle[] = [];
   let vertices: [number, number, number][] = [];
@@ -211,11 +211,15 @@ export function parseAsciiStl(source: string): GeometryTriangle[] {
  * vanishing point buys nothing at this size and distorts the silhouette. Facets
  * are sorted back to front and painted, which is exact for the convex solids this
  * previews and degrades gracefully rather than dropping faces for anything else.
+ *
+ * The angle is a parameter rather than a constant because the 3D canvas re-renders
+ * this from the SAME triangles whenever the camera settles: a mesh that only ever
+ * projects at one fixed three-quarter angle is a photograph of an object, not an
+ * object the scene can turn.
  */
-export function stlPreviewSvg(source: string, options: GeometryPreviewOptions = {}): string | null {
+export function meshPreviewSvg(triangles: readonly GeometryTriangle[], options: GeometryPreviewOptions = {}): string | null {
   const width = options.width ?? DEFAULT_WIDTH;
   const height = options.height ?? DEFAULT_HEIGHT;
-  const triangles = parseAsciiStl(source);
   if (!triangles.length) return null;
 
   const yaw = ((options.yaw ?? DEFAULT_YAW) * Math.PI) / 180;
@@ -255,4 +259,353 @@ export function stlPreviewSvg(source: string, options: GeometryPreviewOptions = 
     return `<polygon points="${points}" fill="rgb(${channel(0)},${channel(1)},${channel(2)})" stroke="rgba(255,255,255,.24)" stroke-width="1.5" stroke-linejoin="round"/>`;
   }).join('');
   return svgDocument(width, height, body);
+}
+
+/** Draw an ASCII STL back as an image — the mesh reader plus the projection. */
+export function stlPreviewSvg(source: string, options: GeometryPreviewOptions = {}): string | null {
+  return meshPreviewSvg(parseAsciiStl(source), options);
+}
+
+/* ---------- reading a mesh authored anywhere ---------- */
+
+/**
+ * The mesh containers this canvas can turn.
+ *
+ * Canvas writes ASCII STL, but a model dropped onto the board was authored
+ * somewhere else — a slicer writes binary STL, a modeller writes OBJ or glTF, a
+ * CAD seat writes STEP. Reading only the one format Canvas happens to emit makes
+ * every model from anywhere else an unreadable file, so each of these has a
+ * reader. STEP is read only where it carries a tessellated face set: evaluating
+ * analytic B-rep surfaces needs a geometry kernel, and guessing at one would draw
+ * a shape the file does not describe.
+ */
+export type MeshFormat = 'stl' | 'obj' | 'gltf' | 'glb' | 'step';
+
+const MESH_EXTENSIONS: ReadonlyArray<readonly [string, MeshFormat]> = [
+  ['stl', 'stl'], ['obj', 'obj'], ['gltf', 'gltf'], ['glb', 'glb'], ['step', 'step'], ['stp', 'step'],
+];
+
+/**
+ * Which reader a file name, URL, MIME type or format label asks for.
+ *
+ * Only the head of the value is inspected: a `data:` URL carries its media type
+ * at the front and its payload — which may contain any of these words — after it.
+ */
+export function meshFormatFromHint(hint: string): MeshFormat | null {
+  const value = hint.slice(0, 200).toLowerCase();
+  for (const [token, format] of MESH_EXTENSIONS) {
+    if (new RegExp(`(^|[^a-z0-9])${token}([^a-z0-9]|$)`).test(value)) return format;
+  }
+  return null;
+}
+
+function decodeText(data: ArrayBuffer): string {
+  return new TextDecoder().decode(data);
+}
+
+/**
+ * ASCII and binary STL share an extension, so the bytes decide.
+ *
+ * A binary file's triangle count exactly accounts for its length, which is the
+ * reliable test; the text sniff is the fallback for a file whose count field is
+ * wrong, where an ASCII header is the only remaining evidence.
+ */
+function isBinaryStl(data: ArrayBuffer): boolean {
+  if (data.byteLength < 84) return false;
+  if (84 + new DataView(data).getUint32(80, true) * 50 === data.byteLength) return true;
+  const head = decodeText(data.slice(0, 512));
+  return !/^\s*solid/i.test(head) || !/facet\s+normal/i.test(head);
+}
+
+export function parseBinaryStl(data: ArrayBuffer): GeometryTriangle[] {
+  if (data.byteLength < 84) return [];
+  const view = new DataView(data);
+  const declared = view.getUint32(80, true);
+  const available = Math.floor((data.byteLength - 84) / 50);
+  const count = Math.min(declared, available);
+  const triangles: GeometryTriangle[] = [];
+  for (let index = 0; index < count; index += 1) {
+    // 50 bytes per facet: a normal we recompute anyway, then three vertices.
+    const base = 84 + index * 50 + 12;
+    const vertex = (corner: number): [number, number, number] => [
+      view.getFloat32(base + corner * 12, true),
+      view.getFloat32(base + corner * 12 + 4, true),
+      view.getFloat32(base + corner * 12 + 8, true),
+    ];
+    const vertices: [number, number, number][] = [vertex(0), vertex(1), vertex(2)];
+    if (vertices.every((point) => point.every((component) => Number.isFinite(component)))) {
+      triangles.push({ vertices: [vertices[0]!, vertices[1]!, vertices[2]!] });
+    }
+  }
+  return triangles;
+}
+
+/** Read an OBJ's vertices and faces. Faces of any size are fanned into triangles. */
+export function parseObj(source: string): GeometryTriangle[] {
+  const points: [number, number, number][] = [];
+  const triangles: GeometryTriangle[] = [];
+  for (const line of source.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('v ')) {
+      const parts = trimmed.slice(2).trim().split(/\s+/).slice(0, 3).map(Number);
+      if (parts.length === 3 && parts.every((component) => Number.isFinite(component))) {
+        points.push([parts[0]!, parts[1]!, parts[2]!]);
+      }
+    } else if (trimmed.startsWith('f ')) {
+      // `f v`, `f v/vt`, `f v//vn` and `f v/vt/vn` all lead with the vertex index,
+      // and a negative index counts back from the vertices seen so far.
+      const corners = trimmed.slice(2).trim().split(/\s+/).map((token) => {
+        const raw = Number(token.split('/')[0]);
+        if (!Number.isFinite(raw) || raw === 0) return -1;
+        return raw < 0 ? points.length + raw : raw - 1;
+      }).filter((index) => index >= 0 && index < points.length);
+      for (let corner = 2; corner < corners.length; corner += 1) {
+        triangles.push({ vertices: [points[corners[0]!]!, points[corners[corner - 1]!]!, points[corners[corner]!]!] });
+      }
+    }
+  }
+  return triangles;
+}
+
+/* ---------- glTF / GLB ---------- */
+
+type Matrix4 = readonly number[];
+const IDENTITY_4: Matrix4 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+
+/** Column-major 4×4 multiply, matching glTF's own matrix convention. */
+function multiply4(a: Matrix4, b: Matrix4): Matrix4 {
+  const out = new Array<number>(16).fill(0);
+  for (let column = 0; column < 4; column += 1) {
+    for (let row = 0; row < 4; row += 1) {
+      out[column * 4 + row] = a[row]! * b[column * 4]!
+        + a[4 + row]! * b[column * 4 + 1]!
+        + a[8 + row]! * b[column * 4 + 2]!
+        + a[12 + row]! * b[column * 4 + 3]!;
+    }
+  }
+  return out;
+}
+
+function transformPoint(matrix: Matrix4, point: [number, number, number]): [number, number, number] {
+  return [
+    matrix[0]! * point[0]! + matrix[4]! * point[1]! + matrix[8]! * point[2]! + matrix[12]!,
+    matrix[1]! * point[0]! + matrix[5]! * point[1]! + matrix[9]! * point[2]! + matrix[13]!,
+    matrix[2]! * point[0]! + matrix[6]! * point[1]! + matrix[10]! * point[2]! + matrix[14]!,
+  ];
+}
+
+function trsMatrix(node: Record<string, unknown>): Matrix4 {
+  if (Array.isArray(node.matrix) && node.matrix.length === 16) return node.matrix as number[];
+  const [tx, ty, tz] = (Array.isArray(node.translation) ? node.translation : [0, 0, 0]) as number[];
+  const [qx, qy, qz, qw] = (Array.isArray(node.rotation) ? node.rotation : [0, 0, 0, 1]) as number[];
+  const [sx, sy, sz] = (Array.isArray(node.scale) ? node.scale : [1, 1, 1]) as number[];
+  const rotation = [
+    1 - 2 * (qy! * qy! + qz! * qz!), 2 * (qx! * qy! + qz! * qw!), 2 * (qx! * qz! - qy! * qw!), 0,
+    2 * (qx! * qy! - qz! * qw!), 1 - 2 * (qx! * qx! + qz! * qz!), 2 * (qy! * qz! + qx! * qw!), 0,
+    2 * (qx! * qz! + qy! * qw!), 2 * (qy! * qz! - qx! * qw!), 1 - 2 * (qx! * qx! + qy! * qy!), 0,
+    tx!, ty!, tz!, 1,
+  ];
+  return rotation.map((value, index) => (index < 12 ? value * [sx!, sy!, sz!][Math.floor(index / 4)]! : value));
+}
+
+function base64ToBuffer(payload: string): ArrayBuffer | null {
+  try {
+    const binary = atob(payload);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+    return bytes.buffer;
+  } catch {
+    return null;
+  }
+}
+
+const GLTF_COMPONENT_READERS: Record<number, (view: DataView, offset: number) => number> = {
+  5120: (view, offset) => view.getInt8(offset),
+  5121: (view, offset) => view.getUint8(offset),
+  5122: (view, offset) => view.getInt16(offset, true),
+  5123: (view, offset) => view.getUint16(offset, true),
+  5125: (view, offset) => view.getUint32(offset, true),
+  5126: (view, offset) => view.getFloat32(offset, true),
+};
+const GLTF_COMPONENT_BYTES: Record<number, number> = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 };
+const GLTF_TYPE_COMPONENTS: Record<string, number> = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 };
+
+/**
+ * Read a glTF document's triangles, with every node's placement applied.
+ *
+ * A model is routinely a tree of parts positioned by their nodes; reading the
+ * primitives alone piles every part at the origin, which is a different object
+ * from the one the file describes. Buffers are read from the GLB binary chunk or
+ * from an embedded `data:` URI — a buffer that lives in a separate file is left
+ * to the caller, since fetching it is not this function's decision to make.
+ */
+export function parseGltf(json: string, binaryChunk: ArrayBuffer | null = null): GeometryTriangle[] {
+  let document: Record<string, unknown>;
+  try {
+    document = JSON.parse(json) as Record<string, unknown>;
+  } catch {
+    return [];
+  }
+  const list = (key: string): Record<string, unknown>[] => Array.isArray(document[key]) ? document[key] as Record<string, unknown>[] : [];
+  const buffers = list('buffers').map((buffer) => {
+    const uri = typeof buffer.uri === 'string' ? buffer.uri : '';
+    if (!uri) return binaryChunk;
+    const match = /^data:[^,]*;base64,(.*)$/s.exec(uri);
+    return match ? base64ToBuffer(match[1]!) : null;
+  });
+  const bufferViews = list('bufferViews');
+  const accessors = list('accessors');
+  const meshes = list('meshes');
+  const nodes = list('nodes');
+
+  const read = (accessorIndex: unknown): number[] | null => {
+    const accessor = typeof accessorIndex === 'number' ? accessors[accessorIndex] : undefined;
+    if (!accessor) return null;
+    const view = typeof accessor.bufferView === 'number' ? bufferViews[accessor.bufferView] : undefined;
+    if (!view) return null;
+    const buffer = typeof view.buffer === 'number' ? buffers[view.buffer] : null;
+    const reader = GLTF_COMPONENT_READERS[accessor.componentType as number];
+    const componentBytes = GLTF_COMPONENT_BYTES[accessor.componentType as number];
+    const components = GLTF_TYPE_COMPONENTS[String(accessor.type)];
+    if (!buffer || !reader || !componentBytes || !components) return null;
+    const stride = typeof view.byteStride === 'number' && view.byteStride > 0 ? view.byteStride : components * componentBytes;
+    const start = (typeof view.byteOffset === 'number' ? view.byteOffset : 0) + (typeof accessor.byteOffset === 'number' ? accessor.byteOffset : 0);
+    const count = typeof accessor.count === 'number' ? accessor.count : 0;
+    if (start + (count - 1) * stride + components * componentBytes > buffer.byteLength) return null;
+    const data = new DataView(buffer);
+    const out: number[] = [];
+    for (let element = 0; element < count; element += 1) {
+      for (let component = 0; component < components; component += 1) {
+        out.push(reader(data, start + element * stride + component * componentBytes));
+      }
+    }
+    return out;
+  };
+
+  const triangles: GeometryTriangle[] = [];
+  const emit = (meshIndex: unknown, matrix: Matrix4) => {
+    const mesh = typeof meshIndex === 'number' ? meshes[meshIndex] : undefined;
+    if (!mesh) return;
+    for (const primitive of (Array.isArray(mesh.primitives) ? mesh.primitives : []) as Record<string, unknown>[]) {
+      // Mode 4 is TRIANGLES and is the glTF default; strips and fans are a
+      // different index walk and are skipped rather than drawn wrongly.
+      if (primitive.mode !== undefined && primitive.mode !== 4) continue;
+      const attributes = (primitive.attributes ?? {}) as Record<string, unknown>;
+      const positions = read(attributes.POSITION);
+      if (!positions) continue;
+      const vertexCount = Math.floor(positions.length / 3);
+      const indices = read(primitive.indices) ?? Array.from({ length: vertexCount }, (_, index) => index);
+      const corner = (index: number): [number, number, number] => transformPoint(matrix, [positions[index * 3]!, positions[index * 3 + 1]!, positions[index * 3 + 2]!]);
+      for (let offset = 0; offset + 2 < indices.length; offset += 3) {
+        const [a, b, c] = [indices[offset]!, indices[offset + 1]!, indices[offset + 2]!];
+        if (a >= vertexCount || b >= vertexCount || c >= vertexCount) continue;
+        triangles.push({ vertices: [corner(a), corner(b), corner(c)] });
+      }
+    }
+  };
+
+  const visited = new Set<number>();
+  const walk = (index: number, parent: Matrix4) => {
+    const node = nodes[index];
+    if (!node || visited.has(index)) return;
+    visited.add(index);
+    const matrix = multiply4(parent, trsMatrix(node));
+    emit(node.mesh, matrix);
+    for (const child of (Array.isArray(node.children) ? node.children : []) as number[]) walk(child, matrix);
+  };
+  const scenes = list('scenes');
+  const scene = scenes[typeof document.scene === 'number' ? document.scene : 0];
+  const roots = Array.isArray(scene?.nodes) ? scene.nodes as number[] : nodes.map((_, index) => index);
+  for (const root of roots) walk(root, IDENTITY_4);
+  return triangles;
+}
+
+/** Split a GLB container into its JSON and binary chunks, then read it as glTF. */
+export function parseGlb(data: ArrayBuffer): GeometryTriangle[] {
+  if (data.byteLength < 20) return [];
+  const view = new DataView(data);
+  if (view.getUint32(0, true) !== 0x46546c67) return []; // 'glTF'
+  let offset = 12;
+  let json = '';
+  let binary: ArrayBuffer | null = null;
+  while (offset + 8 <= data.byteLength) {
+    const length = view.getUint32(offset, true);
+    const type = view.getUint32(offset + 4, true);
+    const start = offset + 8;
+    if (start + length > data.byteLength) break;
+    if (type === 0x4e4f534a) json = decodeText(data.slice(start, start + length));
+    else if (type === 0x004e4942) binary = data.slice(start, start + length);
+    offset = start + length + ((4 - (length % 4)) % 4);
+  }
+  return json ? parseGltf(json, binary) : [];
+}
+
+/**
+ * Read the tessellated face sets an AP242 STEP file carries.
+ *
+ * A STEP part is normally analytic B-rep — surfaces defined by equations, which
+ * need a geometry kernel to turn into triangles. Where the file also ships a
+ * tessellation (which exporters targeting viewers routinely include) those
+ * triangles are exactly what a preview wants, so they are read directly. A file
+ * with no tessellation returns nothing rather than a guessed shape.
+ */
+export function parseStepTriangles(source: string): GeometryTriangle[] {
+  const flat = source.replace(/\r?\n/g, ' ');
+  const coordinateLists = new Map<string, [number, number, number][]>();
+  const listPattern = /#(\d+)\s*=\s*COORDINATES_LIST\s*\(([\s\S]*?)\)\s*;/gi;
+  for (const match of flat.matchAll(listPattern)) {
+    const points: [number, number, number][] = [];
+    for (const triple of match[2]!.matchAll(/\(\s*(-?[\d.eE+-]+)\s*,\s*(-?[\d.eE+-]+)\s*,\s*(-?[\d.eE+-]+)\s*\)/g)) {
+      const point: [number, number, number] = [Number(triple[1]), Number(triple[2]), Number(triple[3])];
+      if (point.every((component) => Number.isFinite(component))) points.push(point);
+    }
+    if (points.length) coordinateLists.set(match[1]!, points);
+  }
+  if (!coordinateLists.size) return [];
+
+  const triangles: GeometryTriangle[] = [];
+  for (const match of flat.matchAll(/TRIANGULATED_FACE_SET\s*\(([\s\S]*?)\)\s*;/gi)) {
+    const body = match[1]!;
+    const reference = /#(\d+)/.exec(body)?.[1];
+    const points = reference ? coordinateLists.get(reference) : [...coordinateLists.values()][0];
+    if (!points) continue;
+    // The face set's last list of integer triples is its triangle table; the
+    // lists before it are normals and per-point indices, which a shaded preview
+    // recomputes for itself.
+    const groups = [...body.matchAll(/\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/g)];
+    for (const group of groups) {
+      const corners = [Number(group[1]) - 1, Number(group[2]) - 1, Number(group[3]) - 1];
+      if (corners.some((index) => index < 0 || index >= points.length)) continue;
+      triangles.push({ vertices: [points[corners[0]!]!, points[corners[1]!]!, points[corners[2]!]!] });
+    }
+  }
+  return triangles;
+}
+
+/** What the bytes look like, when nothing named the format. */
+function sniffMeshFormat(data: ArrayBuffer): MeshFormat | null {
+  if (data.byteLength >= 4 && new DataView(data).getUint32(0, true) === 0x46546c67) return 'glb';
+  const head = decodeText(data.slice(0, 1024)).trimStart();
+  if (/^ISO-10303/i.test(head)) return 'step';
+  if (head.startsWith('{')) return 'gltf';
+  if (/^solid\b/i.test(head) || /facet\s+normal/i.test(head)) return 'stl';
+  if (/^(#|v\s|o\s|mtllib\b|usemtl\b)/m.test(head)) return 'obj';
+  return data.byteLength >= 84 ? 'stl' : null;
+}
+
+/**
+ * Read a mesh from whatever container it arrived in.
+ *
+ * `format` is the caller's hint (from a file name or media type); when it is
+ * absent or wrong the bytes are sniffed instead, so a model saved with the wrong
+ * extension still reads.
+ */
+export function parseMeshTriangles(data: ArrayBuffer, format?: MeshFormat | null): GeometryTriangle[] {
+  const resolved = format ?? sniffMeshFormat(data);
+  if (!resolved) return [];
+  if (resolved === 'glb') return parseGlb(data);
+  if (resolved === 'gltf') return parseGltf(decodeText(data));
+  if (resolved === 'obj') return parseObj(decodeText(data));
+  if (resolved === 'step') return parseStepTriangles(decodeText(data));
+  return isBinaryStl(data) ? parseBinaryStl(data) : parseAsciiStl(decodeText(data));
 }

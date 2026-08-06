@@ -13,7 +13,7 @@ vi.mock('@seanhogg/builderforce-brain-embedded', async (importOriginal) => ({
 }));
 vi.mock('@/lib/brain/runtime', () => ({ brainConfig: { transport: {} } }));
 vi.mock('@/lib/brain/guestRuntime', () => ({ guestBrainConfig: { transport: {} } }));
-vi.mock('@/lib/guestChatApi', () => ({ ensureGuestToken: mocks.ensureGuestToken }));
+vi.mock('@/lib/guestRoomApi', () => ({ ensureGuestToken: mocks.ensureGuestToken }));
 
 const { runCreationCanvasAi } = await import('./creationCanvasAi');
 

@@ -14,11 +14,29 @@ import type { Canvas3DDepthMode } from './canvas3d';
  */
 export interface Canvas3DControls {
   depthMode: Canvas3DDepthMode;
-  /** Move to the next depth axis (dependency flow ⇄ object group). */
+  /** Restack the space on the next depth axis (dependency flow ⇄ object group). */
   toggleDepth: () => void;
   zoomIn: () => void;
   zoomOut: () => void;
   resetView: () => void;
+  /**
+   * Travel to the given objects. The canvas has one "focus the selection" action
+   * whichever way it is being read; this is what that action means in here.
+   */
+  focusObjects: (ids: readonly string[]) => void;
+  /**
+   * Whether the layer guides are drawn. They are a reading aid over a space the
+   * user arranges freely, so they can be put away without changing where a
+   * single object sits.
+   */
+  layersVisible: boolean;
+  toggleLayers: () => void;
+  /**
+   * Settle every object back onto the layer its dependencies put it on. Present
+   * only while something is actually floating, so the rail never offers a tidy-up
+   * with nothing to tidy.
+   */
+  dropToLayers?: (() => void) | undefined;
 }
 
 type Canvas3DControlsStore = {

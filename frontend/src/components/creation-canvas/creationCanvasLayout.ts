@@ -12,7 +12,7 @@ const DEFAULT_WIDTH_BY_KIND: Partial<Record<CreationFlowNode['data']['kind'], nu
 
 const WIDE_KINDS = new Set<CreationFlowNode['data']['kind']>([
   'workflow', 'website', 'prototype', 'dashboard', 'chart', 'report', 'roadmap',
-  'slides', 'document', 'prd', 'code', 'table', 'spreadsheet', 'featureSummary',
+  'slides', 'document', 'diagram', 'prd', 'code', 'table', 'spreadsheet', 'featureSummary',
   'mockupSet', 'evermind', 'projectComparison', 'frame',
 ]);
 
@@ -28,13 +28,24 @@ export function canvasNodeDimensions(node: CreationFlowNode): { width: number; h
   };
 }
 
+/**
+ * Whether this object may be repositioned at all.
+ *
+ * A locked placement is locked in every view — arranging, aligning, nudging with
+ * the arrow keys, dragging through the 3D space. One predicate, so a new way to
+ * move an object cannot quietly forget to honour the lock.
+ */
+export function canvasPlacementUnlocked(node: CreationFlowNode): boolean {
+  return node.data.placementLocked !== true;
+}
+
 /** Arrangement is canvas-wide by default, even when the prompt composer is scoped to one selected object. */
 export function canvasArrangementTargets(nodes: CreationFlowNode[], requestedIds?: ReadonlySet<string> | null): CreationFlowNode[] {
   return nodes.filter((node) => (
     (!requestedIds || requestedIds.has(node.id))
     && node.hidden !== true
     && node.data.placementHidden !== true
-    && node.data.placementLocked !== true
+    && canvasPlacementUnlocked(node)
   ));
 }
 

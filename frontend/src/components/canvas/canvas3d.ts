@@ -1,13 +1,16 @@
 import { canvasNodeFootprint, graphLayerRanks, type CanvasGraphEdge, type CanvasGraphNode } from './canvasGraph';
 
 /**
- * The 3D canvas view — a spatial reading of the same objects and connections.
+ * The 3D canvas view — the board as a space you can turn, travel and rearrange.
  *
- * A flat board answers "what is here"; it answers "what depends on what" only by
- * tracing arrows. Lifting each object onto a depth plane makes that structure the
- * first thing you see: sources at the back, everything they feed one plane closer,
- * and the whole stack turnable so a dense board can be read from an angle instead
- * of untangled by hand.
+ * The space is the thing. Objects hold a real place in it, the camera orbits and
+ * pans around them, and anything can be picked up and moved wherever it belongs.
+ *
+ * The depth planes are a reading aid laid over that space, not a cage the objects
+ * live in. A flat board answers "what is here"; it answers "what depends on what"
+ * only by tracing arrows. Stacking the objects by dependency (or by kind) makes
+ * that structure the first thing you see — but an object dragged off its plane
+ * stays where the user put it, with the plane left behind as a reference.
  *
  * Everything here is pure geometry over the node/edge arrays already on screen —
  * no renderer, no WebGL, no second copy of the graph. The scene is projected by
@@ -28,10 +31,17 @@ export interface Canvas3DOrbit {
   pitch: number;
   /** Uniform scale applied to the whole scene. */
   zoom: number;
+  /**
+   * Where the camera is pointed, in viewport pixels. Applied outside the rotation
+   * and the scale, so panning stays 1:1 with the pointer at any angle or zoom —
+   * without it, zooming in would trap the user at the middle of the space.
+   */
+  panX: number;
+  panY: number;
 }
 
 /** Enough tilt to read the depth axis, little enough to still read the cards. */
-export const CANVAS_3D_DEFAULT_ORBIT: Canvas3DOrbit = { yaw: -24, pitch: 14, zoom: 0.42 };
+export const CANVAS_3D_DEFAULT_ORBIT: Canvas3DOrbit = { yaw: -24, pitch: 14, zoom: 0.42, panX: 0, panY: 0 };
 export const CANVAS_3D_MIN_ZOOM = 0.08;
 export const CANVAS_3D_MAX_ZOOM = 1.6;
 /** Beyond this the planes are edge-on and nothing is legible, so orbiting stops. */
@@ -66,6 +76,25 @@ export interface Canvas3DDescriptor {
    * distance, which is exactly what the depth view is for.
    */
   preview?: string | undefined;
+  /**
+   * The geometry this object exported, when it exported any.
+   *
+   * A picture of a mesh is a photograph: it keeps the angle it was taken at while
+   * the camera moves past it. Handing the view the geometry itself lets the object
+   * be re-drawn from wherever the camera has ended up, so turning the scene turns
+   * the object in it.
+   */
+  geometry?: { url: string; format?: string | undefined } | undefined;
+  /**
+   * How far this object floats off its depth plane, in board pixels.
+   *
+   * The plane is where the object would sit if depth were derived from the graph
+   * alone; the offset is the user's own answer, kept whichever way the scene is
+   * currently stacked. Absent means "wherever the layer puts it".
+   */
+  depthOffset?: number | undefined;
+  /** Placement is locked on the board, so the space must not move it either. */
+  locked?: boolean | undefined;
 }
 
 export type Canvas3DNode = CanvasGraphNode & { position: { x: number; y: number } };
@@ -78,10 +107,15 @@ export interface Canvas3DCard extends Canvas3DPoint {
   icon?: string | undefined;
   accent?: string | undefined;
   preview?: string | undefined;
+  geometry?: { url: string; format?: string | undefined } | undefined;
   width: number;
   height: number;
   /** Contiguous depth index, 0 = furthest from the viewer. */
   layer: number;
+  /** Depth of that layer's plane. Equal to `z` until the user lifts the object off it. */
+  layerZ: number;
+  /** Placement is locked: the card reads and selects, but never moves. */
+  locked: boolean;
 }
 
 export interface Canvas3DLink {
@@ -90,7 +124,7 @@ export interface Canvas3DLink {
   target: string;
   from: Canvas3DPoint;
   to: Canvas3DPoint;
-  /** True when the connection also crosses a depth plane. */
+  /** True when the connection travels through depth as well as across the board. */
   spansLayers: boolean;
 }
 
@@ -163,6 +197,8 @@ export function canvas3dScene<T extends Canvas3DNode>({
 
   const cards: Canvas3DCard[] = described.map((entry) => {
     const layer = layerOf(entry);
+    const layerZ = zOf(layer);
+    const offset = Number.isFinite(entry.descriptor.depthOffset) ? Number(entry.descriptor.depthOffset) : 0;
     return {
       id: entry.node.id,
       label: entry.descriptor.label,
@@ -171,12 +207,15 @@ export function canvas3dScene<T extends Canvas3DNode>({
       icon: entry.descriptor.icon,
       accent: entry.descriptor.accent,
       preview: entry.descriptor.preview,
+      geometry: entry.descriptor.geometry,
       width: entry.size.width,
       height: entry.size.height,
       layer,
+      layerZ,
+      locked: entry.descriptor.locked === true,
       x: entry.node.position.x + entry.size.width / 2 - centreX,
       y: entry.node.position.y + entry.size.height / 2 - centreY,
-      z: zOf(layer),
+      z: layerZ + offset,
     };
   });
 
@@ -191,7 +230,7 @@ export function canvas3dScene<T extends Canvas3DNode>({
       target: edge.target,
       from: { x: from.x, y: from.y, z: from.z },
       to: { x: to.x, y: to.y, z: to.z },
-      spansLayers: from.layer !== to.layer,
+      spansLayers: from.z !== to.z,
     }];
   });
 
@@ -252,6 +291,20 @@ export function canvas3dFitZoom(plane: { width: number; height: number }, viewpo
   return clamp(Math.min(viewport.width / plane.width, viewport.height / plane.height) * 0.82, CANVAS_3D_MIN_ZOOM, 1);
 }
 
+/**
+ * Pan after a drag of (dx, dy) pixels.
+ *
+ * The pan sits outside the scale in the stage transform, so a pixel of pointer
+ * travel is a pixel of scene travel however far in the user has zoomed.
+ */
+export function canvas3dPanAfterDrag(orbit: Canvas3DOrbit, dx: number, dy: number): Canvas3DOrbit {
+  return {
+    ...orbit,
+    panX: Number.isFinite(orbit.panX + dx) ? orbit.panX + dx : orbit.panX,
+    panY: Number.isFinite(orbit.panY + dy) ? orbit.panY + dy : orbit.panY,
+  };
+}
+
 /** Multiplicative zoom, so each step feels the same at any distance. */
 export function canvas3dOrbitAfterZoom(orbit: Canvas3DOrbit, factor: number): Canvas3DOrbit {
   const safe = Number.isFinite(factor) && factor > 0 ? factor : 1;
@@ -267,6 +320,170 @@ export function canvas3dZoomFactorFromWheel(deltaY: number): number {
 export function canvas3dStageTransform(orbit: Canvas3DOrbit): string {
   return `scale(${round(orbit.zoom)}) rotateX(${round(orbit.pitch)}deg) rotateY(${round(orbit.yaw)}deg)`;
 }
+
+/**
+ * The transform for the camera the scene is projected through.
+ *
+ * Panning moves the camera, not the scene: applied here — on the element that
+ * owns the perspective — it lands after the projection, so a pixel of pointer
+ * travel is a pixel of travel on screen and, more importantly, the pan never
+ * bends how a drag maps back onto the board.
+ */
+export function canvas3dCameraTransform(orbit: Canvas3DOrbit): string {
+  return `translate3d(${round(orbit.panX)}px, ${round(orbit.panY)}px, 0px)`;
+}
+
+/**
+ * Where each board axis points on screen under the current orbit.
+ *
+ * This is the stage transform written as three vectors: the images of board +X,
+ * +Y and depth +Z after `scale · rotateX · rotateY`, before the perspective
+ * divide. Reading a card's position is that matrix applied forwards; dragging a
+ * card is the same matrix solved backwards, so both live off this one basis
+ * rather than each deriving the trigonometry again.
+ */
+export interface Canvas3DAxes {
+  /** The screen direction board +X (right on the flat board) travels in. */
+  u: Canvas3DPoint;
+  /** The screen direction board +Y (down on the flat board) travels in. */
+  v: Canvas3DPoint;
+  /** The screen direction depth travels in. +Z is toward the viewer. */
+  w: Canvas3DPoint;
+}
+
+export function canvas3dAxes({ yaw, pitch, zoom }: Canvas3DOrbit): Canvas3DAxes {
+  // CSS rotateY maps +X to (cos, 0, -sin) and rotateX then tips the result about
+  // the horizontal, which is where every sin/cos pairing below comes from.
+  const cosYaw = Math.cos(yaw / DEGREES);
+  const sinYaw = Math.sin(yaw / DEGREES);
+  const cosPitch = Math.cos(pitch / DEGREES);
+  const sinPitch = Math.sin(pitch / DEGREES);
+  const scale = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  return {
+    u: { x: scale * cosYaw, y: scale * sinYaw * sinPitch, z: -scale * sinYaw * cosPitch },
+    v: { x: 0, y: scale * cosPitch, z: scale * sinPitch },
+    w: { x: scale * sinYaw, y: -scale * cosYaw * sinPitch, z: scale * cosYaw * cosPitch },
+  };
+}
+
+/** Which way a drag moves an object: across its plane, or through depth. */
+export type Canvas3DDragAxis = 'plane' | 'depth';
+
+/**
+ * An axis shorter than this on screen is pointing at the camera, and a drag has
+ * no direction left to follow along it.
+ */
+const MIN_SCREEN_AXIS = 0.05;
+/**
+ * Past this many board pixels from the scene an answer is the solve falling
+ * apart, not a place the user meant to reach.
+ */
+const MAX_UNPROJECT_REACH = 1e6;
+
+/**
+ * Where the pointer is in the space, read on a chosen depth plane.
+ *
+ * This inverts the projection rather than approximating it: the ray under the
+ * cursor is intersected with the plane the object travels on, which is what
+ * keeps a card exactly under the pointer for a whole drag — however far the
+ * scene is turned, panned or zoomed, and however much perspective is
+ * foreshortening it. Null when the plane is edge-on to the ray, where there is
+ * no meaningful answer and the object simply waits for a better angle.
+ *
+ * Solving means three unknowns: the board (x, y), plus how much the perspective
+ * divides at the answer — which is unknown until the answer is, and is exactly
+ * what a linear approximation has to guess at. Written as `1/foreshortening` it
+ * enters the equations linearly, so all three fall out of one 3x3 solve.
+ */
+export function canvas3dUnprojectToPlane(
+  orbit: Canvas3DOrbit,
+  screen: { x: number; y: number },
+  planeZ: number,
+): { x: number; y: number } | null {
+  const { u, v, w } = canvas3dAxes(orbit);
+  const depth = CANVAS_3D_PERSPECTIVE;
+  const toPointer = { x: screen.x - orbit.panX, y: screen.y - orbit.panY };
+  const columns: Matrix3 = [
+    [u.x, v.x, -toPointer.x],
+    [u.y, v.y, -toPointer.y],
+    [u.z, v.z, depth],
+  ];
+  const rhs: [number, number, number] = [-w.x * planeZ, -w.y * planeZ, depth - w.z * planeZ];
+  const determinant = determinant3(columns);
+  const zoom = Number.isFinite(orbit.zoom) && orbit.zoom > 0 ? orbit.zoom : 1;
+  if (!Number.isFinite(determinant) || Math.abs(determinant) <= 1e-6 * zoom * zoom * depth) return null;
+
+  const x = determinant3(withColumn(columns, 0, rhs)) / determinant;
+  const y = determinant3(withColumn(columns, 1, rhs)) / determinant;
+  if (!Number.isFinite(x) || !Number.isFinite(y) || Math.hypot(x, y) > MAX_UNPROJECT_REACH) return null;
+  return { x, y };
+}
+
+/**
+ * How far through depth a drag of (dx, dy) pixels carries the object under it.
+ *
+ * Depth is a single direction on screen, so the drag is measured along it: how
+ * much of the gesture went the way depth runs, divided by how long that
+ * direction is once foreshortened. `at` is where the object is now, since the
+ * same drag means more board the further away it is being read from.
+ */
+export function canvas3dDepthFromDrag(orbit: Canvas3DOrbit, screen: { dx: number; dy: number }, at: Canvas3DPoint): number {
+  const { u, v, w } = canvas3dAxes(orbit);
+  const zoom = Number.isFinite(orbit.zoom) && orbit.zoom > 0 ? orbit.zoom : 1;
+  const foreshorten = canvas3dPerspectiveFactor(u.z * at.x + v.z * at.y + w.z * at.z);
+  const onScreen = Math.hypot(w.x, w.y);
+  // Looking straight down the depth axis it has no screen direction at all, so
+  // fall back to the vertical — the direction it resolves to at every angle that
+  // can see the planes at all.
+  const travelled = onScreen < MIN_SCREEN_AXIS * zoom
+    ? -screen.dy / (zoom * foreshorten)
+    : (screen.dx * w.x + screen.dy * w.y) / (foreshorten * onScreen * onScreen);
+  return Number.isFinite(travelled) ? travelled : 0;
+}
+
+type Matrix3 = readonly [readonly [number, number, number], readonly [number, number, number], readonly [number, number, number]];
+
+function determinant3(m: Matrix3): number {
+  return m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+    - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+    + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
+}
+
+/** Cramer's rule: the same matrix with one column swapped for the right-hand side. */
+function withColumn(m: Matrix3, index: number, column: readonly [number, number, number]): Matrix3 {
+  return [
+    [index === 0 ? column[0] : m[0][0], index === 1 ? column[0] : m[0][1], index === 2 ? column[0] : m[0][2]],
+    [index === 0 ? column[1] : m[1][0], index === 1 ? column[1] : m[1][1], index === 2 ? column[1] : m[1][2]],
+    [index === 0 ? column[2] : m[2][0], index === 1 ? column[2] : m[2][1], index === 2 ? column[2] : m[2][2]],
+  ];
+}
+
+/**
+ * The pan that brings a point in the scene to the middle of the viewport — how
+ * the canvas focuses on a chosen object without disturbing where anything sits.
+ */
+export function canvas3dPanToCentre(orbit: Canvas3DOrbit, point: Canvas3DPoint): Canvas3DOrbit {
+  const { u, v, w } = canvas3dAxes(orbit);
+  const foreshorten = canvas3dPerspectiveFactor(u.z * point.x + v.z * point.y + w.z * point.z);
+  const panX = -foreshorten * (u.x * point.x + v.x * point.y + w.x * point.z);
+  const panY = -foreshorten * (u.y * point.x + v.y * point.y + w.y * point.z);
+  return {
+    ...orbit,
+    panX: Number.isFinite(panX) ? panX : orbit.panX,
+    panY: Number.isFinite(panY) ? panY : orbit.panY,
+  };
+}
+
+/**
+ * CSS perspective foreshortening at a transformed depth: things nearer the eye
+ * project larger. Clamped well short of the camera plane, where the projection
+ * has no finite answer and a gesture would blow up rather than degrade.
+ */
+export function canvas3dPerspectiveFactor(depth: number): number {
+  if (!Number.isFinite(depth)) return 1;
+  return CANVAS_3D_PERSPECTIVE / Math.max(CANVAS_3D_PERSPECTIVE - depth, CANVAS_3D_PERSPECTIVE * 0.2);
+}
+
 
 /**
  * A connection as a single rotated bar.

@@ -177,6 +177,21 @@ export async function joinGuestRoom(code: string, name: string): Promise<GuestRo
 }
 
 /**
+ * Ensure this browser holds a usable guest credential, minting one on demand.
+ *
+ * Room-aware on purpose: a guest in a shared session must be re-admitted to THAT
+ * ROOM, not handed a fresh solo token. Minting a plain one would quietly move them
+ * off the room's combined allowance and out of its relay, and the only symptom
+ * would be that everyone else stopped seeing their work.
+ */
+export async function ensureGuestToken(): Promise<string | null> {
+  const existing = getStoredGuestToken();
+  if (existing) return existing;
+  await refreshGuestCredentials();
+  return getStoredGuestToken();
+}
+
+/**
  * Keep this browser's guest credentials alive.
  *
  * A guest token lasts an hour; a shared session — especially one with a meeting

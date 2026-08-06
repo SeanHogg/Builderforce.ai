@@ -35,13 +35,24 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
-  /* The whole surface is an orbit target, so the browser must not claim the gesture. */
+  /* The whole surface is a gesture target, so the browser must not claim it. */
   touch-action: none;
   cursor: grab;
 }
 
-.viewport[data-dragging='true'] { cursor: grabbing; }
+.viewport[data-gesture='orbit'] { cursor: grabbing; }
+.viewport[data-gesture='pan'] { cursor: move; }
+.viewport[data-gesture='move'] { cursor: grabbing; }
 .viewport:focus-visible { outline: 2px solid var(--canvas-blue, #3978f6); outline-offset: -2px; }
+
+/* The camera the scene is projected through. Panning transforms THIS element —
+   outside the perspective it owns — so travel is a plain screen-space slide and
+   never bends how a drag maps back onto the board. */
+.camera {
+  position: absolute;
+  inset: 0;
+  transition: transform .09s linear;
+}
 
 .stage {
   position: absolute;
@@ -106,6 +117,23 @@
 
 .link[data-spans='true'] { background: color-mix(in srgb, var(--canvas-blue, #3978f6) 72%, transparent); height: 4px; margin-top: -2px; }
 
+/* An object lifted off its plane keeps a line back to it: without one, a card
+   floating in open space reads as being somewhere it is not. */
+.tether {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  height: 2px;
+  margin-top: -1px;
+  background: repeating-linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--canvas-blue, #3978f6) 58%, transparent) 0 10px,
+    transparent 10px 20px
+  );
+  transform-origin: 0 50%;
+  pointer-events: none;
+}
+
 .card {
   position: absolute;
   top: 50%;
@@ -123,8 +151,15 @@
   color: inherit;
   text-align: left;
   cursor: pointer;
+  /* The card is a drag handle, so the browser must not scroll or zoom on it. */
+  touch-action: none;
   transition: box-shadow .16s ease, border-color .16s ease;
 }
+
+/* Grabbable, and it says so. A locked or read-only object keeps the pointer
+   cursor: the drag falls through and turns the space instead. */
+.card[data-movable='true'] { cursor: grab; }
+.viewport[data-gesture='move'] .card[data-movable='true'] { cursor: grabbing; }
 
 .card:hover,
 .card:focus-visible { border-color: var(--canvas-3d-accent, var(--canvas-blue, #3978f6)); outline: none; }

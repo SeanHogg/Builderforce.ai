@@ -4,6 +4,22 @@
 
 ---
 
+## 2026-08-05 — ✅ RESOLVED: Generate on a CAD or 3D-model object produced a broken image (ui 2026.7.168)
+
+Operator report, with screenshots of both objects: "when you click the generate button on the CAD or 3D model, the output is a broken image. In 3D mode, shouldn't the models render?"
+
+**The tile was pointed at the export.** `CreativeStudioBody` read `thumbnailUrl ?? outputUrl` into an `<img src>`. `outputUrl` is the *deliverable*, and for CAD that is a DXF and for a 3D model an STL — neither is something an image element can decode, so generating one replaced the placeholder tile with a broken-image icon. The same line broke `game` and `animation` (HTML), `resume` and `podcast` (Markdown) and `template` (JSON); `FileBody` carried an identical copy of the expression for attachments. Both now read one exported rule — `creativePreviewImageUrl()` in `lib/creationDeliverables.ts`: `thumbnailUrl` is authored as a picture so it is trusted, `outputUrl` is shown only when `isDisplayableImageUrl()` says an `<img>` can actually load it. Node body and 3D view read the same function, so they cannot disagree about what an object looks like.
+
+**A placeholder would have been the wrong fix.** The geometry is right there in the file, so it is drawn back rather than stood in for. `lib/creativeGeometry.ts` is a pure string → SVG reader: `parseDxfPaths` reads the LWPOLYLINE/POLYLINE/LINE/CIRCLE subset Canvas emits (circles tessellated so one path renderer draws everything, Y flipped once because DXF measures upward and SVG downward), and `parseAsciiStl` + `stlPreviewSvg` project the mesh orthographically at a three-quarter view — Z-up swapped into a Y-up camera space, facets painted back-to-front, shaded by an absolute Lambert term so a mesh with inconsistent winding still reads as a solid instead of going half black. Orthographic, not perspective: at thumbnail size a vanishing point buys nothing and distorts the silhouette. `buildBrowserCreativeArtifact` returns the rendering as `previewImageUrl`, and `runCreativeAction` writes it to `thumbnailUrl` — writing `''` when an artifact has no preview, so a stale thumbnail can never outlive the file it described.
+
+**The exports themselves were thinner than they claimed.** The STL was four facets — two disconnected squares — under a `solid`/`endsolid` wrapper and a "ASCII STL mesh generated" validation line. It is now a closed twelve-facet 100 × 60 × 40 box with per-facet normals computed from the winding (`asciiStlBox`), which is the smallest thing that can honestly be called a solid and the reason the preview reads as one. The DXF gained a bored Ø28 circle (`dxfPlate`) so a drawing shows a feature rather than a rectangle.
+
+**And 3D mode shows what an object made.** `Canvas3DDescriptor`/`Canvas3DCard` carry an optional `preview`, `describeThreeD` fills it from the same shared rule, and `Canvas3DView` renders it above the card's sublabel. Cards in the depth view are otherwise label-only, which is exactly where a generated mesh or drawing is the fastest way to recognise an object across a plane. The scene stays CSS-3D DOM — the mesh is a rendered image on a card, not live geometry re-projected as the camera orbits (logged in the gap register).
+
+Also fixed in this pass: `CreationCanvas.tsx` called `creationStorageKey(sessionId)` without importing it, which threw on mount and took the whole canvas down. Guarded by `creativeGeometry.test.ts` (DXF/STL readers, in-frame projection, null for unreadable input), `creationDeliverables.test.ts` (twelve facets, preview present for CAD/3D, never offered for HTML/Markdown/JSON exports, URL classification) and a `CreationCanvas.test.tsx` case asserting the object renders no image for a bare STL and the rendered preview when one is attached.
+
+---
+
 ## 2026-08-05 — ✅ RESOLVED: the small Brain placement put two live chats on the same board (ui 2026.7.167)
 
 Operator report, with a screenshot circling both: "the brain chat when in short or collapsed mode, there can't be two on the screen. There should only be the chat/brain that is part of the graph."

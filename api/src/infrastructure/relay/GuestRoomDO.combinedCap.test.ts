@@ -11,24 +11,36 @@ import { newRoomCode } from '../../application/guest/guestToken';
  * not exist".
  */
 
-/** Minimal in-memory DurableObjectState (storage + blockConcurrencyWhile). */
+/**
+ * Minimal in-memory DurableObjectState (storage + blockConcurrencyWhile).
+ *
+ * `hydration` is captured so {@link makeRoom} can await it. The real runtime
+ * guarantees no `fetch` is delivered until `blockConcurrencyWhile` settles; a fake
+ * that doesn't model that would let a test pass or fail on microtask timing, and
+ * every "survives eviction" assertion here depends on the room having actually
+ * rehydrated before it is asked anything.
+ */
 function fakeState(store = new Map<string, unknown>()) {
-  return {
+  const fake = {
     storage: {
       get: async <T>(key: string) => store.get(key) as T | undefined,
       put: async (key: string, value: unknown) => { store.set(key, structuredClone(value)); },
       deleteAll: async () => { store.clear(); },
     },
-    blockConcurrencyWhile: async (fn: () => Promise<void>) => { await fn(); },
+    blockConcurrencyWhile: (fn: () => Promise<void>) => { fake.hydration = fn(); return fake.hydration; },
     waitUntil: () => {},
+    hydration: Promise.resolve() as Promise<void>,
     store,
   };
+  return fake;
 }
 
 type Fake = ReturnType<typeof fakeState>;
 
-function makeRoom(state: Fake) {
-  return new GuestRoomDO(state as unknown as DurableObjectState, { JWT_SECRET: 'secret' });
+async function makeRoom(state: Fake) {
+  const room = new GuestRoomDO(state as unknown as DurableObjectState, { JWT_SECRET: 'secret' });
+  await state.hydration;
+  return room;
 }
 
 async function post(room: GuestRoomDO, path: string, body: unknown) {
@@ -47,7 +59,7 @@ describe('GuestRoomDO combined turn allowance', () => {
 
   beforeEach(async () => {
     state = fakeState();
-    room = makeRoom(state);
+    room = await makeRoom(state);
     code = newRoomCode();
     await post(room, '/open', { code, visitorId: 'host-1', name: 'Ada', title: 'Launch plan' });
   });
@@ -89,7 +101,7 @@ describe('GuestRoomDO combined turn allowance', () => {
     for (let i = 0; i < 4; i++) await post(room, '/turn', { turnId: `turn-${i}`, commit: true });
 
     // Same storage, brand-new instance: exactly what an eviction looks like.
-    const revived = makeRoom(fakeState(state.store));
+    const revived = await makeRoom(fakeState(state.store));
     const turn = await post(revived, '/turn', { turnId: 'turn-after-evict', commit: false });
     expect(turn.data.remaining).toBe(LIMIT - 4);
   });
@@ -116,7 +128,7 @@ describe('GuestRoomDO combined turn allowance', () => {
     const meta = state.store.get('meta') as { createdAt: string };
     meta.createdAt = new Date(Date.now() - (GUEST_ROOM_LIMITS.ttlMinutes + 1) * 60_000).toISOString();
     state.store.set('meta', meta);
-    const expired = makeRoom(fakeState(state.store));
+    const expired = await makeRoom(fakeState(state.store));
 
     const turn = await post(expired, '/turn', { turnId: 'x', commit: true });
     expect(turn.status).toBe(410);
@@ -130,7 +142,7 @@ describe('GuestRoomDO transcript claim (surviving sign-up)', () => {
 
   beforeEach(async () => {
     state = fakeState();
-    room = makeRoom(state);
+    room = await makeRoom(state);
     await post(room, '/open', { code: newRoomCode(), visitorId: 'host-1', name: 'Ada', title: 'Launch plan' });
     await post(room, '/join', { visitorId: 'guest-2', name: 'Bo' });
     await post(room, '/messages', { messages: [{ role: 'user', content: 'what should we build?' }, { role: 'assistant', content: 'start here' }] });
@@ -156,7 +168,7 @@ describe('GuestRoomDO transcript claim (surviving sign-up)', () => {
     expect(again.data.messages).toEqual([]);
 
     // …and the record survives eviction, or "again" would just mean "a while later".
-    const revived = makeRoom(fakeState(state.store));
+    const revived = await makeRoom(fakeState(state.store));
     const later = await post(revived, '/claim', { visitorId: 'host-1' });
     expect(later.data.alreadyClaimed).toBe(true);
   });
@@ -172,15 +184,75 @@ describe('GuestRoomDO transcript claim (surviving sign-up)', () => {
     const meta = state.store.get('meta') as { createdAt: string };
     meta.createdAt = new Date(Date.now() - (GUEST_ROOM_LIMITS.ttlMinutes + 1) * 60_000).toISOString();
     state.store.set('meta', meta);
-    const expired = makeRoom(fakeState(state.store));
+    const expired = await makeRoom(fakeState(state.store));
     expect((await post(expired, '/claim', { visitorId: 'host-1' })).status).toBe(410);
+  });
+});
+
+describe('GuestRoomDO shared canvas board', () => {
+  let state: Fake;
+  let room: GuestRoomDO;
+  let code: string;
+
+  beforeEach(async () => {
+    state = fakeState();
+    room = await makeRoom(state);
+    code = newRoomCode();
+    await post(room, '/open', { code, visitorId: 'host-1', name: 'Ada', surface: 'canvas' });
+  });
+
+  it('remembers which surface opened it, so the invite link lands people on the board', async () => {
+    const res = await room.fetch(new Request('https://guest-room/state?visitorId=host-1'));
+    const { state: view } = await res.json() as { state: { surface: string } };
+    expect(view.surface).toBe('canvas');
+
+    // A chat room must NOT inherit it — the default is the chat surface.
+    const chat = await makeRoom(fakeState());
+    await post(chat, '/open', { code: newRoomCode(), visitorId: 'host-2' });
+    const chatState = await (await chat.fetch(new Request('https://guest-room/state?visitorId=host-2'))).json() as { state: { surface: string } };
+    expect(chatState.state.surface).toBe('chat');
+  });
+
+  it('serves the board to a LATE joiner, not just to whoever was connected', async () => {
+    // Nothing stored yet: an empty room answers honestly rather than 404ing.
+    const empty = await (await room.fetch(new Request('https://guest-room/canvas'))).json() as { snapshot: string | null };
+    expect(empty.snapshot).toBeNull();
+
+    const board = JSON.stringify({ version: 1, title: 'Launch plan', nodes: [{ id: 'a' }], edges: [] });
+    expect((await post(room, '/canvas', { snapshot: board })).data.stored).toBe(true);
+
+    // Someone who arrives afterwards — and a DO that was evicted in between —
+    // both see the board.
+    const revived = await makeRoom(fakeState(state.store));
+    const got = await (await revived.fetch(new Request('https://guest-room/canvas'))).json() as { snapshot: string };
+    expect(got.snapshot).toBe(board);
+  });
+
+  it('REFUSES a board too large to sync instead of silently dropping it', async () => {
+    const huge = 'x'.repeat(GUEST_ROOM_LIMITS.maxCanvasChars + 1);
+    const res = await post(room, '/canvas', { snapshot: huge });
+    expect(res.data.stored).toBe(false);
+    expect(res.data.reason).toBe('too_large');
+    // …and the previous good board is left intact rather than half-written.
+    const after = await (await room.fetch(new Request('https://guest-room/canvas'))).json() as { snapshot: string | null };
+    expect(after.snapshot).toBeNull();
+  });
+
+  it('answers 410 for an expired room rather than handing out a wiped board', async () => {
+    await post(room, '/canvas', { snapshot: '{"nodes":[],"edges":[]}' });
+    const meta = state.store.get('meta') as { createdAt: string };
+    meta.createdAt = new Date(Date.now() - (GUEST_ROOM_LIMITS.ttlMinutes + 1) * 60_000).toISOString();
+    state.store.set('meta', meta);
+    const expired = await makeRoom(fakeState(state.store));
+    const res = await expired.fetch(new Request('https://guest-room/canvas'));
+    expect(res.status).toBe(410);
   });
 });
 
 describe('GuestRoomDO shared transcript', () => {
   it('gives every participant the same ordered list, bounded so it cannot grow forever', async () => {
     const state = fakeState();
-    const room = makeRoom(state);
+    const room = await makeRoom(state);
     const code = newRoomCode();
     await post(room, '/open', { code, visitorId: 'host-1', name: 'Ada' });
 

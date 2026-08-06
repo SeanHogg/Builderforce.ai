@@ -18,11 +18,12 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AccessibleOutlineIcon, CanvasCommands, CanvasRailToggle, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
-import { Canvas3DView } from '@/components/canvas/Canvas3DView';
+import { AccessibleOutlineIcon, CanvasCommands, CanvasFilesIcon, CanvasRailToggle, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
+import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import type { Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { CanvasOutlinePanel } from './CanvasOutlinePanel';
+import { CanvasFilesPanel } from './CanvasFilesPanel';
 import { BrainDock } from './BrainDock';
 import { brainDockReservedWidth, brainDockWidth, DEFAULT_BRAIN_DOCK_PREFERENCES, readBrainDockPreferences, writeBrainDockPreferences, type BrainDockPreferences } from './brainDockPreferences';
 import { BrainSurfaceProvider, type BrainSurfaceContextValue } from './brainSurfaceContext';
@@ -68,13 +69,14 @@ import { useVoiceStudio } from '@/lib/voiceStudio';
 import { CopyButton } from '@/components/CopyButton';
 import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
 import { buildCreationCanvasDiagnosticsReport } from '@/lib/creationCanvasDiagnostics';
-import { arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions, nextCanvasObjectPosition, type CanvasArrangement } from './creationCanvasLayout';
+import { arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions, canvasPlacementUnlocked, nextCanvasObjectPosition, type CanvasArrangement } from './creationCanvasLayout';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useLlmModels } from '@/lib/useLlmModels';
 import { ChatInput, type ChatModelOptions, type ChatModelSelection } from '@/components/ChatInput';
 import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
-import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, creativePreviewImageUrl, generateEvermindMedia, mediaFrameDataUrl, withCreationDeliverable, type CreationDeliverable } from '@/lib/creationDeliverables';
+import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, creativePreviewImageUrl, generateEvermindMedia, mediaFrameDataUrl, navigableArtifactUrl, withCreationDeliverable, type CreationDeliverable } from '@/lib/creationDeliverables';
+import { canvasDiagram, canvasFiles, canvasObjectMarkdown, type CanvasFile } from '@/lib/canvasDocuments';
 import { listEvermindModels } from '@/lib/studioModelsApi';
 import { AITrainingPanel } from '@/components/AITrainingPanel';
 
@@ -210,19 +212,27 @@ function safeDownloadName(value: string): string {
   return value.trim().replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'creation';
 }
 
-function artifactMarkdown(data: CreationNodeData): string {
-  if (data.kind === 'chat' && Array.isArray(data.messages)) {
-    const transcript = data.messages.flatMap((value) => {
-      if (!value || typeof value !== 'object') return [];
-      const message = value as Record<string, unknown>;
-      if (typeof message.content !== 'string' || !message.content.trim()) return [];
-      const speaker = message.role === 'user' ? 'You' : message.role === 'assistant' ? 'Brain' : 'System';
-      return [`## ${speaker}\n\n${message.content}`];
-    });
-    if (transcript.length) return `# ${data.title}\n\n${transcript.join('\n\n')}`;
-  }
-  const authored = [data.markdown, data.aiResponse, data.content, data.subtitle].find((value) => typeof value === 'string' && value.trim());
-  return typeof authored === 'string' ? authored : `# ${data.title}\n\n${data.status ? `Status: ${data.status}\n` : ''}`;
+export type CanvasExportAction = 'copy' | 'markdown' | 'csv' | 'docx' | 'pptx' | 'json' | 'diagram';
+
+/** Objects whose body is authored prose or an outline, and so get a writable
+ * editor rather than a read-only "live object" note. */
+const DOCUMENT_EDITOR_KINDS = new Set<CreationObjectKind>(['document', 'prd', 'knowledge', 'note', 'report', 'slides']);
+
+const EXPORT_MIME: Readonly<Record<CanvasExportAction, string>> = {
+  copy: 'text/plain', markdown: 'text/markdown', csv: 'text/csv', json: 'application/json',
+  diagram: 'application/vnd.jgraph.mxfile',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+};
+
+/** The format an object exports to when nothing more specific was asked for —
+ * a deck becomes a deck, a sheet becomes rows, a diagram stays a diagram. */
+export function defaultExportAction(kind: CreationObjectKind): CanvasExportAction {
+  if (kind === 'slides') return 'pptx';
+  if (kind === 'diagram') return 'diagram';
+  if (kind === 'spreadsheet' || kind === 'table' || kind === 'dataset') return 'csv';
+  if (kind === 'document' || kind === 'prd' || kind === 'knowledge' || kind === 'report' || kind === 'note') return 'docx';
+  return 'markdown';
 }
 
 function artifactCsv(data: CreationNodeData): string | null {
@@ -357,6 +367,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const t = useTranslations('creationCanvas');
   /** Chrome shared with every other spatial canvas lives in its own namespace. */
   const tCommands = useTranslations('canvasCommands');
+  const tFiles = useTranslations('creationCanvas.files');
   const confirm = useConfirm();
   const toast = useToast();
   const storageKey = creationStorageKey(sessionId);
@@ -459,6 +470,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   roomCodeRef.current = inRoom ? roomCode : null;
   /** The snapshot most recently exchanged with the room — suppresses echo. */
   const lastRoomSnapshot = useRef<string>('');
+  /**
+   * False until this device has read the room's board (or learned it has none).
+   *
+   * An invitee mounts on the DEFAULT starter board and the save debounce fires
+   * ~300ms later — before the first pull can land. Without this gate that empty
+   * starter board would be pushed over the host's real one, and joining a shared
+   * canvas would wipe it. Pushes are held until the pull settles.
+   */
+  const roomHydrated = useRef(false);
   const announceCanvas = room.announceCanvas;
 
   /**
@@ -470,7 +490,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const persistSnapshot = useCallback((snapshot: LocalCreationSnapshot) => {
     writeLocalCreationSession(sessionId, snapshot);
     const code = roomCodeRef.current;
-    if (!code) return;
+    if (!code || !roomHydrated.current) return;
     const serialized = JSON.stringify(snapshot);
     // Don't push back what we just pulled — that is how two peers get into a
     // permanent round-trip over a board neither of them is touching.
@@ -498,6 +518,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [conversationOpen, setConversationOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [outlineOpen, setOutlineOpen] = useState(false);
+  const [filesOpen, setFilesOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   // ONE Brain surface: which side it is parked on, how wide, and whether the user
   // wants the step list. Read from storage after mount so SSR stays deterministic.
@@ -748,12 +769,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // Pull the shared board: once on entering a room (this is how a LATE joiner
   // sees anything at all) and again whenever a peer announces a new one.
   useEffect(() => {
-    if (persistence !== 'local' || !roomCode) return;
+    if (persistence !== 'local' || !roomCode) { roomHydrated.current = false; return; }
     let cancelled = false;
     void fetchGuestRoomCanvas(roomCode).then((serialized) => {
-      if (cancelled || !serialized) return;
-      applyRoomSnapshot(serialized);
-      hydrated.current = true;
+      if (cancelled) return;
+      // A room with no board yet (the host is mid-create) means THIS device's
+      // board becomes the shared one — so open the gate either way.
+      if (serialized) { applyRoomSnapshot(serialized); hydrated.current = true; }
+      roomHydrated.current = true;
     });
     return () => { cancelled = true; };
   }, [persistence, roomCode, room.canvasVersion, applyRoomSnapshot]);
@@ -786,6 +809,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     };
     const serialized = JSON.stringify(snapshot);
     lastRoomSnapshot.current = serialized;
+    // The host's board IS the room's board — no pull to wait for.
+    roomHydrated.current = true;
     const stored = await pushGuestRoomCanvas(state.code, serialized);
     setRoomCode(state.code);
     setRoomBusy(false);
@@ -1078,11 +1103,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     return null;
   }, [nodes, scopedNodeIds, scopedNodes]);
 
-  const updateSelected = useCallback((patch: Partial<CreationNodeData>) => {
-    if (!selectedId || !canEdit || lockBlocked) return;
-    setNodes((current) => current.map((node) => node.id === selectedId ? { ...node, data: { ...node.data, ...patch } } : node));
+  /** One writer for an object's content, wherever the edit was made — the
+   * inspector, a cell edited on the card itself, or the Files library. */
+  const updateNodeData = useCallback((nodeId: string, patch: Partial<CreationNodeData>) => {
+    if (!canEdit || lockBlocked) return;
+    setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, ...patch } } : node));
     setNotice('Saving changes…');
-  }, [canEdit, lockBlocked, selectedId, setNodes]);
+  }, [canEdit, lockBlocked, setNodes]);
+
+  const updateSelected = useCallback((patch: Partial<CreationNodeData>) => {
+    if (!selectedId) return;
+    updateNodeData(selectedId, patch);
+  }, [selectedId, updateNodeData]);
 
   const updateWebsiteViewport = useCallback((viewport: 'desktop' | 'tablet' | 'mobile') => {
     if (!selectedId || !canEdit || lockBlocked) return;
@@ -1217,7 +1249,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const ids = new Set(selectionIds());
     if (!canEdit || ids.size < 2) { setNotice('Select at least two objects to align'); return; }
     const left = Math.min(...nodes.filter((node) => ids.has(node.id)).map((node) => node.position.x));
-    setNodes((current) => current.map((node) => ids.has(node.id) && node.data.placementLocked !== true ? { ...node, position: { ...node.position, x: left } } : node));
+    setNodes((current) => current.map((node) => ids.has(node.id) && canvasPlacementUnlocked(node) ? { ...node, position: { ...node.position, x: left } } : node));
     setNotice(`${ids.size} objects aligned left`);
   }, [canEdit, nodes, selectionIds, setNodes]);
 
@@ -1236,7 +1268,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   const togglePlacementLock = useCallback(() => {
     const ids = new Set(selectionIds()); if (!canEdit || !ids.size) return;
-    const shouldLock = nodes.some((node) => ids.has(node.id) && node.data.placementLocked !== true);
+    const shouldLock = nodes.some((node) => ids.has(node.id) && canvasPlacementUnlocked(node));
     setNodes((current) => current.map((node) => ids.has(node.id) ? { ...node, draggable: !shouldLock, data: { ...node.data, placementLocked: shouldLock } } : node));
     setNotice(shouldLock ? 'Object placement locked' : 'Object placement unlocked');
   }, [canEdit, nodes, selectionIds, setNodes]);
@@ -1249,10 +1281,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNotice(shouldHide ? 'Objects hidden from the canvas' : 'Objects shown on the canvas');
   }, [canEdit, nodes, selectionIds, setNodes]);
 
+  /**
+   * The commands the 3D scene publishes while it is on screen, and `null` in the
+   * flat view. Everything the canvas can do to its own camera — focus, zoom, fit
+   * — routes through this so there is ONE action per command that means the right
+   * thing in whichever view is live, rather than a control that quietly dies in
+   * the other one.
+   */
+  const threeDControls = useCanvas3DControls();
   const focusSelection = useCallback(() => {
     const ids = selectionIds(); if (!ids.length) return;
+    if (threeDControls) { threeDControls.focusObjects(ids); return; }
     void flowRef.current?.fitView({ nodes: ids.map((id) => ({ id })), padding: 0.28, duration: 350 });
-  }, [selectionIds]);
+  }, [selectionIds, threeDControls]);
 
   useEffect(() => {
     const keyboard = (event: KeyboardEvent) => {
@@ -1269,7 +1310,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (event.key === 'Escape') { setSelectedId(null); setSelectedIds([]); setNodes((current) => current.map((node) => ({ ...node, selected: false }))); return; }
       if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key) && ids.size && canEdit) {
         event.preventDefault(); const step = event.shiftKey ? 10 : 1; const dx = event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0; const dy = event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0;
-        setNodes((current) => current.map((node) => ids.has(node.id) && node.data.placementLocked !== true ? { ...node, position: { x: node.position.x + dx, y: node.position.y + dy } } : node));
+        setNodes((current) => current.map((node) => ids.has(node.id) && canvasPlacementUnlocked(node) ? { ...node, position: { x: node.position.x + dx, y: node.position.y + dy } } : node));
       }
     };
     window.addEventListener('keydown', keyboard); return () => window.removeEventListener('keydown', keyboard);
@@ -2789,12 +2830,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!target) { setNotice('Select a creative object first'); return; }
     const existingUrl = typeof target.data.outputUrl === 'string' ? target.data.outputUrl : '';
     if ((action === 'preview' || action === 'export') && existingUrl) {
-      if (action === 'preview') window.open(existingUrl, '_blank', 'noopener,noreferrer');
+      // A browser refuses to open a `data:` URL in a top-level tab, so both paths
+      // go through a navigable URL. It is revoked on a timer rather than at once:
+      // revoking it before the new tab has read it is the same blank page.
+      const navigable = navigableArtifactUrl(existingUrl);
+      if (action === 'preview') window.open(navigable, '_blank', 'noopener,noreferrer');
       else {
-        const anchor = document.createElement('a'); anchor.href = existingUrl;
+        const anchor = document.createElement('a'); anchor.href = navigable;
         anchor.download = typeof target.data.outputFileName === 'string' ? target.data.outputFileName : `${target.data.title}.artifact`;
         anchor.click();
       }
+      if (navigable !== existingUrl) window.setTimeout(() => URL.revokeObjectURL(navigable), 60_000);
       setNotice(action === 'preview' ? 'Preview opened' : 'Deliverable downloaded');
       return;
     }
@@ -2809,6 +2855,80 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: action === 'apply' ? 'Applied' : 'Generated', outputUrl: artifact.url, outputFormat: artifact.outputFormat, outputFileName: artifact.fileName, thumbnailUrl: artifact.previewImageUrl ?? '', deliverables: withCreationDeliverable(node.data, delivered) } } : node));
     setNotice(`${artifact.fileName} generated and validated`);
   }, [nodes, selectedNode, setNodes]);
+
+  /**
+   * The one export path for an authored object. The inspector's buttons, Brain's
+   * `export` action, and the Files library all call this, so the file that lands
+   * in Downloads, the deliverable recorded on the object, and the row the library
+   * lists are produced once and cannot disagree.
+   */
+  const exportArtifact = useCallback(async (nodeId: string, action: CanvasExportAction): Promise<string> => {
+    const target = nodes.find((node) => node.id === nodeId);
+    if (!target) return t('exportFailed');
+    const markdown = canvasObjectMarkdown(target.data);
+    const base = safeDownloadName(target.data.title);
+    try {
+      if (action === 'copy') return await copyTextToClipboard(markdown) ? t('copiedToClipboard') : t('clipboardUnavailable');
+      const office = (action === 'docx' || action === 'pptx') && persistence === 'server';
+      let fileName = `${base}.md`;
+      if (action === 'markdown' || ((action === 'docx' || action === 'pptx') && !office)) downloadText(markdown, fileName, 'text/markdown');
+      if (action === 'csv') {
+        const csv = artifactCsv(target.data);
+        if (!csv) throw new Error(t('noTabularRows'));
+        fileName = `${base}.csv`;
+        exportCsv(csv, fileName);
+      }
+      if (action === 'diagram') {
+        const diagram = canvasDiagram(target.data);
+        if (!diagram) throw new Error(t('noDiagramSource'));
+        fileName = `${base}.${diagram.format === 'drawio' ? 'drawio' : 'mmd'}`;
+        downloadText(diagram.source, fileName, diagram.format === 'drawio' ? 'application/vnd.jgraph.mxfile' : 'text/vnd.mermaid');
+      }
+      if (office) {
+        fileName = `${base}.${action}`;
+        if (action === 'docx') await exportDocx(markdown, target.data.title);
+        else await exportPptx(markdown, target.data.title);
+      }
+      if (action === 'json') {
+        fileName = `${base}.json`;
+        downloadJson({ kind: target.data.kind, title: target.data.title, data: target.data }, fileName);
+      }
+      const delivered: CreationDeliverable = {
+        id: crypto.randomUUID(), action: 'export', artifactKind: action, status: 'delivered',
+        createdAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+        provider: office ? 'builderforce-office-export' : action === 'docx' || action === 'pptx' ? 'browser-markdown-fallback' : 'browser-download',
+        fileName,
+        mimeType: action === 'diagram' ? 'application/vnd.jgraph.mxfile' : office || (action !== 'docx' && action !== 'pptx') ? EXPORT_MIME[action] : 'text/markdown',
+        validation: { status: 'passed', detail: 'Export generated and download started' },
+      };
+      setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, deliverables: withCreationDeliverable(node.data, delivered) } } : node));
+      return (action === 'docx' || action === 'pptx') && !office ? t('markdownDownloaded') : t('downloadReady');
+    } catch (error) {
+      return error instanceof Error ? error.message : t('exportFailed');
+    }
+  }, [nodes, persistence, setNodes, t]);
+
+  /** Every file this session holds, derived from the objects themselves so a new
+   * document, deck, diagram, or sheet appears in the library the moment Brain
+   * authors it — no separate registration step to forget. */
+  const sessionFiles = useMemo(() => canvasFiles(nodes), [nodes]);
+
+  /** A file the library offers: a delivered artifact opens, an authored object
+   * exports through the path above. */
+  const downloadCanvasFile = useCallback((file: CanvasFile) => {
+    if (file.url) {
+      const navigable = navigableArtifactUrl(file.url);
+      const anchor = document.createElement('a');
+      anchor.href = navigable;
+      anchor.download = file.name;
+      anchor.click();
+      if (navigable !== file.url) window.setTimeout(() => URL.revokeObjectURL(navigable), 60_000);
+      setNotice(t('downloadReady'));
+      return;
+    }
+    const target = nodes.find((node) => node.id === file.nodeId);
+    if (target) void exportArtifact(file.nodeId, defaultExportAction(target.data.kind)).then(setNotice);
+  }, [exportArtifact, nodes, t]);
 
   useEffect(() => {
     const pending = pendingBrainActions[0];
@@ -2834,6 +2954,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     else if (target.data.kind === 'standup' && pending.action === 'start') startStandup();
     else if (target.data.kind === 'evermind' && pending.action === 'train') openEvermindTraining();
     else if (target.data.kind === 'evermind' && pending.action === 'evaluate') evaluateEvermind(target.id);
+    else if (pending.action === 'export') void exportArtifact(target.id, defaultExportAction(target.data.kind)).then(setNotice);
+    else if (target.data.kind === 'slides' && pending.action === 'present') setPresentMode(true);
     else if (target.data.kind === 'evermind' && pending.action === 'publish') {
       openEvermindTraining();
       setNotice('Use the trained package section to publish and test this Evermind');
@@ -2842,7 +2964,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(`${pending.action} did not run because this ${creationObjectDefinition(target.data.kind).label} has no connected delivery adapter`);
     }
     finish();
-  }, [compareProjects, deliverMockup, evaluateEvermind, expandMockupSet, expandProject, generateVideo, nodes, openEvermindTraining, pendingBrainActions, persistence, profileDataset, publishWebsite, runCreativeAction, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
+  }, [compareProjects, deliverMockup, evaluateEvermind, expandMockupSet, expandProject, exportArtifact, generateVideo, nodes, openEvermindTraining, pendingBrainActions, persistence, profileDataset, publishWebsite, runCreativeAction, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
 
   const openHistory = useCallback(() => {
     setHistoryOpen(true);
@@ -2936,6 +3058,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // A generated object carries a picture of what it produced — a rendered
       // mesh, a drawn profile, an image. In 3D that is the point of the card.
       preview: creativePreviewImageUrl(node.data) ?? undefined,
+      // Where the user has put this object through depth, if they have. It rides
+      // in the object's own content, so it survives a reload and a share exactly
+      // like its position on the flat board does.
+      depthOffset: typeof node.data.depthOffset === 'number' ? node.data.depthOffset : undefined,
+      locked: !canvasPlacementUnlocked(node),
     };
   }, [minimapColor, t]);
   const selectThreeDObject = useCallback((id: string) => {
@@ -2944,12 +3071,37 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setSelectedIds([id]);
   }, []);
   /**
+   * Objects moved in the 3D space, written straight back to the board.
+   *
+   * There is one set of positions, not a 3D copy of them: across the plane the
+   * move IS the board position, and through depth it is how far the object
+   * floats off the layer its dependencies put it on. So an object dragged in the
+   * space is where the user left it on the flat canvas too, and is saved by the
+   * same autosave that persists any other placement.
+   */
+  const moveThreeDObjects = useCallback((moves: readonly Canvas3DMove[]) => {
+    if (!canEdit || !moves.length) return;
+    const byId = new Map(moves.map((move) => [move.id, move]));
+    setNodes((current) => current.map((node) => {
+      const move = byId.get(node.id);
+      if (!move || !canvasPlacementUnlocked(node)) return node;
+      const depth = (typeof node.data.depthOffset === 'number' ? node.data.depthOffset : 0) + move.dz;
+      return {
+        ...node,
+        position: { x: node.position.x + move.dx, y: node.position.y + move.dy },
+        // A zero offset is the absence of one: an object settled back onto its
+        // layer must not carry a stale field into every future save.
+        data: depth === 0
+          ? { ...node.data, depthOffset: undefined }
+          : { ...node.data, depthOffset: depth },
+      };
+    }));
+  }, [canEdit, setNodes]);
+  /**
    * Zoom and fit mean the scene while it is up, and the flat board otherwise —
    * the phone-sized action stack keeps the same buttons in both views instead of
-   * leaving three dead controls behind whenever 3D opens. `null` until the scene
-   * publishes, which is exactly the flat case.
+   * leaving three dead controls behind whenever 3D opens.
    */
-  const threeDControls = useCanvas3DControls();
   const zoomInAction = useCallback(() => {
     if (threeDControls) threeDControls.zoomIn(); else void flowRef.current?.zoomIn({ duration: 180 });
   }, [threeDControls]);
@@ -2963,11 +3115,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   // a per-token dependency here would hand React Flow a new nodeTypes object and
   // remount every Object on the board on every streamed word.
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
-    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={(nodeId) => runWorkflow(nodeId)} onOpenDetails={(nodeId, focus) => {
+    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={(nodeId) => runWorkflow(nodeId)} onEditData={updateNodeData} onOpenDetails={(nodeId, focus) => {
       setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
       setInspectorFocus(focus || null); setSelectedId(nodeId); setSelectedIds([nodeId]);
     }} />,
-  }), [canRun, runWorkflow]);
+  }), [canRun, runWorkflow, updateNodeData]);
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
     sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
     objectCount: nodes.length, connectionCount: edges.length,
@@ -3268,11 +3420,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             minimapMaskColor="var(--creation-minimap-mask, rgba(244,248,253,.72))"
             threeDActive={threeD}
             onToggleThreeD={() => setThreeD((value) => !value)}
-            extraControls={<CanvasRailToggle
-              pressed={outlineOpen}
-              onClick={() => setOutlineOpen((value) => !value)}
-              label={t('canvasOutline')}
-            ><AccessibleOutlineIcon /></CanvasRailToggle>}
+            extraControls={<>
+              <CanvasRailToggle
+                pressed={filesOpen}
+                onClick={() => setFilesOpen((value) => !value)}
+                label={tFiles('title')}
+              ><CanvasFilesIcon /></CanvasRailToggle>
+              <CanvasRailToggle
+                pressed={outlineOpen}
+                onClick={() => setOutlineOpen((value) => !value)}
+                label={t('canvasOutline')}
+              ><AccessibleOutlineIcon /></CanvasRailToggle>
+            </>}
           />
         </ReactFlow>
         </BrainSurfaceProvider>
@@ -3284,6 +3443,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <button type="button" onClick={cleanLayout} aria-label={t('arrangeObjects')}>⌘</button>
           <button type="button" onClick={() => setThreeD((value) => !value)} aria-pressed={threeD} aria-label={tCommands('threeD.toggle')}>◱</button>
           {threeDControls && <button type="button" onClick={threeDControls.toggleDepth} aria-pressed={threeDControls.depthMode !== 'flow'} aria-label={tCommands('threeD.depthGroup')}>⧉</button>}
+          {threeDControls && <button type="button" onClick={threeDControls.toggleLayers} aria-pressed={threeDControls.layersVisible} aria-label={tCommands('threeD.layerGuides')}>▤</button>}
+          {threeDControls?.dropToLayers && <button type="button" onClick={threeDControls.dropToLayers} aria-label={tCommands('threeD.dropToLayers')}>⤓</button>}
+          <button type="button" onClick={() => setFilesOpen((value) => !value)} aria-pressed={filesOpen} aria-label={tFiles('title')}><CanvasFilesIcon /></button>
           <button type="button" onClick={() => setOutlineOpen((value) => !value)} aria-pressed={outlineOpen} aria-label={t('canvasOutline')}><AccessibleOutlineIcon /></button>
         </div>
 
@@ -3294,10 +3456,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           measure={canvasNodeDimensions}
           selectedIds={effectiveSelectedIds}
           onSelect={selectThreeDObject}
+          onMove={canEdit ? moveThreeDObjects : undefined}
           onExit={() => setThreeD(false)}
         />}
 
         <RemoteCursors members={members} currentUserId={currentUserId} instance={flowRef.current} container={flowWrapRef.current} />
+        {filesOpen && <CanvasFilesPanel
+          files={sessionFiles}
+          onOpen={(nodeId) => { setInspectorFocus(null); setSelectedId(nodeId); setSelectedIds([nodeId]); void flowRef.current?.fitView({ nodes: [{ id: nodeId }], padding: .35, maxZoom: 1.1, duration: 320 }); }}
+          onDownload={downloadCanvasFile}
+          onClose={() => setFilesOpen(false)}
+        />}
         {outlineOpen && <CanvasOutlinePanel
           nodes={nodes}
           edges={edges}
@@ -3321,7 +3490,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           })}</div>
         </aside>}
 
-        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} />}
+        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} />}
 
         {workflowFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('workflowFocusEditor')}>
           <header><div><strong>{t('editWorkflowOnCanvas')}</strong><small>{t('editWorkflowHint')}</small></div><button type="button" onClick={() => setWorkflowFocus(null)} aria-label={t('closeWorkflowEditor')}>×</button></header>
@@ -3425,7 +3594,7 @@ function RemoteCursors({ members, currentUserId, instance, container }: { member
   })}</div>;
 }
 
-function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onGenerateVideo, onRunCreativeAction, onEditWorkflow, onSaveAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onEditWorkflow: () => void; onSaveAgent: () => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void }) {
+function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onGenerateVideo, onRunCreativeAction, onEditWorkflow, onSaveAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onExportArtifact }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onEditWorkflow: () => void; onSaveAgent: () => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onExportArtifact: (action: CanvasExportAction) => Promise<string> }) {
   const t = useTranslations('creationCanvas');
   const kind = node.data.kind;
   const [tab, setTab] = useState<'details' | 'activity'>('details');
@@ -3480,7 +3649,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
     setExpandedInspector(false);
     applyInspectorWidth(next, true);
   };
-  const markdown = artifactMarkdown(node.data);
+  const markdown = canvasObjectMarkdown(node.data);
   const csv = artifactCsv(node.data);
   const deliverables = creationDeliverables(node.data);
   const taskId = kind === 'task' && /^task:\d+$/.test(node.data.resourceId || '') ? Number(node.data.resourceId!.slice(5)) : null;
@@ -3526,35 +3695,9 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
       setActionStatus(error instanceof Error ? error.message : t('taskUpdateFailed'));
     }
   };
-  const runArtifactAction = async (action: 'copy' | 'markdown' | 'csv' | 'docx' | 'pptx' | 'json') => {
+  const runArtifactAction = async (action: CanvasExportAction) => {
     setActionStatus(t('preparing'));
-    try {
-      const base = safeDownloadName(node.data.title);
-      if (action === 'copy') {
-        setActionStatus(await copyTextToClipboard(markdown) ? t('copiedToClipboard') : t('clipboardUnavailable'));
-        return;
-      }
-      if (action === 'markdown') downloadText(markdown, `${base}.md`, 'text/markdown');
-      if (action === 'csv') {
-        if (!csv) throw new Error(t('noTabularRows'));
-        exportCsv(csv, `${base}.csv`);
-      }
-      if (action === 'docx') {
-        if (persistence === 'local') downloadText(markdown, `${base}.md`, 'text/markdown');
-        else await exportDocx(markdown, node.data.title);
-      }
-      if (action === 'pptx') {
-        if (persistence === 'local') downloadText(markdown, `${base}.md`, 'text/markdown');
-        else await exportPptx(markdown, node.data.title);
-      }
-      if (action === 'json') downloadJson({ kind, title: node.data.title, data: node.data }, `${base}.json`);
-      const extension = action === 'markdown' ? 'md' : action;
-      const delivered: CreationDeliverable = { id: crypto.randomUUID(), action: 'export', artifactKind: action, status: 'delivered', createdAt: new Date().toISOString(), completedAt: new Date().toISOString(), provider: action === 'docx' || action === 'pptx' ? (persistence === 'server' ? 'builderforce-office-export' : 'browser-markdown-fallback') : 'browser-download', fileName: `${base}.${persistence === 'local' && (action === 'docx' || action === 'pptx') ? 'md' : extension}`, mimeType: action === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : action === 'pptx' ? 'application/vnd.openxmlformats-officedocument.presentationml.presentation' : action === 'csv' ? 'text/csv' : action === 'json' ? 'application/json' : 'text/markdown', validation: { status: 'passed', detail: 'Export generated and download started' } };
-      onChange({ deliverables: withCreationDeliverable(node.data, delivered) });
-      setActionStatus(action === 'docx' && persistence === 'local' || action === 'pptx' && persistence === 'local' ? t('markdownDownloaded') : t('downloadReady'));
-    } catch (error) {
-      setActionStatus(error instanceof Error ? error.message : t('exportFailed'));
-    }
+    setActionStatus(await onExportArtifact(action));
   };
   return <aside ref={inspectorRef} className={styles.inspector} aria-label="Details panel" style={{ '--inspector-width': `${inspectorWidth}px` } as CSSProperties}>
     <div
@@ -3681,20 +3824,40 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
         <label>{t('outputFormat')}<select value={typeof node.data.outputFormat === 'string' ? node.data.outputFormat : ''} onChange={(event) => onChange({ outputFormat: event.target.value })}><option value="">{t('chooseOnExport')}</option>{(CREATIVE_OUTPUTS[kind] || []).map((format) => <option key={format} value={format}>{format}</option>)}</select></label>
         <section className={styles.taskPrdSummary} aria-label={t('nativeCreativeCapability')}><div><span>{t('creativeCapability')}</span><small>{typeof node.data.provider === 'string' ? node.data.provider : 'native'}</small></div><strong>{typeof node.data.capabilityId === 'string' ? node.data.capabilityId : `creative.${kind}`}</strong><p>{t('creativeCapabilityHint')}</p></section>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button type="button" className={styles.fullButton} onClick={() => onRunCreativeAction(kind === 'template' ? 'apply' : 'generate')}>{kind === 'template' ? t('applyTemplate') : t('generateLabel', { label: creationObjectDefinition(kind).label })}</button>{typeof node.data.outputUrl === 'string' && <><button type="button" onClick={() => onRunCreativeAction('preview')}>{t('preview')}</button><button type="button" onClick={() => onRunCreativeAction('export')}>{t('download')}</button></>}</div>
-        {typeof node.data.outputUrl === 'string' && <a href={node.data.outputUrl} target="_blank" rel="noreferrer">{t('openGeneratedOutput')}</a>}
       </>}
       {kind === 'frame' && <><label>{t('purpose')}<input value={typeof node.data.framePurpose === 'string' ? node.data.framePurpose : t('arrangeObjectsHere')} onChange={(event) => onChange({ framePurpose: event.target.value })} /></label><label>{t('fillColor')}<input type="color" value={typeof node.data.frameColor === 'string' ? node.data.frameColor : '#f8f6ff'} onChange={(event) => onChange({ frameColor: event.target.value })} /></label><label>{t('borderColor')}<input type="color" value={typeof node.data.frameBorder === 'string' ? node.data.frameBorder : '#9d8bea'} onChange={(event) => onChange({ frameBorder: event.target.value })} /></label><button className={styles.fullButton} onClick={onSaveFramePreset}>{t('saveReusableFrame')}</button></>}
       {kind === 'drawing' && <><label>{t('strokeColor')}<input type="color" value={typeof node.data.stroke === 'string' ? node.data.stroke : '#5b5ce2'} onChange={(event) => onChange({ stroke: event.target.value })} /></label><label>{t('strokeWidth')}<input type="range" min="1" max="12" value={typeof node.data.strokeWidth === 'number' ? node.data.strokeWidth : 3} onChange={(event) => onChange({ strokeWidth: Number(event.target.value) })} /></label><p className={styles.inspectorHint}>{t('drawingHint')}</p></>}
-      {!['chat', 'agent', 'evaluation', 'staff', 'website', 'prototype', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'task', 'mockup', 'evermind', 'standup', 'frame', 'drawing'].includes(kind) && !CREATIVE_GENERATOR_KINDS.has(kind) && <p className={styles.inspectorHint}>{t('objectLiveHint')}</p>}
+      {DOCUMENT_EDITOR_KINDS.has(kind) && <label>{kind === 'slides' ? t('deckOutline') : t('documentBody')}<textarea
+        rows={12}
+        aria-label={kind === 'slides' ? t('deckOutline') : t('documentBody')}
+        value={typeof node.data.markdown === 'string' ? node.data.markdown : typeof node.data.content === 'string' ? node.data.content : ''}
+        placeholder={kind === 'slides' ? t('deckOutlinePlaceholder') : t('documentBodyPlaceholder')}
+        onChange={(event) => onChange({ markdown: event.target.value, content: event.target.value })}
+      /></label>}
+      {kind === 'diagram' && <>
+        <label>{t('diagramFormat')}<select value={typeof node.data.diagramFormat === 'string' ? node.data.diagramFormat : 'drawio'} onChange={(event) => onChange({ diagramFormat: event.target.value })}>
+          <option value="drawio">{t('diagramFormatDrawio')}</option>
+          <option value="mermaid">{t('diagramFormatMermaid')}</option>
+        </select></label>
+        <label>{t('diagramSource')}<textarea
+          rows={12}
+          aria-label={t('diagramSource')}
+          value={typeof node.data.diagram === 'string' ? node.data.diagram : typeof node.data.content === 'string' ? node.data.content : ''}
+          placeholder={t('diagramSourcePlaceholder')}
+          onChange={(event) => onChange({ diagram: event.target.value, content: event.target.value })}
+        /></label>
+      </>}
+      {!['chat', 'agent', 'evaluation', 'staff', 'website', 'prototype', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'task', 'mockup', 'evermind', 'standup', 'frame', 'drawing', 'diagram'].includes(kind) && !DOCUMENT_EDITOR_KINDS.has(kind) && !CREATIVE_GENERATOR_KINDS.has(kind) && <p className={styles.inspectorHint}>{t('objectLiveHint')}</p>}
       </fieldset> : <ActivityInspector sessionId={sessionId} objectId={node.id} persistence={persistence} role={role} members={members} />}
       {tab === 'details' && <section aria-label={t('copyAndDownload')} style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
         <strong style={{ fontSize: 12 }}>{t('copyAndDownload')}</strong>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {(kind === 'chat' || kind === 'code' || kind === 'note' || kind === 'report' || kind === 'document' || kind === 'slides' || kind === 'prd') && <button type="button" onClick={() => void runArtifactAction('copy')}>{t('copy')}</button>}
-          {(kind === 'chat' || kind === 'code' || kind === 'note' || kind === 'report' || kind === 'prd') && <button type="button" onClick={() => void runArtifactAction('markdown')}>{t('downloadMarkdown')}</button>}
+          {(kind === 'chat' || kind === 'code' || kind === 'note' || kind === 'report' || kind === 'document' || kind === 'slides' || kind === 'knowledge' || kind === 'diagram' || kind === 'prd') && <button type="button" onClick={() => void runArtifactAction('copy')}>{t('copy')}</button>}
+          {(kind === 'chat' || kind === 'code' || kind === 'note' || kind === 'report' || kind === 'document' || kind === 'slides' || kind === 'knowledge' || kind === 'prd') && <button type="button" onClick={() => void runArtifactAction('markdown')}>{t('downloadMarkdown')}</button>}
           {(kind === 'dataset' || kind === 'spreadsheet' || kind === 'table') && <button type="button" onClick={() => void runArtifactAction('csv')}>{t('downloadCsv')}</button>}
-          {kind === 'document' && <button type="button" onClick={() => void runArtifactAction('docx')}>{t('downloadWord')}</button>}
+          {(kind === 'document' || kind === 'knowledge' || kind === 'prd' || kind === 'report') && <button type="button" onClick={() => void runArtifactAction('docx')}>{t('downloadWord')}</button>}
           {kind === 'slides' && <button type="button" onClick={() => void runArtifactAction('pptx')}>{t('downloadPowerPoint')}</button>}
+          {kind === 'diagram' && <button type="button" onClick={() => void runArtifactAction('diagram')}>{t('downloadDiagram')}</button>}
           {(kind === 'dashboard' || kind === 'chart' || kind === 'evaluation' || kind === 'featureSummary' || kind === 'projectComparison') && <button type="button" onClick={() => void runArtifactAction('json')}>{t('downloadData')}</button>}
         </div>
         {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
