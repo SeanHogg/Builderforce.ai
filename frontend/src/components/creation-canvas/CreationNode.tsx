@@ -505,8 +505,10 @@ function DataGridBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patc
 /**
  * A document object rendered AS a document — the pages, headings, tables and
  * lists that were written — instead of the first paragraph of its source text.
- * The sheet scrolls inside the card, so a twenty-page market analysis is
- * readable on the board without opening anything.
+ * Pages are turned, not scrolled past: a file imported from Word or PDF keeps
+ * the breaks its author declared, so the page on the card is the page in the
+ * source file, and a twenty-page market analysis is readable on the board
+ * without opening anything.
  */
 function DocumentBody({ data }: { data: CreationNodeData }) {
   const t = useTranslations('creationCanvas.node');

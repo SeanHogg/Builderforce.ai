@@ -1236,7 +1236,8 @@
   background:var(--canvas-widget-surface,#fff); color:var(--canvas-ink,#142234);
   font-size:12px; line-height:1; cursor:pointer;
 }
-.documentPager button:hover:not(:disabled) { background:var(--canvas-panel-muted,#f3f7fc); }
+.documentPager button:hover:not(:disabled),
+.documentPager button:focus-visible { background:var(--canvas-hover,#e7effc); outline:none; }
 .documentPager button:disabled { opacity:.4; cursor:default; }
 
 /* Workbook tabs. An imported .xlsx carries every sheet on one object, so moving
@@ -1253,6 +1254,8 @@
   border-color:var(--canvas-accent-ink,#2a5fc7);
   background:var(--canvas-widget-surface,#fff); color:var(--canvas-ink,#142234); font-weight:700;
 }
+.sheetTabs button:hover:not(:disabled),
+.sheetTabs button:focus-visible { background:var(--canvas-hover,#e7effc); outline:none; }
 .sheetTabs button:disabled { cursor:default; opacity:.6; }
 
 /* Held over the board while a file is dragged in from the desktop. It never

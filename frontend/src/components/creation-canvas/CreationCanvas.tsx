@@ -20,7 +20,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { AccessibleOutlineIcon, CanvasCommands, CanvasFilesIcon, CanvasRailToggle, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
 import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
-import { Canvas3DControlsProvider, useCanvas3DControls } from '@/components/canvas/canvas3dControls';
+import { Canvas3DControlsProvider, useCanvas3DControls, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { CanvasOutlinePanel } from './CanvasOutlinePanel';
 import { CanvasFilesPanel } from './CanvasFilesPanel';
@@ -80,7 +80,7 @@ import { ChatModeToggle } from '@/components/brain/ChatModeToggle';
 import { DEFAULT_CHAT_MODE, normalizeChatMode, type ChatMode } from '@/lib/brain';
 import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
 import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, creativeBrief, creativeMeshGeometry, creativePreviewImageUrl, evermindMediaArtifact, generateEvermindMedia, generateServerCreativeArtifact, mediaFrameDataUrl, navigableArtifactUrl, withCreationDeliverable, EVERMIND_CREATIVE_KINDS, SERVER_CREATIVE_KINDS, type CreationDeliverable, type CreativeArtifact } from '@/lib/creationDeliverables';
-import { canvasDiagram, canvasFiles, canvasObjectMarkdown, type CanvasFile } from '@/lib/canvasDocuments';
+import { canvasDiagram, canvasDocument, canvasFiles, canvasObjectMarkdown, type CanvasFile } from '@/lib/canvasDocuments';
 import { listEvermindModels } from '@/lib/studioModelsApi';
 import { AITrainingPanel } from '@/components/AITrainingPanel';
 
@@ -386,7 +386,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * floating over it — two live views of the same objects would compete for the
    * same pointer, and the point of the mode is to read depth without distraction.
    */
-  const [threeD, setThreeD] = useState(false);
+  const threeD = useCanvasThreeD();
   const [shareOpen, setShareOpen] = useState(initialShareOpen);
   const [accountGate, setAccountGate] = useState<AccountGate | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -2054,6 +2054,49 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return creationSessionsApi.projectPrdContext(sessionId, projectId);
     },
   }, {
+    // The canvas snapshot caps every string field, so a twenty-page document
+    // dropped on the board reaches Brain as its first two thousand characters.
+    // This is the document counterpart of canvas_query_dataset: the full body,
+    // by page, so "summarise this" reads the file rather than its opening.
+    name: 'canvas_read_document',
+    description: 'Read the full written body of any object on this canvas that carries one — a Document, PRD, Knowledge page, Report, Note, or an imported Word or PDF file — one page at a time. The canvas snapshot truncates long bodies, so ALWAYS use this before summarizing, reviewing, rewriting, quoting, or answering questions about a document; never answer from the truncated snapshot text.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        objectId: { type: 'string', description: 'Object id of the document. Omit when the canvas holds exactly one document-like object.' },
+        page: { type: 'number', description: 'One-based page to read. Omit for the first page.' },
+        pages: { type: 'number', description: 'How many consecutive pages to return, up to 6. Defaults to 3.' },
+      },
+    },
+    run: (raw: unknown) => {
+      const args = raw as { objectId?: string; page?: number; pages?: number };
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const candidates = [...nodes, ...stagedNodes].filter((node) => canvasDocument(node.data));
+      const target = args.objectId ? candidates.find((node) => node.id === args.objectId) : candidates.length === 1 ? candidates[0] : undefined;
+      if (!target) {
+        return { error: candidates.length
+          ? `Specify which document to read. Documents on this canvas: ${candidates.map((node) => `${node.id} (${node.data.title})`).join(', ')}`
+          : 'No document with a written body is on this canvas.' };
+      }
+      const document = canvasDocument(target.data)!;
+      const span = Math.max(1, Math.min(Math.round(Number(args.pages) || 3), 6));
+      const first = Math.max(1, Math.min(Math.round(Number(args.page) || 1), document.pages.length));
+      const returned = document.pages.slice(first - 1, first - 1 + span);
+      return {
+        objectId: target.id,
+        title: target.data.title,
+        ...(typeof target.data.fileName === 'string' ? { fileName: target.data.fileName } : {}),
+        ...(typeof target.data.sourceFormat === 'string' ? { sourceFormat: target.data.sourceFormat } : {}),
+        totalPages: document.pages.length,
+        wordCount: document.wordCount,
+        outline: document.headings,
+        firstPage: first,
+        pages: returned.map((body, index) => ({ page: first + index, body })),
+        hasMore: first - 1 + returned.length < document.pages.length,
+        readFromSource: true,
+      };
+    },
+  }, {
     name: 'canvas_create_project_prd',
     description: 'Propose a complete canonical PRD assigned to a project and represented on the canvas. Use this—not canvas_add_object—for a project PRD, consolidated PRD, or requirements synthesis.',
     parameters: {
@@ -3514,7 +3557,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // board controls off that edge from this, not from the side. An inline Brain
         // is an Object on the board and takes no edge, so it must not set this.
         data-brain-open={brainSurfaceOpen && brainDock.mode === 'docked' ? 'true' : 'false'}
-        data-view={threeD ? '3d' : 'flat'}
+        data-view={threeD.active ? '3d' : 'flat'}
         data-cursor-mode={drawingMode ? 'draw' : 'pan'} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPoints.current = []; }} onDragEnter={onCanvasDragEnter} onDragLeave={onCanvasDragLeave} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
         {fileDragging && <div className={styles.fileDropOverlay} role="status" aria-live="polite">
           <div>
@@ -3574,8 +3617,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             showInteractive={false}
             minimapNodeColor={minimapColor as (node: Node) => string}
             minimapMaskColor="var(--creation-minimap-mask, rgba(244,248,253,.72))"
-            threeDActive={threeD}
-            onToggleThreeD={() => setThreeD((value) => !value)}
+            {...threeD.commandProps}
             extraControls={<>
               <CanvasRailToggle
                 pressed={filesOpen}
@@ -3597,7 +3639,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <button type="button" onClick={zoomOutAction} aria-label={t('zoomOut')}>−</button>
           <button type="button" onClick={fitViewAction} aria-label={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')}>⌗</button>
           <button type="button" onClick={cleanLayout} aria-label={t('arrangeObjects')}>⌘</button>
-          <button type="button" onClick={() => setThreeD((value) => !value)} aria-pressed={threeD} aria-label={tCommands('threeD.toggle')}>◱</button>
+          <button type="button" onClick={threeD.toggle} aria-pressed={threeD.active} aria-label={tCommands('threeD.toggle')}>◱</button>
           {threeDControls && <button type="button" onClick={threeDControls.toggleDepth} aria-pressed={threeDControls.depthMode !== 'flow'} aria-label={tCommands('threeD.depthGroup')}>⧉</button>}
           {threeDControls && <button type="button" onClick={threeDControls.toggleLayers} aria-pressed={threeDControls.layersVisible} aria-label={tCommands('threeD.layerGuides')}>▤</button>}
           {threeDControls?.dropToLayers && <button type="button" onClick={threeDControls.dropToLayers} aria-label={tCommands('threeD.dropToLayers')}>⤓</button>}
@@ -3605,7 +3647,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <button type="button" onClick={() => setOutlineOpen((value) => !value)} aria-pressed={outlineOpen} aria-label={t('canvasOutline')}><AccessibleOutlineIcon /></button>
         </div>
 
-        {threeD && <Canvas3DView
+        {threeD.active && <Canvas3DView
           nodes={threeDNodes}
           edges={edges}
           describe={describeThreeD}
@@ -3613,7 +3655,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           selectedIds={effectiveSelectedIds}
           onSelect={selectThreeDObject}
           onMove={canEdit ? moveThreeDObjects : undefined}
-          onExit={() => setThreeD(false)}
+          onExit={threeD.exit}
         />}
 
         <RemoteCursors members={members} currentUserId={currentUserId} instance={flowRef.current} container={flowWrapRef.current} />
