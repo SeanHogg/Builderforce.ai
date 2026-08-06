@@ -21,6 +21,18 @@ describe('restrictGuestTools', () => {
     expect(body.tool_choice).toBe('auto');
   });
 
+  it('keeps the dataset query tool so guest analytics use real rows, not placeholders', () => {
+    const body = {
+      messages: [{ role: 'user', content: 'chart the delivery success rate' }],
+      tools: [tool('canvas_query_dataset'), tool('builtin_projects_create')],
+      tool_choice: 'auto',
+    } as ChatCompletionRequest;
+
+    restrictGuestTools(body);
+
+    expect(body.tools).toEqual([tool('canvas_query_dataset')]);
+  });
+
   it('removes tenant, MCP, and unknown tools from a mixed guest request', () => {
     const body = {
       messages: [{ role: 'user', content: 'create and publish it' }],

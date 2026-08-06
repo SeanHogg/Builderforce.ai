@@ -55,19 +55,19 @@ describe('runCreationCanvasAi', () => {
     expect(firstRequest.metadata.guestTurnInput).toBe('build a new LLM');
     expect(secondRequest.metadata.guestTurnInput).toBe('build a new LLM');
     expect(firstRequest.tools).toHaveLength(1);
-    expect(firstRequest.messages[0].content).toContain('kind "llm" is a conventional language-model blueprint');
-    expect(firstRequest.messages[0].content).toContain('kind "evermind" is BuilderForce\'s self-learning Evermind model');
-    expect(firstRequest.messages[0].content).toContain('"create a workflow" means call canvas_add_object');
-    expect(firstRequest.messages[0].content).toContain('do not call builtin_workflows_create or ask a follow-up question');
-    expect(firstRequest.messages[0].content).toContain('call canvas_arrange_objects');
-    expect(firstRequest.messages[0].content).toContain('first call canvas_read_project_prds');
-    expect(firstRequest.messages[0].content).toContain('Then call canvas_create_project_prd');
-    expect(firstRequest.messages[0].content).toContain('regardless of the current canvas selection');
-    expect(firstRequest.messages[0].content).toContain('Never emit tool_code');
-    expect(firstRequest.messages[0].content).toContain('Never create a blank drawing or visual placeholder');
-    expect(firstRequest.messages[0].content).toContain('A correction, complaint, question about a displayed value');
-    expect(firstRequest.messages[0].content).toContain('Never create a replacement or duplicate');
-    expect(firstRequest.messages[0].content).toContain('Never claim an object was updated unless canvas_update_object succeeded');
+    expect(firstRequest.messages[1].content).toContain('kind "llm" is a conventional language-model blueprint');
+    expect(firstRequest.messages[1].content).toContain('kind "evermind" is BuilderForce\'s self-learning Evermind model');
+    expect(firstRequest.messages[1].content).toContain('"create a workflow" means call canvas_add_object');
+    expect(firstRequest.messages[1].content).toContain('do not call builtin_workflows_create or ask a follow-up question');
+    expect(firstRequest.messages[1].content).toContain('call canvas_arrange_objects');
+    expect(firstRequest.messages[1].content).toContain('first call canvas_read_project_prds');
+    expect(firstRequest.messages[1].content).toContain('Then call canvas_create_project_prd');
+    expect(firstRequest.messages[1].content).toContain('regardless of the current canvas selection');
+    expect(firstRequest.messages[1].content).toContain('Never emit tool_code');
+    expect(firstRequest.messages[1].content).toContain('Never create a blank drawing or visual placeholder');
+    expect(firstRequest.messages[1].content).toContain('A correction, complaint, question about a displayed value');
+    expect(firstRequest.messages[1].content).toContain('Never create a replacement or duplicate');
+    expect(firstRequest.messages[1].content).toContain('Never claim an object was updated unless canvas_update_object succeeded');
   });
 
   it('runs an invited Canvas agent under its own identity and instructions', async () => {
@@ -80,7 +80,7 @@ describe('runCreationCanvasAi', () => {
     });
 
     expect(answer).toContain('validating demand');
-    const system = mocks.streamChatCompletion.mock.calls[0][0].messages[0].content;
+    const system = mocks.streamChatCompletion.mock.calls[0][0].messages[1].content;
     expect(system).toContain('You are Market Researcher, an invited specialist agent');
     expect(system).toContain('Challenge unsupported market assumptions.');
     expect(system).toContain('Do not pretend to be Brain');
@@ -226,8 +226,72 @@ describe('runCreationCanvasAi', () => {
       onTrace,
     });
 
-    expect(mocks.streamChatCompletion.mock.calls[0][0].messages[0].content).toContain('[Evermind Memory');
+    expect(mocks.streamChatCompletion.mock.calls[0][0].messages[1].content).toContain('[Evermind Memory');
     expect(learn).toHaveBeenCalledWith(answer, 'How should we release?');
     expect(onTrace.mock.calls.map(([event]) => event.category)).toEqual(['recall', 'learn', 'reconcile']);
+  });
+  const DATASET_SNAPSHOT = JSON.stringify({
+    objects: [{ id: 'ds-1', kind: 'dataset', title: '07_30_2026.csv', rowCount: 812, columns: ['Shipment ID', 'Count Delivery'] }],
+  });
+
+  it('directs data questions to the query tool instead of authored values', async () => {
+    mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'Done.', toolCalls: [] });
+
+    await runCreationCanvasAi({
+      prompt: 'chart the delivery success rate', canvasSnapshot: DATASET_SNAPSHOT, persistence: 'local', canvasActions: [],
+    });
+
+    const system = mocks.streamChatCompletion.mock.calls[0][0].messages[1].content;
+    expect(system).toContain('must come from canvas_query_dataset');
+    expect(system).toContain('placeholder or example figures');
+    expect(system).toContain('materializeAs');
+  });
+
+  it('refuses to report a canvas artifact that no tool actually created', async () => {
+    mocks.streamChatCompletion.mockResolvedValueOnce({
+      text: 'I have created a table to visualize the shipment data, highlighting successes and failures.',
+      toolCalls: [],
+    });
+
+    const answer = await runCreationCanvasAi({
+      prompt: 'Use this data set to visualize as a table', canvasSnapshot: DATASET_SNAPSHOT, persistence: 'local', canvasActions: [],
+    });
+
+    expect(answer).toContain('did not actually make one');
+    expect(answer).not.toContain('I have created a table');
+  });
+
+  it('keeps a creation claim when a canvas mutation really was proposed', async () => {
+    mocks.streamChatCompletion
+      .mockResolvedValueOnce({ text: '', toolCalls: [{ id: 'c1', name: 'canvas_query_dataset', args: JSON.stringify({ materializeAs: 'table' }) }] })
+      .mockResolvedValueOnce({ text: 'I have created a table from all 812 rows.', toolCalls: [] });
+
+    const answer = await runCreationCanvasAi({
+      prompt: 'build the table', canvasSnapshot: DATASET_SNAPSHOT, persistence: 'local',
+      canvasActions: [{
+        name: 'canvas_query_dataset', description: 'Query', parameters: { type: 'object' }, mutates: true,
+        run: () => ({ ok: true, proposed: true, groups: [{ key: 'Success', count: 700 }] }),
+      }],
+    });
+
+    expect(answer).toBe('I have created a table from all 812 rows.');
+  });
+
+  it('flags fabricated figures when the canvas holds real rows', async () => {
+    mocks.streamChatCompletion.mockResolvedValueOnce({
+      text: "I've used placeholder values (75 successful, 25 unsuccessful) for demonstration purposes.",
+      toolCalls: [{ id: 'c1', name: 'canvas_add_object', args: '{}' }],
+    });
+    mocks.streamChatCompletion.mockResolvedValueOnce({
+      text: "I've used placeholder values (75 successful, 25 unsuccessful) for demonstration purposes.",
+      toolCalls: [],
+    });
+
+    const answer = await runCreationCanvasAi({
+      prompt: 'visualize it', canvasSnapshot: DATASET_SNAPSHOT, persistence: 'local',
+      canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: () => ({ ok: true, proposed: true }) }],
+    });
+
+    expect(answer).toContain('Those figures are not real');
   });
 });

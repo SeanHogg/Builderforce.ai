@@ -7,6 +7,9 @@ import type { ChatCompletionRequest } from '../llm/LlmProxyService';
  */
 export const GUEST_CANVAS_TOOL_NAMES = new Set([
   'canvas_read_snapshot',
+  // Pure client-side computation over rows already loaded in the guest's own
+  // browser. Without it a guest can only be told placeholder numbers.
+  'canvas_query_dataset',
   'canvas_add_object',
   'canvas_update_object',
   'canvas_delete_object',

@@ -4,6 +4,46 @@
 
 ---
 
+## 2026-08-05 — ✅ RESOLVED: three competing Brain surfaces, an undismissable outline, and a per-widget colour zoo on the Creation Canvas (ui 2026.7.157)
+
+Six usability findings from watching people use the Canvas, fixed together because most of them are the same problem: chrome that could not be put away.
+
+**1. The accessible outline is a command, not furniture.** It was a permanently docked `<details>` widget with no close control. It is now an accessibility icon on the SAME command rail as zoom / fit / clean-layout (`CanvasCommands` gained an `extraControls` slot so any canvas can add a rail command instead of floating its own chrome), opening a `CanvasOutlinePanel` that closes like every other canvas panel. Mirrored on the mobile rail.
+
+**2. Full screen.** A header toggle drives the Fullscreen API on the canvas shell and syncs from `fullscreenchange`, so the icon reflects reality even when the user leaves full screen with Esc. `.canvasShell:fullscreen` reclaims the topbar's height.
+
+**3. Diagnostics is one click, not three.** The header control is now icon-only; clicking it copies the whole report to the clipboard AND opens the panel, with a toast for success or for a refused clipboard. Nobody has to hunt for a second Copy button to report what they are looking at.
+
+**4. Two palettes, not twenty.** Brain surfaces (the Brain Object and the prompt it owns) share `--canvas-brain-*`; every other Object uses `--canvas-widget-*`. The per-kind accent colours on the evaluation / diagnostics / evermind / comparison / standup / creative cards are gone — sizing stayed, identity stopped forking per widget. Both palettes are declared once for light and once for dark.
+
+**5. Progress you can read; steps you opt into.** `brainActivity.ts` derives ONE phase from the live trace (`executing · tasks create`, `recalling`, `learning`, `writing`, and a rotating thinking / processing / churning / designing / composing cycle before the first step lands), plus live token spend and — once the turn settles — a "Thought for 52s · 3 actions · 1.2k tokens" receipt. The full step list is now behind a toggle (`showExecutionDetail`), off by default. Pure and time-injected, so every phase, count, and duration is unit-tested.
+
+**6. ONE Brain chat.** The Object transcript, the details-panel transcript, and the floating composer are consolidated into a `BrainDock` that parks left OR right (never both), slim or expanded, holding the conversation, the activity strip, its connected work (Context tab), and the prompt. The Brain Object became an anchor card showing the latest exchange plus "Open Brain chat"; selecting it reveals the dock instead of rendering a second transcript. The board reserves the dock's width through `--brain-dock-left` / `--brain-dock-right`, so the palette, inspector, history, diagnostics, and change-set panels are pushed inward rather than hidden underneath it. Layout choices persist to `builderforce:create:brain-dock` and emit a `creation_brain_dock_preference` activity signal, so the shipped default can be set from what people actually pick rather than from a guess. On phones the dock becomes a bottom sheet (slim = composer + status, expanded = 70% sheet) and the left/right controls hide, because a phone has no side to choose.
+
+Also in this pass: `CreationNode.tsx`, `CreationCanvas.tsx`, and `CanvasCommands.tsx` are now fully localized — 393 `creationCanvas.*` keys, 224 `creationCanvas.node.*` keys, and a new `canvasCommands.*` namespace, with real translations in all five catalogs.
+
+---
+
+## 2026-08-05 — ✅ RESOLVED: the Creation Canvas could not analyze the data you gave it, and said it had anyway (ui 2026.7.156, api 2026.7.207)
+
+A user uploaded a shipment export, asked which shipment IDs succeeded and which failed, and got back a dashboard built on "placeholder values (75 successful, 25 unsuccessful) for demonstration purposes", then a claimed table that was never created — the session snapshot shows `objects: 4` with no table on it. Four separate defects lined up to produce that.
+
+**1. An attached data file was inert.** `attachCanvasArtifact` only read a data URL for images; a `.csv`/`.tsv`/`.json` dropped on the composer became a `file` object holding a name, a MIME type, and nothing else. `file` also had no renderer, so it fell through to the generic card — hence "uploaded the dataset and couldn't preview the data". A tabular attachment now parses on drop and becomes a real **Dataset** object with columns, rows, and a column profile; non-tabular text files keep a readable preview; and `FileBody` renders type, size, and content instead of an opaque card.
+
+**2. Brain had no way to compute anything.** The 12 canvas tools could add and update objects but could not read a row. The snapshot carried `sampleRows` only, and `safeContextValue` capped every array at 25 — so on a 40-column export Brain could not even see the columns it was being asked about (`columns` and `profile` now get a 60-entry budget; `sampleRows` drops to 8 because it is no longer the evidence). New **`canvas_query_dataset`** runs a declarative query over *every* imported row — filter, `derive` (classify rows, e.g. Success when any count column is 1), `groupBy`, aggregate, sort, limit — and `materializeAs` builds the Table, Chart, Dashboard, or KPI from the real result rather than asking the model to retype 800 rows through a tool call. Re-running updates the object it already made instead of duplicating it. Added to `GUEST_CANVAS_TOOL_NAMES` — without that the API strips it from anonymous requests, which is exactly the session this came from.
+
+**3. The Table object could not show the answer.** `DataGridBody` truncated to 4 rows × 6 columns with no scroll and no notion of pass/fail. It now scrolls to 40 rows × 10 columns with a sticky header, `highlightRules` colour rows by tone, and a legend counts each tone across the *whole* row set, not the visible page.
+
+**4. Brain reported work it never did.** `runCreationCanvasAi` returned the model's text verbatim; a turn that narrated "I have created a table…" while calling no tool reached the user as success. A creation claim with zero proposed mutations is now replaced with what actually happened, and stated placeholder figures are contradicted when the canvas holds real rows. The prompt says plainly that invented, estimated, or illustrative figures are a failure when a dataset is present.
+
+Also folded in: one shared `parseTabularText`/`queryTabular`/`profileTabular` engine (`lib/canvasTabularData.ts`) used by the importer, the attachment path, the renderers, and the tool; `parseCSV` gained a `delimiter` argument so TSV stops going through an ad-hoc split that mishandled quoted fields; the import column cap went 24 → 60 (a shipment export's status columns were being silently dropped); `visualizeDataset` groups and aggregates instead of charting the first six rows; and the dataset `profile` action — advertised in the registry but wired to nothing — is now a real action with an inspector panel showing per-column type, coverage, distinct count, and range.
+
+Tests: `canvasTabularData.test.ts` (15, new) covers quoted CSV/TSV/JSON/JSONL parsing, wide-export retention, number coercion of `$1,234`/`45%`, profiling (a 0/1 counter column must profile as **number**, not boolean, or it cannot be summed), derive→groupBy on the exact shipment success/failure case, filters, and unknown-column reporting. `creationCanvasAi.test.ts` (14, +4) covers the query directive, the unverified-creation-claim replacement, that a real mutation keeps its claim, and the fabricated-figure flag. `CreationCanvas.test.tsx` (+2) covers highlighted table rows with a tone legend and the file preview. `guestCanvasTools.test.ts` (4, +1) covers guest access to the query tool. Three stale `creationCanvasAi` assertions reading `messages[0]` (there are two system messages) were fixed. `tsgo --noEmit` exit 0.
+
+Files: `frontend/src/lib/canvasTabularData.ts` (new), `frontend/src/lib/importHelpers.ts`, `frontend/src/components/creation-canvas/{CreationCanvas.tsx,CreationNode.tsx,CreationCanvas.module.css,creationObjectRegistry.ts}`, `frontend/src/lib/creationCanvasAi.ts`, `api/src/application/guest/guestCanvasTools.ts`, `frontend/src/i18n/messages/{en,zh,es,fr,de}.json` (+55 keys each).
+
+---
+
 ## 2026-08-04 — ✅ RESOLVED: a BYO-only tenant could be told "LLM proxy not configured" while holding a working key (api 2026.7.206)
 
 Found while verifying that Kimi is genuinely SELECTABLE in the VSIX and Cloud Chat, not merely dispatchable. The selection path itself was already sound end-to-end — `/v1/models` projects a connected provider through `byoModelsFor`, both pickers render `byo.models` from that one projection, and the strict-pin gate exempts a pin whose vendor the tenant's own credentials cover. Writing the test that proves it is what surfaced the bug.

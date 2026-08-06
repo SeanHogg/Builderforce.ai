@@ -1,0 +1,227 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
+import { useTranslations } from 'next-intl';
+import {
+  CANVAS_3D_DEFAULT_ORBIT,
+  CANVAS_3D_DEPTH_MODES,
+  CANVAS_3D_PERSPECTIVE,
+  canvas3dLinkTransform,
+  canvas3dOrbitAfterDrag,
+  canvas3dOrbitAfterZoom,
+  canvas3dScene,
+  canvas3dStageTransform,
+  canvas3dTranslate,
+  canvas3dZoomFactorFromWheel,
+  isCanvas3DDepthMode,
+  type Canvas3DDepthMode,
+  type Canvas3DDescriptor,
+  type Canvas3DNode,
+  type Canvas3DOrbit,
+} from './canvas3d';
+import type { CanvasGraphEdge } from './canvasGraph';
+import styles from './Canvas3DView.module.css';
+
+export interface Canvas3DViewProps<T extends Canvas3DNode> {
+  nodes: readonly T[];
+  edges: readonly CanvasGraphEdge[];
+  /** How this canvas labels and colours one of its objects. */
+  describe: (node: T) => Canvas3DDescriptor;
+  /** Canvas-specific footprint, when a canvas knows more than the measured box. */
+  measure?: (node: T) => { width: number; height: number };
+  selectedIds?: readonly string[];
+  onSelect?: (id: string) => void;
+  onExit: () => void;
+}
+
+/** Pointer travel, in pixels, past which a gesture is an orbit and not a click. */
+const CLICK_SLOP = 3;
+const KEYBOARD_STEP = 12;
+const ZOOM_STEP = 1.25;
+
+/**
+ * The 3D reading of a canvas: the same objects, lifted onto depth planes.
+ *
+ * Rendered as real DOM under CSS 3D transforms rather than a WebGL scene, which
+ * is what keeps every card a focusable button with its own text — the view stays
+ * usable from the keyboard and by assistive tech, and it costs no new runtime.
+ * Selection is shared with the flat canvas, so opening an object in 3D shows the
+ * same inspector the board would.
+ */
+export function Canvas3DView<T extends Canvas3DNode>({
+  nodes,
+  edges,
+  describe,
+  measure,
+  selectedIds = [],
+  onSelect,
+  onExit,
+}: Canvas3DViewProps<T>) {
+  const t = useTranslations('canvasCommands');
+  const [orbit, setOrbit] = useState<Canvas3DOrbit>(CANVAS_3D_DEFAULT_ORBIT);
+  const [depthMode, setDepthMode] = useState<Canvas3DDepthMode>('flow');
+  const [dragging, setDragging] = useState(false);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+
+  const scene = useMemo(
+    () => canvas3dScene({ nodes, edges, describe, depthMode, ...(measure ? { measure } : {}) }),
+    [depthMode, describe, edges, measure, nodes],
+  );
+  const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
+
+  useEffect(() => {
+    if (!dragging) return;
+    const move = (event: PointerEvent) => {
+      const drag = dragRef.current;
+      if (!drag) return;
+      const dx = event.clientX - drag.x;
+      const dy = event.clientY - drag.y;
+      dragRef.current = { x: event.clientX, y: event.clientY, moved: drag.moved || Math.abs(dx) + Math.abs(dy) > CLICK_SLOP };
+      setOrbit((current) => canvas3dOrbitAfterDrag(current, dx, dy));
+    };
+    const end = () => setDragging(false);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', end);
+      window.removeEventListener('pointercancel', end);
+    };
+  }, [dragging]);
+
+  // React attaches wheel passively at the root, so zooming has to come from a
+  // non-passive listener — otherwise the page scrolls behind the scene.
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+    const wheel = (event: WheelEvent) => {
+      event.preventDefault();
+      setOrbit((current) => canvas3dOrbitAfterZoom(current, canvas3dZoomFactorFromWheel(event.deltaY)));
+    };
+    viewport.addEventListener('wheel', wheel, { passive: false });
+    return () => viewport.removeEventListener('wheel', wheel);
+  }, []);
+
+  const onPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    dragRef.current = { x: event.clientX, y: event.clientY, moved: false };
+    setDragging(true);
+  }, []);
+
+  const onKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const drag = ({ ArrowLeft: [-KEYBOARD_STEP, 0], ArrowRight: [KEYBOARD_STEP, 0], ArrowUp: [0, -KEYBOARD_STEP], ArrowDown: [0, KEYBOARD_STEP] } as Record<string, [number, number]>)[event.key];
+    if (drag) {
+      event.preventDefault();
+      setOrbit((current) => canvas3dOrbitAfterDrag(current, drag[0], drag[1]));
+      return;
+    }
+    if (event.key === '+' || event.key === '=') {
+      event.preventDefault();
+      setOrbit((current) => canvas3dOrbitAfterZoom(current, ZOOM_STEP));
+    } else if (event.key === '-' || event.key === '_') {
+      event.preventDefault();
+      setOrbit((current) => canvas3dOrbitAfterZoom(current, 1 / ZOOM_STEP));
+    } else if (event.key === '0') {
+      event.preventDefault();
+      setOrbit(CANVAS_3D_DEFAULT_ORBIT);
+    }
+  }, []);
+
+  const layerName = useCallback(
+    (index: number, label?: string) => label ?? t('threeD.layerName', { index: index + 1 }),
+    [t],
+  );
+
+  return (
+    <section className={styles.scene} aria-label={t('threeD.title')} data-testid="canvas-3d-view">
+      <header className={styles.hud}>
+        <div className={styles.hudTitle}>
+          <span className={styles.hudMark} aria-hidden>◱</span>
+          <strong>{t('threeD.title')}</strong>
+          <small>{t('threeD.summary', { objects: scene.cards.length, layers: scene.layers.length })}</small>
+        </div>
+        <div className={styles.hudActions}>
+          <label className={styles.hudField}>
+            <span>{t('threeD.depth')}</span>
+            <select
+              value={depthMode}
+              onChange={(event) => setDepthMode(isCanvas3DDepthMode(event.target.value) ? event.target.value : 'flow')}
+            >
+              {CANVAS_3D_DEPTH_MODES.map((mode) => <option key={mode} value={mode}>{t(`threeD.depth_${mode}`)}</option>)}
+            </select>
+          </label>
+          <div className={styles.hudGroup} role="group" aria-label={t('threeD.viewControls')}>
+            <button type="button" onClick={() => setOrbit((current) => canvas3dOrbitAfterZoom(current, ZOOM_STEP))} aria-label={t('threeD.zoomIn')} title={t('threeD.zoomIn')}>＋</button>
+            <button type="button" onClick={() => setOrbit((current) => canvas3dOrbitAfterZoom(current, 1 / ZOOM_STEP))} aria-label={t('threeD.zoomOut')} title={t('threeD.zoomOut')}>−</button>
+            <button type="button" onClick={() => setOrbit(CANVAS_3D_DEFAULT_ORBIT)} aria-label={t('threeD.reset')} title={t('threeD.reset')}>⟳</button>
+          </div>
+          <button type="button" className={styles.exit} onClick={onExit}>{t('threeD.exit')}</button>
+        </div>
+      </header>
+
+      <div
+        ref={viewportRef}
+        className={styles.viewport}
+        style={{ perspective: `${CANVAS_3D_PERSPECTIVE}px` }}
+        data-dragging={dragging}
+        tabIndex={0}
+        aria-label={t('threeD.orbitLabel')}
+        onPointerDown={onPointerDown}
+        onKeyDown={onKeyDown}
+      >
+        {scene.cards.length === 0
+          ? <p className={styles.empty}>{t('threeD.empty')}</p>
+          : <div className={styles.stage} style={{ transform: canvas3dStageTransform(orbit) }}>
+            {scene.layers.map((layer) => <div
+              key={layer.index}
+              className={styles.plane}
+              aria-hidden
+              style={{ width: scene.plane.width, height: scene.plane.height, transform: canvas3dTranslate({ x: 0, y: 0, z: layer.z }) }}
+            >
+              <span className={styles.planeTag}>{layerName(layer.index, layer.label)}<i>{t('threeD.layerCount', { count: layer.count })}</i></span>
+            </div>)}
+
+            {scene.links.map((link) => {
+              const { transform, length } = canvas3dLinkTransform(link.from, link.to);
+              return <i
+                key={link.id}
+                className={styles.link}
+                aria-hidden
+                data-spans={link.spansLayers}
+                style={{ width: Math.max(1, length), transform }}
+              />;
+            })}
+
+            {scene.cards.map((card) => <button
+              key={card.id}
+              type="button"
+              className={styles.card}
+              style={{
+                width: card.width,
+                minHeight: card.height,
+                transform: canvas3dTranslate(card),
+                ...(card.accent ? { ['--canvas-3d-accent' as string]: card.accent } : {}),
+              }}
+              aria-pressed={selected.has(card.id)}
+              data-selected={selected.has(card.id)}
+              onClick={() => {
+                if (dragRef.current?.moved) return;
+                onSelect?.(card.id);
+              }}
+            >
+              <span className={styles.cardHead}>
+                {card.icon && <i aria-hidden>{card.icon}</i>}
+                <b>{card.label}</b>
+              </span>
+              {card.sublabel && <span className={styles.cardSub}>{card.sublabel}</span>}
+              <span className={styles.cardGroup}>{card.group}</span>
+            </button>)}
+          </div>}
+      </div>
+
+      <footer className={styles.hint}>{t('threeD.hint')}</footer>
+    </section>
+  );
+}

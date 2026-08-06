@@ -8,14 +8,14 @@ describe('WorkspaceCanvas', () => {
       { id: 'overview', title: 'Overview', content: <div>Overview panel</div> },
     ]} />);
 
-    expect(screen.getByRole('button', { name: 'Clean up canvas layout' })).toBeInTheDocument();
-    const minimapAction = screen.getByRole('button', { name: 'Toggle mini map' });
+    expect(screen.getByRole('button', { name: 'canvasCommands.cleanLayout' })).toBeInTheDocument();
+    const minimapAction = screen.getByRole('button', { name: 'canvasCommands.toggleMiniMap' });
     expect(minimapAction).toHaveAttribute('aria-pressed', 'true');
-    fireEvent.click(screen.getByRole('button', { name: 'Close mini map' }));
+    fireEvent.click(screen.getByRole('button', { name: 'canvasCommands.closeMiniMap' }));
     expect(minimapAction).toHaveAttribute('aria-pressed', 'false');
     fireEvent.click(minimapAction);
     expect(minimapAction).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Close mini map' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'canvasCommands.closeMiniMap' })).toBeInTheDocument();
   });
 
   it('renders reusable application components as canvas panels', () => {

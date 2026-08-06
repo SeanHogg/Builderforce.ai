@@ -1,5 +1,6 @@
 import type { CreationNodeData, CreationObjectKind } from './types';
 import { CREATION_CONNECTION_KINDS, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
+import { MAX_TABULAR_COLUMNS } from '@/lib/canvasTabularData';
 
 export type CreationObjectGroup = 'Build' | 'Data' | 'Knowledge' | 'Insights' | 'Work' | 'People' | 'Agents' | 'Models' | 'Collaborate' | 'Integrations';
 
@@ -108,12 +109,12 @@ const MUTABLE_FIELDS = {
   workflow: ['content', 'steps', 'approvalMode', 'runTarget'],
   website: ['content', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteAccent', 'viewport', 'pages', 'subdomain', 'url', 'siteUrl', 'pathUrl'],
   chat: ['content', 'aiResponse', 'messages', 'trace'],
-  dataset: ['content', 'columns', 'rows', 'sampleRows', 'rowCount'],
-  table: ['content', 'columns', 'rows'],
-  spreadsheet: ['content', 'columns', 'rows', 'formulas'],
-  chart: ['content', 'chartType', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'chartLabels', 'chartValues', 'kpis', 'sources'],
-  kpi: ['content', 'value', 'target', 'unit', 'trend', 'sources'],
-  dashboard: ['content', 'kpis', 'chartLabels', 'chartValues', 'sources', 'fetchedAt', 'dateRange'],
+  dataset: ['content', 'columns', 'rows', 'sampleRows', 'rowCount', 'profile', 'summary', 'fileName', 'mimeType'],
+  table: ['content', 'columns', 'rows', 'rowCount', 'sampleRows', 'highlightRules', 'summary', 'sourceDatasetId', 'sources'],
+  spreadsheet: ['content', 'columns', 'rows', 'formulas', 'rowCount', 'highlightRules', 'summary'],
+  chart: ['content', 'chartType', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'chartLabels', 'chartValues', 'kpis', 'sources', 'summary', 'sourceDatasetId'],
+  kpi: ['content', 'value', 'target', 'unit', 'trend', 'sources', 'summary', 'sourceDatasetId'],
+  dashboard: ['content', 'kpis', 'chartLabels', 'chartValues', 'sources', 'fetchedAt', 'dateRange', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'summary', 'sourceDatasetId'],
   report: ['content', 'markdown', 'chartLabels', 'chartValues', 'sources'],
   evaluation: ['content', 'criteria', 'verdict', 'gaps', 'recommendations', 'sources', 'testResults', 'passRate', 'runCount', 'lastRunAt'],
   projectComparison: ['content', 'projects', 'sources', 'fetchedAt', 'recommendations'],
@@ -160,7 +161,7 @@ const MUTABLE_FIELDS = {
   document: ['content', 'markdown', 'sources'],
   slides: ['content', 'markdown', 'items', 'sources'],
   knowledge: ['content', 'markdown', 'sources'],
-  file: ['content', 'fileName', 'mimeType', 'url'],
+  file: ['content', 'fileName', 'mimeType', 'url', 'fileSize', 'summary'],
   url: ['content', 'url', 'sources'],
   frame: ['content', 'framePurpose', 'frameColor', 'frameBorder'],
   drawing: ['content', 'points', 'drawingWidth', 'drawingHeight', 'stroke', 'strokeWidth'],
@@ -209,7 +210,8 @@ export function sanitizeCreationObjectPatch(kind: CreationObjectKind, value: unk
  */
 const CONTEXT_FIELDS = [
   'kind', 'title', 'subtitle', 'status', 'resourceId', 'model', 'role', 'focus',
-  'fetchedAt', 'dateRange', 'projectLens', 'columns', 'rowCount', 'sampleRows', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'chartLabels', 'chartValues',
+  'fetchedAt', 'dateRange', 'projectLens', 'columns', 'rowCount', 'sampleRows', 'profile', 'highlightRules', 'sourceDatasetId',
+  'fileName', 'mimeType', 'fileSize', 'chartType', 'chartTitle', 'xAxisLabel', 'yAxisLabel', 'chartLabels', 'chartValues',
   'projects', 'sources', 'items', 'summary', 'participants', 'evermindVersion',
   'contributions', 'inferenceEnabled', 'teacherModel', 'viewport', 'content', 'markdown',
   'steps', 'websiteHeadline', 'websiteBody', 'websiteCta', 'pages', 'kpis', 'verdict',
@@ -228,14 +230,27 @@ const CONTEXT_FIELDS = [
   'revenueGoalCents', 'referralLink', 'salesLink',
 ] as const;
 const SENSITIVE_CONTEXT_KEY = /(?:secret|token|password|credential|authorization|api.?key|cookie)/i;
+const DEFAULT_CONTEXT_ARRAY_LIMIT = 25;
+/**
+ * Per-field array budgets. A wide operational export must not have the column
+ * a user is asking about silently truncated away, while row samples stay small
+ * because Brain reads real numbers through canvas_query_dataset instead of
+ * counting sampled rows by hand.
+ */
+const CONTEXT_ARRAY_LIMITS: Readonly<Partial<Record<string, number>>> = {
+  columns: MAX_TABULAR_COLUMNS,
+  profile: MAX_TABULAR_COLUMNS,
+  highlightRules: 20,
+  sampleRows: 8,
+};
 
-function safeContextValue(value: unknown, depth = 0): unknown {
+function safeContextValue(value: unknown, depth = 0, arrayLimit = DEFAULT_CONTEXT_ARRAY_LIMIT): unknown {
   if (value == null || typeof value === 'boolean' || typeof value === 'number') return value;
   if (typeof value === 'string') return value.slice(0, 2_000);
   if (depth >= 3) return undefined;
-  if (Array.isArray(value)) return value.slice(0, 25).map((item) => safeContextValue(item, depth + 1)).filter((item) => item !== undefined);
+  if (Array.isArray(value)) return value.slice(0, arrayLimit).map((item) => safeContextValue(item, depth + 1)).filter((item) => item !== undefined);
   if (typeof value === 'object') {
-    return Object.fromEntries(Object.entries(value as Record<string, unknown>).slice(0, 30).flatMap(([key, item]) => {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).slice(0, MAX_TABULAR_COLUMNS).flatMap(([key, item]) => {
       if (SENSITIVE_CONTEXT_KEY.test(key)) return [];
       const safe = safeContextValue(item, depth + 1);
       return safe === undefined ? [] : [[key, safe]];
@@ -246,7 +261,7 @@ function safeContextValue(value: unknown, depth = 0): unknown {
 
 export function creationObjectAiContext(data: CreationNodeData): Record<string, unknown> {
   return Object.fromEntries(CONTEXT_FIELDS.flatMap((field) => {
-    const value = safeContextValue(data[field]);
+    const value = safeContextValue(data[field], 0, CONTEXT_ARRAY_LIMITS[field] ?? DEFAULT_CONTEXT_ARRAY_LIMIT);
     return value === undefined ? [] : [[field, value]];
   }));
 }

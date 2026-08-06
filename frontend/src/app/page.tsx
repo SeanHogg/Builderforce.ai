@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
-import { FEATURES, EVERMIND, STATS, WORKFLOW_PROOF_DEMOS } from '@/lib/content';
+import { FEATURES, STATS, WORKFLOW_PROOF_DEMOS } from '@/lib/content';
 import { createLocalCreationSession } from '@/lib/creationSessions';
 import { BLOG_POSTS } from '@/lib/blogData';
 import { ArticleCardGrid } from '@/components/blog/ArticleCard';
@@ -15,6 +15,7 @@ import BrainBackdrop from '@/components/BrainBackdrop';
 import { DemoShowcase } from '@/components/demo/DemoShowcase';
 import { ChatInput } from '@/components/ChatInput';
 import { AUTH_API_URL } from '@/lib/auth';
+import { MeetCarousel } from '@/components/home/MeetCarousel';
 
 // Visible copy is sourced from the `home`, `features`, `compare` and `evermind`
 // catalog namespaces (localized in all 5 locales). `content.ts` (EVERMIND,
@@ -22,12 +23,9 @@ import { AUTH_API_URL } from '@/lib/auth';
 // JSON-LD (homepageSchema) — only non-translatable ICONS are read from it here,
 // paired with the translated arrays by index, so the arrays stay length/order-aligned.
 type TitleDesc = { title: string; desc: string };
-type RoleDesc = { role: string; desc: string };
 type StatLabel = { label: string };
 type FaqItem = { question: string; answer: string };
 type PricingTeaser = { name: string; perks: string[] };
-type CanvasFeature = { title: string; desc: string };
-type CanvasObject = { title: string; meta: string };
 type WorkflowProofCopy = { title: string; audience: string; outcome: string; steps: string[]; evidence: string };
 
 export default function LandingPage() {
@@ -645,119 +643,8 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* ── Create: turn a prompt into connected, deliverable work ── */}
-        <section className="lp-features" id="create" style={{ paddingTop: 0, scrollMarginTop: '90px' }}>
-          <div className="lp-create">
-            <div className="lp-create-head">
-              <span className="lp-create-eyebrow">✦ {t('home.createCanvas.eyebrow')}</span>
-              <h2 className="section-title" style={{ marginBottom: 8 }}>
-                <span className="agentHost-accent">⟩</span> {t('home.createCanvas.heading')}
-              </h2>
-              <p style={{ margin: 0, color: 'var(--text-secondary)', lineHeight: 1.65 }}>
-                {t('home.createCanvas.blurb')}
-              </p>
-            </div>
-            <div className="lp-create-layout">
-              <div className="lp-create-features">
-                {(t.raw('home.createCanvas.features') as CanvasFeature[]).map((feature) => (
-                  <div className="lp-create-feature" key={feature.title}>
-                    <strong>{feature.title}</strong>
-                    <span>{feature.desc}</span>
-                  </div>
-                ))}
-                <div className="lp-actions" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
-                  <Link href="/create/new" className="lp-btn-primary">✦ {t('home.createCanvas.startCta')} →</Link>
-                  <Link href="/creation-canvas" className="lp-btn-secondary">{t('home.createCanvas.exploreCta')}</Link>
-                </div>
-              </div>
-              <div className="lp-create-board" aria-label={t('home.createCanvas.previewAria')}>
-                <div className="lp-create-toolbar"><i /><i /><i /><span>{t('home.createCanvas.sessionLabel')}</span></div>
-                {(t.raw('home.createCanvas.objects') as CanvasObject[]).map((object, i) => (
-                  <div className="lp-create-object" key={object.title}>
-                    <strong>{['⌘', '◎', '▥', '✦'][i]} {object.title}</strong>
-                    <small>{object.meta}</small>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="lp-create-flow">
-              {(t.raw('home.createCanvas.flow') as string[]).map((step, i, steps) => (
-                <span key={step}>{step}{i < steps.length - 1 && <b> &nbsp;→</b>}</span>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ── Evermind: the brain behind the platform (what the hero animation depicts) ── */}
-        <section className="lp-features" id="evermind" style={{ paddingTop: 0, scrollMarginTop: '90px' }}>
-          <div className="lp-evermind">
-            <span className="lp-evermind-eyebrow">{t('evermind.eyebrow')}</span>
-            <h2 className="section-title" style={{ marginBottom: 8 }}>
-              <span className="agentHost-accent">⟩</span> Evermind — {t('evermind.tagline')}
-            </h2>
-            <p style={{ maxWidth: '780px', margin: '0 0 28px', color: 'var(--text-secondary)' }}>
-              {t('evermind.blurb')}
-            </p>
-            <div className="lp-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))' }}>
-              {(t.raw('evermind.architecture.pillars') as TitleDesc[]).map((p, i) => (
-                <div key={p.title} className="lp-card">
-                  <span className="lp-card-icon">{EVERMIND.pillars[i]?.icon}</span>
-                  <h3 className="lp-card-title">{p.title}</h3>
-                  <p className="lp-card-desc">{p.desc}</p>
-                </div>
-              ))}
-            </div>
-            <div className="lp-evermind-edges">
-              {(t.raw('evermind.edges.items') as { label: string; desc: string }[]).map((e) => (
-                <div key={e.label} className="lp-evermind-edge">
-                  <span className="lp-evermind-edge-label">{e.label}</span>
-                  <span className="lp-evermind-edge-desc">{e.desc}</span>
-                </div>
-              ))}
-            </div>
-            <div className="lp-actions" style={{ marginTop: 24 }}>
-              <Link href="/evermind" className="lp-btn-primary">🧠 {t('evermind.exploreCta')} →</Link>
-            </div>
-          </div>
-        </section>
-
-        {/* ── Pillars: the human-in-the-loop, fully agentic framing ── */}
-        <section className="lp-features" style={{ paddingTop: 0 }}>
-          <h2 className="section-title">
-            <span className="agentHost-accent">⟩</span> {t('home.pillarsHeading')}
-          </h2>
-          <p style={{ maxWidth: 'none', margin: '0 0 32px', color: 'var(--text-secondary)' }}>
-            {t('home.pillarsLead')}
-          </p>
-          <div className="lp-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(260px,1fr))' }}>
-            {(t.raw('home.pillars') as TitleDesc[]).map((p, i) => (
-              <div key={p.title} className="lp-card">
-                <span className="lp-card-icon">{['🔁', '▦', '🧩'][i]}</span>
-                <h3 className="lp-card-title">{p.title}</h3>
-                <p className="lp-card-desc">{p.desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* ── Enterprise framing: one instrumented system → every role's operating picture ── */}
-        <section className="lp-features" style={{ paddingTop: 0 }}>
-          <h2 className="section-title">
-            <span className="agentHost-accent">⟩</span> {t('home.rolesHeading')}
-          </h2>
-          <p style={{ maxWidth: 'none', margin: '0 0 32px', color: 'var(--text-secondary)' }}>
-            {t('home.rolesLead')}
-          </p>
-          <div className="lp-grid" style={{ gridTemplateColumns: 'repeat(auto-fit,minmax(240px,1fr))' }}>
-            {(t.raw('home.roles') as RoleDesc[]).map((p, i) => (
-              <div key={p.role} className="lp-card">
-                <span className="lp-card-icon">{['🧭', '⚙️', '💰', '🗂️', '🛡️', '👥'][i]}</span>
-                <h3 className="lp-card-title">{p.role}</h3>
-                <p className="lp-card-desc">{p.desc}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+        {/* ── One rotating product story: Create → Evermind → governed delivery ── */}
+        <MeetCarousel />
 
         {/* ── Quickstart install block ── */}
         <QuickStart />

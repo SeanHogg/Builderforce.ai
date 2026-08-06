@@ -1,7 +1,9 @@
 'use client';
 
 import { ControlButton, Controls, MiniMap, type Edge, type Node } from '@xyflow/react';
-import type { CSSProperties, Dispatch, SetStateAction } from 'react';
+import { useTranslations } from 'next-intl';
+import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from 'react';
+import { canvasNodeFootprint, graphLayerRanks } from './canvasGraph';
 import styles from './CanvasCommands.module.css';
 
 function MinimapIcon() {
@@ -21,6 +23,22 @@ function CleanLayoutIcon() {
   </svg>;
 }
 
+function ThreeDIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M8 1.4 14 4.6v6.8L8 14.6 2 11.4V4.6z" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+    <path d="M2 4.6 8 7.9l6-3.3M8 7.9v6.7" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+  </svg>;
+}
+
+/** The universal-access glyph used by every canvas that publishes a text outline. */
+export function AccessibleOutlineIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" strokeWidth="1.25" />
+    <circle cx="8" cy="3.9" r="1.15" fill="currentColor" />
+    <path d="M4.6 6.1 8 6.9l3.4-.8M8 6.9v3.1l-1.5 3M8 10h1.4l1.5 3" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
+}
+
 type CanvasCommandsProps = {
   minimapOpen: boolean;
   setMinimapOpen: Dispatch<SetStateAction<boolean>>;
@@ -29,9 +47,29 @@ type CanvasCommandsProps = {
   minimapNodeColor?: string | ((node: Node) => string);
   minimapMaskColor?: string;
   minimapStyle?: CSSProperties;
+  /**
+   * Extra `<ControlButton>`s appended to the rail (e.g. the accessible outline).
+   * Canvas-specific commands belong on the SAME rail as zoom/fit rather than
+   * floating separately, so there is one place to look for a canvas control.
+   */
+  extraControls?: ReactNode;
+  /**
+   * Supplied by canvases that can render themselves in 3D. The control appears
+   * only when a canvas can actually honour it, so the rail never offers a view
+   * that does not exist — the component decides its own visibility rather than
+   * every caller repeating the same condition.
+   */
+  onToggleThreeD?: () => void;
+  threeDActive?: boolean;
 };
 
-/** The common command rail and dismissible mini map used by every spatial canvas. */
+/**
+ * The common command rail and dismissible mini map used by every spatial canvas.
+ *
+ * The mini map is a map OF the flat board, so it stands down while a canvas is
+ * being read in 3D — the scene is the map at that point, and leaving a stale
+ * top-down thumbnail on screen would describe a view nobody is looking at.
+ */
 export function CanvasCommands({
   minimapOpen,
   setMinimapOpen,
@@ -40,22 +78,35 @@ export function CanvasCommands({
   minimapNodeColor,
   minimapMaskColor,
   minimapStyle,
+  extraControls,
+  onToggleThreeD,
+  threeDActive = false,
 }: CanvasCommandsProps) {
+  const t = useTranslations('canvasCommands');
   return <>
     <Controls position="bottom-left" showInteractive={showInteractive}>
-      <ControlButton onClick={onCleanLayout} aria-label="Clean up canvas layout" title="Clean up canvas layout">
+      <ControlButton onClick={onCleanLayout} aria-label={t('cleanLayout')} title={t('cleanLayout')}>
         <CleanLayoutIcon />
       </ControlButton>
+      {onToggleThreeD && <ControlButton
+        onClick={onToggleThreeD}
+        aria-label={t('threeD.toggle')}
+        aria-pressed={threeDActive}
+        title={threeDActive ? t('threeD.exit') : t('threeD.enter')}
+      >
+        <ThreeDIcon />
+      </ControlButton>}
       <ControlButton
         onClick={() => setMinimapOpen((open) => !open)}
-        aria-label="Toggle mini map"
+        aria-label={t('toggleMiniMap')}
         aria-pressed={minimapOpen}
-        title={minimapOpen ? 'Hide mini map' : 'Show mini map'}
+        title={minimapOpen ? t('hideMiniMap') : t('showMiniMap')}
       >
         <MinimapIcon />
       </ControlButton>
+      {extraControls}
     </Controls>
-    {minimapOpen && <>
+    {minimapOpen && !threeDActive && <>
       <MiniMap
         position="bottom-right"
         pannable
@@ -64,30 +115,28 @@ export function CanvasCommands({
         maskColor={minimapMaskColor}
         style={minimapStyle}
       />
-      <button type="button" className={styles.minimapClose} onClick={() => setMinimapOpen(false)} aria-label="Close mini map" title="Close mini map">×</button>
+      <button type="button" className={styles.minimapClose} onClick={() => setMinimapOpen(false)} aria-label={t('closeMiniMap')} title={t('closeMiniMap')}>×</button>
     </>}
   </>;
 }
 
-const nodeSize = (node: Node) => ({
-  width: node.measured?.width ?? node.width ?? (Number(node.style?.width) || 260),
-  height: node.measured?.height ?? node.height ?? (Number(node.style?.height) || 150),
-});
-
-/** Deterministically spaces nodes into graph layers, or a compact grid when there are no connections. */
+/**
+ * Deterministically spaces nodes into graph layers, or a compact grid when there
+ * are no connections. Shares its layering with the 3D view (see `canvasGraph`),
+ * so arranging the board and tilting it tell the same story about dependencies.
+ */
 export function cleanCanvasLayout<T extends Node>(nodes: T[], edges: Edge[]): T[] {
   if (nodes.length < 2) return nodes;
   const horizontalGap = 88;
   const verticalGap = 64;
-  const ids = new Set(nodes.map((node) => node.id));
-  const usableEdges = edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target) && edge.source !== edge.target);
+  const { ranks, connected } = graphLayerRanks(nodes, edges);
 
-  if (usableEdges.length === 0) {
+  if (!connected) {
     const columns = Math.max(1, Math.ceil(Math.sqrt(nodes.length)));
     const columnWidths = Array.from({ length: columns }, () => 0);
     const rowHeights: number[] = [];
     nodes.forEach((node, index) => {
-      const size = nodeSize(node);
+      const size = canvasNodeFootprint(node);
       const column = index % columns;
       const row = Math.floor(index / columns);
       columnWidths[column] = Math.max(columnWidths[column], size.width);
@@ -98,30 +147,8 @@ export function cleanCanvasLayout<T extends Node>(nodes: T[], edges: Edge[]): T[
     return nodes.map((node, index) => ({ ...node, position: { x: xs[index % columns], y: ys[Math.floor(index / columns)] } }));
   }
 
-  const successors = new Map<string, string[]>();
-  const indegree = new Map(nodes.map((node) => [node.id, 0]));
-  for (const edge of usableEdges) {
-    successors.set(edge.source, [...(successors.get(edge.source) ?? []), edge.target]);
-    indegree.set(edge.target, (indegree.get(edge.target) ?? 0) + 1);
-  }
-  const rank = new Map(nodes.map((node) => [node.id, 0]));
-  const queue = nodes.filter((node) => indegree.get(node.id) === 0).map((node) => node.id);
-  const visited = new Set<string>();
-  while (queue.length) {
-    const id = queue.shift()!;
-    visited.add(id);
-    for (const target of successors.get(id) ?? []) {
-      rank.set(target, Math.max(rank.get(target) ?? 0, (rank.get(id) ?? 0) + 1));
-      indegree.set(target, (indegree.get(target) ?? 0) - 1);
-      if (indegree.get(target) === 0) queue.push(target);
-    }
-  }
-  // Cyclic nodes still get a stable layer instead of remaining piled together.
-  let cycleRank = Math.max(...rank.values()) + 1;
-  for (const node of nodes) if (!visited.has(node.id)) rank.set(node.id, cycleRank++);
-
   const layers = new Map<number, T[]>();
-  for (const node of nodes) layers.set(rank.get(node.id) ?? 0, [...(layers.get(rank.get(node.id) ?? 0) ?? []), node]);
+  for (const node of nodes) layers.set(ranks.get(node.id) ?? 0, [...(layers.get(ranks.get(node.id) ?? 0) ?? []), node]);
   const orderedLayers = [...layers.entries()].sort(([a], [b]) => a - b);
   let x = 0;
   const positions = new Map<string, { x: number; y: number }>();
@@ -129,7 +156,7 @@ export function cleanCanvasLayout<T extends Node>(nodes: T[], edges: Edge[]): T[
     let y = 0;
     let layerWidth = 0;
     for (const node of layerNodes) {
-      const size = nodeSize(node);
+      const size = canvasNodeFootprint(node);
       positions.set(node.id, { x, y });
       y += size.height + verticalGap;
       layerWidth = Math.max(layerWidth, size.width);

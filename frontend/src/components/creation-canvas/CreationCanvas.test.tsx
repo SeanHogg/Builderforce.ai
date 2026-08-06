@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { associateBrainWithArtifacts, canInvokeCreationObjectAction, canvasChangesCanAutoApply, CreationCanvas, duplicateAddUpdateTarget, persistCanonicalProjectPrd, projectEvermindNodePatch, scoreAgentTestResponse, shouldAcquireCanvasObjectLock, type ProposedCanvasChange } from './CreationCanvas';
 import { CreationNode } from './CreationNode';
@@ -24,6 +24,10 @@ vi.mock('next-intl', async (importOriginal) => {
 });
 
 vi.mock('@/components/ConfirmProvider', () => ({ useConfirm: () => vi.fn(async () => true) }));
+
+vi.mock('@/components/ToastProvider', () => ({
+  useToast: () => ({ show: vi.fn(), success: vi.fn(), error: vi.fn(), info: vi.fn(), warning: vi.fn(), dismiss: vi.fn() }),
+}));
 
 vi.mock('@xyflow/react', async () => {
   const React = await import('react');
@@ -69,6 +73,36 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     fireEvent.click(minimapAction);
     expect(minimapAction).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Close mini map' })).toBeInTheDocument();
+  });
+
+  it('opens the 3D view from the canvas rail, then hands the board back', () => {
+    render(<CreationCanvas sessionId="three-d-controls-test" persistence="local" />);
+
+    // The rail and the phone-sized action stack both offer the mode.
+    const [toggle] = screen.getAllByRole('button', { name: 'Toggle 3D view' });
+    expect(screen.queryByTestId('canvas-3d-view')).not.toBeInTheDocument();
+
+    fireEvent.click(toggle!);
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    const scene = screen.getByTestId('canvas-3d-view');
+    expect(scene).toBeInTheDocument();
+    // The mini map is a map of the flat board, so it stands down in 3D.
+    expect(screen.queryByRole('button', { name: 'Close mini map' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Exit 3D' }));
+    expect(screen.queryByTestId('canvas-3d-view')).not.toBeInTheDocument();
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('selects the same object in 3D that the flat board would', () => {
+    render(<CreationCanvas sessionId="three-d-selection-test" persistence="local" />);
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Toggle 3D view' })[0]!);
+    const cards = screen.getByTestId('canvas-3d-view').querySelectorAll('[aria-pressed]');
+    expect(cards.length).toBeGreaterThan(0);
+
+    fireEvent.click(cards[0]!);
+    expect(cards[0]).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('auto-applies basic canvas output but keeps consequential changes in review', () => {
@@ -496,9 +530,12 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     await waitFor(() => expect(screen.getAllByText('concept.png').length).toBeGreaterThan(0));
   });
 
-  it('renders a scrollable Brain transcript, rich chat details, and a recognizable microphone control', () => {
+  it('keeps exactly ONE Brain transcript — the dock — with its connected work behind a tab', () => {
     render(<CreationCanvas sessionId="brain-object-details-test" persistence="local" />);
 
+    // One transcript, not three: the Brain Object and the details panel no longer
+    // render competing copies of the same conversation.
+    expect(screen.getAllByRole('log', { name: 'Brain chat history' })).toHaveLength(1);
     expect(screen.getByRole('log', { name: 'Brain chat history' })).toHaveAttribute('tabindex', '0');
     const microphone = screen.getByRole('button', { name: 'Dictate' });
     expect(microphone.querySelector('svg')).toBeInTheDocument();
@@ -508,20 +545,51 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(autoApply).toHaveAttribute('aria-pressed', 'true');
     expect(localStorage.getItem('brain.autoApprove')).toBe('1');
 
-    fireEvent.click(screen.getAllByText('Brain')[0]!);
-    expect(screen.getByRole('log', { name: 'Full Brain activity' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('tab', { name: 'Context' }));
     expect(screen.getByRole('heading', { name: 'Agents' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Associated tickets' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Connected objects' })).toBeInTheDocument();
   });
 
-  it('opens the Brain chat as soon as a footer prompt is submitted', () => {
+  it('docks Brain to one side only and remembers the layout the user picked', () => {
+    render(<CreationCanvas sessionId="brain-dock-preference-test" persistence="local" />);
+
+    const dock = screen.getByRole('complementary', { name: 'Brain chat' });
+    expect(dock).toHaveAttribute('data-side', 'right');
+    expect(dock).toHaveAttribute('data-size', 'slim');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dock Brain to the left' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Expand Brain chat' }));
+
+    expect(screen.getByRole('complementary', { name: 'Brain chat' })).toHaveAttribute('data-side', 'left');
+    expect(screen.getByRole('complementary', { name: 'Brain chat' })).toHaveAttribute('data-size', 'expanded');
+    expect(JSON.parse(localStorage.getItem('builderforce:create:brain-dock')!)).toMatchObject({ side: 'left', size: 'expanded' });
+
+    // Closing the dock must leave a way back to it, not strand the user without a prompt.
+    fireEvent.click(screen.getByRole('button', { name: 'Close Brain chat' }));
+    expect(screen.queryByLabelText('Ask Brain about this canvas')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show Brain chat' }));
+    expect(screen.getByLabelText('Ask Brain about this canvas')).toBeInTheDocument();
+  });
+
+  it('hides Brain execution steps until the user turns that feedback on', () => {
+    render(<CreationCanvas sessionId="brain-execution-detail-test" persistence="local" />);
+
+    const toggle = screen.getByRole('button', { name: 'Show execution steps' });
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
+    fireEvent.click(toggle);
+
+    expect(screen.getByRole('button', { name: 'Hide execution steps' })).toHaveAttribute('aria-pressed', 'true');
+    expect(JSON.parse(localStorage.getItem('builderforce:create:brain-dock')!)).toMatchObject({ showExecutionDetail: true });
+  });
+
+  it('opens the Brain chat as soon as a prompt is submitted', () => {
     render(<CreationCanvas sessionId="composer-opens-brain-test" persistence="local" />);
 
     fireEvent.change(screen.getByLabelText('Ask Brain about this canvas'), { target: { value: 'Show which agents are active' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send to Brain' }));
 
-    expect(screen.getByRole('log', { name: 'Full Brain activity' })).toBeInTheDocument();
+    expect(screen.getByRole('log', { name: 'Brain chat history' })).toBeInTheDocument();
     expect(screen.getAllByText('Show which agents are active').length).toBeGreaterThan(0);
   });
 
@@ -654,16 +722,64 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(previewNode).toHaveStyle({ width: '340px', height: '620px' });
   });
 
+  it('renders every imported row with success and failure highlighting', () => {
+    const props = {
+      type: 'creation' as const, selected: false, dragging: false, zIndex: 0,
+      selectable: true, deletable: true, draggable: true, isConnectable: true,
+      positionAbsoluteX: 0, positionAbsoluteY: 0,
+    };
+    render(<CreationNode {...props} id="table-card" data={{
+      kind: 'table', title: 'Shipment outcomes',
+      columns: ['Shipment ID', 'Status'],
+      rows: [
+        { 'Shipment ID': 'SHP-1', Status: 'Success' },
+        { 'Shipment ID': 'SHP-2', Status: 'Failure' },
+        { 'Shipment ID': 'SHP-3', Status: 'Success' },
+      ],
+      rowCount: 3,
+      highlightRules: [
+        { column: 'Status', op: 'eq', value: 'Failure', tone: 'danger' },
+        { column: 'Status', op: 'eq', value: 'Success', tone: 'success' },
+      ],
+    }} />);
+
+    expect(screen.getByText('3 rows · 2 columns')).toBeInTheDocument();
+    const grid = within(screen.getByRole('region', { name: 'Shipment outcomes' }));
+    expect(grid.getByText('SHP-2')).toBeInTheDocument();
+    expect(grid.getAllByText('Failure').filter((cell) => cell.getAttribute('data-tone') === 'danger')).toHaveLength(1);
+    expect(grid.getAllByText('Success').filter((cell) => cell.getAttribute('data-tone') === 'success')).toHaveLength(2);
+    // The legend summarises the same tones across every row, not just visible ones.
+    const legend = screen.getAllByText('Success').filter((element) => element.querySelector('b'));
+    expect(legend).toHaveLength(1);
+    expect(legend[0]).toHaveTextContent('2');
+  });
+
+  it('previews an attached non-tabular file instead of showing an opaque card', () => {
+    const props = {
+      type: 'creation' as const, selected: false, dragging: false, zIndex: 0,
+      selectable: true, deletable: true, draggable: true, isConnectable: true,
+      positionAbsoluteX: 0, positionAbsoluteY: 0,
+    };
+    render(<CreationNode {...props} id="file-card" data={{
+      kind: 'file', title: 'notes.md', fileName: 'notes.md', mimeType: 'text/markdown', fileSize: 2048,
+      content: '# Release notes\nShipment portal export',
+    }} />);
+
+    expect(screen.getByText('text/markdown')).toBeInTheDocument();
+    expect(screen.getByText('2.0 KB')).toBeInTheDocument();
+    expect(screen.getByText(/Shipment portal export/)).toBeInTheDocument();
+  });
+
   it('imports tabular data and creates a connected visualization', async () => {
     render(<CreationCanvas sessionId="dataset-visual-test" persistence="local" />);
     fireEvent.click(screen.getByRole('button', { name: 'Dataset' }));
     const file = new File(['Region,Revenue\nNorth,120\nSouth,90'], 'revenue.csv', { type: 'text/csv' });
     Object.defineProperty(file, 'text', { value: vi.fn().mockResolvedValue('Region,Revenue\nNorth,120\nSouth,90') });
     await act(async () => {
-      fireEvent.change(screen.getByLabelText('Import CSV or TSV'), { target: { files: [file] } });
+      fireEvent.change(screen.getByLabelText('Import CSV, TSV, or JSON'), { target: { files: [file] } });
       await Promise.resolve();
     });
-    expect(screen.getByText('2 rows · 2 columns')).toBeInTheDocument();
+    expect(screen.getAllByText('2 rows · 2 columns').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: 'Create visualization' }));
     expect(screen.getByDisplayValue('revenue.csv visualization')).toBeInTheDocument();
     expect(screen.getAllByText('North').length).toBeGreaterThan(0);
@@ -795,13 +911,33 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.getByRole('button', { name: 'Copy Session chat diagnostics' })).toBeInTheDocument();
   });
 
-  it('provides a keyboard-readable structured graph and semantic connections', () => {
+  it('opens and closes the accessible outline from the canvas command rail', () => {
     render(<CreationCanvas sessionId="accessible-graph-test" persistence="local" />);
 
-    fireEvent.click(screen.getByText('Accessible canvas outline'));
+    // The outline is off the board until asked for, and reachable from the same
+    // rail as zoom/fit rather than floating permanently over the canvas.
+    expect(screen.queryByRole('complementary', { name: 'Accessible canvas outline' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Accessible canvas outline' })[0]!);
+
+    expect(screen.getByRole('complementary', { name: 'Accessible canvas outline' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Focus Fall campaign workflow' })).toBeInTheDocument();
     expect(screen.getByText(/control connection to Campaign landing page: publishes/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Focus Campaign landing page' }));
     expect(screen.getByDisplayValue('Campaign landing page')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close canvas outline' }));
+    expect(screen.queryByRole('complementary', { name: 'Accessible canvas outline' })).not.toBeInTheDocument();
+  });
+
+  it('copies the diagnostics report and opens the panel from one icon-only control', async () => {
+    const writeText = vi.fn(async (_text: string) => undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    render(<CreationCanvas sessionId="diagnostics-copy-test" persistence="local" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open Canvas diagnostics' }));
+
+    expect(screen.getByLabelText('Canvas diagnostics')).toBeInTheDocument();
+    await waitFor(() => expect(writeText).toHaveBeenCalled());
+    expect(String(writeText.mock.calls[0]![0])).toContain('Creation Canvas diagnostics');
   });
 });

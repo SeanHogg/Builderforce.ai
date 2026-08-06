@@ -18,7 +18,14 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { CanvasCommands, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
+import { AccessibleOutlineIcon, CanvasCommands, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
+import { ControlButton } from '@xyflow/react';
+import { Canvas3DView } from '@/components/canvas/Canvas3DView';
+import type { Canvas3DDescriptor } from '@/components/canvas/canvas3d';
+import { CanvasOutlinePanel } from './CanvasOutlinePanel';
+import { BrainDock } from './BrainDock';
+import { BRAIN_DOCK_WIDTH, DEFAULT_BRAIN_DOCK_PREFERENCES, readBrainDockPreferences, writeBrainDockPreferences, type BrainDockPreferences } from './brainDockPreferences';
+import { useToast } from '@/components/ToastProvider';
 import { CreationNode, type CreationFlowNode } from './CreationNode';
 import type { CreationNodeData, CreationObjectKind } from './types';
 import styles from './CreationCanvas.module.css';
@@ -26,9 +33,7 @@ import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, 
 import { creationGraphFromSnapshot, creationStorageKey, readLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
 import { runCreationCanvasAi } from '@/lib/creationCanvasAi';
 import type { BrainAction, BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
-import { BrainTimeline } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
-import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
 import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
 import { EvermindValidationProvider } from '@/components/ide/EvermindValidationContext';
 import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
@@ -44,7 +49,11 @@ import { CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, type CreationConnecti
 import { downloadJson, downloadText, toCsv } from '@/lib/download';
 import { exportCsv, exportDocx, exportPptx } from '@/lib/exportApi';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
-import { parseCSV } from '@/lib/importHelpers';
+import {
+  MAX_MATERIALIZED_ROWS, MAX_TABULAR_COLUMNS, TABULAR_AGGREGATE_OPERATORS, TABULAR_FILTER_OPERATORS,
+  isTabularFile, parseTabularText, profileTabular, queryTabular, tabularFromObject,
+  type TabularHighlightRule, type TabularQuery, type TabularSource,
+} from '@/lib/canvasTabularData';
 import { WorkflowBuilder } from '@/components/workflow-builder/WorkflowBuilder';
 import { VoiceConfigPanel } from '@/components/ide/VoiceConfigPanel';
 import { VoiceOutput } from '@/components/ide/VoiceOutput';
@@ -73,7 +82,7 @@ const INSPECTOR_MAX_WIDTH = 720;
 const ACCOUNT_REQUIRED_OBJECT_ACTIONS = new Set(['publish', 'deliver', 'assign', 'authenticate', 'execute', 'record', 'train', 'start', 'compare']);
 const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   website: ['publish'], video: ['generate'],
-  workflow: ['run'], dataset: ['visualize'], project: ['expand', 'compare'],
+  workflow: ['run'], dataset: ['visualize', 'profile'], project: ['expand', 'compare'],
   mockup: ['deliver'], mockupSet: ['expand', 'deliver'], standup: ['start'],
   evermind: ['train', 'evaluate', 'publish'],
   image: ['generate', 'preview', 'export'], animation: ['generate', 'preview', 'export'], podcast: ['generate', 'preview', 'export'],
@@ -224,6 +233,31 @@ function artifactCsv(data: CreationNodeData): string | null {
   return toCsv(columns, rows);
 }
 
+/**
+ * Canonical Dataset object fields for an imported or attached tabular file.
+ * Both the inspector importer and the composer attachment build the object
+ * through this helper, so an uploaded file is previewable and queryable no
+ * matter which route it arrived by.
+ */
+function datasetObjectData(fileName: string, source: TabularSource, options: { mimeType?: string; subtitle: string; status: string }): Partial<CreationNodeData> {
+  return {
+    title: fileName,
+    fileName,
+    ...(options.mimeType ? { mimeType: options.mimeType } : {}),
+    columns: source.columns,
+    rows: source.rows,
+    sampleRows: source.rows.slice(0, 25),
+    rowCount: source.rows.length,
+    profile: profileTabular(source),
+    status: options.status,
+    subtitle: options.subtitle,
+  };
+}
+
+/** Text attachments Brain can read directly once they are on the canvas. */
+const READABLE_TEXT_FILE = /\.(txt|md|markdown|log|xml|yaml|yml|html?|sql|ini|conf|env\.example)$/i;
+const MAX_FILE_PREVIEW_CHARS = 20_000;
+
 const SEED = {
   workflow: '00000000-0000-4000-8000-000000000001', website: '00000000-0000-4000-8000-000000000002',
   dashboard: '00000000-0000-4000-8000-000000000003', chat: '00000000-0000-4000-8000-000000000004',
@@ -314,7 +348,10 @@ export function projectEvermindNodePatch(head: ProjectEvermindHead, activity: Pr
 
 function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialPresent = false }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialPresent?: boolean }) {
   const t = useTranslations('creationCanvas');
+  /** Chrome shared with every other spatial canvas lives in its own namespace. */
+  const tCommands = useTranslations('canvasCommands');
   const confirm = useConfirm();
+  const toast = useToast();
   const storageKey = creationStorageKey(sessionId);
   const [nodes, setNodes, onNodesChange] = useNodesState<CreationFlowNode>(persistence === 'local' ? INITIAL_NODES : []);
   const [evermindLiveByNodeId, setEvermindLiveByNodeId] = useState<Record<string, Partial<CreationNodeData>>>({});
@@ -326,6 +363,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [title, setTitle] = useState('Untitled session');
   const [paletteOpen, setPaletteOpen] = useState(true);
   const [minimapOpen, setMinimapOpen] = useState(true);
+  /**
+   * The 3D reading of this canvas. It replaces the flat board rather than
+   * floating over it — two live views of the same objects would compete for the
+   * same pointer, and the point of the mode is to read depth without distraction.
+   */
+  const [threeD, setThreeD] = useState(false);
   const [shareOpen, setShareOpen] = useState(initialShareOpen);
   const [accountGate, setAccountGate] = useState<AccountGate | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -386,6 +429,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [memoryEnabled, setMemoryEnabled] = useState(true);
   const [conversationOpen, setConversationOpen] = useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [outlineOpen, setOutlineOpen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+  // ONE Brain surface: which side it is parked on, how wide, and whether the user
+  // wants the step list. Read from storage after mount so SSR stays deterministic.
+  const [brainDock, setBrainDock] = useState(DEFAULT_BRAIN_DOCK_PREFERENCES);
   const [inspectorFocus, setInspectorFocus] = useState<'knowledge' | 'test' | 'evaluation' | 'delivery' | null>(null);
   const [outcomeMetricsOpen, setOutcomeMetricsOpen] = useState(false);
   const [outcomeMetrics, setOutcomeMetrics] = useState<CreationOutcomeMetrics | null>(null);
@@ -417,6 +465,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       localStorage.setItem(PALETTE_OPEN_STORAGE_KEY, paletteOpen ? '1' : '0');
     } catch { /* storage can be unavailable in hardened contexts */ }
   }, [collapsedPaletteGroups, paletteOpen, palettePreferencesReady]);
+  const shellRef = useRef<HTMLDivElement | null>(null);
   const flowRef = useRef<ReactFlowInstance<CreationFlowNode, Edge> | null>(null);
   const hydrated = useRef(false);
   const revision = useRef(1);
@@ -445,6 +494,36 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const enabled = isBrainAutoApprove();
     autoApplyRef.current = enabled;
     setAutoApply(enabled);
+  }, []);
+
+  useEffect(() => { setBrainDock(readBrainDockPreferences()); }, []);
+
+  /**
+   * Persist AND report the layout the user chose. The signal is what lets the
+   * shipped default become the layout people actually prefer instead of a guess.
+   */
+  const updateBrainDock = useCallback((patch: Partial<BrainDockPreferences>) => {
+    setBrainDock((current) => {
+      const next = { ...current, ...patch };
+      writeBrainDockPreferences(next);
+      trackActivity('creation_brain_dock_preference', { sessionId, metadata: { clientSurface: 'web', ...next } });
+      return next;
+    });
+  }, [sessionId]);
+
+  const toggleFullscreen = useCallback(() => {
+    const shell = shellRef.current;
+    if (typeof document === 'undefined' || !shell) return;
+    if (document.fullscreenElement) { void document.exitFullscreen?.().catch(() => undefined); return; }
+    const request = shell.requestFullscreen?.();
+    if (request) void request.catch(() => toast.error(t('fullScreenUnavailable')));
+    else toast.error(t('fullScreenUnavailable'));
+  }, [t, toast]);
+
+  useEffect(() => {
+    const sync = () => setFullscreen(!!document.fullscreenElement && document.fullscreenElement === shellRef.current);
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
   }, []);
 
   const setAutoApplyMode = useCallback((enabled: boolean) => {
@@ -791,7 +870,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (resolvedScopeMode === 'frame' && selectedNode?.data.kind === 'frame') {
       const { width, height } = canvasNodeDimensions(selectedNode);
       nodes.forEach((node) => {
-        if (node.id !== selectedNode.id && node.position.x >= selectedNode.position.x && node.position.y >= selectedNode.position.y && node.position.x <= selectedNode.position.x + width && node.position.y <= selectedNode.position.y + height) selected.add(node.id);
+        if (node.id === selectedNode.id) return;
+        const withinX = node.position.x >= selectedNode.position.x
+          && node.position.x <= selectedNode.position.x + width;
+        const withinY = node.position.y >= selectedNode.position.y
+          && node.position.y <= selectedNode.position.y + height;
+        if (withinX && withinY) selected.add(node.id);
       });
     }
     return selected;
@@ -868,23 +952,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const importDataset = useCallback(async (file: File) => {
     if (!selectedId) return;
     try {
-      const text = await file.text();
-      const delimiter = file.name.toLowerCase().endsWith('.tsv') ? '\t' : ',';
-      const allLines = text.split(/\r?\n/).filter((line) => line.trim());
-      const parsed = delimiter === ',' ? parseCSV(text) : {
-        headers: (allLines[0] ?? '').split('\t').map((value) => value.trim()),
-        rows: allLines.slice(1).map((line) => Object.fromEntries((allLines[0] ?? '').split('\t').map((column, index) => [column.trim(), line.split('\t')[index]?.trim() ?? '']))),
-      };
-      if (parsed.rows.length > datasetRowLimit) throw new Error(`This plan supports up to ${datasetRowLimit.toLocaleString()} dataset rows per Canvas import.`);
-      const columns = parsed.headers.filter(Boolean).slice(0, 24);
-      if (!columns.length) throw new Error('No columns found');
-      const rows = parsed.rows.map((row) => Object.fromEntries(columns.map((column) => [column, row[column] ?? ''])));
-      setNodes((current) => current.map((node) => node.id === selectedId ? { ...node, data: { ...node.data, title: file.name, columns, rows, sampleRows: rows.slice(0, 25), rowCount: rows.length, status: 'Imported', subtitle: `${rows.length} preview rows loaded` } } : node));
-      setNotice(`${file.name} imported`);
+      const parsed = parseTabularText(file.name, await file.text());
+      if (parsed.rows.length > datasetRowLimit) throw new Error(t('datasetRowLimit', { limit: datasetRowLimit.toLocaleString() }));
+      if (!parsed.columns.length) throw new Error(t('datasetNoColumns'));
+      const shape = { rows: parsed.rows.length.toLocaleString(), columns: parsed.columns.length };
+      setNodes((current) => current.map((node) => node.id === selectedId ? { ...node, data: { ...node.data, ...datasetObjectData(file.name, parsed, { mimeType: file.type, subtitle: t('datasetShape', shape), status: t('datasetStatusImported') }) } } : node));
+      setNotice(t('datasetImported', { name: file.name, rows: parsed.rows.length.toLocaleString(), columns: parsed.columns.length }));
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : 'Dataset import failed');
+      setNotice(error instanceof Error ? error.message : t('datasetImportFailed'));
     }
-  }, [datasetRowLimit, selectedId, setNodes]);
+  }, [datasetRowLimit, selectedId, setNodes, t]);
 
   useEffect(() => {
     if (!hydrated.current || historyApplying.current) return;
@@ -1020,29 +1097,61 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   const visualizeDataset = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'dataset') return;
-    const columns = Array.isArray(selectedNode.data.columns) ? selectedNode.data.columns.map(String) : [];
-    const rows = Array.isArray(selectedNode.data.rows) ? selectedNode.data.rows as Array<Record<string, unknown>> : [];
-    if (!columns.length || !rows.length) { setNotice('Import data before visualizing it'); return; }
-    const numeric = columns.find((column) => rows.some((row) => Number.isFinite(Number(row[column]))));
-    const category = columns.find((column) => column !== numeric) ?? columns[0]!;
-    let labels: string[];
-    let values: number[];
-    if (numeric) {
-      labels = rows.slice(0, 6).map((row, index) => String(row[category] ?? `Row ${index + 1}`));
-      values = rows.slice(0, 6).map((row) => Number(row[numeric]) || 0);
-    } else {
-      const counts = new Map<string, number>();
-      rows.forEach((row) => { const key = String(row[category] ?? 'Unknown'); counts.set(key, (counts.get(key) ?? 0) + 1); });
-      const entries = [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
-      labels = entries.map(([label]) => label); values = entries.map(([, value]) => value);
-    }
+    const source = tabularFromObject(selectedNode.data as Record<string, unknown>);
+    if (!source.columns.length || !source.rows.length) { setNotice(t('datasetImportBeforeVisualizing')); return; }
+    // Group by the most informative low-cardinality column and total the first
+    // numeric measure, rather than charting the first six rows verbatim.
+    const profile = profileTabular(source);
+    const groupable = (column: { distinct: number }) => {
+      const distinct = column.distinct;
+      if (distinct < 2) return false;
+      return distinct < 25;
+    };
+    const category = profile.find((column) => column.type !== 'number' && groupable(column))
+      ?? profile.find(groupable)
+      ?? profile[0]!;
+    const measure = profile.find((column) => column.type === 'number' && column.name !== category.name);
+    const result = queryTabular(source, {
+      groupBy: category.name,
+      aggregate: measure ? [{ op: 'sum', column: measure.name, label: measure.name }] : [{ op: 'count', label: 'count' }],
+      sort: { column: measure ? measure.name : 'count', direction: 'desc' },
+      limit: 8,
+    });
+    const valueKey = measure ? measure.name : 'count';
     const dashboard = newNode('dashboard', { x: selectedNode.position.x + 440, y: selectedNode.position.y });
-    dashboard.data = { ...dashboard.data, title: `${selectedNode.data.title} visualization`, status: 'Live', chartLabels: labels, chartValues: values, subtitle: numeric ? `${numeric} by ${category}` : `Count by ${category}` };
+    dashboard.data = {
+      ...dashboard.data,
+      title: t('datasetVisualizationTitle', { name: selectedNode.data.title }),
+      status: t('statusLive'),
+      chartTitle: measure ? t('chartTitleMeasureBy', { measure: measure.name, category: category.name }) : t('chartTitleCountBy', { category: category.name }),
+      xAxisLabel: category.name,
+      yAxisLabel: measure ? measure.name : t('chartCountAxis'),
+      chartLabels: (result.groups ?? []).map((group) => group.key),
+      chartValues: (result.groups ?? []).map((group) => Number(group[valueKey] ?? group.count)),
+      kpis: [
+        { label: t('kpiTotalRows'), value: result.totalRows.toLocaleString() },
+        { label: t('kpiGroups', { category: category.name }), value: String(result.groups?.length ?? 0) },
+      ],
+      sourceDatasetId: selectedNode.id,
+      subtitle: measure ? t('chartTitleMeasureBy', { measure: measure.name, category: category.name }) : t('chartTitleCountBy', { category: category.name }),
+    };
     setNodes((current) => [...current, dashboard]);
-    setEdges((current) => [...current, { id: crypto.randomUUID(), source: selectedNode.id, target: dashboard.id, type: 'smoothstep', label: 'visualizes', animated: true }]);
+    setEdges((current) => [...current, { id: crypto.randomUUID(), source: selectedNode.id, target: dashboard.id, type: 'smoothstep', label: t('edgeVisualizes'), animated: true, data: { connectionKind: 'data' } }]);
     setSelectedId(dashboard.id);
-    setNotice('Dashboard visualization added');
-  }, [selectedNode, setEdges, setNodes]);
+    setNotice(t('datasetVisualizationAdded'));
+  }, [selectedNode, setEdges, setNodes, t]);
+
+  const profileDataset = useCallback((nodeId: string) => {
+    const target = nodes.find((node) => node.id === nodeId);
+    if (!target) return;
+    const source = tabularFromObject(target.data as Record<string, unknown>);
+    if (!source.columns.length || !source.rows.length) { setNotice(t('datasetImportBeforeProfiling')); return; }
+    const profile = profileTabular(source);
+    setNodes((current) => current.map((node) => node.id === nodeId
+      ? { ...node, data: { ...node.data, profile, rowCount: source.rows.length, columns: source.columns, summary: t('datasetProfileSummary', { rows: source.rows.length.toLocaleString(), columns: source.columns.length, complete: profile.filter((column) => !column.empty).length }) } }
+      : node));
+    setNotice(t('datasetProfiled', { columns: profile.length }));
+  }, [nodes, setNodes, t]);
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((current) => addEdge({ ...connection, id: crypto.randomUUID(), type: 'smoothstep', data: { connectionKind }, label: connectionKind, markerEnd: { type: MarkerType.ArrowClosed } }, current));
@@ -1057,10 +1166,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }
   }, [connectionKind, nodes, persistence, sessionId, setEdges]);
 
+  /** Selecting the Brain Object reveals the dock instead of a second transcript. */
+  const openBrainDock = useCallback(() => setBrainDock((current) => {
+    if (current.open) return current;
+    const next = { ...current, open: true };
+    writeBrainDockPreferences(next);
+    return next;
+  }), []);
+
   const onNodeClick: NodeMouseHandler<CreationFlowNode> = useCallback((_event, node) => {
     setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
     setInspectorFocus(null); setSelectedId(node.id); if (!node.selected) setSelectedIds([node.id]);
-  }, []);
+    if (node.data.kind === 'chat') openBrainDock();
+  }, [openBrainDock]);
   // XYFlow subscribes to this callback through its Zustand store. An inline
   // callback is a new subscription every render; immediately writing a fresh
   // `[]` back to React from that subscription can create an update-depth loop
@@ -1118,10 +1236,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [canEdit, sessionId, setNodes, timeline]);
 
   const attachCanvasArtifact = useCallback(async (file: File) => {
-    if (!canEdit) { setNotice('Your session role does not allow editing'); return; }
+    if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
     const position = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 300 };
     const isImage = file.type.startsWith('image/');
-    const node = newNode(isImage ? 'image' : 'file', position);
+    // A dropped data file becomes a real Dataset, not an opaque attachment:
+    // it must be previewable on the canvas and queryable by Brain immediately.
+    const tabular = !isImage && isTabularFile(file.name, file.type) ? parseTabularText(file.name, await file.text()) : null;
+    const parsed = tabular?.columns.length && tabular.rows.length ? tabular : null;
+    const node = newNode(isImage ? 'image' : parsed ? 'dataset' : 'file', position);
     let dataUrl: string | null = null;
     if (isImage) {
       dataUrl = await new Promise<string | null>((resolve) => {
@@ -1131,21 +1253,38 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         reader.readAsDataURL(file);
       });
     }
-    node.data = {
-      ...node.data,
-      title: file.name,
-      subtitle: `${file.type || 'File'} · ${Math.max(1, Math.round(file.size / 1024)).toLocaleString()} KB`,
-      status: isImage ? 'Image attached' : 'File attached',
-      mimeType: file.type || 'application/octet-stream',
-      fileSize: file.size,
-      ...(dataUrl ? { thumbnailUrl: dataUrl, outputUrl: dataUrl } : {}),
-    };
+    const readableText = !isImage && !parsed && (READABLE_TEXT_FILE.test(file.name) || file.type.startsWith('text/'))
+      ? (await file.text()).slice(0, MAX_FILE_PREVIEW_CHARS)
+      : '';
+    node.data = parsed
+      ? {
+        ...node.data,
+        ...datasetObjectData(file.name, parsed, {
+          mimeType: file.type || 'text/csv',
+          subtitle: t('datasetShape', { rows: parsed.rows.length.toLocaleString(), columns: parsed.columns.length }),
+          status: t('datasetStatusImported'),
+        }),
+        fileSize: file.size,
+      }
+      : {
+        ...node.data,
+        title: file.name,
+        fileName: file.name,
+        subtitle: `${file.type || t('fileGeneric')} · ${Math.max(1, Math.round(file.size / 1024)).toLocaleString()} KB`,
+        status: isImage ? t('imageAttached') : t('fileAttached'),
+        mimeType: file.type || 'application/octet-stream',
+        fileSize: file.size,
+        ...(readableText ? { content: readableText } : {}),
+        ...(dataUrl ? { thumbnailUrl: dataUrl, outputUrl: dataUrl } : {}),
+      };
     setNodes((current) => [...current, node]);
     setSelectedId(node.id);
     setSelectedIds([node.id]);
-    setNotice(`${file.name} added to the canvas`);
+    setNotice(parsed
+      ? t('datasetAttached', { name: file.name, rows: parsed.rows.length.toLocaleString(), columns: parsed.columns.length })
+      : t('fileAddedToCanvas', { name: file.name }));
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: 'web', objectKinds: [node.data.kind], source: 'composer_attachment' } });
-  }, [canEdit, sessionId, setNodes]);
+  }, [canEdit, sessionId, setNodes, t]);
 
   const applyTemplate = useCallback((template: CreationTemplate) => {
     if (!canEdit) return;
@@ -1689,8 +1828,116 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return { ok: true, proposed: true, projectId, object: { id: node.id, kind: 'prd', title }, persistence: 'canonical-after-review' };
     },
   }, {
+    name: 'canvas_query_dataset',
+    description: 'Compute real values from a Dataset, Table, or Spreadsheet object on this canvas, and optionally build the resulting Table, Chart, Dashboard, or KPI. This runs over every imported row, not the sample in the snapshot. Use it for any counting, totalling, ranking, comparison, success/failure split, or visualization of uploaded data. Never estimate, sample, or invent numbers when this tool can compute them.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        datasetId: { type: 'string', description: 'Object id of the dataset. Omit when the canvas holds exactly one tabular object.' },
+        select: { type: 'array', items: { type: 'string' }, description: 'Columns to return. Omit for every column.' },
+        filter: {
+          type: 'array', description: 'Row conditions applied before grouping.',
+          items: { type: 'object', required: ['column'], additionalProperties: false, properties: { column: { type: 'string' }, op: { type: 'string', enum: [...TABULAR_FILTER_OPERATORS] }, value: { description: 'Comparison value, or an array for in/notIn.' } } },
+        },
+        filterMatch: { type: 'string', enum: ['all', 'any'], description: 'Whether every filter must match, or any one of them. Defaults to all.' },
+        derive: {
+          type: 'array',
+          description: 'Computed columns evaluated before filtering and grouping. Use this to classify rows, for example a Status column that is "Success" when a count column equals 1 and "Failure" otherwise.',
+          items: { type: 'object', required: ['name', 'when', 'then'], additionalProperties: false, properties: {
+            name: { type: 'string' },
+            when: { type: 'array', items: { type: 'object', required: ['column'], additionalProperties: false, properties: { column: { type: 'string' }, op: { type: 'string', enum: [...TABULAR_FILTER_OPERATORS] }, value: {} } } },
+            match: { type: 'string', enum: ['all', 'any'] },
+            then: { type: 'string' }, otherwise: { type: 'string' },
+          } },
+        },
+        groupBy: { type: 'string', description: 'Column or derived column to group by. Returns one row per distinct value with real counts.' },
+        aggregate: { type: 'array', items: { type: 'object', required: ['op'], additionalProperties: false, properties: { op: { type: 'string', enum: [...TABULAR_AGGREGATE_OPERATORS] }, column: { type: 'string' }, label: { type: 'string' } } } },
+        sort: { type: 'object', additionalProperties: false, properties: { column: { type: 'string' }, direction: { type: 'string', enum: ['asc', 'desc'] } } },
+        limit: { type: 'number' },
+        materializeAs: { type: 'string', enum: ['none', 'table', 'chart', 'dashboard', 'kpi'], description: 'Build a canvas object populated with the real query result. Use "table" for a row-level breakdown and "chart" or "dashboard" for a grouped visualization.' },
+        title: { type: 'string', description: 'Title for the materialized object.' },
+        highlight: {
+          type: 'array', description: 'Row colouring for a materialized table. The first matching rule wins.',
+          items: { type: 'object', required: ['column', 'tone'], additionalProperties: false, properties: { column: { type: 'string' }, op: { type: 'string', enum: [...TABULAR_FILTER_OPERATORS] }, value: {}, tone: { type: 'string', enum: ['success', 'warning', 'danger', 'info'] } } },
+        },
+      },
+    },
+    mutates: (raw: unknown) => (raw as { materializeAs?: unknown })?.materializeAs != null && (raw as { materializeAs?: unknown }).materializeAs !== 'none',
+    run: (raw: unknown) => {
+      const args = raw as TabularQuery & { datasetId?: string; materializeAs?: string; title?: string; highlight?: TabularHighlightRule[] };
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const candidates = [...nodes, ...stagedNodes].filter((node) => ['dataset', 'table', 'spreadsheet'].includes(node.data.kind) && Array.isArray(node.data.rows) && node.data.rows.length > 0);
+      const target = args.datasetId ? candidates.find((node) => node.id === args.datasetId) : candidates.length === 1 ? candidates[0] : undefined;
+      if (!target) {
+        return { error: candidates.length
+          ? `Specify which dataset to query. Tabular objects on this canvas: ${candidates.map((node) => `${node.id} (${node.data.title})`).join(', ')}`
+          : 'No dataset with imported rows is on this canvas. Ask the user to attach a CSV, TSV, or JSON file, or import one from the Dataset inspector.' };
+      }
+      const source = tabularFromObject(target.data as Record<string, unknown>);
+      if (!source.rows.length) return { error: `${target.data.title} has no imported rows yet` };
+      const result = queryTabular(source, args);
+      if (result.unknownColumns.length) {
+        return { error: `Unknown column(s): ${result.unknownColumns.join(', ')}. Available columns: ${source.columns.join(', ')}` };
+      }
+      const materializeAs = ['table', 'chart', 'dashboard', 'kpi'].includes(String(args.materializeAs)) ? String(args.materializeAs) as 'table' | 'chart' | 'dashboard' | 'kpi' : null;
+      const payload = {
+        datasetId: target.id, datasetTitle: target.data.title,
+        columns: result.columns, rows: result.rows.slice(0, 20),
+        totalRows: result.totalRows, matchedRows: result.matchedRows, returnedRows: result.returnedRows, truncated: result.truncated,
+        ...(result.groups ? { groups: result.groups } : {}),
+        ...(result.aggregates ? { aggregates: result.aggregates } : {}),
+        computedFromEveryRow: true,
+      };
+      if (!materializeAs) return payload;
+      if (!canEdit) return { ...payload, error: 'The current session role cannot edit this canvas' };
+      const kind: CreationObjectKind = materializeAs;
+      const existing = [...nodes, ...stagedNodes].find((node) => node.data.kind === kind && node.data.sourceDatasetId === target.id);
+      const title = typeof args.title === 'string' && args.title.trim()
+        ? args.title.trim().slice(0, 160)
+        : `${target.data.title} ${materializeAs === 'kpi' ? 'metric' : materializeAs}`;
+      const highlightRules = Array.isArray(args.highlight)
+        ? args.highlight.filter((rule) => rule?.column && rule.tone).slice(0, 20)
+        : [];
+      const valueKey = result.columns.find((column) => column !== args.groupBy) ?? 'count';
+      const fields: Record<string, unknown> = materializeAs === 'table'
+        ? {
+          title, columns: result.columns, rows: result.rows.slice(0, MAX_MATERIALIZED_ROWS), rowCount: result.matchedRows,
+          sampleRows: result.rows.slice(0, 8), ...(highlightRules.length ? { highlightRules } : {}),
+          status: `${result.matchedRows.toLocaleString()} of ${result.totalRows.toLocaleString()} rows`,
+          summary: `${result.matchedRows.toLocaleString()} matching rows of ${result.totalRows.toLocaleString()} in ${target.data.title}.`,
+          sourceDatasetId: target.id,
+        }
+        : materializeAs === 'kpi'
+          ? {
+            title, value: String(Object.values(result.aggregates ?? { count: result.matchedRows })[0] ?? result.matchedRows),
+            status: 'Live', summary: `Computed from ${result.totalRows.toLocaleString()} rows in ${target.data.title}.`, sourceDatasetId: target.id,
+          }
+          : {
+            title, status: 'Live',
+            chartTitle: title,
+            ...(args.groupBy ? { xAxisLabel: args.groupBy } : {}),
+            yAxisLabel: valueKey,
+            chartLabels: (result.groups ?? result.rows).map((row, index) => String((row as Record<string, unknown>).key ?? (args.groupBy ? (row as Record<string, unknown>)[args.groupBy] : '') ?? `Row ${index + 1}`)),
+            chartValues: (result.groups ?? result.rows).map((row) => Number((row as Record<string, unknown>)[valueKey] ?? (row as { count?: number }).count ?? 0)),
+            kpis: Object.entries(result.aggregates ?? {}).slice(0, 4).map(([label, value]) => ({ label, value: value.toLocaleString() })),
+            summary: `Computed from ${result.totalRows.toLocaleString()} rows in ${target.data.title}.`,
+            sourceDatasetId: target.id,
+          };
+      const patch = sanitizeCreationObjectPatch(kind, fields);
+      if (existing) {
+        proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Update ${kind} “${title}”`, objectId: existing.id, patch });
+        return { ...payload, proposed: true, materialized: { id: existing.id, kind, title, updated: true } };
+      }
+      const node = newNode(kind, nextCanvasObjectPosition([...nodes, ...stagedNodes], { x: target.position.x + 460, y: target.position.y }, typeof window !== 'undefined' && window.innerWidth <= 760));
+      node.data = { ...node.data, ...patch };
+      if (kind === 'table') node.style = { width: 720, height: 460 };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add ${kind} “${title}”`, node });
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Connect ${target.data.title} to ${title}`, edge: { id: crypto.randomUUID(), source: target.id, target: node.id, type: 'smoothstep', animated: true, label: 'computed from', data: { connectionKind: 'data' } } });
+      return { ...payload, proposed: true, materialized: { id: node.id, kind, title, created: true } };
+    },
+  }, {
     name: 'canvas_add_object',
-    description: 'Create a fully authored visual object. Put type-specific content in fields; supported fields depend on kind and are listed in the current canvas snapshot.',
+    description: 'Create a fully authored visual object. Put type-specific content in fields; supported fields depend on kind and are listed in the current canvas snapshot. Never author rows or chart values by hand from an imported dataset — use canvas_query_dataset so the artifact holds real computed values.',
     parameters: {
       type: 'object', required: ['kind'], additionalProperties: false,
       properties: {
@@ -2370,6 +2617,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     else if (target.data.kind === 'video' && pending.action === 'generate') generateVideo(target.id);
     else if (CREATIVE_GENERATOR_KINDS.has(target.data.kind)) runCreativeAction(target.id, pending.action);
     else if (target.data.kind === 'dataset' && pending.action === 'visualize') visualizeDataset();
+    else if (target.data.kind === 'dataset' && pending.action === 'profile') profileDataset(target.id);
     else if (target.data.kind === 'project' && pending.action === 'expand') expandProject();
     else if (target.data.kind === 'project' && pending.action === 'compare') compareProjects();
     else if (target.data.kind === 'mockupSet' && pending.action === 'expand') expandMockupSet();
@@ -2385,7 +2633,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(`${pending.action} did not run because this ${creationObjectDefinition(target.data.kind).label} has no connected delivery adapter`);
     }
     finish();
-  }, [compareProjects, deliverMockup, evaluateEvermind, expandMockupSet, expandProject, generateVideo, nodes, openEvermindTraining, pendingBrainActions, persistence, publishWebsite, runCreativeAction, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
+  }, [compareProjects, deliverMockup, evaluateEvermind, expandMockupSet, expandProject, generateVideo, nodes, openEvermindTraining, pendingBrainActions, persistence, profileDataset, publishWebsite, runCreativeAction, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
 
   const openHistory = useCallback(() => {
     setHistoryOpen(true);
@@ -2454,12 +2702,35 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       : liveNode;
     return withLiveData.data.placementHidden === true ? { ...withLiveData, hidden: !showHidden, style: showHidden ? { ...withLiveData.style, opacity: .42 } : withLiveData.style } : withLiveData;
   }), [edges, evermindLiveByNodeId, nodes, showHidden]);
+  /**
+   * The 3D view reads the SAME nodes the board renders, minus the ones the board
+   * is currently hiding — a mode that quietly resurrects hidden objects would
+   * report a different canvas than the one the user is working on.
+   */
+  const threeDNodes = useMemo(() => renderedNodes.filter((node) => node.hidden !== true), [renderedNodes]);
+  const describeThreeD = useCallback((node: CreationFlowNode): Canvas3DDescriptor => {
+    const definition = creationObjectDefinition(node.data.kind);
+    return {
+      label: node.data.title || t(`object.${node.data.kind}`),
+      sublabel: node.data.status || node.data.subtitle,
+      group: t(`group.${definition.group}`),
+      icon: definition.icon,
+      accent: typeof node.data.accent === 'string' ? node.data.accent : minimapColor(node),
+    };
+  }, [minimapColor, t]);
+  const selectThreeDObject = useCallback((id: string) => {
+    setInspectorFocus(null);
+    setSelectedId(id);
+    setSelectedIds([id]);
+  }, []);
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
-    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={(nodeId) => runWorkflow(nodeId)} onOpenDetails={(nodeId, focus) => {
+    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={(nodeId) => runWorkflow(nodeId)} onOpenBrain={(nodeId) => {
+      setSelectedId(nodeId); setSelectedIds([nodeId]); openBrainDock();
+    }} onOpenDetails={(nodeId, focus) => {
       setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
       setInspectorFocus(focus || null); setSelectedId(nodeId); setSelectedIds([nodeId]);
     }} />,
-  }), [canRun, runWorkflow]);
+  }), [canRun, openBrainDock, runWorkflow]);
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
     sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
     objectCount: nodes.length, connectionCount: edges.length,
@@ -2474,6 +2745,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     timeline: timeline.map((message) => ({ role: message.messageRole === 'assistant' ? 'Brain' : message.messageRole, body: message.body, createdAt: message.createdAt })),
     brain: { scope: resolvedScopeMode, thinking, proposedChangeCount: proposedChanges.length, actionCount: canvasActions.length },
   }, await captureDiagnosticsContext()), [allMembers.length, canvasActions.length, edges.length, effectiveSelectedIds, nodes, pendingInvitations.length, persistence, proposedChanges.length, realtimeState, resolvedScopeMode, sessionId, sessionRole, thinking, timeline, title]);
+
+  /**
+   * The diagnostics control does the whole job in one click: the report is on the
+   * clipboard (ready to paste into a bug report) before the panel finishes opening,
+   * so nobody has to find a second "Copy" button to report what they are looking at.
+   */
+  const openDiagnostics = useCallback(async () => {
+    setDiagnosticsOpen(true);
+    setHistoryOpen(false);
+    setOutcomeMetricsOpen(false);
+    const report = await buildDiagnostics();
+    if (await copyTextToClipboard(report)) toast.success(t('diagnosticsCopied'));
+    else toast.error(t('diagnosticsCopyFailed'));
+  }, [buildDiagnostics, t, toast]);
 
   const openOutcomeMetrics = useCallback(() => {
     setOutcomeMetricsOpen(true);
@@ -2495,24 +2780,67 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     return value.toFixed(value % 1 ? 1 : 0);
   }, []);
 
+  const brainNode = nodes.find((node) => node.data.kind === 'chat') ?? null;
+  const brainDockWidth = brainDock.open ? BRAIN_DOCK_WIDTH[brainDock.size] : 0;
+  const brainMessages = useMemo<BrainMessage[]>(() => timeline.map((message, index) => ({
+    id: index + 1,
+    seq: index + 1,
+    role: message.messageRole,
+    content: message.body,
+    metadata: message.metadata?.authoredBy ? JSON.stringify({ authoredBy: message.metadata.authoredBy }) : null,
+    createdAt: message.createdAt,
+  })), [timeline]);
+
+  const composer = !presentMode && <ChatInput
+    className={styles.composer}
+    value={prompt}
+    onChange={setPrompt}
+    onSubmit={evaluateCanvas}
+    placeholder={t('askBrain')}
+    submitLabel={t('sendBrain')}
+    disabled={thinking}
+    rows={1}
+    submitOnEnter
+    contextControls={<>
+      <label className={styles.scopeChip}>⌁ <span className="sr-only">{t('brainScope')}</span><select aria-label={t('brainScope')} value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">{t('entireCanvas')}</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? t('selectedObjects', { count: effectiveSelectedIds.length }) : t('selectedObject')}</option><option value="connected" disabled={!effectiveSelectedIds.length}>{t('connectedScope')}</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>{t('currentFrame')}</option></select></label>
+    </>}
+    onAttach={attachCanvasArtifact}
+    onAddContext={openPalette}
+    autoMode={autoApply}
+    onAutoModeChange={setAutoApplyMode}
+    modelSelection={modelSelection}
+    modelOptions={canvasModelOptions}
+    onModelSelectionChange={setModelSelection}
+    modelTrigger="slash"
+    modeControls={
+      <button type="button" className={`${styles.memoryButton} ${memoryEnabled ? styles.memoryButtonActive : ''}`} aria-pressed={memoryEnabled} aria-label={t('memory')} disabled={evermindProjectId == null || persistence !== 'server'} title={evermindProjectId == null ? t('memoryNeedsProject') : memoryEnabled ? t('memoryEnabled') : t('memoryDisabled')} onClick={() => setMemoryMode(!memoryEnabled)}><span aria-hidden>🧠</span><span className={styles.composerActionLabel}>{t('memory')}</span></button>
+    }
+    showVoice
+  />;
+
   return (
-    <div className={`${styles.canvasShell} app-full-height`}>
+    <div
+      ref={shellRef}
+      className={`${styles.canvasShell} app-full-height`}
+      data-fullscreen={fullscreen ? 'true' : 'false'}
+    >
       <div className={styles.sessionBar}>
-        <div className={styles.titleBlock}><span className={styles.spark}>✦</span><input aria-label={t('sessionTitle')} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice('Title save failed')); }} /><span className={styles.saved}>{notice}</span>{persistence === 'server' && <span role="status" aria-live="polite" className={styles.realtimeStatus} data-state={realtimeState}>{realtimeState === 'online' ? t('live') : realtimeState === 'offline' ? t('offlineRetry') : realtimeState === 'reconnecting' ? t('reconnecting') : t('connecting')}</span>}</div>
+        <div className={styles.titleBlock}><span className={styles.spark}>✦</span><input aria-label={t('sessionTitle')} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice(t('titleSaveFailed'))); }} /><span className={styles.saved}>{notice}</span>{persistence === 'server' && <span role="status" aria-live="polite" className={styles.realtimeStatus} data-state={realtimeState}>{realtimeState === 'online' ? t('live') : realtimeState === 'offline' ? t('offlineRetry') : realtimeState === 'reconnecting' ? t('reconnecting') : t('connecting')}</span>}</div>
         <div className={styles.sessionActions}>
-          <div className={styles.collaborators} aria-label="Active collaborators">
-            {(persistence === 'local' ? [{ userId: 'local', displayName: 'You', role: 'owner' as const }] : members).slice(0, 4).map((member, index) => <button key={member.userId} type="button" aria-pressed={followingUserId === member.userId} title={`${member.displayName || 'Collaborator'} · ${member.role}${member.userId !== currentUserId ? ' · click to follow viewport' : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button>)}
-            <button aria-label="Invite collaborator" onClick={() => persistence === 'local' ? requireAccount('invite', 'Create an account to invite collaborators', 'Your canvas will be saved securely so teammates can join the same live session with roles, comments, and presence.') : setShareOpen(true)}>+</button>
+          <div className={styles.collaborators} aria-label={t('activeCollaborators')}>
+            {(persistence === 'local' ? [{ userId: 'local', displayName: 'You', role: 'owner' as const }] : members).slice(0, 4).map((member, index) => <button key={member.userId} type="button" aria-pressed={followingUserId === member.userId} title={`${member.displayName || t('collaborator')} · ${member.role}${member.userId !== currentUserId ? ` · ${t('clickToFollow')}` : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button>)}
+            <button aria-label={t('inviteCollaborator')} onClick={() => persistence === 'local' ? requireAccount('invite', t('gateInviteTitle'), t('gateInviteBody')) : setShareOpen(true)}>+</button>
           </div>
-          <div className={styles.undoRedoGroup} role="group" aria-label="Canvas history">
-            <button className={styles.secondaryButton} onClick={undo} aria-label="Undo canvas change">↶</button>
-            <button className={styles.secondaryButton} onClick={redo} aria-label="Redo canvas change">↷</button>
+          <div className={styles.undoRedoGroup} role="group" aria-label={t('canvasHistory')}>
+            <button className={styles.secondaryButton} onClick={undo} aria-label={t('undoCanvasChange')}>↶</button>
+            <button className={styles.secondaryButton} onClick={redo} aria-label={t('redoCanvasChange')}>↷</button>
           </div>
-          <button className={styles.secondaryButton} aria-expanded={outcomeMetricsOpen} aria-label="View outcome metrics" title="Idea-to-delivery outcome metrics" onClick={openOutcomeMetrics}>↗</button>
-          <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-label={t('openDiagnostics')} onClick={() => setDiagnosticsOpen((value) => !value)}>⚠ <span>{t('diagnostics')}</span></button>
+          <button className={styles.secondaryButton} aria-expanded={outcomeMetricsOpen} aria-label={t('viewOutcomeMetrics')} title={t('outcomeMetricsTitle')} onClick={openOutcomeMetrics}>↗</button>
+          <button className={`${styles.secondaryButton} ${styles.iconAction}`} aria-pressed={fullscreen} aria-label={fullscreen ? t('exitFullScreen') : t('fullScreen')} title={fullscreen ? t('exitFullScreen') : t('fullScreen')} onClick={toggleFullscreen}>{fullscreen ? '⤡' : '⛶'}</button>
+          <button className={`${styles.secondaryButton} ${styles.iconAction}`} aria-expanded={diagnosticsOpen} aria-label={t('openDiagnostics')} title={t('openDiagnostics')} onClick={() => void openDiagnostics()}>⚠</button>
           <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}>•••</button>
-          <button className={styles.secondaryButton} onClick={() => { if (persistence === 'local') requireAccount('share', 'Create an account to share this canvas', 'Your work is already safe on this device. An account saves it to your tenant and enables live collaboration, invitations, and access controls.'); else setShareOpen((value) => !value); setMoreOpen(false); }}>{t('share')} ▾</button>
-          {persistence === 'local' && <button className={`${styles.primaryButton} ${styles.saveButton}`} aria-label={t('saveCollaborate')} onClick={() => requireAccount('save', 'Create an account to save and collaborate', 'Move this local session into a secure tenant workspace without losing its objects, conversation, or layout.')}><span className={styles.saveButtonFull}>{t('saveCollaborate')}</span><span className={styles.saveButtonShort} aria-hidden>Save</span></button>}
+          <button className={styles.secondaryButton} onClick={() => { if (persistence === 'local') requireAccount('share', t('gateShareTitle'), t('gateShareBody')); else setShareOpen((value) => !value); setMoreOpen(false); }}>{t('share')} ▾</button>
+          {persistence === 'local' && <button className={`${styles.primaryButton} ${styles.saveButton}`} aria-label={t('saveCollaborate')} onClick={() => requireAccount('save', t('gateSaveTitle'), t('gateSaveBody'))}><span className={styles.saveButtonFull}>{t('saveCollaborate')}</span><span className={styles.saveButtonShort} aria-hidden>{t('save')}</span></button>}
           {moreOpen && <div className={styles.moreMenu} aria-label={t('moreActions')}>
             <span className={styles.moreMenuHeading}>{t('createAndView')}</span>
             <button onClick={() => { setTemplateOpen(true); setMoreOpen(false); }}><span aria-hidden>▦</span>{t('templates')}</button>
@@ -2526,52 +2854,63 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             <button onClick={() => { setShowHidden((value) => !value); setMoreOpen(false); }}><span aria-hidden>◉</span>{showHidden ? t('hideHidden') : t('showHidden')}</button>
             <button onClick={() => { createBranch(); setMoreOpen(false); }}><span aria-hidden>⑂</span>{t('branch')}</button>
             {branchParentId && <button onClick={() => { prepareMerge(); setMoreOpen(false); }}><span aria-hidden>⇄</span>{t('merge')}</button>}
-            <label><span><i aria-hidden>⌁</i>{t('edge')}</span><select aria-label="Connection kind" value={connectionKind} onChange={(event) => setConnectionKind(event.target.value as CreationConnectionKind)}>{CREATION_CONNECTION_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label>
+            <label><span><i aria-hidden>⌁</i>{t('edge')}</span><select aria-label={t('connectionKind')} value={connectionKind} onChange={(event) => setConnectionKind(event.target.value as CreationConnectionKind)}>{CREATION_CONNECTION_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label>
           </div>}
-          {shareOpen && <div className={styles.shareMenu} role="dialog" aria-label={persistence === 'local' ? 'Save to invite people' : 'Invite collaborators'}>
+          {shareOpen && <div className={styles.shareMenu} role="dialog" aria-label={persistence === 'local' ? t('saveToInvite') : t('inviteCollaborators')}>
             <div className={styles.shareMenuHeader}>
-              <strong>{persistence === 'local' ? 'Save to invite people' : 'Invite collaborators'}</strong>
-              <button type="button" className={styles.shareMenuClose} aria-label="Close invitation panel" onClick={() => setShareOpen(false)}>×</button>
+              <strong>{persistence === 'local' ? t('saveToInvite') : t('inviteCollaborators')}</strong>
+              <button type="button" className={styles.shareMenuClose} aria-label={t('closeInvitationPanel')} onClick={() => setShareOpen(false)}>×</button>
             </div>
-            <p>{persistence === 'local' ? 'Your work is safe on this device. Create a free account when you want live collaboration or delivery.' : 'Anyone invited can build with you and ask Brain questions.'}</p>
-            {persistence === 'local' ? <button onClick={() => requireAccount('save', 'Create an account to save this session', 'Move this local session into a secure tenant workspace without losing its objects, conversation, or layout.')}>Create free account</button> : <>
-              <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="name@company.com" /><select aria-label="Invitation role" value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">Viewer</option><option value="commenter">Commenter</option><option value="editor">Editor</option><option value="runner">Runner</option><option value="owner">Owner</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await copyTextToClipboard(`${window.location.origin}${result.acceptPath}`); setPendingInvitations((current) => [...current.filter((item) => item.id !== result.invitationId), { id: result.invitationId, email: result.email, role: result.role as CreationSessionSummary['role'], expiresAt: result.expiresAt, acceptedAt: null, revokedAt: null, createdAt: new Date().toISOString() }]); setNotice(result.emailSent ? 'Invitation emailed and backup link copied' : 'Invitation saved; backup link copied (email delivery is not configured)'); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice(result.emailSent ? 'Collaborator invited by email' : 'Collaborator invited in Builderforce'); } setInviteEmail(''); }).catch((error) => setNotice(error instanceof Error ? error.message : 'Invite failed')); }}>Invite</button></div>
-              {sessionRole === 'owner' && <div aria-label="Session members">{allMembers.map((member) => <div key={member.userId} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                <span>{member.displayName || 'Collaborator'}{member.userId === currentUserId ? ' (you)' : ''}</span>
-                <select aria-label={`Role for ${member.displayName || member.userId}`} value={member.role} onChange={(event) => { const role = event.target.value as CreationSessionSummary['role']; void creationSessionsApi.members.update(sessionId, member.userId, role).then(() => setAllMembers((current) => current.map((item) => item.userId === member.userId ? { ...item, role } : item))).catch((error) => setNotice(error instanceof Error ? error.message : 'Role update failed')); }}><option value="viewer">Viewer</option><option value="commenter">Commenter</option><option value="editor">Editor</option><option value="runner">Runner</option><option value="owner">Owner</option></select>
-                <button type="button" disabled={member.userId === currentUserId} aria-label={`Remove ${member.displayName || 'member'}`} onClick={() => { void creationSessionsApi.members.remove(sessionId, member.userId).then(() => setAllMembers((current) => current.filter((item) => item.userId !== member.userId))).catch((error) => setNotice(error instanceof Error ? error.message : 'Member removal failed')); }}>×</button>
-              </div>)}{!!pendingInvitations.length && <div aria-label="Pending invitations" style={{ marginTop: 10 }}><strong>Pending invitations</strong>{pendingInvitations.map((invitation) => <div key={invitation.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
-                <span>{invitation.email}</span><small>{invitation.role}</small><button type="button" aria-label={`Revoke invitation for ${invitation.email}`} onClick={() => { void creationSessionsApi.invitations.revoke(sessionId, invitation.id).then(() => { setPendingInvitations((current) => current.filter((item) => item.id !== invitation.id)); setNotice('Invitation revoked'); }).catch((error) => setNotice(error instanceof Error ? error.message : 'Invitation could not be revoked')); }}>×</button>
+            <p>{persistence === 'local' ? t('localSafeHint') : t('invitedCanBuild')}</p>
+            {persistence === 'local' ? <button onClick={() => requireAccount('save', t('gateSaveSessionTitle'), t('gateSaveBody'))}>{t('createFreeAccount')}</button> : <>
+              <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder={t('emailPlaceholder')} /><select aria-label={t('invitationRole')} value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await copyTextToClipboard(`${window.location.origin}${result.acceptPath}`); setPendingInvitations((current) => [...current.filter((item) => item.id !== result.invitationId), { id: result.invitationId, email: result.email, role: result.role as CreationSessionSummary['role'], expiresAt: result.expiresAt, acceptedAt: null, revokedAt: null, createdAt: new Date().toISOString() }]); setNotice(result.emailSent ? t('invitationEmailed') : t('invitationSavedLinkCopied')); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice(result.emailSent ? t('collaboratorInvitedEmail') : t('collaboratorInvited')); } setInviteEmail(''); }).catch((error) => setNotice(error instanceof Error ? error.message : t('inviteFailed'))); }}>{t('invite')}</button></div>
+              {sessionRole === 'owner' && <div aria-label={t('sessionMembers')}>{allMembers.map((member) => <div key={member.userId} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                <span>{member.displayName || t('collaborator')}{member.userId === currentUserId ? ` ${t('youSuffix')}` : ''}</span>
+                <select aria-label={t('roleFor', { name: member.displayName || member.userId })} value={member.role} onChange={(event) => { const role = event.target.value as CreationSessionSummary['role']; void creationSessionsApi.members.update(sessionId, member.userId, role).then(() => setAllMembers((current) => current.map((item) => item.userId === member.userId ? { ...item, role } : item))).catch((error) => setNotice(error instanceof Error ? error.message : t('roleUpdateFailed'))); }}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select>
+                <button type="button" disabled={member.userId === currentUserId} aria-label={t('removeMember', { name: member.displayName || t('member') })} onClick={() => { void creationSessionsApi.members.remove(sessionId, member.userId).then(() => setAllMembers((current) => current.filter((item) => item.userId !== member.userId))).catch((error) => setNotice(error instanceof Error ? error.message : t('memberRemovalFailed'))); }}>×</button>
+              </div>)}{!!pendingInvitations.length && <div aria-label={t('pendingInvitations')} style={{ marginTop: 10 }}><strong>{t('pendingInvitations')}</strong>{pendingInvitations.map((invitation) => <div key={invitation.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
+                <span>{invitation.email}</span><small>{invitation.role}</small><button type="button" aria-label={t('revokeInvitation', { email: invitation.email })} onClick={() => { void creationSessionsApi.invitations.revoke(sessionId, invitation.id).then(() => { setPendingInvitations((current) => current.filter((item) => item.id !== invitation.id)); setNotice(t('invitationRevoked')); }).catch((error) => setNotice(error instanceof Error ? error.message : t('invitationRevokeFailed'))); }}>×</button>
               </div>)}</div>}</div>}
             </>}
-            <small>Access: {persistence === 'local' ? 'Private on this device' : inviteRole}</small>
+            <small>{t('accessLabel', { access: persistence === 'local' ? t('privateOnDevice') : inviteRole })}</small>
           </div>}
           {templateOpen && <div className={styles.templateMenu}>
-            <header><div><strong>{t('canvasTemplates')}</strong><small>{t('marketplacePacks')}</small></div><button onClick={() => setTemplateOpen(false)} aria-label="Close templates">×</button></header>
-            {CREATION_TEMPLATES.map((template) => <button key={template.id} onClick={() => applyTemplate(template)}><b>{template.name}</b><small>{template.category} · {template.objects.length} objects</small><span>{template.description}</span></button>)}
-            {!!serverTemplates.length && <><h4>{t('savedAccount')}</h4>{serverTemplates.map((template) => <button key={template.id} onClick={() => applyServerTemplate(template)}><b>{template.name}</b><small>{template.visibility === 'tenant' ? 'Shared with tenant' : 'Private'} · {template.category}</small><span>{template.description}</span></button>)}</>}
-            {!!framePresets.length && <><h4>{t('reusableFrames')}</h4>{framePresets.map((preset) => <button key={preset.id} onClick={() => addFramePreset(preset)}><b>{preset.name}</b><small><span>Private custom frame</span> · this device</small></button>)}</>}
+            <header><div><strong>{t('canvasTemplates')}</strong><small>{t('marketplacePacks')}</small></div><button onClick={() => setTemplateOpen(false)} aria-label={t('closeTemplates')}>×</button></header>
+            {CREATION_TEMPLATES.map((template) => <button key={template.id} onClick={() => applyTemplate(template)}><b>{template.name}</b><small>{t('templateMeta', { category: template.category, count: template.objects.length })}</small><span>{template.description}</span></button>)}
+            {!!serverTemplates.length && <><h4>{t('savedAccount')}</h4>{serverTemplates.map((template) => <button key={template.id} onClick={() => applyServerTemplate(template)}><b>{template.name}</b><small>{template.visibility === 'tenant' ? t('sharedWithTenant') : t('private')} · {template.category}</small><span>{template.description}</span></button>)}</>}
+            {!!framePresets.length && <><h4>{t('reusableFrames')}</h4>{framePresets.map((preset) => <button key={preset.id} onClick={() => addFramePreset(preset)}><b>{preset.name}</b><small><span>{t('privateCustomFrame')}</span> · {t('thisDevice')}</small></button>)}</>}
           </div>}
         </div>
       </div>
 
       {accountGate && <div className={styles.accountGateBackdrop} role="presentation">
         <section className={styles.accountGate} role="dialog" aria-modal="true" aria-labelledby="canvas-account-gate-title">
-          <button type="button" className={styles.accountGateClose} aria-label="Close account prompt" onClick={() => setAccountGate(null)}>×</button>
+          <button type="button" className={styles.accountGateClose} aria-label={t('closeAccountPrompt')} onClick={() => setAccountGate(null)}>×</button>
           <span className={styles.accountGateIcon} aria-hidden>✦</span>
-          <small>Keep your momentum</small>
+          <small>{t('keepMomentum')}</small>
           <h2 id="canvas-account-gate-title">{accountGate.title}</h2>
           <p>{accountGate.description}</p>
-          <div className={styles.accountGateBenefits}><span>✓ Keep this entire local session</span><span>✓ Unlock durable resources and history</span><span>✓ Collaborate with your team</span></div>
+          <div className={styles.accountGateBenefits}><span>{`✓ ${t('gateBenefitKeep')}`}</span><span>{`✓ ${t('gateBenefitUnlock')}`}</span><span>{`✓ ${t('gateBenefitCollaborate')}`}</span></div>
           <div className={styles.accountGateActions}>
-            <button type="button" className={styles.primaryButton} onClick={() => { trackActivity('creation_account_gate_accepted', { sessionId, metadata: { clientSurface: 'web', action: accountGate.action } }); window.location.href = `/register?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>Create free account</button>
-            <button type="button" className={styles.secondaryButton} onClick={() => { window.location.href = `/login?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>Sign in</button>
+            <button type="button" className={styles.primaryButton} onClick={() => { trackActivity('creation_account_gate_accepted', { sessionId, metadata: { clientSurface: 'web', action: accountGate.action } }); window.location.href = `/register?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>{t('createFreeAccount')}</button>
+            <button type="button" className={styles.secondaryButton} onClick={() => { window.location.href = `/login?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>{t('signIn')}</button>
           </div>
-          <button type="button" className={styles.accountGateLater} onClick={() => setAccountGate(null)}>Not now — keep creating locally</button>
+          <button type="button" className={styles.accountGateLater} onClick={() => setAccountGate(null)}>{t('notNowKeepLocal')}</button>
         </section>
       </div>}
 
-      <div ref={flowWrapRef} className={styles.flowWrap} data-cursor-mode={drawingMode ? 'draw' : 'pan'} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPoints.current = []; }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
+      <div
+        ref={flowWrapRef}
+        className={styles.flowWrap}
+        style={{
+          // The dock owns one edge of the board; every other floating panel is
+          // pushed in by exactly its width so nothing can ever sit underneath it.
+          '--brain-dock-left': `${brainDock.side === 'left' ? brainDockWidth : 0}px`,
+          '--brain-dock-right': `${brainDock.side === 'right' ? brainDockWidth : 0}px`,
+        } as CSSProperties}
+        data-brain-side={brainDock.open ? brainDock.side : 'none'}
+        data-view={threeD ? '3d' : 'flat'}
+        data-cursor-mode={drawingMode ? 'draw' : 'pan'} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPoints.current = []; }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
         {!presentMode && effectiveSelectedIds.length > 0 && <div className={styles.selectionToolbar} aria-label={t('selectionActions')}>
           <span>{t('selectedCount', { count: effectiveSelectedIds.length })}</span>
           <button onClick={focusSelection}>{t('focus')}</button>
@@ -2581,12 +2920,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <button onClick={togglePlacementLock} disabled={!canEdit}>{effectiveSelectedIds.some((id) => nodes.find((node) => node.id === id)?.data.placementLocked !== true) ? t('lock') : t('unlock')}</button>
           <button onClick={toggleHidden} disabled={!canEdit}>{t('hide')}</button>
         </div>}
-        {loadingSession && <div className={styles.canvasSkeleton} role="status" aria-live="polite"><span /><span /><span /><b>Loading session…</b></div>}
-        {nodes.length > 100 && <div className={styles.performanceNotice} role="status"><strong>{t('largeSession', { count: nodes.length })}</strong><span>Only visible Objects are rendered. Use frames or hide heavy Objects to keep navigation fast.</span><button type="button" onClick={openPalette}>{t('frame')}</button></div>}
+        {loadingSession && <div className={styles.canvasSkeleton} role="status" aria-live="polite"><span /><span /><span /><b>{t('loadingSession')}</b></div>}
+        {nodes.length > 100 && <div className={styles.performanceNotice} role="status"><strong>{t('largeSession', { count: nodes.length })}</strong><span>{t('largeSessionHint')}</span><button type="button" onClick={openPalette}>{t('frame')}</button></div>}
         {tourStep > 0 && <div style={{ position: 'absolute', zIndex: 30, top: 18, left: '50%', transform: 'translateX(-50%)', width: 'min(430px, calc(100% - 32px))', padding: 16, borderRadius: 14, background: 'var(--bg-elevated, white)', boxShadow: '0 14px 44px rgba(25,40,70,.22)', border: '1px solid var(--border-subtle)' }}>
-          <strong>{['', 'Ask Brain from the composer', 'Everything is an object', 'Select to focus Brain', 'Connect ideas explicitly', 'Build with collaborators', 'Deliver when you are ready'][tourStep]}</strong>
-          <p style={{ margin: '7px 0 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{['', 'The familiar prompt stays at the bottom and can create or evaluate anything in this session.', 'Drag workflows, sites, data, agents, people, and project context from the palette.', 'Select one object for a focused question, or click the background to evaluate the complete session.', 'Connect two objects to define a real data, control, reference, presentation, or delivery relationship.', 'Share the session, comment on objects, and see live cursors without moving anyone else’s viewport.', 'Projects are optional. Add one only when you want to turn an artifact into a Task and assign an Agent.'][tourStep]}</p>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><small>{tourStep} of 6</small><span style={{ display: 'flex', gap: 7 }}><button className={styles.secondaryButton} onClick={() => { localStorage.setItem(tourStorageKey, '1'); setTourStep(0); }}>Dismiss</button><button className={styles.primaryButton} onClick={() => { trackActivity('creation_tutorial_step_completed', { sessionId, metadata: { clientSurface: 'web', step: tourStep } }); if (tourStep < 6) setTourStep((step) => step + 1); else { localStorage.setItem(tourStorageKey, '1'); setTourStep(0); } }}>{tourStep < 6 ? 'Next' : 'Start creating'}</button></span></div>
+          <strong>{t(`tourTitle${tourStep}` as 'tourTitle1')}</strong>
+          <p style={{ margin: '7px 0 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{t(`tourBody${tourStep}` as 'tourBody1')}</p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><small>{t('tourStep', { step: tourStep })}</small><span style={{ display: 'flex', gap: 7 }}><button className={styles.secondaryButton} onClick={() => { localStorage.setItem(tourStorageKey, '1'); setTourStep(0); }}>{t('dismiss')}</button><button className={styles.primaryButton} onClick={() => { trackActivity('creation_tutorial_step_completed', { sessionId, metadata: { clientSurface: 'web', step: tourStep } }); if (tourStep < 6) setTourStep((step) => step + 1); else { localStorage.setItem(tourStorageKey, '1'); setTourStep(0); } }}>{tourStep < 6 ? t('next') : t('startCreating')}</button></span></div>
         </div>}
         <ReactFlow<CreationFlowNode, Edge>
           nodes={renderedNodes}
@@ -2622,44 +2961,69 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             showInteractive={false}
             minimapNodeColor={minimapColor as (node: Node) => string}
             minimapMaskColor="var(--creation-minimap-mask, rgba(244,248,253,.72))"
+            threeDActive={threeD}
+            onToggleThreeD={() => setThreeD((value) => !value)}
+            extraControls={<ControlButton
+              onClick={() => setOutlineOpen((value) => !value)}
+              aria-label={t('canvasOutline')}
+              aria-pressed={outlineOpen}
+              title={t('canvasOutline')}
+            ><AccessibleOutlineIcon /></ControlButton>}
           />
         </ReactFlow>
 
-        <div className={styles.mobileCanvasActions} role="group" aria-label="Canvas view controls">
-          <button type="button" onClick={() => void flowRef.current?.zoomIn({ duration: 180 })} aria-label="Zoom in">＋</button>
-          <button type="button" onClick={() => void flowRef.current?.zoomOut({ duration: 180 })} aria-label="Zoom out">−</button>
-          <button type="button" onClick={() => void flowRef.current?.fitView({ padding: .18, maxZoom: .9, duration: 260 })} aria-label="Fit canvas to view">⌗</button>
-          <button type="button" onClick={cleanLayout} aria-label="Arrange canvas objects">⌘</button>
+        <div className={styles.mobileCanvasActions} role="group" aria-label={t('canvasViewControls')}>
+          <button type="button" onClick={() => void flowRef.current?.zoomIn({ duration: 180 })} aria-label={t('zoomIn')}>＋</button>
+          <button type="button" onClick={() => void flowRef.current?.zoomOut({ duration: 180 })} aria-label={t('zoomOut')}>−</button>
+          <button type="button" onClick={() => void flowRef.current?.fitView({ padding: .18, maxZoom: .9, duration: 260 })} aria-label={t('fitCanvas')}>⌗</button>
+          <button type="button" onClick={cleanLayout} aria-label={t('arrangeObjects')}>⌘</button>
+          <button type="button" onClick={() => setThreeD((value) => !value)} aria-pressed={threeD} aria-label={tCommands('threeD.toggle')}>◱</button>
+          <button type="button" onClick={() => setOutlineOpen((value) => !value)} aria-pressed={outlineOpen} aria-label={t('canvasOutline')}><AccessibleOutlineIcon /></button>
         </div>
 
-        <RemoteCursors members={members} currentUserId={currentUserId} instance={flowRef.current} container={flowWrapRef.current} />
-        <details className={styles.structuredGraph}><summary>Accessible canvas outline</summary><ol>{nodes.map((node) => <li key={node.id}><button aria-label={`Focus ${node.data.title}`} onClick={() => { setSelectedId(node.id); setSelectedIds([node.id]); }}>{node.data.title} ({node.data.kind})</button><span>{node.data.status || 'Canvas object'}{node.data.placementLocked === true ? ' · placement locked' : ''}</span><ul>{edges.filter((edge) => edge.source === node.id).map((edge) => <li key={edge.id}>{String(edge.data?.connectionKind || 'reference')} connection to {nodes.find((target) => target.id === edge.target)?.data.title || 'object'}{edge.label ? `: ${String(edge.label)}` : ''}</li>)}</ul></li>)}</ol></details>
+        {threeD && <Canvas3DView
+          nodes={threeDNodes}
+          edges={edges}
+          describe={describeThreeD}
+          measure={canvasNodeDimensions}
+          selectedIds={effectiveSelectedIds}
+          onSelect={selectThreeDObject}
+          onExit={() => setThreeD(false)}
+        />}
 
-        {!presentMode && <button className={styles.paletteToggle} onClick={() => setPaletteOpen((value) => !value)} aria-label="Toggle object palette">{paletteOpen ? '‹' : '+'}</button>}
+        <RemoteCursors members={members} currentUserId={currentUserId} instance={flowRef.current} container={flowWrapRef.current} />
+        {outlineOpen && <CanvasOutlinePanel
+          nodes={nodes}
+          edges={edges}
+          onFocus={(nodeId) => { setSelectedId(nodeId); setSelectedIds([nodeId]); }}
+          onClose={() => setOutlineOpen(false)}
+        />}
+
+        {!presentMode && <button className={styles.paletteToggle} onClick={() => setPaletteOpen((value) => !value)} aria-label={t('toggleObjectPalette')}>{paletteOpen ? '‹' : '+'}</button>}
         {!presentMode && paletteOpen && <aside id="canvas-object-palette" className={styles.palette}>
-          <div className={styles.paletteHeader}><strong>{t('addToCanvas')}</strong><button onClick={() => setPaletteOpen(false)} aria-label="Close palette">×</button></div>
+          <div className={styles.paletteHeader}><strong>{t('addToCanvas')}</strong><button onClick={() => setPaletteOpen(false)} aria-label={t('closePalette')}>×</button></div>
           <div className={styles.paletteSearchWrap}><span aria-hidden>⌕</span><input ref={paletteSearchRef} className={styles.search} aria-label={t('searchEverything')} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder={t('searchEverything')} />{paletteSearch && <button type="button" aria-label={t('clearSearch')} onClick={() => setPaletteSearch('')}>×</button>}</div>
-          <div className={styles.paletteSections}>{CREATION_PALETTE_GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => `${t(`object.${item.kind}`)} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => {
+          <div className={styles.paletteSections}>{CREATION_PALETTE_GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => `${t(`object.${item.kind}`)} ${t(`group.${item.group}`)} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => {
             const collapsed = !paletteSearch.trim() && collapsedPaletteGroups.has(group.group);
             const regionId = `canvas-palette-${group.group.toLowerCase()}`;
             return <section key={group.group} className={styles.paletteSection}>
               <button type="button" className={styles.paletteSectionToggle} aria-expanded={!collapsed} aria-controls={regionId} onClick={() => setCollapsedPaletteGroups((current) => { const next = new Set(current); if (next.has(group.group)) next.delete(group.group); else next.add(group.group); return next; })}>
-                <span className={styles.paletteGroupIcon} aria-hidden>{PALETTE_GROUP_ICONS[group.group]}</span><strong>{group.group}</strong><small>{group.items.length}</small><span className={styles.paletteChevron} aria-hidden>{collapsed ? '›' : '⌄'}</span>
+                <span className={styles.paletteGroupIcon} aria-hidden>{PALETTE_GROUP_ICONS[group.group]}</span><strong>{t(`group.${group.group}`)}</strong><small>{group.items.length}</small><span className={styles.paletteChevron} aria-hidden>{collapsed ? '›' : '⌄'}</span>
               </button>
               {!collapsed && <div id={regionId} className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} aria-label={t(`object.${item.kind}`)} disabled={!canEdit} draggable={canEdit} onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addAtCenter(item.kind)}><span>{item.icon}</span>{t(`object.${item.kind}`)}</button>)}</div>}
             </section>;
           })}</div>
         </aside>}
 
-        {!presentMode && selectedNode && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} />}
+        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} />}
 
-        {workflowFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label="Workflow focus editor">
-          <header><div><strong>Edit Workflow on Canvas</strong><small>Changes save to the canonical Workflow definition.</small></div><button type="button" onClick={() => setWorkflowFocus(null)} aria-label="Close workflow editor">×</button></header>
-          <div className={styles.workflowFocusBody}><ReactFlowProvider><WorkflowBuilder definitionId={workflowFocus.definitionId} embedded onSaved={(definitionId, name) => { setWorkflowFocus((current) => current ? { ...current, definitionId } : current); setNodes((current) => current.map((node) => node.id === workflowFocus.nodeId ? { ...node, data: { ...node.data, title: name, resourceId: `workflow:${definitionId}`, workflowExecutable: true, resourceSubtype: 'definition', status: 'Saved' } } : node)); setNotice('Workflow saved from this Session'); }} onRunStarted={(workflowId) => { setNodes((current) => current.map((node) => node.id === workflowFocus.nodeId ? { ...node, data: { ...node.data, status: 'Running', workflowRunId: workflowId } } : node)); setNotice(`Workflow run ${workflowId} started`); }} /></ReactFlowProvider></div>
+        {workflowFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('workflowFocusEditor')}>
+          <header><div><strong>{t('editWorkflowOnCanvas')}</strong><small>{t('editWorkflowHint')}</small></div><button type="button" onClick={() => setWorkflowFocus(null)} aria-label={t('closeWorkflowEditor')}>×</button></header>
+          <div className={styles.workflowFocusBody}><ReactFlowProvider><WorkflowBuilder definitionId={workflowFocus.definitionId} embedded onSaved={(definitionId, name) => { setWorkflowFocus((current) => current ? { ...current, definitionId } : current); setNodes((current) => current.map((node) => node.id === workflowFocus.nodeId ? { ...node, data: { ...node.data, title: name, resourceId: `workflow:${definitionId}`, workflowExecutable: true, resourceSubtype: 'definition', status: 'Saved' } } : node)); setNotice(t('workflowSaved')); }} onRunStarted={(workflowId) => { setNodes((current) => current.map((node) => node.id === workflowFocus.nodeId ? { ...node, data: { ...node.data, status: 'Running', workflowRunId: workflowId } } : node)); setNotice(`Workflow run ${workflowId} started`); }} /></ReactFlowProvider></div>
         </section>}
 
-        {trainingFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label="Evermind adapter studio">
-          <header><div><strong>Train Evermind on Canvas</strong><small>Real frozen-base LoRA, evaluation-ready job evidence, and portable safetensors output.</small></div><button type="button" onClick={() => setTrainingFocus(null)} aria-label="Close adapter studio">×</button></header>
+        {trainingFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('evermindAdapterStudio')}>
+          <header><div><strong>{t('trainEvermindOnCanvas')}</strong><small>{t('trainEvermindHint')}</small></div><button type="button" onClick={() => setTrainingFocus(null)} aria-label={t('closeAdapterStudio')}>×</button></header>
           <div className={styles.workflowFocusBody} style={{ overflow: 'auto', background: '#111827', justifyContent: 'center', padding: 20 }}>
             <AITrainingPanel
               projectId={trainingFocus.projectId}
@@ -2667,11 +3031,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               workspaceEnabled={!trainingFocus.localOnly}
               onJobCompleted={(job) => {
                 setNodes((current) => current.map((node) => node.id === trainingFocus.nodeId ? { ...node, data: { ...node.data, status: 'Adapter trained', trainingJobId: job.id, adapterArtifact: job.r2_artifact_key, model: job.base_model, loraRank: job.lora_rank } } : node));
-                setNotice('Evermind adapter trained and linked to this canvas object');
+                setNotice(t('adapterTrained'));
               }}
               onLocalArtifactCompleted={(artifact) => {
                 setNodes((current) => current.map((node) => node.id === trainingFocus.nodeId ? { ...node, data: { ...node.data, status: 'Local adapter trained', adapterArtifact: `local://${artifact.filename}`, trainableParams: artifact.trainableParams } } : node));
-                setNotice('Local Evermind adapter trained, downloaded, and linked to this canvas object');
+                setNotice(t('localAdapterTrained'));
               }}
               onModelPublished={(model) => {
                 setNodes((current) => current.map((node) => node.id === trainingFocus.nodeId ? { ...node, data: { ...node.data, status: 'Published', model: model.ref, modelSlug: model.slug, evermindRef: model.evermindRef, publishedAt: new Date().toISOString() } } : node));
@@ -2681,52 +3045,51 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           </div>
         </section>}
 
-        {historyOpen && <aside className={styles.historyPanel}><header><div><strong>Version history</strong><small>Restore creates a new revision</small></div><button onClick={() => setHistoryOpen(false)} aria-label="Close history">×</button></header>{persistence === 'local' ? <p>This session is currently stored on this device. Server version history begins after you save it.</p> : <><button className={styles.primaryButton} onClick={createCheckpoint} disabled={!canEdit}>+ Name current checkpoint</button><div>{history.length ? history.map((snapshot) => <button key={snapshot.revision} onClick={() => restoreRevision(snapshot.revision)} disabled={!canEdit}><b>{snapshot.label || `Revision ${snapshot.revision}`}</b><span>Revision {snapshot.revision} · {new Date(snapshot.createdAt).toLocaleString()}</span></button>) : <p>No saved revisions yet.</p>}</div></>}</aside>}
-        {outcomeMetricsOpen && <aside className={`${styles.historyPanel} ${styles.outcomeMetricsPanel}`} aria-label="Session outcome metrics">
-          <header><div><strong>Idea → delivery</strong><small>{outcomeMetrics ? `This session vs ${outcomeMetrics.sampleSize} tenant session${outcomeMetrics.sampleSize === 1 ? '' : 's'}` : 'Value generated in this session'}</small></div><button onClick={() => setOutcomeMetricsOpen(false)} aria-label="Close outcome metrics">×</button></header>
-          {persistence === 'local' ? <div className={styles.outcomeEmpty}><span aria-hidden>↗</span><strong>Save to establish a baseline</strong><p>Your draft stays local. Saving lets Builderforce correlate actions with outcomes and compare this session to aggregated tenant sessions.</p><button className={styles.primaryButton} onClick={() => requireAccount('metrics', 'Create an account to measure delivered value', 'Save this session to compare idea-to-delivery outcomes across sessions, projects, and your workspace.')}>Save and measure</button></div> : outcomeMetricsLoading ? <p role="status">Calculating delivered value…</p> : outcomeMetricsError ? <div className={styles.outcomeEmpty}><strong>Metrics unavailable</strong><p>{outcomeMetricsError}</p><button className={styles.secondaryButton} onClick={openOutcomeMetrics}>Retry</button></div> : outcomeMetrics ? <div className={styles.outcomeMetricList}>{outcomeMetrics.metrics.map((metric) => {
+        {historyOpen && <aside className={styles.historyPanel}><header><div><strong>{t('versionHistory')}</strong><small>{t('versionHistoryHint')}</small></div><button onClick={() => setHistoryOpen(false)} aria-label={t('closeHistory')}>×</button></header>{persistence === 'local' ? <p>{t('historyLocalOnly')}</p> : <><button className={styles.primaryButton} onClick={createCheckpoint} disabled={!canEdit}>{t('nameCheckpoint')}</button><div>{history.length ? history.map((snapshot) => <button key={snapshot.revision} onClick={() => restoreRevision(snapshot.revision)} disabled={!canEdit}><b>{snapshot.label || t('revisionLabel', { revision: snapshot.revision })}</b><span>{t('revisionMeta', { revision: snapshot.revision, at: new Date(snapshot.createdAt).toLocaleString() })}</span></button>) : <p>{t('noRevisions')}</p>}</div></>}</aside>}
+        {outcomeMetricsOpen && <aside className={`${styles.historyPanel} ${styles.outcomeMetricsPanel}`} aria-label={t('sessionOutcomeMetrics')}>
+          <header><div><strong>{t('ideaToDelivery')}</strong><small>{outcomeMetrics ? t('sessionVsTenant', { count: outcomeMetrics.sampleSize }) : t('valueGenerated')}</small></div><button onClick={() => setOutcomeMetricsOpen(false)} aria-label={t('closeOutcomeMetrics')}>×</button></header>
+          {persistence === 'local' ? <div className={styles.outcomeEmpty}><span aria-hidden>↗</span><strong>{t('saveForBaseline')}</strong><p>{t('saveForBaselineHint')}</p><button className={styles.primaryButton} onClick={() => requireAccount('metrics', t('gateMetricsTitle'), t('gateMetricsBody'))}>{t('saveAndMeasure')}</button></div> : outcomeMetricsLoading ? <p role="status">{t('calculatingValue')}</p> : outcomeMetricsError ? <div className={styles.outcomeEmpty}><strong>{t('metricsUnavailable')}</strong><p>{outcomeMetricsError}</p><button className={styles.secondaryButton} onClick={openOutcomeMetrics}>{t('retry')}</button></div> : outcomeMetrics ? <div className={styles.outcomeMetricList}>{outcomeMetrics.metrics.map((metric) => {
             const comparable = metric.current != null && metric.baseline != null;
             const delta = comparable ? metric.current! - metric.baseline! : null;
-            const favorable = delta == null ? null : metric.direction === 'higher' ? delta >= 0 : delta <= 0;
+            const improving = delta == null ? null : metric.direction === 'higher' ? delta >= 0 : false;
+            const favorable = improving == null ? null : improving || (metric.direction !== 'higher' && delta! <= 0);
             return <article key={metric.key} className={styles.outcomeMetric}>
               <div><strong>{metric.label}</strong><span>{formatOutcomeValue(metric.current, metric.unit)}</span></div>
-              <small>{metric.baseline == null ? 'Baseline gathering' : `Typical: ${formatOutcomeValue(metric.baseline, metric.unit)}`}{delta != null && Math.abs(delta) > .0001 ? <em data-positive={favorable}>{favorable ? ' ↗' : ' ↘'}</em> : null}</small>
+              <small>{metric.baseline == null ? t('baselineGathering') : t('typicalValue', { value: formatOutcomeValue(metric.baseline, metric.unit) })}{delta != null && Math.abs(delta) > .0001 ? <em data-positive={favorable}>{favorable ? ' ↗' : ' ↘'}</em> : null}</small>
             </article>;
           })}</div> : null}
-          <footer><span>Correlation coverage keeps every action accountable.</span><small>Aggregates are content-free and tenant scoped.</small></footer>
+          <footer><span>{t('correlationCoverage')}</span><small>{t('aggregatesScoped')}</small></footer>
         </aside>}
-        {conversationOpen && <aside className={styles.historyPanel} aria-label="Session conversation"><header><div><strong>Session conversation</strong><small>Persists even when Chat Objects are removed</small></div><span className={styles.panelHeaderActions}><CopyButton compact label={t('copyDiagnostics')} ariaLabel={t('copyChatDiagnostics')} getText={buildDiagnostics} /><button onClick={() => setConversationOpen(false)} aria-label="Close conversation">×</button></span></header><div>{timeline.length ? timeline.map((message) => <article key={message.clientMessageId} style={{ padding: '9px 10px', borderBottom: '1px solid var(--border-subtle)' }}><strong style={{ textTransform: 'capitalize' }}>{message.metadata?.authoredBy?.name || (message.messageRole === 'assistant' ? 'Brain' : message.messageRole)}</strong><p style={{ margin: '4px 0', whiteSpace: 'pre-wrap' }}>{message.body}</p><small>{new Date(message.createdAt).toLocaleString()}</small></article>) : <p>No conversation yet. Ask Brain from the composer to begin.</p>}</div></aside>}
-        {diagnosticsOpen && <aside className={`${styles.historyPanel} ${styles.diagnosticsPanel}`} aria-label="Canvas diagnostics"><header><div><strong>{t('diagnostics')}</strong><small>{t('diagnosticsHint')}</small></div><button onClick={() => setDiagnosticsOpen(false)} aria-label="Close diagnostics">×</button></header><div className={styles.diagnosticsSummary}><dl><div><dt>Session</dt><dd>{persistence} · revision {revision.current}</dd></div><div><dt>Realtime</dt><dd>{realtimeState}</dd></div><div><dt>Canvas</dt><dd>{nodes.length} objects · {edges.length} connections</dd></div><div><dt>Brain</dt><dd>{thinking ? 'responding' : 'ready'} · {canvasActions.length} actions</dd></div><div><dt>Scope</dt><dd>{resolvedScopeMode}</dd></div><div><dt>Access</dt><dd>{sessionRole}</dd></div></dl><CopyButton label={t('copyDiagnostics')} ariaLabel={t('copyCanvasDiagnostics')} getText={buildDiagnostics} /></div></aside>}
+        {conversationOpen && <aside className={styles.historyPanel} aria-label={t('sessionConversation')}><header><div><strong>{t('sessionConversation')}</strong><small>{t('sessionConversationHint')}</small></div><span className={styles.panelHeaderActions}><CopyButton compact label={t('copyDiagnostics')} ariaLabel={t('copyChatDiagnostics')} getText={buildDiagnostics} /><button onClick={() => setConversationOpen(false)} aria-label={t('closeConversation')}>×</button></span></header><div>{timeline.length ? timeline.map((message) => <article key={message.clientMessageId} style={{ padding: '9px 10px', borderBottom: '1px solid var(--border-subtle)' }}><strong style={{ textTransform: 'capitalize' }}>{message.metadata?.authoredBy?.name || (message.messageRole === 'assistant' ? 'Brain' : message.messageRole)}</strong><p style={{ margin: '4px 0', whiteSpace: 'pre-wrap' }}>{message.body}</p><small>{new Date(message.createdAt).toLocaleString()}</small></article>) : <p>{t('brainEmpty')}</p>}</div></aside>}
+        {diagnosticsOpen && <aside className={`${styles.historyPanel} ${styles.diagnosticsPanel}`} aria-label={t('canvasDiagnostics')}><header><div><strong>{t('diagnostics')}</strong><small>{t('diagnosticsHint')}</small></div><button onClick={() => setDiagnosticsOpen(false)} aria-label={t('closeDiagnostics')}>×</button></header><div className={styles.diagnosticsSummary}><dl><div><dt>{t('diagSession')}</dt><dd>{t('diagSessionValue', { persistence, revision: revision.current })}</dd></div><div><dt>{t('diagRealtime')}</dt><dd>{realtimeState}</dd></div><div><dt>{t('diagCanvas')}</dt><dd>{t('diagCanvasValue', { objects: nodes.length, connections: edges.length })}</dd></div><div><dt>{t('brain')}</dt><dd>{t('diagBrainValue', { state: thinking ? t('diagResponding') : t('diagReady'), actions: canvasActions.length })}</dd></div><div><dt>{t('diagScope')}</dt><dd>{resolvedScopeMode}</dd></div><div><dt>{t('diagAccess')}</dt><dd>{sessionRole}</dd></div></dl><CopyButton label={t('copyDiagnostics')} ariaLabel={t('copyCanvasDiagnostics')} getText={buildDiagnostics} /></div></aside>}
 
-        {!!proposedChanges.length && <aside className={styles.changeSetPanel}><header><div><strong>Review Brain changes</strong><small>Select exactly what should change</small></div><button onClick={rejectProposedChanges} aria-label="Close change set">×</button></header><div>{proposedChanges.map((change) => <label key={change.id}><input type="checkbox" checked={acceptedProposalIds.has(change.id)} onChange={() => setAcceptedProposalIds((current) => { const next = new Set(current); if (next.has(change.id)) next.delete(change.id); else next.add(change.id); return next; })} /><span><b>{change.label}</b><small>{change.type.replace('.', ' ')}</small></span></label>)}</div><footer><button className={styles.secondaryButton} onClick={rejectProposedChanges}>Reject all</button><button className={styles.secondaryButton} disabled={!acceptedProposalIds.size} onClick={applyAndEnableAutoApply} title="Apply this batch and automatically apply following Brain actions">Apply &amp; auto-apply</button><button className={styles.primaryButton} disabled={!acceptedProposalIds.size} onClick={applyProposedChanges}>Apply {acceptedProposalIds.size} selected</button></footer></aside>}
-        {mergeReview && <aside className={styles.mergePanel}><header><div><strong>Merge branch into parent</strong><p>Resolve each object explicitly. Parent-only objects are preserved.</p></div><button onClick={() => setMergeReview(null)} aria-label="Close merge review">×</button></header>{mergeReview.items.map((item) => <label key={item.key}><b>{item.source.data.title}</b><small>{item.target ? `Both sessions contain this ${item.source.data.kind}.` : `New ${item.source.data.kind} from this branch.`}</small>{item.target && <span><select aria-label={`Merge choice for ${item.source.data.title}`} value={item.choice} onChange={(event) => setMergeReview((current) => current ? { ...current, items: current.items.map((candidate) => candidate.key === item.key ? { ...candidate, choice: event.target.value as 'branch' | 'parent' } : candidate) } : current)}><option value="branch">Use branch version</option><option value="parent">Keep parent version</option></select></span>}</label>)}<button className={styles.primaryButton} onClick={applyMerge}>Apply reviewed merge</button></aside>}
+        {!!proposedChanges.length && <aside className={styles.changeSetPanel}><header><div><strong>{t('reviewBrainChanges')}</strong><small>{t('reviewBrainChangesHint')}</small></div><button onClick={rejectProposedChanges} aria-label={t('closeChangeSet')}>×</button></header><div>{proposedChanges.map((change) => <label key={change.id}><input type="checkbox" checked={acceptedProposalIds.has(change.id)} onChange={() => setAcceptedProposalIds((current) => { const next = new Set(current); if (next.has(change.id)) next.delete(change.id); else next.add(change.id); return next; })} /><span><b>{change.label}</b><small>{change.type.replace('.', ' ')}</small></span></label>)}</div><footer><button className={styles.secondaryButton} onClick={rejectProposedChanges}>{t('rejectAll')}</button><button className={styles.secondaryButton} disabled={!acceptedProposalIds.size} onClick={applyAndEnableAutoApply} title={t('applyAutoApplyHint')}>{t('applyAutoApply')}</button><button className={styles.primaryButton} disabled={!acceptedProposalIds.size} onClick={applyProposedChanges}>{t('applySelected', { count: acceptedProposalIds.size })}</button></footer></aside>}
+        {mergeReview && <aside className={styles.mergePanel}><header><div><strong>{t('mergeBranch')}</strong><p>{t('mergeBranchHint')}</p></div><button onClick={() => setMergeReview(null)} aria-label={t('closeMergeReview')}>×</button></header>{mergeReview.items.map((item) => <label key={item.key}><b>{item.source.data.title}</b><small>{item.target ? t('mergeBothContain', { kind: item.source.data.kind }) : t('mergeNewFromBranch', { kind: item.source.data.kind })}</small>{item.target && <span><select aria-label={t('mergeChoiceFor', { title: item.source.data.title })} value={item.choice} onChange={(event) => setMergeReview((current) => current ? { ...current, items: current.items.map((candidate) => candidate.key === item.key ? { ...candidate, choice: event.target.value as 'branch' | 'parent' } : candidate) } : current)}><option value="branch">{t('useBranchVersion')}</option><option value="parent">{t('keepParentVersion')}</option></select></span>}</label>)}<button className={styles.primaryButton} onClick={applyMerge}>{t('applyReviewedMerge')}</button></aside>}
 
-        {!presentMode && <ChatInput
-          className={styles.composer}
-          value={prompt}
-          onChange={setPrompt}
-          onSubmit={evaluateCanvas}
-          placeholder={t('askBrain')}
-          submitLabel={t('sendBrain')}
-          disabled={thinking}
-          rows={1}
-          submitOnEnter
-          contextControls={<>
-            <label className={styles.scopeChip}>⌁ <span className="sr-only">Brain scope</span><select aria-label="Brain scope" value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">Entire canvas</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects` : 'Selected object'}</option><option value="connected" disabled={!effectiveSelectedIds.length}>Connected objects</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>Current frame</option></select></label>
-          </>}
-          onAttach={attachCanvasArtifact}
-          onAddContext={openPalette}
-          autoMode={autoApply}
-          onAutoModeChange={setAutoApplyMode}
-          modelSelection={modelSelection}
-          modelOptions={canvasModelOptions}
-          onModelSelectionChange={setModelSelection}
-          modelTrigger="slash"
-          modeControls={
-            <button type="button" className={`${styles.memoryButton} ${memoryEnabled ? styles.memoryButtonActive : ''}`} aria-pressed={memoryEnabled} aria-label="Memory" disabled={evermindProjectId == null || persistence !== 'server'} title={evermindProjectId == null ? 'Add a saved Project to connect its Evermind' : memoryEnabled ? 'Evermind recall and learning are enabled' : 'Evermind is disabled for this canvas chat'} onClick={() => setMemoryMode(!memoryEnabled)}><span aria-hidden>🧠</span><span className={styles.composerActionLabel}>Memory</span></button>
-          }
-          showVoice
+        {!presentMode && brainDock.open && <BrainDock
+          side={brainDock.side}
+          size={brainDock.size}
+          showExecutionDetail={brainDock.showExecutionDetail}
+          onSideChange={(side) => updateBrainDock({ side })}
+          onSizeChange={(size) => updateBrainDock({ size })}
+          onExecutionDetailChange={(showExecutionDetail) => updateBrainDock({ showExecutionDetail })}
+          onClose={() => updateBrainDock({ open: false })}
+          messages={brainMessages}
+          trace={brainTrace}
+          running={thinking}
+          node={brainNode}
+          nodes={nodes}
+          edges={edges}
+          composer={composer}
         />}
+        {!presentMode && !brainDock.open && <button
+          type="button"
+          className={styles.brainDockLauncher}
+          data-side={brainDock.side}
+          aria-label={t('openBrainDock')}
+          title={t('openBrainDock')}
+          onClick={() => updateBrainDock({ open: true })}
+        ><span aria-hidden>✦</span>{t('brain')}</button>}
       </div>
     </div>
   );
@@ -2737,58 +3100,12 @@ function RemoteCursors({ members, currentUserId, instance, container }: { member
   const rect = container.getBoundingClientRect();
   return <div className={styles.remoteCursors} aria-live="polite">{members.filter((member) => member.userId !== currentUserId && typeof member.cursor?.x === 'number' && typeof member.cursor?.y === 'number').map((member, index) => {
     const screen = instance.flowToScreenPosition({ x: member.cursor!.x!, y: member.cursor!.y! });
-    return <span key={member.userId} style={{ left: screen.x - rect.left, top: screen.y - rect.top, color: ['#d946ef', '#f97316', '#059669', '#2563eb'][index % 4] }}><i>◢</i><b>{member.displayName || 'Collaborator'}{member.typing ? ' · typing…' : ''}</b></span>;
+    return <span key={member.userId} style={{ left: screen.x - rect.left, top: screen.y - rect.top, color: ['#d946ef', '#f97316', '#059669', '#2563eb'][index % 4] }}><i>◢</i><b>{member.displayName || 'Collaborator'}{member.typing ? ' · …' : ''}</b></span>;
   })}</div>;
 }
 
-function BrainObjectDetails({ node, nodes, edges, timeline, trace }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; timeline: CanvasTimelineMessage[]; trace: BrainTraceEvent[] }) {
-  const messages: CanvasTimelineMessage[] = timeline.length ? timeline : Array.isArray(node.data.messages) ? node.data.messages.flatMap((value) => {
-    if (!value || typeof value !== 'object') return [];
-    const message = value as Record<string, unknown>;
-    if (typeof message.content !== 'string') return [];
-    return [{
-      clientMessageId: `${message.createdAt || 'message'}:${message.role || 'assistant'}:${message.content}`,
-      messageRole: message.role === 'user' || message.role === 'system' ? message.role : 'assistant',
-      body: message.content,
-      createdAt: typeof message.createdAt === 'string' ? message.createdAt : '',
-    } satisfies CanvasTimelineMessage];
-  }) : [];
-  const connectedIds = new Set(edges.flatMap((edge) => edge.source === node.id ? [edge.target] : edge.target === node.id ? [edge.source] : []));
-  const connected = nodes.filter((candidate) => candidate.id !== node.id && connectedIds.has(candidate.id));
-  const agents = connected.filter((candidate) => candidate.data.kind === 'agent');
-  const tickets = connected.filter((candidate) => candidate.data.kind === 'task');
-  const related = connected.filter((candidate) => candidate.data.kind !== 'agent' && candidate.data.kind !== 'task');
-  const canonicalChatId = node.data.resourceId?.match(/^chat:(\d+)$/)?.[1];
-  const connectedProjectId = connected.find((candidate) => candidate.data.kind === 'project')?.data.resourceId?.match(/^project:(\d+)$/)?.[1];
-  const timelineMessages: BrainMessage[] = messages.map((message, index) => ({
-    id: index + 1,
-    seq: index + 1,
-    role: message.messageRole,
-    content: message.body,
-    metadata: message.metadata?.authoredBy ? JSON.stringify({ authoredBy: message.metadata.authoredBy }) : null,
-    createdAt: message.createdAt,
-  }));
-  const visibleTrace = trace.length ? trace : Array.isArray(node.data.trace) ? node.data.trace.filter((value): value is BrainTraceEvent => !!value && typeof value === 'object' && typeof (value as { ts?: unknown }).ts === 'string' && typeof (value as { category?: unknown }).category === 'string' && typeof (value as { label?: unknown }).label === 'string') : [];
-  const roster = (items: CreationFlowNode[], empty: string) => items.length ? <div className={styles.brainAssociationList}>{items.map((item) => <div key={item.id}><span aria-hidden>{creationObjectDefinition(item.data.kind).icon}</span><p><b>{item.data.title}</b><small>{item.data.status || creationObjectDefinition(item.data.kind).label}</small></p></div>)}</div> : <p className={styles.brainEmpty}>{empty}</p>;
-
-  return <div className={styles.brainDetails}>
-    <section aria-labelledby="brain-conversation-heading">
-      <div className={styles.brainSectionHeading}><h3 id="brain-conversation-heading">Conversation</h3><span>{messages.length}</span></div>
-      <div className={styles.brainInspectorTimeline} role="log" aria-label="Full Brain activity" tabIndex={0}>
-        <BrainTimeline messages={timelineMessages} trace={visibleTrace} streamingText="" isRunning={false} assistantName="Brain" labels={{ you: 'You', assistant: 'Brain', empty: 'No conversation yet. Ask Brain from the canvas prompt to begin.' }} />
-      </div>
-    </section>
-    {canonicalChatId ? <section aria-label="Brain chat associations" className={styles.brainCanonicalAssociations}>
-      <ChatTicketsPanel chatId={Number(canonicalChatId)} projectId={connectedProjectId ? Number(connectedProjectId) : null} chatList={[{ id: Number(canonicalChatId), title: node.data.title }]} />
-    </section> : <>
-      <section aria-labelledby="brain-agents-heading"><div className={styles.brainSectionHeading}><h3 id="brain-agents-heading">Agents</h3><span>{agents.length}</span></div>{roster(agents, 'No agents associated with this chat.')}</section>
-      <section aria-labelledby="brain-tickets-heading"><div className={styles.brainSectionHeading}><h3 id="brain-tickets-heading">Associated tickets</h3><span>{tickets.length}</span></div>{roster(tickets, 'No tickets associated with this chat.')}</section>
-      <section aria-labelledby="brain-objects-heading"><div className={styles.brainSectionHeading}><h3 id="brain-objects-heading">Connected objects</h3><span>{related.length}</span></div>{roster(related, 'No other objects connected yet.')}</section>
-    </>}
-  </div>;
-}
-
-function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onGenerateVideo, onRunCreativeAction, onEditWorkflow, onSaveAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onEditWorkflow: () => void; onSaveAgent: () => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void }) {
+function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onGenerateVideo, onRunCreativeAction, onEditWorkflow, onSaveAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onEditWorkflow: () => void; onSaveAgent: () => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void }) {
+  const t = useTranslations('creationCanvas');
   const kind = node.data.kind;
   const [tab, setTab] = useState<'details' | 'activity'>('details');
   const [accessStatus, setAccessStatus] = useState('');
@@ -2878,26 +3195,26 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
     done: 'This task is complete. Reopen it only when the PRD or acceptance criteria are not satisfied.',
   };
   const persistTaskPatch = async (apiPatch: Parameters<typeof tasksApi.update>[1], canvasPatch: Partial<CreationNodeData>) => {
-    setActionStatus('Saving task…');
+    setActionStatus(t('savingTask'));
     try {
       if (taskId != null && persistence === 'server') await tasksApi.update(taskId, apiPatch);
       onChange(canvasPatch);
-      setActionStatus(taskId != null && persistence === 'server' ? 'Task updated' : 'Task updated in this session');
+      setActionStatus(taskId != null && persistence === 'server' ? t('taskUpdated') : t('taskUpdatedLocal'));
     } catch (error) {
-      setActionStatus(error instanceof Error ? error.message : 'Task update failed');
+      setActionStatus(error instanceof Error ? error.message : t('taskUpdateFailed'));
     }
   };
   const runArtifactAction = async (action: 'copy' | 'markdown' | 'csv' | 'docx' | 'pptx' | 'json') => {
-    setActionStatus('Preparing…');
+    setActionStatus(t('preparing'));
     try {
       const base = safeDownloadName(node.data.title);
       if (action === 'copy') {
-        setActionStatus(await copyTextToClipboard(markdown) ? 'Copied to clipboard' : 'Clipboard access was unavailable');
+        setActionStatus(await copyTextToClipboard(markdown) ? t('copiedToClipboard') : t('clipboardUnavailable'));
         return;
       }
       if (action === 'markdown') downloadText(markdown, `${base}.md`, 'text/markdown');
       if (action === 'csv') {
-        if (!csv) throw new Error('This object does not contain tabular rows yet');
+        if (!csv) throw new Error(t('noTabularRows'));
         exportCsv(csv, `${base}.csv`);
       }
       if (action === 'docx') {
@@ -2912,16 +3229,16 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
       const extension = action === 'markdown' ? 'md' : action;
       const delivered: CreationDeliverable = { id: crypto.randomUUID(), action: 'export', artifactKind: action, status: 'delivered', createdAt: new Date().toISOString(), completedAt: new Date().toISOString(), provider: action === 'docx' || action === 'pptx' ? (persistence === 'server' ? 'builderforce-office-export' : 'browser-markdown-fallback') : 'browser-download', fileName: `${base}.${persistence === 'local' && (action === 'docx' || action === 'pptx') ? 'md' : extension}`, mimeType: action === 'docx' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' : action === 'pptx' ? 'application/vnd.openxmlformats-officedocument.presentationml.presentation' : action === 'csv' ? 'text/csv' : action === 'json' ? 'application/json' : 'text/markdown', validation: { status: 'passed', detail: 'Export generated and download started' } };
       onChange({ deliverables: withCreationDeliverable(node.data, delivered) });
-      setActionStatus(action === 'docx' && persistence === 'local' || action === 'pptx' && persistence === 'local' ? 'Markdown downloaded; save the Session for Office export' : 'Download ready');
+      setActionStatus(action === 'docx' && persistence === 'local' || action === 'pptx' && persistence === 'local' ? t('markdownDownloaded') : t('downloadReady'));
     } catch (error) {
-      setActionStatus(error instanceof Error ? error.message : 'Export failed');
+      setActionStatus(error instanceof Error ? error.message : t('exportFailed'));
     }
   };
   return <aside ref={inspectorRef} className={styles.inspector} aria-label="Details panel" style={{ '--inspector-width': `${inspectorWidth}px` } as CSSProperties}>
     <div
       className={styles.inspectorResizeHandle}
       role="separator"
-      aria-label="Resize details panel"
+      aria-label={t('resizeDetailsPanel')}
       aria-orientation="vertical"
       aria-valuemin={INSPECTOR_MIN_WIDTH}
       aria-valuemax={maxInspectorWidth()}
@@ -2943,125 +3260,165 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
         window.localStorage.setItem(INSPECTOR_WIDTH_STORAGE_KEY, String(inspectorWidthRef.current));
       }}
     />
-    <header><div className={styles.inspectorTitle}><span>{kind === 'agent' ? '✦' : kind === 'website' ? '◎' : kind === 'workflow' ? '⌘' : '◇'}</span><strong>{node.data.title}</strong><small>Live {kind}</small></div><div className={styles.inspectorHeaderActions}><button type="button" onClick={toggleInspectorWidth} aria-label={expandedInspector ? 'Restore details panel width' : 'Expand details panel'} title={expandedInspector ? 'Restore panel width' : 'Expand panel'}>{expandedInspector ? '⇥' : '↔'}</button><button type="button" onClick={onClose} aria-label="Close inspector">×</button></div></header>
-    <div className={styles.inspectorTabs}><button className={tab === 'details' ? styles.activeTab : ''} onClick={() => setTab('details')}>Details</button><button className={tab === 'activity' ? styles.activeTab : ''} onClick={() => setTab('activity')}>Activity</button></div>
+    <header><div className={styles.inspectorTitle}><span>{kind === 'agent' ? '✦' : kind === 'website' ? '◎' : kind === 'workflow' ? '⌘' : '◇'}</span><strong>{node.data.title}</strong><small>{t('liveKind', { kind })}</small></div><div className={styles.inspectorHeaderActions}><button type="button" onClick={toggleInspectorWidth} aria-label={expandedInspector ? t('restoreDetailsWidth') : t('expandDetailsPanel')} title={expandedInspector ? t('restorePanelWidth') : t('expandPanel')}>{expandedInspector ? '⇥' : '↔'}</button><button type="button" onClick={onClose} aria-label={t('closeInspector')}>×</button></div></header>
+    <div className={styles.inspectorTabs}><button className={tab === 'details' ? styles.activeTab : ''} onClick={() => setTab('details')}>{t('details')}</button><button className={tab === 'activity' ? styles.activeTab : ''} onClick={() => setTab('activity')}>{t('activity')}</button></div>
     <div className={styles.inspectorBody}>
       {tab === 'details' ? <fieldset className={styles.inspectorFields} disabled={!editable}>
-      {node.data.redacted === true && <><p className={styles.inspectorHint}>You can see this object’s position, but its source is no longer available to you.</p><button type="button" className={styles.fullButton} disabled={persistence !== 'server' || !!accessStatus} onClick={() => { setAccessStatus('Requesting…'); void creationSessionsApi.requestObjectAccess(sessionId, node.id).then(() => setAccessStatus('Access requested')).catch((error) => setAccessStatus(error instanceof Error ? error.message : 'Request failed')); }}>{accessStatus || 'Request access'}</button></>}
-      <label>Name<input value={node.data.title} onChange={(event) => onChange({ title: event.target.value })} /></label>
-      {typeof node.data.pipelineStep === 'number' && <section className={styles.pipelineInspectorGuide} aria-label={`Evermind setup step ${node.data.pipelineStep}`}><span>Evermind setup · {node.data.pipelineStep} of 5</span><strong>{node.data.pipelineStart === true ? 'Start here' : node.data.title}</strong><p>{String(node.data.pipelineInstruction || 'Complete this stage, then follow the numbered connection to the next card.')}</p>{node.data.pipelineStep === 1 && node.data.status !== 'Imported' && <small>Use the file picker directly below to begin.</small>}{node.data.pipelineStep === 1 && node.data.status === 'Imported' && <small>Data is ready. Follow “2 · examples” to Tokenize examples.</small>}</section>}
-      {kind === 'chat' && <BrainObjectDetails node={node} nodes={nodes} edges={edges} timeline={timeline} trace={brainTrace} />}
+      {node.data.redacted === true && <><p className={styles.inspectorHint}>{t('redactedObject')}</p><button type="button" className={styles.fullButton} disabled={persistence !== 'server' || !!accessStatus} onClick={() => { setAccessStatus(t('requesting')); void creationSessionsApi.requestObjectAccess(sessionId, node.id).then(() => setAccessStatus(t('accessRequested'))).catch((error) => setAccessStatus(error instanceof Error ? error.message : t('requestFailed'))); }}>{accessStatus || t('requestAccess')}</button></>}
+      <label>{t('name')}<input value={node.data.title} onChange={(event) => onChange({ title: event.target.value })} /></label>
+      {typeof node.data.pipelineStep === 'number' && <section className={styles.pipelineInspectorGuide} aria-label={t('evermindSetupStep', { step: node.data.pipelineStep })}><span>{t('evermindSetupOf5', { step: node.data.pipelineStep })}</span><strong>{node.data.pipelineStart === true ? t('startHere') : node.data.title}</strong><p>{String(node.data.pipelineInstruction || t('pipelineStageHint'))}</p>{node.data.pipelineStep === 1 && node.data.status !== 'Imported' && <small>{t('useFilePicker')}</small>}{node.data.pipelineStep === 1 && node.data.status === 'Imported' && <small>{t('dataReadyNext')}</small>}</section>}
       {kind === 'agent' && <>
-        <section className={styles.agentSetupGuide} aria-label="Agent setup progress">
-          <strong>Build → test → evaluate → deliver</strong>
-          <p>Use these steps in order. Everything happens from this details panel; results stay attached to the canvas.</p>
-          <div className={styles.agentSetupSteps}><span data-done={connectedAgentKnowledge.length > 0}>1 · Knowledge {connectedAgentKnowledge.length ? 'added' : 'needed'}</span><span data-done={!!node.data.testResponse}>2 · Test {!!node.data.testResponse ? 'run' : 'needed'}</span><span data-done={!!connectedAgentEvaluation?.data.testResults}>3 · Evaluation {!!connectedAgentEvaluation?.data.testResults ? 'recorded' : 'pending'}</span><span data-done={!!node.data.resourceId}>4 · Delivery {node.data.resourceId ? 'connected' : connectedAgentRelease ? 'ready next' : 'pending'}</span></div>
+        <section className={styles.agentSetupGuide} aria-label={t('agentSetupProgress')}>
+          <strong>{t('buildTestEvaluateDeliver')}</strong>
+          <p>{t('agentStepsHint')}</p>
+          <div className={styles.agentSetupSteps}><span data-done={connectedAgentKnowledge.length > 0}>{t('stepKnowledge', { state: connectedAgentKnowledge.length ? t('stateAdded') : t('stateNeeded') })}</span><span data-done={!!node.data.testResponse}>{t('stepTest', { state: node.data.testResponse ? t('stateRun') : t('stateNeeded') })}</span><span data-done={!!connectedAgentEvaluation?.data.testResults}>{t('stepEvaluation', { state: connectedAgentEvaluation?.data.testResults ? t('stateRecorded') : t('statePending') })}</span><span data-done={!!node.data.resourceId}>{t('stepDelivery', { state: node.data.resourceId ? t('stateConnected') : connectedAgentRelease ? t('stateReadyNext') : t('statePending') })}</span></div>
         </section>
-        <label>Model<select value={node.data.model || 'gpt-4o'} onChange={(event) => onChange({ model: event.target.value })}><option>gpt-4o</option><option>claude-3.5-sonnet</option><option>Evermind</option></select></label>
-        <label>Instructions<textarea value={typeof node.data.instructions === 'string' ? node.data.instructions : node.data.subtitle || ''} onChange={(event) => onChange({ instructions: event.target.value, subtitle: event.target.value })} rows={5} /></label>
-        <label>Tools<div className={styles.inspectorPills}>{agentTools.map((tool) => <button type="button" key={tool} aria-label={`Remove ${tool}`} onClick={() => onChange({ tools: agentTools.filter((candidate) => candidate !== tool) })}>{tool} ×</button>)}<button type="button" disabled={availableAgentTools.every((tool) => agentTools.includes(tool))} onClick={() => { const next = availableAgentTools.find((tool) => !agentTools.includes(tool)); if (next) onChange({ tools: [...agentTools, next] }); }}>+ Add tool</button></div></label>
-        <label>Autonomy<select value={typeof node.data.autonomy === 'string' ? node.data.autonomy : 'medium'} onChange={(event) => onChange({ autonomy: event.target.value })}><option value="medium">Medium · request approvals</option><option value="low">Low · suggest only</option><option value="high">High · act within policy</option></select></label>
-        <section className={styles.agentWorkbench} aria-label="Agent knowledge" data-inspector-section="knowledge">
-          <div className={styles.workbenchHeading}><strong>Knowledge</strong><span>{connectedAgentKnowledge.length} connected</span></div>
+        <label>{t('model')}<select value={node.data.model || 'gpt-4o'} onChange={(event) => onChange({ model: event.target.value })}><option>gpt-4o</option><option>claude-3.5-sonnet</option><option>Evermind</option></select></label>
+        <label>{t('instructions')}<textarea value={typeof node.data.instructions === 'string' ? node.data.instructions : node.data.subtitle || ''} onChange={(event) => onChange({ instructions: event.target.value, subtitle: event.target.value })} rows={5} /></label>
+        <label>{t('tools')}<div className={styles.inspectorPills}>{agentTools.map((tool) => <button type="button" key={tool} aria-label={t('removeTool', { tool })} onClick={() => onChange({ tools: agentTools.filter((candidate) => candidate !== tool) })}>{tool} ×</button>)}<button type="button" disabled={availableAgentTools.every((tool) => agentTools.includes(tool))} onClick={() => { const next = availableAgentTools.find((tool) => !agentTools.includes(tool)); if (next) onChange({ tools: [...agentTools, next] }); }}>{t('addTool')}</button></div></label>
+        <label>{t('autonomy')}<select value={typeof node.data.autonomy === 'string' ? node.data.autonomy : 'medium'} onChange={(event) => onChange({ autonomy: event.target.value })}><option value="medium">{t('autonomyMedium')}</option><option value="low">{t('autonomyLow')}</option><option value="high">{t('autonomyHigh')}</option></select></label>
+        <section className={styles.agentWorkbench} aria-label={t('agentKnowledge')} data-inspector-section="knowledge">
+          <div className={styles.workbenchHeading}><strong>{t('knowledge')}</strong><span>{t('connectedCount', { count: connectedAgentKnowledge.length })}</span></div>
           {connectedAgentKnowledge.length > 0 && <div className={styles.knowledgeList}>{connectedAgentKnowledge.map((item) => <span key={item.id}>{item.data.kind} · {item.data.title}</span>)}</div>}
-          <label>Add knowledge<textarea rows={4} value={knowledgeDraft} onChange={(event) => setKnowledgeDraft(event.target.value)} placeholder="Paste policies, product facts, escalation rules, or support procedures" /></label>
-          <button type="button" className={styles.fullButton} disabled={!knowledgeDraft.trim()} onClick={() => { onAddAgentKnowledge(knowledgeDraft); setKnowledgeDraft(''); }}>Add &amp; connect knowledge</button>
+          <label>{t('addKnowledge')}<textarea rows={4} value={knowledgeDraft} onChange={(event) => setKnowledgeDraft(event.target.value)} placeholder={t('addKnowledgePlaceholder')} /></label>
+          <button type="button" className={styles.fullButton} disabled={!knowledgeDraft.trim()} onClick={() => { onAddAgentKnowledge(knowledgeDraft); setKnowledgeDraft(''); }}>{t('addAndConnectKnowledge')}</button>
         </section>
-        <section className={styles.agentWorkbench} aria-label="Agent test bench" data-inspector-section="test">
-          <div className={styles.workbenchHeading}><strong>Test bench</strong><span>{String(node.data.testStatus || 'Not run')}</span></div>
-          <label>Customer message<textarea rows={3} value={typeof node.data.testPrompt === 'string' ? node.data.testPrompt : ''} onChange={(event) => onChange({ testPrompt: event.target.value })} placeholder="I was charged twice. Can you help?" /></label>
-          <label>Expected response signals<textarea rows={2} value={typeof node.data.testExpected === 'string' ? node.data.testExpected : ''} onChange={(event) => onChange({ testExpected: event.target.value })} placeholder="duplicate charge, order number, investigate" /></label>
-          <button type="button" className={styles.fullButton} disabled={!String(node.data.testPrompt || '').trim() || node.data.testStatus === 'Running'} onClick={() => void onRunAgentTest(String(node.data.testPrompt || ''), String(node.data.testExpected || ''))}>{node.data.testStatus === 'Running' ? 'Running test…' : 'Run agent test'}</button>
-          {typeof node.data.testResponse === 'string' && node.data.testResponse && <div className={styles.testResponse}><strong>Agent response</strong><p>{node.data.testResponse}</p></div>}
+        <section className={styles.agentWorkbench} aria-label={t('agentTestBench')} data-inspector-section="test">
+          <div className={styles.workbenchHeading}><strong>{t('testBench')}</strong><span>{String(node.data.testStatus || t('notRun'))}</span></div>
+          <label>{t('customerMessage')}<textarea rows={3} value={typeof node.data.testPrompt === 'string' ? node.data.testPrompt : ''} onChange={(event) => onChange({ testPrompt: event.target.value })} placeholder={t('customerMessagePlaceholder')} /></label>
+          <label>{t('expectedSignals')}<textarea rows={2} value={typeof node.data.testExpected === 'string' ? node.data.testExpected : ''} onChange={(event) => onChange({ testExpected: event.target.value })} placeholder={t('expectedSignalsPlaceholder')} /></label>
+          <button type="button" className={styles.fullButton} disabled={!String(node.data.testPrompt || '').trim() || node.data.testStatus === 'Running'} onClick={() => void onRunAgentTest(String(node.data.testPrompt || ''), String(node.data.testExpected || ''))}>{node.data.testStatus === 'Running' ? t('runningTest') : t('runAgentTest')}</button>
+          {typeof node.data.testResponse === 'string' && node.data.testResponse && <div className={styles.testResponse}><strong>{t('agentResponse')}</strong><p>{node.data.testResponse}</p></div>}
         </section>
-        <button type="button" className={styles.fullButton} onClick={onSaveAgent}>Save agent settings everywhere</button>
+        <button type="button" className={styles.fullButton} onClick={onSaveAgent}>{t('saveAgentEverywhere')}</button>
       </>}
       {kind === 'evaluation' && <section data-inspector-section="evaluation">
-        <div className={styles.evaluationSummary}><strong>{String(node.data.verdict || 'Not run')}</strong><span>{typeof node.data.passRate === 'number' ? `${node.data.passRate}% pass rate` : 'Run an agent test to collect a result'}</span></div>
-        <label>Evaluation criteria<textarea rows={5} value={typeof node.data.criteria === 'string' ? node.data.criteria : typeof node.data.content === 'string' ? node.data.content : ''} onChange={(event) => onChange({ criteria: event.target.value })} placeholder="One expected behavior per line" /></label>
-        <p className={styles.inspectorHint}>Connect this Evaluation to an Agent. Tests run from that Agent’s Test bench are recorded here with pass/fail evidence.</p>
-        {Array.isArray(node.data.testResults) && node.data.testResults.length > 0 && <div className={styles.testResults}>{node.data.testResults.slice(0, 10).map((value, index) => { const result = value as Record<string, unknown>; return <div key={String(result.id || index)}><b>{String(result.status || 'Completed')}</b><span>{String(result.prompt || 'Test case')}</span><small>{String(result.runAt || '')}</small></div>; })}</div>}
+        <div className={styles.evaluationSummary}><strong>{String(node.data.verdict || t('notRun'))}</strong><span>{typeof node.data.passRate === 'number' ? t('passRate', { rate: node.data.passRate }) : t('runTestForResult')}</span></div>
+        <label>{t('evaluationCriteria')}<textarea rows={5} value={typeof node.data.criteria === 'string' ? node.data.criteria : typeof node.data.content === 'string' ? node.data.content : ''} onChange={(event) => onChange({ criteria: event.target.value })} placeholder={t('evaluationCriteriaPlaceholder')} /></label>
+        <p className={styles.inspectorHint}>{t('evaluationHint')}</p>
+        {Array.isArray(node.data.testResults) && node.data.testResults.length > 0 && <div className={styles.testResults}>{node.data.testResults.slice(0, 10).map((value, index) => { const result = value as Record<string, unknown>; return <div key={String(result.id || index)}><b>{String(result.status || t('completed'))}</b><span>{String(result.prompt || t('testCase'))}</span><small>{String(result.runAt || '')}</small></div>; })}</div>}
       </section>}
-      {kind === 'release' && <section className={styles.deliveryChecklist} data-inspector-section="delivery" aria-label="Agent delivery checklist">
-        <strong>Delivery checklist</strong>
-        <span>{deliveryAgent ? '✓' : '○'} Agent selected {deliveryAgent ? `· ${deliveryAgent.data.title}` : '· connect an Agent card'}</span>
-        <span>{deliveryKnowledgeCount > 0 ? '✓' : '○'} Knowledge connected {deliveryKnowledgeCount ? `· ${deliveryKnowledgeCount} source${deliveryKnowledgeCount === 1 ? '' : 's'}` : ''}</span>
-        <span>{deliveryAgent?.data.testResponse ? '✓' : '○'} Test response recorded</span>
-        <span>{deliveryAgent?.data.resourceId ? '✓' : '○'} Workforce agent saved</span>
-        <p className={styles.inspectorHint}>{deliveryAgent?.data.resourceId ? 'The agent is connected to a durable workforce resource. Review its evaluation, then use the workforce agent wherever support work is assigned.' : 'Open the Agent card, complete Knowledge and Test, then save the session and use “Save agent settings everywhere” to connect delivery.'}</p>
+      {kind === 'release' && <section className={styles.deliveryChecklist} data-inspector-section="delivery" aria-label={t('agentDeliveryChecklist')}>
+        <strong>{t('deliveryChecklist')}</strong>
+        <span>{`${deliveryAgent ? '✓' : '○'} ${t('agentSelected')} ${deliveryAgent ? `· ${deliveryAgent.data.title}` : `· ${t('connectAgentCard')}`}`}</span>
+        <span>{`${deliveryKnowledgeCount > 0 ? '✓' : '○'} ${t('knowledgeConnected')} ${deliveryKnowledgeCount ? `· ${t('sourceCount', { count: deliveryKnowledgeCount })}` : ''}`}</span>
+        <span>{`${deliveryAgent?.data.testResponse ? '✓' : '○'} ${t('testResponseRecorded')}`}</span>
+        <span>{`${deliveryAgent?.data.resourceId ? '✓' : '○'} ${t('workforceAgentSaved')}`}</span>
+        <p className={styles.inspectorHint}>{deliveryAgent?.data.resourceId ? t('deliveryConnectedHint') : t('deliveryPendingHint')}</p>
       </section>}
-      {kind === 'staff' && <><label>Role<input value={node.data.role || ''} onChange={(event) => onChange({ role: event.target.value })} /></label><label>Current focus<textarea value={node.data.focus || ''} onChange={(event) => onChange({ focus: event.target.value })} rows={4} /></label></>}
-      {(kind === 'website' || kind === 'prototype') && <><label>Headline<input value={typeof node.data.websiteHeadline === 'string' ? node.data.websiteHeadline : 'Fall in love with every look'} onChange={(event) => onChange({ websiteHeadline: event.target.value })} /></label><label>Supporting copy<textarea rows={3} value={typeof node.data.websiteBody === 'string' ? node.data.websiteBody : 'New arrivals for the season ahead.'} onChange={(event) => onChange({ websiteBody: event.target.value })} /></label><label>Call to action<input value={typeof node.data.websiteCta === 'string' ? node.data.websiteCta : 'Shop the collection'} onChange={(event) => onChange({ websiteCta: event.target.value })} /></label><label>Accent color<input type="color" value={typeof node.data.websiteAccent === 'string' ? node.data.websiteAccent : '#3978f6'} onChange={(event) => onChange({ websiteAccent: event.target.value })} /></label><label>Viewport<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onWebsiteViewportChange(event.target.value as 'desktop' | 'tablet' | 'mobile')}><option value="desktop">Desktop · 1440</option><option value="tablet">Tablet · 768</option><option value="mobile">Mobile · 390</option></select></label>{kind === 'website' && <><label>Subdomain<input value={typeof node.data.subdomain === 'string' ? node.data.subdomain : ''} placeholder="uses project name when blank" onChange={(event) => onChange({ subdomain: event.target.value })} /></label><button type="button" className={styles.fullButton} onClick={onPublishWebsite}>Publish live website</button>{typeof node.data.siteUrl === 'string' && <a href={node.data.siteUrl} target="_blank" rel="noreferrer">Open published site ↗</a>}</>}<p className={styles.inspectorHint}>Changes render live in the interactive prototype on the canvas.</p></>}
-      {kind === 'video' && <><label>Prompt<textarea rows={5} value={typeof node.data.prompt === 'string' ? node.data.prompt : ''} onChange={(event) => onChange({ prompt: event.target.value })} placeholder="Describe the video to generate" /></label><label>Published Evermind model (optional)<input value={typeof node.data.modelSlug === 'string' ? node.data.modelSlug : ''} onChange={(event) => onChange({ modelSlug: event.target.value })} placeholder="First published media model" /></label><label>Frames<input type="number" min="1" max="64" value={typeof node.data.maxFrames === 'number' ? node.data.maxFrames : 16} onChange={(event) => onChange({ maxFrames: Math.max(1, Math.min(64, Number(event.target.value) || 16)) })} /></label><button type="button" className={styles.fullButton} onClick={onGenerateVideo}>Generate video</button>{typeof node.data.videoUrl === 'string' && <img src={node.data.videoUrl} alt="Generated video first frame" style={{ width: '100%', borderRadius: 10 }} />}</>}
-      {kind === 'workflow' && <><label>Execution target<select value={typeof node.data.runTarget === 'string' ? node.data.runTarget : 'builderforce'} onChange={(event) => onChange({ runTarget: event.target.value })}><option value="builderforce">BuilderForce.AI</option><option value="campaign-strategist">Campaign Strategist</option></select></label><label>Approval mode<select value={typeof node.data.approvalMode === 'string' ? node.data.approvalMode : 'required'} onChange={(event) => onChange({ approvalMode: event.target.value })}><option value="required">Required before publish</option><option value="autonomous">Fully autonomous</option></select></label><button type="button" className={styles.fullButton} onClick={onEditWorkflow}>Edit Workflow on Canvas</button><button className={styles.fullButton} onClick={onRun}>▶ Run workflow</button></>}
-      {kind === 'dashboard' && <><label>Date range<select value={typeof node.data.dateRange === 'string' ? node.data.dateRange : '30d'} onChange={(event) => onChange({ dateRange: event.target.value })}><option value="30d">Last 30 days</option><option value="7d">Last 7 days</option><option value="qtd">Quarter to date</option></select></label><button type="button" className={styles.fullButton} onClick={() => onChange({ fetchedAt: new Date().toISOString(), status: 'Live' })}>Refresh live data</button></>}
-      {kind === 'dataset' && <><label>Import CSV or TSV<input type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onImportDataset(file); }} /></label><p className={styles.inspectorHint}>A safe preview of up to 500 rows is stored with this session. Connect it to a dashboard or ask Brain to analyze it.</p><button className={styles.fullButton} onClick={onVisualizeDataset}>Create visualization</button></>}
+      {kind === 'staff' && <><label>{t('role')}<input value={node.data.role || ''} onChange={(event) => onChange({ role: event.target.value })} /></label><label>{t('currentFocus')}<textarea value={node.data.focus || ''} onChange={(event) => onChange({ focus: event.target.value })} rows={4} /></label></>}
+      {(kind === 'website' || kind === 'prototype') && <><label>{t('headline')}<input value={typeof node.data.websiteHeadline === 'string' ? node.data.websiteHeadline : 'Fall in love with every look'} onChange={(event) => onChange({ websiteHeadline: event.target.value })} /></label><label>{t('supportingCopy')}<textarea rows={3} value={typeof node.data.websiteBody === 'string' ? node.data.websiteBody : 'New arrivals for the season ahead.'} onChange={(event) => onChange({ websiteBody: event.target.value })} /></label><label>{t('callToAction')}<input value={typeof node.data.websiteCta === 'string' ? node.data.websiteCta : 'Shop the collection'} onChange={(event) => onChange({ websiteCta: event.target.value })} /></label><label>{t('accentColor')}<input type="color" value={typeof node.data.websiteAccent === 'string' ? node.data.websiteAccent : '#3978f6'} onChange={(event) => onChange({ websiteAccent: event.target.value })} /></label><label>{t('viewport')}<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onWebsiteViewportChange(event.target.value as 'desktop' | 'tablet' | 'mobile')}><option value="desktop">{t('viewportDesktop')}</option><option value="tablet">{t('viewportTablet')}</option><option value="mobile">{t('viewportMobile')}</option></select></label>{kind === 'website' && <><label>{t('subdomain')}<input value={typeof node.data.subdomain === 'string' ? node.data.subdomain : ''} placeholder={t('subdomainPlaceholder')} onChange={(event) => onChange({ subdomain: event.target.value })} /></label><button type="button" className={styles.fullButton} onClick={onPublishWebsite}>{t('publishWebsite')}</button>{typeof node.data.siteUrl === 'string' && <a href={node.data.siteUrl} target="_blank" rel="noreferrer">{t('openPublishedSite')}</a>}</>}<p className={styles.inspectorHint}>{t('websiteLiveHint')}</p></>}
+      {kind === 'video' && <><label>{t('prompt')}<textarea rows={5} value={typeof node.data.prompt === 'string' ? node.data.prompt : ''} onChange={(event) => onChange({ prompt: event.target.value })} placeholder={t('videoPromptPlaceholder')} /></label><label>{t('publishedEvermindModel')}<input value={typeof node.data.modelSlug === 'string' ? node.data.modelSlug : ''} onChange={(event) => onChange({ modelSlug: event.target.value })} placeholder={t('mediaModelPlaceholder')} /></label><label>{t('frames')}<input type="number" min="1" max="64" value={typeof node.data.maxFrames === 'number' ? node.data.maxFrames : 16} onChange={(event) => onChange({ maxFrames: Math.max(1, Math.min(64, Number(event.target.value) || 16)) })} /></label><button type="button" className={styles.fullButton} onClick={onGenerateVideo}>{t('generateVideo')}</button>{typeof node.data.videoUrl === 'string' && <img src={node.data.videoUrl} alt={t('videoFirstFrame')} style={{ width: '100%', borderRadius: 10 }} />}</>}
+      {kind === 'workflow' && <><label>{t('executionTarget')}<select value={typeof node.data.runTarget === 'string' ? node.data.runTarget : 'builderforce'} onChange={(event) => onChange({ runTarget: event.target.value })}><option value="builderforce">BuilderForce.AI</option><option value="campaign-strategist">Campaign Strategist</option></select></label><label>{t('approvalMode')}<select value={typeof node.data.approvalMode === 'string' ? node.data.approvalMode : 'required'} onChange={(event) => onChange({ approvalMode: event.target.value })}><option value="required">{t('approvalRequiredBeforePublish')}</option><option value="autonomous">{t('fullyAutonomous')}</option></select></label><button type="button" className={styles.fullButton} onClick={onEditWorkflow}>{t('editWorkflowOnCanvas')}</button><button className={styles.fullButton} onClick={onRun}>{`▶ ${t('runWorkflow')}`}</button></>}
+      {kind === 'dashboard' && <><label>{t('dateRange')}<select value={typeof node.data.dateRange === 'string' ? node.data.dateRange : '30d'} onChange={(event) => onChange({ dateRange: event.target.value })}><option value="30d">{t('last30Days')}</option><option value="7d">{t('last7Days')}</option><option value="qtd">{t('quarterToDate')}</option></select></label><button type="button" className={styles.fullButton} onClick={() => onChange({ fetchedAt: new Date().toISOString(), status: 'Live' })}>{t('refreshLiveData')}</button></>}
+      {kind === 'dataset' && <>
+        <label>{t('datasetImportLabel')}<input type="file" accept=".csv,.tsv,.tab,.json,.jsonl,text/csv,text/tab-separated-values,application/json" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onImportDataset(file); }} /></label>
+        <p className={styles.inspectorHint}>{t('datasetImportHint')}</p>
+        <DatasetProfileSummary data={node.data} />
+        <button type="button" className={styles.fullButton} onClick={() => onProfileDataset(node.id)}>{t('datasetProfileAction')}</button>
+        <button type="button" className={styles.fullButton} onClick={onVisualizeDataset}>{t('datasetVisualizeAction')}</button>
+      </>}
+      {kind === 'file' && <>
+        <label>{t('fileNameLabel')}<input value={typeof node.data.fileName === 'string' ? node.data.fileName : node.data.title} onChange={(event) => onChange({ fileName: event.target.value })} /></label>
+        <p className={styles.inspectorHint}>{t('fileInspectorHint')}</p>
+      </>}
       {kind === 'voice' && <CanvasVoiceInspector node={node} persistence={persistence} onChange={onChange} />}
-      {kind === 'project' && <><label>Project view<select value={typeof node.data.projectLens === 'string' ? node.data.projectLens : 'everything'} onChange={(event) => onChange({ projectLens: event.target.value })}><option value="everything">Everything</option><option value="delivery">Delivery</option><option value="metrics">Metrics</option><option value="customer-feedback">Customer feedback</option></select></label><p className={styles.inspectorHint}>Project context is optional. Load its quality evidence, add related work, or compare it with every other project on the canvas.</p><button className={styles.fullButton} onClick={onLoadProjectQuality}>Visualize quality diagnostics</button><button className={styles.fullButton} onClick={onExpandProject}>Add all related items</button><button className={styles.fullButton} onClick={onCompareProjects}>Compare projects on canvas</button></>}
+      {kind === 'project' && <><label>{t('projectView')}<select value={typeof node.data.projectLens === 'string' ? node.data.projectLens : 'everything'} onChange={(event) => onChange({ projectLens: event.target.value })}><option value="everything">{t('lensEverything')}</option><option value="delivery">{t('lensDelivery')}</option><option value="metrics">{t('lensMetrics')}</option><option value="customer-feedback">{t('lensFeedback')}</option></select></label><p className={styles.inspectorHint}>{t('projectContextHint')}</p><button className={styles.fullButton} onClick={onLoadProjectQuality}>{t('visualizeQuality')}</button><button className={styles.fullButton} onClick={onExpandProject}>{t('addRelatedItems')}</button><button className={styles.fullButton} onClick={onCompareProjects}>{t('compareProjects')}</button></>}
       {kind === 'task' && <>
         <div className={styles.taskInspectorGrid}>
-          <label>Status<select value={String(node.data.status || 'ready')} onChange={(event) => void persistTaskPatch({ status: event.target.value }, { status: event.target.value })}>
+          <label>{t('status')}<select value={String(node.data.status || 'ready')} onChange={(event) => void persistTaskPatch({ status: event.target.value }, { status: event.target.value })}>
             {!['backlog','todo','ready','assigned','in_progress','in_review','blocked','done'].includes(String(node.data.status || 'ready')) && <option value={String(node.data.status)}>{String(node.data.status)}</option>}
-            <option value="backlog">Backlog</option><option value="todo">To do</option><option value="ready">Ready</option><option value="assigned">Assigned</option><option value="in_progress">In progress</option><option value="in_review">In review</option><option value="blocked">Blocked</option><option value="done">Done</option>
+            <option value="backlog">{t('statusBacklog')}</option><option value="todo">{t('statusTodo')}</option><option value="ready">{t('statusReady')}</option><option value="assigned">{t('statusAssigned')}</option><option value="in_progress">{t('statusInProgress')}</option><option value="in_review">{t('statusInReview')}</option><option value="blocked">{t('statusBlocked')}</option><option value="done">{t('statusDone')}</option>
           </select></label>
-          <label>Priority<select value={typeof node.data.priority === 'string' ? node.data.priority : 'medium'} onChange={(event) => void persistTaskPatch({ priority: event.target.value as 'low' | 'medium' | 'high' | 'urgent' }, { priority: event.target.value })}><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="urgent">Urgent</option></select></label>
+          <label>{t('priority')}<select value={typeof node.data.priority === 'string' ? node.data.priority : 'medium'} onChange={(event) => void persistTaskPatch({ priority: event.target.value as 'low' | 'medium' | 'high' | 'urgent' }, { priority: event.target.value })}><option value="low">{t('priorityLow')}</option><option value="medium">{t('priorityMedium')}</option><option value="high">{t('priorityHigh')}</option><option value="urgent">{t('priorityUrgent')}</option></select></label>
         </div>
-        <div className={styles.statusGuidance}><b>How to move this forward</b><p>{statusGuidance[normalizedTaskStatus] || 'Keep the owner, PRD, acceptance criteria, and current state accurate so the next action is clear.'}</p></div>
-        <label>Assigned agent<select value={taskAgentValue} onChange={(event) => {
+        <div className={styles.statusGuidance}><b>{t('howToMoveForward')}</b><p>{statusGuidance[normalizedTaskStatus] || t('taskGuidanceFallback')}</p></div>
+        <label>{t('assignedAgent')}<select value={taskAgentValue} onChange={(event) => {
           const selected = taskAgents.find((agent) => (agent.data.resourceId?.replace(/^agent:/, '') || agent.id) === event.target.value);
           const agentRef = selected?.data.resourceId?.startsWith('agent:') ? selected.data.resourceId.slice(6) : null;
-          if (taskId != null && persistence === 'server' && selected && !agentRef) { setActionStatus('Save this Agent before assigning it to a project task'); return; }
+          if (taskId != null && persistence === 'server' && selected && !agentRef) { setActionStatus(t('saveAgentBeforeAssign')); return; }
           void persistTaskPatch({ assignedAgentRef: agentRef, assignedAgentHostId: null, assignedUserId: null }, { agentRef: event.target.value || undefined, assignee: selected?.data.title || undefined, role: selected?.data.title || undefined });
-        }}><option value="">Unassigned</option>{taskAgents.map((agent) => { const value = agent.data.resourceId?.replace(/^agent:/, '') || agent.id; return <option key={agent.id} value={value}>{agent.data.title}{agent.data.model ? ` · ${String(agent.data.model)}` : ''}</option>; })}</select></label>
-        <label>Description<textarea rows={5} value={typeof node.data.content === 'string' ? node.data.content : typeof node.data.subtitle === 'string' ? node.data.subtitle : ''} onChange={(event) => onChange({ content: event.target.value })} onBlur={(event) => { if (taskId != null && persistence === 'server') void persistTaskPatch({ description: event.target.value || null }, { content: event.target.value }); }} /></label>
-        <label>Acceptance criteria<textarea rows={4} value={typeof node.data.acceptanceCriteria === 'string' ? node.data.acceptanceCriteria : ''} placeholder="What must be true for this task to be done?" onChange={(event) => onChange({ acceptanceCriteria: event.target.value })} /></label>
-        <section className={styles.taskPrdSummary} aria-label="Task PRD">
-          <div><span>PRD</span>{prdStatus && <small>{prdStatus}</small>}</div>
-          {prdTitle ? <><strong>{prdTitle}</strong>{prdSummary && <p>{prdSummary.replace(/[#*_`>\[\]]/g, '').trim().slice(0, 360)}</p>}</> : <><strong>No PRD linked</strong><p>Connect a PRD object to this task or link one from the project task details. The PRD gives the agent the goal and handoff context.</p></>}
+        }}><option value="">{t('unassigned')}</option>{taskAgents.map((agent) => { const value = agent.data.resourceId?.replace(/^agent:/, '') || agent.id; return <option key={agent.id} value={value}>{agent.data.title}{agent.data.model ? ` · ${String(agent.data.model)}` : ''}</option>; })}</select></label>
+        <label>{t('description')}<textarea rows={5} value={typeof node.data.content === 'string' ? node.data.content : typeof node.data.subtitle === 'string' ? node.data.subtitle : ''} onChange={(event) => onChange({ content: event.target.value })} onBlur={(event) => { if (taskId != null && persistence === 'server') void persistTaskPatch({ description: event.target.value || null }, { content: event.target.value }); }} /></label>
+        <label>{t('acceptanceCriteria')}<textarea rows={4} value={typeof node.data.acceptanceCriteria === 'string' ? node.data.acceptanceCriteria : ''} placeholder={t('acceptanceCriteriaPlaceholder')} onChange={(event) => onChange({ acceptanceCriteria: event.target.value })} /></label>
+        <section className={styles.taskPrdSummary} aria-label={t('taskPrd')}>
+          <div><span>{t('prd')}</span>{prdStatus && <small>{prdStatus}</small>}</div>
+          {prdTitle ? <><strong>{prdTitle}</strong>{prdSummary && <p>{prdSummary.replace(/[#*_`>\[\]]/g, '').trim().slice(0, 360)}</p>}</> : <><strong>{t('noPrdLinked')}</strong><p>{t('noPrdLinkedHint')}</p></>}
         </section>
         {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
       </>}
-      {kind === 'projectComparison' && <><p className={styles.inspectorHint}>This portfolio view combines project health with saved quality diagnostics, open gaps, remediation state, and prioritized recommendations.</p><button className={styles.fullButton} onClick={onCompareProjects}>Refresh quality comparison</button><SourceList sources={node.data.sources} /></>}
-      {kind === 'mockup' && <><label>Delivery project<select value={mockupProjectValue} onChange={(event) => { const project = mockupProjects.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ deliveryProjectRef: event.target.value, deliveryProjectName: project?.data.title || (event.target.value === 'draft:builderforce-launch' ? 'BuilderForce launch' : 'No project') }); }}><option value="draft:builderforce-launch">BuilderForce launch</option>{mockupProjects.filter((project) => (project.data.resourceId || project.id) !== 'draft:builderforce-launch').map((project) => <option key={project.id} value={project.data.resourceId || project.id}>{project.data.title}</option>)}<option value="">No project</option></select></label><label>Assign agent<select value={mockupAgentValue} onChange={(event) => { const agent = mockupAgents.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ mockupAgentRef: event.target.value, mockupAgentName: agent?.data.title || (event.target.value === 'web-analyst' ? 'Web Analyst' : 'Unassigned') }); }}><option value="campaign-strategist">Campaign Strategist</option>{mockupAgents.filter((agent) => (agent.data.resourceId || agent.id) !== 'campaign-strategist').map((agent) => <option key={agent.id} value={agent.data.resourceId || agent.id}>{agent.data.title}</option>)}<option value="web-analyst">Web Analyst</option><option value="">Unassigned</option></select></label><button className={styles.fullButton} onClick={onDeliverMockup}>Add to project and assign</button></>}
-      {kind === 'mockupSet' && <><p className={styles.inspectorHint}>Expand the set into individually reviewable mockups, or deliver the approved set as one project task.</p><button className={styles.fullButton} onClick={onExpandMockupSet}>Expand all mockups</button><button className={styles.fullButton} onClick={onDeliverMockup}>Add to project and assign</button><SourceList sources={node.data.sources} /></>}
+      {kind === 'projectComparison' && <><p className={styles.inspectorHint}>{t('portfolioViewHint')}</p><button className={styles.fullButton} onClick={onCompareProjects}>{t('refreshQualityComparison')}</button><SourceList sources={node.data.sources} /></>}
+      {kind === 'mockup' && <><label>{t('deliveryProject')}<select value={mockupProjectValue} onChange={(event) => { const project = mockupProjects.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ deliveryProjectRef: event.target.value, deliveryProjectName: project?.data.title || (event.target.value === 'draft:builderforce-launch' ? 'BuilderForce launch' : t('noProject')) }); }}><option value="draft:builderforce-launch">BuilderForce launch</option>{mockupProjects.filter((project) => (project.data.resourceId || project.id) !== 'draft:builderforce-launch').map((project) => <option key={project.id} value={project.data.resourceId || project.id}>{project.data.title}</option>)}<option value="">{t('noProject')}</option></select></label><label>{t('assignAgent')}<select value={mockupAgentValue} onChange={(event) => { const agent = mockupAgents.find((candidate) => (candidate.data.resourceId || candidate.id) === event.target.value); onChange({ mockupAgentRef: event.target.value, mockupAgentName: agent?.data.title || (event.target.value === 'web-analyst' ? 'Web Analyst' : t('unassigned')) }); }}><option value="campaign-strategist">Campaign Strategist</option>{mockupAgents.filter((agent) => (agent.data.resourceId || agent.id) !== 'campaign-strategist').map((agent) => <option key={agent.id} value={agent.data.resourceId || agent.id}>{agent.data.title}</option>)}<option value="web-analyst">Web Analyst</option><option value="">{t('unassigned')}</option></select></label><button className={styles.fullButton} onClick={onDeliverMockup}>{t('addToProjectAssign')}</button></>}
+      {kind === 'mockupSet' && <><p className={styles.inspectorHint}>{t('mockupSetHint')}</p><button className={styles.fullButton} onClick={onExpandMockupSet}>{t('expandAllMockups')}</button><button className={styles.fullButton} onClick={onDeliverMockup}>{t('addToProjectAssign')}</button><SourceList sources={node.data.sources} /></>}
       {kind === 'evermind' && <EvermindInspector node={node} persistence={persistence} onAttach={onAttachEvermindProject} onExpand={onExpandEvermindPipeline} onTrain={onTrainEvermind} />}
-      {kind === 'standup' && <><p className={styles.inspectorHint}>Gather every Staff Member and Agent currently on the canvas. With a saved Project, this starts the canonical stand-up ceremony and keeps its resource link in the session.</p><button className={styles.fullButton} onClick={onStartStandup}>Gather and start stand-up</button></>}
+      {kind === 'standup' && <><p className={styles.inspectorHint}>{t('standupHint')}</p><button className={styles.fullButton} onClick={onStartStandup}>{t('gatherStandup')}</button></>}
       {CREATIVE_GENERATOR_KINDS.has(kind) && <>
-        <label>Creative brief<textarea rows={5} value={typeof node.data.prompt === 'string' ? node.data.prompt : typeof node.data.content === 'string' ? node.data.content : ''} onChange={(event) => onChange({ prompt: event.target.value, content: event.target.value })} placeholder={`Describe the ${creationObjectDefinition(kind).label.toLowerCase()} to create`} /></label>
-        <label>Template ID<input value={typeof node.data.templateId === 'string' ? node.data.templateId : ''} onChange={(event) => onChange({ templateId: event.target.value })} placeholder={kind === 'template' ? 'Browse with Brain or enter an ID' : 'Optional template'} /></label>
-        <label>Output format<select value={typeof node.data.outputFormat === 'string' ? node.data.outputFormat : ''} onChange={(event) => onChange({ outputFormat: event.target.value })}><option value="">Choose on export</option>{(CREATIVE_OUTPUTS[kind] || []).map((format) => <option key={format} value={format}>{format}</option>)}</select></label>
-        <section className={styles.taskPrdSummary} aria-label="Native creative capability"><div><span>Creative capability</span><small>{typeof node.data.provider === 'string' ? node.data.provider : 'native'}</small></div><strong>{typeof node.data.capabilityId === 'string' ? node.data.capabilityId : `creative.${kind}`}</strong><p>Builderforce owns this provider-neutral contract. Brain composes it through the built-in MCP catalog; execution providers can be added later without changing the Canvas object.</p></section>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button type="button" className={styles.fullButton} onClick={() => onRunCreativeAction(kind === 'template' ? 'apply' : 'generate')}>{kind === 'template' ? 'Apply template' : `Generate ${creationObjectDefinition(kind).label}`}</button>{typeof node.data.outputUrl === 'string' && <><button type="button" onClick={() => onRunCreativeAction('preview')}>Preview</button><button type="button" onClick={() => onRunCreativeAction('export')}>Download</button></>}</div>
-        {typeof node.data.outputUrl === 'string' && <a href={node.data.outputUrl} target="_blank" rel="noreferrer">Open generated output ↗</a>}
+        <label>{t('creativeBrief')}<textarea rows={5} value={typeof node.data.prompt === 'string' ? node.data.prompt : typeof node.data.content === 'string' ? node.data.content : ''} onChange={(event) => onChange({ prompt: event.target.value, content: event.target.value })} placeholder={t('creativeBriefPlaceholder', { label: creationObjectDefinition(kind).label.toLowerCase() })} /></label>
+        <label>{t('templateId')}<input value={typeof node.data.templateId === 'string' ? node.data.templateId : ''} onChange={(event) => onChange({ templateId: event.target.value })} placeholder={kind === 'template' ? t('browseWithBrain') : t('optionalTemplate')} /></label>
+        <label>{t('outputFormat')}<select value={typeof node.data.outputFormat === 'string' ? node.data.outputFormat : ''} onChange={(event) => onChange({ outputFormat: event.target.value })}><option value="">{t('chooseOnExport')}</option>{(CREATIVE_OUTPUTS[kind] || []).map((format) => <option key={format} value={format}>{format}</option>)}</select></label>
+        <section className={styles.taskPrdSummary} aria-label={t('nativeCreativeCapability')}><div><span>{t('creativeCapability')}</span><small>{typeof node.data.provider === 'string' ? node.data.provider : 'native'}</small></div><strong>{typeof node.data.capabilityId === 'string' ? node.data.capabilityId : `creative.${kind}`}</strong><p>{t('creativeCapabilityHint')}</p></section>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button type="button" className={styles.fullButton} onClick={() => onRunCreativeAction(kind === 'template' ? 'apply' : 'generate')}>{kind === 'template' ? t('applyTemplate') : t('generateLabel', { label: creationObjectDefinition(kind).label })}</button>{typeof node.data.outputUrl === 'string' && <><button type="button" onClick={() => onRunCreativeAction('preview')}>{t('preview')}</button><button type="button" onClick={() => onRunCreativeAction('export')}>{t('download')}</button></>}</div>
+        {typeof node.data.outputUrl === 'string' && <a href={node.data.outputUrl} target="_blank" rel="noreferrer">{t('openGeneratedOutput')}</a>}
       </>}
-      {kind === 'frame' && <><label>Purpose<input value={typeof node.data.framePurpose === 'string' ? node.data.framePurpose : 'Arrange related objects here'} onChange={(event) => onChange({ framePurpose: event.target.value })} /></label><label>Fill color<input type="color" value={typeof node.data.frameColor === 'string' ? node.data.frameColor : '#f8f6ff'} onChange={(event) => onChange({ frameColor: event.target.value })} /></label><label>Border color<input type="color" value={typeof node.data.frameBorder === 'string' ? node.data.frameBorder : '#9d8bea'} onChange={(event) => onChange({ frameBorder: event.target.value })} /></label><button className={styles.fullButton} onClick={onSaveFramePreset}>Save as reusable frame</button></>}
-      {kind === 'drawing' && <><label>Stroke color<input type="color" value={typeof node.data.stroke === 'string' ? node.data.stroke : '#5b5ce2'} onChange={(event) => onChange({ stroke: event.target.value })} /></label><label>Stroke width<input type="range" min="1" max="12" value={typeof node.data.strokeWidth === 'number' ? node.data.strokeWidth : 3} onChange={(event) => onChange({ strokeWidth: Number(event.target.value) })} /></label><p className={styles.inspectorHint}>Resize, annotate, connect, or use this sketch as visual context for Brain.</p></>}
-      {!['chat', 'agent', 'evaluation', 'staff', 'website', 'prototype', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'task', 'mockup', 'evermind', 'standup', 'frame', 'drawing'].includes(kind) && !CREATIVE_GENERATOR_KINDS.has(kind) && <p className={styles.inspectorHint}>This object is live in the session. Connect it to other objects or ask Brain to transform or evaluate it.</p>}
+      {kind === 'frame' && <><label>{t('purpose')}<input value={typeof node.data.framePurpose === 'string' ? node.data.framePurpose : t('arrangeObjectsHere')} onChange={(event) => onChange({ framePurpose: event.target.value })} /></label><label>{t('fillColor')}<input type="color" value={typeof node.data.frameColor === 'string' ? node.data.frameColor : '#f8f6ff'} onChange={(event) => onChange({ frameColor: event.target.value })} /></label><label>{t('borderColor')}<input type="color" value={typeof node.data.frameBorder === 'string' ? node.data.frameBorder : '#9d8bea'} onChange={(event) => onChange({ frameBorder: event.target.value })} /></label><button className={styles.fullButton} onClick={onSaveFramePreset}>{t('saveReusableFrame')}</button></>}
+      {kind === 'drawing' && <><label>{t('strokeColor')}<input type="color" value={typeof node.data.stroke === 'string' ? node.data.stroke : '#5b5ce2'} onChange={(event) => onChange({ stroke: event.target.value })} /></label><label>{t('strokeWidth')}<input type="range" min="1" max="12" value={typeof node.data.strokeWidth === 'number' ? node.data.strokeWidth : 3} onChange={(event) => onChange({ strokeWidth: Number(event.target.value) })} /></label><p className={styles.inspectorHint}>{t('drawingHint')}</p></>}
+      {!['chat', 'agent', 'evaluation', 'staff', 'website', 'prototype', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'task', 'mockup', 'evermind', 'standup', 'frame', 'drawing'].includes(kind) && !CREATIVE_GENERATOR_KINDS.has(kind) && <p className={styles.inspectorHint}>{t('objectLiveHint')}</p>}
       </fieldset> : <ActivityInspector sessionId={sessionId} objectId={node.id} persistence={persistence} role={role} members={members} />}
-      {tab === 'details' && <section aria-label="Copy and download" style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
-        <strong style={{ fontSize: 12 }}>Copy &amp; download</strong>
+      {tab === 'details' && <section aria-label={t('copyAndDownload')} style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
+        <strong style={{ fontSize: 12 }}>{t('copyAndDownload')}</strong>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {(kind === 'chat' || kind === 'code' || kind === 'note' || kind === 'report' || kind === 'document' || kind === 'slides' || kind === 'prd') && <button type="button" onClick={() => void runArtifactAction('copy')}>Copy</button>}
-          {(kind === 'chat' || kind === 'code' || kind === 'note' || kind === 'report' || kind === 'prd') && <button type="button" onClick={() => void runArtifactAction('markdown')}>Download Markdown</button>}
-          {(kind === 'dataset' || kind === 'spreadsheet' || kind === 'table') && <button type="button" onClick={() => void runArtifactAction('csv')}>Download CSV</button>}
-          {kind === 'document' && <button type="button" onClick={() => void runArtifactAction('docx')}>Download Word</button>}
-          {kind === 'slides' && <button type="button" onClick={() => void runArtifactAction('pptx')}>Download PowerPoint</button>}
-          {(kind === 'dashboard' || kind === 'chart' || kind === 'evaluation' || kind === 'featureSummary' || kind === 'projectComparison') && <button type="button" onClick={() => void runArtifactAction('json')}>Download data</button>}
+          {(kind === 'chat' || kind === 'code' || kind === 'note' || kind === 'report' || kind === 'document' || kind === 'slides' || kind === 'prd') && <button type="button" onClick={() => void runArtifactAction('copy')}>{t('copy')}</button>}
+          {(kind === 'chat' || kind === 'code' || kind === 'note' || kind === 'report' || kind === 'prd') && <button type="button" onClick={() => void runArtifactAction('markdown')}>{t('downloadMarkdown')}</button>}
+          {(kind === 'dataset' || kind === 'spreadsheet' || kind === 'table') && <button type="button" onClick={() => void runArtifactAction('csv')}>{t('downloadCsv')}</button>}
+          {kind === 'document' && <button type="button" onClick={() => void runArtifactAction('docx')}>{t('downloadWord')}</button>}
+          {kind === 'slides' && <button type="button" onClick={() => void runArtifactAction('pptx')}>{t('downloadPowerPoint')}</button>}
+          {(kind === 'dashboard' || kind === 'chart' || kind === 'evaluation' || kind === 'featureSummary' || kind === 'projectComparison') && <button type="button" onClick={() => void runArtifactAction('json')}>{t('downloadData')}</button>}
         </div>
         {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
       </section>}
-      {tab === 'details' && deliverables.length > 0 && <section aria-label="Deliverables" style={{ display: 'grid', gap: 8, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}><strong style={{ fontSize: 12 }}>Delivered outputs</strong>{deliverables.slice(0, 6).map((deliverable) => <div key={deliverable.id} style={{ display: 'grid', gap: 2, fontSize: 12 }}><span><b>{deliverable.artifactKind}</b> · {deliverable.status}</span><small>{deliverable.provider || 'Builderforce'} · {new Date(deliverable.completedAt || deliverable.createdAt).toLocaleString()}</small>{deliverable.url && !deliverable.url.startsWith('data:') && <a href={deliverable.url} target="_blank" rel="noreferrer">Open deliverable ↗</a>}{deliverable.error && <small style={{ color: 'var(--text-error, #c0392b)' }}>{deliverable.error}</small>}</div>)}</section>}
+      {tab === 'details' && deliverables.length > 0 && <section aria-label={t('deliverables')} style={{ display: 'grid', gap: 8, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}><strong style={{ fontSize: 12 }}>{t('deliveredOutputs')}</strong>{deliverables.slice(0, 6).map((deliverable) => <div key={deliverable.id} style={{ display: 'grid', gap: 2, fontSize: 12 }}><span><b>{deliverable.artifactKind}</b> · {deliverable.status}</span><small>{deliverable.provider || 'Builderforce'} · {new Date(deliverable.completedAt || deliverable.createdAt).toLocaleString()}</small>{deliverable.url && !deliverable.url.startsWith('data:') && <a href={deliverable.url} target="_blank" rel="noreferrer">{t('openDeliverable')}</a>}{deliverable.error && <small style={{ color: 'var(--text-error, #c0392b)' }}>{deliverable.error}</small>}</div>)}</section>}
     </div>
-    <footer><span>Resource · {role}</span><code>{node.data.resourceId || `session:${node.id}`}</code><button className={styles.fullButton} disabled={!editable} onClick={() => kind === 'task' ? setActionStatus('Task details are saved') : onChange({ status: 'Saved' })}>{kind === 'task' ? 'Save task details' : 'Save changes'}</button></footer>
+    <footer><span>{t('resourceRole', { role })}</span><code>{node.data.resourceId || `session:${node.id}`}</code><button className={styles.fullButton} disabled={!editable} onClick={() => kind === 'task' ? setActionStatus(t('taskDetailsSaved')) : onChange({ status: 'Saved' })}>{kind === 'task' ? t('saveTaskDetails') : t('saveChanges')}</button></footer>
   </aside>;
 }
 
+/**
+ * Column-level shape of an imported dataset. This is what tells a user whether
+ * the column they want to analyze actually survived the import, and it is the
+ * same profile Brain reads before it queries.
+ */
+function DatasetProfileSummary({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas');
+  const profile = Array.isArray(data.profile) ? data.profile as Array<Record<string, unknown>> : [];
+  const rowCount = Number(data.rowCount) || (Array.isArray(data.rows) ? data.rows.length : 0);
+  if (!profile.length) return <p className={styles.inspectorHint}>{rowCount ? t('datasetProfilePending') : t('datasetProfileEmpty')}</p>;
+  return <section className={styles.datasetProfile} aria-label={t('datasetProfileLabel')}>
+    <div className={styles.datasetProfileHead}><strong>{t('datasetProfileLabel')}</strong><span>{t('dataGridShape', { rows: rowCount.toLocaleString(), columns: profile.length })}</span></div>
+    <div className={styles.datasetProfileList}>
+      {profile.slice(0, 40).map((column, index) => {
+        const filled = Number(column.filled) || 0;
+        const coverage = rowCount ? Math.round(filled / rowCount * 100) : 0;
+        const top = Array.isArray(column.topValues) ? column.topValues as Array<Record<string, unknown>> : [];
+        return <article key={`${String(column.name)}-${index}`}>
+          <div><b>{String(column.name)}</b><small>{t(`datasetColumnType_${String(column.type)}` as 'datasetColumnType_text')}</small></div>
+          <p>{t('datasetColumnCoverage', { coverage, distinct: Number(column.distinct) || 0 })}</p>
+          {column.type === 'number' && column.min != null
+            ? <small>{t('datasetColumnRange', { min: String(column.min), max: String(column.max), sum: String(column.sum ?? 0) })}</small>
+            : top.length ? <small>{top.slice(0, 3).map((value) => `${String(value.value)} (${Number(value.count) || 0})`).join(' · ')}</small> : null}
+        </article>;
+      })}
+    </div>
+  </section>;
+}
+
 function SourceList({ sources }: { sources: unknown }) {
+  const t = useTranslations('creationCanvas');
   if (!Array.isArray(sources) || !sources.length) return null;
-  return <div className={styles.sourceList}><strong>Evidence sources</strong>{sources.map((source, index) => { const item = source as { label?: string; resource?: string }; return <div key={`${item.resource}-${index}`}><span>{index + 1}</span><p><b>{item.label || 'Source'}</b><code>{item.resource || 'Canonical API'}</code></p></div>; })}</div>;
+  return <div className={styles.sourceList}><strong>{t('evidenceSources')}</strong>{sources.map((source, index) => { const item = source as { label?: string; resource?: string }; return <div key={`${item.resource}-${index}`}><span>{index + 1}</span><p><b>{item.label || t('source')}</b><code>{item.resource || t('canonicalApi')}</code></p></div>; })}</div>;
 }
 
 function CanvasVoiceInspector({ node, persistence, onChange }: { node: CreationFlowNode; persistence: 'local' | 'server'; onChange: (patch: Partial<CreationNodeData>) => void }) {
+  const t = useTranslations('creationCanvas');
   const storageProjectId = useMemo(() => {
     const ref = node.data.resourceId;
     if (!ref?.startsWith('project:')) return null;
@@ -3114,34 +3471,36 @@ function CanvasVoiceInspector({ node, persistence, onChange }: { node: CreationF
       voice.setText(transcript);
       onChange({ voiceScript: transcript, voiceTranscript: transcript, subtitle: transcript, status: 'Transcribed' });
     };
-    recognition.onerror = () => onChange({ status: 'Voice transcription failed' });
+    recognition.onerror = () => onChange({ status: t('voiceTranscriptionFailed') });
     recognition.onend = null;
     recognition.start();
   };
 
-  if (persistence === 'local') return <p className={styles.inspectorHint}>Save this Session to create or select a consented voice, record a sample, transcribe speech, and generate playable audio.</p>;
+  if (persistence === 'local') return <p className={styles.inspectorHint}>{t('voiceLocalHint')}</p>;
   return <div className={styles.canvasVoiceStudio}>
-    <button type="button" className={styles.fullButton} onClick={dictate}>Dictate and transcribe script</button>
+    <button type="button" className={styles.fullButton} onClick={dictate}>{t('dictateScript')}</button>
     <VoiceConfigPanel voice={voice} />
-    <button type="button" className={styles.fullButton} disabled={voice.busy || !voice.selectedCloneId || !voice.text.trim()} onClick={() => { onChange({ voiceScript: voice.text, voiceTranscript: voice.text, status: 'Generating voice…' }); void voice.synth(); }}>{voice.busy ? 'Generating…' : 'Generate voice'}</button>
+    <button type="button" className={styles.fullButton} disabled={voice.busy || !voice.selectedCloneId || !voice.text.trim()} onClick={() => { onChange({ voiceScript: voice.text, voiceTranscript: voice.text, status: t('generatingVoiceStatus') }); void voice.synth(); }}>{voice.busy ? t('generating') : t('generateVoice')}</button>
     <div className={styles.canvasVoiceOutput}><VoiceOutput result={voice.result} audioUrl={voice.audioUrl} busy={voice.busy} unavailable={voice.unavailable} /></div>
   </div>;
 }
 
 function EvermindInspector({ node, persistence, onAttach, onExpand, onTrain }: { node: CreationFlowNode; persistence: 'local' | 'server'; onAttach: () => void; onExpand: () => void; onTrain: () => void }) {
+  const t = useTranslations('creationCanvas');
   const rawProjectId = node.data.resourceId?.startsWith('evermind:') ? node.data.resourceId.slice('evermind:'.length) : '';
   const projectId = /^\d+$/.test(rawProjectId) ? Number(rawProjectId) : null;
   return <>
-    <div className={styles.evermindStartGuide}><span>{node.data.pipelineExpanded === true ? 'Guided setup added' : 'New model'}</span><strong>{node.data.pipelineExpanded === true ? 'Continue from Step 1' : 'Start with training examples'}</strong><p>{node.data.pipelineExpanded === true ? 'The numbered cards show the complete learning path. This button returns you to the first unfinished action.' : 'We’ll add a five-step flow and open the training-data picker first. Each card explains the next action.'}</p></div>
-    <button className={styles.fullButton} onClick={onExpand}>{node.data.pipelineExpanded === true ? 'Go to Step 1 · Training data' : 'Start guided setup'}</button>
-    <button className={styles.fullButton} onClick={onTrain}>Train LoRA adapter</button>
-    {persistence === 'local' && <p className={styles.inspectorHint}>This blueprint works without an account. Save the session when you want to run training, store versions, or deploy inference.</p>}
-    {persistence === 'server' && projectId == null && <button className={styles.fullButton} onClick={onAttach}>Use project on canvas</button>}
+    <div className={styles.evermindStartGuide}><span>{node.data.pipelineExpanded === true ? t('guidedSetupAdded') : t('newModel')}</span><strong>{node.data.pipelineExpanded === true ? t('continueFromStep1') : t('startWithExamples')}</strong><p>{node.data.pipelineExpanded === true ? t('guidedSetupAddedHint') : t('guidedSetupHint')}</p></div>
+    <button className={styles.fullButton} onClick={onExpand}>{node.data.pipelineExpanded === true ? t('goToStep1') : t('startGuidedSetup')}</button>
+    <button className={styles.fullButton} onClick={onTrain}>{t('trainLoraAdapter')}</button>
+    {persistence === 'local' && <p className={styles.inspectorHint}>{t('blueprintNoAccountHint')}</p>}
+    {persistence === 'server' && projectId == null && <button className={styles.fullButton} onClick={onAttach}>{t('useProjectOnCanvas')}</button>}
     {persistence === 'server' && projectId != null && <div className={styles.evermindConsoleHost}><EvermindValidationProvider><ProjectEvermindPanel projectId={projectId} /></EvermindValidationProvider></div>}
   </>;
 }
 
 function ActivityInspector({ sessionId, objectId, persistence, role, members }: { sessionId: string; objectId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; members: Array<{ userId: string; displayName: string | null; role: string }> }) {
+  const t = useTranslations('creationCanvas');
   const [comments, setComments] = useState<CreationSessionComment[]>([]);
   const [activity, setActivity] = useState<CreationSessionActivity[]>([]);
   const [draft, setDraft] = useState('');
@@ -3180,27 +3539,27 @@ function ActivityInspector({ sessionId, objectId, persistence, role, members }: 
 
   const resolve = (comment: CreationSessionComment) => {
     void creationSessionsApi.comments.resolve(sessionId, comment.id, !comment.resolvedAt).then(() => void reload())
-      .catch((error) => setStatus(error instanceof Error ? error.message : 'Could not update comment'));
+      .catch((error) => setStatus(error instanceof Error ? error.message : t('commentUpdateFailed')));
   };
 
-  if (persistence === 'local') return <div className={styles.activityEmpty}><strong>Collaboration starts when you save</strong><p>Your canvas remains editable on this device. Sign in to add comments, mentions, shared activity, and collaborators.</p></div>;
+  if (persistence === 'local') return <div className={styles.activityEmpty}><strong>{t('collaborationStartsOnSave')}</strong><p>{t('collaborationStartsHint')}</p></div>;
 
   return <div className={styles.activityPanel}>
     <section className={styles.commentComposer}>
-      <label>Comment on this object<textarea rows={3} value={draft} disabled={!canComment} onChange={(event) => setDraft(event.target.value)} placeholder={canComment ? 'Write a comment or @mention a collaborator…' : 'View-only access'} /></label>
-      <button className={styles.fullButton} disabled={!canComment || !draft.trim()} onClick={submit}>Post comment</button>
+      <label>{t('commentOnObject')}<textarea rows={3} value={draft} disabled={!canComment} onChange={(event) => setDraft(event.target.value)} placeholder={canComment ? t('commentPlaceholder') : t('viewOnlyAccess')} /></label>
+      <button className={styles.fullButton} disabled={!canComment || !draft.trim()} onClick={submit}>{t('postComment')}</button>
     </section>
     {status && <p className={styles.inspectorHint}>{status}</p>}
-    <section className={styles.commentList} aria-label="Object comments">
+    <section className={styles.commentList} aria-label={t('objectComments')}>
       {comments.map((comment) => <article key={comment.id} className={comment.resolvedAt ? styles.commentResolved : ''}>
-        <header><b>{comment.authorName || 'Collaborator'}</b><time>{new Date(comment.createdAt).toLocaleString()}</time></header>
+        <header><b>{comment.authorName || t('collaborator')}</b><time>{new Date(comment.createdAt).toLocaleString()}</time></header>
         <p>{comment.body}</p>
-        {canComment && <button onClick={() => resolve(comment)}>{comment.resolvedAt ? 'Reopen' : 'Resolve'}</button>}
+        {canComment && <button onClick={() => resolve(comment)}>{comment.resolvedAt ? t('reopen') : t('resolve')}</button>}
       </article>)}
     </section>
-    <section className={styles.activityList} aria-label="Object activity">
-      <h4>Recent activity</h4>
-      {activity.filter((item) => item.kind === 'event').map((item) => <div key={item.id}><span>•</span><p><b>{item.actorName || 'BuilderForce'}</b> {item.type.replaceAll('.', ' ')}</p><time>{new Date(item.createdAt).toLocaleString()}</time></div>)}
+    <section className={styles.activityList} aria-label={t('objectActivity')}>
+      <h4>{t('recentActivity')}</h4>
+      {activity.filter((item) => item.kind === 'event').map((item) => <div key={item.id}><span>•</span><p><b>{item.actorName || 'BuilderForce'}</b>{` ${item.type.replaceAll('.', ' ')}`}</p><time>{new Date(item.createdAt).toLocaleString()}</time></div>)}
     </section>
   </div>;
 }
