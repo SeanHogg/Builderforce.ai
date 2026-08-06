@@ -32,9 +32,16 @@ export interface GuestRoomParticipant {
   joinedAt: string;
 }
 
+/**
+ * Which surface a room was opened from. It decides where the invite link points —
+ * share a canvas and your invitee must land on the canvas, not in an empty chat.
+ */
+export type GuestRoomSurface = 'chat' | 'canvas';
+
 export interface GuestRoomState {
   code: string;
   title: string;
+  surface: GuestRoomSurface;
   createdAt: string;
   /** When the room (and its transcript) disappears. */
   expiresAt: string;
@@ -105,10 +112,15 @@ export function clearActiveGuestRoom(): void {
   clearGuestToken();
 }
 
-/** The public link to share. Built from the current origin so it works on any host. */
-export function guestRoomInviteUrl(code: string): string {
+/**
+ * The public link to share, routed to the surface the room was opened from:
+ * a chat room lands invitees in the guest chat, a canvas room on a canvas bound
+ * to that room. Built from the current origin so it works on any host.
+ */
+export function guestRoomInviteUrl(code: string, surface: GuestRoomSurface = 'chat'): string {
   if (typeof window === 'undefined') return '';
-  return `${window.location.origin}/brainstorm?room=${encodeURIComponent(code)}`;
+  const path = surface === 'canvas' ? '/create/new' : '/brainstorm';
+  return `${window.location.origin}${path}?room=${encodeURIComponent(code)}`;
 }
 
 // ── Room API ─────────────────────────────────────────────────────────────────
@@ -127,14 +139,16 @@ function adopt(data: EntryResponse): GuestRoomState {
 }
 
 /** Open a new shared session. The caller is its host. */
-export async function createGuestRoom(name: string, title?: string): Promise<GuestRoomState | GuestRoomError> {
+export async function createGuestRoom(
+  name: string, title?: string, surface: GuestRoomSurface = 'chat',
+): Promise<GuestRoomState | GuestRoomError> {
   const visitorId = getVisitorId();
   if (!visitorId) return 'network';
   try {
     const res = await apiRequestStream('/api/guest/rooms', {
       method: 'POST',
       auth: 'none',
-      body: JSON.stringify({ visitorId, name, title, touch: getFirstTouch() }),
+      body: JSON.stringify({ visitorId, name, title, surface, touch: getFirstTouch() }),
       expectedErrors: [400, 401, 403, 404, 410, 429, 503],
     });
     if (!res.ok) return res.status === 503 ? 'unavailable' : 'gone';
@@ -238,6 +252,32 @@ export async function appendGuestRoomMessages(
   if (!res?.ok) return null;
   const data = (await res.json()) as { created: GuestRoomMessage[] };
   return data.created;
+}
+
+/**
+ * The shared Creation Canvas board, as one opaque serialized snapshot.
+ *
+ * Sync is last-writer-wins on a debounce: whoever changed the board pushes it and
+ * relays a `canvas` frame over their socket, and everyone else pulls. This slot is
+ * what lets a LATE joiner see the board at all — a relay-only design would show
+ * them an empty canvas until somebody happened to move something.
+ */
+export async function fetchGuestRoomCanvas(code: string): Promise<string | null> {
+  const res = await roomRequest(`/api/guest/rooms/${encodeURIComponent(code)}/canvas`);
+  if (!res?.ok) return null;
+  const data = (await res.json()) as { snapshot: string | null };
+  return data.snapshot;
+}
+
+/** Push the board. `false` means it outgrew the room's slot and did NOT sync. */
+export async function pushGuestRoomCanvas(code: string, snapshot: string): Promise<boolean> {
+  const res = await roomRequest(`/api/guest/rooms/${encodeURIComponent(code)}/canvas`, {
+    method: 'POST',
+    body: JSON.stringify({ snapshot }),
+  });
+  if (!res?.ok) return false;
+  const data = (await res.json()) as { stored?: boolean };
+  return !!data.stored;
 }
 
 export async function renameGuestRoom(code: string, title: string): Promise<void> {

@@ -9,6 +9,7 @@ import {
 import {
   guestRoomsEnabled, openGuestRoom, joinGuestRoom, guestRoomState, guestRoomMessages,
   appendGuestRoomMessages, setGuestRoomTitle, leaveGuestRoom, relayToGuestRoom,
+  guestRoomCanvas, putGuestRoomCanvas,
 } from '../../application/guest/guestRoomClient';
 import { GUEST_CHAT_LIMITS, GUEST_ROOM_LIMITS } from '../../domain/tenant/PlanLimits';
 import { iceServers } from '../../application/meetings/iceServers';
@@ -41,6 +42,8 @@ interface RoomEntryBody {
   visitorId?: string;
   name?: string;
   title?: string;
+  /** Which surface opened the room — decides where its invite link points. */
+  surface?: string;
   touch?: MarketingTouch;
 }
 
@@ -141,7 +144,10 @@ export function createGuestRoutes(guest: GuestChatService): Hono<HonoEnv> {
     }));
 
     const code = newRoomCode();
-    const state = await openGuestRoom(c.env as Env, code, visitorId, body.name ?? '', body.title ?? '');
+    const state = await openGuestRoom(
+      c.env as Env, code, visitorId, body.name ?? '', body.title ?? '',
+      body.surface === 'canvas' ? 'canvas' : 'chat',
+    );
     if (!state) return c.json({ error: 'Could not open a shared session.', code: 'guest_room_unavailable' }, 503);
     const token = await signGuestToken(visitorId, c.env.JWT_SECRET, GUEST_TOKEN_TTL_SECONDS, code);
     return c.json({ token, expiresInSeconds: GUEST_TOKEN_TTL_SECONDS, state }, 201);
@@ -216,6 +222,36 @@ export function createGuestRoutes(guest: GuestChatService): Hono<HonoEnv> {
     const created = await appendGuestRoomMessages(c.env as Env, code, messages);
     if (!created) return c.json({ error: 'This shared session has ended.', code: 'guest_room_unavailable' }, 410);
     return c.json({ created });
+  });
+
+  /**
+   * The shared Creation Canvas board. GET is how a late joiner (or a reconnecting
+   * peer) gets the board at all; POST is the debounced write from whoever last
+   * changed it. Deliberately UNCACHED: this is per-room mutable state read by a
+   * handful of people who are actively editing it, so any cache layer in front of
+   * it would serve exactly the stale board the sync exists to prevent — and the
+   * read is a single Durable Object hit, not a database query.
+   */
+  router.get('/rooms/:code/canvas', async (c) => {
+    const code = c.req.param('code');
+    if (!isValidRoomCode(code)) return c.json({ error: 'Invalid room code' }, 400);
+    const auth = await authenticate(c, code);
+    if (!auth) return c.json({ error: 'Not a member of this session.', code: 'guest_room_forbidden' }, 401);
+    const canvas = await guestRoomCanvas(c.env as Env, code);
+    if (!canvas) return c.json({ error: 'This shared session has ended.', code: 'guest_room_unavailable' }, 410);
+    return c.json(canvas);
+  });
+
+  router.post('/rooms/:code/canvas', async (c) => {
+    const code = c.req.param('code');
+    if (!isValidRoomCode(code)) return c.json({ error: 'Invalid room code' }, 400);
+    const auth = await authenticate(c, code);
+    if (!auth) return c.json({ error: 'Not a member of this session.', code: 'guest_room_forbidden' }, 401);
+    const { snapshot } = await c.req.json<{ snapshot?: string }>().catch((): { snapshot?: string } => ({}));
+    if (typeof snapshot !== 'string') return c.json({ error: 'snapshot is required' }, 400);
+    const result = await putGuestRoomCanvas(c.env as Env, code, snapshot);
+    if (!result) return c.json({ error: 'This shared session has ended.', code: 'guest_room_unavailable' }, 410);
+    return c.json(result);
   });
 
   // Rename the session (any participant — this is a shared scratchpad, not an org).

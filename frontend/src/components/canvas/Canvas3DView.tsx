@@ -253,6 +253,13 @@ export function Canvas3DView<T extends Canvas3DNode>({
                 {card.icon && <i aria-hidden>{card.icon}</i>}
                 <b>{card.label}</b>
               </span>
+              {card.preview && <img
+                className={styles.cardPreview}
+                src={card.preview}
+                alt={t('threeD.previewAlt', { label: card.label })}
+                loading="lazy"
+                draggable={false}
+              />}
               {card.sublabel && <span className={styles.cardSub}>{card.sublabel}</span>}
               <span className={styles.cardGroup}>{card.group}</span>
             </button>)}

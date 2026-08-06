@@ -9975,7 +9975,8 @@
     "endMeeting": "Quitter la réunion",
     "mediaBlocked": "Impossible d’accéder à votre caméra ou micro. Vérifiez les autorisations du navigateur.",
     "you": "Vous",
-    "replyingTo": "Réponse à {name}"
+    "replyingTo": "Réponse à {name}",
+    "inviteLink": "Lien d’invitation"
   },
   "login": {
     "navSignUp": "Inscription gratuite",
@@ -12651,7 +12652,6 @@
     "viewOutcomeMetrics": "Voir les indicateurs de résultats",
     "outcomeMetricsTitle": "Indicateurs idée-à-livraison",
     "titleSaveFailed": "Échec de l’enregistrement du titre",
-    "saveToInvite": "Enregistrez pour inviter",
     "closeInvitationPanel": "Fermer le panneau d’invitation",
     "emailPlaceholder": "name@company.com",
     "invitationRole": "Rôle de l’invitation",
@@ -12684,16 +12684,11 @@
     "gateBenefitKeep": "Conservez toute cette session locale",
     "gateBenefitUnlock": "Débloquez des ressources durables et l’historique",
     "gateBenefitCollaborate": "Collaborez avec votre équipe",
-    "gateInviteTitle": "Créez un compte pour inviter des collaborateurs",
-    "gateInviteBody": "Votre toile sera enregistrée en toute sécurité pour que vos coéquipiers rejoignent la même session en direct avec rôles, commentaires et présence.",
-    "gateShareTitle": "Créez un compte pour partager cette toile",
-    "gateShareBody": "Votre travail est déjà en sécurité sur cet appareil. Un compte l’enregistre dans votre tenant et active la collaboration en direct, les invitations et les contrôles d’accès.",
     "gateSaveTitle": "Créez un compte pour enregistrer et collaborer",
     "gateSaveSessionTitle": "Créez un compte pour enregistrer cette session",
     "gateSaveBody": "Déplacez cette session locale vers un espace tenant sécurisé sans perdre ses objets, sa conversation ni sa mise en page.",
     "gateMetricsTitle": "Créez un compte pour mesurer la valeur livrée",
     "gateMetricsBody": "Enregistrez cette session pour comparer les résultats idée-à-livraison entre sessions, projets et votre espace de travail.",
-    "localSafeHint": "Votre travail est en sécurité sur cet appareil. Créez un compte gratuit lorsque vous voulez collaborer en direct ou livrer.",
     "invitedCanBuild": "Toute personne invitée peut construire avec vous et poser des questions à Brain.",
     "invitationEmailed": "Invitation envoyée par e-mail et lien de secours copié",
     "invitationSavedLinkCopied": "Invitation enregistrée ; lien de secours copié (l’envoi d’e-mails n’est pas configuré)",
@@ -12998,7 +12993,25 @@
     "agentCreatedReady": "Agent créé et prêt à collaborer",
     "agentSettingsSaveFailed": "Les paramètres de l’agent n’ont pas pu être enregistrés",
     "createInviteAgent": "Créer et inviter l’agent",
-    "openingCanvas": "Ouverture de votre canevas de création…"
+    "openingCanvas": "Ouverture de votre canevas de création…",
+    "creatingCanvas": "Création de votre canevas…",
+    "startingOnDevice": "Démarrage en toute sécurité sur cet appareil…",
+    "sharedStart": "Partager ce canevas",
+    "sharedStarting": "Création…",
+    "sharedStarted": "Partagé — envoyez le lien pour inviter des personnes",
+    "sharedInviteHint": "Partagez ce canevas avec qui vous voulez, sans compte. Vous modifierez le même tableau et partagerez le même quota de messages gratuits.",
+    "sharedLiveHint": "Toute personne disposant de ce lien peut ouvrir et modifier ce canevas. Les messages gratuits sont partagés par tous les participants.",
+    "sharedJoinBlurb": "Rejoignez pour construire ensemble sur ce canevas. Vous modifierez le même tableau — aucun compte requis.",
+    "sharedPeopleHere": "{count, plural, =0 {Personne pour l’instant} one {# personne ici} other {# personnes ici}}",
+    "sharedHostTag": "(hôte)",
+    "sharedStopSharing": "Arrêter le partage",
+    "sharedSaveToKeep": "Enregistrer pour le conserver",
+    "sharedLeft": "Vous avez arrêté de partager ce canevas",
+    "sharedAnyoneWithLink": "toute personne disposant du lien",
+    "sharedDefaultHostName": "Hôte",
+    "sharedUnavailable": "Les canevas partagés sont indisponibles pour le moment",
+    "sharedEnded": "Ce canevas partagé est terminé",
+    "sharedBoardTooLarge": "Ce tableau est trop volumineux pour être synchronisé — enregistré sur cet appareil uniquement"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",
@@ -13021,7 +13034,8 @@
       "layerCount": "{count, plural, one {# objet} other {# objets}}",
       "orbitLabel": "Canevas 3D. Faites glisser pour pivoter, défilez pour zoomer ou utilisez les touches fléchées.",
       "hint": "Glisser pour pivoter · Défiler pour zoomer · Les flèches pivotent, + et − zooment, 0 réinitialise · Sélectionnez un objet pour l’ouvrir",
-      "empty": "Ajoutez des objets à ce canevas pour les voir en 3D."
+      "empty": "Ajoutez des objets à ce canevas pour les voir en 3D.",
+      "previewAlt": "Aperçu de {label}"
     }
   }
 }

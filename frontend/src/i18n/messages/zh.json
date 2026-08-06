@@ -9975,7 +9975,8 @@
     "endMeeting": "离开会议",
     "mediaBlocked": "无法访问你的摄像头或麦克风。请检查浏览器权限。",
     "you": "你",
-    "replyingTo": "正在回复 {name}"
+    "replyingTo": "正在回复 {name}",
+    "inviteLink": "邀请链接"
   },
   "login": {
     "navSignUp": "免费注册",
@@ -12651,7 +12652,6 @@
     "viewOutcomeMetrics": "查看成果指标",
     "outcomeMetricsTitle": "从想法到交付的成果指标",
     "titleSaveFailed": "标题保存失败",
-    "saveToInvite": "保存后即可邀请他人",
     "closeInvitationPanel": "关闭邀请面板",
     "emailPlaceholder": "name@company.com",
     "invitationRole": "邀请角色",
@@ -12684,16 +12684,11 @@
     "gateBenefitKeep": "保留整个本地会话",
     "gateBenefitUnlock": "解锁持久资源与历史记录",
     "gateBenefitCollaborate": "与团队协作",
-    "gateInviteTitle": "创建账户以邀请协作者",
-    "gateInviteBody": "你的画布会被安全保存，队友可以带着角色、评论和在线状态加入同一个实时会话。",
-    "gateShareTitle": "创建账户以分享此画布",
-    "gateShareBody": "你的работа已安全保存在本设备上。账户会将其保存到你的租户，并启用实时协作、邀请和访问控制。",
     "gateSaveTitle": "创建账户以保存并协作",
     "gateSaveSessionTitle": "创建账户以保存此会话",
     "gateSaveBody": "将此本地会话移入安全的租户工作区，不会丢失其对象、对话或布局。",
     "gateMetricsTitle": "创建账户以衡量交付价值",
     "gateMetricsBody": "保存此会话，以便在会话、项目和工作区之间比较从想法到交付的成果。",
-    "localSafeHint": "你的工作已安全保存在本设备上。想要实时协作或交付时再创建免费账户。",
     "invitedCanBuild": "受邀者可以与你一起创建，并向 Brain 提问。",
     "invitationEmailed": "邀请已发送邮件，备用链接已复制",
     "invitationSavedLinkCopied": "邀请已保存；备用链接已复制（未配置邮件发送）",
@@ -12998,7 +12993,25 @@
     "agentCreatedReady": "智能体已创建，可以开始协作",
     "agentSettingsSaveFailed": "无法保存智能体设置",
     "createInviteAgent": "创建并邀请智能体",
-    "openingCanvas": "正在打开你的创作画布……"
+    "openingCanvas": "正在打开你的创作画布……",
+    "creatingCanvas": "正在创建你的画布……",
+    "startingOnDevice": "正在此设备上安全启动……",
+    "sharedStart": "分享此画布",
+    "sharedStarting": "正在创建……",
+    "sharedStarted": "已共享——发送链接即可邀请他人",
+    "sharedInviteHint": "无需账户即可与任何人共享此画布。你们将编辑同一块画板，并共享同一份免费消息额度。",
+    "sharedLiveHint": "任何拥有此链接的人都可以打开并编辑此画布。免费消息由这里的所有人共享。",
+    "sharedJoinBlurb": "加入后即可一起在此画布上创作。你们将编辑同一块画板——无需账户。",
+    "sharedPeopleHere": "{count, plural, =0 {暂无他人} other {当前 # 人在线}}",
+    "sharedHostTag": "（主持人）",
+    "sharedStopSharing": "停止共享",
+    "sharedSaveToKeep": "保存以便留存",
+    "sharedLeft": "你已停止共享此画布",
+    "sharedAnyoneWithLink": "任何拥有链接的人",
+    "sharedDefaultHostName": "主持人",
+    "sharedUnavailable": "共享画布目前不可用",
+    "sharedEnded": "该共享画布已结束",
+    "sharedBoardTooLarge": "此画板过大，无法同步——仅保存在此设备上"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -13021,7 +13034,8 @@
       "layerCount": "{count} 个对象",
       "orbitLabel": "3D 画布。拖动可旋转，滚动可缩放，也可使用方向键。",
       "hint": "拖动旋转 · 滚动缩放 · 方向键旋转，+ 与 − 缩放，0 重置 · 选择对象即可打开",
-      "empty": "向此画布添加对象后即可在 3D 中查看。"
+      "empty": "向此画布添加对象后即可在 3D 中查看。",
+      "previewAlt": "{label} 预览"
     }
   }
 }

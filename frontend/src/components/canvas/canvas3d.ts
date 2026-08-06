@@ -60,6 +60,12 @@ export interface Canvas3DDescriptor {
   group: string;
   icon?: string | undefined;
   accent?: string | undefined;
+  /**
+   * A picture of what this object produced — a rendered mesh, a drawn profile, an
+   * image. Objects that generate something are the ones worth recognising at a
+   * distance, which is exactly what the depth view is for.
+   */
+  preview?: string | undefined;
 }
 
 export type Canvas3DNode = CanvasGraphNode & { position: { x: number; y: number } };
@@ -71,6 +77,7 @@ export interface Canvas3DCard extends Canvas3DPoint {
   group: string;
   icon?: string | undefined;
   accent?: string | undefined;
+  preview?: string | undefined;
   width: number;
   height: number;
   /** Contiguous depth index, 0 = furthest from the viewer. */
@@ -163,6 +170,7 @@ export function canvas3dScene<T extends Canvas3DNode>({
       group: entry.descriptor.group,
       icon: entry.descriptor.icon,
       accent: entry.descriptor.accent,
+      preview: entry.descriptor.preview,
       width: entry.size.width,
       height: entry.size.height,
       layer,

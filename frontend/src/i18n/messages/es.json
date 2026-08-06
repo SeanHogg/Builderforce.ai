@@ -9975,7 +9975,8 @@
     "endMeeting": "Salir de la reunión",
     "mediaBlocked": "No pudimos acceder a tu cámara o micrófono. Revisa los permisos del navegador.",
     "you": "Tú",
-    "replyingTo": "Respondiendo a {name}"
+    "replyingTo": "Respondiendo a {name}",
+    "inviteLink": "Enlace de invitación"
   },
   "login": {
     "navSignUp": "Regístrate gratis",
@@ -12651,7 +12652,6 @@
     "viewOutcomeMetrics": "Ver métricas de resultados",
     "outcomeMetricsTitle": "Métricas de idea a entrega",
     "titleSaveFailed": "No se pudo guardar el título",
-    "saveToInvite": "Guarda para invitar a otros",
     "closeInvitationPanel": "Cerrar el panel de invitaciones",
     "emailPlaceholder": "name@company.com",
     "invitationRole": "Rol de la invitación",
@@ -12684,16 +12684,11 @@
     "gateBenefitKeep": "Conserva toda esta sesión local",
     "gateBenefitUnlock": "Desbloquea recursos duraderos e historial",
     "gateBenefitCollaborate": "Colabora con tu equipo",
-    "gateInviteTitle": "Crea una cuenta para invitar colaboradores",
-    "gateInviteBody": "Tu lienzo se guardará de forma segura para que tus compañeros se unan a la misma sesión en vivo con roles, comentarios y presencia.",
-    "gateShareTitle": "Crea una cuenta para compartir este lienzo",
-    "gateShareBody": "Tu trabajo ya está seguro en este dispositivo. Una cuenta lo guarda en tu tenant y habilita la colaboración en vivo, las invitaciones y los controles de acceso.",
     "gateSaveTitle": "Crea una cuenta para guardar y colaborar",
     "gateSaveSessionTitle": "Crea una cuenta para guardar esta sesión",
     "gateSaveBody": "Mueve esta sesión local a un espacio de trabajo seguro del tenant sin perder objetos, conversación ni diseño.",
     "gateMetricsTitle": "Crea una cuenta para medir el valor entregado",
     "gateMetricsBody": "Guarda esta sesión para comparar resultados de idea a entrega entre sesiones, proyectos y tu espacio de trabajo.",
-    "localSafeHint": "Tu trabajo está seguro en este dispositivo. Crea una cuenta gratuita cuando quieras colaborar en vivo o entregar.",
     "invitedCanBuild": "Cualquier persona invitada puede construir contigo y hacer preguntas a Brain.",
     "invitationEmailed": "Invitación enviada por correo y enlace de respaldo copiado",
     "invitationSavedLinkCopied": "Invitación guardada; enlace de respaldo copiado (el envío de correo no está configurado)",
@@ -12998,7 +12993,25 @@
     "agentCreatedReady": "Agente creado y listo para colaborar",
     "agentSettingsSaveFailed": "No se pudo guardar la configuración del agente",
     "createInviteAgent": "Crear e invitar agente",
-    "openingCanvas": "Abriendo tu lienzo de creación…"
+    "openingCanvas": "Abriendo tu lienzo de creación…",
+    "creatingCanvas": "Creando tu lienzo…",
+    "startingOnDevice": "Iniciando de forma segura en este dispositivo…",
+    "sharedStart": "Compartir este lienzo",
+    "sharedStarting": "Creando…",
+    "sharedStarted": "Compartido: envía el enlace para invitar a alguien",
+    "sharedInviteHint": "Comparte este lienzo con quien quieras, sin necesidad de cuenta. Editaréis el mismo tablero y compartiréis la misma cuota de mensajes gratis.",
+    "sharedLiveHint": "Cualquiera con este enlace puede abrir y editar este lienzo. Los mensajes gratis se comparten entre todos los presentes.",
+    "sharedJoinBlurb": "Únete para construir en este lienzo en equipo. Editaréis el mismo tablero, sin necesidad de cuenta.",
+    "sharedPeopleHere": "{count, plural, =0 {Todavía no hay nadie} one {# persona aquí} other {# personas aquí}}",
+    "sharedHostTag": "(anfitrión)",
+    "sharedStopSharing": "Dejar de compartir",
+    "sharedSaveToKeep": "Guardar para conservarlo",
+    "sharedLeft": "Has dejado de compartir este lienzo",
+    "sharedAnyoneWithLink": "cualquiera con el enlace",
+    "sharedDefaultHostName": "Anfitrión",
+    "sharedUnavailable": "Los lienzos compartidos no están disponibles ahora mismo",
+    "sharedEnded": "Ese lienzo compartido ha terminado",
+    "sharedBoardTooLarge": "Este tablero es demasiado grande para sincronizarse: guardado solo en este dispositivo"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",
@@ -13021,7 +13034,8 @@
       "layerCount": "{count, plural, one {# objeto} other {# objetos}}",
       "orbitLabel": "Lienzo 3D. Arrastra para orbitar, desplázate para hacer zoom o usa las flechas del teclado.",
       "hint": "Arrastra para orbitar · Desplázate para hacer zoom · Las flechas rotan, + y − hacen zoom, 0 restablece · Selecciona un objeto para abrirlo",
-      "empty": "Añade objetos a este lienzo para verlos en 3D."
+      "empty": "Añade objetos a este lienzo para verlos en 3D.",
+      "previewAlt": "Vista previa de {label}"
     }
   }
 }

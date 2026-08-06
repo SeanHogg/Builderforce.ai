@@ -14,6 +14,7 @@ import { BrainActivityBar, useBrainActivity } from './BrainActivityView';
 import { BrainSurfaceActions, BrainSurfaceBody } from './BrainDock';
 import { useBrainSurface } from './brainSurfaceContext';
 import { highlightToneFor, tabularFromObject, type TabularHighlightRule } from '@/lib/canvasTabularData';
+import { creativePreviewImageUrl } from '@/lib/creationDeliverables';
 
 export type CreationFlowNode = Node<CreationNodeData, 'creation'>;
 
@@ -60,7 +61,7 @@ function CreativeStudioBody({ data }: { data: CreationNodeData }) {
   const mediaKind = textValue(data.mediaKind, data.kind === 'model3d' ? 'cad_3d' : data.kind);
   const template = textValue(data.templateId, data.kind === 'template' ? t('browseCatalog') : t('blankCanvas'));
   const output = textValue(data.outputFormat, data.kind === 'resume' ? 'PDF / DOCX' : t('chooseOnExport'));
-  const thumbnail = textValue(data.thumbnailUrl, textValue(data.outputUrl));
+  const thumbnail = creativePreviewImageUrl(data);
   return <div className={styles.creativeStudioBody}>
     {thumbnail ? <img src={thumbnail} alt={t('previewAlt', { title: data.title })} /> : <div className={styles.creativeStudioPreview} aria-hidden="true"><span>{creationObjectDefinition(data.kind).icon}</span><i /><i /><i /></div>}
     <AuthoredContent data={data} fallback={t('creativeFallback')} />
@@ -351,7 +352,7 @@ function FileBody({ data }: { data: CreationNodeData }) {
   const mimeType = textValue(data.mimeType, t('fileGeneric'));
   const size = Number(data.fileSize);
   const preview = textValue(data.content, textValue(data.markdown));
-  const image = textValue(data.thumbnailUrl, textValue(data.outputUrl));
+  const image = creativePreviewImageUrl(data);
   return <div className={styles.fileBody}>
     <div className={styles.widgetSettings}>
       <span><small>{t('fileType')}</small><b>{mimeType}</b></span>
@@ -671,11 +672,21 @@ function BrainObjectBody({ nodeId, data }: { nodeId: string; data: CreationNodeD
   const surface = useBrainSurface();
 
   if (!surface || !surface.open || surface.mode !== 'inline') {
-    return <BrainAnchorBody data={data} onOpen={() => surface?.onOpen(nodeId)} />;
+    // No handler while presenting: nothing can reveal Brain there, and an anchor that
+    // offers a way in and then does nothing is worse than an anchor that stays quiet.
+    return <BrainAnchorBody data={data} onOpen={surface?.canOpen ? () => surface.onOpen(nodeId) : undefined} />;
   }
 
   return (
-    <section className={`${styles.brainObjectChat} nodrag nowheel`} aria-label={t('brainDock')}>
+    // Clicks are contained here on purpose. Selecting the Brain Object reveals the
+    // conversation, so without this every control inside the conversation would also
+    // re-reveal it — closing Brain would reopen it on the way back up. The Object's
+    // header is outside this section and still selects the node normally.
+    <section
+      className={`${styles.brainObjectChat} nodrag nowheel`}
+      aria-label={t('brainDock')}
+      onClick={(event) => event.stopPropagation()}
+    >
       <div className={styles.brainObjectChatBar}>
         <BrainSurfaceActions
           mode={surface.mode}
@@ -740,7 +751,7 @@ function BrainAnchorBody({ data, onOpen }: { data: CreationNodeData; onOpen?: ()
       <span ref={latestRef}><small>{t('brainAnchorBrain')}</small><p>{brainText}</p></span>
     </div>
     <BrainActivityBar state={activity} variant="inline" />
-    <div className={`${styles.nodeActionBar} nodrag nowheel`}><button type="button" onClick={(event) => { event.stopPropagation(); onOpen?.(); }}>{t('openBrainChat')}</button></div>
+    {onOpen && <div className={`${styles.nodeActionBar} nodrag nowheel`}><button type="button" onClick={(event) => { event.stopPropagation(); onOpen(); }}>{t('openBrainChat')}</button></div>}
   </div>;
 }
 

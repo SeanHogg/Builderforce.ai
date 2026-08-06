@@ -160,6 +160,18 @@
   line-clamp: 2;
 }
 
+/* What a generated object made. Sized in card units, not viewport units, because
+   the whole scene is already scaled by the stage transform. */
+.cardPreview {
+  width: 100%;
+  height: 190px;
+  flex: none;
+  object-fit: contain;
+  border: 1px solid var(--canvas-line, var(--border-subtle, #d9e2ee));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--canvas-3d-accent, #3978f6) 10%, var(--canvas-panel, #fff));
+}
+
 .cardSub {
   overflow: hidden;
   color: var(--canvas-muted, var(--text-secondary, #6d7d94));

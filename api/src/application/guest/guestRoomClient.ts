@@ -144,6 +144,24 @@ export async function leaveGuestRoom(env: Env, code: string, visitorId: string):
   await call<{ ok: boolean }>(env, code, '/leave', { body: JSON.stringify({ visitorId }) });
 }
 
+/**
+ * The shared Creation Canvas board, as one opaque serialized snapshot. The Worker
+ * never interprets it — the shape belongs to the client that writes it, and a
+ * server-side copy of that schema would be a second definition to keep in step.
+ */
+export async function guestRoomCanvas(env: Env, code: string): Promise<{ snapshot: string | null; updatedAt: string | null } | null> {
+  return call<{ snapshot: string | null; updatedAt: string | null }>(env, code, '/canvas');
+}
+
+/** Store the board. `stored:false` means it outgrew the slot — tell the writer. */
+export async function putGuestRoomCanvas(
+  env: Env, code: string, snapshot: string,
+): Promise<{ stored: boolean; reason?: string; limit?: number } | null> {
+  return call<{ stored: boolean; reason?: string; limit?: number }>(env, code, '/canvas', {
+    method: 'POST', body: JSON.stringify({ snapshot }),
+  });
+}
+
 /** The transcript a just-signed-up participant is entitled to keep. */
 export interface GuestRoomClaim {
   /** True when this visitor already converted the room — do not fork a second chat. */
@@ -170,4 +188,6 @@ export async function claimGuestRoom(env: Env, code: string, visitorId: string):
  */
 export async function relayToGuestRoom(env: Env, code: string, request: Request): Promise<Response> {
   const room = stub(env, code);
-  if (!room) return new Response('Realtime unavailable', { status: 503 
+  if (!room) return new Response('Realtime unavailable', { status: 503 });
+  return room.fetch(request);
+}

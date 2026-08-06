@@ -1,4 +1,5 @@
 import { apiRequest } from './apiClient';
+import { dxfPreviewSvg, stlPreviewSvg, svgDataUrl } from './creativeGeometry';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
 
 export type CreationDeliverableStatus = 'running' | 'delivered' | 'failed';
@@ -55,6 +56,70 @@ export interface BrowserCreativeArtifact {
   url: string;
   outputFormat: string;
   validationDetail: string;
+  /**
+   * A picture of the artifact, when the artifact itself is not one. A DXF or an
+   * STL cannot be the `src` of an image, so the geometry is drawn back instead of
+   * the export being pointed at a tile that can only fail to load.
+   */
+  previewImageUrl?: string;
+}
+
+const IMAGE_DATA_URL = /^data:image\//i;
+const IMAGE_FILE = /\.(?:png|jpe?g|gif|webp|avif|svg)(?:[?#]|$)/i;
+
+/** Whether a URL is something an `<img>` can actually display. */
+export function isDisplayableImageUrl(url: string): boolean {
+  const value = url.trim();
+  if (!value) return false;
+  if (value.startsWith('data:')) return IMAGE_DATA_URL.test(value);
+  if (value.startsWith('blob:')) return true;
+  return IMAGE_FILE.test(value);
+}
+
+/**
+ * The one rule for what a creative object shows on its preview tile.
+ *
+ * `thumbnailUrl` is authored as a picture, so it is trusted. `outputUrl` is the
+ * exported deliverable, which is a picture only for some kinds — using it blindly
+ * is what renders a broken image for CAD, 3D, game, resume and podcast objects.
+ * Both the node body and the 3D view read this, so they cannot disagree.
+ */
+export function creativePreviewImageUrl(data: CreationNodeData): string | null {
+  const thumbnail = typeof data.thumbnailUrl === 'string' ? data.thumbnailUrl.trim() : '';
+  if (thumbnail) return thumbnail;
+  const output = typeof data.outputUrl === 'string' ? data.outputUrl.trim() : '';
+  return output && isDisplayableImageUrl(output) ? output : null;
+}
+
+/** A closed, manifold box — the smallest solid an STL can honestly claim to be. */
+function asciiStlBox(name: string, [width, depth, height]: [number, number, number]): string {
+  const corner = (x: number, y: number, z: number): [number, number, number] => [x * width, y * depth, z * height];
+  const quads: Array<[number, number, number][]> = [
+    [corner(0, 0, 0), corner(0, 1, 0), corner(1, 1, 0), corner(1, 0, 0)],
+    [corner(0, 0, 1), corner(1, 0, 1), corner(1, 1, 1), corner(0, 1, 1)],
+    [corner(0, 0, 0), corner(1, 0, 0), corner(1, 0, 1), corner(0, 0, 1)],
+    [corner(1, 0, 0), corner(1, 1, 0), corner(1, 1, 1), corner(1, 0, 1)],
+    [corner(1, 1, 0), corner(0, 1, 0), corner(0, 1, 1), corner(1, 1, 1)],
+    [corner(0, 1, 0), corner(0, 0, 0), corner(0, 0, 1), corner(0, 1, 1)],
+  ];
+  const facet = (a: [number, number, number], b: [number, number, number], c: [number, number, number]) => {
+    const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+    const v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+    const cross = [u[1]! * v[2]! - u[2]! * v[1]!, u[2]! * v[0]! - u[0]! * v[2]!, u[0]! * v[1]! - u[1]! * v[0]!];
+    const length = Math.hypot(cross[0]!, cross[1]!, cross[2]!) || 1;
+    const normal = cross.map((component) => Number((component / length).toFixed(6))).join(' ');
+    const vertex = (point: [number, number, number]) => `vertex ${point.join(' ')}`;
+    return `facet normal ${normal}\nouter loop\n${vertex(a)}\n${vertex(b)}\n${vertex(c)}\nendloop\nendfacet`;
+  };
+  const facets = quads.flatMap(([a, b, c, d]) => [facet(a!, b!, c!), facet(a!, c!, d!)]);
+  return `solid ${name}\n${facets.join('\n')}\nendsolid ${name}`;
+}
+
+/** A closed outline with a bored hole — a drawing with a feature in it, not just a box. */
+function dxfPlate([width, height]: [number, number], radius: number): string {
+  const polyline = ['0', 'LWPOLYLINE', '8', '0', '90', '4', '70', '1', '10', '0', '20', '0', '10', String(width), '20', '0', '10', String(width), '20', String(height), '10', '0', '20', String(height)];
+  const circle = ['0', 'CIRCLE', '8', '0', '10', String(width / 2), '20', String(height / 2), '40', String(radius)];
+  return ['0', 'SECTION', '2', 'ENTITIES', ...polyline, ...circle, '0', 'ENDSEC', '0', 'EOF', ''].join('\n');
 }
 
 /** Produce a real, portable baseline artifact without claiming an unavailable
@@ -69,7 +134,8 @@ export function buildBrowserCreativeArtifact(data: CreationNodeData): BrowserCre
   const svg = (body: string) => `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="#202b5f"/><stop offset="1" stop-color="#7c4dff"/></linearGradient></defs><rect width="1200" height="675" rx="32" fill="url(#g)"/>${body}<text x="70" y="555" fill="white" font-family="system-ui,sans-serif" font-size="58" font-weight="750">${escapedTitle}</text><text x="70" y="610" fill="#ddd7ff" font-family="system-ui,sans-serif" font-size="24">${escapedBrief.slice(0, 86)}</text></svg>`;
   if (kind === 'image' || kind === 'comic') {
     const content = svg(kind === 'comic' ? '<g fill="#fff" opacity=".92"><rect x="70" y="70" width="310" height="390" rx="18"/><rect x="445" y="70" width="310" height="390" rx="18"/><rect x="820" y="70" width="310" height="390" rx="18"/></g>' : '<circle cx="600" cy="290" r="180" fill="#fff" opacity=".88"/><circle cx="650" cy="250" r="110" fill="#ffb35c"/>');
-    return { artifactKind: kind, fileName: `${stem}.svg`, mimeType: 'image/svg+xml', url: textDataUrl('image/svg+xml', content), outputFormat: 'SVG', validationDetail: 'Valid standalone SVG generated in the browser' };
+    const url = textDataUrl('image/svg+xml', content);
+    return { artifactKind: kind, fileName: `${stem}.svg`, mimeType: 'image/svg+xml', url, outputFormat: 'SVG', validationDetail: 'Valid standalone SVG generated in the browser', previewImageUrl: url };
   }
   if (kind === 'animation') {
     const content = `<!doctype html><meta charset="utf-8"><title>${escapedTitle}</title><style>html,body{height:100%;margin:0;background:#11152b;overflow:hidden}.orb{position:absolute;width:22vmin;aspect-ratio:1;border-radius:50%;background:linear-gradient(135deg,#ffb35c,#7c4dff);animation:move 4s ease-in-out infinite alternate;box-shadow:0 0 80px #7c4dff88}@keyframes move{from{transform:translate(20vw,20vh) scale(.7)}to{transform:translate(65vw,55vh) scale(1.4)}}h1{position:absolute;color:white;font:700 6vw system-ui;left:6vw;bottom:8vh}</style><div class="orb"></div><h1>${escapedTitle}</h1>`;
@@ -80,12 +146,22 @@ export function buildBrowserCreativeArtifact(data: CreationNodeData): BrowserCre
     return { artifactKind: kind, fileName: `${stem}.html`, mimeType: 'text/html', url: textDataUrl('text/html', content), outputFormat: 'HTML', validationDetail: 'Self-contained interactive HTML game generated in the browser' };
   }
   if (kind === 'cad') {
-    const dxf = `0\nSECTION\n2\nENTITIES\n0\nLWPOLYLINE\n8\n0\n90\n4\n70\n1\n10\n0\n20\n0\n10\n100\n20\n0\n10\n100\n20\n60\n10\n0\n20\n60\n0\nENDSEC\n0\nEOF\n`;
-    return { artifactKind: kind, fileName: `${stem}.dxf`, mimeType: 'application/dxf', url: textDataUrl('application/dxf', dxf), outputFormat: 'DXF', validationDetail: 'Closed 100 × 60 unit DXF polyline generated in the browser' };
+    const dxf = dxfPlate([100, 60], 14);
+    const preview = dxfPreviewSvg(dxf);
+    return {
+      artifactKind: kind, fileName: `${stem}.dxf`, mimeType: 'application/dxf', url: textDataUrl('application/dxf', dxf), outputFormat: 'DXF',
+      validationDetail: 'Closed 100 × 60 unit DXF profile with a Ø28 bore, generated and drawn back in the browser',
+      ...(preview ? { previewImageUrl: svgDataUrl(preview) } : {}),
+    };
   }
   if (kind === 'model3d') {
-    const stl = `solid ${stem}\nfacet normal 0 0 -1\nouter loop\nvertex 0 0 0\nvertex 1 1 0\nvertex 1 0 0\nendloop\nendfacet\nfacet normal 0 0 -1\nouter loop\nvertex 0 0 0\nvertex 0 1 0\nvertex 1 1 0\nendloop\nendfacet\nfacet normal 0 0 1\nouter loop\nvertex 0 0 1\nvertex 1 0 1\nvertex 1 1 1\nendloop\nendfacet\nfacet normal 0 0 1\nouter loop\nvertex 0 0 1\nvertex 1 1 1\nvertex 0 1 1\nendloop\nendfacet\nendsolid ${stem}`;
-    return { artifactKind: kind, fileName: `${stem}.stl`, mimeType: 'model/stl', url: textDataUrl('model/stl', stl), outputFormat: 'STL', validationDetail: 'ASCII STL mesh generated in the browser' };
+    const stl = asciiStlBox(stem, [100, 60, 40]);
+    const preview = stlPreviewSvg(stl);
+    return {
+      artifactKind: kind, fileName: `${stem}.stl`, mimeType: 'model/stl', url: textDataUrl('model/stl', stl), outputFormat: 'STL',
+      validationDetail: 'Closed 12-facet ASCII STL solid generated and rendered back in the browser',
+      ...(preview ? { previewImageUrl: svgDataUrl(preview) } : {}),
+    };
   }
   if (kind === 'resume') {
     const markdown = `# ${title}\n\n${brief}\n\n## Experience\n\n- Add measurable achievement\n\n## Skills\n\n- Add relevant skills\n`;

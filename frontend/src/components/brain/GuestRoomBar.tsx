@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { guestRoomInviteUrl, type GuestRoomParticipant } from '@/lib/guestRoomApi';
+import { GuestInviteLink } from '@/components/guest/GuestInviteLink';
+import type { GuestRoomParticipant, GuestRoomSurface } from '@/lib/guestRoomApi';
 
 /**
  * The header strip of a SHARED free session: who is here, the invite link, and
@@ -16,11 +16,13 @@ import { guestRoomInviteUrl, type GuestRoomParticipant } from '@/lib/guestRoomAp
  * its own layout at narrow widths rather than being told.
  */
 export function GuestRoomBar({
-  code, title, participants, maxParticipants, remaining, limit,
+  code, title, surface, participants, maxParticipants, remaining, limit,
   connected, busyWith, meetingOn, onToggleMeeting, onLeave,
 }: {
   code: string;
   title: string;
+  /** Where this room's invite link should land people. */
+  surface: GuestRoomSurface;
   participants: GuestRoomParticipant[];
   maxParticipants: number;
   /** Combined turns left for the whole room (null while unknown). */
@@ -34,22 +36,6 @@ export function GuestRoomBar({
   onLeave: () => void;
 }) {
   const t = useTranslations('guestRoom');
-  const [copied, setCopied] = useState(false);
-
-  const copyInvite = useCallback(async () => {
-    const url = guestRoomInviteUrl(code);
-    try {
-      await navigator.clipboard.writeText(url);
-    } catch {
-      // Clipboard is blocked (insecure context / permission). Fall back to a
-      // prompt so the link is still obtainable rather than silently lost.
-      window.prompt(t('copyFallback'), url);
-      return;
-    }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2200);
-  }, [code, t]);
-
   const full = participants.length >= maxParticipants;
 
   return (
@@ -74,15 +60,14 @@ export function GuestRoomBar({
           ))}
         </ul>
         <div className="gr-bar-actions">
-          <button type="button" onClick={copyInvite} className="gr-btn gr-btn-primary" disabled={full}>
-            {full ? t('roomFull') : copied ? t('linkCopied') : t('copyInvite')}
-          </button>
           <button type="button" onClick={onToggleMeeting} aria-pressed={meetingOn} className="gr-btn">
             {meetingOn ? t('stopVideo') : t('startVideo')}
           </button>
           <button type="button" onClick={onLeave} className="gr-btn gr-btn-quiet">{t('leave')}</button>
         </div>
       </div>
+
+      <GuestInviteLink code={code} surface={surface} full={full} compact />
 
       {busyWith && <p className="gr-busy" aria-live="polite">{t('waitingOnBrain', { name: busyWith })}</p>}
 
@@ -100,7 +85,6 @@ export function GuestRoomBar({
         .gr-bar-actions { display: flex; gap: 6px; flex-wrap: wrap; }
         .gr-btn { padding: 6px 11px; font-size: 12px; font-weight: 600; border-radius: 8px; border: 1px solid var(--border-subtle); background: var(--bg-base); color: var(--text-primary); cursor: pointer; min-height: 32px; }
         .gr-btn:disabled { opacity: 0.55; cursor: default; }
-        .gr-btn-primary { background: var(--accent, #3b82f6); border-color: var(--accent, #3b82f6); color: #fff; }
         .gr-btn-quiet { background: transparent; color: var(--text-muted); }
         .gr-busy { margin: 0; font-size: 12px; color: var(--text-muted); }
         @media (max-width: 520px) {

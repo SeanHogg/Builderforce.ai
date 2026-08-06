@@ -64,6 +64,21 @@ export function createLocalCreationSession(prompt: string): string {
   return sessionId;
 }
 
+/**
+ * Persist a local (account-less) canvas. The ONE write — the canvas had this
+ * `localStorage.setItem(storageKey, JSON.stringify(snapshot))` inlined at three
+ * call sites, which is three chances for the stored shape to drift from what
+ * {@link readLocalCreationSession} validates on the way back in.
+ */
+export function writeLocalCreationSession(sessionId: string, snapshot: LocalCreationSnapshot): void {
+  try {
+    localStorage.setItem(creationStorageKey(sessionId), JSON.stringify(snapshot));
+  } catch {
+    // Private mode / quota — the board stays live in memory for this page, and a
+    // shared session still has the room as its durable copy.
+  }
+}
+
 export function readLocalCreationSession(sessionId: string): LocalCreationSnapshot | null {
   try {
     const raw = localStorage.getItem(creationStorageKey(sessionId));

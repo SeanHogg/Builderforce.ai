@@ -30,11 +30,12 @@ import { useBrainChats, useBrainConversation, isStepMessage, getBrainCapability,
 import { ChatMessageContent } from '@/components/ChatMessageContent';
 import { BrainCapabilityPicker } from '@/components/brain/BrainCapabilityPicker';
 import { GuestRoomBar } from '@/components/brain/GuestRoomBar';
+import { GuestRoomJoinCard } from '@/components/guest/GuestRoomJoinCard';
 import { GuestRoomMeeting } from '@/components/brain/GuestRoomMeeting';
 import { mintGuestSession, getGuestUsage } from '@/lib/guestChatApi';
 import { useGuestRoom } from '@/lib/useGuestRoom';
 import {
-  createGuestRoom, joinGuestRoom, leaveGuestRoom, appendGuestRoomMessages, refreshGuestCredentials,
+  createGuestRoom, leaveGuestRoom, appendGuestRoomMessages, refreshGuestCredentials,
   getActiveGuestRoom, getGuestDisplayName, setGuestDisplayName, type GuestRoomState,
 } from '@/lib/guestRoomApi';
 
@@ -250,24 +251,6 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
     setJoining(false);
   }, [conv.messages, displayName, adoptRoom, tRoom]);
 
-  /** Accept an invite link. */
-  const acceptInvite = useCallback(async () => {
-    if (!inviteCode) return;
-    setJoining(true);
-    setRoomError(null);
-    const name = displayName.trim() || tRoom('defaultGuestName');
-    setGuestDisplayName(name);
-    const state = await joinGuestRoom(inviteCode, name);
-    if (typeof state === 'string') {
-      setRoomError(state === 'unavailable' ? tRoom('errorUnavailable') : tRoom('errorGone'));
-      setJoining(false);
-      return;
-    }
-    adoptRoom(state);
-    setDisplayName(name);
-    setJoining(false);
-  }, [inviteCode, displayName, adoptRoom, tRoom]);
-
   const exitRoom = useCallback(async () => {
     const code = getActiveGuestRoom();
     setMeetingOn(false);
@@ -299,14 +282,10 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
       {/* Body */}
       {ready && !enabled ? (
         <GuestDisabledCTA t={t} />
-      ) : pendingInvite ? (
-        <GuestRoomInvite
-          tRoom={tRoom}
-          name={displayName}
-          onNameChange={setDisplayName}
-          onJoin={acceptInvite}
-          joining={joining}
-          error={roomError}
+      ) : pendingInvite && inviteCode ? (
+        <GuestRoomJoinCard
+          code={inviteCode}
+          onJoined={(state) => { adoptRoom(state); setDisplayName(getGuestDisplayName()); }}
         />
       ) : (
         <>
@@ -314,6 +293,7 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
             <GuestRoomBar
               code={roomCode}
               title={room.state?.title || tRoom('defaultTitle')}
+              surface={room.state?.surface ?? 'chat'}
               participants={room.participants}
               maxParticipants={room.state?.maxParticipants ?? 0}
               remaining={room.remaining}
@@ -463,56 +443,6 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
           .gb-composer-actions { width: 100%; }
           .gb-composer-actions .gb-send, .gb-composer-actions .gb-invite { flex: 1 1 auto; }
         }
-      `}</style>
-    </div>
-  );
-}
-
-/** The join card an invite link lands on: pick a name, then step into the room. */
-function GuestRoomInvite({
-  tRoom, name, onNameChange, onJoin, joining, error,
-}: {
-  tRoom: ReturnType<typeof useTranslations>;
-  name: string;
-  onNameChange: (value: string) => void;
-  onJoin: () => void;
-  joining: boolean;
-  error: string | null;
-}) {
-  return (
-    <div className="gr-invite">
-      <div className="gr-invite-emoji" aria-hidden>👋</div>
-      <div className="gr-invite-title">{tRoom('inviteTitle')}</div>
-      <div className="gr-invite-body">{tRoom('inviteBody')}</div>
-      <form
-        className="gr-invite-form"
-        onSubmit={(e) => { e.preventDefault(); onJoin(); }}
-      >
-        <label className="gr-invite-label" htmlFor="gr-name">{tRoom('yourName')}</label>
-        <input
-          id="gr-name"
-          value={name}
-          onChange={(e) => onNameChange(e.target.value)}
-          placeholder={tRoom('namePlaceholder')}
-          maxLength={40}
-          className="gr-invite-input"
-        />
-        <button type="submit" disabled={joining} className="gr-invite-join">
-          {joining ? tRoom('joining') : tRoom('joinSession')}
-        </button>
-      </form>
-      {error && <p className="gr-invite-error" role="alert">{error}</p>}
-      <style>{`
-        .gr-invite { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; color: var(--text-muted); }
-        .gr-invite-emoji { font-size: 40px; }
-        .gr-invite-title { font-size: 17px; font-weight: 600; color: var(--text-primary); }
-        .gr-invite-body { font-size: 14px; line-height: 1.5; max-width: 340px; }
-        .gr-invite-form { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 320px; margin-top: 6px; text-align: left; }
-        .gr-invite-label { font-size: 12px; font-weight: 600; color: var(--text-primary); }
-        .gr-invite-input { width: 100%; box-sizing: border-box; padding: 9px 11px; font-size: 14px; font-family: inherit; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--bg-base); color: var(--text-primary); }
-        .gr-invite-join { padding: 10px 20px; font-size: 14px; font-weight: 600; border: none; border-radius: 10px; background: var(--accent, #3b82f6); color: #fff; cursor: pointer; min-height: 40px; }
-        .gr-invite-join:disabled { opacity: 0.55; cursor: default; }
-        .gr-invite-error { margin: 0; font-size: 13px; color: var(--danger, #dc2626); }
       `}</style>
     </div>
   );

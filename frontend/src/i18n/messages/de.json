@@ -9975,7 +9975,8 @@
     "endMeeting": "Meeting verlassen",
     "mediaBlocked": "Wir konnten deine Kamera oder dein Mikrofon nicht erreichen. Prüfe die Browser-Berechtigungen.",
     "you": "Du",
-    "replyingTo": "Antwort an {name}"
+    "replyingTo": "Antwort an {name}",
+    "inviteLink": "Einladungslink"
   },
   "login": {
     "navSignUp": "Kostenlos registrieren",
@@ -12651,7 +12652,6 @@
     "viewOutcomeMetrics": "Ergebniskennzahlen ansehen",
     "outcomeMetricsTitle": "Kennzahlen von Idee bis Lieferung",
     "titleSaveFailed": "Titel konnte nicht gespeichert werden",
-    "saveToInvite": "Speichern, um einzuladen",
     "closeInvitationPanel": "Einladungsfenster schließen",
     "emailPlaceholder": "name@company.com",
     "invitationRole": "Einladungsrolle",
@@ -12684,16 +12684,11 @@
     "gateBenefitKeep": "Diese lokale Sitzung vollständig behalten",
     "gateBenefitUnlock": "Dauerhafte Ressourcen und Verlauf freischalten",
     "gateBenefitCollaborate": "Mit Ihrem Team zusammenarbeiten",
-    "gateInviteTitle": "Konto erstellen, um Mitarbeiter einzuladen",
-    "gateInviteBody": "Ihre Leinwand wird sicher gespeichert, damit Teamkollegen derselben Live-Sitzung mit Rollen, Kommentaren und Präsenz beitreten können.",
-    "gateShareTitle": "Konto erstellen, um diese Leinwand zu teilen",
-    "gateShareBody": "Ihre Arbeit ist auf diesem Gerät bereits sicher. Ein Konto speichert sie in Ihrem Tenant und ermöglicht Live-Zusammenarbeit, Einladungen und Zugriffskontrollen.",
     "gateSaveTitle": "Konto erstellen, um zu speichern und zusammenzuarbeiten",
     "gateSaveSessionTitle": "Konto erstellen, um diese Sitzung zu speichern",
     "gateSaveBody": "Verschieben Sie diese lokale Sitzung in einen sicheren Tenant-Arbeitsbereich, ohne Objekte, Konversation oder Layout zu verlieren.",
     "gateMetricsTitle": "Konto erstellen, um den gelieferten Wert zu messen",
     "gateMetricsBody": "Speichern Sie diese Sitzung, um Ergebnisse von der Idee bis zur Lieferung über Sitzungen, Projekte und Ihren Arbeitsbereich hinweg zu vergleichen.",
-    "localSafeHint": "Ihre Arbeit ist auf diesem Gerät sicher. Erstellen Sie ein kostenloses Konto, wenn Sie live zusammenarbeiten oder liefern möchten.",
     "invitedCanBuild": "Eingeladene können mit Ihnen bauen und Brain Fragen stellen.",
     "invitationEmailed": "Einladung per E-Mail gesendet und Ersatzlink kopiert",
     "invitationSavedLinkCopied": "Einladung gespeichert; Ersatzlink kopiert (E-Mail-Versand ist nicht konfiguriert)",
@@ -12998,7 +12993,25 @@
     "agentCreatedReady": "Agent wurde erstellt und ist bereit zur Zusammenarbeit",
     "agentSettingsSaveFailed": "Agenteneinstellungen konnten nicht gespeichert werden",
     "createInviteAgent": "Agent erstellen und einladen",
-    "openingCanvas": "Deine Kreativ-Canvas wird geöffnet…"
+    "openingCanvas": "Deine Kreativ-Canvas wird geöffnet…",
+    "creatingCanvas": "Deine Canvas wird erstellt…",
+    "startingOnDevice": "Wird sicher auf diesem Gerät gestartet…",
+    "sharedStart": "Diese Canvas teilen",
+    "sharedStarting": "Wird gestartet…",
+    "sharedStarted": "Geteilt — sende den Link, um Personen einzuladen",
+    "sharedInviteHint": "Teile diese Canvas mit wem du willst — ohne Konto. Ihr bearbeitet dasselbe Board und teilt euch dieselben kostenlosen Nachrichten.",
+    "sharedLiveHint": "Alle mit diesem Link können diese Canvas öffnen und bearbeiten. Die kostenlosen Nachrichten teilen sich alle hier.",
+    "sharedJoinBlurb": "Tritt bei, um gemeinsam auf dieser Canvas zu bauen. Ihr bearbeitet dasselbe Board — kein Konto nötig.",
+    "sharedPeopleHere": "{count, plural, =0 {Noch niemand hier} one {# Person hier} other {# Personen hier}}",
+    "sharedHostTag": "(Gastgeber)",
+    "sharedStopSharing": "Teilen beenden",
+    "sharedSaveToKeep": "Speichern, um es zu behalten",
+    "sharedLeft": "Du teilst diese Canvas nicht mehr",
+    "sharedAnyoneWithLink": "alle mit dem Link",
+    "sharedDefaultHostName": "Gastgeber",
+    "sharedUnavailable": "Geteilte Canvas sind derzeit nicht verfügbar",
+    "sharedEnded": "Diese geteilte Canvas ist beendet",
+    "sharedBoardTooLarge": "Dieses Board ist zu groß zum Synchronisieren — nur auf diesem Gerät gespeichert"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
@@ -13021,7 +13034,8 @@
       "layerCount": "{count, plural, one {# Objekt} other {# Objekte}}",
       "orbitLabel": "3D-Canvas. Zum Drehen ziehen, zum Zoomen scrollen oder die Pfeiltasten verwenden.",
       "hint": "Ziehen zum Drehen · Scrollen zum Zoomen · Pfeiltasten drehen, + und − zoomen, 0 setzt zurück · Objekt auswählen, um es zu öffnen",
-      "empty": "Füge diesem Canvas Objekte hinzu, um sie in 3D zu sehen."
+      "empty": "Füge diesem Canvas Objekte hinzu, um sie in 3D zu sehen.",
+      "previewAlt": "Vorschau von {label}"
     }
   }
 }

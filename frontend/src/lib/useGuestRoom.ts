@@ -52,6 +52,14 @@ export interface GuestRoomLive {
   streamingPeer: { name: string; text: string } | null;
   /** Re-broadcast MY in-flight reply so the room watches the same answer arrive. */
   relayStream: (text: string) => void;
+  /**
+   * Bumped whenever ANOTHER participant reports a new shared-canvas board. A
+   * counter rather than the board itself: the snapshot can be large, so it rides
+   * one authoritative fetch instead of the relay, and this is only the nudge.
+   */
+  canvasVersion: number;
+  /** Tell the room I just wrote a new board — everyone else should pull it. */
+  announceCanvas: () => void;
   /** Refetch room state (roster + combined allowance) from the server. */
   refresh: () => Promise<void>;
 }
@@ -71,6 +79,7 @@ export function useGuestRoom(
   const [participants, setParticipants] = useState<GuestRoomParticipant[]>(NO_PARTICIPANTS);
   const [busyWith, setBusyWith] = useState<string | null>(null);
   const [streamingPeer, setStreamingPeer] = useState<{ name: string; text: string } | null>(null);
+  const [canvasVersion, setCanvasVersion] = useState(0);
 
   const wsRef = useRef<WebSocket | null>(null);
   const streamTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -103,6 +112,12 @@ export function useGuestRoom(
 
   const setBusy = useCallback((busy: boolean) => {
     send({ type: 'busy', busy, name: nameRef.current });
+  }, [send]);
+
+  // The DO relays a frame to everyone EXCEPT its sender, so announcing a board
+  // never bounces back and re-triggers the writer's own pull.
+  const announceCanvas = useCallback(() => {
+    send({ type: 'canvas' });
   }, [send]);
 
   /**
@@ -168,6 +183,7 @@ export function useGuestRoom(
           changedRef.current?.();
           return;
         }
+        if (type === 'canvas') { setCanvasVersion((v) => v + 1); return; }
         if (type === 'stream') {
           const text = String(msg.text ?? '');
           setStreamingPeer(text ? { name: String(msg.name ?? 'Guest'), text } : null);
@@ -225,6 +241,7 @@ export function useGuestRoom(
 
   return {
     state, connected, remaining, limit, participants,
-    busyWith, setBusy, streamingPeer, relayStream, refresh,
+    busyWith, setBusy, streamingPeer, relayStream,
+    canvasVersion, announceCanvas, refresh,
   };
 }

@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-08-05 — ✅ RESOLVED: the small Brain placement put two live chats on the same board (ui 2026.7.167)
+
+Operator report, with a screenshot circling both: "the brain chat when in short or collapsed mode, there can't be two on the screen. There should only be the chat/brain that is part of the graph."
+
+**The floating placement was a duplicate by construction.** `BrainDock` had three placements — docked-left, docked-right, and `floating`, a small card sitting ON the canvas. But the canvas already carries a Brain Object, and that Object renders the same conversation. So choosing the *small* placement was the one choice that guaranteed two live views of one chat on screen at once, which is precisely the "which one am I actually talking to?" confusion the single-Brain-surface consolidation exists to remove. Floating is deleted. `BrainDockMode` is now `'docked' | 'inline'`, and small means the conversation renders INSIDE the Brain Object on the graph — where Brain's connections (what scope a prompt) already are.
+
+**One surface, rendered in two places.** `BrainDock.tsx` now exports `BrainSurfaceBody` (tabs · presence · transcript · activity bar) and `BrainSurfaceActions` (the controls), and both placements render them verbatim, so the two can never drift into two subtly different chats. `BrainSurfaceActions` decides its own visibility: which-edge and how-wide are omitted inline, where the Object's own resize handles already do that job. `CreationNode`'s `BrainObjectBody` picks anchor-vs-chat; the edge panel is gated on `mode === 'docked'` so it is not rendered at all when inline. Inline sizing rides `.node_chat:has(.brainObjectChat)` in CSS, deliberately, so `CreationNode` never has to read the placement.
+
+**The live state reaches the node through context, not props.** `brainSurfaceContext.tsx` carries messages/trace/running/`runStartedAt` plus the placement and its callbacks. A per-token dependency in the `nodeTypes` memo would hand React Flow a new object and remount every Object on the board on every streamed word; the context is consumed by `BrainObjectBody` alone (never by `CreationNode`), so a streaming reply re-renders one node rather than the whole canvas.
+
+Two defects found and fixed in the same pass. React Flow's `onNodeClick` fires for clicks inside a node and selecting the Brain Object reveals the conversation — so the inline **Close button would have reopened Brain on the way back up**; the inline surface now contains its own clicks (the Object header still selects normally). And the anchor's "Open Brain chat" button was **dead in present mode**, where nothing can reveal Brain — the context's new `canOpen` withholds the handler and the anchor stops offering a door that does not open.
+
+Stored preferences migrate rather than snap back: `sanitizeBrainDockPreferences` maps a saved `'floating'` to `'inline'`, because someone who chose it wanted a small Brain on the board and that is now the Object. The floating launcher pill is withheld when an inline Brain still has its Object to click, so there is never a second control for the same job. `floatBrainOnCanvas` → `showBrainInObject` across all five catalogs (en/zh/es/fr/de). Guarded by `CreationCanvas.test.tsx`: exactly one `Brain chat history` log on screen in either placement, the edge panel absent while inline, no width reserved, and the Object reopening a closed inline Brain without a second launcher.
+
+---
+
+## 2026-08-05 — ✅ RESOLVED: the canvas action bar vanished in 3D, and 3D grew a second toolbar of its own (ui 2026.7.166)
+
+Operator report: "in the canvas when set to 3D, the standard action bar is missing. There shouldn't be another header bar with 3D options."
+
+**The rail was there the whole time — painted over.** React Flow writes `position: relative; z-index: 0` as an INLINE style on its own root (`{...style, ...wrapperStyle}`, its values last, so even the `style` prop cannot change them). That inline pair makes the root a stacking context, trapping the command rail at its `z-index: 5` inside it, and `Canvas3DView` at `z-index: 7` covered the whole subtree. The existing `.flowWrap[data-view='3d'] .react-flow { z-index: 9 }` override was silently dead — a stylesheet declaration cannot outrank an inline one — so entering 3D erased arrange, 3D-exit, mini map and the outline, exactly as a left-docked Brain used to (same symptom, unrelated cause; see the reserved-edge entry below). `z-index: 9 !important` is what actually lifts it, verified in a real browser: `.react-flow` computes to 9 and `elementFromPoint` over the rail returns the rail's own button rather than the 3D viewport.
+
+**So the scene stopped carrying chrome at all.** `Canvas3DView`'s header (title, object/layer count, a depth `<select>`, and its own ＋ − ⟳ group) was a second toolbar over a board that already had one, and it was only there because the first one was invisible. It is gone. The scene now publishes its commands through a small context — `canvas3dControls.tsx`: `Canvas3DControlsProvider`, `useCanvas3DControls()` to read, `usePublishCanvas3DControls()` to publish — and `CanvasCommands` renders depth / zoom in / zoom out / reset on the rail the board already has. Entering 3D ADDS to that bar instead of replacing it: the flat zoom, fit and lock commands stand down (`showZoom` / `showFitView` / `showInteractive` off), the mini-map toggle stands down with the mini map it opens, and the phone-sized action stack reads the same controller so its ＋ − ⌗ drive the scene rather than a board nobody is looking at. Depth rides `CanvasRailToggle`, so it is lit while stacking by object group and announced through `aria-pressed` like every other rail mode. The one line the scene keeps is its orbit hint, now padded clear of the rail's corner.
+
+Dead code dropped in the same pass: `isCanvas3DDepthMode` (its only caller was the deleted `<select>`) and the `summary` / `depth` / `depth_flow` / `depth_group` / `viewControls` message keys, replaced by `depthGroup` + active/inactive titles across all five catalogs (en/zh/es/fr/de). Guarded by `CreationCanvas.test.tsx`: the scene exposes no toolbar, no combobox and no zoom of its own; the rail carries all four 3D commands and both surfaces flip depth from one controller; leaving 3D hands the flat commands back.
+
+---
+
 ## 2026-08-05 — ✅ RESOLVED: a shared guest session evaporated on sign-up, and its reply arrived as a wall of text (api 2026.7.209 · ui 2026.7.165)
 
 Three follow-ups from the guest-rooms pass, closed in one go.

@@ -28,6 +28,8 @@ export interface BrainSurfaceCollaborator {
 export interface BrainSurfaceContextValue {
   /** False in present mode or when the user closed Brain — the Object shows its anchor. */
   open: boolean;
+  /** False while presenting, where nothing can reveal Brain — so nothing offers to. */
+  canOpen: boolean;
   mode: BrainDockMode;
   showExecutionDetail: boolean;
   running: boolean;

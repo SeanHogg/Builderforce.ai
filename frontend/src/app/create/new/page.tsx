@@ -2,21 +2,51 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { creationSessionsApi } from '@/lib/builderforceApi';
 import { createLocalCreationSession } from '@/lib/creationSessions';
+import { getActiveGuestRoom } from '@/lib/guestRoomApi';
+import { GuestRoomJoinCard } from '@/components/guest/GuestRoomJoinCard';
 
 export const runtime = 'edge';
 
+/**
+ * "Make me a canvas" — and, with `?room=`, the landing point for a SHARED free
+ * canvas invite.
+ *
+ * An invitee arriving on a room link has no session of their own yet, so they
+ * join the room first and are then routed onto a fresh local canvas, which
+ * hydrates its board from that room. The board lives in the room; the session id
+ * stays per-browser, which is what keeps this from needing a second id scheme.
+ */
 export default function NewCreationSessionPage() {
+  const t = useTranslations('creationCanvas');
   const router = useRouter();
   const { isAuthenticated, hasTenant } = useAuth();
   const started = useRef(false);
-  const [message, setMessage] = useState('Creating your canvas…');
+  const [message, setMessage] = useState('');
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [checkedInvite, setCheckedInvite] = useState(false);
+
+  // Read the invite BEFORE deciding what this page is: a room link must not be
+  // consumed by the ordinary "create a canvas and redirect" path below.
+  useEffect(() => {
+    let code: string | null = null;
+    try {
+      code = new URLSearchParams(window.location.search).get('room')?.trim() || null;
+    } catch {
+      code = null; // no URL access — fall through to the ordinary new-canvas path
+    }
+    // Already in this room (a reload, or a second visit) — straight to the board.
+    setInviteCode(code && code !== getActiveGuestRoom() ? code : null);
+    setCheckedInvite(true);
+  }, []);
 
   useEffect(() => {
-    if (started.current) return;
+    if (!checkedInvite || inviteCode || started.current) return;
     started.current = true;
+    setMessage(t('creatingCanvas'));
     if (!isAuthenticated || !hasTenant) {
       router.replace(`/create/${createLocalCreationSession('')}`);
       return;
@@ -24,10 +54,22 @@ export default function NewCreationSessionPage() {
     void creationSessionsApi.create({ title: 'Untitled session' })
       .then(({ session }) => router.replace(`/create/${session.id}`))
       .catch(() => {
-        setMessage('Starting safely on this device…');
+        setMessage(t('startingOnDevice'));
         router.replace(`/create/${createLocalCreationSession('')}`);
       });
-  }, [hasTenant, isAuthenticated, router]);
+  }, [checkedInvite, hasTenant, inviteCode, isAuthenticated, router, t]);
+
+  if (inviteCode) {
+    return (
+      <main style={{ minHeight: '70vh', display: 'grid', placeItems: 'center' }}>
+        <GuestRoomJoinCard
+          code={inviteCode}
+          blurb={t('sharedJoinBlurb')}
+          onJoined={() => router.replace(`/create/${createLocalCreationSession('')}`)}
+        />
+      </main>
+    );
+  }
 
   return <main style={{ minHeight: '70vh', display: 'grid', placeItems: 'center', color: 'var(--text-secondary)' }}>{message}</main>;
 }

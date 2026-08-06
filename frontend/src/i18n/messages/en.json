@@ -9976,7 +9976,8 @@
     "endMeeting": "Leave meeting",
     "mediaBlocked": "We couldn’t reach your camera or microphone. Check your browser permissions.",
     "you": "You",
-    "replyingTo": "Replying to {name}"
+    "replyingTo": "Replying to {name}",
+    "inviteLink": "Invite link"
   },
   "login": {
     "navSignUp": "Sign up free",
@@ -12652,7 +12653,6 @@
     "viewOutcomeMetrics": "View outcome metrics",
     "outcomeMetricsTitle": "Idea-to-delivery outcome metrics",
     "titleSaveFailed": "Title save failed",
-    "saveToInvite": "Save to invite people",
     "closeInvitationPanel": "Close invitation panel",
     "emailPlaceholder": "name@company.com",
     "invitationRole": "Invitation role",
@@ -12685,16 +12685,11 @@
     "gateBenefitKeep": "Keep this entire local session",
     "gateBenefitUnlock": "Unlock durable resources and history",
     "gateBenefitCollaborate": "Collaborate with your team",
-    "gateInviteTitle": "Create an account to invite collaborators",
-    "gateInviteBody": "Your canvas will be saved securely so teammates can join the same live session with roles, comments, and presence.",
-    "gateShareTitle": "Create an account to share this canvas",
-    "gateShareBody": "Your work is already safe on this device. An account saves it to your tenant and enables live collaboration, invitations, and access controls.",
     "gateSaveTitle": "Create an account to save and collaborate",
     "gateSaveSessionTitle": "Create an account to save this session",
     "gateSaveBody": "Move this local session into a secure tenant workspace without losing its objects, conversation, or layout.",
     "gateMetricsTitle": "Create an account to measure delivered value",
     "gateMetricsBody": "Save this session to compare idea-to-delivery outcomes across sessions, projects, and your workspace.",
-    "localSafeHint": "Your work is safe on this device. Create a free account when you want live collaboration or delivery.",
     "invitedCanBuild": "Anyone invited can build with you and ask Brain questions.",
     "invitationEmailed": "Invitation emailed and backup link copied",
     "invitationSavedLinkCopied": "Invitation saved; backup link copied (email delivery is not configured)",
@@ -12999,7 +12994,25 @@
     "agentCreatedReady": "Agent created and ready to collaborate",
     "agentSettingsSaveFailed": "Agent settings could not be saved",
     "createInviteAgent": "Create & invite agent",
-    "openingCanvas": "Opening your creation canvas…"
+    "openingCanvas": "Opening your creation canvas…",
+    "creatingCanvas": "Creating your canvas…",
+    "startingOnDevice": "Starting safely on this device…",
+    "sharedStart": "Share this canvas",
+    "sharedStarting": "Starting…",
+    "sharedStarted": "Shared — send the link to invite people",
+    "sharedInviteHint": "Share this canvas with anyone — no account needed. You will all edit the same board and share the same free message allowance.",
+    "sharedLiveHint": "Anyone with this link can open and edit this canvas. Free messages are shared by everyone here.",
+    "sharedJoinBlurb": "Join to build on this canvas together. You will both edit the same board — no account needed.",
+    "sharedPeopleHere": "{count, plural, =0 {Nobody here yet} one {# person here} other {# people here}}",
+    "sharedHostTag": "(host)",
+    "sharedStopSharing": "Stop sharing",
+    "sharedSaveToKeep": "Save to keep it",
+    "sharedLeft": "You stopped sharing this canvas",
+    "sharedAnyoneWithLink": "anyone with the link",
+    "sharedDefaultHostName": "Host",
+    "sharedUnavailable": "Shared canvases aren’t available right now",
+    "sharedEnded": "That shared canvas has ended",
+    "sharedBoardTooLarge": "This board is too large to keep in sync — saved on this device only"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -13022,7 +13035,8 @@
       "layerCount": "{count, plural, one {# object} other {# objects}}",
       "orbitLabel": "3D canvas. Drag to orbit, scroll to zoom, or use the arrow keys.",
       "hint": "Drag to orbit · Scroll to zoom · Arrow keys rotate, + and − zoom, 0 resets · Select an object to open it",
-      "empty": "Add objects to this canvas to see them in 3D."
+      "empty": "Add objects to this canvas to see them in 3D.",
+      "previewAlt": "{label} preview"
     }
   }
 }

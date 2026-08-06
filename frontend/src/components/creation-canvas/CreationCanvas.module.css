@@ -106,6 +106,26 @@
 .shareMenu input { min-width: 0; flex: 1; padding: 8px; border: 1px solid var(--canvas-line); border-radius: 7px; background: var(--canvas-panel-muted); color: var(--canvas-ink); }
 .shareMenu button { padding: 7px 10px; background: var(--canvas-blue); color: #fff; border: 0; border-radius: 7px; }
 .shareMenu small { display: block; margin-top: 10px; color: var(--canvas-muted); }
+/* Shared FREE session (no account): the roster and the stop/keep controls. The
+   invite link itself is the shared GuestInviteLink component, which brings its
+   own theme-token styling — these only lay out what sits around it. */
+.shareRoomPeople { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.shareRoomPeople span {
+  padding: 3px 8px; border-radius: 999px; font-size: 11px;
+  background: var(--canvas-panel-muted); color: var(--canvas-ink); border: 1px solid var(--canvas-line);
+}
+.shareRoomActions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.shareRoomActions button { flex: 1 1 auto; min-height: 32px; font-size: 12px; font-weight: 600; cursor: pointer; }
+/* "Stop sharing" is a reversal, not the primary action — it must not read as the
+   thing to press. Only the keep-your-work action stays accented. */
+.shareRoomActions button:first-child {
+  background: transparent; color: var(--canvas-muted); border: 1px solid var(--canvas-line);
+}
+/* The menu is a fixed 300px popover anchored to the session bar; on a phone that
+   overflows a 360px viewport, so it becomes a full-width sheet under the bar. */
+@media (max-width: 560px) {
+  .shareMenu { right: 8px; left: 8px; width: auto; }
+}
 .accountGateBackdrop { position:fixed; z-index:80; inset:0; display:grid; place-items:center; padding:20px; background:rgba(3,8,18,.58); backdrop-filter:blur(5px); }
 .accountGate { position:relative; box-sizing:border-box; width:min(440px,100%); display:grid; justify-items:center; padding:30px; border:1px solid var(--canvas-line); border-radius:18px; background:var(--canvas-panel); color:var(--canvas-ink); box-shadow:0 28px 90px rgba(0,0,0,.4); text-align:center; }
 .accountGateClose { position:absolute; top:11px; right:12px; width:30px; height:30px; border:0; border-radius:8px; background:transparent; color:var(--canvas-muted); font-size:21px; cursor:pointer; }.accountGateClose:hover { background:var(--canvas-hover); }
@@ -132,8 +152,8 @@
 .mergePanel select option { background:var(--canvas-panel); color:var(--canvas-ink); }
 
 /* --composer-space is the band the centred prompt owns at the bottom of the board.
-   Anything else that sits low (the outline, the Brain launcher, a floating Brain)
-   clears it from this ONE number instead of each guessing its own offset. */
+   Anything else that sits low (the canvas outline, the Brain launcher) clears it
+   from this ONE number instead of each guessing its own offset. */
 .flowWrap {
   height: calc(100% - 54px); position: relative; background: var(--canvas-board); --composer-space: 112px;
   /* The dock's footprint, restated under the name the shared canvas chrome reads
@@ -157,15 +177,19 @@
 .flowWrap[data-cursor-mode='draw'] :global(.react-flow__pane) { cursor: crosshair; }
 
 /* 3D view: the board hands the surface over to the 3D scene.
-   React Flow's own stylesheet leaves its root UNPOSITIONED, so a bare `z-index`
-   on it is inert — the scene (positioned, z-index 7) painted straight over the
-   command rail and the board lost every control it had the moment 3D opened.
-   `position: relative` is what makes the lift real. The flat graph is hidden and
-   the root is raised ABOVE the scene with pointer events off, leaving only the
-   rail (and the mini map close) clickable. Remote cursors are hidden too: they
-   are projected from the 2D viewport and would float over the scene pointing at
+   React Flow writes `position: relative; z-index: 0` as an INLINE style on its
+   own root (`{...style, ...wrapperStyle}` — its own values win, so even the
+   `style` prop cannot change them). That inline pair makes the root a stacking
+   context, which traps the command rail at its z-index 5 INSIDE it: the scene
+   at z-index 7 painted over the whole subtree and the board lost every control
+   it had the moment 3D opened. `!important` is the only thing that outranks an
+   inline declaration, and it is what actually keeps the rail on screen — a
+   plain `z-index: 9` here is silently dead. The flat graph is hidden and the
+   root is raised ABOVE the scene with pointer events off, leaving only the rail
+   (and the mini map close) clickable. Remote cursors are hidden too: they are
+   projected from the 2D viewport and would float over the scene pointing at
    nothing. */
-.flowWrap[data-view='3d'] :global(.react-flow) { position: relative; z-index: 9; pointer-events: none; background: transparent; }
+.flowWrap[data-view='3d'] :global(.react-flow) { z-index: 9 !important; pointer-events: none; background: transparent; }
 /* The palette drops objects onto the flat board, so it stands down in 3D rather
    than sitting on top of the scene's own heading. */
 .flowWrap[data-view='3d'] .paletteToggle,
@@ -326,7 +350,8 @@
    as element styles, which beat these rules). :has keeps the decision in CSS so
    CreationNode never has to read the placement and re-render every Object with it. */
 .node_chat:has(.brainObjectChat) { width:390px; min-height:420px; }
-.brainObjectChat { display:flex; flex-direction:column; flex:1; min-height:0; margin:-11px; }
+.node_chat .nodeBody:has(.brainObjectChat) { padding:0; }
+.brainObjectChat { display:flex; flex-direction:column; flex:1; min-height:0; }
 /* The surface's own controls sit on the Object's header line, not in a second bar. */
 .brainObjectChatBar { display:flex; flex:none; justify-content:flex-end; padding:5px 7px; border-bottom:1px solid var(--canvas-brain-border); background:var(--canvas-brain-header); }
 .node_diagnostics { width:720px; min-height:260px; }

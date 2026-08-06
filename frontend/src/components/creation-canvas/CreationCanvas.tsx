@@ -31,7 +31,13 @@ import { CreationNode, type CreationFlowNode } from './CreationNode';
 import type { CreationNodeData, CreationObjectKind } from './types';
 import styles from './CreationCanvas.module.css';
 import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, toolsApi, workflowDefinitions, type CreationOutcomeMetrics, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
-import { creationGraphFromSnapshot, creationStorageKey, readLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
+import { creationGraphFromSnapshot, creationStorageKey, readLocalCreationSession, writeLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
+import { useGuestRoom } from '@/lib/useGuestRoom';
+import { GuestInviteLink } from '@/components/guest/GuestInviteLink';
+import {
+  createGuestRoom, leaveGuestRoom, fetchGuestRoomCanvas, pushGuestRoomCanvas,
+  getActiveGuestRoom, getGuestDisplayName, setGuestDisplayName,
+} from '@/lib/guestRoomApi';
 import { runCreationCanvasAi } from '@/lib/creationCanvasAi';
 import type { BrainAction, BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import '@seanhogg/builderforce-brain-ui/styles.css';
@@ -68,7 +74,7 @@ import { useConfirm } from '@/components/ConfirmProvider';
 import { useLlmModels } from '@/lib/useLlmModels';
 import { ChatInput, type ChatModelOptions, type ChatModelSelection } from '@/components/ChatInput';
 import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
-import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, generateEvermindMedia, mediaFrameDataUrl, withCreationDeliverable, type CreationDeliverable } from '@/lib/creationDeliverables';
+import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, creativePreviewImageUrl, generateEvermindMedia, mediaFrameDataUrl, withCreationDeliverable, type CreationDeliverable } from '@/lib/creationDeliverables';
 import { listEvermindModels } from '@/lib/studioModelsApi';
 import { AITrainingPanel } from '@/components/AITrainingPanel';
 
@@ -421,6 +427,62 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }), [llmModels]);
   const [tourStep, setTourStep] = useState(0);
   const [notice, setNotice] = useState('Session saved');
+
+  /**
+   * SHARED FREE SESSION (no account).
+   *
+   * An account-less canvas used to be strictly single-player: "Share" opened a
+   * sign-up gate, which answers a question nobody asked — they wanted to show
+   * someone the board, not to file paperwork. So a local canvas can now open the
+   * same guest ROOM the free Brain chat uses: an invite link, a roster, a combined
+   * turn allowance, and (on the chat surface) a camera meeting.
+   *
+   * The board syncs through the room as ONE serialized snapshot, last-writer-wins
+   * on the existing save debounce. That is deliberately not a CRDT: this is a
+   * short-lived ≤8-person free session, and an operational-transform stack has
+   * failure modes far worse than "whoever moved a card most recently won".
+   * localStorage stays the local cache, so a dropped connection still leaves the
+   * board on the device that was editing it.
+   */
+  const [roomCode, setRoomCode] = useState<string | null>(null);
+  const [roomBusy, setRoomBusy] = useState(false);
+  const guestName = useRef('');
+  useEffect(() => {
+    if (persistence !== 'local') return;
+    setRoomCode(getActiveGuestRoom());
+    guestName.current = getGuestDisplayName();
+  }, [persistence]);
+  const room = useGuestRoom(persistence === 'local' ? roomCode : null, { name: guestName.current });
+  const inRoom = persistence === 'local' && !!roomCode;
+  /** Read inside callbacks that must not re-create when the room changes. */
+  const roomCodeRef = useRef<string | null>(null);
+  roomCodeRef.current = inRoom ? roomCode : null;
+  /** The snapshot most recently exchanged with the room — suppresses echo. */
+  const lastRoomSnapshot = useRef<string>('');
+  const announceCanvas = room.announceCanvas;
+
+  /**
+   * The ONE write for an account-less canvas: this device, and — when the session
+   * is shared — the room everybody else is reading. Called by every local save
+   * path, so a shared board can never be updated by one of them and missed by
+   * another.
+   */
+  const persistSnapshot = useCallback((snapshot: LocalCreationSnapshot) => {
+    writeLocalCreationSession(sessionId, snapshot);
+    const code = roomCodeRef.current;
+    if (!code) return;
+    const serialized = JSON.stringify(snapshot);
+    // Don't push back what we just pulled — that is how two peers get into a
+    // permanent round-trip over a board neither of them is touching.
+    if (serialized === lastRoomSnapshot.current) return;
+    lastRoomSnapshot.current = serialized;
+    void pushGuestRoomCanvas(code, serialized).then((stored) => {
+      if (stored) announceCanvas();
+      // A board too big for the room's slot must say so out loud: everyone here
+      // would otherwise keep editing while late joiners load a stale board.
+      else setNotice(t('sharedBoardTooLarge'));
+    });
+  }, [sessionId, announceCanvas, t]);
   const [loadingSession, setLoadingSession] = useState(persistence === 'server');
   const [realtimeState, setRealtimeState] = useState<'local' | 'connecting' | 'online' | 'reconnecting' | 'offline'>(persistence === 'local' ? 'local' : 'connecting');
   const [members, setMembers] = useState<CreationSessionDetail['members']>([]);
@@ -649,6 +711,96 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     } catch { hydrated.current = true; }
   }, [persistence, sessionId, setEdges, setNodes]);
 
+  /**
+   * Adopt the room's board. Used for the first load in a shared session and for
+   * every peer edit after it.
+   *
+   * Setting `lastSavedGraph`/`lastRoomSnapshot` BEFORE the state lands is the
+   * whole trick: both save debounces compare against them and bail, so applying a
+   * peer's board cannot be mistaken for a local edit and pushed straight back —
+   * which is how a two-person session turns into an infinite sync loop.
+   */
+  const applyRoomSnapshot = useCallback((serialized: string) => {
+    let snapshot: LocalCreationSnapshot;
+    try {
+      snapshot = JSON.parse(serialized) as LocalCreationSnapshot;
+    } catch {
+      return; // a corrupt board is not worth wiping a good local one for
+    }
+    if (!Array.isArray(snapshot.nodes) || !Array.isArray(snapshot.edges)) return;
+    lastRoomSnapshot.current = serialized;
+    lastSavedGraph.current = JSON.stringify({ nodes: snapshot.nodes, edges: snapshot.edges });
+    setTitle(snapshot.title);
+    setNodes(snapshot.nodes);
+    setEdges(snapshot.edges);
+    setTimeline((snapshot.timeline ?? []).map((message) => ({
+      clientMessageId: message.clientMessageId,
+      messageRole: message.role,
+      body: message.body,
+      metadata: message.metadata ?? {},
+      createdAt: message.createdAt,
+    })));
+    // The viewport is personal — following someone else's pan mid-edit is
+    // disorienting, and each participant keeps their own place on the board.
+    writeLocalCreationSession(sessionId, snapshot);
+  }, [sessionId, setEdges, setNodes]);
+
+  // Pull the shared board: once on entering a room (this is how a LATE joiner
+  // sees anything at all) and again whenever a peer announces a new one.
+  useEffect(() => {
+    if (persistence !== 'local' || !roomCode) return;
+    let cancelled = false;
+    void fetchGuestRoomCanvas(roomCode).then((serialized) => {
+      if (cancelled || !serialized) return;
+      applyRoomSnapshot(serialized);
+      hydrated.current = true;
+    });
+    return () => { cancelled = true; };
+  }, [persistence, roomCode, room.canvasVersion, applyRoomSnapshot]);
+
+  /**
+   * Turn this private board into a shared session. The board comes WITH it —
+   * "invite people to this canvas" that starts them on an empty one would be a
+   * different (and worse) feature.
+   */
+  const startSharedSession = useCallback(async () => {
+    setRoomBusy(true);
+    const name = guestName.current.trim() || t('sharedDefaultHostName');
+    setGuestDisplayName(name);
+    guestName.current = name;
+    const state = await createGuestRoom(name, title, 'canvas');
+    if (typeof state === 'string') {
+      setNotice(state === 'unavailable' ? t('sharedUnavailable') : t('sharedEnded'));
+      setRoomBusy(false);
+      return;
+    }
+    const snapshot: LocalCreationSnapshot = {
+      version: 1,
+      title,
+      initialPrompt: readLocalCreationSession(sessionId)?.initialPrompt,
+      timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })),
+      nodes,
+      edges,
+      viewport: viewportRef.current,
+      updatedAt: new Date().toISOString(),
+    };
+    const serialized = JSON.stringify(snapshot);
+    lastRoomSnapshot.current = serialized;
+    const stored = await pushGuestRoomCanvas(state.code, serialized);
+    setRoomCode(state.code);
+    setRoomBusy(false);
+    setNotice(stored ? t('sharedStarted') : t('sharedBoardTooLarge'));
+  }, [edges, nodes, sessionId, t, timeline, title, viewportRef]);
+
+  /** Stop sharing on THIS device. The board stays here; the room runs on for anyone else. */
+  const leaveSharedSession = useCallback(async () => {
+    const code = roomCodeRef.current;
+    setRoomCode(null);
+    lastRoomSnapshot.current = '';
+    if (code) await leaveGuestRoom(code);
+    setNotice(t('sharedLeft'));
+  }, [t]);
+
   const evermindBindingKey = useMemo(() => JSON.stringify(nodes.flatMap((node) => {
     const match = node.data.kind === 'evermind' && typeof node.data.resourceId === 'string'
       ? /^evermind:(\d+)$/.exec(node.data.resourceId)
@@ -721,7 +873,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (persistence === 'local') {
         const prior = readLocalCreationSession(sessionId);
         const snapshot: LocalCreationSnapshot = { version: 1, title, initialPrompt: prior?.initialPrompt, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport: viewportRef.current, updatedAt: new Date().toISOString() };
-        localStorage.setItem(storageKey, JSON.stringify(snapshot));
+        persistSnapshot(snapshot);
         lastSavedGraph.current = serialized;
         setNotice('Saved on this device');
         return;
@@ -765,7 +917,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const handle = window.setTimeout(() => {
       const prior = readLocalCreationSession(sessionId); if (!prior) return;
       const snapshot: LocalCreationSnapshot = { ...prior, title, nodes, edges, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), viewport: viewportRef.current, updatedAt: new Date().toISOString() };
-      localStorage.setItem(storageKey, JSON.stringify(snapshot));
+      persistSnapshot(snapshot);
     }, 150);
     return () => window.clearTimeout(handle);
   }, [edges, nodes, persistence, sessionId, storageKey, timeline, title]);
@@ -1249,7 +1401,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (persistence !== 'local' || !hydrated.current) return;
     const prior = readLocalCreationSession(sessionId);
     const snapshot: LocalCreationSnapshot = { version: 1, title, initialPrompt: prior?.initialPrompt, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport, updatedAt: new Date().toISOString() };
-    localStorage.setItem(storageKey, JSON.stringify(snapshot));
+    persistSnapshot(snapshot);
   }, [edges, nodes, persistence, sessionId, storageKey, timeline, title]);
 
   const addAtCenter = useCallback((kind: CreationObjectKind) => {
@@ -2651,7 +2803,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       id: crypto.randomUUID(), action, artifactKind: artifact.artifactKind, status: 'delivered', createdAt: new Date().toISOString(), completedAt: new Date().toISOString(),
       url: artifact.url, mimeType: artifact.mimeType, fileName: artifact.fileName, provider: 'builderforce-browser', validation: { status: 'passed', detail: artifact.validationDetail }, metadata: { outputFormat: artifact.outputFormat, capabilityId: target.data.capabilityId },
     };
-    setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: action === 'apply' ? 'Applied' : 'Generated', outputUrl: artifact.url, outputFormat: artifact.outputFormat, outputFileName: artifact.fileName, deliverables: withCreationDeliverable(node.data, delivered) } } : node));
+    // The tile shows the preview the artifact came with, and nothing when it has
+    // none — a stale thumbnail from an earlier generation would misdescribe the
+    // file that is now attached.
+    setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: action === 'apply' ? 'Applied' : 'Generated', outputUrl: artifact.url, outputFormat: artifact.outputFormat, outputFileName: artifact.fileName, thumbnailUrl: artifact.previewImageUrl ?? '', deliverables: withCreationDeliverable(node.data, delivered) } } : node));
     setNotice(`${artifact.fileName} generated and validated`);
   }, [nodes, selectedNode, setNodes]);
 
@@ -2778,6 +2933,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       group: t(`group.${definition.group}`),
       icon: definition.icon,
       accent: typeof node.data.accent === 'string' ? node.data.accent : minimapColor(node),
+      // A generated object carries a picture of what it produced — a rendered
+      // mesh, a drawn profile, an image. In 3D that is the point of the card.
+      preview: creativePreviewImageUrl(node.data) ?? undefined,
     };
   }, [minimapColor, t]);
   const selectThreeDObject = useCallback((id: string) => {
@@ -2883,6 +3041,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   const brainSurface = useMemo<BrainSurfaceContextValue>(() => ({
     open: brainSurfaceOpen,
+    canOpen: !presentMode,
     mode: brainDock.mode,
     showExecutionDetail: brainDock.showExecutionDetail,
     running: thinking,
@@ -2899,7 +3058,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     onClose: () => updateBrainDock({ open: false }),
   }), [
     brainCollaborators, brainDock.mode, brainDock.showExecutionDetail, brainMessages, brainRunStartedAt,
-    brainSurfaceOpen, brainTrace, edges, joinedCollaborator, nodes, openBrainDock, thinking, updateBrainDock,
+    brainSurfaceOpen, brainTrace, edges, joinedCollaborator, nodes, openBrainDock, presentMode, thinking, updateBrainDock,
   ]);
 
   /**
@@ -2945,8 +3104,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         <div className={styles.titleBlock}><span className={styles.spark}>✦</span><input aria-label={t('sessionTitle')} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice(t('titleSaveFailed'))); }} /><span className={styles.saved}>{notice}</span>{persistence === 'server' && <span role="status" aria-live="polite" className={styles.realtimeStatus} data-state={realtimeState}>{realtimeState === 'online' ? t('live') : realtimeState === 'offline' ? t('offlineRetry') : realtimeState === 'reconnecting' ? t('reconnecting') : t('connecting')}</span>}</div>
         <div className={styles.sessionActions}>
           <div className={styles.collaborators} aria-label={t('activeCollaborators')}>
-            {(persistence === 'local' ? [{ userId: 'local', displayName: t('you'), role: 'owner' as const }] : members).slice(0, 4).map((member, index) => <button key={member.userId} type="button" data-typing={'typing' in member && member.typing ? 'true' : 'false'} aria-pressed={followingUserId === member.userId} title={`${member.displayName || t('collaborator')} · ${member.role}${'typing' in member && member.typing ? ` · ${t('writingPrompt')}` : ''}${member.userId !== currentUserId ? ` · ${t('clickToFollow')}` : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button>)}
-            <button aria-label={t('inviteCollaborator')} onClick={() => persistence === 'local' ? requireAccount('invite', t('gateInviteTitle'), t('gateInviteBody')) : setShareOpen(true)}>+</button>
+            {/* In a shared free session the roster is REAL — showing only "you"
+                while three other people move cards around is a lie the board
+                itself contradicts. */}
+            {(persistence !== 'local'
+              ? members
+              : inRoom && room.participants.length
+                ? room.participants.map((person) => ({ userId: `guest:${person.name}:${person.joinedAt}`, displayName: person.name, role: person.isHost ? ('owner' as const) : ('editor' as const) }))
+                : [{ userId: 'local', displayName: t('you'), role: 'owner' as const }]
+            ).slice(0, 4).map((member, index) => <button key={member.userId} type="button" data-typing={'typing' in member && member.typing ? 'true' : 'false'} aria-pressed={followingUserId === member.userId} title={`${member.displayName || t('collaborator')} · ${member.role}${'typing' in member && member.typing ? ` · ${t('writingPrompt')}` : ''}${member.userId !== currentUserId ? ` · ${t('clickToFollow')}` : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button>)}
+            <button aria-label={t('inviteCollaborator')} onClick={() => setShareOpen(true)}>+</button>
           </div>
           <div className={styles.undoRedoGroup} role="group" aria-label={t('canvasHistory')}>
             <button className={styles.secondaryButton} onClick={undo} aria-label={t('undoCanvasChange')}>↶</button>
@@ -2956,7 +3123,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <button className={`${styles.secondaryButton} ${styles.iconAction}`} aria-pressed={fullscreen} aria-label={fullscreen ? t('exitFullScreen') : t('fullScreen')} title={fullscreen ? t('exitFullScreen') : t('fullScreen')} onClick={toggleFullscreen}>{fullscreen ? '⤡' : '⛶'}</button>
           <button className={`${styles.secondaryButton} ${styles.iconAction}`} aria-expanded={diagnosticsOpen} aria-label={t('openDiagnostics')} title={t('openDiagnostics')} onClick={() => void openDiagnostics()}>⚠</button>
           <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}>•••</button>
-          <button className={styles.secondaryButton} onClick={() => { if (persistence === 'local') requireAccount('share', t('gateShareTitle'), t('gateShareBody')); else setShareOpen((value) => !value); setMoreOpen(false); }}>{t('share')} ▾</button>
+          {/* A local canvas opens the SAME share menu a saved one does. It used to
+              open a sign-up gate, which answered a question nobody asked: they
+              wanted to show someone the board, not to create an account. */}
+          <button className={styles.secondaryButton} onClick={() => { setShareOpen((value) => !value); setMoreOpen(false); }}>{t('share')} ▾</button>
           {persistence === 'local' && <button className={`${styles.primaryButton} ${styles.saveButton}`} aria-label={t('saveCollaborate')} onClick={() => requireAccount('save', t('gateSaveTitle'), t('gateSaveBody'))}><span className={styles.saveButtonFull}>{t('saveCollaborate')}</span><span className={styles.saveButtonShort} aria-hidden>{t('save')}</span></button>}
           {moreOpen && <div className={styles.moreMenu} aria-label={t('moreActions')}>
             <span className={styles.moreMenuHeading}>{t('createAndView')}</span>
@@ -2973,13 +3143,25 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             {branchParentId && <button onClick={() => { prepareMerge(); setMoreOpen(false); }}><span aria-hidden>⇄</span>{t('merge')}</button>}
             <label><span><i aria-hidden>⌁</i>{t('edge')}</span><select aria-label={t('connectionKind')} value={connectionKind} onChange={(event) => setConnectionKind(event.target.value as CreationConnectionKind)}>{CREATION_CONNECTION_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label>
           </div>}
-          {shareOpen && <div className={styles.shareMenu} role="dialog" aria-label={persistence === 'local' ? t('saveToInvite') : t('inviteCollaborators')}>
+          {shareOpen && <div className={styles.shareMenu} role="dialog" aria-label={t('inviteCollaborators')}>
             <div className={styles.shareMenuHeader}>
-              <strong>{persistence === 'local' ? t('saveToInvite') : t('inviteCollaborators')}</strong>
+              <strong>{t('inviteCollaborators')}</strong>
               <button type="button" className={styles.shareMenuClose} aria-label={t('closeInvitationPanel')} onClick={() => setShareOpen(false)}>×</button>
             </div>
-            <p>{persistence === 'local' ? t('localSafeHint') : t('invitedCanBuild')}</p>
-            {persistence === 'local' ? <button onClick={() => requireAccount('save', t('gateSaveSessionTitle'), t('gateSaveBody'))}>{t('createFreeAccount')}</button> : <>
+            <p>{persistence === 'local' ? (inRoom ? t('sharedLiveHint') : t('sharedInviteHint')) : t('invitedCanBuild')}</p>
+            {/* NO ACCOUNT: invite by link into a shared free session. Everyone edits
+                the same board and shares one free-message allowance; signing up is
+                offered as the way to KEEP it, not as the price of sharing it. */}
+            {persistence === 'local' ? (inRoom && roomCode ? <>
+              <GuestInviteLink code={roomCode} surface="canvas" full={room.participants.length >= (room.state?.maxParticipants ?? 0)} />
+              <div className={styles.shareRoomPeople} aria-label={t('sharedPeopleHere', { count: room.participants.length })}>
+                {room.participants.map((person) => <span key={`${person.name}-${person.joinedAt}`}>{person.name}{person.isHost ? ` ${t('sharedHostTag')}` : ''}</span>)}
+              </div>
+              <div className={styles.shareRoomActions}>
+                <button type="button" onClick={() => void leaveSharedSession()}>{t('sharedStopSharing')}</button>
+                <button type="button" onClick={() => requireAccount('save', t('gateSaveSessionTitle'), t('gateSaveBody'))}>{t('sharedSaveToKeep')}</button>
+              </div>
+            </> : <button disabled={roomBusy} onClick={() => void startSharedSession()}>{roomBusy ? t('sharedStarting') : t('sharedStart')}</button>) : <>
               <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder={t('emailPlaceholder')} /><select aria-label={t('invitationRole')} value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await copyTextToClipboard(`${window.location.origin}${result.acceptPath}`); setPendingInvitations((current) => [...current.filter((item) => item.id !== result.invitationId), { id: result.invitationId, email: result.email, role: result.role as CreationSessionSummary['role'], expiresAt: result.expiresAt, acceptedAt: null, revokedAt: null, createdAt: new Date().toISOString() }]); setNotice(result.emailSent ? t('invitationEmailed') : t('invitationSavedLinkCopied')); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice(result.emailSent ? t('collaboratorInvitedEmail') : t('collaboratorInvited')); } setInviteEmail(''); }).catch((error) => setNotice(error instanceof Error ? error.message : t('inviteFailed'))); }}>{t('invite')}</button></div>
               {sessionRole === 'owner' && <div aria-label={t('sessionMembers')}>{allMembers.map((member) => <div key={member.userId} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
                 <span>{member.displayName || t('collaborator')}{member.userId === currentUserId ? ` ${t('youSuffix')}` : ''}</span>
@@ -2989,7 +3171,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 <span>{invitation.email}</span><small>{invitation.role}</small><button type="button" aria-label={t('revokeInvitation', { email: invitation.email })} onClick={() => { void creationSessionsApi.invitations.revoke(sessionId, invitation.id).then(() => { setPendingInvitations((current) => current.filter((item) => item.id !== invitation.id)); setNotice(t('invitationRevoked')); }).catch((error) => setNotice(error instanceof Error ? error.message : t('invitationRevokeFailed'))); }}>×</button>
               </div>)}</div>}</div>}
             </>}
-            <small>{t('accessLabel', { access: persistence === 'local' ? t('privateOnDevice') : inviteRole })}</small>
+            <small>{t('accessLabel', { access: persistence === 'local' ? (inRoom ? t('sharedAnyoneWithLink') : t('privateOnDevice')) : inviteRole })}</small>
           </div>}
           {templateOpen && <div className={styles.templateMenu}>
             <header><div><strong>{t('canvasTemplates')}</strong><small>{t('marketplacePacks')}</small></div><button onClick={() => setTemplateOpen(false)} aria-label={t('closeTemplates')}>×</button></header>
@@ -3026,10 +3208,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           '--brain-dock-right': `${brainDock.side === 'right' ? brainDockReserved : 0}px`,
         } as CSSProperties}
         data-brain-side={brainDockReserved > 0 ? brainDock.side : 'none'}
-        // A phone renders every Brain placement as one bottom sheet, so what the
-        // board loses there is the bottom edge — not a side. The phone layout
-        // moves the board controls off that edge from this, not from the side.
-        data-brain-open={!presentMode && brainDock.open ? 'true' : 'false'}
+        // A phone renders the DOCKED placement as one bottom sheet, so what the board
+        // loses there is the bottom edge — not a side. The phone layout moves the
+        // board controls off that edge from this, not from the side. An inline Brain
+        // is an Object on the board and takes no edge, so it must not set this.
+        data-brain-open={brainSurfaceOpen && brainDock.mode === 'docked' ? 'true' : 'false'}
         data-view={threeD ? '3d' : 'flat'}
         data-cursor-mode={drawingMode ? 'draw' : 'pan'} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPoints.current = []; }} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
         {!presentMode && effectiveSelectedIds.length > 0 && <div className={styles.selectionToolbar} aria-label={t('selectionActions')}>
