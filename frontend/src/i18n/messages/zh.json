@@ -13237,7 +13237,9 @@
     "creativeApplied": "已应用",
     "creativeNoMediaModel": "请先发布一个 Evermind 媒体模型来渲染此对象",
     "creativeNoFrames": "模型未返回可读取的帧",
-    "modeSaveFailed": "无法保存会话模式"
+    "modeSaveFailed": "无法保存会话模式",
+    "alignNeedsTwo": "请至少选择两个对象再对齐",
+    "objectsAligned": "已对齐 {count} 个对象"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",

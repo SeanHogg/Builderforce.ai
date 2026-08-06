@@ -13237,7 +13237,9 @@
     "creativeApplied": "Appliqué",
     "creativeNoMediaModel": "Publiez un modèle média Evermind pour générer cet objet",
     "creativeNoFrames": "Le modèle n'a renvoyé aucune image lisible",
-    "modeSaveFailed": "Impossible d'enregistrer le mode de la session"
+    "modeSaveFailed": "Impossible d'enregistrer le mode de la session",
+    "alignNeedsTwo": "Sélectionnez au moins deux objets à aligner",
+    "objectsAligned": "{count, plural, one {# objet aligné} other {# objets alignés}}"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",

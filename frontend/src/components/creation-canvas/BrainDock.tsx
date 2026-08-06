@@ -6,6 +6,7 @@ import { Avatar, BrainTimeline } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
+import { useCanvas3DControls } from '@/components/canvas/canvas3dControls';
 import type { Edge } from '@xyflow/react';
 import styles from './CreationCanvas.module.css';
 import { creationObjectDefinition } from './creationObjectRegistry';
@@ -162,6 +163,12 @@ export function BrainSurfaceActions({
   const inline = mode === 'inline';
   const expanded = size === 'expanded';
   const docked = !inline && !!side && !!onSideChange && !!onSizeChange;
+  // Read, not passed in: the scene publishes its commands here for as long as it is
+  // on screen, so the surface can tell for itself that the board it would move INTO
+  // is not being drawn. Offering "show this in the Brain Object" while the 3D view
+  // has replaced the board is a control that hides the conversation and gives back
+  // nothing, so it is simply not offered until the board is there again.
+  const spatial = useCanvas3DControls() != null;
 
   return (
     <div className={styles.brainDockActions}>
@@ -172,13 +179,13 @@ export function BrainSurfaceActions({
         title={showExecutionDetail ? t('hideExecutionSteps') : t('showExecutionSteps')}
         onClick={() => onExecutionDetailChange(!showExecutionDetail)}
       >⋮⋮</button>
-      <button
+      {!spatial && <button
         type="button"
         aria-pressed={inline}
         aria-label={inline ? t('dockBrainToEdge') : t('showBrainInObject')}
         title={inline ? t('dockBrainToEdge') : t('showBrainInObject')}
         onClick={() => onModeChange(inline ? 'docked' : 'inline')}
-      >{inline ? '▤' : '▣'}</button>
+      >{inline ? '▤' : '▣'}</button>}
       {/* data-dock-side, not the label, is what the stylesheet hides on a phone:
           a selector keyed on English copy would stop matching in every other locale. */}
       {docked && <button

@@ -13237,7 +13237,9 @@
     "creativeApplied": "Angewendet",
     "creativeNoMediaModel": "Veröffentlichen Sie ein Evermind-Medienmodell, um dieses Objekt zu erzeugen",
     "creativeNoFrames": "Das Modell lieferte keine lesbaren Einzelbilder",
-    "modeSaveFailed": "Sitzungsmodus konnte nicht gespeichert werden"
+    "modeSaveFailed": "Sitzungsmodus konnte nicht gespeichert werden",
+    "alignNeedsTwo": "Wähle mindestens zwei Objekte zum Ausrichten aus",
+    "objectsAligned": "{count, plural, one {# Objekt ausgerichtet} other {# Objekte ausgerichtet}}"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",

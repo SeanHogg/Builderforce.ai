@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-08-06 — ✅ RESOLVED: the canvas froze every card at the size it was first measured at, piled objects on top of each other, and lost Brain entirely in 3D
+
+Four reported canvas defects, three of which turned out to be one root cause. Reproduced in a real browser (Playwright against `next dev`) before and after, not reasoned about from the code.
+
+**The size latch (reports 1 and 3).** `CreationNode` wrote React Flow's *measured* `width`/`height` straight back onto the card as an inline style. React Flow derives those props from `node.measured` first (`getNodeDimensions`), so the card could only ever be the size it happened to be measured at — the measurement pinned it, and nothing could grow past it. The Brain Object made it visible because it is the one card that legitimately changes size: 74px as a mark while the conversation is docked, 390×420 as the chat inline. Measured docked first, it rendered inline as a **74×420 sliver** — the "missing Brain node" — and because the sliver is what React Flow measured, its source handle sat at the sliver's edge, so every edge into Brain visibly detached from the card. Any card whose content grew after first render had the quiet version: the old height, with the new content scrolled out of sight.
+
+`useAuthoredNodeSize(id)` now reads the node's **explicit** size from the store (`node.width`/`node.height`, or a numeric `node.style`) and nothing else, so a resize drag or an authored frame still sizes the card while a measurement never does. Measured: inline Brain went from `70×396` to `368×396` on screen and its edge origin from `x=158` to `x=474` (the card's real right edge).
+
+**Objects landing on top of each other (report 2).** Two separate causes. `nextCanvasObjectPosition` returned the requested point verbatim — and `(520, 280)` when Brain supplied no coordinates — so a turn that authored several objects stacked all of them on one spot. It now finishes with `freeCanvasSlot`, which keeps the caller's column (that is the intent: "next to this object") and walks down until the rectangle is clear; each step lands strictly below the card it collided with, so the walk always terminates. `canvasNodeDimensions` also gained a per-kind fallback (`canvasKindFootprint`), so an unmeasured 650px-wide evaluation is no longer treated as a generic 260px card while it is being placed.
+
+Separately, **Align** set one `x` on every selected object and left `y` alone, which turns a selected *row* — the usual selection — into a pile. `alignCanvasNodesLeft` left-aligns *and* spaces the column in its existing top-to-bottom order; locked objects still set where the column starts but are never moved. Notices localized (`creationCanvas.alignNeedsTwo`, `objectsAligned`, all five catalogs). The seeded demo board's staff row moved right so it stays clear of an inline Brain.
+
+**Brain vanished in 3D (report 4).** The 3D view replaces the flat board rather than floating over it, so an inline Brain — which renders *inside* its Object on the graph — had no host: entering 3D left no transcript, no tabs, no controls, and no launcher offering a way back. The effective placement is now derived (`brainPlacement`): while the scene is up the surface is docked to the edge, which is the placement that survives losing the board, and the stored preference is untouched so leaving 3D puts Brain back in its Object. `BrainSurfaceActions` drops its inline/docked toggle while the scene is on screen — it reads `useCanvas3DControls()` itself rather than being told — because that control would otherwise hide the conversation and give nothing back. Measured: inline + 3D went from *no dock at all* to a dock with both tabs and the live timeline.
+
+Files: `CreationNode.tsx`, `creationCanvasLayout.ts` (+ tests), `CreationCanvas.tsx`, `BrainDock.tsx`, the five message catalogs.
+
+---
+
 ## 2026-08-06 — ✅ RESOLVED: dropping a file on the canvas did nothing, and an office file that got there was an icon
 
 The Creation Canvas is meant to be the creative starting space, but the only way to get a file onto it was the composer's `+ → Upload` menu, and what arrived was an opaque `file` card. `onDrop` read a palette drag (`DND_MIME`) and ignored `event.dataTransfer.files` entirely, so dragging a document off the desktop landed on the board and vanished. A `.docx` had no reader at all, a `.xlsx` failed `isTabularFile`, a `.pptx` and a `.pdf` were bytes with a name.

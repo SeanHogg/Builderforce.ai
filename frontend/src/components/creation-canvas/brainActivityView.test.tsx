@@ -31,7 +31,11 @@ vi.mock('next-intl', async (importOriginal) => {
 vi.mock('@xyflow/react', async () => {
   const React = await import('react');
   const inert = () => null;
-  return { Handle: inert, NodeResizer: inert, Position: { Left: 'left', Right: 'right' } };
+  return {
+    Handle: inert, NodeResizer: inert, Position: { Left: 'left', Right: 'right' },
+    // An empty board: the Brain Object here has been given no authored size.
+    useStore: (selector: (state: { nodeLookup: Map<string, unknown> }) => unknown) => selector({ nodeLookup: new Map() }),
+  };
 });
 
 const nodeProps = {

@@ -13238,7 +13238,9 @@
     "creativeApplied": "Applied",
     "creativeNoMediaModel": "Publish an Evermind media model to render this object",
     "creativeNoFrames": "The model returned no readable frames",
-    "modeSaveFailed": "Could not save the session mode"
+    "modeSaveFailed": "Could not save the session mode",
+    "alignNeedsTwo": "Select at least two objects to align",
+    "objectsAligned": "{count, plural, one {# object aligned} other {# objects aligned}}"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",

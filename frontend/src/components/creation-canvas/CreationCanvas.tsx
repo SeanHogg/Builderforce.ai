@@ -25,7 +25,7 @@ import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from
 import { CanvasOutlinePanel } from './CanvasOutlinePanel';
 import { CanvasFilesPanel } from './CanvasFilesPanel';
 import { BrainDock } from './BrainDock';
-import { brainDockReservedWidth, brainDockWidth, DEFAULT_BRAIN_DOCK_PREFERENCES, readBrainDockPreferences, writeBrainDockPreferences, type BrainDockPreferences } from './brainDockPreferences';
+import { brainDockReservedWidth, brainDockWidth, DEFAULT_BRAIN_DOCK_PREFERENCES, readBrainDockPreferences, writeBrainDockPreferences, type BrainDockMode, type BrainDockPreferences } from './brainDockPreferences';
 import { BrainSurfaceProvider, type BrainSurfaceContextValue } from './brainSurfaceContext';
 import { useToast } from '@/components/ToastProvider';
 import { CreationNode, type CreationFlowNode } from './CreationNode';
@@ -71,7 +71,7 @@ import { useVoiceStudio } from '@/lib/voiceStudio';
 import { CopyButton } from '@/components/CopyButton';
 import { captureDiagnosticsContext } from '@/lib/diagnosticsCapture';
 import { buildCreationCanvasDiagnosticsReport } from '@/lib/creationCanvasDiagnostics';
-import { arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions, canvasPlacementUnlocked, nextCanvasObjectPosition, type CanvasArrangement } from './creationCanvasLayout';
+import { alignCanvasNodesLeft, arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions, canvasPlacementUnlocked, nextCanvasObjectPosition, type CanvasArrangement } from './creationCanvasLayout';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useLlmModels } from '@/lib/useLlmModels';
@@ -280,10 +280,13 @@ const INITIAL_NODES: CreationFlowNode[] = [
   { id: SEED.workflow, type: 'creation', position: { x: 80, y: 55 }, data: { kind: 'workflow', title: 'Fall campaign workflow', status: 'Ready' } },
   { id: SEED.website, type: 'creation', position: { x: 610, y: 45 }, data: { kind: 'website', title: 'Campaign landing page', status: 'Draft' } },
   { id: SEED.dashboard, type: 'creation', position: { x: 1140, y: 55 }, data: { kind: 'dashboard', title: 'Campaign forecast' } },
+  // The Brain Object is 390px wide once the conversation is placed INSIDE it, so
+  // the row beside it starts clear of that — a seeded board that reads well docked
+  // and then overlaps itself the moment Brain goes inline is the first impression.
   { id: SEED.chat, type: 'creation', position: { x: 80, y: 380 }, data: { kind: 'chat', title: 'Brain' } },
-  { id: SEED.sarah, type: 'creation', position: { x: 365, y: 455 }, data: { kind: 'staff', title: 'Sarah', role: 'Marketing', focus: 'Defining audience segments and writing email copy.', accent: '#e94b9b' } },
-  { id: SEED.jordan, type: 'creation', position: { x: 635, y: 455 }, data: { kind: 'staff', title: 'Jordan', role: 'Design', focus: 'Refining hero section and mobile layout.', accent: '#ff9827' } },
-  { id: SEED.agent, type: 'creation', position: { x: 930, y: 455 }, data: { kind: 'agent', title: 'Campaign Strategist', status: 'Draft', model: 'gpt-4o', subtitle: 'Defines strategy, messaging, and audience for high-impact campaigns.' } },
+  { id: SEED.sarah, type: 'creation', position: { x: 520, y: 455 }, data: { kind: 'staff', title: 'Sarah', role: 'Marketing', focus: 'Defining audience segments and writing email copy.', accent: '#e94b9b' } },
+  { id: SEED.jordan, type: 'creation', position: { x: 800, y: 455 }, data: { kind: 'staff', title: 'Jordan', role: 'Design', focus: 'Refining hero section and mobile layout.', accent: '#ff9827' } },
+  { id: SEED.agent, type: 'creation', position: { x: 1080, y: 455 }, data: { kind: 'agent', title: 'Campaign Strategist', status: 'Draft', model: 'gpt-4o', subtitle: 'Defines strategy, messaging, and audience for high-impact campaigns.' } },
 ];
 
 const INITIAL_EDGES: Edge[] = [
@@ -1272,11 +1275,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   const alignSelection = useCallback(() => {
     const ids = new Set(selectionIds());
-    if (!canEdit || ids.size < 2) { setNotice('Select at least two objects to align'); return; }
-    const left = Math.min(...nodes.filter((node) => ids.has(node.id)).map((node) => node.position.x));
-    setNodes((current) => current.map((node) => ids.has(node.id) && canvasPlacementUnlocked(node) ? { ...node, position: { ...node.position, x: left } } : node));
-    setNotice(`${ids.size} objects aligned left`);
-  }, [canEdit, nodes, selectionIds, setNodes]);
+    if (!canEdit || ids.size < 2) { setNotice(t('alignNeedsTwo')); return; }
+    // Left-aligning ALONE piles a selected row of objects onto one another, which
+    // is what "align" used to do here; the shared primitive spaces the column too.
+    const placements = alignCanvasNodesLeft(nodes, ids);
+    if (!placements.size) { setNotice(t('alignNeedsTwo')); return; }
+    setNodes((current) => current.map((node) => {
+      const placement = placements.get(node.id);
+      return placement ? { ...node, position: placement } : node;
+    }));
+    setNotice(t('objectsAligned', { count: placements.size }));
+  }, [canEdit, nodes, selectionIds, setNodes, t]);
 
   const frameSelection = useCallback(() => {
     const ids = new Set(selectionIds());
@@ -2266,7 +2275,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Update ${kind} “${title}”`, objectId: existing.id, patch });
         return { ...payload, proposed: true, materialized: { id: existing.id, kind, title, updated: true } };
       }
-      const node = newNode(kind, nextCanvasObjectPosition([...nodes, ...stagedNodes], { x: target.position.x + 460, y: target.position.y }, typeof window !== 'undefined' && window.innerWidth <= 760));
+      const node = newNode(kind, nextCanvasObjectPosition([...nodes, ...stagedNodes], { x: target.position.x + 460, y: target.position.y }, typeof window !== 'undefined' && window.innerWidth <= 760, kind));
       node.data = { ...node.data, ...patch };
       if (kind === 'table') node.style = { width: 720, height: 460 };
       if (kind === 'map') node.style = { width: 420, height: 380 };
@@ -2296,7 +2305,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (updateTarget) return { error: `This is a correction to selected ${args.kind} ${updateTarget.id}. Call canvas_update_object for that object instead of creating a duplicate.` };
       const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
       const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
-      const node = newNode(args.kind, nextCanvasObjectPosition([...nodes, ...stagedNodes], args, narrowViewport));
+      const node = newNode(args.kind, nextCanvasObjectPosition([...nodes, ...stagedNodes], args, narrowViewport, args.kind));
       const authored = sanitizeCreationObjectPatch(args.kind, { ...((args.fields && typeof args.fields === 'object') ? args.fields : {}), title: args.title, subtitle: args.subtitle, status: args.status });
       if (args.kind === 'drawing' && (!Array.isArray(authored.points) || authored.points.length < 2)) {
         return { error: 'A generated drawing must include at least two renderable {x,y} points. Add authored points or use a chart with chartLabels and chartValues.' };
@@ -3357,8 +3366,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, []);
 
   const brainNode = nodes.find((node) => node.data.kind === 'chat') ?? null;
+  /**
+   * Where the ONE Brain surface actually renders.
+   *
+   * Inline means "inside the Brain Object on the graph" — and the 3D view replaces
+   * the flat board rather than floating over it, so while it is up there is no
+   * Object to render into and an inline Brain simply vanished: no transcript, no
+   * tabs, no controls, and nothing on screen offering a way back to it. The 3D
+   * reading therefore places the surface on the edge, which is the placement that
+   * survives losing the board. The stored preference is untouched, so leaving 3D
+   * puts Brain back in its Object.
+   */
+  const brainPlacement: BrainDockMode = threeD.active ? 'docked' : brainDock.mode;
   // An inline Brain IS an Object on the board, so only a docked one is reserved.
-  const brainDockReserved = brainDockReservedWidth(brainDock);
+  const brainDockReserved = brainDockReservedWidth({ ...brainDock, mode: brainPlacement });
   const brainMessages = useMemo<BrainMessage[]>(() => timeline.map((message, index) => ({
     id: index + 1,
     seq: index + 1,
@@ -3381,7 +3402,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const brainSurface = useMemo<BrainSurfaceContextValue>(() => ({
     open: brainSurfaceOpen,
     canOpen: !presentMode,
-    mode: brainDock.mode,
+    mode: brainPlacement,
     showExecutionDetail: brainDock.showExecutionDetail,
     running: thinking,
     runStartedAt: brainRunStartedAt,
@@ -3396,7 +3417,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     onExecutionDetailChange: (showExecutionDetail) => updateBrainDock({ showExecutionDetail }),
     onClose: () => updateBrainDock({ open: false }),
   }), [
-    brainCollaborators, brainDock.mode, brainDock.showExecutionDetail, brainMessages, brainRunStartedAt,
+    brainCollaborators, brainDock.showExecutionDetail, brainMessages, brainPlacement, brainRunStartedAt,
     brainSurfaceOpen, brainTrace, edges, joinedCollaborator, nodes, openBrainDock, presentMode, thinking, updateBrainDock,
   ]);
 
@@ -3556,7 +3577,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         // loses there is the bottom edge — not a side. The phone layout moves the
         // board controls off that edge from this, not from the side. An inline Brain
         // is an Object on the board and takes no edge, so it must not set this.
-        data-brain-open={brainSurfaceOpen && brainDock.mode === 'docked' ? 'true' : 'false'}
+        data-brain-open={brainSurfaceOpen && brainPlacement === 'docked' ? 'true' : 'false'}
         data-view={threeD.active ? '3d' : 'flat'}
         data-cursor-mode={drawingMode ? 'draw' : 'pan'} onPointerDown={onCanvasPointerDown} onPointerMove={onCanvasPointerMove} onPointerUp={onCanvasPointerUp} onPointerLeave={() => { cursorRef.current = null; drawingPoints.current = []; }} onDragEnter={onCanvasDragEnter} onDragLeave={onCanvasDragLeave} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }} onDrop={onDrop}>
         {fileDragging && <div className={styles.fileDropOverlay} role="status" aria-live="polite">
@@ -3742,8 +3763,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         {/* Docked ONLY. An inline Brain renders inside its Object on the graph, so
             rendering the edge panel here too would put the same live conversation on
             screen twice — the duplicate this placement model exists to prevent. */}
-        {brainSurfaceOpen && brainDock.mode === 'docked' && <BrainDock
-          mode={brainDock.mode}
+        {brainSurfaceOpen && brainPlacement === 'docked' && <BrainDock
+          mode={brainPlacement}
           side={brainDock.side}
           size={brainDock.size}
           width={brainDockWidth(brainDock)}
@@ -3770,7 +3791,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             the board already offers one ("Open Brain chat"), so the pill would be a
             second control for the same thing — it appears only when there is no Object
             to click, which is exactly when the board has no other route back. */}
-        {!presentMode && !brainDock.open && (brainDock.mode === 'docked' || !brainNode) && <button
+        {!presentMode && !brainDock.open && (brainPlacement === 'docked' || !brainNode) && <button
           type="button"
           className={styles.brainDockLauncher}
           data-side={brainDock.side}

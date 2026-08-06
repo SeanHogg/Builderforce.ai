@@ -13237,7 +13237,9 @@
     "creativeApplied": "Aplicado",
     "creativeNoMediaModel": "Publica un modelo multimedia de Evermind para renderizar este objeto",
     "creativeNoFrames": "El modelo no devolvió fotogramas legibles",
-    "modeSaveFailed": "No se pudo guardar el modo de la sesión"
+    "modeSaveFailed": "No se pudo guardar el modo de la sesión",
+    "alignNeedsTwo": "Selecciona al menos dos objetos para alinearlos",
+    "objectsAligned": "{count, plural, one {# objeto alineado} other {# objetos alineados}}"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",

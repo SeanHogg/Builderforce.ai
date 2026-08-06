@@ -45,16 +45,28 @@ vi.mock('@/lib/diagnosticsCapture', async (importOriginal) => {
   };
 });
 
+/**
+ * What React Flow's store would hold about each node.
+ *
+ * An object reads its authored size off that store (`useAuthoredNodeSize`), so
+ * the mock has to be a store and not an empty stub — otherwise every card
+ * renders sizeless. The board fills this from the nodes it is handed; a test
+ * that renders one object on its own registers it here itself.
+ */
+const nodeLookup = vi.hoisted(() => new Map<string, { width?: number; height?: number; style?: { width?: number; height?: number } }>());
+
 vi.mock('@xyflow/react', async () => {
   const React = await import('react');
   const inert = () => null;
   return {
     ReactFlowProvider: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
     ReactFlow: ({ nodes, edges = [], nodeTypes, onNodeClick, children }: { nodes: Array<{ id: string; type?: string; data: unknown; style?: { width?: number; height?: number } }>; edges?: Array<{ source: string; target: string }>; nodeTypes: Record<string, React.ComponentType<Record<string, unknown>>>; onNodeClick?: (event: unknown, node: unknown) => void; children?: React.ReactNode }) => React.createElement('div', { 'data-testid': 'flow', 'data-edge-pairs': edges.map((edge) => `${edge.source}:${edge.target}`).join(',') }, children, nodes.map((node) => {
+      nodeLookup.set(node.id, node);
       const Component = nodeTypes[node.type || 'creation'];
       return Component ? React.createElement('div', { key: node.id, onClick: (event: React.MouseEvent<HTMLDivElement>) => onNodeClick?.(event, node) }, React.createElement(Component, { id: node.id, data: node.data, selected: false, width: node.style?.width, height: node.style?.height })) : null;
     })),
     useNodesState: (initial: unknown[]) => { const [nodes, setNodes] = React.useState(initial); return [nodes, setNodes, inert] as const; },
+    useStore: (selector: (state: { nodeLookup: typeof nodeLookup }) => unknown) => selector({ nodeLookup }),
     useEdgesState: (initial: unknown[]) => { const [edges, setEdges] = React.useState(initial); return [edges, setEdges, inert] as const; },
     addEdge: (edge: unknown, edges: unknown[]) => [...edges, edge],
     Background: inert,
@@ -351,6 +363,8 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
   });
 
   it('fills the persisted project boundary with the visible project card', () => {
+    // Rendered on its own, so there is no board to publish its authored box.
+    nodeLookup.set('project-node', { width: 320, height: 220 });
     render(<CreationNode
       id="project-node"
       type="creation"
