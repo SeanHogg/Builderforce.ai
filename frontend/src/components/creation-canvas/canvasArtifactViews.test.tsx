@@ -168,3 +168,72 @@ describe('files library', () => {
     expect(screen.getByText(/no files yet/i)).toBeTruthy();
   });
 });
+
+/**
+ * The regression these cover: a document could be read on the board but only
+ * edited through a markdown textarea in a side panel, and the file it produces
+ * lived on a third surface again.
+ */
+describe('a document is written and taken away from its own card', () => {
+  const document: CreationNodeData = {
+    kind: 'document', title: 'Market analysis',
+    markdown: '# Market analysis\n\nDemand is **strong** in EMEA.',
+  };
+
+  it('offers no editing control on a board this person cannot edit', () => {
+    renderNode(document, { onExport: vi.fn() });
+    expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Word' })).toBeTruthy();
+  });
+
+  it('takes the document away as Word or as PDF', () => {
+    const onExport = vi.fn();
+    renderNode(document, { onExport });
+    fireEvent.click(screen.getByRole('button', { name: 'Word' }));
+    expect(onExport).toHaveBeenCalledWith('object-1', 'docx');
+    fireEvent.click(screen.getByRole('button', { name: 'PDF' }));
+    expect(onExport).toHaveBeenCalledWith('object-1', 'pdf');
+  });
+
+  it('opens the written document in the editor, formatted', () => {
+    renderNode(document, { onEditData: vi.fn() });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const surface = screen.getByRole('textbox', { name: 'Market analysis' });
+    expect(surface.querySelector('h1')?.textContent).toBe('Market analysis');
+    expect(surface.querySelector('strong')?.textContent).toBe('strong');
+    expect(screen.getByRole('toolbar', { name: 'Formatting' })).toBeTruthy();
+  });
+
+  it('writes an edit back as markdown, into both body fields', () => {
+    const onEditData = vi.fn();
+    renderNode(document, { onEditData });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const surface = screen.getByRole('textbox', { name: 'Market analysis' });
+    surface.innerHTML = '<h1>Market analysis</h1><p>Demand is <strong>weak</strong> in EMEA.</p>';
+    fireEvent.blur(surface);
+    expect(onEditData).toHaveBeenCalledWith('object-1', {
+      markdown: '# Market analysis\n\nDemand is **weak** in EMEA.',
+      content: '# Market analysis\n\nDemand is **weak** in EMEA.',
+    });
+  });
+
+  it('keeps the page breaks an imported file declared', () => {
+    const onEditData = vi.fn();
+    renderNode({ ...document, markdown: 'Page one.\n\n<!--page-break-->\n\nPage two.' }, { onEditData });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    const surface = screen.getByRole('textbox', { name: 'Market analysis' });
+    surface.innerHTML = surface.innerHTML.replace('Page one.', 'Page one, revised.');
+    fireEvent.blur(surface);
+    expect(onEditData).toHaveBeenCalledWith('object-1', expect.objectContaining({
+      markdown: 'Page one, revised.\n\n<!--page-break-->\n\nPage two.',
+    }));
+  });
+
+  it('does not rewrite a document nobody touched', () => {
+    const onEditData = vi.fn();
+    renderNode(document, { onEditData });
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.blur(screen.getByRole('textbox', { name: 'Market analysis' }));
+    expect(onEditData).not.toHaveBeenCalled();
+  });
+});

@@ -80,17 +80,19 @@ describe('guestWebSearch backing', () => {
     expect(String(fetchMock.mock.calls[0]![0])).toContain(new URL(wikipediaSearchVendor.endpoint).host);
   });
 
-  it('uses the operator key when one is funded, without any tenant lookup', async () => {
+  it('uses the operator’s own SearXNG when one is configured, without any tenant lookup', async () => {
     const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response(
-      JSON.stringify({ web: { results: [{ title: 'T', url: 'https://example.com/x' }] } }),
+      JSON.stringify({ results: [{ title: 'T', url: 'https://example.com/x', content: 'c' }] }),
       { status: 200, headers: { 'content-type': 'application/json' } },
     ));
     vi.stubGlobal('fetch', fetchMock);
 
-    const r = await guestWebSearch(kvEnv({ BRAVE_SEARCH_API_KEY: 'op-key' }), 'ev makers by volume');
+    const r = await guestWebSearch(kvEnv({ SEARXNG_URL: 'http://searxng:8080' }), 'ev makers by volume');
 
     expect(r).toMatchObject({ ok: true, coverage: 'web' });
-    const init = fetchMock.mock.calls[0]![1]!;
-    expect((init.headers as Record<string, string>)['X-Subscription-Token']).toBe('op-key');
+    // A logged-out visitor gets the operator's open-web index and sends no credential
+    // anywhere — the instance is reached by URL alone.
+    expect(String(fetchMock.mock.calls[0]![0])).toBe('http://searxng:8080/search?q=ev+makers+by+volume&format=json');
+    expect(JSON.stringify(fetchMock.mock.calls[0]![1]!.headers)).not.toMatch(/token|key|authorization/i);
   });
 });
