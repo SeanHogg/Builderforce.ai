@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { PromptPanel, PromptOptionsMenu, useMentionAutocomplete, type ChatModelOptions, type ChatModelSelection, type PromptOptionsLabels } from '@seanhogg/builderforce-brain-ui';
 import { effortProfile, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import { CHAT_MODES, CHAT_MODE_ICON, type BrainEffort, type ChatMode } from '@/lib/brain';
+import { PlanBadge } from '@/components/PlanBadge';
 export type { ChatModelOptions, ChatModelSelection } from '@seanhogg/builderforce-brain-ui';
 
 /** Browser Web Speech API (not in all TS libs). */
@@ -94,6 +95,16 @@ export interface ChatInputProps {
   /** Why memory is unusable right now — the `/` menu states it rather than offering
    *  a toggle that would do nothing. */
   memoryUnavailableReason?: string;
+  /**
+   * Consolidate / fork THIS chat, shown in the `/` menu (never as pills in the
+   * action row — they are inert for most of a chat's life and would crowd out Send
+   * on a narrow panel). Needs both handlers to render.
+   */
+  canConsolidate?: boolean;
+  consolidating?: boolean;
+  forking?: boolean;
+  onConsolidate?: () => void;
+  onFork?: () => void;
   /** When set, an "Auto mode" pill toggles this (auto-approve tool actions). */
   autoMode?: boolean;
   onAutoModeChange?: (on: boolean) => void;
@@ -351,6 +362,11 @@ export function ChatInput({
   memoryEnabled,
   onMemoryChange,
   memoryUnavailableReason,
+  canConsolidate = false,
+  consolidating = false,
+  forking = false,
+  onConsolidate,
+  onFork,
   autoMode,
   onAutoModeChange,
   showBrainIcon = false,
@@ -402,6 +418,14 @@ export function ChatInput({
     options: t('options'),
     mode: tModes('pickerAria'),
     memory: t('memory'),
+    conversation: t('conversation'),
+    consolidate: t('consolidate'),
+    consolidating: t('consolidating'),
+    consolidateHint: t('consolidateHint'),
+    fork: t('fork'),
+    forking: t('forking'),
+    forkHint: t('forkHint'),
+    sessionUnavailable: t('sessionUnavailable'),
     effort: t('effort'),
     effortQuick: t('effort_quick'),
     effortBalanced: t('effort_balanced'),
@@ -461,13 +485,11 @@ export function ChatInput({
   // The textarea always takes its own full-width row on top (so typed text is
   // never crushed into a sliver in a narrow side-panel), and the control buttons
   // sit on a second row below — matching the VS Code composer across modalities.
-  // The trailing icon group (brain / voice / send) is pushed to the right via
-  // marginLeft:auto on whichever of them renders first, so Send always lands
-  // bottom-right, Claude-style.
+  // The trailing group (plan · host modes · brain / voice / send) is pushed right
+  // by marginLeft:auto on the plan-chip wrapper, so Send always lands bottom-right,
+  // Claude-style. The wrapper renders even when the chip self-gates to nothing,
+  // which is exactly why it — and not a conditional icon — owns the anchor.
   const trailingShift: React.CSSProperties = { marginLeft: 'auto' };
-  const brainAnchored = showBrainIcon;
-  const voiceAnchored = !showBrainIcon && showVoice;
-  const sendAnchored = !showBrainIcon && !showVoice;
 
   // @-mention typeahead — active only when the host supplies participants. Picking
   // one routes the next turn (via onMention) and strips the "@query" from the text.
@@ -664,6 +686,7 @@ export function ChatInput({
               disabled={disabled}
               mode={chatMode && onChatModeChange ? { value: chatMode, onChange: (next) => onChatModeChange(next as ChatMode), choices: modeChoices } : undefined}
               memory={onMemoryChange ? { enabled: !!memoryEnabled, onChange: onMemoryChange, unavailableReason: memoryUnavailableReason, describe: describeMemory } : undefined}
+              session={onConsolidate && onFork ? { canConsolidate, consolidating, forking, onConsolidate, onFork } : undefined}
               effort={effort}
               onEffortChange={onEffortChange}
               describeEffort={describeEffort}
@@ -703,11 +726,18 @@ export function ChatInput({
             <span>{t('autoMode')}</span>
           </button>
             )}
+            {/* Which plan is funding this chat (and, when metered, what allowance is
+                left) — the same chip, in the same place, as the VS Code composer.
+                Self-gating: it renders nothing without a tenant session, so the
+                wrapper carries the right-alignment anchor instead of the chip. */}
+            <span style={{ display: 'inline-flex', alignItems: 'center', minWidth: 0, ...trailingShift }}>
+              <PlanBadge />
+            </span>
             {modeControls}
             {showBrainIcon && (
           <Link
             href="/brainstorm"
-            style={brainAnchored ? { ...iconButtonStyle(false), ...trailingShift } : iconButtonStyle(false)}
+            style={iconButtonStyle(false)}
             title={t('brainstorm')}
           >
             <SpeechBubbleIcon />
@@ -719,7 +749,7 @@ export function ChatInput({
             onClick={recording ? stopVoice : startVoice}
             disabled={disabled}
             title={recording ? t('stopDictation') : t('dictate')}
-            style={{ ...iconButtonStyle(disabled), background: recording ? 'var(--surface-interactive)' : undefined, ...(voiceAnchored ? trailingShift : null) }}
+            style={{ ...iconButtonStyle(disabled), background: recording ? 'var(--surface-interactive)' : undefined }}
           >
             <MicIcon />
           </button>
@@ -734,7 +764,7 @@ export function ChatInput({
             onClick={onStop}
             title={stopLabel}
             aria-label={stopLabel}
-            style={sendAnchored ? { ...sendButtonStyle(false), ...trailingShift } : sendButtonStyle(false)}
+            style={sendButtonStyle(false)}
           >
             <StopSquareIcon />
           </button>
@@ -743,7 +773,7 @@ export function ChatInput({
             type="submit"
             disabled={!canSubmit}
             title={submitLabel}
-            style={sendAnchored ? { ...sendButtonStyle(!canSubmit), ...trailingShift } : sendButtonStyle(!canSubmit)}
+            style={sendButtonStyle(!canSubmit)}
           >
             <SendArrowIcon />
           </button>

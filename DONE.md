@@ -4,6 +4,92 @@
 
 ---
 
+## ✅ RESOLVED 2026-08-07 — Every artifact leaves the canvas in its own native format, from one shared row
+
+Only the document card had downloads, and the one format most objects could
+reach was markdown. A deck could not leave as a deck, a sheet had no Excel file
+at all, and a diagram had no image. Meanwhile the inspector carried SEVEN
+hand-written inline kind conditions — one per button — which is how the card came
+to offer Word and PDF for a document while the inspector offered Word and
+Markdown for the same object.
+
+**One taxonomy.** `frontend/src/lib/canvasExports.ts` now holds `exportActionsFor(kind)`
+— every format a kind offers, NATIVE FIRST — plus `EXPORT_MIME`,
+`EXPORT_EXTENSION` and `SERVER_RENDERED_ACTIONS`. Order is the contract: the head
+of the list is what a one-click download produces, so `defaultExportAction` is
+just `exportActionsFor(kind)[0]` and the Files library cannot disagree with the
+first button. A kind absent from the table has no artifact to take away and gets
+no row at all, instead of a "Download Markdown" button that writes out its own
+title.
+
+| Kind | Offers, native first |
+|---|---|
+| document · prd · knowledge · report · note · resume | Word · PDF · Markdown · Copy |
+| slides | PowerPoint · PDF · Markdown · Copy |
+| spreadsheet · table · dataset | Excel · CSV |
+| diagram | Draw.io/Mermaid · SVG · PDF · Copy |
+| chat · code | Markdown · Copy |
+| dashboard · chart · evaluation · featureSummary · projectComparison | JSON |
+
+**One row.** `CanvasExportActions` renders it, decides its own visibility, and is
+used by BOTH the inspector and every card. It reads the object, drops formats
+that object cannot currently fill — a sheet with no rows, a deck with no outline,
+a diagram still resolving — and returns null when nothing is left. No caller
+passes a `canExport` boolean it could compute itself. `canvasExportActionsFor` is
+exported for the one surface that FRAMES the row, so the inspector's "Copy &
+download" heading can never sit above an empty row.
+
+**Three native formats that did not exist before.**
+
+1. **Excel.** `api/src/application/office/xlsxWriter.ts` writes real SpreadsheetML
+   through `fflate`, the same zip library `docxWriter` uses — no new package.
+   CSV is an interchange format, not Excel's: it carries no types, no header, no
+   widths, and `01234` comes back a number. The writer keeps numbers numeric and
+   text textual, writes a frozen filtered header band, and sizes columns to their
+   content. `POST /api/exports/xlsx` + `exportXlsx`; 7 tests.
+2. **Deck PDF.** `printSlideDeck` paginates one slide per landscape page off
+   `canvasSlides`, so a deck prints as a deck rather than as its outline.
+3. **Diagram SVG (and PDF).** `frontend/src/lib/renderedSvg.ts` serializes the
+   drawing that is ON the board. Reading the rendered element is what lets ONE
+   implementation cover both notations — Mermaid's renderer is not ours to
+   reimplement. The catch it solves: the card draws from the canvas palette,
+   which is CSS custom properties, so a naively serialized SVG opens invisible
+   outside the app; computed styles are resolved onto each node as presentation
+   attributes first.
+
+`printCanvasObject` is the one switch that decides what "export as PDF" means per
+kind — pages for a document, a slide per page for a deck, a scaled drawing for a
+diagram — rather than every kind being flattened through the markdown renderer
+because that was the branch that already existed.
+
+**DRY fixes carried in the same pass.** `artifactCsv` re-read `data.rows`/
+`data.columns` by hand instead of using `tabularFromObject`, the derivation the
+sheet card itself renders from — so a dataset carrying `sampleRows` displayed on
+the card and then exported as "no rows". It is now `artifactSheet`, one
+derivation feeding both CSV and the .xlsx writer. `.documentActions` became
+`.cardActions`, worn by both the Edit toggle and the export row. Eight now-dead
+i18n keys (`downloadMarkdown`, `downloadCsv`, `downloadWord`,
+`downloadPowerPoint`, `downloadDiagram`, `downloadData`, `downloadPdf`, `copy`)
+and two dead node keys were deleted from all five catalogs, replaced by one
+`creationCanvas.export.*` namespace whose labels name the tool the file opens in.
+
+Guest degradation is now per-format instead of everything collapsing to markdown:
+`.docx`/`.pptx` → markdown, `.xlsx` → CSV, each saying which it did and why.
+
+Files: `api/src/application/office/xlsxWriter.ts` (+ 7 tests in
+`officeExport.test.ts`), `api/src/presentation/routes/exportRoutes.ts`,
+`frontend/src/lib/canvasExports.ts`, `frontend/src/lib/renderedSvg.ts`,
+`frontend/src/lib/printDocument.ts`, `frontend/src/lib/exportApi.ts`,
+`frontend/src/components/creation-canvas/CanvasExportActions.tsx`,
+`CreationNode.tsx`, `CreationCanvas.tsx`, `CreationCanvas.module.css`,
+all five i18n catalogs. 9 new card tests.
+
+Open follow-ups in the roadmap: a guest still cannot produce any OOXML container
+(blocked on a packaging-or-auth decision), and `comic`/`cad` still advertise a
+PDF only their generator could produce.
+
+---
+
 ## ✅ RESOLVED 2026-08-07 — The document on the canvas is now a document you can write and take away
 
 Asking the canvas for a document produced a document you could only read. Fixing
@@ -120,6 +206,60 @@ Files: `api/src/application/runtime/{webSearchVendors,webSearchCredential,cloudW
 `frontend/src/lib/{guestResearchActions,creationCanvasAi}.ts`. No migration.
 
 ---
+
+## ✅ RESOLVED 2026-08-07 — Brave dropped: search is SearXNG + Tavily/Exa/Linkup + a keyless floor
+
+Brave was removed as a product decision (operator: *"I don't want to use
+Brave"*). What replaced it is deliberately not a like-for-like swap — the
+backing ladder now matches what a **self-hosted** product should default to:
+
+1. **Tenant BYO key** — `tavily` → `exa` → `linkup`, from the existing
+   `integration_credentials` vault. All three have standing free tiers, and all
+   three return page CONTENT in the search response, so a result is often
+   usable without a follow-up `web_fetch` (Brave did not). Precedence is walked
+   in the port's declared order, not in whatever order the query planner
+   returned the rows.
+2. **The operator's own SearXNG** (`SEARXNG_URL`) — real open-web coverage with
+   no vendor account, no per-query meter, and no third party learning what a
+   tenant researches. This replaces the old operator-wide `BRAVE_SEARCH_API_KEY`
+   tier, and it is the recommended setup.
+3. **Wikipedia** — the keyless floor, unchanged. Research still works on a
+   deployment with nothing configured at all.
+
+**`WebSearchAuth` replaced the bare `apiKey`.** A metered vendor has a fixed
+endpoint and a secret; a self-hosted one has no secret and an endpoint only the
+operator knows. Collapsing both into one string would have sent SearXNG's base
+URL through a field called `apiKey`, in code that reasonably assumes that field
+is a secret.
+
+**SearXNG's base URL is deliberately exempt from `classifyWebEgress`.** That
+policy exists to stop an *untrusted* URL — one an index or a model handed us —
+reaching a private address. This one is operator configuration, and a
+self-hosted instance almost always IS private (`http://searxng:8080`), so
+applying the policy would block precisely the intended deployment. The RESULTS
+it returns are untrusted and are filtered exactly as every other vendor's are.
+
+Migration **0413** adds `tavily`/`exa`/`linkup` to `integration_provider`.
+`brave_search` is NOT removed: PostgreSQL has no `ALTER TYPE ... DROP VALUE`,
+so dropping it would mean recreating the enum and rewriting every dependent
+column to reclaim one label. Instead no adapter answers to it, so
+`webSearchVendor('brave_search')` returns null and a leftover row is skipped as
+an unwired vendor — the path the resolver already had. There is a test for
+exactly that.
+
+Also folded in, because two Wikipedia adapters had appeared: **one MediaWiki
+client** (`web/mediaWiki.ts`) now serves both the keyless search vendor and the
+keyless bulk geocoder, over **one bounded JSON transport** (`fetchVendorJson`
+in `cloudWeb.ts`, extended to POST for the three keyed vendors). Three
+hand-rolled `fetch` call sites with three different timeouts and User-Agents
+became one. Frontend catalog, workflow-builder integration, `IntegrationProvider`
+union, provider "Test connection" (one factory for all three keyed vendors) and
+the `web.search` tool copy all updated.
+
+> **Unverified against live APIs** — no vendor account and no SearXNG instance
+> were available, so all five adapters are stub-tested. Tracked in the roadmap
+> under `web_search` residuals; the per-vendor response field names are the
+> highest-risk assumption.
 
 ## ✅ RESOLVED 2026-08-07 — `geo.geocode` plots a whole dataset in one call
 

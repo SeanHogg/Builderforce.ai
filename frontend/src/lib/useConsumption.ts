@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/lib/AuthContext';
+import { useOptionalAuth } from '@/lib/AuthContext';
 import { consumptionApi, type ConsumptionSnapshot } from '@/lib/builderforceApi';
 
 /**
@@ -58,7 +58,10 @@ export function invalidateConsumption(): void {
 }
 
 export function useConsumption(): ConsumptionSnapshot | null {
-  const { hasTenant } = useAuth();
+  // Non-throwing auth read: the plan chip now rides in the composer, which also
+  // renders in isolated trees (tests, the marketing hero) that have no
+  // AuthProvider above them. No provider ⇒ no tenant ⇒ no snapshot, not a crash.
+  const hasTenant = useOptionalAuth()?.hasTenant ?? false;
   const [snapshot, setSnapshot] = useState<ConsumptionSnapshot | null>(cache?.data ?? null);
 
   useEffect(() => {

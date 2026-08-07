@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.119] — One composer, one menu — the editor and the web app now match
+
+- **Memory, Consolidate and Fork have moved into the `/` menu.** They used to be three permanent pills in the composer's button row, inert for most of a chat's life, sitting between the mode controls and Send — on a narrow side panel they crowded out the send button itself. In the menu each one has room to say what it actually does, and the two that need a real conversation behind them now explain *why* they are unavailable instead of just greying out.
+- **Memory no longer disappears when a chat has no project behind it.** It used to vanish from the row entirely, which reads as a bug; now it stays put and tells you to link the chat to a project first.
+- **The editor composer and the web composer are now the same control**, top to bottom: same `/` menu contents, same order, same plan chip beside the send button. A change to either one can no longer leave the other behind.
+
 ## [2026.7.117] — Change model shows the same list wherever you open it
 
 - **The Sessions-view / command-palette "Change model" picker now offers exactly what the composer's `/` menu does** — same rows, same order (cheapest first: Free → Plan → Paid → your own connected accounts → your saved LLM configs), and the same one-line answer to who gets billed for each. The two pickers used to be built separately, so they grouped models differently, named the same connected provider differently, and worded "who pays" differently while reading the same account. Both are now rendered from one list.

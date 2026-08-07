@@ -320,7 +320,7 @@ export function wikipediaArticleUrl(title: string): string {
 
 /**
  * Shape MediaWiki's `{ query: { search: [{ title, snippet }] } }` payload into the
- * shared rows. Pure → unit-testable, same contract as {@link parseBraveResults}: the
+ * shared rows. Pure → unit-testable, same contract as every other parser here: the
  * constructed URL still goes through the egress policy, because "we built this URL
  * ourselves" is an assumption, and the one place an assumption like that is worth
  * re-checking is the one that feeds `web_fetch`.

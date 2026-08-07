@@ -21,6 +21,7 @@ import { useModalityCopy } from '@/lib/useModalityCopy';
 import { authoredMarkdown, canvasDiagram, canvasDocument, canvasSlides } from '@/lib/canvasDocuments';
 import type { CanvasExportAction } from '@/lib/canvasExports';
 import { DocumentEditor } from './DocumentEditor';
+import { CanvasExportActions } from './CanvasExportActions';
 import { drawioLabelLines, drawioShapePolygon, parseDrawioXml, resolveDrawioXml, type DrawioGraph } from '@/lib/drawioDiagram';
 import { MermaidDiagram } from '@/components/MermaidDiagram';
 
@@ -550,12 +551,11 @@ function DataGridBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patc
  * a different surface again to get a file out of it — is three places to learn
  * for one document. Write it here, take it away from here.
  */
-function DocumentBody({ data, onEdit, onExport }: {
+function DocumentBody({ data, onEdit }: {
   data: CreationNodeData;
   /** Absent on a board this person cannot edit, which is what removes the Edit
    * control rather than leaving an inert one behind. */
   onEdit?: (patch: Partial<CreationNodeData>) => void;
-  onExport?: (action: CanvasExportAction) => void;
 }) {
   const t = useTranslations('creationCanvas.node');
   const [requested, setRequested] = useState(0);
@@ -573,17 +573,16 @@ function DocumentBody({ data, onEdit, onExport }: {
   const page = Math.min(Math.max(requested, 0), Math.max(0, pages.length - 1));
   const paginated = !editing && pages.length > 1;
 
-  const actions = (onEdit || onExport) ? <div className={`${styles.documentActions} nodrag nowheel`}>
-    {onEdit && <button
+  // Only the Edit toggle lives here. Downloads are the shared export row that
+  // every artifact card carries, so a document and a deck offer their formats
+  // in the same place and neither list can drift from the other.
+  const actions = onEdit ? <div className={`${styles.cardActions} nodrag nowheel`}>
+    <button
       type="button"
       data-active={editing ? 'true' : undefined}
       aria-pressed={editing}
       onClick={(event) => { event.stopPropagation(); setEditing(!editing); }}
-    >{editing ? t('documentDone') : t('documentEdit')}</button>}
-    {onExport && <>
-      <button type="button" onClick={(event) => { event.stopPropagation(); onExport('docx'); }}>{t('documentWord')}</button>
-      <button type="button" onClick={(event) => { event.stopPropagation(); onExport('pdf'); }}>{t('documentPdf')}</button>
-    </>}
+    >{editing ? t('documentDone') : t('documentEdit')}</button>
   </div> : null;
 
   if (editing && onEdit) return <div className={styles.documentBody}>
@@ -1330,7 +1329,6 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {DOCUMENT_BODY_KINDS.has(data.kind) && <DocumentBody
           data={data}
           {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})}
-          {...(onExport ? { onExport: (action: CanvasExportAction) => onExport(id, action) } : {})}
         />}
         {data.kind === 'slides' && <SlidesBody data={data} />}
         {data.kind === 'diagram' && <DiagramBody data={data} />}
@@ -1352,6 +1350,11 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'frame' && <div className={styles.frameBody}><strong>{String(data.framePurpose || t('arrangeObjects'))}</strong><p>{data.subtitle || t('frameFallback')}</p></div>}
         {data.kind === 'release' && <ReleaseBody data={data} onOpen={() => onOpenDetails?.(id, 'delivery')} />}
         {!specialized.has(data.kind) && <><AuthoredContent data={data} fallback={t('objectReady', { label: creationObjectDefinition(data.kind).label })} /><div className={styles.pills}><span>{data.status || t('canvasObject')}</span><span>{t('liveSessionContext')}</span></div></>}
+        {/* Every artifact leaves the board from the same place, in its own
+            native formats. The row renders nothing for an object that is not a
+            file — an agent, a frame, a timer — so it is safe to place once here
+            rather than threaded into each body that happens to produce one. */}
+        {onExport && <CanvasExportActions data={data} onExport={(action) => onExport(id, action)} />}
       </div>
       <Handle type="source" position={Position.Right} className={styles.handle} />
     </article>

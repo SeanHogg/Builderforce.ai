@@ -1095,6 +1095,9 @@
 .bf-pmenu__item:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .bf-pmenu__ico { flex: 0 0 auto; width: 18px; text-align: center; font-size: 13px; }
+/* Rows whose glyph is an inline SVG (consolidate, fork) rather than an emoji: the
+   list is align-items:flex-start, so centre the mark on the label's first line. */
+.bf-pmenu__ico > svg { display: block; margin: 1px auto 0; }
 
 .bf-pmenu__lbl {
   flex: 1 1 auto;

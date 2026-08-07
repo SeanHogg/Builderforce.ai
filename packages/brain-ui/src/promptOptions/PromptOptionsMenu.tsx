@@ -61,11 +61,41 @@ export interface PromptOptionsMemory {
   unavailableReason?: string;
 }
 
+/**
+ * The two actions that act on the CONVERSATION rather than on the next turn:
+ * consolidate it into a compact summary, or fork that summary into a new chat.
+ *
+ * They used to be two always-visible pills in the action row on both hosts (the
+ * web composer through a `ConsolidateForkControl`, the VS Code webview through a
+ * hand-rolled copy of the same two buttons) — four controls that were inert for
+ * most of a chat's life and, on a narrow panel, crowded out Send. Here they get
+ * room to say what they do, and the host only supplies state + handlers.
+ */
+export interface PromptOptionsSession {
+  /** The chat is long enough / idle enough for a summary to mean anything. */
+  canConsolidate: boolean;
+  consolidating?: boolean;
+  forking?: boolean;
+  onConsolidate: () => void;
+  onFork: () => void;
+}
+
+/* Consolidate = collapse the conversation inward into a compact summary. */
+const IconConsolidate = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 5.5 4.5 8 2 10.5M14 5.5 11.5 8 14 10.5M6.5 3v10M9.5 3v10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+);
+/* Fork = branch the conversation into a new one (git-branch glyph). */
+const IconFork = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="4" cy="3.5" r="1.5" fill="currentColor" /><circle cx="4" cy="12.5" r="1.5" fill="currentColor" /><circle cx="12" cy="3.5" r="1.5" fill="currentColor" /><path d="M4 5v6M4 8h4.5A3.5 3.5 0 0 0 12 4.5V5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
+);
+
 export interface PromptOptionsMenuProps {
   labels?: Partial<PromptOptionsLabels>;
   disabled?: boolean;
   mode?: PromptOptionsMode;
   memory?: PromptOptionsMemory;
+  /** Consolidate / fork this chat. Omit on a surface with no chat behind it. */
+  session?: PromptOptionsSession;
   effort?: Effort;
   onEffortChange?: (effort: Effort) => void;
   /** What a level really costs at this host's current state (answer/thinking budgets). */
@@ -100,6 +130,7 @@ export function PromptOptionsMenu({
   disabled = false,
   mode,
   memory,
+  session,
   effort,
   onEffortChange,
   describeEffort,
@@ -139,7 +170,7 @@ export function PromptOptionsMenu({
   const visible = useMemo(() => filterModelItems(items, labels, query, filter), [items, labels, query, filter]);
 
   // Nothing wired ⇒ no control (the component decides its own visibility).
-  if (!mode && !memory && !onEffortChange && !onThinkingChange && !model && !onAccountSettings) return null;
+  if (!mode && !memory && !session && !onEffortChange && !onThinkingChange && !model && !onAccountSettings) return null;
 
   const canChoose = model?.canChoose !== false;
   const activeKey = model ? activeModelKey(model.selection) : '';
@@ -326,6 +357,43 @@ export function PromptOptionsMenu({
                   </span>
                 </div>
               )}
+            </>
+          )}
+
+          {/* Actions on the conversation itself, kept last (above settings) because
+              they FIRE rather than arm: everything above shapes the next turn, these
+              two change the chat you are in. Both state their reason when inert, so a
+              short chat explains itself instead of showing two dead pills. */}
+          {session && (
+            <>
+              <div className="bf-pmenu__sep" />
+              <div className="bf-pmenu__group">{labels.conversation}</div>
+              <button
+                type="button"
+                role="menuitem"
+                className="bf-pmenu__item"
+                disabled={!session.canConsolidate || !!session.consolidating || !!session.forking}
+                onClick={() => { setOpen(false); session.onConsolidate(); }}
+              >
+                <span className="bf-pmenu__ico" aria-hidden="true"><IconConsolidate /></span>
+                <span className="bf-pmenu__lbl">
+                  {session.consolidating ? labels.consolidating : labels.consolidate}
+                  <span className="bf-pmenu__desc">{session.canConsolidate ? labels.consolidateHint : labels.sessionUnavailable}</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="bf-pmenu__item"
+                disabled={!session.canConsolidate || !!session.consolidating || !!session.forking}
+                onClick={() => { setOpen(false); session.onFork(); }}
+              >
+                <span className="bf-pmenu__ico" aria-hidden="true"><IconFork /></span>
+                <span className="bf-pmenu__lbl">
+                  {session.forking ? labels.forking : labels.fork}
+                  <span className="bf-pmenu__desc">{session.canConsolidate ? labels.forkHint : labels.sessionUnavailable}</span>
+                </span>
+              </button>
             </>
           )}
 

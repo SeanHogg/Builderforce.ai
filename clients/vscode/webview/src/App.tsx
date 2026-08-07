@@ -263,6 +263,15 @@ function promptMenuLabels(
     thinking: t('app.thinking', 'Thinking'),
     on: t('app.on', 'On'),
     off: t('app.off', 'Off'),
+    memory: t('app.memory', 'Memory'),
+    conversation: t('app.conversation', 'Conversation'),
+    consolidate: t('app.consolidate', 'Consolidate'),
+    consolidating: t('app.consolidating', 'Consolidating…'),
+    consolidateHint: t('app.consolidateHint', 'Summarize this chat into a compact context the rest of the conversation builds on'),
+    fork: t('app.fork', 'Fork'),
+    forking: t('app.forking', 'Forking…'),
+    forkHint: t('app.forkHint', 'Summarize this chat and continue in a new one from that summary'),
+    sessionUnavailable: t('app.sessionUnavailable', 'Available once this chat has a few messages and no run in flight'),
     model: t('app.model', 'Model'),
     modelInUse: t('app.modelInUse', 'Model in use'),
     searchModels: t('app.searchModels', 'Search models…'),
@@ -288,18 +297,6 @@ const IconSend = () => (
 );
 const IconBolt = () => (
   <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M9.2 1 3.4 8.6h3.4L6 15l6.2-8.1H8.6L9.2 1z" /></svg>
-);
-/* Consolidate = collapse the conversation inward into a compact summary. */
-const IconConsolidate = () => (
-  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M2 5.5 4.5 8 2 10.5M14 5.5 11.5 8 14 10.5M6.5 3v10M9.5 3v10" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
-);
-/* Fork = branch the conversation into a new one (git-branch glyph). */
-const IconFork = () => (
-  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><circle cx="4" cy="3.5" r="1.5" fill="currentColor" /><circle cx="4" cy="12.5" r="1.5" fill="currentColor" /><circle cx="12" cy="3.5" r="1.5" fill="currentColor" /><path d="M4 5v6M4 8h4.5A3.5 3.5 0 0 0 12 4.5V5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" /></svg>
-);
-/* Memory = brain glyph for the per-chat project-Evermind recall/learn switch. */
-const IconBrain = () => (
-  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M6 2.5a2 2 0 0 0-2 2 2 2 0 0 0-1 3.5 2 2 0 0 0 1 3.5 2 2 0 0 0 2 2V2.5zM10 2.5a2 2 0 0 1 2 2 2 2 0 0 1 1 3.5 2 2 0 0 1-1 3.5 2 2 0 0 1-2 2V2.5z" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" /><path d="M8 2.5v11" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" /></svg>
 );
 /* Rename = pencil glyph for editing the selected chat's title. */
 const IconRename = () => (
@@ -1798,6 +1795,25 @@ function Chat({ init }: { init: InitData }) {
               prose, which is exactly why users couldn't tell what they did. */}
           <PromptOptionsMenu
             labels={promptLabels}
+            memory={{
+              enabled: memoryEnabled,
+              onChange: toggleMemory,
+              describe: (on) => (on
+                ? t('app.memoryOnHint', 'Memory on — this chat recalls and learns from the project Evermind')
+                : t('app.memoryOffHint', 'Memory off — this chat is a scratch space (no recall, no learning)')),
+              // No project Evermind behind this chat ⇒ the switch would gate nothing.
+              // It still shows, and says so, rather than vanishing from the menu.
+              unavailableReason: evermindProjectId == null
+                ? t('app.memoryUnavailable', 'This chat has no project memory to recall from — link it to a project first')
+                : undefined,
+            }}
+            session={chatId != null ? {
+              canConsolidate,
+              consolidating,
+              forking,
+              onConsolidate: consolidate,
+              onFork: fork,
+            } : undefined}
             effort={effort}
             onEffortChange={setEffort}
             describeEffort={(level) => effortDesc(level, thinking, t)}
@@ -1827,51 +1843,6 @@ function Chat({ init }: { init: InitData }) {
           >
             <IconBolt />
             <span>{t('app.autoMode', 'Auto mode')}</span>
-          </button>
-
-          {/* Per-chat memory switch — when off, this chat neither recalls from nor
-              contributes back to the project's Evermind (web BrainPanel parity).
-              Sits with Auto mode because both are per-chat modes the user sets
-              BEFORE typing; only shown when there's a project Evermind to gate. */}
-          {evermindProjectId != null && (
-            <button
-              type="button"
-              className={`bf-toggle${memoryEnabled ? ' is-on' : ''}`}
-              title={memoryEnabled
-                ? t('app.memoryOnHint', 'Memory on — this chat recalls and learns from the project Evermind')
-                : t('app.memoryOffHint', 'Memory off — this chat is a scratch space (no recall, no learning)')}
-              aria-label={t('app.memory', 'Memory')}
-              aria-pressed={memoryEnabled}
-              onClick={() => toggleMemory(!memoryEnabled)}
-            >
-              <IconBrain />
-              <span>{t('app.memory', 'Memory')}</span>
-            </button>
-          )}
-
-          {/* Consolidate: compress the chat into a summary marker the rest of the
-              conversation builds on. Fork: branch that summary into a new chat. */}
-          <button
-            type="button"
-            className="bf-toggle"
-            title={t('app.consolidateHint', 'Summarize this chat into a compact context the rest of the conversation builds on')}
-            aria-label={t('app.consolidate', 'Consolidate')}
-            disabled={!canConsolidate || consolidating}
-            onClick={consolidate}
-          >
-            <IconConsolidate />
-            <span>{consolidating ? t('app.consolidating', 'Consolidating…') : t('app.consolidate', 'Consolidate')}</span>
-          </button>
-          <button
-            type="button"
-            className="bf-toggle"
-            title={t('app.forkHint', 'Summarize this chat and continue in a new one from that summary')}
-            aria-label={t('app.fork', 'Fork')}
-            disabled={!canConsolidate || forking}
-            onClick={fork}
-          >
-            <IconFork />
-            <span>{forking ? t('app.forking', 'Forking…') : t('app.fork', 'Fork')}</span>
           </button>
 
           <div className="bf-header__spacer" />

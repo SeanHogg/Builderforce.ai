@@ -57,7 +57,7 @@ import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
 import { CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
 import { downloadJson, downloadText, toCsv } from '@/lib/download';
-import { exportCsv, exportDocx, exportPptx } from '@/lib/exportApi';
+import { exportCsv, exportDocx, exportPptx, exportXlsx } from '@/lib/exportApi';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 import {
   MAX_MATERIALIZED_ROWS, MAX_TABULAR_COLUMNS, TABULAR_AGGREGATE_OPERATORS, TABULAR_FILTER_OPERATORS,
@@ -84,8 +84,10 @@ import { NEW_CHAT_MODE, normalizeChatMode, type ChatMode } from '@/lib/brain';
 import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
 import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, creativeBrief, creativeMeshGeometry, creativePreviewImageUrl, evermindMediaArtifact, generateEvermindMedia, generateServerCreativeArtifact, mediaFrameDataUrl, navigableArtifactUrl, withCreationDeliverable, EVERMIND_CREATIVE_KINDS, SERVER_CREATIVE_KINDS, type CreationDeliverable, type CreativeArtifact } from '@/lib/creationDeliverables';
 import { canvasDiagram, canvasDocument, canvasFiles, canvasObjectMarkdown, type CanvasFile } from '@/lib/canvasDocuments';
-import { EXPORT_MIME, OFFICE_DOCUMENT_KINDS, defaultExportAction, type CanvasExportAction } from '@/lib/canvasExports';
-import { printMarkdownDocument } from '@/lib/printDocument';
+import { EXPORT_EXTENSION, EXPORT_MIME, SERVER_RENDERED_ACTIONS, defaultExportAction, type CanvasExportAction } from '@/lib/canvasExports';
+import { printCanvasObject } from '@/lib/printDocument';
+import { renderedNodeSvg, serializeRenderedSvg } from '@/lib/renderedSvg';
+import { CanvasExportActions, canvasExportActionsFor } from './CanvasExportActions';
 import { listEvermindModels } from '@/lib/studioModelsApi';
 import { AITrainingPanel } from '@/components/AITrainingPanel';
 import { canvasProjectId, canvasProjectNodes, connectedCanvasProjectNode } from '@/lib/canvasProjectRef';
@@ -232,19 +234,24 @@ function safeDownloadName(value: string): string {
  * editor rather than a read-only "live object" note. */
 const DOCUMENT_EDITOR_KINDS = new Set<CreationObjectKind>(['document', 'prd', 'knowledge', 'note', 'report', 'slides']);
 
-function artifactCsv(data: CreationNodeData): string | null {
-  const rawRows = Array.isArray(data.rows) ? data.rows : [];
-  const rawColumns = Array.isArray(data.columns) ? data.columns : [];
-  const columns = rawColumns.map((column) => typeof column === 'string' ? column : String((column as { name?: unknown; key?: unknown })?.name ?? (column as { key?: unknown })?.key ?? 'Column'));
-  if (!columns.length && rawRows[0] && typeof rawRows[0] === 'object' && !Array.isArray(rawRows[0])) columns.push(...Object.keys(rawRows[0] as Record<string, unknown>));
-  if (!columns.length) return null;
-  const rows = rawRows.map((row) => Array.isArray(row)
-    ? row.map((value) => value == null || ['string', 'number'].includes(typeof value) ? value as string | number | null : JSON.stringify(value))
-    : columns.map((column) => {
-      const value = row && typeof row === 'object' ? (row as Record<string, unknown>)[column] : '';
-      return value == null || ['string', 'number'].includes(typeof value) ? value as string | number | null : JSON.stringify(value);
-    }));
-  return toCsv(columns, rows);
+/**
+ * The rows an object holds, in the positional shape BOTH the CSV writer and the
+ * .xlsx writer index by.
+ *
+ * One derivation — `tabularFromObject`, the same one the sheet card renders from
+ * — so an exported file can never disagree with what is on screen. This used to
+ * re-read `data.rows`/`data.columns` by hand, which is why a dataset carrying
+ * `sampleRows` rendered on the card and then exported as "no rows".
+ */
+function artifactSheet(data: CreationNodeData): { columns: string[]; rows: Array<Array<string | number | null>> } | null {
+  const source = tabularFromObject(data as Record<string, unknown>);
+  if (!source.columns.length) return null;
+  const rows = source.rows.map((row) => source.columns.map((column) => {
+    const value = row[column];
+    if (value == null) return null;
+    return typeof value === 'string' || typeof value === 'number' ? value : String(value);
+  }));
+  return { columns: source.columns, rows };
 }
 
 /** Horizontal gap between objects created by one multi-file drop, so a folder
@@ -3256,42 +3263,62 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const base = safeDownloadName(target.data.title);
     try {
       if (action === 'copy') return await copyTextToClipboard(markdown) ? t('copiedToClipboard') : t('clipboardUnavailable');
-      const office = (action === 'docx' || action === 'pptx') && persistence === 'server';
-      let fileName = `${base}.md`;
-      if (action === 'markdown' || ((action === 'docx' || action === 'pptx') && !office)) downloadText(markdown, fileName, 'text/markdown');
-      if (action === 'csv') {
-        const csv = artifactCsv(target.data);
-        if (!csv) throw new Error(t('noTabularRows'));
+      // The Office containers are zips of XML parts, so their writers live on the
+      // API and a guest session — which has no tenant to authenticate as — cannot
+      // reach them. Only THOSE degrade, and each degrades to its own nearest
+      // browser-writable format rather than everything collapsing to markdown.
+      const degraded = SERVER_RENDERED_ACTIONS.has(action) && persistence !== 'server';
+      const diagram = canvasDiagram(target.data);
+      let fileName = `${base}.${EXPORT_EXTENSION[action as Exclude<CanvasExportAction, 'copy' | 'diagram'>] ?? 'md'}`;
+
+      if (action === 'markdown') downloadText(markdown, fileName, 'text/markdown');
+      if (action === 'csv' || (action === 'xlsx' && degraded)) {
+        const sheet = artifactSheet(target.data);
+        if (!sheet) throw new Error(t('noTabularRows'));
         fileName = `${base}.csv`;
-        exportCsv(csv, fileName);
+        exportCsv(toCsv(sheet.columns, sheet.rows), fileName);
       }
       if (action === 'diagram') {
-        const diagram = canvasDiagram(target.data);
         if (!diagram) throw new Error(t('noDiagramSource'));
         fileName = `${base}.${diagram.format === 'drawio' ? 'drawio' : 'mmd'}`;
         downloadText(diagram.source, fileName, diagram.format === 'drawio' ? 'application/vnd.jgraph.mxfile' : 'text/vnd.mermaid');
       }
-      if (office) {
-        fileName = `${base}.${action}`;
+      if (action === 'svg') {
+        // The drawing that is ON the board, not a second rendering of its source.
+        const svg = serializeRenderedSvg(renderedNodeSvg(nodeId));
+        if (!svg) throw new Error(t('noRenderedDrawing'));
+        downloadText(svg, fileName, 'image/svg+xml');
+      }
+      if ((action === 'docx' || action === 'pptx') && degraded) {
+        fileName = `${base}.md`;
+        downloadText(markdown, fileName, 'text/markdown');
+      }
+      if (SERVER_RENDERED_ACTIONS.has(action) && !degraded) {
         if (action === 'docx') await exportDocx(markdown, target.data.title);
-        else await exportPptx(markdown, target.data.title);
+        if (action === 'pptx') await exportPptx(markdown, target.data.title);
+        if (action === 'xlsx') {
+          const sheet = artifactSheet(target.data);
+          if (!sheet) throw new Error(t('noTabularRows'));
+          await exportXlsx(sheet.columns, sheet.rows, target.data.title);
+        }
       }
       if (action === 'pdf') {
         // The browser's own print pipeline, where "Save as PDF" lives. It needs
-        // no server, so it is the one export a GUEST session can also finish.
-        fileName = `${base}.pdf`;
-        if (!printMarkdownDocument(target.data.title, markdown)) throw new Error(t('printUnavailable'));
+        // no server, so it is the one export a GUEST session can also finish —
+        // and it prints each kind AS that kind: pages for a document, a slide per
+        // page for a deck, a scaled drawing for a diagram.
+        if (!printCanvasObject(target.data, action === 'pdf' && target.data.kind === 'diagram' ? serializeRenderedSvg(renderedNodeSvg(nodeId)) : null)) throw new Error(t('printUnavailable'));
       }
-      if (action === 'json') {
-        fileName = `${base}.json`;
-        downloadJson({ kind: target.data.kind, title: target.data.title, data: target.data }, fileName);
-      }
+      if (action === 'json') downloadJson({ kind: target.data.kind, title: target.data.title, data: target.data }, fileName);
+
       const delivered: CreationDeliverable = {
         id: crypto.randomUUID(), action: 'export', artifactKind: action, status: 'delivered',
         createdAt: new Date().toISOString(), completedAt: new Date().toISOString(),
-        provider: office ? 'builderforce-office-export' : action === 'pdf' ? 'browser-print' : action === 'docx' || action === 'pptx' ? 'browser-markdown-fallback' : 'browser-download',
+        provider: degraded ? 'browser-office-fallback' : SERVER_RENDERED_ACTIONS.has(action) ? 'builderforce-office-export' : action === 'pdf' ? 'browser-print' : 'browser-download',
         fileName,
-        mimeType: action === 'diagram' ? 'application/vnd.jgraph.mxfile' : office || (action !== 'docx' && action !== 'pptx') ? EXPORT_MIME[action] : 'text/markdown',
+        mimeType: action === 'diagram'
+          ? (diagram?.format === 'mermaid' ? 'text/vnd.mermaid' : 'application/vnd.jgraph.mxfile')
+          : degraded ? (action === 'xlsx' ? EXPORT_MIME.csv : EXPORT_MIME.markdown) : EXPORT_MIME[action],
         validation: { status: 'passed', detail: 'Export generated and download started' },
       };
       setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, deliverables: withCreationDeliverable(node.data, delivered) } } : node));
@@ -3299,7 +3326,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       // A guest session cannot reach the authenticated Office renderer, so say
       // what actually landed in Downloads and point at the export that DOES work
       // there, rather than reporting a Word file that was never produced.
-      return (action === 'docx' || action === 'pptx') && !office ? t('markdownDownloadedUsePdf') : t('downloadReady');
+      return degraded ? (action === 'xlsx' ? t('csvDownloadedSignInForExcel') : t('markdownDownloadedUsePdf')) : t('downloadReady');
     } catch (error) {
       return error instanceof Error ? error.message : t('exportFailed');
     }
@@ -4126,8 +4153,6 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
     setExpandedInspector(false);
     applyInspectorWidth(next, true);
   };
-  const markdown = canvasObjectMarkdown(node.data);
-  const csv = artifactCsv(node.data);
   const deliverables = creationDeliverables(node.data);
   const taskId = kind === 'task' && /^task:\d+$/.test(node.data.resourceId || '') ? Number(node.data.resourceId!.slice(5)) : null;
   const taskAgents = nodes.filter((candidate) => candidate.data.kind === 'agent');
@@ -4328,17 +4353,9 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
       </>}
       {!['chat', 'agent', 'evaluation', 'staff', 'website', 'prototype', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'task', 'mockup', 'evermind', 'standup', 'frame', 'drawing', 'diagram'].includes(kind) && !DOCUMENT_EDITOR_KINDS.has(kind) && !CREATIVE_GENERATOR_KINDS.has(kind) && <p className={styles.inspectorHint}>{t('objectLiveHint')}</p>}
       </fieldset> : <ActivityInspector sessionId={sessionId} objectId={node.id} persistence={persistence} role={role} members={members} />}
-      {tab === 'details' && <section aria-label={t('copyAndDownload')} style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
+      {tab === 'details' && canvasExportActionsFor(node.data).length > 0 && <section aria-label={t('copyAndDownload')} style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
         <strong style={{ fontSize: 12 }}>{t('copyAndDownload')}</strong>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-          {(kind === 'chat' || kind === 'code' || kind === 'note' || kind === 'report' || kind === 'document' || kind === 'slides' || kind === 'knowledge' || kind === 'diagram' || kind === 'prd') && <button type="button" onClick={() => void runArtifactAction('copy')}>{t('copy')}</button>}
-          {(kind === 'chat' || kind === 'code' || kind === 'note' || kind === 'report' || kind === 'document' || kind === 'slides' || kind === 'knowledge' || kind === 'prd') && <button type="button" onClick={() => void runArtifactAction('markdown')}>{t('downloadMarkdown')}</button>}
-          {(kind === 'dataset' || kind === 'spreadsheet' || kind === 'table') && <button type="button" onClick={() => void runArtifactAction('csv')}>{t('downloadCsv')}</button>}
-          {OFFICE_DOCUMENT_KINDS.has(kind) && <><button type="button" onClick={() => void runArtifactAction('docx')}>{t('downloadWord')}</button><button type="button" onClick={() => void runArtifactAction('pdf')}>{t('downloadPdf')}</button></>}
-          {kind === 'slides' && <button type="button" onClick={() => void runArtifactAction('pptx')}>{t('downloadPowerPoint')}</button>}
-          {kind === 'diagram' && <button type="button" onClick={() => void runArtifactAction('diagram')}>{t('downloadDiagram')}</button>}
-          {(kind === 'dashboard' || kind === 'chart' || kind === 'evaluation' || kind === 'featureSummary' || kind === 'projectComparison') && <button type="button" onClick={() => void runArtifactAction('json')}>{t('downloadData')}</button>}
-        </div>
+        <CanvasExportActions data={node.data} onExport={(action) => void runArtifactAction(action)} className={styles.panelActions} />
         {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
       </section>}
       {tab === 'details' && deliverables.length > 0 && <section aria-label={t('deliverables')} style={{ display: 'grid', gap: 8, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}><strong style={{ fontSize: 12 }}>{t('deliveredOutputs')}</strong>{deliverables.slice(0, 6).map((deliverable) => <div key={deliverable.id} style={{ display: 'grid', gap: 2, fontSize: 12 }}><span><b>{deliverable.artifactKind}</b> · {deliverable.status}</span><small>{deliverable.provider || 'Builderforce'} · {new Date(deliverable.completedAt || deliverable.createdAt).toLocaleString()}</small>{deliverable.url && !deliverable.url.startsWith('data:') && <a href={deliverable.url} target="_blank" rel="noreferrer">{t('openDeliverable')}</a>}{deliverable.error && <small style={{ color: 'var(--text-error, #c0392b)' }}>{deliverable.error}</small>}</div>)}</section>}

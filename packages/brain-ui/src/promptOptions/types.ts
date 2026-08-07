@@ -35,6 +35,17 @@ export interface PromptOptionsLabels extends ModelChoiceLabels {
   mode: string;
   /** Section heading + row label for persistent project memory. */
   memory: string;
+  /** Section heading for the actions that act on the CHAT itself (consolidate, fork). */
+  conversation: string;
+  consolidate: string;
+  consolidating: string;
+  /** What consolidating actually does to the rest of the conversation. */
+  consolidateHint: string;
+  fork: string;
+  forking: string;
+  forkHint: string;
+  /** Why neither conversation action can run yet (too short a chat, or a live run). */
+  sessionUnavailable: string;
   effort: string;
   effortQuick: string;
   effortBalanced: string;
@@ -61,6 +72,14 @@ export const DEFAULT_PROMPT_OPTIONS_LABELS: PromptOptionsLabels = {
   options: 'Options',
   mode: 'Mode',
   memory: 'Memory',
+  conversation: 'Conversation',
+  consolidate: 'Consolidate',
+  consolidating: 'Consolidating…',
+  consolidateHint: 'Summarize this chat into a compact context the rest of the conversation builds on',
+  fork: 'Fork',
+  forking: 'Forking…',
+  forkHint: 'Summarize this chat and continue in a new one from that summary',
+  sessionUnavailable: 'Available once this chat has a few messages and no run in flight',
   effort: 'Effort',
   effortQuick: 'Quick',
   effortBalanced: 'Balanced',

@@ -131,7 +131,9 @@ function buildLabels(): Record<string, string> {
     // answerable without hunting back through the transcript for its card.
     "app.askPending": t("Answer needed"),
     "app.askJumpTo": t("Show in conversation"),
-    // Consolidate + Fork composer actions
+    // Consolidate + Fork — rows in the composer's `/` menu (they act on the CHAT,
+    // not the next turn), grouped there under the existing `app.conversation` heading.
+    "app.sessionUnavailable": t("Available once this chat has a few messages and no run in flight"),
     "app.consolidate": t("Consolidate"),
     "app.consolidateHint": t("Summarize this chat into a compact context the rest of the conversation builds on"),
     "app.consolidating": t("Consolidating…"),
@@ -143,6 +145,7 @@ function buildLabels(): Record<string, string> {
     "app.memory": t("Memory"),
     "app.memoryOnHint": t("Memory on — this chat recalls and learns from the project Evermind"),
     "app.memoryOffHint": t("Memory off — this chat is a scratch space (no recall, no learning)"),
+    "app.memoryUnavailable": t("This chat has no project memory to recall from — link it to a project first"),
     "app.diagnostics": t("Run connection diagnostics"),
     "app.attachImage": t("Attach image"),
     "app.remove": t("Remove"),

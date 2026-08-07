@@ -1310,17 +1310,23 @@
 /* ── Working on the document, on the card ────────────────────────────────────
    Edit it here, take it away from here. Everything below draws from the canvas
    palette, so both themes and a phone-width board come from one definition. */
-.documentActions { display:flex; flex-wrap:wrap; gap:4px; }
-.documentActions button {
+/* One action row, worn by the document card's Edit toggle AND by the shared
+   export row every artifact card carries — so a deck, a sheet and a diagram all
+   present their downloads the same way a document does. */
+.cardActions { display:flex; flex-wrap:wrap; gap:4px; }
+.cardActions button {
   min-height:22px; padding:3px 9px;
   border:1px solid var(--canvas-line,#d7e1ee); border-radius:6px;
   background:var(--canvas-widget-surface,#fff); color:var(--canvas-ink,#142234);
   font:650 8px inherit; font-family:inherit; line-height:1.2; white-space:nowrap; cursor:pointer;
 }
-.documentActions button:hover,.documentActions button:focus-visible { background:var(--canvas-hover,#e7effc); outline:none; }
-.documentActions button[data-active='true'] {
+.cardActions button:hover,.cardActions button:focus-visible { background:var(--canvas-hover,#e7effc); outline:none; }
+.cardActions button[data-active='true'] {
   border-color:var(--canvas-accent-ink,#2a5fc7); background:var(--canvas-hover,#e7effc); color:var(--canvas-accent-ink,#2a5fc7);
 }
+/* The same row read at panel scale. A card is zoomed with the board and can be
+   compact; the inspector is fixed-size UI and its controls must stay tappable. */
+.panelActions.panelActions button { min-height:30px; padding:6px 11px; font-size:12px; }
 
 .docEditor { display:grid; gap:5px; min-height:0; }
 .docToolbar {

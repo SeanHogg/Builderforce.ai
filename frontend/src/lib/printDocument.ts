@@ -14,6 +14,8 @@
  */
 
 import { escapeHtml, markdownToHtml } from './richText';
+import { canvasDiagram, canvasObjectMarkdown, canvasSlides, type CanvasSlide } from './canvasDocuments';
+import type { CreationNodeData } from '@/components/creation-canvas/types';
 
 /**
  * The printed page.
@@ -64,7 +66,7 @@ const FRAME_TTL_MS = 10 * 60_000;
  * browser that refused the frame) so the caller can report a real failure
  * instead of claiming a download that never happened.
  */
-export function printHtmlDocument(title: string, bodyHtml: string): boolean {
+export function printHtmlDocument(title: string, bodyHtml: string, extraStyles = ''): boolean {
   if (typeof document === 'undefined') return false;
   const frame = document.createElement('iframe');
   frame.setAttribute('aria-hidden', 'true');
@@ -76,7 +78,7 @@ export function printHtmlDocument(title: string, bodyHtml: string): boolean {
   if (!view || !page) { frame.remove(); return false; }
 
   page.open();
-  page.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${PRINT_STYLES}</style></head><body>${bodyHtml}</body></html>`);
+  page.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>${PRINT_STYLES}${extraStyles}</style></head><body>${bodyHtml}</body></html>`);
   page.close();
 
   let released = false;
@@ -117,4 +119,67 @@ export function printHtmlDocument(title: string, bodyHtml: string): boolean {
 export function printMarkdownDocument(title: string, markdown: string): boolean {
   const body = markdownToHtml(markdown);
   return printHtmlDocument(title, body || `<h1>${escapeHtml(title)}</h1>`);
+}
+
+/** A deck prints as a deck: one slide per landscape page, not as an outline. */
+const DECK_STYLES = `
+  @page { size: A4 landscape; margin: 12mm; }
+  body { font-family: Helvetica, Arial, sans-serif; }
+  .slide { display: flex; flex-direction: column; justify-content: center; min-height: 168mm; break-after: page; page-break-after: always; }
+  .slide:last-child { break-after: auto; page-break-after: auto; }
+  .slide h2 { margin: 0 0 .6em; font-size: 26pt; line-height: 1.15; letter-spacing: -.015em; }
+  .slide ul { margin: 0; padding-left: 1.1em; font-size: 14pt; line-height: 1.5; }
+  .slide li { margin: .3em 0; }
+  .slide .notes { margin-top: auto; padding-top: .8em; border-top: 1px solid #9ca3af; color: #4b5563; font-size: 9pt; }
+  .slide .number { position: absolute; right: 12mm; color: #6b7280; font-size: 9pt; }
+`;
+
+function slideHtml(slide: CanvasSlide, index: number): string {
+  const bullets = slide.bullets.length ? `<ul>${slide.bullets.map((bullet) => `<li>${escapeHtml(bullet)}</li>`).join('')}</ul>` : '';
+  const notes = slide.notes ? `<div class="notes">${escapeHtml(slide.notes)}</div>` : '';
+  return `<section class="slide"><span class="number">${index + 1}</span><h2>${escapeHtml(slide.title)}</h2>${bullets}${notes}</section>`;
+}
+
+/** Print a deck. Returns `false` when the object holds no slides, so an empty
+ * deck reports that rather than opening a blank print dialog. */
+export function printSlideDeck(title: string, slides: readonly CanvasSlide[]): boolean {
+  if (!slides.length) return false;
+  return printHtmlDocument(title, slides.map(slideHtml).join(''), DECK_STYLES);
+}
+
+/** A drawing prints on one landscape page, scaled to fit rather than cropped. */
+const DRAWING_STYLES = `
+  @page { size: A4 landscape; margin: 12mm; }
+  .drawing { display: flex; align-items: center; justify-content: center; height: 168mm; }
+  .drawing svg { max-width: 100%; max-height: 100%; height: auto; }
+`;
+
+/** Print a rendered drawing, given the serialized SVG for it. */
+export function printSvgDrawing(title: string, svg: string): boolean {
+  // The XML prolog is for a standalone .svg FILE; inside an HTML document it
+  // would render as stray text above the drawing.
+  const markup = svg.replace(/^<\?xml[^>]*\?>\s*/, '');
+  return printHtmlDocument(title, `<div class="drawing">${markup}</div>`, DRAWING_STYLES);
+}
+
+/**
+ * Print whatever this object is, as the thing it is.
+ *
+ * One switch, so "export as PDF" means a paginated document for a document, a
+ * slide per page for a deck, and a scaled drawing for a diagram — rather than
+ * every kind being flattened through the same markdown renderer because that
+ * was the branch that already existed.
+ */
+export function printCanvasObject(data: CreationNodeData, svg: string | null): boolean {
+  if (data.kind === 'slides') return printSlideDeck(data.title, canvasSlides(data));
+  if (data.kind === 'diagram') return svg ? printSvgDrawing(data.title, svg) : false;
+  return printMarkdownDocument(data.title, canvasObjectMarkdown(data));
+}
+
+/** Whether this object currently HAS something to print, asked before the button
+ * is offered rather than after it fails. */
+export function canPrintCanvasObject(data: CreationNodeData): boolean {
+  if (data.kind === 'slides') return canvasSlides(data).length > 0;
+  if (data.kind === 'diagram') return !!canvasDiagram(data);
+  return true;
 }

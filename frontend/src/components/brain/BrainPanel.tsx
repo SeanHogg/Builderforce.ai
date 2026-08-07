@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
-import { BrainTimeline, Avatar, ConsolidateForkControl } from '@seanhogg/builderforce-brain-ui';
+import { BrainTimeline, Avatar } from '@seanhogg/builderforce-brain-ui';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import {
   consolidationMarkerContent,
@@ -1362,6 +1362,17 @@ export function BrainPanel({
       // surfaces that have this setting now render it from the same place.
       chatMode={chatMode}
       onChatModeChange={selectMode}
+      // Memory and the consolidate/fork actions live in that same `/` menu, for the
+      // same reason and on both surfaces: three pills that were inert for most of a
+      // chat's life used to sit between the mode control and Send.
+      memoryEnabled={memoryEnabled}
+      onMemoryChange={toggleMemory}
+      memoryUnavailableReason={evermindProjectId == null ? tBrain('memoryUnavailable') : undefined}
+      canConsolidate={canConsolidate}
+      consolidating={consolidating}
+      forking={forking}
+      onConsolidate={consolidate}
+      onFork={fork}
       showVoice
       pendingAttachments={conv.pendingAttachments}
       onRemoveAttachment={conv.removeAttachment}
@@ -1401,26 +1412,7 @@ export function BrainPanel({
           </Select>
         </>}
       </>}
-      modeControls={chats.activeChatId != null ? <>
-        <ConsolidateForkControl
-          canConsolidate={canConsolidate}
-          consolidating={consolidating}
-          forking={forking}
-          onConsolidate={consolidate}
-          onFork={fork}
-          labels={{ consolidate: tBrain('consolidate'), consolidating: tBrain('consolidating'), fork: tBrain('fork'), forking: tBrain('forking') }}
-        />
-        <button
-          type="button"
-          onClick={() => toggleMemory(!memoryEnabled)}
-          aria-pressed={memoryEnabled}
-          title={memoryEnabled ? tBrain('memoryOnTooltip') : tBrain('memoryOffTooltip')}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 'var(--chat-ctl-size, 32px)', padding: '0 9px', borderRadius: 999, border: '1px solid var(--border-subtle)', background: memoryEnabled ? 'var(--bg-elevated)' : 'var(--bg-base)', color: memoryEnabled ? 'var(--text-secondary)' : 'var(--text-muted)', cursor: 'pointer' }}
-        >
-          <span aria-hidden>{memoryEnabled ? '🧠' : '🚫'}</span><span>{tBrain('memoryToggleLabel')}</span>
-        </button>
-        <span><EvermindStatusBadge projectId={ctxProjectId} /></span>
-      </> : undefined}
+      modeControls={chats.activeChatId != null ? <EvermindStatusBadge projectId={ctxProjectId} /> : undefined}
     />
   );
 

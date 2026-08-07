@@ -33,9 +33,6 @@ export type { AskUserPayload, AskUserOption, AskUserLabels, PendingAskUser } fro
 export { ChatErrorBanner, DEFAULT_CHAT_ERROR_LABELS } from './ChatErrorBanner';
 export type { ChatErrorBannerProps, ChatErrorBannerLabels } from './ChatErrorBanner';
 
-export { ConsolidateForkControl, DEFAULT_CONSOLIDATE_FORK_LABELS } from './ConsolidateForkControl';
-export type { ConsolidateForkControlProps, ConsolidateForkLabels } from './ConsolidateForkControl';
-
 export { PromptPanel } from './PromptPanel';
 export type { PromptPanelProps } from './PromptPanel';
 
@@ -48,6 +45,7 @@ export type {
   PromptOptionsMode,
   PromptOptionsModeChoice,
   PromptOptionsModel,
+  PromptOptionsSession,
 } from './promptOptions/PromptOptionsMenu';
 export { DEFAULT_PROMPT_OPTIONS_LABELS, promptOptionsLabels } from './promptOptions/types';
 export type { PromptOptionsLabels } from './promptOptions/types';

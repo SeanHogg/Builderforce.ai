@@ -237,3 +237,61 @@ describe('a document is written and taken away from its own card', () => {
     expect(onEditData).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * The regression these cover: only the document card had downloads, and the one
+ * format every other artifact could reach was markdown — a deck, a sheet and a
+ * diagram had no way off the board in the format their own tool opens.
+ */
+describe('every artifact leaves the board in its own native format', () => {
+  const formats = (data: CreationNodeData) => {
+    const { unmount } = renderNode(data, { onExport: vi.fn() });
+    const group = screen.queryByRole('group', { name: 'Download' });
+    const labels = group ? within(group).getAllByRole('button').map((button) => button.textContent) : [];
+    unmount();
+    return labels;
+  };
+
+  it('offers a deck as PowerPoint before anything else', () => {
+    expect(formats({ kind: 'slides', title: 'Q3 review', markdown: '## Growth\n\n- EMEA up 12%\n\n## Risks\n\n- Churn' }))
+      .toEqual(['PowerPoint', 'PDF', 'Markdown', 'Copy']);
+  });
+
+  it('offers a sheet as Excel before CSV', () => {
+    expect(formats({ kind: 'spreadsheet', title: 'Pricing', columns: ['Plan', 'Price'], rows: [{ Plan: 'Pro', Price: 40 }] }))
+      .toEqual(['Excel', 'CSV']);
+  });
+
+  it('offers a diagram in its own notation, plus SVG', () => {
+    expect(formats({ kind: 'diagram', title: 'Flow', diagram: 'graph TD;A-->B;' }))
+      .toEqual(['Mermaid', 'SVG', 'PDF', 'Copy']);
+  });
+
+  it('names the notation the diagram is actually written in', () => {
+    expect(formats({ kind: 'diagram', title: 'Flow', diagram: '<mxfile><diagram/></mxfile>' })[0]).toBe('Draw.io');
+  });
+
+  it('offers a document as Word before PDF or Markdown', () => {
+    expect(formats({ kind: 'document', title: 'Analysis', markdown: '# Analysis' }))
+      .toEqual(['Word', 'PDF', 'Markdown', 'Copy']);
+  });
+
+  it('offers nothing for an object that is not a file', () => {
+    expect(formats({ kind: 'agent', title: 'Researcher' })).toEqual([]);
+  });
+
+  it('drops a format the object cannot currently fill', () => {
+    // A sheet with no rows yet has no columns to write, so Excel and CSV are
+    // absent rather than present-and-failing.
+    expect(formats({ kind: 'spreadsheet', title: 'Empty' })).toEqual([]);
+    // A deck whose outline has not been written yet cannot render slides.
+    expect(formats({ kind: 'slides', title: 'Untitled deck' })).toEqual(['Markdown', 'Copy']);
+  });
+
+  it('asks the board to export the format that was clicked', () => {
+    const onExport = vi.fn();
+    renderNode({ kind: 'spreadsheet', title: 'Pricing', columns: ['Plan'], rows: [{ Plan: 'Pro' }] }, { onExport });
+    fireEvent.click(screen.getByRole('button', { name: 'Excel' }));
+    expect(onExport).toHaveBeenCalledWith('object-1', 'xlsx');
+  });
+});
