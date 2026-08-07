@@ -220,7 +220,7 @@ export function createProjectBackendRoutes(db: Db): Hono<HonoEnv> {
     if (!env.UPLOADS) return c.json({ error: 'Storage is not configured' }, 503);
 
     const body = await c.req.json<{ document?: unknown }>().catch(() => ({}) as never);
-    const saved = await saveHandler(env.UPLOADS, project.id, c.req.param('name'), body.document);
+    const saved = await saveHandler(env, env.UPLOADS, project.id, c.req.param('name'), body.document);
     if (!saved.ok) return c.json({ error: saved.reason }, saved.status);
 
     await regenerate(db, env, tenantId, project);
@@ -234,7 +234,7 @@ export function createProjectBackendRoutes(db: Db): Hono<HonoEnv> {
 
     const env = c.env as Env & { UPLOADS?: R2Bucket };
     if (!env.UPLOADS) return c.json({ error: 'Storage is not configured' }, 503);
-    if (!(await removeHandler(env.UPLOADS, project.id, c.req.param('name')))) {
+    if (!(await removeHandler(env, env.UPLOADS, project.id, c.req.param('name')))) {
       return c.json({ error: 'Invalid handler name' }, 400);
     }
     await regenerate(db, env, tenantId, project);

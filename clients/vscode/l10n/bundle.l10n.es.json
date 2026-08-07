@@ -253,5 +253,16 @@
   "Your {provider} account is connected in a DIFFERENT workspace, so this run used the shared model pool instead of your own model. Switch to that workspace, or connect it in this one under Settings ▸ API Keys.": "Tu cuenta de {provider} está conectada en OTRO espacio de trabajo, por lo que esta ejecución usó el grupo de modelos compartido en lugar de tu propio modelo. Cambia a ese espacio de trabajo o conéctala en este en Ajustes ▸ Claves de API.",
   "Your connected {provider} account couldn’t be used this run (its token looks expired or revoked), so it ran on the shared model pool instead of your own model. Reconnect it in the web app under Settings ▸ API Keys.": "No se pudo usar tu cuenta de {provider} conectada en esta ejecución (su token parece caducado o revocado), por lo que se usó el grupo de modelos compartido en lugar de tu propio modelo. Vuelve a conectarla en la aplicación web en Ajustes ▸ Claves de API.",
   "Your project's own learned Evermind model.": "El modelo Evermind aprendido por tu propio proyecto.",
-  "Your workspace is on the {plan} plan. Click to manage your plan.": "Tu espacio de trabajo está en el plan {plan}. Haz clic para gestionar tu plan."
+  "Your workspace is on the {plan} plan. Click to manage your plan.": "Tu espacio de trabajo está en el plan {plan}. Haz clic para gestionar tu plan.",
+  "Tries your connected accounts in the order configured in Account settings.": "Prueba tus cuentas conectadas en el orden configurado en Configuración de la cuenta.",
+  "Select BuilderForce model": "Seleccionar modelo de BuilderForce",
+  "Pick a model for new turns": "Elige un modelo para los próximos mensajes",
+  "Your own connected accounts are billed to your key — no plan credit used": "Tus cuentas conectadas se facturan a tu clave: no consumen crédito del plan",
+  "Open settings": "Abrir configuración",
+  "Sign In": "Iniciar sesión",
+  "$(credit-card) Add a card to unlock premium models": "$(credit-card) Añade una tarjeta para desbloquear los modelos premium",
+  "$(rocket) Upgrade to unlock premium models": "$(rocket) Mejora tu plan para desbloquear los modelos premium",
+  "Your plan allows premium; it needs a validated card on file": "Tu plan permite premium; necesita una tarjeta validada registrada",
+  "Any paid OpenRouter model, at cost + 1¢/request": "Cualquier modelo de pago de OpenRouter, al coste + 1 ¢ por solicitud",
+  "Model choice needs a paid plan or a connected provider account. Connect your own Anthropic/OpenAI key to pick models and have turns billed to your account.": "Elegir modelo requiere un plan de pago o una cuenta de proveedor conectada. Conecta tu propia clave de Anthropic/OpenAI para elegir modelos y que se facturen a tu cuenta."
 }

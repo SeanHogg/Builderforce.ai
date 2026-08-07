@@ -13486,7 +13486,11 @@
     "noticeAgentGroupFailed": "No se pudo completar el turno del agente",
     "noticeAgentTestStatusError": "Error · {reason}",
     "noticeAgentGroupTurnFailed": "El grupo de agentes no pudo completar su turno: {reason}",
-    "noticeClaimFailed": "Todavía no se pudo guardar esta sesión"
+    "noticeClaimFailed": "Todavía no se pudo guardar esta sesión",
+    "noticeApplyingBrainChanges": "Aplicando {count, plural, one {# cambio de Brain} other {# cambios de Brain}}…",
+    "noticeBrainChangesAwaitReview": "{count, plural, one {# cambio de Brain espera} other {# cambios de Brain esperan}} revisión",
+    "noticeConversationSaveFailedReason": "No se pudo guardar la conversación: {reason}",
+    "noticePrdNotSavedReason": "El PRD del proyecto no se guardó: {reason}"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",

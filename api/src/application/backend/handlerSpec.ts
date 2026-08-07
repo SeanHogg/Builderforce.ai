@@ -34,7 +34,7 @@
  * calls authenticate through connector connections, which the runtime resolves.
  */
 
-import { isVerifyKind, type VerifyKind } from './webhookVerification';
+import { isVerifyKind, VERIFY_KINDS, type VerifyKind } from './webhookVerification';
 import { parseTwimlNodes, type TwimlNode } from './twiml';
 
 /** Methods a handler may claim. `ANY` matches every method — status callbacks vary. */
@@ -85,7 +85,29 @@ export interface SetStep {
   when?: string;
 }
 
-export type HandlerStep = LlmStep | ConnectorStep | SetStep;
+/**
+ * Read the project's own site collection and bind `{ collection, count, records }`.
+ *
+ * The counterpart to the public write endpoint: a form posts to
+ * `/__api/collections/signups`, and this is how a page then SHOWS what was
+ * collected. Without it the datastore is write-only and "run server code" can
+ * only ever mean "call something else".
+ */
+export interface DataStep {
+  kind: 'data';
+  id: string;
+  /** Collection name on THIS project's site. */
+  collection: string;
+  /** Rows to read; clamped by the runtime. */
+  limit?: number;
+  /** Optional single-field equality filter. Both sides are templated, so
+   *  `matchValue: "{{query.plan}}"` filters by a query parameter. */
+  matchField?: string;
+  matchValue?: string;
+  when?: string;
+}
+
+export type HandlerStep = LlmStep | ConnectorStep | SetStep | DataStep;
 
 // ---------------------------------------------------------------------------
 // Response
@@ -183,8 +205,27 @@ function parseStep(raw: unknown, index: number): HandlerStep | { error: string }
       if (typeof raw.value !== 'string') return { error: `steps[${index}] (set) requires a string value` };
       return { kind: 'set', id, value: raw.value, ...(when ? { when } : {}) };
     }
+    case 'data': {
+      const collection = typeof raw.collection === 'string' ? raw.collection.trim() : '';
+      if (!collection) return { error: `steps[${index}] (data) requires a collection name` };
+      // A filter needs both halves; one alone is an author error that would
+      // silently return everything — exactly the mistake worth failing on.
+      const hasField = typeof raw.matchField === 'string' && raw.matchField.trim() !== '';
+      const hasValue = typeof raw.matchValue === 'string';
+      if (hasField !== hasValue) {
+        return { error: `steps[${index}] (data) needs matchField and matchValue together` };
+      }
+      return {
+        kind: 'data',
+        id,
+        collection,
+        ...(typeof raw.limit === 'number' && Number.isFinite(raw.limit) ? { limit: raw.limit } : {}),
+        ...(hasField ? { matchField: (raw.matchField as string).trim(), matchValue: raw.matchValue as string } : {}),
+        ...(when ? { when } : {}),
+      };
+    }
     default:
-      return { error: `steps[${index}].kind must be one of: llm, connector, set` };
+      return { error: `steps[${index}].kind must be one of: llm, connector, set, data` };
   }
 }
 
@@ -231,7 +272,10 @@ export function parseHandlerSpec(raw: unknown, fallbackName: string): ParseResul
   // insecure choice the one you get by forgetting, on an endpoint whose whole job
   // is to accept requests from the public internet.
   if (!isVerifyKind(raw.verify)) {
-    return { ok: false, reason: `verify must be one of: none, twilio, shared-secret (declare it explicitly)` };
+    // Derived from the list rather than retyped — a hardcoded copy went stale the
+    // first time a verification kind was added, and told authors that a kind the
+    // runtime supports was invalid.
+    return { ok: false, reason: `verify must be one of: ${VERIFY_KINDS.join(', ')} (declare it explicitly)` };
   }
 
   const rawSteps = Array.isArray(raw.steps) ? raw.steps : [];

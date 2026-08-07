@@ -3,13 +3,17 @@
  * port. This is the ONE place that knows how a project's server-side half is
  * bound to a strategy, where its handlers live, and how its ingress is addressed.
  *
- * Handlers are read from the CANVAS (R2) on every ingress request rather than
- * from a database copy. That is a deliberate cost: it means the canvas is the
- * single source of truth for what the backend does, so editing a handler in the
- * IDE changes behaviour immediately, with no publish step to forget and no
- * "deployed version vs. what I see" drift — the failure mode that makes
- * webhook debugging miserable. The read is one R2 list plus one GET per handler,
- * which is well inside a webhook's latency budget.
+ * Handlers are read from the CANVAS (R2) rather than from a database copy: the
+ * canvas is the single source of truth for what the backend does, so editing a
+ * handler in the IDE changes behaviour with no publish step to forget and no
+ * "deployed version vs. what I see" drift — the failure mode that makes webhook
+ * debugging miserable.
+ *
+ * That read is one R2 list plus a GET per handler, and it now runs on site
+ * traffic as well as webhook traffic, so it is served through the read-through
+ * cache and invalidated by {@link onCanvasWrite} from every write path. The
+ * cache is a cost optimisation only; the invalidation, not the TTL, is what
+ * preserves the no-publish-step contract.
  */
 
 import { and, eq, sql } from 'drizzle-orm';
@@ -99,18 +103,7 @@ export async function ensureProjectBackend(
       .from(projectBackends)
       .where(scopedToTenant(projectBackends, tenantId, eq(projectBackends.projectId, projectId)))
       .limit(1);
-    if (!row) return null;
-    return {
-      id: row.id,
-      projectId: row.projectId,
-      tenantId: row.tenantId,
-      strategy: isBackendStrategy(row.strategy) ? row.strategy : 'declarative',
-      status: row.status,
-      ingressToken: row.ingressToken,
-      deployedUrl: row.deployedUrl,
-      handlerCount: row.handlerCount,
-      lastDeployedAt: row.lastDeployedAt ? new Date(row.lastDeployedAt).toISOString() : null,
-    };
+    return row ? toProjectBackend(row) : null;
   };
 
   const existing = await read();
@@ -120,7 +113,7 @@ export async function ensureProjectBackend(
         .update(projectBackends)
         .set({ strategy, updatedAt: new Date() })
         .where(scopedToTenant(projectBackends, tenantId, eq(projectBackends.id, existing.id)));
-      await invalidateIngress(env, existing.ingressToken);
+      await invalidateIngress(env, existing.ingressToken, projectId);
       return { ...existing, strategy };
     }
     return existing;
@@ -142,6 +135,22 @@ export async function ensureProjectBackend(
 }
 
 const ingressCacheKey = (token: string): string => `project-backend:ingress:${token}`;
+const projectBackendCacheKey = (projectId: number): string => `project-backend:project:${projectId}`;
+
+/** One row → the shape both lookups return. */
+function toProjectBackend(row: typeof projectBackends.$inferSelect): ProjectBackend {
+  return {
+    id: row.id,
+    projectId: row.projectId,
+    tenantId: row.tenantId,
+    strategy: isBackendStrategy(row.strategy) ? row.strategy : 'declarative',
+    status: row.status,
+    ingressToken: row.ingressToken,
+    deployedUrl: row.deployedUrl,
+    handlerCount: row.handlerCount,
+    lastDeployedAt: row.lastDeployedAt ? new Date(row.lastDeployedAt).toISOString() : null,
+  };
+}
 
 /**
  * Resolve an ingress token to its backend. Public path — no tenant scope is
@@ -160,26 +169,46 @@ export async function backendByIngressToken(env: Env, db: Db, token: string): Pr
     async () => {
       const [row] = await db.select().from(projectBackends).where(eq(projectBackends.ingressToken, token)).limit(1);
       if (!row || row.status !== 'active') return null;
-      return {
-        id: row.id,
-        projectId: row.projectId,
-        tenantId: row.tenantId,
-        strategy: isBackendStrategy(row.strategy) ? row.strategy : 'declarative',
-        status: row.status,
-        ingressToken: row.ingressToken,
-        deployedUrl: row.deployedUrl,
-        handlerCount: row.handlerCount,
-        lastDeployedAt: row.lastDeployedAt ? new Date(row.lastDeployedAt).toISOString() : null,
-      };
+      return toProjectBackend(row);
     },
     { kvTtlSeconds: 300, l1TtlMs: 60_000 },
   );
 }
 
-/** Drop the cached ingress resolution. Called on any write to the backend row —
- *  a strategy switch that kept serving the old value would be invisible. */
-export async function invalidateIngress(env: Env, token: string): Promise<void> {
-  await invalidateCached(env, ingressCacheKey(token));
+/**
+ * Resolve a PROJECT to its active backend — the site-origin address, where the
+ * host already identified the project and there is no token in the path.
+ *
+ * Cached with the negative result for the same reason the token lookup is: this
+ * runs on public site traffic, and a site with no backend must not turn every
+ * `/api/...` request into a database round-trip.
+ */
+export async function backendByProject(env: Env, db: Db, projectId: number): Promise<ProjectBackend | null> {
+  return getOrSetCached<ProjectBackend | null>(
+    env,
+    projectBackendCacheKey(projectId),
+    async () => {
+      const [row] = await db.select().from(projectBackends).where(eq(projectBackends.projectId, projectId)).limit(1);
+      if (!row || row.status !== 'active') return null;
+      return toProjectBackend(row);
+    },
+    { kvTtlSeconds: 300, l1TtlMs: 60_000 },
+  );
+}
+
+/**
+ * Drop every cached resolution of one backend row. Called on any write to it —
+ * a strategy switch or a pause that kept serving the old value would be
+ * invisible, and the pause case is exactly when someone is trying to stop it.
+ *
+ * BOTH keys, always: the row is reachable by ingress token and by project, and
+ * clearing one would leave the other address serving the stale answer.
+ */
+export async function invalidateIngress(env: Env, token: string, projectId: number): Promise<void> {
+  await Promise.all([
+    invalidateCached(env, ingressCacheKey(token)),
+    invalidateCached(env, projectBackendCacheKey(projectId)),
+  ]);
 }
 
 // ---------------------------------------------------------------------------
@@ -221,7 +250,7 @@ export async function setBackendStatus(
     .update(projectBackends)
     .set({ status, updatedAt: new Date() })
     .where(scopedToTenant(projectBackends, tenantId, eq(projectBackends.id, backend.id)));
-  await invalidateIngress(env, backend.ingressToken);
+  await invalidateIngress(env, backend.ingressToken, projectId);
   return { ...backend, status };
 }
 
@@ -309,6 +338,50 @@ export async function loadHandlers(bucket: R2Bucket, projectId: number): Promise
   return { specs, errors };
 }
 
+const handlersCacheKey = (projectId: number): string => `project-backend:handlers:${projectId}`;
+
+/**
+ * {@link loadHandlers}, served through the read-through cache.
+ *
+ * The uncached read is one R2 list plus a GET per handler, and it runs on the
+ * hottest public path there is: every webhook delivery AND — now that handlers
+ * answer on the site's own origin — every `fetch('/api/...')` a published page
+ * makes. Left uncached, a page that calls its backend on load turns each visitor
+ * into N+1 storage round-trips.
+ *
+ * The canvas is still the single source of truth: every write path invalidates
+ * through {@link onCanvasWrite}, so editing a handler in the IDE changes
+ * behaviour on the next request rather than after a publish step. The TTL is a
+ * backstop for writes that reach R2 some other way, not the invalidation
+ * mechanism.
+ */
+export async function loadHandlersCached(
+  env: Env,
+  bucket: R2Bucket,
+  projectId: number,
+): Promise<LoadedHandlers> {
+  return getOrSetCached<LoadedHandlers>(
+    env,
+    handlersCacheKey(projectId),
+    () => loadHandlers(bucket, projectId),
+    { kvTtlSeconds: 60, l1TtlMs: 15_000 },
+  );
+}
+
+/**
+ * Call after ANY write to a project's canvas. A no-op unless the path is a
+ * handler document.
+ *
+ * One function rather than a condition at each write site: the IDE editor, the
+ * challenge materializer and the handler authoring API all write canvas files,
+ * and any of them forgetting the check would leave a project serving the
+ * previous version of its backend with nothing to indicate why.
+ */
+export async function onCanvasWrite(env: Env, projectId: number, path: string): Promise<void> {
+  if (!path.startsWith(HANDLERS_DIR)) return;
+  await invalidateCached(env, handlersCacheKey(projectId));
+}
+
 /** Handler file names are canvas paths, so they are constrained like one. */
 const HANDLER_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
@@ -328,6 +401,7 @@ export type HandlerWriteResult =
  * webhook — is how the feature felt before this existed.
  */
 export async function saveHandler(
+  env: Env,
   bucket: R2Bucket,
   projectId: number,
   name: string,
@@ -353,14 +427,22 @@ export async function saveHandler(
   const path = handlerPathFor(clean);
   const write = await writeWorkspaceFile(bucket, projectId, path, `${JSON.stringify(document, null, 2)}\n`);
   if (!write.ok) return { ok: false, reason: write.reason, status: 400 };
+  await onCanvasWrite(env, projectId, path);
   return { ok: true, path, spec: { ...parsed.spec, name: clean } };
 }
 
 /** Remove a handler. Idempotent — deleting one that is already gone is not an error. */
-export async function removeHandler(bucket: R2Bucket, projectId: number, name: string): Promise<boolean> {
+export async function removeHandler(
+  env: Env,
+  bucket: R2Bucket,
+  projectId: number,
+  name: string,
+): Promise<boolean> {
   const clean = name.trim().toLowerCase();
   if (!HANDLER_NAME_RE.test(clean)) return false;
-  await deleteWorkspaceFile(bucket, projectId, handlerPathFor(clean));
+  const path = handlerPathFor(clean);
+  await deleteWorkspaceFile(bucket, projectId, path);
+  await onCanvasWrite(env, projectId, path);
   return true;
 }
 
@@ -432,8 +514,12 @@ export async function materializeBackend(args: {
   const written: string[] = [];
   for (const [path, content] of Object.entries(result.files)) {
     const write = await writeWorkspaceFile(args.bucket, args.projectId, path, content);
-    if (write.ok) written.push(path);
-    else errors.push({ path, reason: write.reason });
+    if (write.ok) {
+      written.push(path);
+      await onCanvasWrite(args.env, args.projectId, path);
+    } else {
+      errors.push({ path, reason: write.reason });
+    }
   }
 
   await args.db
@@ -445,7 +531,7 @@ export async function materializeBackend(args: {
       updatedAt: new Date(),
     })
     .where(scopedToTenant(projectBackends, args.tenantId, eq(projectBackends.id, backend.id)));
-  await invalidateIngress(args.env, backend.ingressToken);
+  await invalidateIngress(args.env, backend.ingressToken, args.projectId);
 
   return {
     ...result,
@@ -486,7 +572,7 @@ export async function recordWorkerDeployment(
     .update(projectBackends)
     .set({ deployedUrl: parsed.origin, lastDeployedAt: new Date(), updatedAt: new Date() })
     .where(scopedToTenant(projectBackends, args.tenantId, eq(projectBackends.id, backend.id)));
-  await invalidateIngress(env, backend.ingressToken);
+  await invalidateIngress(env, backend.ingressToken, args.projectId);
   // A redeploy is exactly when the secret bindings may have changed, so the
   // cached readiness for both the old and the new address has to go.
   await invalidateWorkerHealth(env, backend.deployedUrl);

@@ -14,9 +14,14 @@ import { describe, it, expect } from 'vitest';
 import {
   timingSafeEqual,
   twilioSignatureBase,
+  verifyShopifySignature,
   verifySharedSecret,
+  verifyStripeSignature,
   verifyTwilioSignature,
+  STRIPE_TIMESTAMP_TOLERANCE_SECONDS,
+  VERIFY_KINDS,
   VERIFY_SECRET_NAME,
+  VERIFY_SIGNATURE_HEADER,
   isVerifyKind,
 } from './webhookVerification';
 
@@ -169,14 +174,140 @@ describe('timingSafeEqual', () => {
 });
 
 describe('verify kinds', () => {
-  it('names a secret for every non-none kind, so nothing verifies against nothing', () => {
+  it('names a secret AND a header for every non-none kind, so nothing verifies against nothing', () => {
     expect(VERIFY_SECRET_NAME.twilio).toBe('TWILIO_AUTH_TOKEN');
     expect(VERIFY_SECRET_NAME['shared-secret']).toBe('WEBHOOK_SHARED_SECRET');
+    // A kind added without a secret or a header name would fail open or 500 at
+    // request time, so the tables are asserted TOTAL rather than spot-checked.
+    for (const kind of VERIFY_KINDS) {
+      if (kind === 'none') continue;
+      expect(VERIFY_SECRET_NAME[kind], kind).toBeTruthy();
+      expect(VERIFY_SIGNATURE_HEADER[kind], kind).toBeTruthy();
+    }
   });
 
   it('rejects an unknown kind', () => {
     expect(isVerifyKind('twilio')).toBe(true);
     expect(isVerifyKind('trust-me')).toBe(false);
     expect(isVerifyKind(undefined)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Stripe
+// ---------------------------------------------------------------------------
+
+const STRIPE_SECRET = 'whsec_test_secret_value';
+
+async function hmacHex(secret: string, message: string): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message));
+  return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+describe('verifyStripeSignature', () => {
+  const body = JSON.stringify({ type: 'invoice.payment_failed', data: { object: { id: 'in_1' } } });
+  const now = 1_800_000_000;
+
+  it('accepts a signature computed over "<timestamp>.<body>"', async () => {
+    const v1 = await hmacHex(STRIPE_SECRET, `${now}.${body}`);
+    const result = await verifyStripeSignature({
+      signature: `t=${now},v1=${v1}`,
+      secret: STRIPE_SECRET,
+      rawBody: body,
+      nowSeconds: now,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects an HMAC of the BODY ALONE — the mistake a generated integration makes', async () => {
+    const wrong = await hmacHex(STRIPE_SECRET, body);
+    const result = await verifyStripeSignature({
+      signature: `t=${now},v1=${wrong}`,
+      secret: STRIPE_SECRET,
+      rawBody: body,
+      nowSeconds: now,
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects a replay outside the tolerance window even though the MAC is valid', async () => {
+    const old = now - STRIPE_TIMESTAMP_TOLERANCE_SECONDS - 1;
+    const v1 = await hmacHex(STRIPE_SECRET, `${old}.${body}`);
+    const result = await verifyStripeSignature({
+      signature: `t=${old},v1=${v1}`,
+      secret: STRIPE_SECRET,
+      rawBody: body,
+      nowSeconds: now,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.reason).toMatch(/tolerance/i);
+  });
+
+  it('accepts when ANY v1 matches, so a secret rotation does not drop events', async () => {
+    const good = await hmacHex(STRIPE_SECRET, `${now}.${body}`);
+    const result = await verifyStripeSignature({
+      signature: `t=${now},v1=${'0'.repeat(64)},v1=${good}`,
+      secret: STRIPE_SECRET,
+      rawBody: body,
+      nowSeconds: now,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('refuses a header with no t= or no v1=, and refuses an unset secret', async () => {
+    expect((await verifyStripeSignature({ signature: 'v1=abc', secret: STRIPE_SECRET, rawBody: body, nowSeconds: now })).ok).toBe(false);
+    expect((await verifyStripeSignature({ signature: `t=${now}`, secret: STRIPE_SECRET, rawBody: body, nowSeconds: now })).ok).toBe(false);
+    expect((await verifyStripeSignature({ signature: `t=${now},v1=abc`, secret: '', rawBody: body })).ok).toBe(false);
+    expect((await verifyStripeSignature({ signature: null, secret: STRIPE_SECRET, rawBody: body })).ok).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Shopify
+// ---------------------------------------------------------------------------
+
+describe('verifyShopifySignature', () => {
+  const SECRET = 'shopify_shared_secret';
+  const body = JSON.stringify({ id: 4501, name: '#1001' });
+
+  async function shopifySign(message: string): Promise<string> {
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(SECRET),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign'],
+    );
+    const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(message));
+    return btoa(String.fromCharCode(...new Uint8Array(sig)));
+  }
+
+  it('accepts the base64 digest Shopify actually sends', async () => {
+    const result = await verifyShopifySignature({ signature: await shopifySign(body), secret: SECRET, rawBody: body });
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects the HEX form — the encoding mistake that looks like a wrong secret', async () => {
+    const hex = await hmacHex(SECRET, body);
+    const result = await verifyShopifySignature({ signature: hex, secret: SECRET, rawBody: body });
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects a body that was altered after signing', async () => {
+    const signature = await shopifySign(body);
+    const result = await verifyShopifySignature({ signature, secret: SECRET, rawBody: `${body} ` });
+    expect(result.ok).toBe(false);
+  });
+
+  it('refuses a missing header or an unset secret rather than passing', async () => {
+    expect((await verifyShopifySignature({ signature: null, secret: SECRET, rawBody: body })).ok).toBe(false);
+    expect((await verifyShopifySignature({ signature: await shopifySign(body), secret: '', rawBody: body })).ok).toBe(false);
   });
 });

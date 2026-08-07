@@ -8232,14 +8232,43 @@ export const challengeApi = {
 // Project backends — the server-side half of a project
 // ---------------------------------------------------------------------------
 
+/** Every way a handler can prove who called it. Mirrors VERIFY_KINDS on the api. */
+export const HANDLER_VERIFY_KINDS = ['none', 'twilio', 'stripe', 'shopify', 'shared-secret'] as const;
+export type HandlerVerifyKind = (typeof HANDLER_VERIFY_KINDS)[number];
+
+export const HANDLER_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'ANY'] as const;
+export type HandlerMethod = (typeof HANDLER_METHODS)[number];
+
+/** The canvas document a handler IS — edited as a whole and re-parsed on save. */
+export interface HandlerSpecDocument {
+  name?: string;
+  route: string;
+  method: HandlerMethod;
+  verify: HandlerVerifyKind;
+  description?: string;
+  steps: unknown[];
+  respond: Record<string, unknown>;
+}
+
 export interface ProjectBackendHandler {
   name: string;
   route: string;
   method: string;
-  verify: 'none' | 'twilio' | 'shared-secret';
+  verify: HandlerVerifyKind;
   description: string | null;
   url: string;
   stepCount: number;
+  /** The parsed spec, so the editor opens without a second round trip. */
+  spec: HandlerSpecDocument;
+}
+
+/** What a deployed `github-worker` backend reports about itself. */
+export interface WorkerHealth {
+  reachable: boolean;
+  /** Expected secret name → whether the Worker has it bound. Never a value. */
+  secrets: Record<string, boolean>;
+  handlers: Array<{ method: string; route: string; verify?: string }>;
+  reason?: string;
 }
 
 export interface ProjectSecretSummary {
@@ -8264,6 +8293,8 @@ export interface ProjectBackendView {
   handlerErrors: Array<{ path: string; reason: string }>;
   secrets: ProjectSecretSummary[];
   missingSecrets: string[];
+  /** Present only for a deployed `github-worker` backend. */
+  workerHealth: WorkerHealth | null;
 }
 
 export interface ProjectBackendRequestRow {
@@ -8271,7 +8302,7 @@ export interface ProjectBackendRequestRow {
   route: string;
   method: string;
   statusCode: number;
-  verdict: 'ok' | 'unverified' | 'no-handler' | 'error';
+  verdict: 'ok' | 'unverified' | 'no-handler' | 'rate-limited' | 'error';
   durationMs: number | null;
   error: string | null;
   createdAt: string | null;
@@ -8282,9 +8313,28 @@ export const projectBackendApi = {
     request<ProjectBackendView>(`/api/projects/${projectId}/backend`),
 
   setStrategy: (projectId: number, strategy: string) =>
-    request<{ backend: { strategy: string; ingressUrl: string } }>(`/api/projects/${projectId}/backend`, {
+    request<{ backend: { strategy: string; status: string; ingressUrl: string } }>(`/api/projects/${projectId}/backend`, {
       method: 'PATCH',
       body: JSON.stringify({ strategy }),
+    }),
+
+  /** Pause or resume the public ingress. A paused backend 404s every delivery. */
+  setStatus: (projectId: number, status: 'active' | 'paused') =>
+    request<{ backend: { strategy: string; status: string; ingressUrl: string } }>(`/api/projects/${projectId}/backend`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status }),
+    }),
+
+  /** Create or replace one handler. Rejected if the document does not parse. */
+  saveHandler: (projectId: number, name: string, document: unknown) =>
+    request<{ ok: boolean; path: string; spec: HandlerSpecDocument }>(
+      `/api/projects/${projectId}/backend/handlers/${encodeURIComponent(name)}`,
+      { method: 'PUT', body: JSON.stringify({ document }) },
+    ),
+
+  deleteHandler: (projectId: number, name: string) =>
+    request<{ ok: boolean }>(`/api/projects/${projectId}/backend/handlers/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
     }),
 
   /** Re-run the hosting strategy (regenerate the endpoint map / the Worker). */

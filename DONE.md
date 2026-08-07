@@ -4,6 +4,24 @@
 
 ---
 
+## 2026-08-06 — RESOLVED: one model list, three surfaces — the editor's QuickPick now shares it
+
+Closes the register residual left by the `/`-menu work earlier the same day: the composer menu built its rows from the shared builder while `pickModel` in `clients/vscode/src/extension.ts` kept a second, independently-written `showQuickPick` for the Sessions-view overflow and the command palette. Both read the same endpoints, so they could not disagree about WHICH models exist — but they grouped them differently (BYO-first vs cheapest-first), named the same connected provider differently (`byoProviderLabel` was a private copy of the vendor map), and worded "who pays" differently on the row a user reads before spending their own key.
+
+The entry named a blocker — "needs a product decision on removing a contributed command" — that turned out to be a false choice: the command is worth keeping (it is the only model control for a user who never opens the Brain panel, including the native `@builderforce` participant), and the OTHER option in that entry needed no decision at all.
+
+**The model-choice domain moved to where all three surfaces can reach it.** `brain-embedded/src/modelChoice.ts` now owns the selection/options types, `buildModelItems` + its filters, `modelInUse`, `byoVendorLabel`, the price formatter, and the default label set — deliberately React-free, because the extension HOST runs in Node and cannot import the UI package. brain-ui re-exports it (so UI consumers keep one import site) and `PromptOptionsLabels` now *extends* `ModelChoiceLabels`: the menu owns only its own chrome. `pickModel` renders the shared items as a QuickPick — one separator per funding tier in the builder's cost order, the shared funding line as each row's detail — and keeps its premium-unlock CTA row. Deleted with it: the host's private `BYO_PROVIDER_LABELS` map and its hand-grouped BYO/free/plan/premium sections.
+
+**The copy is shared too, not just the rows.** `clients/vscode/src/modelChoiceLabels.ts` builds one `ModelChoiceLabels` from `vscode.l10n`, used by the QuickPick AND shipped to the webview as `init.modelLabels`, so the two editor pickers cannot word the same row differently; the webview's label map now covers only the menu's own chrome. As a side effect the QuickPick is localized for the first time (title, placeholder, entitlement message, and the add-a-card / upgrade rows) — zh/es/fr/de.
+
+A `buildModelItems` test pins the invariant the QuickPick's separator walk depends on: each funding tier stays contiguous, so a tier can never render two headings around a split group.
+
+**Also closed (by the canvas work landed alongside):** the trimmed canvas catalogs are now derived from the real import closure rather than a hand-written list — see the entry above.
+
+Files: `brain-embedded/src/modelChoice.ts` (+ test, 2026.7.62), `packages/brain-ui/src/promptOptions/types.ts` + `PromptOptionsMenu.tsx` (2026.7.41), `clients/vscode/src/{extension.ts,modelChoiceLabels.ts,brainWebview.ts}`, `clients/vscode/webview/src/{App.tsx,vscodeBridge.ts}`, the five l10n bundles (VSIX 2026.7.117, packaged).
+
+---
+
 ## 2026-08-06 — ✅ SHIPPED: the VS Code canvas IS the web canvas (one implementation, two surfaces)
 
 The editor's Creation Canvas was a 246-line hand-rolled webview — flat cards, a one-level palette, a toolbar row, its own comments panel — against a 4,276-line React board on the web. Rather than grow a second implementation toward the first, the extension now **compiles and ships the web canvas itself**: `webview/vite.canvas.config.ts` builds `frontend/src/components/creation-canvas/**` and its ~120-module closure into `media/canvas/`. All 66 object kinds, the inspector, the palette, the Brain dock, checkpoints, branch/merge, comments, presence, the 3D view, the workflow editor and the Evermind adapter studio are the web components, unmodified. A feature added on the web appears in the editor on the next build; there is no parity matrix to maintain because there is no second copy.

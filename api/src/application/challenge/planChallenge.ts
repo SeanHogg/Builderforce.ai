@@ -90,7 +90,13 @@ Hard rules:
   "action" must be one of that connector's listed actions. Do not invent either.
 - Step ids are lowercase identifiers, unique within the handler.
 - Prefer few handlers that do real work over many stubs. At most 8.
-- tasks: 3-8 setup/verification tickets a human must work. Concrete and checkable.
+- tasks: 3-8 tickets, concrete and checkable, each with a "kind":
+    "setup" — only a person can do it (connect an account, paste a URL into a
+             provider console, verify a sender, obtain a credential).
+    "build" — a coding agent can do it from the ticket text alone (write a page,
+             add a handler, extend the console, add a test).
+  Get this right: a "build" ticket is dispatched to an agent automatically, so
+  labelling "go and connect your Twilio account" as build wastes a run.
 - secrets: only values the RUNTIME needs (e.g. a signature-verification token).
   Connector credentials are NOT secrets here — they live on the connection.`;
 
@@ -266,11 +272,14 @@ export async function planChallenge(spec: ChallengeSpec, briefText: string, llm?
   const tasks: BlueprintTask[] = [
     ...base.tasks,
     ...rawTasks
-      .filter((t): t is { title: string; description?: unknown } => !!t && typeof (t as { title?: unknown }).title === 'string')
+      .filter((t): t is { title: string; description?: unknown; kind?: unknown } => !!t && typeof (t as { title?: unknown }).title === 'string')
       .map((t, i) => ({
         order: 100 + i,
         title: t.title.slice(0, 200),
         description: typeof t.description === 'string' ? t.description : '',
+        // Anything the model did not explicitly call `build` stays human work.
+        // The cost of the two mistakes is not symmetric — see BlueprintTask.kind.
+        kind: t.kind === 'build' ? ('build' as const) : ('setup' as const),
       })),
   ];
 

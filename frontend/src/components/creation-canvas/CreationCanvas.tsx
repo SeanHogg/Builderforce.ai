@@ -1166,7 +1166,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setTimeline((current) => current.some((item) => item.clientMessageId === clientMessageId) ? current : [...current, message]);
     if (persistence === 'server') void creationSessionsApi.timeline.append(sessionId, { clientMessageId, role, body, metadata }).then((saved) => {
       setTimeline((current) => current.map((item) => item.clientMessageId === clientMessageId ? saved : item));
-    }).catch((error) => setNotice(error instanceof Error ? `Conversation save failed: ${error.message}` : t('noticeConversationSaveFailed')));
+    }).catch((error) => setNotice(error instanceof Error ? t('noticeConversationSaveFailedReason', { reason: error.message }) : t('noticeConversationSaveFailed')));
     return clientMessageId;
   }, [persistence, sessionId]);
 
@@ -2688,7 +2688,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         }
         setThinking(false);
         setActiveAgentIds(new Set());
-        setNotice(changes.length ? shouldAutoApply ? `Applying ${changes.length} Brain changes…` : `${changes.length} Brain changes await review` : t('noticeBrainFinished'));
+        setNotice(changes.length ? t(shouldAutoApply ? 'noticeApplyingBrainChanges' : 'noticeBrainChangesAwaitReview', { count: changes.length }) : t('noticeBrainFinished'));
         trackActivity('creation_ai_evaluation_completed', { sessionId, metadata: { clientSurface: canvasSurface(), proposedChangeCount: changes.length, objectKinds: [...new Set(nodes.map((node) => node.data.kind))] } });
         if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'succeeded', actorType: 'brain', durationMs: performance.now() - promptStartedAt, metricKey: 'artifacts_proposed', metricValue: changes.length, unit: 'count' }).catch(() => undefined);
       }).catch((error) => {
@@ -2764,7 +2764,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           return { ...change, node: await persistCanonicalProjectPrd(change.node) };
         }));
       } catch (error) {
-        setNotice(error instanceof Error ? `Project PRD was not saved: ${error.message}` : t('noticePrdNotSaved'));
+        setNotice(error instanceof Error ? t('noticePrdNotSavedReason', { reason: error.message }) : t('noticePrdNotSaved'));
         return;
       }
     }

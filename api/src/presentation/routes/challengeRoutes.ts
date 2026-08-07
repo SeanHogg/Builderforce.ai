@@ -33,6 +33,7 @@ import { planChallenge, type ChallengePlan } from '../../application/challenge/p
 import { materializeChallenge } from '../../application/challenge/materializeChallenge';
 import { BLUEPRINTS } from '../../application/challenge/blueprints';
 import { HOSTING_STRATEGIES } from '../../application/backend';
+import type { RuntimeService } from '../../application/runtime/RuntimeService';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 
 /** Briefs longer than this are truncated at extraction; reject beyond it outright. */
@@ -50,7 +51,7 @@ async function readAndPlan(env: Env, brief: string): Promise<{ spec: ChallengeSp
   return { spec, plan };
 }
 
-export function createChallengeRoutes(db: Db): Hono<HonoEnv> {
+export function createChallengeRoutes(db: Db, runtimeService: RuntimeService): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
@@ -171,6 +172,9 @@ export function createChallengeRoutes(db: Db): Hono<HonoEnv> {
         spec,
         plan,
         projectId: row.projectId,
+        // Seeded BUILD tickets are offered to the canonical auto-run gate, so a
+        // built challenge starts moving instead of waiting for a first drag.
+        runtimeService,
       });
       const updated = await setChallengeStatus(db, tenantId, row.id, {
         status: 'built',

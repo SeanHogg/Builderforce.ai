@@ -79,7 +79,21 @@ export interface BlueprintTask {
   description: string;
   /** Ordering hint on the board; lower runs first. */
   order: number;
+  /**
+   * `setup` is work only a human can do — connect an account, paste a URL into a
+   * provider console, verify a sender. `build` is work a coding agent can pick
+   * up.
+   *
+   * Absent means `setup`, and that default is load-bearing: dispatching a coding
+   * agent at "go and connect your Twilio account" burns a run to produce nothing,
+   * and does it on a ticket whose whole content is a human instruction. A wrong
+   * `build` costs a run; a wrong `setup` costs a click.
+   */
+  kind?: 'setup' | 'build';
 }
+
+/** Whether a seeded ticket is eligible for autonomous dispatch. */
+export const isBuildTask = (task: BlueprintTask): boolean => task.kind === 'build';
 
 export interface Blueprint {
   key: string;
@@ -109,6 +123,8 @@ export interface BlueprintMatch {
   reasons: string[];
   matchedCapabilities: Capability[];
   missingCapabilities: Capability[];
+  /** Vendor/product words from the blueprint that the brief actually names. */
+  signalHits: string[];
 }
 
 /**
@@ -118,8 +134,24 @@ export interface BlueprintMatch {
  * path: generic produces a plausible design the customer reviews, while a wrong
  * specific one produces a confident, wrong, Twilio-shaped system for a brief
  * about invoicing. Half the capabilities plus a vendor signal is the bar.
+ *
+ * The score is NOT sufficient on its own — see {@link requiresSignal}.
  */
 export const MATCH_THRESHOLD = 0.5;
+
+/**
+ * A specific blueprint must also be NAMED by the brief, not merely shaped like it.
+ *
+ * Capability overlap alone tops out at `1 - SIGNAL_WEIGHT` = 0.65, which clears
+ * the threshold — so without this gate a brief wanting nothing but "payments and
+ * email" would land on the Stripe dunning blueprint with no mention of Stripe
+ * anywhere in it. That failure mode gets WORSE with every blueprint added, since
+ * each one is another confident wrong answer competing on generic capabilities.
+ * Requiring one vendor/product word makes the catalog safe to grow.
+ */
+export function requiresSignal(match: BlueprintMatch): boolean {
+  return match.blueprint.signals.length > 0 && match.signalHits.length === 0;
+}
 
 /** Vendor signals are worth this much of the score; capability overlap the rest. */
 const SIGNAL_WEIGHT = 0.35;
@@ -155,7 +187,14 @@ export function scoreBlueprint(
   if (hitSignals.length) reasons.push(`The brief names ${hitSignals.join(', ')}`);
   if (missing.length) reasons.push(`Does not cover: ${missing.join(', ')}`);
 
-  return { blueprint, score, reasons, matchedCapabilities: matched, missingCapabilities: missing };
+  return {
+    blueprint,
+    score,
+    reasons,
+    matchedCapabilities: matched,
+    missingCapabilities: missing,
+    signalHits: hitSignals,
+  };
 }
 
 /**

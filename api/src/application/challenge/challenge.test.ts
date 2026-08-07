@@ -10,9 +10,11 @@
 import { describe, it, expect } from 'vitest';
 import { heuristicSpec, parseBrief } from './parseBrief';
 import { normalizeCapability, normalizeCapabilities, scoreBlueprint, MATCH_THRESHOLD } from './blueprint';
-import { matchBlueprint, twilioOmnichannelBlueprint, genericBlueprint } from './blueprints';
+import { BLUEPRINTS, matchBlueprint, twilioOmnichannelBlueprint, genericBlueprint } from './blueprints';
+import { BUILTIN_CONNECTORS } from '../connectors/defaults';
 import { planChallenge } from './planChallenge';
 import { parseHandlerSpec } from '../backend/handlerSpec';
+import { VERIFY_SECRET_NAME } from '../backend/webhookVerification';
 
 const TWILIO_BRIEF = `Hi there,
 
@@ -189,6 +191,103 @@ describe('the Twilio blueprint itself', () => {
         expect(manifest!.actions.some((a) => a.key === step.actionKey), `${name} → ${step.connector}.${step.actionKey}`).toBe(true);
       }
     }
+  });
+});
+
+describe('every blueprint in the catalog', () => {
+  // These run over the WHOLE catalog rather than one blueprint, so a fourth or a
+  // tenth cannot be added with a spec that fails to parse, an endpoint nobody
+  // authenticates, or an action the connector does not have. A blueprint's value
+  // is that it is guaranteed where a generated design is only validated — an
+  // unchecked blueprint is worse than no blueprint.
+  for (const blueprint of BLUEPRINTS) {
+    describe(blueprint.key, () => {
+      it('ships handlers that all parse', () => {
+        for (const [name, raw] of Object.entries(blueprint.handlers)) {
+          const parsed = parseHandlerSpec(raw, name);
+          expect(parsed.ok, `${name}: ${parsed.ok ? '' : parsed.reason}`).toBe(true);
+        }
+      });
+
+      it('declares a secret for every verification kind its handlers use', () => {
+        const declared = new Set(blueprint.requiredSecrets.map((s) => s.name));
+        for (const [name, raw] of Object.entries(blueprint.handlers)) {
+          const parsed = parseHandlerSpec(raw, name);
+          if (!parsed.ok || parsed.spec.verify === 'none') continue;
+          expect(declared, `${blueprint.key}/${name} verifies ${parsed.spec.verify}`)
+            .toContain(VERIFY_SECRET_NAME[parsed.spec.verify]);
+        }
+      });
+
+      it('only calls connector actions that exist, and only declared connectors', () => {
+        const declared = new Set(blueprint.requiredConnectors.map((c) => c.key));
+        for (const [name, raw] of Object.entries(blueprint.handlers)) {
+          const parsed = parseHandlerSpec(raw, name);
+          if (!parsed.ok) continue;
+          for (const step of parsed.spec.steps) {
+            if (step.kind !== 'connector') continue;
+            const manifest = BUILTIN_CONNECTORS.get(step.connector);
+            expect(manifest, `${name} → ${step.connector}`).toBeTruthy();
+            expect(
+              manifest!.actions.some((a) => a.key === step.actionKey),
+              `${name} → ${step.connector}.${step.actionKey}`,
+            ).toBe(true);
+            // A connector a handler calls but the plan never asks you to connect
+            // is a system that fails on its first real request.
+            expect(declared, `${blueprint.key} calls ${step.connector} but does not require it`)
+              .toContain(step.connector);
+          }
+        }
+      });
+
+      it('gives every handler a distinct route+method, so none shadows another', () => {
+        const seen = new Set<string>();
+        for (const [name, raw] of Object.entries(blueprint.handlers)) {
+          const parsed = parseHandlerSpec(raw, name);
+          if (!parsed.ok) continue;
+          const key = `${parsed.spec.method} ${parsed.spec.route}`;
+          expect(seen, `${blueprint.key}: duplicate ${key}`).not.toContain(key);
+          seen.add(key);
+        }
+      });
+
+      it('lists every handler route in its own console', () => {
+        // The console is how an operator learns which URL to paste where. A route
+        // missing from it is an endpoint nobody will ever point a provider at.
+        const html = blueprint.files['index.html'] ?? '';
+        for (const [name, raw] of Object.entries(blueprint.handlers)) {
+          const parsed = parseHandlerSpec(raw, name);
+          if (!parsed.ok || blueprint.key === 'generic') continue;
+          expect(html, `${blueprint.key}: ${parsed.spec.route} missing from the console`)
+            .toContain(parsed.spec.route);
+        }
+      });
+    });
+  }
+});
+
+describe('the signal gate', () => {
+  it('will not choose a specific blueprint the brief never names', () => {
+    // Capability overlap alone tops out at 0.65, which clears the threshold — so
+    // without this gate a "payments and email" brief lands on Stripe dunning.
+    const { chosen } = matchBlueprint(['payments', 'email', 'notifications'], 'We need to email customers about money.');
+    expect(chosen.blueprint.key).toBe('generic');
+    expect(chosen.reasons.join(' ')).toMatch(/never names it/i);
+  });
+
+  it('still chooses a blueprint the brief DOES name', () => {
+    const { chosen } = matchBlueprint(
+      ['payments', 'email', 'notifications'],
+      'Recover revenue from failed payment events in Stripe and chase past_due invoices.',
+    );
+    expect(chosen.blueprint.key).toBe('stripe-dunning');
+    expect(chosen.signalHits.length).toBeGreaterThan(0);
+  });
+
+  it('keeps the Twilio brief on the Twilio blueprint now that the catalog is larger', () => {
+    const spec = heuristicSpec(TWILIO_BRIEF);
+    const { chosen } = matchBlueprint(spec.capabilities, TWILIO_BRIEF);
+    expect(chosen.blueprint.key).toBe('twilio-omnichannel');
   });
 });
 

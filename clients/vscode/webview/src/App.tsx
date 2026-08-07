@@ -40,7 +40,9 @@ import {
   PromptPanel, PromptOptionsMenu,
   PendingQuestionBanner, selectPendingAskUser, askUserAnchorId,
   type BrainTimelineLabels,
+  DEFAULT_PROMPT_OPTIONS_LABELS,
   type ChatModelSelection,
+  type ModelChoiceLabels,
   type PromptOptionsLabels,
 } from '@seanhogg/builderforce-brain-ui';
 import { loadComposerModels, invalidateModelSurface, type ComposerModelSurface } from './modelOptions';
@@ -240,12 +242,19 @@ const EFFORT_DESC_FALLBACK: Record<Effort, string> = {
 };
 
 /**
- * The `/` menu's copy, from the host's localized bundle. The menu itself is the
- * SHARED control (`PromptOptionsMenu`) — the same one the web composer renders —
- * so both surfaces read one implementation and only supply their own strings.
+ * The `/` menu's copy: its own chrome from the host's label bundle, and the model
+ * rows' copy from `init.modelLabels` — the SAME object the host's `Change model`
+ * QuickPick renders from, so the two pickers cannot describe a row differently.
+ * The menu itself is the shared control (`PromptOptionsMenu`), identical to the
+ * web composer's.
  */
-function promptMenuLabels(t: (key: string, fallback: string) => string): PromptOptionsLabels {
+function promptMenuLabels(
+  t: (key: string, fallback: string) => string,
+  modelLabels: ModelChoiceLabels | undefined,
+): PromptOptionsLabels {
   return {
+    ...DEFAULT_PROMPT_OPTIONS_LABELS,
+    ...(modelLabels ?? {}),
     options: t('app.options', 'Options'),
     effort: t('app.effort', 'Effort'),
     effortQuick: t('app.effortQuick', 'Quick'),
@@ -261,24 +270,6 @@ function promptMenuLabels(t: (key: string, fallback: string) => string): PromptO
     chooseModel: t('app.pickModel', 'Change model'),
     noModels: t('app.noModels', 'No matching models'),
     all: t('app.all', 'All'),
-    categoryAuto: t('app.modelAutoShort', 'Auto'),
-    categoryByo: t('app.categoryByo', 'BYO'),
-    categoryFree: t('app.categoryFree', 'Free'),
-    categoryPlan: t('app.categoryPlan', 'Plan'),
-    categoryPaid: t('app.categoryPaid', 'Paid'),
-    categoryConfigured: t('app.categoryConfigured', 'Configured'),
-    autoLabel: t('app.modelAutoShort', 'Auto'),
-    autoDetail: t('app.modelFundingAuto', 'Routed per turn: your connected accounts first, then your plan.'),
-    poolLabel: t('app.modelPoolShort', 'Pool'),
-    poolDetail: t('app.modelFundingPool', 'Tries your connected accounts in the order configured in Account settings.'),
-    freeDetail: t('app.modelFundingFree', 'Free — included with BuilderForce.'),
-    planDetail: t('app.modelFundingPlan', 'Included in your plan.'),
-    paidDetail: t('app.modelFundingPremium', 'Premium — metered at cost + 1¢ per request.'),
-    paidCostDetail: t('app.modelCost', '{input} input / {output} output per 1M tokens + $0.01 per request'),
-    byoDetail: t('app.modelFundingByo', 'Billed to your own {provider} account — no plan credit used.').replace('{provider}', '{vendor}'),
-    configuredDetail: t('app.modelFundingConfigured', 'Saved workspace LLM configuration'),
-    evermindLabel: t('app.modelEvermind', 'Project Evermind'),
-    evermindDetail: t('app.modelFundingEvermind', "Your project's own learned Evermind model."),
     modelLocked: t('app.modelLocked', 'Model choice needs a paid plan or a connected provider account.'),
     accountSettings: t('app.accountSettings', 'Account settings'),
   };
@@ -759,7 +750,7 @@ function Chat({ init }: { init: InitData }) {
   // URL (see modelOptions.ts); any failure degrades to "auto only". The labels are
   // keyed on the host's bundle, not on `t` (rebuilt every render), so the fetch below
   // re-runs on a new init frame rather than on every keystroke.
-  const promptLabels = useMemo(() => promptMenuLabels(makeT(init.labels)), [init.labels]);
+  const promptLabels = useMemo(() => promptMenuLabels(makeT(init.labels), init.modelLabels), [init.labels, init.modelLabels]);
   const [modelChoices, setModelChoices] = useState<ComposerModelSurface | null>(null);
   const costLine = promptLabels.paidCostDetail;
   useEffect(() => {

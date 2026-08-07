@@ -2,6 +2,11 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.117] — Change model shows the same list wherever you open it
+
+- **The Sessions-view / command-palette "Change model" picker now offers exactly what the composer's `/` menu does** — same rows, same order (cheapest first: Free → Plan → Paid → your own connected accounts → your saved LLM configs), and the same one-line answer to who gets billed for each. The two pickers used to be built separately, so they grouped models differently, named the same connected provider differently, and worded "who pays" differently while reading the same account. Both are now rendered from one list.
+- **The picker is now translated** (Chinese, Spanish, French, German), including the "add a card" / "upgrade" rows when premium is locked. It used to be English-only.
+
 ## [2026.7.115] — Pick your model from the composer, without leaving the chat
 
 - **The model now lives in the `/` menu, next to Effort and Thinking.** The composer used to carry a separate chip that only told you the model's name; changing it threw you into a VS Code quick-pick, and the panel could never show you what was actually on offer. Now the `/` control names the model in use right on the button, and opening it gives you the full list — searchable, filtered by who pays (Free, Plan, Paid, BYO, your saved LLM configs) — with the funding line on every row, so you can see that a pick is billed to your own connected account rather than your plan allowance before you make it. The old chip is gone; **Change model** remains in the Sessions view overflow and the command palette.

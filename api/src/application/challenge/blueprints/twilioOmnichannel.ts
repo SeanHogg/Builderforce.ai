@@ -33,6 +33,7 @@
  */
 
 import type { Blueprint } from '../blueprint';
+import { renderOpsConsole } from './opsConsole';
 
 /** Shared preamble for the model steps: short, because it is going into an SMS. */
 const SUPPORT_PERSONA =
@@ -192,133 +193,29 @@ const handlers: Record<string, unknown> = {
 };
 
 /**
- * The operator console. Deliberately a single dependency-free HTML file: it is
- * published to the project's static site, and a build step between "the system
- * works" and "I can show someone" is a step that breaks on demo day.
- *
- * It talks to the project's own ingress for the health check and otherwise gives
- * the operator the two things a trial account needs — the webhook URLs to paste
- * into the Twilio console, and a running count against the trial allowances.
+ * The operator console, from the shared generator — the trial allowances and the
+ * five webhook URLs are the only parts that are specific to this blueprint.
  */
-const CONSOLE_HTML = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Omnichannel operations console</title>
-<style>
-  /* Both themes are declared here rather than inherited: this file is served
-     from the project's own subdomain and has no access to app tokens. */
-  :root {
-    color-scheme: light dark;
-    --bg: #f6f7f9; --surface: #ffffff; --text: #14161a; --muted: #5c6470;
-    --border: #dfe3e8; --accent: #2f6fed; --ok: #167a4a; --warn: #9a6200; --bad: #b3261e;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #0e1116; --surface: #161a21; --text: #e8eaed; --muted: #9aa3ae;
-      --border: #262c36; --accent: #6f9bff; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171;
-    }
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .wrap { max-width: 1100px; margin: 0 auto; padding: clamp(16px, 4vw, 40px); }
-  h1 { font-size: clamp(20px, 4vw, 30px); margin: 0 0 6px; }
-  .sub { color: var(--muted); margin: 0 0 28px; }
-  .grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
-  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em;
-             color: var(--muted); margin: 0 0 12px; }
-  .num { font-size: clamp(24px, 5vw, 34px); font-weight: 700; }
-  .cap { color: var(--muted); font-size: 13px; }
-  .bar { height: 6px; border-radius: 3px; background: var(--border); margin-top: 10px; overflow: hidden; }
-  .bar > i { display: block; height: 100%; background: var(--accent); }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
-  code { background: var(--bg); border: 1px solid var(--border); border-radius: 5px;
-         padding: 2px 6px; font-size: 12.5px; word-break: break-all; }
-  .scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; }
-  .pill.ok { background: color-mix(in srgb, var(--ok) 16%, transparent); color: var(--ok); }
-  .pill.bad { background: color-mix(in srgb, var(--bad) 16%, transparent); color: var(--bad); }
-  section { margin-top: 28px; }
-</style>
-</head>
-<body>
-<div class="wrap">
-  <h1>Omnichannel operations console</h1>
-  <p class="sub">SMS · Voice · Email · WhatsApp — one system, one set of webhooks, one trial balance.</p>
-
-  <section class="grid" id="meters"></section>
-
-  <section>
-    <h2 style="font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Webhook endpoints</h2>
-    <div class="card scroll">
-      <table>
-        <thead><tr><th>Product</th><th>Point Twilio at</th><th>Status</th></tr></thead>
-        <tbody id="endpoints"></tbody>
-      </table>
-    </div>
-  </section>
-</div>
-
-<script>
-  // Trial allowances from the brief. Edit these if your plan changes.
-  var ALLOWANCE = { SMS: 100, 'Voice minutes': 75, Email: 3000, WhatsApp: 100 };
-
-  // The ingress this console belongs to. Replaced at build time by the platform;
-  // falls back to a same-origin /hooks path for local preview.
-  var INGRESS = window.__INGRESS_URL__ || '';
-
-  var ROUTES = [
-    ['Inbound SMS', '/sms'],
-    ['Inbound voice (IVR)', '/voice'],
-    ['IVR keypress', '/ivr'],
-    ['Inbound WhatsApp', '/whatsapp'],
-    ['Delivery status', '/status']
-  ];
-
-  function meters() {
-    var used = JSON.parse(localStorage.getItem('bf.usage') || '{}');
-    document.getElementById('meters').innerHTML = Object.keys(ALLOWANCE).map(function (k) {
-      var cap = ALLOWANCE[k], n = used[k] || 0, pct = Math.min(100, Math.round((n / cap) * 100));
-      return '<div class="card"><h2>' + k + '</h2>' +
-        '<div class="num">' + n + '</div>' +
-        '<div class="cap">of ' + cap + ' included</div>' +
-        '<div class="bar"><i style="width:' + pct + '%"></i></div></div>';
-    }).join('');
-  }
-
-  function endpoints() {
-    document.getElementById('endpoints').innerHTML = ROUTES.map(function (r) {
-      return '<tr><td>' + r[0] + '</td><td><code>' + (INGRESS || '(ingress URL not set)') + r[1] +
-        '</code></td><td><span class="pill ok" data-route="' + r[1] + '">checking…</span></td></tr>';
-    }).join('');
-
-    if (!INGRESS) return;
-    fetch(INGRESS).then(function (r) { return r.json(); }).then(function (data) {
-      var live = {};
-      (data.handlers || []).forEach(function (h) { live[h.route] = true; });
-      document.querySelectorAll('[data-route]').forEach(function (el) {
-        var ok = live[el.getAttribute('data-route')];
-        el.className = 'pill ' + (ok ? 'ok' : 'bad');
-        el.textContent = ok ? 'live' : 'no handler';
-      });
-    }).catch(function () {
-      document.querySelectorAll('[data-route]').forEach(function (el) {
-        el.className = 'pill bad'; el.textContent = 'unreachable';
-      });
-    });
-  }
-
-  meters();
-  endpoints();
-</script>
-</body>
-</html>
-`;
+const CONSOLE_HTML = renderOpsConsole({
+  title: 'Omnichannel operations console',
+  subtitle: 'SMS \u00b7 Voice \u00b7 Email \u00b7 WhatsApp \u2014 one system, one set of webhooks, one trial balance.',
+  targetLabel: 'Point Twilio at',
+  // The brief's allowances. A system that silently burns a 100-message balance
+  // during testing fails the brief in the most annoying possible way.
+  meters: [
+    { label: 'SMS', allowance: 100 },
+    { label: 'Voice minutes', allowance: 75 },
+    { label: 'Email', allowance: 3000 },
+    { label: 'WhatsApp', allowance: 100 },
+  ],
+  routes: [
+    { label: 'Inbound SMS', path: '/sms' },
+    { label: 'Inbound voice (IVR)', path: '/voice' },
+    { label: 'IVR keypress', path: '/ivr' },
+    { label: 'Inbound WhatsApp', path: '/whatsapp' },
+    { label: 'Delivery status', path: '/status' },
+  ],
+});
 
 const RUNBOOK = `# Twilio omnichannel — runbook
 

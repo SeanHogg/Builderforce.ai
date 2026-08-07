@@ -13486,7 +13486,11 @@
     "noticeAgentGroupFailed": "该智能体回合未能完成",
     "noticeAgentTestStatusError": "错误 · {reason}",
     "noticeAgentGroupTurnFailed": "智能体小组未能完成本回合：{reason}",
-    "noticeClaimFailed": "暂时无法保存此会话"
+    "noticeClaimFailed": "暂时无法保存此会话",
+    "noticeApplyingBrainChanges": "正在应用 {count} 项 Brain 更改…",
+    "noticeBrainChangesAwaitReview": "{count} 项 Brain 更改待审核",
+    "noticeConversationSaveFailedReason": "对话保存失败：{reason}",
+    "noticePrdNotSavedReason": "项目 PRD 未保存：{reason}"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",

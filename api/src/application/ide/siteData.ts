@@ -12,9 +12,11 @@
  *   record      one submission
  *
  * WRITES ARE PUBLIC, READS ARE NOT. A GET on the public endpoint would hand
- * every visitor the whole submission list, so there isn't one: the owner reads
- * records back through the authenticated project API. That asymmetry is the
- * whole security model and is deliberately not configurable.
+ * every visitor the whole submission list, so there isn't one. Records are read
+ * back two ways, both server-side: the owner through the authenticated project
+ * API, and the project's own handlers through {@link listSiteRecordsForHandler}
+ * — a spec the tenant wrote, deciding exactly which fields reach the page. That
+ * asymmetry is the whole security model and is deliberately not configurable.
  *
  * ZERO SETUP. Publishing auto-provisions a `signups` collection (the same
  * best-effort pattern that already auto-provisions a QA target), so a form on a
@@ -339,6 +341,99 @@ export async function listRecords(
     .where(and(...filters))
     .orderBy(desc(siteRecords.id))
     .limit(bounded);
+}
+
+// ---------------------------------------------------------------------------
+// Server-side read, for handlers only
+// ---------------------------------------------------------------------------
+
+/** One record as a handler template sees it. The payload is FLATTENED so a spec
+ *  reads `{{steps.recent.records[0].name}}` rather than `…records[0].payload.name`;
+ *  `id`/`email`/`createdAt` are applied last so a submitted field cannot shadow
+ *  the record's own identity. */
+export interface HandlerRecordView extends Record<string, unknown> {
+  id: number;
+  email: string | null;
+  createdAt: string;
+}
+
+export interface HandlerCollectionRead {
+  collection: string;
+  count: number;
+  records: HandlerRecordView[];
+  /** Set when the collection does not exist — a template can branch on it, and
+   *  the outcome list shows the author why their page is empty. */
+  error?: string;
+}
+
+/** Hard ceiling on rows a single handler step may pull back. A handler runs
+ *  inside a webhook's latency budget and its output is rendered into a reply. */
+const HANDLER_READ_MAX = 100;
+
+/**
+ * Read a collection's records for a HANDLER.
+ *
+ * This is the read half of the site datastore, and it exists only here: the
+ * public `/__api/collections/<name>` endpoint is write-only on purpose (a signup
+ * form anyone can enumerate is a leak). A handler is not the internet — it runs
+ * server-side against a spec the tenant authored, so it is the intended way to
+ * build a page out of collected data.
+ *
+ * Scoped by BOTH tenant and project: the handler's project id comes from the
+ * resolved backend, so a spec cannot name another project's collection.
+ */
+export async function listSiteRecordsForHandler(args: {
+  db: Db;
+  tenantId: number;
+  projectId: number;
+  collectionName: string;
+  limit?: number;
+  /** Optional single-field equality filter over the stored payload. */
+  match?: { field: string; value: string } | undefined;
+}): Promise<HandlerCollectionRead> {
+  const name = normalizeCollectionName(args.collectionName);
+  if (!name) return { collection: String(args.collectionName ?? ''), count: 0, records: [], error: 'Invalid collection name.' };
+
+  const [collection] = await args.db
+    .select({ id: siteCollections.id })
+    .from(siteCollections)
+    .where(and(
+      eq(siteCollections.tenantId, args.tenantId),
+      eq(siteCollections.projectId, args.projectId),
+      eq(siteCollections.name, name),
+    ))
+    .limit(1);
+  if (!collection) return { collection: name, count: 0, records: [], error: `No collection named "${name}".` };
+
+  const limit = Math.min(Math.max(1, Math.trunc(args.limit ?? 20)), HANDLER_READ_MAX);
+  const filters = [eq(siteRecords.collectionId, collection.id), eq(siteRecords.tenantId, args.tenantId)];
+  // Parameterised on both sides: the field name is interpolated as a VALUE into
+  // the `->>` operator, not concatenated into the statement.
+  if (args.match?.field) {
+    filters.push(sql`${siteRecords.payload}->>${args.match.field} = ${args.match.value}` as never);
+  }
+
+  const rows = await args.db
+    .select({
+      id: siteRecords.id,
+      payload: siteRecords.payload,
+      email: siteRecords.email,
+      createdAt: siteRecords.createdAt,
+    })
+    .from(siteRecords)
+    .where(and(...filters))
+    .orderBy(desc(siteRecords.id))
+    .limit(limit);
+
+  const records: HandlerRecordView[] = rows.map((r) => ({
+    ...(r.payload && typeof r.payload === 'object' && !Array.isArray(r.payload)
+      ? (r.payload as Record<string, unknown>)
+      : {}),
+    id: r.id,
+    email: r.email,
+    createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+  }));
+  return { collection: name, count: records.length, records };
 }
 
 export type UpdateCollectionResult =

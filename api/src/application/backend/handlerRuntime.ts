@@ -20,6 +20,7 @@
  */
 
 import type { ConnectorCallResult } from '../connectors/connectorRuntime';
+import type { HandlerCollectionRead } from '../ide/siteData';
 import { renderTwiml, TWIML_CONTENT_TYPE, type TwimlNode } from './twiml';
 import type { HandlerSpec, HandlerStep } from './handlerSpec';
 
@@ -37,6 +38,12 @@ export interface HandlerRuntimeDeps {
     input: Record<string, unknown>;
     connectionId?: string | null;
   }): Promise<ConnectorCallResult>;
+  /** Read the project's own site collection, already scoped to tenant+project. */
+  readCollection(args: {
+    collection: string;
+    limit?: number;
+    match?: { field: string; value: string } | undefined;
+  }): Promise<HandlerCollectionRead>;
 }
 
 /**
@@ -173,6 +180,19 @@ async function runStep(
       // The DATA is what a later template wants (`{{steps.sent.sid}}`); the ok/error
       // are surfaced to the outcome list rather than buried in the bound value.
       return { value: result.data, ...(result.ok ? {} : { error: result.error ?? `Connector returned ${result.status}` }) };
+    }
+
+    case 'data': {
+      const field = step.matchField ? renderTemplate(step.matchField, scope) : '';
+      const read = await deps.readCollection({
+        collection: renderTemplate(step.collection, scope),
+        ...(step.limit !== undefined ? { limit: step.limit } : {}),
+        match: field ? { field, value: renderTemplate(step.matchValue ?? '', scope) } : undefined,
+      });
+      // An unknown collection binds an EMPTY read rather than failing the handler,
+      // so `{{#steps.rows.count}}`-style branching still works and the page
+      // renders its empty state; the reason lands in the outcome list.
+      return { value: read, ...(read.error ? { error: read.error } : {}) };
     }
   }
 }

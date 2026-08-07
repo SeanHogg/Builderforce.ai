@@ -33,6 +33,7 @@ import {
   type ErrorLogFilters,
 } from '../observability/errorLogQuery';
 import { ProjectService } from '../project/ProjectService';
+import { r2ProjectStoragePurge } from '../ide/projectStorage';
 import { TaskService } from '../task/TaskService';
 import { addManagerDirective } from '../manager/managerDirectives';
 import { createManagerCoachingTask, getEffectiveManagerPolicy } from '../manager/ManagerService';
@@ -3243,7 +3244,7 @@ function buildCtx(
   return {
     db,
     tenantId,
-    projects: new ProjectService(projectRepo),
+    projects: new ProjectService(projectRepo, undefined, opts?.env ? r2ProjectStoragePurge(opts.env) : null),
     tasks: new TaskService(taskRepo, projectRepo),
     env: opts?.env,
     userId: opts?.userId ?? null,

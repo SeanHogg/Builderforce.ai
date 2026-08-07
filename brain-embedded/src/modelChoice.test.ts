@@ -40,6 +40,16 @@ describe('buildModelItems', () => {
       .toBe('Billed to your own Kimi Code account — no plan credit used.');
   });
 
+  it('keeps each funding tier contiguous', () => {
+    // The VS Code QuickPick emits one separator per tier as it walks this list, so a
+    // tier appearing twice would render duplicate headings around split groups.
+    const seen: string[] = [];
+    for (const item of buildModelItems(options, L)) {
+      if (seen[seen.length - 1] !== item.category) seen.push(item.category);
+    }
+    expect(seen).toEqual([...new Set(seen)]);
+  });
+
   it('offers the BYO pool only when a provider is connected', () => {
     const items = buildModelItems({ ...options, byo: [] }, L);
     expect(items.some((item) => item.key === 'byo_pool')).toBe(false);

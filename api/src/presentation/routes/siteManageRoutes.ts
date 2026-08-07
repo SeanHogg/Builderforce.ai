@@ -24,7 +24,7 @@ import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv } from '../../env';
-import type { Db } from '../../application/shared/dbPort';
+import type { DbHandle as Db } from '../../application/shared/dbHandle';
 import {
   claimCustomDomain,
   cnamePointsAtUs,

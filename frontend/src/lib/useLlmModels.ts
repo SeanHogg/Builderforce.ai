@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { perMillionUsd, type ChatModelOptions } from '@seanhogg/builderforce-brain-ui';
+import { byoVendorLabel, perMillionUsd, type ChatModelOptions } from '@seanhogg/builderforce-brain-ui';
 import { llmApi, tenantModelApi, type ByoModel, type PremiumModelInfo, type TenantModel } from './builderforceApi';
 import { getPremiumModelCatalog, type ModelRecord } from './modelCatalog';
 import { getStoredTenantToken } from './auth';
@@ -168,7 +168,9 @@ export function useChatModelOptions(): { options: ChatModelOptions; canChooseMod
   return useMemo(() => ({
     options: {
       configured: lists.tenantModels.map((model) => ({ id: model.ref, label: model.name })),
-      byo: lists.fundingSurface.byo.models.map(({ id, vendor }) => ({ id, vendor, cost: t('byoDetail', { vendor }) })),
+      // `byoVendorLabel` is the SHARED vendor map, so a connected account reads the same
+      // ('Kimi Code', not 'kimi-code') here, in the editor composer, and in its QuickPick.
+      byo: lists.fundingSurface.byo.models.map(({ id, vendor }) => ({ id, vendor, cost: t('byoDetail', { vendor: byoVendorLabel(vendor) }) })),
       free: lists.freeModels,
       plan: lists.models,
       paid: lists.premiumModels.map((model) => ({

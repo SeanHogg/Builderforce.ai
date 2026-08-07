@@ -32,6 +32,7 @@ function deps(over: Partial<HandlerRuntimeDeps> = {}): HandlerRuntimeDeps {
   return {
     llm: vi.fn(async () => 'model reply'),
     callConnector: vi.fn(async () => ok({ sid: 'SM1' })),
+    readCollection: vi.fn(async () => ({ collection: 'signups', count: 0, records: [] })),
     ...over,
   };
 }

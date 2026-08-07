@@ -13486,7 +13486,11 @@
     "noticeAgentGroupFailed": "Der Agentenzug konnte nicht abgeschlossen werden",
     "noticeAgentTestStatusError": "Fehler · {reason}",
     "noticeAgentGroupTurnFailed": "Die Agentengruppe konnte ihren Zug nicht abschließen: {reason}",
-    "noticeClaimFailed": "Diese Sitzung konnte noch nicht gespeichert werden"
+    "noticeClaimFailed": "Diese Sitzung konnte noch nicht gespeichert werden",
+    "noticeApplyingBrainChanges": "{count, plural, one {# Brain-Änderung wird} other {# Brain-Änderungen werden}} angewendet…",
+    "noticeBrainChangesAwaitReview": "{count, plural, one {# Brain-Änderung wartet} other {# Brain-Änderungen warten}} auf Prüfung",
+    "noticeConversationSaveFailedReason": "Konversation konnte nicht gespeichert werden: {reason}",
+    "noticePrdNotSavedReason": "Projekt-PRD wurde nicht gespeichert: {reason}"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",

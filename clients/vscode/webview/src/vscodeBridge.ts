@@ -14,6 +14,7 @@
  *                    'editorContext'{editorContext}, 'refresh'
  */
 
+import type { ModelChoiceLabels } from '@seanhogg/builderforce-brain-embedded';
 import type { EditorContext } from '../../src/idePersona';
 
 export interface ToolSpecMsg {
@@ -93,6 +94,10 @@ export interface InitData {
   tools: ToolSpecMsg[];
   /** Localized UI strings (see {@link LabelBundle}). */
   labels: LabelBundle;
+  /** The MODEL ROWS' copy (categories, funding lines, Auto/Pool/Evermind naming),
+   *  shared verbatim with the host's `Change model` QuickPick so the two pickers
+   *  cannot word the same row differently. See `src/modelChoiceLabels.ts`. */
+  modelLabels?: ModelChoiceLabels;
   /**
    * The signed-in user's PERSONALITY-only directive block (from the gateway's
    * `/api/limbic/block`), so the chat's tone reflects the user. Injected into the

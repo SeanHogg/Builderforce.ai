@@ -28,6 +28,7 @@ import {
   contentTypeFor,
 } from './siteHosting';
 import { ensureDefaultCollection } from './siteData';
+import { ensureProjectBackend } from '../backend';
 
 /** A single built file, dist-relative. */
 export interface PublishAsset {
@@ -177,6 +178,19 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
         operation: 'ensureDefaultCollection',
       });
     }
+  }
+
+  // …and a backend row, which is what makes the project's canvas handlers answer
+  // at `https://<site>/api/<route>`. Without it a handler someone wrote in the
+  // IDE would only ever be reachable at the opaque `/hooks/<token>` address —
+  // the site's own pages could not call it. Best-effort for the same reason.
+  try {
+    await ensureProjectBackend(env, db, tenantId, projectId);
+  } catch (error) {
+    reportCaughtError(error, {
+      source: 'application/ide/publishStaticSite.ts',
+      operation: 'ensureProjectBackend',
+    });
   }
 
   // Wire deploy → test: a published site is a testable target. Keep the project's

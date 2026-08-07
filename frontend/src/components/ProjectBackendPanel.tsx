@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import HandlerEditor from '@/components/HandlerEditor';
 import {
   projectBackendApi,
+  type HandlerSpecDocument,
   type ProjectBackendRequestRow,
   type ProjectBackendView,
 } from '@/lib/builderforceApi';
@@ -77,6 +79,7 @@ const VERDICT_COLOR: Record<string, string> = {
   ok: 'var(--success, #167a4a)',
   unverified: 'var(--warning, #9a6200)',
   'no-handler': 'var(--warning, #9a6200)',
+  'rate-limited': 'var(--warning, #9a6200)',
   error: 'var(--danger, #b3261e)',
 };
 

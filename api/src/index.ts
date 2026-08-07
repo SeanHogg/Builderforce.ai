@@ -23,6 +23,7 @@ import { AuditRepository }      from './infrastructure/repositories/AuditReposit
 
 // Application services
 import { ProjectService }  from './application/project/ProjectService';
+import { r2ProjectStoragePurge } from './application/ide/projectStorage';
 import { TaskService }     from './application/task/TaskService';
 import { TaskType }        from './domain/shared/types';
 import { llmEpicDecomposer } from './application/task/EpicDecomposer';
@@ -278,7 +279,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   const paymentProvider = buildPaymentProvider(env);
 
   // --- Application ---
-  const projectService  = new ProjectService(projectRepo, taskRepo);
+  const projectService  = new ProjectService(projectRepo, taskRepo, r2ProjectStoragePurge(env));
   const taskService     = new TaskService(taskRepo, projectRepo, llmEpicDecomposer(env),
     (projectId, roleKey) => recommendTopAssignee(env, db, projectId, roleKey ? { roleKey } : {}),
     // Epic fan-out records its planned SEQUENCE as real precedence edges, through the
@@ -695,7 +696,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/compile',   createCompileRoutes(db, runtimeService));
   // Paste a brief (a contest, an RFP, a hackathon prompt) → extracted requirements,
   // a matched blueprint, a plan, and — on an explicit second call — a built project.
-  app.route('/api/challenges', createChallengeRoutes(db));
+  app.route('/api/challenges', createChallengeRoutes(db, runtimeService));
   // Operating a project's server-side half: hosting strategy, live handlers, the
   // per-project secret vault, and the inbound-delivery log.
   app.route('/api/projects',  createProjectBackendRoutes(db));

@@ -55,6 +55,7 @@ import {
   writeWorkspaceFile,
   deleteWorkspaceFile,
 } from '../../application/ide/workspaceStore';
+import { onCanvasWrite } from '../../application/backend';
 import { HOSTING_APEX } from '../../application/ide/siteHosting';
 import { publishStaticSite, assetsFromFormData } from '../../application/ide/publishStaticSite';
 import { validateLoRASafetensors } from '../../domain/training/loraArtifact';
@@ -301,6 +302,10 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     // content (JSON into .js, source into .html) — 400/422 with the reason.
     const result = await writeWorkspaceFile(bucket, projectId, path, await c.req.text());
     if (!result.ok) return c.json({ error: result.reason }, result.status);
+    // Editing a handler in the editor must change what the live ingress serves on
+    // the very next request — the canvas is the source of truth, and the ingress
+    // reads it through a cache.
+    await onCanvasWrite(c.env, projectId, path);
     return c.json({ success: true });
   });
 
@@ -313,6 +318,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     if (!bucket) return c.json({ error: 'Storage not configured' }, 503);
     if (!(await projectInTenant(db, tenantId, projectId))) return c.json({ error: 'Project not found' }, 404);
     await deleteWorkspaceFile(bucket, projectId, path);
+    await onCanvasWrite(c.env, projectId, path);
     return c.json({ success: true });
   });
 

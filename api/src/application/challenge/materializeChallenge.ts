@@ -29,11 +29,14 @@ import { buildProjectKey } from '../project/projectKey';
 import { formatTaskKey, nextProjectKeySeqBase } from '../task/taskKeys';
 import { writeWorkspaceFile } from '../ide/workspaceStore';
 import { HANDLERS_DIR } from '../backend/handlerSpec';
-import { ensureProjectBackend, ingressUrlFor, materializeBackend } from '../backend';
+import { ensureProjectBackend, ingressUrlFor, materializeBackend, onCanvasWrite } from '../backend';
 import { listProjectSecrets } from '../secrets/projectSecrets';
 import { BUILTIN_CONNECTORS } from '../connectors/defaults';
 import { connectorConnections } from '../../infrastructure/database/schema';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { maybeAutoRunOnLaneEntry } from '../swimlane/laneEntryTrigger';
+import type { RuntimeService } from '../runtime/RuntimeService';
+import { isBuildTask } from './blueprint';
 import type { ChallengePlan } from './planChallenge';
 import type { ChallengeSpec } from './parseBrief';
 import type { SetupStep } from '../backend/hostingStrategy';
@@ -46,6 +49,8 @@ export interface MaterializeChallengeResult {
   handlersWritten: string[];
   tasksCreated: number;
   tasksSkipped: number;
+  /** Seeded build tickets autonomy actually started a run for. */
+  tasksDispatched: number;
   /** Everything still standing between this and a working system. */
   readiness: SetupStep[];
   warnings: string[];
@@ -117,7 +122,7 @@ async function seedTasks(
   projectId: number,
   projectKey: string,
   plan: ChallengePlan,
-): Promise<{ created: number; skipped: number }> {
+): Promise<{ created: number; skipped: number; buildTaskIds: number[] }> {
   const existing = await db
     .select({ title: tasks.title })
     .from(tasks)
@@ -127,6 +132,7 @@ async function seedTasks(
   let seq = await nextProjectKeySeqBase(db, projectId);
   let created = 0;
   let skipped = 0;
+  const buildTaskIds: number[] = [];
 
   for (const task of [...plan.tasks].sort((a, b) => a.order - b.order)) {
     if (seen.has(task.title.trim().toLowerCase())) {
@@ -136,17 +142,25 @@ async function seedTasks(
     let inserted = false;
     for (let attempt = 0; attempt < 3 && !inserted; attempt++) {
       try {
-        await db.insert(tasks).values({
-          projectId,
-          key: formatTaskKey(projectKey, seq),
-          title: task.title.slice(0, 500),
-          description: task.description,
-          status: 'backlog',
-          priority: 'medium',
-        });
+        const [row] = await db
+          .insert(tasks)
+          .values({
+            projectId,
+            key: formatTaskKey(projectKey, seq),
+            title: task.title.slice(0, 500),
+            description: task.description,
+            status: 'backlog',
+            priority: 'medium',
+          })
+          .returning({ id: tasks.id });
         inserted = true;
         created++;
         seen.add(task.title.trim().toLowerCase());
+        // Only tickets seeded THIS run are offered to autonomy. A ticket that was
+        // already on the board has its own history — it may be in review, or
+        // deliberately parked — and re-dispatching it because the challenge was
+        // rebuilt would be the pipeline reaching into work it does not own.
+        if (row && isBuildTask(task)) buildTaskIds.push(row.id);
       } catch (error) {
         // Almost certainly a key collision with a concurrent create — walk on.
         reportCaughtError(error, {
@@ -158,7 +172,54 @@ async function seedTasks(
       }
     }
   }
-  return { created, skipped };
+  return { created, skipped, buildTaskIds };
+}
+
+/** Most tickets one build may hand to autonomy. A plan caps tasks at 8 already;
+ *  this is the backstop against a future planner that does not. */
+const MAX_AUTO_DISPATCH = 8;
+
+/**
+ * Offer the freshly-seeded BUILD tickets to autonomy.
+ *
+ * Deliberately "offer", not "start": every candidate goes through
+ * {@link maybeAutoRunOnLaneEntry}, the same gate a drag onto a lane uses, which
+ * already decides whether a lane is staffed, whether the board is human-gated,
+ * whether the workspace has budget and whether an agent is even eligible. A
+ * project whose board has no staffed lane declines every candidate and nothing
+ * happens — which is the correct outcome, not a failure.
+ *
+ * Reusing that gate rather than dispatching directly is the whole point: a second
+ * dispatch path would be a second set of rules about when the platform is allowed
+ * to spend a customer's run budget, and the two would drift.
+ */
+async function dispatchBuildTasks(
+  env: Env,
+  db: Db,
+  runtimeService: RuntimeService,
+  args: { tenantId: number; projectId: number; taskIds: readonly number[] },
+): Promise<number> {
+  let dispatched = 0;
+  for (const taskId of args.taskIds.slice(0, MAX_AUTO_DISPATCH)) {
+    try {
+      const started = await maybeAutoRunOnLaneEntry(env, db, runtimeService, {
+        tenantId: args.tenantId,
+        projectId: args.projectId,
+        taskId,
+        status: 'backlog',
+        submittedBy: 'system:challenge-build',
+      });
+      if (started) dispatched++;
+    } catch (error) {
+      // A declined or failed dispatch must not fail the BUILD — the system is
+      // already materialised and working; this only decides who starts the work.
+      reportCaughtError(error, {
+        source: 'application/challenge/materializeChallenge.ts',
+        operation: `dispatchBuildTasks:${taskId}`,
+      });
+    }
+  }
+  return dispatched;
 }
 
 /** Connectors from the plan that have no live connection yet. */
@@ -202,6 +263,12 @@ export async function materializeChallenge(args: {
   plan: ChallengePlan;
   /** Build into an existing project instead of creating one. */
   projectId?: number | null;
+  /**
+   * Present ⇒ the seeded BUILD tickets are offered to autonomy. Optional so a
+   * caller without a runtime (a test, a dry run) still materialises the system;
+   * the board simply waits for a human, as it did before.
+   */
+  runtimeService?: RuntimeService | null;
 }): Promise<MaterializeChallengeResult> {
   const { db, env, bucket, tenantId, spec, plan } = args;
   const warnings: string[] = [...plan.handlerWarnings];
@@ -229,8 +296,14 @@ export async function materializeChallenge(args: {
   for (const [name, spec_] of Object.entries(plan.handlers)) {
     const path = `${HANDLERS_DIR}${name}.json`;
     const write = await writeWorkspaceFile(bucket, project.id, path, JSON.stringify(spec_, null, 2));
-    if (write.ok) handlersWritten.push(path);
-    else warnings.push(`Could not write ${path}: ${write.reason}`);
+    if (write.ok) {
+      handlersWritten.push(path);
+      // The ingress serves handlers through a cache; a freshly materialized
+      // challenge must answer on its own routes immediately, not after a TTL.
+      await onCanvasWrite(env, project.id, path);
+    } else {
+      warnings.push(`Could not write ${path}: ${write.reason}`);
+    }
   }
 
   // ── Board ────────────────────────────────────────────────────────────────
@@ -259,6 +332,17 @@ export async function materializeChallenge(args: {
 
   const connectorSteps = await missingConnectorSteps(db, tenantId, plan);
 
+  // ── Start the work ───────────────────────────────────────────────────────
+  // Last, and only after the system is materialised: an agent dispatched before
+  // the handlers were written would open a repo that does not yet contain them.
+  const tasksDispatched = args.runtimeService
+    ? await dispatchBuildTasks(env, db, args.runtimeService, {
+        tenantId,
+        projectId: project.id,
+        taskIds: seeded.buildTaskIds,
+      })
+    : 0;
+
   return {
     projectId: project.id,
     projectKey: project.key,
@@ -267,6 +351,7 @@ export async function materializeChallenge(args: {
     handlersWritten,
     tasksCreated: seeded.created,
     tasksSkipped: seeded.skipped,
+    tasksDispatched,
     // Connectors first: a missing connection is what stops the system doing
     // anything at all, while a missing webhook URL only stops it being reached.
     readiness: [...connectorSteps, ...materialized.setupSteps],

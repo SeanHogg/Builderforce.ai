@@ -13486,7 +13486,11 @@
     "noticeAgentGroupFailed": "Le tour de l'agent n'a pas pu être terminé",
     "noticeAgentTestStatusError": "Erreur · {reason}",
     "noticeAgentGroupTurnFailed": "Le groupe d'agents n'a pas pu terminer son tour : {reason}",
-    "noticeClaimFailed": "Impossible d'enregistrer cette session pour le moment"
+    "noticeClaimFailed": "Impossible d'enregistrer cette session pour le moment",
+    "noticeApplyingBrainChanges": "Application en cours : {count, plural, one {# modification de Brain} other {# modifications de Brain}}…",
+    "noticeBrainChangesAwaitReview": "{count, plural, one {# modification de Brain attend} other {# modifications de Brain attendent}} une révision",
+    "noticeConversationSaveFailedReason": "Échec de l'enregistrement de la conversation : {reason}",
+    "noticePrdNotSavedReason": "Le PRD du projet n'a pas été enregistré : {reason}"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",

@@ -249,5 +249,16 @@
   "Your {provider} account is connected in a DIFFERENT workspace, so this run used the shared model pool instead of your own model. Switch to that workspace, or connect it in this one under Settings ▸ API Keys.": "Your {provider} account is connected in a DIFFERENT workspace, so this run used the shared model pool instead of your own model. Switch to that workspace, or connect it in this one under Settings ▸ API Keys.",
   "Your connected {provider} account couldn’t be used this run (its token looks expired or revoked), so it ran on the shared model pool instead of your own model. Reconnect it in the web app under Settings ▸ API Keys.": "Your connected {provider} account couldn’t be used this run (its token looks expired or revoked), so it ran on the shared model pool instead of your own model. Reconnect it in the web app under Settings ▸ API Keys.",
   "Your project's own learned Evermind model.": "Your project's own learned Evermind model.",
-  "Your workspace is on the {plan} plan. Click to manage your plan.": "Your workspace is on the {plan} plan. Click to manage your plan."
+  "Your workspace is on the {plan} plan. Click to manage your plan.": "Your workspace is on the {plan} plan. Click to manage your plan.",
+  "Tries your connected accounts in the order configured in Account settings.": "Tries your connected accounts in the order configured in Account settings.",
+  "Select BuilderForce model": "Select BuilderForce model",
+  "Pick a model for new turns": "Pick a model for new turns",
+  "Your own connected accounts are billed to your key — no plan credit used": "Your own connected accounts are billed to your key — no plan credit used",
+  "Open settings": "Open settings",
+  "Sign In": "Sign In",
+  "$(credit-card) Add a card to unlock premium models": "$(credit-card) Add a card to unlock premium models",
+  "$(rocket) Upgrade to unlock premium models": "$(rocket) Upgrade to unlock premium models",
+  "Your plan allows premium; it needs a validated card on file": "Your plan allows premium; it needs a validated card on file",
+  "Any paid OpenRouter model, at cost + 1¢/request": "Any paid OpenRouter model, at cost + 1¢/request",
+  "Model choice needs a paid plan or a connected provider account. Connect your own Anthropic/OpenAI key to pick models and have turns billed to your account.": "Model choice needs a paid plan or a connected provider account. Connect your own Anthropic/OpenAI key to pick models and have turns billed to your account."
 }

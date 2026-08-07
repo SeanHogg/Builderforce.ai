@@ -253,5 +253,16 @@
   "Your {provider} account is connected in a DIFFERENT workspace, so this run used the shared model pool instead of your own model. Switch to that workspace, or connect it in this one under Settings ▸ API Keys.": "您的 {provider} 账户连接在另一个工作区中，因此本次运行使用了共享模型池而非您自己的模型。请切换到该工作区，或在当前工作区的“设置 ▸ API 密钥”中进行连接。",
   "Your connected {provider} account couldn’t be used this run (its token looks expired or revoked), so it ran on the shared model pool instead of your own model. Reconnect it in the web app under Settings ▸ API Keys.": "本次运行无法使用您已连接的 {provider} 账户（其令牌似乎已过期或被吊销），因此改用了共享模型池而非您自己的模型。请在网页应用的“设置 ▸ API 密钥”中重新连接。",
   "Your project's own learned Evermind model.": "你项目自己学习得到的 Evermind 模型。",
-  "Your workspace is on the {plan} plan. Click to manage your plan.": "您的工作区使用 {plan} 套餐。点击管理您的套餐。"
+  "Your workspace is on the {plan} plan. Click to manage your plan.": "您的工作区使用 {plan} 套餐。点击管理您的套餐。",
+  "Tries your connected accounts in the order configured in Account settings.": "按“账户设置”中配置的顺序依次尝试你已连接的账号。",
+  "Select BuilderForce model": "选择 BuilderForce 模型",
+  "Pick a model for new turns": "为后续对话选择一个模型",
+  "Your own connected accounts are billed to your key — no plan credit used": "你自己连接的账号按你的密钥计费——不消耗套餐额度",
+  "Open settings": "打开设置",
+  "Sign In": "登录",
+  "$(credit-card) Add a card to unlock premium models": "$(credit-card) 添加银行卡以解锁高级模型",
+  "$(rocket) Upgrade to unlock premium models": "$(rocket) 升级以解锁高级模型",
+  "Your plan allows premium; it needs a validated card on file": "你的套餐支持高级模型，但需要先绑定并验证一张银行卡",
+  "Any paid OpenRouter model, at cost + 1¢/request": "任意付费 OpenRouter 模型，按成本 + 每次请求 1 美分计费",
+  "Model choice needs a paid plan or a connected provider account. Connect your own Anthropic/OpenAI key to pick models and have turns billed to your account.": "选择模型需要付费套餐或已连接的服务商账号。连接你自己的 Anthropic/OpenAI 密钥即可挑选模型，并将用量计入你自己的账号。"
 }

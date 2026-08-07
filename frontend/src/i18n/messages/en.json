@@ -13487,7 +13487,11 @@
     "noticeAgentGroupFailed": "The agent turn could not be completed",
     "noticeAgentTestStatusError": "Error · {reason}",
     "noticeAgentGroupTurnFailed": "The agent group could not complete its turn: {reason}",
-    "noticeClaimFailed": "Could not save this session yet"
+    "noticeClaimFailed": "Could not save this session yet",
+    "noticeApplyingBrainChanges": "Applying {count, plural, one {# Brain change} other {# Brain changes}}…",
+    "noticeBrainChangesAwaitReview": "{count, plural, one {# Brain change awaits} other {# Brain changes await}} review",
+    "noticeConversationSaveFailedReason": "Conversation save failed: {reason}",
+    "noticePrdNotSavedReason": "Project PRD was not saved: {reason}"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",

@@ -29,7 +29,11 @@
 import type { ConnectorManifest } from '../../connectors/connectorManifest';
 import { authFieldsFor } from '../../connectors/connectorManifest';
 import { BUILDERFORCE_OIDC_AUDIENCE } from '../../ide/githubOidc';
-import { VERIFY_SECRET_NAME } from '../webhookVerification';
+import {
+  STRIPE_TIMESTAMP_TOLERANCE_SECONDS,
+  VERIFY_SECRET_NAME,
+  VERIFY_SIGNATURE_HEADER,
+} from '../webhookVerification';
 import {
   missingSecretSteps,
   type BackendHostingStrategy,
@@ -624,10 +628,16 @@ export default {
     }
 
     if (handler.verify === 'twilio') {
-      const failure = await verifyTwilio(request.url, formParams, request.headers.get('x-twilio-signature'), env.${VERIFY_SECRET_NAME.twilio});
+      const failure = await verifyTwilio(request.url, formParams, request.headers.get('${VERIFY_SIGNATURE_HEADER.twilio}'), env.${VERIFY_SECRET_NAME.twilio});
+      if (failure) return new Response(failure, { status: 403 });
+    } else if (handler.verify === 'stripe') {
+      const failure = await verifyStripe(rawBody, request.headers.get('${VERIFY_SIGNATURE_HEADER.stripe}'), env.${VERIFY_SECRET_NAME.stripe});
+      if (failure) return new Response(failure, { status: 403 });
+    } else if (handler.verify === 'shopify') {
+      const failure = await verifyShopify(rawBody, request.headers.get('${VERIFY_SIGNATURE_HEADER.shopify}'), env.${VERIFY_SECRET_NAME.shopify});
       if (failure) return new Response(failure, { status: 403 });
     } else if (handler.verify === 'shared-secret') {
-      const signature = request.headers.get('x-builderforce-signature') ?? request.headers.get('x-hub-signature-256');
+      const signature = request.headers.get('${VERIFY_SIGNATURE_HEADER['shared-secret']}') ?? request.headers.get('x-hub-signature-256');
       const failure = await verifySharedSecret(rawBody, signature, env.${VERIFY_SECRET_NAME['shared-secret']});
       if (failure) return new Response(failure, { status: 403 });
     }
