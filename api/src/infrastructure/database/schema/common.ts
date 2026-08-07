@@ -216,8 +216,11 @@ export const integrationProviderEnum = pgEnum('integration_provider', [
   'google_calendar',
   // 0221 — single-pane / migration connectors
   'servicenow', 'linear', 'sentry', 'pagerduty', 'monday', 'asana', 'clickup',
-  // 0353 — BYO web-search vendor keys (backs the cloud agent's `web_search` tool).
-  // Ids MUST match WEB_SEARCH_VENDOR_IDS in application/runtime/webSearchVendors.ts.
+  // 0353 — BYO web-search vendor keys. These WIDEN `web_search` from the keyless
+  // encyclopedic floor to a general web index; they do not enable it.
+  // Ids MUST match CREDENTIALED_WEB_SEARCH_VENDOR_IDS in
+  // application/runtime/webSearchVendors.ts (the KEYLESS ids are deliberately absent —
+  // there is no credential to store for them).
   'brave_search',
   // 0355 — Google connectors (OAuth offline credentials). Gmail backs the email
   // workflow node; Google Drive can back a project's file storage.

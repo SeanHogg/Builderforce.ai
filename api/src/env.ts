@@ -170,13 +170,13 @@ export interface Env {
    *  Set via `wrangler secret put VOYAGE_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   VOYAGE_API_KEY?: string;
 
-  /** OPTIONAL operator-wide Brave Search API key — the floor under the cloud agent's
-   *  `web_search` tool. Search is metered per query, so the platform funds NO key: the
-   *  normal path is a tenant's own BYO key in `integration_credentials`
-   *  (provider `brave_search`), which always wins over this. Set this only if you are
-   *  self-hosting and want to fund search for every tenant. When neither is configured,
-   *  `web.search` is not advertised and the agent keeps fetch-only web access — no tool
-   *  that would certainly fail is ever handed to the model.
+  /** OPTIONAL operator-wide Brave Search API key — the MIDDLE tier of the search-backing
+   *  precedence in `webSearchCredential.ts`: a tenant's own BYO key in
+   *  `integration_credentials` (provider `brave_search`) always wins over it, and beneath
+   *  it sits the keyless encyclopedic vendor that needs no account at all. Set this only
+   *  if you are self-hosting and want to fund WIDE (general web index) search for every
+   *  tenant and for logged-out visitors; search works without it, just against a
+   *  narrower index, and the tool result says which it used.
    *  Set via `wrangler secret put BRAVE_SEARCH_API_KEY`. */
   BRAVE_SEARCH_API_KEY?: string;
 

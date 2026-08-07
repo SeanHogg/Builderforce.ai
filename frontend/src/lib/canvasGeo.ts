@@ -319,6 +319,70 @@ export function outlinePaths(outline: unknown, project: (lat: number, lng: numbe
   });
 }
 
+/**
+ * The field bag a `map` object is built from — the ONE place the shape is assembled.
+ *
+ * Two callers materialize a map and they must not drift: `canvas_query_dataset`'s
+ * `materializeAs: 'map'` (the Brain path) and the Dataset inspector's "Plot on a map"
+ * button (the direct path). They differ only in what they KNOW — the Brain path can
+ * carry a geocoded region, outline and attribution; the inspector plots coordinates that
+ * are already on the rows — and in what language they speak, which is why `status` and
+ * `summary` are inputs rather than built here: the inspector's copy is localized and the
+ * Brain path's is model-facing English.
+ *
+ * Everything else — including the outline flattening that a raw GeoJSON MultiPolygon
+ * silently fails without ({@link outlineRings}) — is shared, because that is exactly the
+ * kind of step a second call site forgets.
+ */
+export type MapObjectFields = {
+  title: string;
+  status: string;
+  summary: string;
+  mapTitle: string;
+  mapPoints: MapPoint[];
+  sourceDatasetId: string;
+  mapValueLabel?: string;
+  mapRegion?: GeoBounds;
+  mapRegionName?: string;
+  mapOutline?: OutlineRings;
+  mapAttribution?: string;
+};
+
+export function mapObjectFields(args: {
+  title: string;
+  status: string;
+  summary: string;
+  points: MapPoint[];
+  columns: GeoColumns;
+  sourceDatasetId: string;
+  /** Optional geography the caller resolved separately (the Brain path). Each is
+   *  sanitized here rather than by the caller, so a bad value is dropped once. */
+  region?: unknown;
+  regionName?: unknown;
+  outline?: unknown;
+  attribution?: unknown;
+}): MapObjectFields {
+  const region = sanitizeGeoBounds(args.region);
+  const rings = outlineRings(args.outline);
+  const regionName = typeof args.regionName === 'string' && args.regionName.trim() ? args.regionName.trim().slice(0, 120) : null;
+  const attribution = typeof args.attribution === 'string' && args.attribution.trim() ? args.attribution.trim().slice(0, 200) : null;
+  return {
+    title: args.title,
+    status: args.status,
+    summary: args.summary,
+    mapTitle: args.title,
+    mapPoints: args.points,
+    sourceDatasetId: args.sourceDatasetId,
+    ...(args.columns.value ? { mapValueLabel: args.columns.value } : {}),
+    ...(region ? { mapRegion: region } : {}),
+    ...(regionName ? { mapRegionName: regionName } : {}),
+    // Stored FLAT — the shared authored-patch sanitizer drops values nested deeper than
+    // four levels, and a GeoJSON MultiPolygon's positions sit past that.
+    ...(rings.length ? { mapOutline: rings } : {}),
+    ...(attribution ? { mapAttribution: attribution } : {}),
+  };
+}
+
 /** Read a `[south, north, west, east]` region off an authored object field, or null.
  *  Also accepts `geo.geocode`'s `boundingBox` verbatim, which is the same order — so a
  *  region can be pasted straight from a lookup without a transform step to get wrong. */

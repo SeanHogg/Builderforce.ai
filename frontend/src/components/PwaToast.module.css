@@ -1,0 +1,108 @@
+/*
+ * The shared chrome for the bottom-of-screen PWA toasts (update-available +
+ * install-app).
+ *
+ * These used to be inline styles: a nowrap pill pinned to `bottom: 24px` in the
+ * middle of the screen. On a phone that put them straight on top of the two
+ * things that already own the bottom edge — the canvas prompt and the fixed
+ * mobile bottom bar — and the nowrap pill had to break into a ragged three-line
+ * block to fit a 360px screen. On a phone the toast now takes the free strip
+ * under the header instead, full width, with the message and its actions on
+ * their own rows.
+ *
+ * `--pwa-toast-slot` is the toast's index in the shared bottom-of-screen stack
+ * (0 = nearest the edge it is anchored to); the component writes it as an inline
+ * custom property so the offset arithmetic lives HERE, where the anchor edge and
+ * the row height differ between phone and desktop.
+ */
+
+.shell {
+  position: fixed;
+  z-index: 9999;
+  bottom: calc(24px + var(--pwa-toast-slot, 0) * 72px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(560px, calc(100vw - 48px));
+  padding: 12px 14px 12px 18px;
+  border: 1px solid var(--border-subtle, rgba(136, 146, 176, 0.15));
+  border-radius: 14px;
+  background: var(--bg-elevated, #111827);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.text {
+  color: var(--text-primary, #f0f4ff);
+  font-family: var(--font-body, sans-serif);
+  font-size: 0.875rem;
+  line-height: 1.35;
+}
+
+.primary {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--coral-bright, #4d9eff), var(--coral-dark, #1e40af));
+  color: #fff;
+  font-family: var(--font-display, sans-serif);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.primary:hover { filter: brightness(1.08); }
+
+.dismiss {
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text-muted, #5a6480);
+  cursor: pointer;
+}
+
+.dismiss:hover { background: var(--surface-interactive, rgba(255, 255, 255, 0.08)); color: var(--text-primary, #f0f4ff); }
+.dismiss > svg { display: block; width: 13px; height: 13px; }
+
+/*
+ * Phone: the bottom edge is spoken for (the fixed bottom bar, and whatever the
+ * page docks above it), so the toast takes the strip under the header and runs
+ * edge to edge. 66px is the taller of the two app headers — the marketing bar;
+ * on the app shell's 56px topbar the extra clearance simply reads as breathing
+ * room. Matches the bottom-bar breakpoint in globals.css.
+ */
+@media (max-width: 767px) {
+  .shell {
+    top: calc(env(safe-area-inset-top, 0px) + 74px + var(--pwa-toast-slot, 0) * 104px);
+    right: 10px;
+    bottom: auto;
+    left: 10px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: auto;
+    max-width: none;
+    padding: 12px;
+    transform: none;
+    gap: 10px;
+  }
+
+  .text { grid-area: 1 / 1; font-size: 0.8125rem; }
+  .dismiss { grid-area: 1 / 2; align-self: start; }
+  /* The action gets its own full-width row: a 44px tap target that cannot be
+     squeezed to a sliver by a message that happens to be long. */
+  .primary { grid-area: 2 / 1 / 3 / 3; min-height: 40px; padding: 9px 14px; font-size: 0.8125rem; }
+}

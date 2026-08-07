@@ -69,7 +69,7 @@ async function testBraveSearch(creds: Record<string, unknown>): Promise<TestResu
   if (!key) return { ok: false, message: 'apiKey is required' };
   const r = await braveSearchVendor.search('builderforce connectivity check', key);
   return r.ok
-    ? { ok: true, message: `Connected — ${r.results?.length ?? 0} result(s). Cloud agents can now use web_search.` }
+    ? { ok: true, message: `Connected — ${r.results?.length ?? 0} result(s). Research now searches the full web index instead of the keyless encyclopedic one.` }
     : { ok: false, message: r.error ?? 'Search request failed' };
 }
 

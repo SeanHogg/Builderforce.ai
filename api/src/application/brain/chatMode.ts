@@ -17,10 +17,18 @@ export const CHAT_MODES = ['chat', 'work'] as const;
 export type ChatMode = (typeof CHAT_MODES)[number];
 
 /**
- * The resting mode. A conversation is a conversation until someone says otherwise —
- * asking a question must never be the thing that opens a ticket.
+ * The mode a NEW conversation opens in. Work, because that is what the product is
+ * for — a conversation that cannot dispatch produces a plan and stops. A user who
+ * only wants to ask flips one switch in the composer's `/` menu.
  */
-export const DEFAULT_CHAT_MODE: ChatMode = 'chat';
+export const NEW_CHAT_MODE: ChatMode = 'work';
+
+/**
+ * What an unset or unrecognised STORED value resolves to: a conversation. Deliberately
+ * NOT the same answer as {@link NEW_CHAT_MODE} — a row written before 0409 never opted
+ * into execution authority and must not be granted it by a default that moved.
+ */
+export const RESTING_CHAT_MODE: ChatMode = 'chat';
 
 /**
  * Chat ORIGINS that are always executional, whatever the column says.
@@ -48,11 +56,11 @@ export function normalizeChatMode(value: unknown): ChatMode | null {
 
 /**
  * The mode a chat ACTUALLY runs in: the stored value, with the always-work origins
- * pinned and anything unrecognised falling back to the default. This is the single
- * resolution every server read should go through, so "which mode is this chat in?"
- * cannot be answered two different ways in two different places.
+ * pinned and anything unrecognised resting in {@link RESTING_CHAT_MODE}. This is the
+ * single resolution every server read should go through, so "which mode is this chat
+ * in?" cannot be answered two different ways in two different places.
  */
 export function resolveChatMode(chat: { origin?: string | null; mode?: string | null }): ChatMode {
   if (chat.origin && ALWAYS_WORK_ORIGINS.has(chat.origin)) return 'work';
-  return normalizeChatMode(chat.mode) ?? DEFAULT_CHAT_MODE;
+  return normalizeChatMode(chat.mode) ?? RESTING_CHAT_MODE;
 }

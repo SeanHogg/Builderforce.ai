@@ -1122,6 +1122,8 @@ var import_builderforce_brain_embedded3 = require("@seanhogg/builderforce-brain-
 var DEFAULT_PROMPT_OPTIONS_LABELS = {
   ...import_builderforce_brain_embedded3.DEFAULT_MODEL_CHOICE_LABELS,
   options: "Options",
+  mode: "Mode",
+  memory: "Memory",
   effort: "Effort",
   effortQuick: "Quick",
   effortBalanced: "Balanced",
@@ -1150,6 +1152,8 @@ var EFFORT_ICON = { quick: "\u{1F3C3}", balanced: "\u2696\uFE0F", thorough: "\u{
 function PromptOptionsMenu({
   labels: labelOverrides,
   disabled = false,
+  mode,
+  memory,
   effort,
   onEffortChange,
   describeEffort,
@@ -1190,10 +1194,15 @@ function PromptOptionsMenu({
     [items]
   );
   const visible = (0, import_react4.useMemo)(() => (0, import_builderforce_brain_embedded4.filterModelItems)(items, labels, query, filter), [items, labels, query, filter]);
-  if (!onEffortChange && !onThinkingChange && !model && !onAccountSettings) return null;
+  if (!mode && !memory && !onEffortChange && !onThinkingChange && !model && !onAccountSettings) return null;
   const canChoose = model?.canChoose !== false;
   const activeKey = model ? (0, import_builderforce_brain_embedded4.activeModelKey)(model.selection) : "";
-  const title = inUse ? `${labels.options} \xB7 ${labels.modelInUse}: ${inUse.name}` : labels.options;
+  const activeMode = mode?.choices.find((choice) => choice.value === mode.value);
+  const title = [
+    labels.options,
+    activeMode && `${labels.mode}: ${activeMode.label}`,
+    inUse && `${labels.modelInUse}: ${inUse.name}`
+  ].filter(Boolean).join(" \xB7 ");
   return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { ref: rootRef, className: ["bf-pmenu", className].filter(Boolean).join(" "), children: [
     /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
       "button",
@@ -1208,12 +1217,68 @@ function PromptOptionsMenu({
         onClick: () => setOpen((value) => !value),
         children: [
           /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__slash", "aria-hidden": "true", children: "/" }),
+          activeMode && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "bf-pmenu__mode", children: [
+            activeMode.icon && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { "aria-hidden": "true", children: activeMode.icon }),
+            activeMode.label
+          ] }),
           inUse && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__model", children: inUse.name })
         ]
       }
     ),
     open && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "bf-pmenu__pop", role: "menu", children: [
+      mode && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__group", children: labels.mode }),
+        mode.choices.map((choice) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+          "button",
+          {
+            type: "button",
+            role: "menuitemradio",
+            "aria-checked": choice.value === mode.value,
+            className: `bf-pmenu__item${choice.value === mode.value ? " is-active" : ""}`,
+            onClick: () => {
+              mode.onChange(choice.value);
+              setOpen(false);
+            },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: choice.icon ?? "" }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "bf-pmenu__lbl", children: [
+                choice.label,
+                choice.hint && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__desc", children: choice.hint })
+              ] }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: choice.value === mode.value ? "\u2713" : "" })
+            ]
+          },
+          choice.value
+        ))
+      ] }),
+      memory && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
+        mode && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__sep" }),
+        /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
+          "button",
+          {
+            type: "button",
+            role: "menuitemcheckbox",
+            "aria-checked": memory.enabled,
+            disabled: !!memory.unavailableReason,
+            className: `bf-pmenu__item${memory.enabled && !memory.unavailableReason ? " is-active" : ""}`,
+            title: memory.unavailableReason,
+            onClick: () => {
+              if (!memory.unavailableReason) memory.onChange(!memory.enabled);
+            },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F9E0}" }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("span", { className: "bf-pmenu__lbl", children: [
+                labels.memory,
+                (memory.unavailableReason ?? memory.describe?.(memory.enabled)) && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__desc", children: memory.unavailableReason ?? memory.describe?.(memory.enabled) })
+              ] }),
+              !memory.unavailableReason && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__hint", children: memory.enabled ? labels.on : labels.off }),
+              /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: memory.enabled && !memory.unavailableReason ? "\u2713" : "" })
+            ]
+          }
+        )
+      ] }),
       onEffortChange && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
+        (mode || memory) && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__sep" }),
         /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__group", children: labels.effort }),
         EFFORT_LEVELS.map((level) => /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
           "button",
@@ -1236,7 +1301,7 @@ function PromptOptionsMenu({
         ))
       ] }),
       onThinkingChange && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
-        onEffortChange && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__sep" }),
+        (mode || memory || onEffortChange) && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__sep" }),
         /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
           "button",
           {
@@ -1258,7 +1323,7 @@ function PromptOptionsMenu({
         )
       ] }),
       model && inUse && /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(import_jsx_runtime8.Fragment, { children: [
-        (onEffortChange || onThinkingChange) && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__sep" }),
+        (mode || memory || onEffortChange || onThinkingChange) && /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__sep" }),
         /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("div", { className: "bf-pmenu__group", children: labels.model }),
         /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { className: "bf-pmenu__info", children: [
           /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F9E0}" }),

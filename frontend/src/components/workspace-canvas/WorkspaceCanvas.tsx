@@ -15,7 +15,7 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { CanvasCommands, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
+import { CANVAS_FIT_MIN_ZOOM, CanvasCommands, useCanvasCleanLayout } from '@/components/canvas/CanvasCommands';
 import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
@@ -123,6 +123,8 @@ export function WorkspaceCanvas({
   const [mobile, setMobile] = useState(false);
   const [minimapOpen, setMinimapOpen] = useState(true);
   const flowRef = useRef<ReactFlowInstance<WorkspacePanelNode, never> | null>(null);
+  /** The board's own box — the arrange command lays out for the shape it measures here. */
+  const boardRef = useRef<HTMLDivElement | null>(null);
   const panelIds = panels.map((panel) => panel.id).join('\u0000');
   const threeD = useCanvasThreeD();
 
@@ -144,10 +146,7 @@ export function WorkspaceCanvas({
     // when the set of reusable panels changes.
   }, [panelIds, setNodes]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const cleanLayout = useCallback(() => {
-    setNodes((current) => cleanCanvasLayout(current, []));
-    window.setTimeout(() => void flowRef.current?.fitView({ padding: .12, maxZoom: 1, duration: 320 }), 0);
-  }, [setNodes]);
+  const cleanLayout = useCanvasCleanLayout({ boardRef, instanceRef: flowRef, setNodes, padding: .12 });
 
   /**
    * How a panel reads in the 3D space.
@@ -179,7 +178,7 @@ export function WorkspaceCanvas({
   </div>;
 
   return (
-    <div className={`${styles.canvas}${className ? ` ${className}` : ''}`} data-testid="workspace-canvas" data-layout="spatial">
+    <div ref={boardRef} className={`${styles.canvas}${className ? ` ${className}` : ''}`} data-testid="workspace-canvas" data-layout="spatial">
       <WorkspacePanelsContext.Provider value={{ panels, onRemovePanel }}>
         <ReactFlowProvider>
           <Canvas3DControlsProvider>
@@ -190,8 +189,8 @@ export function WorkspaceCanvas({
             onNodesChange={onNodesChange}
             onInit={(instance) => { flowRef.current = instance; }}
             fitView
-            fitViewOptions={{ padding: 0.1, maxZoom: 1 }}
-            minZoom={0.2}
+            fitViewOptions={{ padding: 0.1, maxZoom: 1, minZoom: CANVAS_FIT_MIN_ZOOM }}
+            minZoom={CANVAS_FIT_MIN_ZOOM}
             maxZoom={1.5}
             snapToGrid
             snapGrid={[16, 16]}

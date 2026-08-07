@@ -29,9 +29,43 @@ export interface PromptOptionsModel {
   canChoose?: boolean;
 }
 
+/** One selectable conversation mode. `value` is the host's stable, non-translatable id. */
+export interface PromptOptionsModeChoice {
+  value: string;
+  label: string;
+  hint?: string;
+  icon?: string;
+}
+
+/**
+ * Conversation mode for this turn — on BuilderForce, Chat vs Work.
+ *
+ * It lives in the `/` menu rather than beside it for the same reason the model does:
+ * a composer that grows one pill per setting is a composer nobody can use on a phone.
+ * The trigger keeps naming the ARMED mode, so "can this turn dispatch real work?" is
+ * still answerable without opening anything.
+ */
+export interface PromptOptionsMode {
+  value: string;
+  onChange: (value: string) => void;
+  choices: PromptOptionsModeChoice[];
+}
+
+/** Persistent memory for this conversation, when the host has one to offer. */
+export interface PromptOptionsMemory {
+  enabled: boolean;
+  onChange: (on: boolean) => void;
+  /** What being on/off means here — shown under the label. */
+  describe?: (on: boolean) => string;
+  /** Why it cannot be used right now. Set ⇒ the row is inert and states the reason. */
+  unavailableReason?: string;
+}
+
 export interface PromptOptionsMenuProps {
   labels?: Partial<PromptOptionsLabels>;
   disabled?: boolean;
+  mode?: PromptOptionsMode;
+  memory?: PromptOptionsMemory;
   effort?: Effort;
   onEffortChange?: (effort: Effort) => void;
   /** What a level really costs at this host's current state (answer/thinking budgets). */
@@ -48,17 +82,24 @@ const EFFORT_LEVELS: Effort[] = ['quick', 'balanced', 'thorough'];
 const EFFORT_ICON: Record<Effort, string> = { quick: '🏃', balanced: '⚖️', thorough: '🎯' };
 
 /**
- * The composer's `/` control: run shaping (effort, thinking), the model in use,
- * the model picker, and account settings — one affordance, shared by every
+ * The composer's `/` control: everything that shapes the NEXT TURN — the mode it
+ * runs in, whether it remembers, run shaping (effort, thinking), the model in use
+ * and the model picker, plus account settings. One affordance, shared by every
  * BuilderForce prompt surface (web Brain, Creation Canvas, the VS Code webview).
  *
- * The trigger states the active model next to the slash, so "what is running this
- * turn" is readable without opening anything; opening it is how you change it.
+ * Every one of those settings used to be its own pill in the composer's action row
+ * — a segmented Chat|Work control, a memory button, a model chip — which on a phone
+ * left a row of eight unlabelled circles and no room for the send button. They live
+ * here now, and the trigger states the two consequential ones (the armed mode, the
+ * model in use) so nothing has to be opened to read what will happen.
+ *
  * Self-gating: renders nothing until a host wires at least one section.
  */
 export function PromptOptionsMenu({
   labels: labelOverrides,
   disabled = false,
+  mode,
+  memory,
   effort,
   onEffortChange,
   describeEffort,
@@ -98,11 +139,18 @@ export function PromptOptionsMenu({
   const visible = useMemo(() => filterModelItems(items, labels, query, filter), [items, labels, query, filter]);
 
   // Nothing wired ⇒ no control (the component decides its own visibility).
-  if (!onEffortChange && !onThinkingChange && !model && !onAccountSettings) return null;
+  if (!mode && !memory && !onEffortChange && !onThinkingChange && !model && !onAccountSettings) return null;
 
   const canChoose = model?.canChoose !== false;
   const activeKey = model ? activeModelKey(model.selection) : '';
-  const title = inUse ? `${labels.options} · ${labels.modelInUse}: ${inUse.name}` : labels.options;
+  const activeMode = mode?.choices.find((choice) => choice.value === mode.value);
+  // The trigger names what is ARMED — the mode first, because it decides whether this
+  // turn may dispatch real work, then the model that will run it.
+  const title = [
+    labels.options,
+    activeMode && `${labels.mode}: ${activeMode.label}`,
+    inUse && `${labels.modelInUse}: ${inUse.name}`,
+  ].filter(Boolean).join(' · ');
 
   return (
     <div ref={rootRef} className={['bf-pmenu', className].filter(Boolean).join(' ')}>
@@ -117,13 +165,66 @@ export function PromptOptionsMenu({
         onClick={() => setOpen((value) => !value)}
       >
         <span className="bf-pmenu__slash" aria-hidden="true">/</span>
+        {activeMode && <span className="bf-pmenu__mode">
+          {activeMode.icon && <span aria-hidden="true">{activeMode.icon}</span>}
+          {activeMode.label}
+        </span>}
         {inUse && <span className="bf-pmenu__model">{inUse.name}</span>}
       </button>
 
       {open && (
         <div className="bf-pmenu__pop" role="menu">
+          {mode && (
+            <>
+              <div className="bf-pmenu__group">{labels.mode}</div>
+              {mode.choices.map((choice) => (
+                <button
+                  key={choice.value}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={choice.value === mode.value}
+                  className={`bf-pmenu__item${choice.value === mode.value ? ' is-active' : ''}`}
+                  onClick={() => { mode.onChange(choice.value); setOpen(false); }}
+                >
+                  <span className="bf-pmenu__ico" aria-hidden="true">{choice.icon ?? ''}</span>
+                  <span className="bf-pmenu__lbl">
+                    {choice.label}
+                    {choice.hint && <span className="bf-pmenu__desc">{choice.hint}</span>}
+                  </span>
+                  <span className="bf-pmenu__check" aria-hidden="true">{choice.value === mode.value ? '✓' : ''}</span>
+                </button>
+              ))}
+            </>
+          )}
+
+          {memory && (
+            <>
+              {mode && <div className="bf-pmenu__sep" />}
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={memory.enabled}
+                disabled={!!memory.unavailableReason}
+                className={`bf-pmenu__item${memory.enabled && !memory.unavailableReason ? ' is-active' : ''}`}
+                title={memory.unavailableReason}
+                onClick={() => { if (!memory.unavailableReason) memory.onChange(!memory.enabled); }}
+              >
+                <span className="bf-pmenu__ico" aria-hidden="true">🧠</span>
+                <span className="bf-pmenu__lbl">
+                  {labels.memory}
+                  {(memory.unavailableReason ?? memory.describe?.(memory.enabled)) && (
+                    <span className="bf-pmenu__desc">{memory.unavailableReason ?? memory.describe?.(memory.enabled)}</span>
+                  )}
+                </span>
+                {!memory.unavailableReason && <span className="bf-pmenu__hint">{memory.enabled ? labels.on : labels.off}</span>}
+                <span className="bf-pmenu__check" aria-hidden="true">{memory.enabled && !memory.unavailableReason ? '✓' : ''}</span>
+              </button>
+            </>
+          )}
+
           {onEffortChange && (
             <>
+              {(mode || memory) && <div className="bf-pmenu__sep" />}
               <div className="bf-pmenu__group">{labels.effort}</div>
               {EFFORT_LEVELS.map((level) => (
                 <button
@@ -147,7 +248,7 @@ export function PromptOptionsMenu({
 
           {onThinkingChange && (
             <>
-              {onEffortChange && <div className="bf-pmenu__sep" />}
+              {(mode || memory || onEffortChange) && <div className="bf-pmenu__sep" />}
               <button
                 type="button"
                 role="menuitemcheckbox"
@@ -168,7 +269,7 @@ export function PromptOptionsMenu({
 
           {model && inUse && (
             <>
-              {(onEffortChange || onThinkingChange) && <div className="bf-pmenu__sep" />}
+              {(mode || memory || onEffortChange || onThinkingChange) && <div className="bf-pmenu__sep" />}
               <div className="bf-pmenu__group">{labels.model}</div>
               <div className="bf-pmenu__info">
                 <span className="bf-pmenu__ico" aria-hidden="true">🧠</span>

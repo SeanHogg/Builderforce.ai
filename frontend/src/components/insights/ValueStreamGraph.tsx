@@ -7,7 +7,7 @@ import {
   useNodesState, useEdgesState, type Node, type Edge, type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { CanvasCommands, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
+import { CANVAS_FIT_MIN_ZOOM, CanvasCommands, useCanvasCleanLayout } from '@/components/canvas/CanvasCommands';
 import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
@@ -69,6 +69,8 @@ export function ValueStreamGraph() {
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [minimapOpen, setMinimapOpen] = useState(true);
   const flowRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
+  /** The board's own box — the arrange command lays out for the shape it measures here. */
+  const boardRef = useRef<HTMLDivElement | null>(null);
   const threeD = useCanvasThreeD();
 
   const built = useMemo(() => {
@@ -104,10 +106,7 @@ export function ValueStreamGraph() {
     if (built) { setNodes(built.flowNodes); setEdges(built.flowEdges); }
   }, [built, setNodes, setEdges]);
 
-  const cleanLayout = useCallback(() => {
-    setNodes((current) => cleanCanvasLayout(current, edges));
-    window.setTimeout(() => void flowRef.current?.fitView({ padding: .18, maxZoom: 1, duration: 320 }), 0);
-  }, [edges, setNodes]);
+  const cleanLayout = useCanvasCleanLayout({ boardRef, instanceRef: flowRef, setNodes, edges });
 
   /**
    * How an initiative reads in the 3D space.
@@ -157,8 +156,8 @@ export function ValueStreamGraph() {
         <Canvas3DControlsProvider>
           {/* The scene fills this box, so it has to be the box it is positioned
               against — see `.scene` in Canvas3DView.module.css. */}
-          <div style={{ position: 'relative', height: 420, border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
-            <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onInit={(instance) => { flowRef.current = instance; }} fitView proOptions={{ hideAttribution: true }}>
+          <div ref={boardRef} style={{ position: 'relative', height: 420, border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+            <ReactFlow nodes={nodes} edges={edges} onNodesChange={onNodesChange} onEdgesChange={onEdgesChange} onInit={(instance) => { flowRef.current = instance; }} fitView fitViewOptions={{ padding: 0.15, minZoom: CANVAS_FIT_MIN_ZOOM }} minZoom={CANVAS_FIT_MIN_ZOOM} proOptions={{ hideAttribution: true }}>
               <Background color="var(--border-subtle)" gap={18} />
               <CanvasCommands
                 minimapOpen={minimapOpen}

@@ -48,7 +48,7 @@ import { pullPendingSteering, releasePendingSteers } from './executionSteering';
 import { notifyExecutionSubscribers } from './executionEvents';
 import { notifyApprovalRequested } from '../approval/approvalNotifier';
 import {
-  CONTAINER_AGENT_TOOLS, cloudSurfaceCaps, cloudAgentToolsFor, cloudToolRegistry,
+  CONTAINER_AGENT_TOOLS, CLOUD_AGENT_TOOLS, CLOUD_SURFACE_CAPS, cloudToolRegistry,
   MAX_CLOUD_TOOL_STEPS, MAX_PLACEHOLDER_FINISH_BLOCKS,
   CONTAINER_MAX_STEPS, assertsUnrunVerification, hasNoCodeDeliverable, policyGateCallKey, type RawToolCall,
 } from './cloudAgentTools';
@@ -58,7 +58,7 @@ import {
   applyDelta, appraiseAmygdala, homeostasis,
   type AgentEngine, type AgentRunInput, type AgentRunResult, type CapabilityProvider, type ToolContext, type ToolControl, type LimbicState, type LimbicEvent, type PolicyGate, type AgentExecParams, type Capability,
 } from '@builderforce/agent-tools';
-import { resolveWebSearchCredential, type ResolvedWebSearchCredential } from './webSearchCredential';
+import { resolveWebSearchBacking, type ResolvedWebSearchBacking } from './webSearchCredential';
 import { parseRemediation, parseFollowUp, parseRoleInstruction, parseCloudAgentRef, parseModel } from './cloudDispatch';
 import { classifyTaskAction } from '../llm/classifyTask';
 import { deriveAllocationCategory } from '../llm/allocationCategories';
@@ -1548,9 +1548,9 @@ function buildCloudProvider(args: {
    *  unlocked (today: `web.search`). Must be the same set the advertised tool schemas
    *  were derived from. */
   capabilities: ReadonlySet<Capability>;
-  /** Resolved BYO web-search backing, or null when this tenant has no key. Null must
-   *  coincide with `capabilities` lacking `web.search`. */
-  webSearch: ResolvedWebSearchCredential | null;
+  /** Resolved web-search backing for this tenant — a BYO key, the operator key, or the
+   *  keyless floor. Always present, which is why `web.search` is a surface capability. */
+  webSearch: ResolvedWebSearchBacking;
   /** Replay: pin repo reads to this ref rather than computing base→branch. */
   frozenReadRef?: string;
 }): CapabilityProvider {
@@ -1716,15 +1716,14 @@ function buildCloudProvider(args: {
     // Multi-agent coordination for this ticket: leases + the shared blackboard.
     coordination: buildCoordinationCapability({ env, db, holder: leaseHolder }),
     // Read a public URL (docs / an API spec / a linked issue) so the agent isn't
-    // limited to what the repo already contains — and, when the TENANT has a BYO
-    // search key, discover that URL in the first place. Search is metered per query,
-    // so its backing (and therefore `web.search`, and therefore the `web_search`
-    // schema) is present only when a usable key resolved; otherwise this is
-    // fetch-only exactly as before. SSRF egress policy + byte cap + timeout + the
-    // read-through cache all live in cloudWeb.
+    // limited to what the repo already contains — and discover that URL in the first
+    // place. The search backing always resolves (tenant BYO key → operator key →
+    // keyless encyclopedic floor), so both halves are always wired; what a key buys is
+    // WIDER coverage, which the result states. SSRF egress policy + byte cap + timeout
+    // + the read-through cache + per-query metering all live in cloudWeb.
     web: buildCloudWebCapability({
       env,
-      search: args.webSearch ? { vendor: args.webSearch.vendor, apiKey: args.webSearch.apiKey, meter: { db, tenantId } } : null,
+      search: { vendor: args.webSearch.vendor, apiKey: args.webSearch.apiKey, meter: { db, tenantId } },
     }),
   };
 }
@@ -1775,15 +1774,14 @@ export async function runCloudToolLoop(
   // alongside the repo/file tools and dispatched in-process below. The prompt
   // guidance that makes the agent USE them lives in prepareCloudRun so every
   // surface (Worker/DO durable + the container) gets it once (DRY).
-  // Self-gating web search. Resolved ONCE per run (not per step): `web.search` is a
-  // TENANT capability, not a surface one — it needs a BYO search-vendor key, because
-  // search bills per query and the platform funds none. A resolved key adds
-  // `web.search` to BOTH the capability set the provider reports and the schemas sent
-  // to the model, from the same value, so the two can never drift. No key → the base
-  // set, and the run is byte-identical to fetch-only behaviour.
-  const webSearchCred = await resolveWebSearchCredential(env, db, tenantId);
-  const surfaceCaps = cloudSurfaceCaps({ webSearch: webSearchCred !== null });
-  const cloudTools = [...cloudAgentToolsFor(surfaceCaps), ...cloudAgentPlatformToolSchemas()];
+  // Web-search backing, resolved ONCE per run (not per step): a tenant BYO key, the
+  // operator-wide key, or the keyless encyclopedic floor. It ALWAYS resolves, so
+  // `web.search` is part of CLOUD_SURFACE_CAPS rather than a per-run addition — the
+  // advertised schemas and the wired backing come from the same constant and cannot
+  // drift. What the key buys is coverage, and the tool result says which it got.
+  const webSearchCred = await resolveWebSearchBacking(env, db, tenantId);
+  const surfaceCaps = CLOUD_SURFACE_CAPS;
+  const cloudTools = [...CLOUD_AGENT_TOOLS, ...cloudAgentPlatformToolSchemas()];
   const effectiveSystemPrompt = tenantModel?.directives
     ? `${tenantModel.directives}\n\n${systemPrompt}`
     : systemPrompt;

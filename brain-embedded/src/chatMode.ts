@@ -37,10 +37,27 @@ export const CHAT_MODES = ['chat', 'work'] as const;
 export type ChatMode = (typeof CHAT_MODES)[number];
 
 /**
- * The resting mode. A conversation is a conversation until someone says otherwise —
- * asking a question must never be the thing that opens a ticket.
+ * The mode a NEW conversation opens in.
+ *
+ * Work, because that is what people come here to do: the measured reality is that a
+ * conversation which cannot dispatch produces a plan and stops, and the user is then
+ * asked to find a control they did not know existed to get the work started. Opening
+ * in Work makes the product's actual promise the resting state; a user who only wants
+ * to ask a question flips one switch in the composer's `/` menu.
+ *
+ * This is NOT the coercion fallback — see {@link RESTING_CHAT_MODE}. The two were one
+ * constant, which meant "what does a new chat start as" and "what does an unreadable
+ * stored value mean" could not be answered differently, and changing one silently
+ * re-armed every legacy row that had never stored a mode at all.
  */
-export const DEFAULT_CHAT_MODE: ChatMode = 'chat';
+export const NEW_CHAT_MODE: ChatMode = 'work';
+
+/**
+ * What an unset or unrecognised stored value resolves to: a conversation. A row that
+ * never recorded a mode (or a client ahead of the server) must not be granted execution
+ * authority by a default it never opted into.
+ */
+export const RESTING_CHAT_MODE: ChatMode = 'chat';
 
 /** True for a value that is one of the known modes. */
 export function isChatMode(value: unknown): value is ChatMode {
@@ -48,12 +65,12 @@ export function isChatMode(value: unknown): value is ChatMode {
 }
 
 /**
- * Coerce an inbound/stored value to a mode, falling back to {@link DEFAULT_CHAT_MODE}.
+ * Coerce an inbound/stored value to a mode, falling back to {@link RESTING_CHAT_MODE}.
  * Tolerant by design: an unknown value (an older row, a client ahead of the server)
  * resolves to a conversation rather than silently granting execution authority.
  */
 export function normalizeChatMode(value: unknown): ChatMode {
-  return isChatMode(value) ? value : DEFAULT_CHAT_MODE;
+  return isChatMode(value) ? value : RESTING_CHAT_MODE;
 }
 
 /**

@@ -8,16 +8,24 @@
  *
  * Below --canvas-hero-break the board is not rendered at all (see the component):
  * an infinite pan/zoom surface is the wrong first touch on a phone, so narrow
- * viewports get the copy-first hero and the same composer in normal flow.
+ * viewports get the copy-first hero, the same composer in normal flow, and the
+ * Evermind brain animation behind it (`.heroBrain`).
  */
 
 .hero {
+  position: relative;
+  isolation: isolate;
+  padding: clamp(28px, 5vw, 56px) clamp(16px, 4vw, 24px) clamp(24px, 4vw, 40px);
+  text-align: center;
+}
+
+.inner {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 14px;
-  padding: clamp(28px, 5vw, 56px) clamp(16px, 4vw, 24px) clamp(24px, 4vw, 40px);
-  text-align: center;
 }
 
 /* ── Copy — deliberately short: the board has to fit the same viewport ── */
@@ -283,16 +291,6 @@
   color: var(--text-secondary);
   font-weight: 600;
 }
-.scrollHint {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--text-muted);
-  font-size: 0.78rem;
-  text-decoration: none;
-}
-.scrollHint:hover { color: var(--text-primary); }
-
 /*
  * ── Narrow viewports ──
  * The board is removed from the DOM by the component below 900px, so this only
@@ -314,4 +312,72 @@
   color: var(--text-muted);
   font-size: 0.78rem;
   line-height: 1.5;
+}
+
+/*
+ * ── The brain scene (narrow only) ──
+ *
+ * The wide hero argues with the board; the narrow hero argues with the Evermind
+ * brain, which is what stood here before the board existed. The scene is a fixed
+ * dark artwork — `.wb-scene` paints its own near-black ground and the canvas
+ * render loop composites in `lighter`, which is invisible over white — so this
+ * hero DECLARES its palette for both themes instead of inheriting the shell's.
+ * The values below are the dark theme's own tokens, so nothing here is a new
+ * colour; a light-theme visitor sees the same hero a dark-theme visitor sees,
+ * and `.wb-fade` still fades into whichever `--bg` the page actually uses.
+ */
+.heroBrain {
+  overflow: hidden; /* the aura is 116vw wide — never let it scroll the page */
+  /* Clears the scene's bottom fade (below) so no light-on-dark copy ever lands
+     in the band where the scene has already blended into the page's own --bg —
+     which in the light theme is very nearly white. */
+  padding-bottom: 88px;
+
+  --text-primary: #f0f4ff;
+  --text-secondary: #b9c4de;
+  --text-muted: #8892b0;
+  --border-subtle: rgba(136, 146, 176, 0.28);
+  --border-accent: rgba(77, 158, 255, 0.42);
+  --surface-card: rgba(10, 15, 26, 0.72);
+  --surface-card-strong: rgba(10, 15, 26, 0.88);
+  --surface-interactive: rgba(255, 255, 255, 0.1);
+  --surface-interactive-hover: rgba(255, 255, 255, 0.16);
+  --surface-inset-highlight: rgba(255, 255, 255, 0.06);
+  --bg-elevated: rgba(17, 24, 39, 0.82);
+  --chat-input-bg: rgba(255, 255, 255, 0.08);
+}
+/* The shared scene fades over its last 150px, sized for the full-height
+   /evermind hero. That is most of a phone hero, so shorten it here and let the
+   hero's own bottom padding be the lane it fades through. */
+.brain :global(.wb-fade) {
+  height: 80px;
+}
+/*
+ * /evermind gives the cortex a tall hero to itself and sets its copy well above
+ * it. A phone hero is short enough that the headline and lede land ON the
+ * brightest part of the render, so the text-safe vignette is pulled up and
+ * deepened over the copy band, and the cortex is dimmed under it — the animation
+ * still reads, the sentence still passes contrast.
+ */
+.brain :global(.wb-veil) {
+  background: radial-gradient(
+    ellipse 82% 40% at 50% 24%,
+    rgba(3, 7, 17, 0.88) 0%,
+    rgba(3, 7, 17, 0.7) 46%,
+    rgba(3, 7, 17, 0.24) 76%,
+    transparent 100%
+  );
+}
+.brain :global(.wb-brain-shell) {
+  opacity: 0.82;
+}
+/* The composer is the hero's job on a phone — float it clear of the cortex. */
+.heroBrain .prompt {
+  --prompt-panel-bg: rgba(8, 13, 24, 0.86);
+  --prompt-panel-border: var(--border-accent);
+  --prompt-panel-shadow: 0 18px 44px rgba(0, 0, 0, 0.45), inset 0 1px 0 var(--surface-inset-highlight);
+  backdrop-filter: blur(14px);
+}
+.heroBrain .chip {
+  backdrop-filter: blur(10px);
 }

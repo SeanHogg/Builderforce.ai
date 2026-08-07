@@ -223,6 +223,28 @@ export const GUEST_CHAT_LIMITS = {
 } as const;
 
 /**
+ * Guest RESEARCH — the server-side web search / page read / geocode a logged-out
+ * canvas turn may perform.
+ *
+ * Metered SEPARATELY from `messagesDailyLimit` because the units differ: one guest
+ * message can legitimately fan out into a whole research pipeline (search → read two
+ * sources → geocode the rows), and charging that as several messages would make the
+ * free canvas feel broken. The allowance is per CALL and generous enough for a few
+ * complete pipelines, then stops — these are outbound requests from the platform's own
+ * IP against third parties, so the cap is an abuse ceiling, not a paywall.
+ *
+ * Search itself is keyless by default (`webSearchVendors.ts`), so the marginal cost of
+ * a guest research call is bandwidth, not vendor spend — unless the operator has funded
+ * a wide-index key, in which case this cap is what bounds their bill.
+ */
+export const GUEST_RESEARCH_LIMITS = {
+  /** Research tool calls per visitorId per UTC day. */
+  callsDailyLimit: 40,
+  /** Per source IP per UTC day — the spoof backstop, same reasoning as chat. */
+  ipCallsDailyLimit: 200,
+} as const;
+
+/**
  * Shared guest ROOMS — a logged-out visitor can invite others into their free
  * session (chat + camera). The room's turn allowance is exactly
  * `GUEST_CHAT_LIMITS.messagesDailyLimit`, spent COMBINED by everyone in it: five

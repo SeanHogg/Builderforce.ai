@@ -78,6 +78,11 @@ A handler is JSON, not JavaScript. It declares:
   against the project's \`TWILIO_AUTH_TOKEN\` secret; \`shared-secret\` checks an
   HMAC-SHA256 of the body. **An unverified public webhook lets anyone forge
   traffic on your account**, so this field has no default — you choose it.
+- \`cors\` — origins a BROWSER may call this handler from, e.g.
+  \`["https://example.com"]\`. Omit it and no cross-origin page can call this
+  handler at all; your own published site is same-origin and never needs it.
+  Only set it for a frontend hosted somewhere else. \`["*"]\` means anyone, and
+  is available only by typing it.
 - \`steps\` — ordered work. \`llm\` asks a model, \`connector\` calls a connected
   system (Twilio, SendGrid, …), \`set\` binds a computed value. Each step binds its
   result to \`{{steps.<id>}}\` for the steps after it.

@@ -34,7 +34,7 @@ import {
   resolveChatAccess, syncPendingMemberships as syncPendingMembershipsShared,
 } from './chatAccess';
 import { markChatRead } from './chatReadState';
-import { normalizeChatMode, resolveChatMode, DEFAULT_CHAT_MODE } from './chatMode';
+import { normalizeChatMode, resolveChatMode, NEW_CHAT_MODE } from './chatMode';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 
@@ -116,7 +116,7 @@ export interface CreateChatDto {
   projectId?: number | null;
   capability?: string | null;
   /** Conversation (`chat`) or execution (`work`) — migration 0409. Omitted/invalid
-   *  falls back to {@link DEFAULT_CHAT_MODE}. */
+   *  opens in {@link NEW_CHAT_MODE}. */
   mode?: string | null;
 }
 
@@ -571,7 +571,7 @@ export class BrainService {
         projectId: dto.projectId ?? null,
         title,
         capability: normalizeCapability(dto.capability),
-        mode: normalizeChatMode(dto.mode) ?? DEFAULT_CHAT_MODE,
+        mode: normalizeChatMode(dto.mode) ?? NEW_CHAT_MODE,
       })
       .returning(chatColumns);
 

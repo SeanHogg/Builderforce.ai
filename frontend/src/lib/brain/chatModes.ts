@@ -4,9 +4,9 @@
  * Two modes per conversation (see `brain-embedded/src/chatMode.ts` for what each one
  * MEANS to the model, and migration 0409 for where the choice is stored):
  *
- *   • `chat` — read, reason, answer. The default.
+ *   • `chat` — read, reason, answer. Where an unreadable stored value rests.
  *   • `work` — create the ticket, scope it, link it to this conversation, and dispatch
- *     an agent to run it.
+ *     an agent to run it. What a NEW conversation opens in.
  *
  * This module owns the two things the model-facing package must NOT: the option list
  * the UI renders, and the WORK OPTIONS — a small catalogue of the jobs people actually
@@ -26,7 +26,7 @@
 
 import type { ChatMode } from '@seanhogg/builderforce-brain-embedded';
 
-export { CHAT_MODES, DEFAULT_CHAT_MODE, isChatMode, normalizeChatMode } from '@seanhogg/builderforce-brain-embedded';
+export { CHAT_MODES, NEW_CHAT_MODE, RESTING_CHAT_MODE, isChatMode, normalizeChatMode } from '@seanhogg/builderforce-brain-embedded';
 export type { ChatMode } from '@seanhogg/builderforce-brain-embedded';
 
 /** The glyph for a mode. Decorative — the label carries the meaning. */

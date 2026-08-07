@@ -12,6 +12,9 @@ import {
   guestRoomCanvas, putGuestRoomCanvas,
 } from '../../application/guest/guestRoomClient';
 import { GUEST_CHAT_LIMITS, GUEST_ROOM_LIMITS } from '../../domain/tenant/PlanLimits';
+import {
+  consumeGuestResearchCall, guestWebSearch, guestWebFetch, guestGeocode,
+} from '../../application/guest/guestResearch';
 import { iceServers } from '../../application/meetings/iceServers';
 import { applyMediaPrivacyMode } from '../../domain/meetings/mediaPrivacy';
 
@@ -111,6 +114,82 @@ export function createGuestRoutes(guest: GuestChatService): Hono<HonoEnv> {
       messagesDailyLimit: GUEST_CHAT_LIMITS.messagesDailyLimit,
       roomsEnabled: guestRoomsEnabled(c.env as Env),
     });
+  });
+
+  // ── Research ───────────────────────────────────────────────────────────────
+  //
+  // The logged-out canvas's `builtin_web_search` / `builtin_web_fetch` /
+  // `builtin_geo_geocode` tools. A guest has no tenant, so they cannot reach the MCP
+  // catalog that owns these for authed users — without this surface an anonymous
+  // "research X and chart it" turn answers from the model's weights and invents its
+  // numbers. Guarded by the signed guest token, charged against a per-visitor and
+  // per-IP daily call allowance, and backed only by the PLATFORM search backing (a
+  // guest can never reach a tenant's BYO key). See application/guest/guestResearch.ts.
+
+  /** Shared guard: verified guest + one charged research call, or the refusal to send. */
+  async function chargeResearch(c: Context<HonoEnv>): Promise<{ visitorId: string } | Response> {
+    if (!guestBrainEnabled(c.env)) {
+      return c.json({ error: 'Guest research is disabled.', code: 'guest_brain_disabled' }, 503);
+    }
+    const auth = await authenticate(c);
+    if (!auth) return c.json({ error: 'A guest session is required.', code: 'guest_forbidden' }, 401);
+    const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null;
+    const cap = await consumeGuestResearchCall(c.env as Env, auth.visitorId, ip);
+    if (!cap.allowed) {
+      // 429, and `terminal` so the canvas stops retrying: like the chat cap, a guest
+      // has no plan to upgrade — the next step is signing up, not paying.
+      return c.json({
+        error: cap.reason === 'ip'
+          ? 'This device has reached its free research limit for today. Sign up free to keep going.'
+          : `You've used your ${cap.limit} free research lookups for today. Sign up free to keep going.`,
+        code: 'guest_research_limit_reached',
+        reason: cap.reason,
+        limit: cap.limit,
+        terminal: true,
+      }, 429);
+    }
+    return { visitorId: auth.visitorId };
+  }
+
+  router.post('/research/search', async (c) => {
+    const charged = await chargeResearch(c);
+    if (charged instanceof Response) return charged;
+    const { query } = await c.req.json<{ query?: string }>().catch((): { query?: string } => ({}));
+    if (typeof query !== 'string' || !query.trim()) return c.json({ error: 'A query is required' }, 400);
+    return c.json(await guestWebSearch(c.env as Env, query.trim().slice(0, 400)));
+  });
+
+  router.post('/research/fetch', async (c) => {
+    const charged = await chargeResearch(c);
+    if (charged instanceof Response) return charged;
+    const { url } = await c.req.json<{ url?: string }>().catch((): { url?: string } => ({}));
+    if (typeof url !== 'string' || !url.trim()) return c.json({ error: 'A url is required' }, 400);
+    try {
+      return c.json(await guestWebFetch(c.env as Env, url.trim()));
+    } catch (error) {
+      // An SSRF refusal or an unreachable origin — a 400 the model can relay verbatim.
+      return c.json({ error: error instanceof Error ? error.message : 'Could not fetch the URL' }, 400);
+    }
+  });
+
+  router.post('/research/geocode', async (c) => {
+    const charged = await chargeResearch(c);
+    if (charged instanceof Response) return charged;
+    const body = await c.req
+      .json<{ queries?: unknown; context?: string; countryCodes?: string; outline?: boolean }>()
+      .catch((): Record<string, never> => ({}));
+    // Deliberately NOT sliced here: `geocodeBatch` owns the cap and REPORTS it as
+    // `truncated`, and a silent slice in the route would turn a half-plotted map into
+    // one that claims to be whole.
+    const queries = Array.isArray(body.queries)
+      ? body.queries.filter((v): v is string => typeof v === 'string' && !!v.trim())
+      : [];
+    if (!queries.length) return c.json({ error: 'At least one place name is required' }, 400);
+    return c.json(await guestGeocode(c.env as Env, queries, {
+      ...(body.context?.trim() ? { context: body.context.trim() } : {}),
+      ...(body.countryCodes?.trim() ? { countryCodes: body.countryCodes.trim().toLowerCase() } : {}),
+      ...(body.outline === true ? { outline: true } : {}),
+    }));
   });
 
   // ── Shared rooms ───────────────────────────────────────────────────────────

@@ -18,7 +18,9 @@ import { outlinePaths, projectMap, sanitizeGeoBounds, sanitizeMapPoints } from '
 import { creativePreviewImageUrl } from '@/lib/creationDeliverables';
 import { canvasBuildBinding } from '@/lib/canvasBuild';
 import { useModalityCopy } from '@/lib/useModalityCopy';
-import { canvasDiagram, canvasDocument, canvasSlides } from '@/lib/canvasDocuments';
+import { authoredMarkdown, canvasDiagram, canvasDocument, canvasSlides } from '@/lib/canvasDocuments';
+import type { CanvasExportAction } from '@/lib/canvasExports';
+import { DocumentEditor } from './DocumentEditor';
 import { drawioLabelLines, drawioShapePolygon, parseDrawioXml, resolveDrawioXml, type DrawioGraph } from '@/lib/drawioDiagram';
 import { MermaidDiagram } from '@/components/MermaidDiagram';
 
@@ -542,19 +544,55 @@ function DataGridBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patc
  * the breaks its author declared, so the page on the card is the page in the
  * source file, and a twenty-page market analysis is readable on the board
  * without opening anything.
+ *
+ * The card is also where the document is WORKED ON. Asking for a document and
+ * then being sent to a markdown box in a side panel to fix one sentence — or to
+ * a different surface again to get a file out of it — is three places to learn
+ * for one document. Write it here, take it away from here.
  */
-function DocumentBody({ data }: { data: CreationNodeData }) {
+function DocumentBody({ data, onEdit, onExport }: {
+  data: CreationNodeData;
+  /** Absent on a board this person cannot edit, which is what removes the Edit
+   * control rather than leaving an inert one behind. */
+  onEdit?: (patch: Partial<CreationNodeData>) => void;
+  onExport?: (action: CanvasExportAction) => void;
+}) {
   const t = useTranslations('creationCanvas.node');
   const [requested, setRequested] = useState(0);
+  const [editing, setEditing] = useState(false);
   // Paginating re-splits the whole body; a twenty-page import would do that on
   // every re-render of a card that is only being dragged.
   const document = useMemo(() => canvasDocument(data), [data]);
+  // The editor works on the RAW body, not the paginated read of it: the page
+  // breaks a Word or PDF import declared are markers inside that body, and
+  // saving the flattened version back would collapse the file to one page.
+  const source = authoredMarkdown(data) ?? '';
   const pages = document?.pages ?? [];
   // Editing can shorten a document under a reader who has turned past the new
   // last page, so the rendered page is always clamped to what exists.
   const page = Math.min(Math.max(requested, 0), Math.max(0, pages.length - 1));
-  if (!document) return <AuthoredContent data={data} fallback={t('documentFallback')} />;
-  const paginated = pages.length > 1;
+  const paginated = !editing && pages.length > 1;
+
+  const actions = (onEdit || onExport) ? <div className={`${styles.documentActions} nodrag nowheel`}>
+    {onEdit && <button
+      type="button"
+      data-active={editing ? 'true' : undefined}
+      aria-pressed={editing}
+      onClick={(event) => { event.stopPropagation(); setEditing(!editing); }}
+    >{editing ? t('documentDone') : t('documentEdit')}</button>}
+    {onExport && <>
+      <button type="button" onClick={(event) => { event.stopPropagation(); onExport('docx'); }}>{t('documentWord')}</button>
+      <button type="button" onClick={(event) => { event.stopPropagation(); onExport('pdf'); }}>{t('documentPdf')}</button>
+    </>}
+  </div> : null;
+
+  if (editing && onEdit) return <div className={styles.documentBody}>
+    {actions}
+    <DocumentEditor markdown={source} label={data.title} onCommit={(markdown) => onEdit({ markdown, content: markdown })} />
+  </div>;
+
+  if (!document) return <>{actions}<AuthoredContent data={data} fallback={t('documentFallback')} /></>;
+
   return <div className={styles.documentBody}>
     <div className={styles.documentMeta}>
       <span>{t('documentPages', { count: document.pageCount })}</span>
@@ -562,6 +600,7 @@ function DocumentBody({ data }: { data: CreationNodeData }) {
       <span>{t('documentReading', { minutes: document.readingMinutes })}</span>
       {typeof data.sourceFormat === 'string' && <span>{String(data.sourceFormat)}</span>}
     </div>
+    {actions}
     <div className={`${styles.documentSheet} nowheel nodrag`} role="region" aria-label={data.title} tabIndex={0}>
       <div className={styles.documentPage} data-paginated={paginated ? 'true' : undefined}>
         <div className={styles.documentMarkdown}><ReactMarkdown remarkPlugins={[remarkGfm]}>{pages[page] ?? document.markdown}</ReactMarkdown></div>
@@ -1203,8 +1242,12 @@ type CreationNodeProps = NodeProps<CreationFlowNode> & {
   onRun?: (nodeId: string) => void;
   onOpenDetails?: (nodeId: string, focus?: 'knowledge' | 'test' | 'evaluation' | 'delivery') => void;
   /** Direct edits made on the card itself — a spreadsheet cell, a renamed
-   * column — written back through the same path the inspector uses. */
+   * column, a rewritten paragraph — written back through the same path the
+   * inspector uses. Absent when the board is read-only or lock-blocked, so an
+   * editing control is never rendered where it would do nothing. */
   onEditData?: (nodeId: string, patch: Partial<CreationNodeData>) => void;
+  /** Take the object away as a file, from the card that holds it. */
+  onExport?: (nodeId: string, action: CanvasExportAction) => void;
 };
 
 /** Object kinds whose body IS a document. Registry kinds, so a new document-like
@@ -1246,7 +1289,7 @@ function useAuthoredNodeSize(id: string): { width?: number; height?: number } {
   }, [authored]);
 }
 
-export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onEditData }: CreationNodeProps) {
+export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onEditData, onExport }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
   const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame'].includes(data.kind);
   const specialized = new Set(['workflow','website','build','prototype','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram']);
@@ -1284,7 +1327,11 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'staff' && <><div className={styles.personRow}><span className={styles.avatar} style={{ background: data.accent }}>{data.title.slice(0, 1)}</span><b>{data.role}</b><span className={styles.presence} /></div><small>{t('currentFocus')}</small><p>{data.focus}</p></>}
         {data.kind === 'chat' && <BrainObjectBody nodeId={id} data={data} />}
         {(data.kind === 'dataset' || data.kind === 'table' || data.kind === 'spreadsheet') && <DataGridBody data={data} {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})} />}
-        {DOCUMENT_BODY_KINDS.has(data.kind) && <DocumentBody data={data} />}
+        {DOCUMENT_BODY_KINDS.has(data.kind) && <DocumentBody
+          data={data}
+          {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})}
+          {...(onExport ? { onExport: (action: CanvasExportAction) => onExport(id, action) } : {})}
+        />}
         {data.kind === 'slides' && <SlidesBody data={data} />}
         {data.kind === 'diagram' && <DiagramBody data={data} />}
         {data.kind === 'file' && <FileBody data={data} />}

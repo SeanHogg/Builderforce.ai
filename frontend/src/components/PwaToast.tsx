@@ -1,87 +1,32 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import type { CSSProperties, ReactNode } from 'react';
-import { PWA_TOAST_ROW_HEIGHT } from './pwaToastStack';
+import styles from './PwaToast.module.css';
 
 /**
- * Shared presentational shell for the bottom-center PWA toasts
- * (update-available + install-app). Owns the fixed positioning, blur, border,
- * shadow, and the coral primary-action button so the two banners stay visually
- * identical without duplicating the chrome.
+ * Shared presentational shell for the PWA toasts (update-available +
+ * install-app). Owns the placement, the surface and the primary-action button so
+ * the two banners stay visually identical without duplicating the chrome, and so
+ * the phone layout — where the bottom edge already belongs to the fixed bottom
+ * bar and whatever the page docks above it — is decided in ONE stylesheet.
  *
- * `slot` is the toast's index in the shared bottom-center stack (0 = bottom-most
- * row). When two toasts are live at once they pass different slots so they
- * stack vertically instead of overlapping at the same `bottom`. A lone toast
- * passes slot 0 (or omits it) and sits in the normal position.
+ * `slot` is the toast's index in the shared stack (0 = nearest the anchored
+ * edge). When two toasts are live at once they pass different slots so they
+ * stack instead of overlapping. The offset arithmetic is the stylesheet's: the
+ * slot is handed over as a custom property, because the anchor edge and the row
+ * height are not the same on a phone as on a desktop.
  */
 
-const BOTTOM_BASE = 24;
+type SlotStyle = CSSProperties & { '--pwa-toast-slot': number };
 
-const SHELL_STYLE: CSSProperties = {
-  position: 'fixed',
-  bottom: BOTTOM_BASE,
-  left: '50%',
-  transform: 'translateX(-50%)',
-  zIndex: 9999,
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-  padding: '12px 16px 12px 20px',
-  background: 'var(--bg-surface, #1a1a24)',
-  border: '1px solid var(--border-subtle, rgba(255,255,255,0.08))',
-  borderRadius: 14,
-  boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-  backdropFilter: 'blur(16px)',
-  maxWidth: 'calc(100vw - 48px)',
-};
-
-const TEXT_STYLE: CSSProperties = {
-  fontSize: '0.875rem',
-  color: 'var(--text-primary, #e8e8f0)',
-  fontFamily: 'var(--font-body, sans-serif)',
-};
-
-const PRIMARY_BUTTON_STYLE: CSSProperties = {
-  padding: '6px 14px',
-  background: 'linear-gradient(135deg, var(--coral-bright, #f4726e), var(--coral-dark, #c94f4b))',
-  color: '#fff',
-  border: 'none',
-  borderRadius: 8,
-  fontFamily: 'var(--font-display, sans-serif)',
-  fontWeight: 700,
-  fontSize: '0.8rem',
-  cursor: 'pointer',
-  letterSpacing: '0.02em',
-  flexShrink: 0,
-};
-
-const DISMISS_BUTTON_STYLE: CSSProperties = {
-  background: 'none',
-  border: 'none',
-  color: 'var(--text-muted, #6b6b80)',
-  cursor: 'pointer',
-  fontSize: '1rem',
-  lineHeight: 1,
-  padding: '2px 4px',
-  flexShrink: 0,
-};
-
-export function PwaToast({
-  children,
-  nowrap = true,
-  slot = 0,
-}: {
-  children: ReactNode;
-  nowrap?: boolean;
-  /** Index in the shared bottom-center stack (0 = bottom-most). Offsets `bottom`. */
-  slot?: number;
-}) {
-  const bottom = BOTTOM_BASE + Math.max(0, slot) * PWA_TOAST_ROW_HEIGHT;
+export function PwaToast({ children, slot = 0 }: { children: ReactNode; slot?: number }) {
   return (
     <div
       role="status"
       aria-live="polite"
-      style={{ ...SHELL_STYLE, bottom, whiteSpace: nowrap ? 'nowrap' : 'normal' }}
+      className={styles.shell}
+      style={{ '--pwa-toast-slot': Math.max(0, slot) } as SlotStyle}
     >
       {children}
     </div>
@@ -89,27 +34,27 @@ export function PwaToast({
 }
 
 export function PwaToastText({ children }: { children: ReactNode }) {
-  return <span style={TEXT_STYLE}>{children}</span>;
+  return <span className={styles.text}>{children}</span>;
 }
 
-export function PwaToastPrimaryButton({
-  children,
-  onClick,
-}: {
-  children: ReactNode;
-  onClick: () => void;
-}) {
+export function PwaToastPrimaryButton({ children, onClick }: { children: ReactNode; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} style={PRIMARY_BUTTON_STYLE}>
+    <button type="button" onClick={onClick} className={styles.primary}>
       {children}
     </button>
   );
 }
 
 export function PwaToastDismissButton({ onClick }: { onClick: () => void }) {
+  const t = useTranslations('pwa');
   return (
-    <button type="button" onClick={onClick} aria-label="Dismiss notification" style={DISMISS_BUTTON_STYLE}>
-      ✕
+    <button type="button" onClick={onClick} aria-label={t('dismiss')} title={t('dismiss')} className={styles.dismiss}>
+      {/* A drawn ✕ rather than the character: the glyph rendered at whatever
+          weight and baseline the platform font felt like, which is what made the
+          toast look bolted together on a phone. */}
+      <svg viewBox="0 0 16 16" aria-hidden="true">
+        <path d="M3.6 3.6l8.8 8.8M12.4 3.6l-8.8 8.8" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+      </svg>
     </button>
   );
 }

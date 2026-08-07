@@ -18,7 +18,7 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AccessibleOutlineIcon, CanvasCommands, CanvasFilesIcon, CanvasRailToggle, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
+import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasFilesIcon, CanvasRailToggle, CleanLayoutIcon, DepthIcon, DropToLayersIcon, ExitFullscreenIcon, FitViewIcon, FullscreenIcon, LayerGuidesIcon, MarqueeSelectIcon, ResetViewIcon, ThreeDIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
 import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvas3DControls, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
@@ -34,7 +34,7 @@ import { CreationNode, type CreationFlowNode } from './CreationNode';
 import type { CreationNodeData, CreationObjectKind } from './types';
 import styles from './CreationCanvas.module.css';
 import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, toolsApi, workflowDefinitions, type CreationOutcomeMetrics, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
-import { creationGraphFromSnapshot, creationStorageKey, readLocalCreationSession, writeLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
+import { creationGraphFromSnapshot, creationStorageKey, localCreationSnapshot, readLocalCreationSession, writeLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
 import { useGuestRoom } from '@/lib/useGuestRoom';
 import { GuestInviteLink } from '@/components/guest/GuestInviteLink';
 import {
@@ -64,7 +64,9 @@ import {
   profileTabular, queryTabular, tabularFromObject,
   type TabularHighlightRule, type TabularQuery, type TabularSource,
 } from '@/lib/canvasTabularData';
-import { detectGeoColumns, mapPointsFromRows, outlineRings, sanitizeGeoBounds } from '@/lib/canvasGeo';
+import { detectGeoColumns, mapObjectFields, mapPointsFromRows } from '@/lib/canvasGeo';
+import { useCoarsePointer } from '@/lib/useCoarsePointer';
+import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode';
 import { importCanvasFile, type ImportTranslator } from '@/lib/canvasFileImport';
 import { WorkflowBuilder } from '@/components/workflow-builder/WorkflowBuilder';
 import { VoiceConfigPanel } from '@/components/ide/VoiceConfigPanel';
@@ -78,11 +80,12 @@ import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useChatModelOptions } from '@/lib/useLlmModels';
 import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
-import { ChatModeToggle } from '@/components/brain/ChatModeToggle';
-import { DEFAULT_CHAT_MODE, normalizeChatMode, type ChatMode } from '@/lib/brain';
+import { NEW_CHAT_MODE, normalizeChatMode, type ChatMode } from '@/lib/brain';
 import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
 import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, creativeBrief, creativeMeshGeometry, creativePreviewImageUrl, evermindMediaArtifact, generateEvermindMedia, generateServerCreativeArtifact, mediaFrameDataUrl, navigableArtifactUrl, withCreationDeliverable, EVERMIND_CREATIVE_KINDS, SERVER_CREATIVE_KINDS, type CreationDeliverable, type CreativeArtifact } from '@/lib/creationDeliverables';
 import { canvasDiagram, canvasDocument, canvasFiles, canvasObjectMarkdown, type CanvasFile } from '@/lib/canvasDocuments';
+import { EXPORT_MIME, OFFICE_DOCUMENT_KINDS, defaultExportAction, type CanvasExportAction } from '@/lib/canvasExports';
+import { printMarkdownDocument } from '@/lib/printDocument';
 import { listEvermindModels } from '@/lib/studioModelsApi';
 import { AITrainingPanel } from '@/components/AITrainingPanel';
 import { canvasProjectId, canvasProjectNodes, connectedCanvasProjectNode } from '@/lib/canvasProjectRef';
@@ -104,7 +107,7 @@ const INSPECTOR_MAX_WIDTH = 720;
 const ACCOUNT_REQUIRED_OBJECT_ACTIONS = new Set(['publish', 'deliver', 'assign', 'authenticate', 'execute', 'record', 'train', 'start', 'compare']);
 const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   website: ['publish'], video: ['generate'], build: ['open'],
-  workflow: ['run'], dataset: ['visualize', 'profile'], project: ['expand', 'compare'],
+  workflow: ['run'], dataset: ['visualize', 'plot', 'profile'], project: ['expand', 'compare'],
   mockup: ['deliver'], mockupSet: ['expand', 'deliver'], standup: ['start'],
   evermind: ['train', 'evaluate', 'publish'],
   image: ['generate', 'preview', 'export'], animation: ['generate', 'preview', 'export'], podcast: ['generate', 'preview', 'export'],
@@ -225,28 +228,9 @@ function safeDownloadName(value: string): string {
   return value.trim().replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '').slice(0, 80) || 'creation';
 }
 
-export type CanvasExportAction = 'copy' | 'markdown' | 'csv' | 'docx' | 'pptx' | 'json' | 'diagram';
-
 /** Objects whose body is authored prose or an outline, and so get a writable
  * editor rather than a read-only "live object" note. */
 const DOCUMENT_EDITOR_KINDS = new Set<CreationObjectKind>(['document', 'prd', 'knowledge', 'note', 'report', 'slides']);
-
-const EXPORT_MIME: Readonly<Record<CanvasExportAction, string>> = {
-  copy: 'text/plain', markdown: 'text/markdown', csv: 'text/csv', json: 'application/json',
-  diagram: 'application/vnd.jgraph.mxfile',
-  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-};
-
-/** The format an object exports to when nothing more specific was asked for —
- * a deck becomes a deck, a sheet becomes rows, a diagram stays a diagram. */
-export function defaultExportAction(kind: CreationObjectKind): CanvasExportAction {
-  if (kind === 'slides') return 'pptx';
-  if (kind === 'diagram') return 'diagram';
-  if (kind === 'spreadsheet' || kind === 'table' || kind === 'dataset') return 'csv';
-  if (kind === 'document' || kind === 'prd' || kind === 'knowledge' || kind === 'report' || kind === 'note') return 'docx';
-  return 'markdown';
-}
 
 function artifactCsv(data: CreationNodeData): string | null {
   const rawRows = Array.isArray(data.rows) ? data.rows : [];
@@ -440,6 +424,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, []);
   const [presentMode, setPresentMode] = useState(initialPresent);
   const [drawingMode, setDrawingMode] = useState(false);
+  // Pan is the default in both pointer worlds, so a board behaves on first touch the way
+  // it always has on first click. The toggle exists because a one-finger drag can only
+  // do one of the two things — see `canvasPointerMode.ts`.
+  const [canvasGesture, setCanvasGesture] = useState<CanvasGesture>('pan');
   const [showHidden, setShowHidden] = useState(false);
   const [followingUserId, setFollowingUserId] = useState<string | null>(null);
   const [branchParentId, setBranchParentId] = useState<string | null>(null);
@@ -545,6 +533,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
+  /** True while the BROWSER is what put us full screen, false for the CSS fallback. */
+  const nativeFullscreenRef = useRef(false);
   // ONE Brain surface: which side it is parked on, how wide, and whether the user
   // wants the step list. Read from storage after mount so SSR stays deterministic.
   const [brainDock, setBrainDock] = useState(DEFAULT_BRAIN_DOCK_PREFERENCES);
@@ -559,7 +549,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [autoApplyPending, setAutoApplyPending] = useState(false);
   /** Conversation vs execution for this session (0409). Hydrated from the loaded
    *  session below; `setSessionMode` is the writer that also persists it. */
-  const [sessionMode, setSessionMode_] = useState<ChatMode>(DEFAULT_CHAT_MODE);
+  const [sessionMode, setSessionMode_] = useState<ChatMode>(NEW_CHAT_MODE);
   const [pendingBrainActions, setPendingBrainActions] = useState<Array<{ objectId: string; action: string }>>([]);
   const [sessionRole, setSessionRole] = useState<CreationSessionSummary['role']>('owner');
   const [lockBlocked, setLockBlocked] = useState(false);
@@ -635,20 +625,48 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     });
   }, [sessionId]);
 
+  /**
+   * Fill the screen with the board, natively where the browser offers it and by
+   * taking over the viewport where it does not.
+   *
+   * iOS Safari exposes no element Fullscreen API at all, so the button used to
+   * report "full screen unavailable" on the one class of device where handing the
+   * whole screen to the canvas is worth the most. The CSS fallback (see
+   * `[data-fullscreen]` in the stylesheet) pins the shell over the app chrome and
+   * the mobile bottom bar, which is the same result the native call would give.
+   */
   const toggleFullscreen = useCallback(() => {
     const shell = shellRef.current;
     if (typeof document === 'undefined' || !shell) return;
     if (document.fullscreenElement) { void document.exitFullscreen?.().catch(() => undefined); return; }
-    const request = shell.requestFullscreen?.();
-    if (request) void request.catch(() => toast.error(t('fullScreenUnavailable')));
-    else toast.error(t('fullScreenUnavailable'));
-  }, [t, toast]);
+    if (fullscreen) { setFullscreen(false); return; }
+    const request = document.fullscreenEnabled ? shell.requestFullscreen?.() : undefined;
+    if (request) void request.catch(() => setFullscreen(true));
+    else setFullscreen(true);
+  }, [fullscreen]);
 
   useEffect(() => {
-    const sync = () => setFullscreen(!!document.fullscreenElement && document.fullscreenElement === shellRef.current);
+    // Only the native path owns the flag while IT is what is on screen. Without
+    // this guard a `fullscreenchange` fired by anything else on the page (a video,
+    // say) would silently drop the canvas out of the CSS fallback.
+    const sync = () => {
+      const native = !!document.fullscreenElement && document.fullscreenElement === shellRef.current;
+      if (!native && !nativeFullscreenRef.current) return;
+      nativeFullscreenRef.current = native;
+      setFullscreen(native);
+    };
     document.addEventListener('fullscreenchange', sync);
     return () => document.removeEventListener('fullscreenchange', sync);
   }, []);
+
+  // Escape leaves the CSS fallback, the way it leaves native full screen — the
+  // browser handles that key itself only when the browser put us there.
+  useEffect(() => {
+    if (!fullscreen || nativeFullscreenRef.current) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') setFullscreen(false); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [fullscreen]);
 
   const setAutoApplyMode = useCallback((enabled: boolean) => {
     autoApplyRef.current = enabled;
@@ -665,7 +683,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   const setSessionMode = useCallback((next: ChatMode) => {
     setSessionMode_(next);
-    if (persistence !== 'server') return;
+    if (persistence !== 'server') {
+      // No server row to hold it, so the local snapshot does — otherwise the mode
+      // reset on every reload of a guest canvas.
+      const prior = readLocalCreationSession(sessionId);
+      if (prior) writeLocalCreationSession(sessionId, { ...prior, mode: next, updatedAt: new Date().toISOString() });
+      return;
+    }
     void creationSessionsApi.update(sessionId, { mode: next })
       .catch(() => setNotice(t('modeSaveFailed')));
   }, [persistence, sessionId, t]);
@@ -729,6 +753,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           setNodes(saved.nodes);
           setEdges(saved.edges);
           setTimeline((saved.timeline ?? []).map((message) => ({ clientMessageId: message.clientMessageId, messageRole: message.role, body: message.body, metadata: message.metadata ?? {}, createdAt: message.createdAt })));
+          // The mode a guest armed in the homepage composer, carried across the
+          // hand-off — a local canvas has no server row, so the snapshot IS the store.
+          setSessionMode_(normalizeChatMode(saved.mode));
           if (saved.viewport) { viewportRef.current = saved.viewport; pendingViewport.current = saved.viewport; void flowRef.current?.setViewport(saved.viewport); }
         }
         hydrated.current = true;
@@ -842,16 +869,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setRoomBusy(false);
       return;
     }
-    const snapshot: LocalCreationSnapshot = {
-      version: 1,
-      title,
-      initialPrompt: readLocalCreationSession(sessionId)?.initialPrompt,
-      timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })),
-      nodes,
-      edges,
-      viewport: viewportRef.current,
-      updatedAt: new Date().toISOString(),
-    };
+    const snapshot = localCreationSnapshot(sessionId, { title, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport: viewportRef.current });
     const serialized = JSON.stringify(snapshot);
     lastRoomSnapshot.current = serialized;
     // The host's board IS the room's board — no pull to wait for.
@@ -941,8 +959,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const serialized = JSON.stringify({ nodes, edges });
       if (serialized === lastSavedGraph.current) return;
       if (persistence === 'local') {
-        const prior = readLocalCreationSession(sessionId);
-        const snapshot: LocalCreationSnapshot = { version: 1, title, initialPrompt: prior?.initialPrompt, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport: viewportRef.current, updatedAt: new Date().toISOString() };
+        const snapshot = localCreationSnapshot(sessionId, { title, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport: viewportRef.current });
         persistSnapshot(snapshot);
         lastSavedGraph.current = serialized;
         setNotice(t('noticeSavedOnDevice'));
@@ -1149,11 +1166,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   /** One writer for an object's content, wherever the edit was made — the
    * inspector, a cell edited on the card itself, or the Files library. */
+  /**
+   * Whether a direct edit made ON a card can land at all.
+   *
+   * One gate, read by both the writer and the cards: `updateNodeData` enforces
+   * it, and the cards use it to decide whether an editing control exists. A
+   * viewer on a shared board, or an editor whose lock has gone, gets no Edit
+   * button rather than one that silently does nothing.
+   */
+  const cardsEditable = canEdit && !lockBlocked;
   const updateNodeData = useCallback((nodeId: string, patch: Partial<CreationNodeData>) => {
-    if (!canEdit || lockBlocked) return;
+    if (!cardsEditable) return;
     setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, ...patch } } : node));
     setNotice(t('noticeSavingChanges'));
-  }, [canEdit, lockBlocked, setNodes]);
+  }, [cardsEditable, setNodes]);
 
   const updateSelected = useCallback((patch: Partial<CreationNodeData>) => {
     if (!selectedId) return;
@@ -1421,6 +1447,48 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNotice(t('datasetVisualizationAdded'));
   }, [selectedNode, setEdges, setNodes, t]);
 
+  /**
+   * "Plot on a map" — the direct counterpart to {@link visualizeDataset}.
+   *
+   * A dataset whose rows ALREADY carry coordinates (an uploaded geocoded CSV, or one the
+   * Brain has written lat/lng back onto) needed a Brain turn to become a map, because the
+   * only path to `materializeAs: 'map'` was `canvas_query_dataset`. The detection was
+   * already here — `detectGeoColumns` runs over the imported rows — so the UI was
+   * withholding something it could see. This spends no tokens and makes no network call.
+   */
+  const plotDataset = useCallback(() => {
+    if (!selectedNode || selectedNode.data.kind !== 'dataset') return;
+    const source = tabularFromObject(selectedNode.data as Record<string, unknown>);
+    if (!source.columns.length || !source.rows.length) { setNotice(t('datasetImportBeforePlotting')); return; }
+    const geoColumns = detectGeoColumns(source);
+    const points = mapPointsFromRows(source, geoColumns, MAX_MATERIALIZED_ROWS);
+    if (!points.length) {
+      // Name the columns actually looked at: "cannot plot" is not actionable, and the
+      // usual cause is a coordinate column this dataset spells differently.
+      setNotice(geoColumns.latitude && geoColumns.longitude
+        ? t('datasetPlotNoCoordinates', { latitude: geoColumns.latitude, longitude: geoColumns.longitude })
+        : t('datasetPlotNoGeoColumns', { columns: source.columns.join(', ') }));
+      return;
+    }
+    const map = newNode('map', { x: selectedNode.position.x + 440, y: selectedNode.position.y });
+    map.style = { width: 420, height: 380 };
+    map.data = {
+      ...map.data,
+      ...mapObjectFields({
+        title: t('datasetMapTitle', { name: selectedNode.data.title }),
+        status: t('datasetPlottedCount', { count: points.length }),
+        summary: t('datasetPlotSummary', { plotted: points.length, total: source.rows.length, name: selectedNode.data.title }),
+        points,
+        columns: geoColumns,
+        sourceDatasetId: selectedNode.id,
+      }),
+    };
+    setNodes((current) => [...current, map]);
+    setEdges((current) => [...current, { id: crypto.randomUUID(), source: selectedNode.id, target: map.id, type: 'smoothstep', label: t('edgePlots'), animated: true, data: { connectionKind: 'data' } }]);
+    setSelectedId(map.id);
+    setNotice(t('datasetMapAdded'));
+  }, [selectedNode, setEdges, setNodes, t]);
+
   const profileDataset = useCallback((nodeId: string) => {
     const target = nodes.find((node) => node.id === nodeId);
     if (!target) return;
@@ -1432,6 +1500,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       : node));
     setNotice(t('datasetProfiled', { columns: profile.length }));
   }, [nodes, setNodes, t]);
+
+  // What a primary drag on empty board does, and how forgiving the board is about a
+  // pointer that wanders. `panAndSelectConflict` is the invariant `canvasInteractionProps`
+  // guarantees, not a React Flow prop, so it is dropped before the rest is spread.
+  const coarsePointer = useCoarsePointer();
+  const { panAndSelectConflict: _panAndSelectConflict, ...interactionProps } = useMemo(
+    () => canvasInteractionProps({ gesture: canvasGesture, pointer: coarsePointer ? 'coarse' : 'fine', drawing: drawingMode }),
+    [canvasGesture, coarsePointer, drawingMode],
+  );
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((current) => addEdge({ ...connection, id: crypto.randomUUID(), type: 'smoothstep', data: { connectionKind }, label: connectionKind, markerEnd: { type: MarkerType.ArrowClosed } }, current));
@@ -1499,8 +1576,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const onViewportChange = useCallback((_event: MouseEvent | TouchEvent | null, viewport: { x: number; y: number; zoom: number }) => {
     viewportRef.current = viewport;
     if (persistence !== 'local' || !hydrated.current) return;
-    const prior = readLocalCreationSession(sessionId);
-    const snapshot: LocalCreationSnapshot = { version: 1, title, initialPrompt: prior?.initialPrompt, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport, updatedAt: new Date().toISOString() };
+    const snapshot = localCreationSnapshot(sessionId, { title, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport });
     persistSnapshot(snapshot);
   }, [edges, nodes, persistence, sessionId, storageKey, timeline, title]);
 
@@ -2277,19 +2353,22 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             status: 'Live', summary: `Computed from ${result.totalRows.toLocaleString()} rows in ${target.data.title}.`, sourceDatasetId: target.id,
           }
           : materializeAs === 'map'
-            ? {
-              title, status: `${mapPoints.length.toLocaleString()} plotted`,
-              mapTitle: title, mapPoints,
-              ...(geoColumns?.value ? { mapValueLabel: geoColumns.value } : {}),
-              ...(sanitizeGeoBounds(args.mapRegion) ? { mapRegion: sanitizeGeoBounds(args.mapRegion) } : {}),
-              ...(typeof args.mapRegionName === 'string' && args.mapRegionName.trim() ? { mapRegionName: args.mapRegionName.trim().slice(0, 120) } : {}),
-              // Stored FLAT — the shared patch sanitizer drops values nested deeper than
-              // four levels, and a GeoJSON MultiPolygon's positions sit past that.
-              ...(outlineRings(args.mapOutline).length ? { mapOutline: outlineRings(args.mapOutline) } : {}),
-              ...(typeof args.mapAttribution === 'string' && args.mapAttribution.trim() ? { mapAttribution: args.mapAttribution.trim().slice(0, 200) } : {}),
+            // Same builder the Dataset inspector's "Plot on a map" uses — see
+            // `mapObjectFields`. Only the copy differs (model-facing here, localized
+            // there); the field assembly, region/outline sanitization and the
+            // MultiPolygon flattening are shared so the two paths cannot drift.
+            ? mapObjectFields({
+              title,
+              status: `${mapPoints.length.toLocaleString()} plotted`,
               summary: `${mapPoints.length.toLocaleString()} of ${result.matchedRows.toLocaleString()} matching rows in ${target.data.title} have coordinates and are plotted.`,
+              points: mapPoints,
+              columns: geoColumns ?? { latitude: null, longitude: null, label: null, value: null },
               sourceDatasetId: target.id,
-            }
+              region: args.mapRegion,
+              regionName: args.mapRegionName,
+              outline: args.mapOutline,
+              attribution: args.mapAttribution,
+            })
             : {
             title, status: 'Live',
             chartTitle: title,
@@ -3197,6 +3276,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         if (action === 'docx') await exportDocx(markdown, target.data.title);
         else await exportPptx(markdown, target.data.title);
       }
+      if (action === 'pdf') {
+        // The browser's own print pipeline, where "Save as PDF" lives. It needs
+        // no server, so it is the one export a GUEST session can also finish.
+        fileName = `${base}.pdf`;
+        if (!printMarkdownDocument(target.data.title, markdown)) throw new Error(t('printUnavailable'));
+      }
       if (action === 'json') {
         fileName = `${base}.json`;
         downloadJson({ kind: target.data.kind, title: target.data.title, data: target.data }, fileName);
@@ -3204,13 +3289,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const delivered: CreationDeliverable = {
         id: crypto.randomUUID(), action: 'export', artifactKind: action, status: 'delivered',
         createdAt: new Date().toISOString(), completedAt: new Date().toISOString(),
-        provider: office ? 'builderforce-office-export' : action === 'docx' || action === 'pptx' ? 'browser-markdown-fallback' : 'browser-download',
+        provider: office ? 'builderforce-office-export' : action === 'pdf' ? 'browser-print' : action === 'docx' || action === 'pptx' ? 'browser-markdown-fallback' : 'browser-download',
         fileName,
         mimeType: action === 'diagram' ? 'application/vnd.jgraph.mxfile' : office || (action !== 'docx' && action !== 'pptx') ? EXPORT_MIME[action] : 'text/markdown',
         validation: { status: 'passed', detail: 'Export generated and download started' },
       };
       setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, deliverables: withCreationDeliverable(node.data, delivered) } } : node));
-      return (action === 'docx' || action === 'pptx') && !office ? t('markdownDownloaded') : t('downloadReady');
+      if (action === 'pdf') return t('printOpened');
+      // A guest session cannot reach the authenticated Office renderer, so say
+      // what actually landed in Downloads and point at the export that DOES work
+      // there, rather than reporting a Word file that was never produced.
+      return (action === 'docx' || action === 'pptx') && !office ? t('markdownDownloadedUsePdf') : t('downloadReady');
     } catch (error) {
       return error instanceof Error ? error.message : t('exportFailed');
     }
@@ -3255,6 +3344,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     else if (target.data.kind === 'video' && pending.action === 'generate') generateVideo(target.id);
     else if (CREATIVE_GENERATOR_KINDS.has(target.data.kind)) runCreativeAction(target.id, pending.action);
     else if (target.data.kind === 'dataset' && pending.action === 'visualize') visualizeDataset();
+    else if (target.data.kind === 'dataset' && pending.action === 'plot') plotDataset();
     else if (target.data.kind === 'dataset' && pending.action === 'profile') profileDataset(target.id);
     else if (target.data.kind === 'project' && pending.action === 'expand') expandProject();
     else if (target.data.kind === 'project' && pending.action === 'compare') compareProjects();
@@ -3273,7 +3363,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(t('noticeNoDeliveryAdapter', { action: pending.action, kind: creationObjectDefinition(target.data.kind).label }));
     }
     finish();
-  }, [compareProjects, deliverMockup, evaluateEvermind, expandMockupSet, expandProject, exportArtifact, generateVideo, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, profileDataset, publishWebsite, runCreativeAction, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
+  }, [compareProjects, deliverMockup, evaluateEvermind, expandMockupSet, expandProject, exportArtifact, generateVideo, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, plotDataset, profileDataset, publishWebsite, runCreativeAction, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
 
   const openHistory = useCallback(() => {
     setHistoryOpen(true);
@@ -3325,10 +3415,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const colors: Partial<Record<CreationObjectKind, string>> = { workflow: '#7357ed', website: '#3978f6', dashboard: '#08b59d', agent: '#8a5cf5', staff: '#f09a3e', evaluation: '#6941d7', evermind: '#df4fa5', projectComparison: '#0d8f82' };
     return colors[node.data.kind] ?? '#9aa8bd';
   }, []);
-  const cleanLayout = useCallback(() => {
-    setNodes((current) => cleanCanvasLayout(current, edges));
-    window.setTimeout(() => void flowRef.current?.fitView({ padding: .16, maxZoom: .9, duration: 320 }), 0);
-  }, [edges, setNodes]);
+  const cleanLayout = useCanvasCleanLayout({ boardRef: flowWrapRef, instanceRef: flowRef, setNodes, edges, padding: .16, maxZoom: .9 });
   const renderedNodes = useMemo(() => nodes.map((node) => {
     const attachedEvermind = node.data.kind === 'evermind' && typeof node.data.resourceId === 'string' && /^evermind:\d+$/.test(node.data.resourceId);
     const live = evermindLiveByNodeId[node.id];
@@ -3410,15 +3497,29 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const fitViewAction = useCallback(() => {
     if (threeDControls) threeDControls.resetView(); else void flowRef.current?.fitView({ padding: .18, maxZoom: .9, duration: 260 });
   }, [threeDControls]);
+  /**
+   * Export from a card, at the identity React Flow needs.
+   *
+   * `exportArtifact` closes over `nodes`, so a card holding it directly would
+   * either export a stale document or force `nodeTypes` to change on every board
+   * edit — remounting every Object. The ref keeps the callback stable while
+   * always running the newest closure, so a paragraph typed a moment ago is in
+   * the file.
+   */
+  const exportRef = useRef(exportArtifact);
+  exportRef.current = exportArtifact;
+  const exportFromNode = useCallback((nodeId: string, action: CanvasExportAction) => {
+    void exportRef.current(nodeId, action).then(setNotice);
+  }, []);
   // Brain reaches its Object through BrainSurfaceProvider, not through this memo:
   // a per-token dependency here would hand React Flow a new nodeTypes object and
   // remount every Object on the board on every streamed word.
   const canvasNodeTypes = useMemo<NodeTypes>(() => ({
-    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={(nodeId) => runWorkflow(nodeId)} onEditData={updateNodeData} onOpenDetails={(nodeId, focus) => {
+    creation: (props) => <CreationNode {...props} canRun={canRun} onRun={(nodeId) => runWorkflow(nodeId)} onExport={exportFromNode} {...(cardsEditable ? { onEditData: updateNodeData } : {})} onOpenDetails={(nodeId, focus) => {
       setDiagnosticsOpen(false); setHistoryOpen(false); setOutcomeMetricsOpen(false);
       setInspectorFocus(focus || null); setSelectedId(nodeId); setSelectedIds([nodeId]);
     }} />,
-  }), [canRun, runWorkflow, updateNodeData]);
+  }), [canRun, cardsEditable, exportFromNode, runWorkflow, updateNodeData]);
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
     sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
     objectCount: nodes.length, connectionCount: edges.length,
@@ -3554,11 +3655,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     rows={1}
     submitOnEnter
     contextControls={<>
-      {/* Chat | Work — first in the row for the same reason as the Brain composer:
-          it is the control that decides whether this turn can leave dispatched work
-          behind. Shared component, so both surfaces cannot drift on what it looks
-          like or what the two words mean. */}
-      <ChatModeToggle value={sessionMode} onChange={setSessionMode} disabled={thinking} />
       <label className={styles.scopeChip}>⌁ <span className="sr-only">{t('brainScope')}</span><select aria-label={t('brainScope')} value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">{t('entireCanvas')}</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? t('selectedObjects', { count: effectiveSelectedIds.length }) : t('selectedObject')}</option><option value="connected" disabled={!effectiveSelectedIds.length}>{t('connectedScope')}</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>{t('currentFrame')}</option></select></label>
     </>}
     onAttach={attachCanvasArtifact}
@@ -3569,9 +3665,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     modelOptions={canvasModelOptions}
     onModelSelectionChange={setModelSelection}
     canChooseModel={canChooseModel}
-    modeControls={
-      <button type="button" className={`${styles.memoryButton} ${memoryEnabled ? styles.memoryButtonActive : ''}`} aria-pressed={memoryEnabled} aria-label={t('memory')} disabled={evermindProjectId == null || persistence !== 'server'} title={evermindProjectId == null ? t('memoryNeedsProject') : memoryEnabled ? t('memoryEnabled') : t('memoryDisabled')} onClick={() => setMemoryMode(!memoryEnabled)}><span aria-hidden>🧠</span><span className={styles.composerActionLabel}>{t('memory')}</span></button>
-    }
+    // Mode and memory live in the `/` menu now — on a phone this row had grown to
+    // eight unlabelled circles, and the two settings that actually decide what a turn
+    // does were the two hardest to read. The menu's trigger names the armed mode, so
+    // nothing has to be opened to see whether this turn can dispatch work.
+    chatMode={sessionMode}
+    onChatModeChange={setSessionMode}
+    memoryEnabled={memoryEnabled}
+    onMemoryChange={setMemoryMode}
+    memoryUnavailableReason={evermindProjectId == null || persistence !== 'server' ? t('memoryNeedsProject') : undefined}
     showVoice
   />;
 
@@ -3609,7 +3711,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             <button className={styles.secondaryButton} onClick={redo} aria-label={t('redoCanvasChange')}>↷</button>
           </div>
           <button className={styles.secondaryButton} aria-expanded={outcomeMetricsOpen} aria-label={t('viewOutcomeMetrics')} title={t('outcomeMetricsTitle')} onClick={openOutcomeMetrics}>↗</button>
-          <button className={`${styles.secondaryButton} ${styles.iconAction}`} aria-pressed={fullscreen} aria-label={fullscreen ? t('exitFullScreen') : t('fullScreen')} title={fullscreen ? t('exitFullScreen') : t('fullScreen')} onClick={toggleFullscreen}>{fullscreen ? '⤡' : '⛶'}</button>
+          {/* Full screen survives the phone layout (hence `mobileAction`): a small
+              screen is where trading the app chrome for board is worth the most,
+              and the ⛶ / ⤡ glyphs it used to draw are exactly the characters a
+              phone font is most likely to render as a blank box. */}
+          <button className={`${styles.secondaryButton} ${styles.iconAction} ${styles.mobileAction}`} aria-pressed={fullscreen} aria-label={fullscreen ? t('exitFullScreen') : t('fullScreen')} title={fullscreen ? t('exitFullScreen') : t('fullScreen')} onClick={toggleFullscreen}>{fullscreen ? <ExitFullscreenIcon /> : <FullscreenIcon />}</button>
           <button className={`${styles.secondaryButton} ${styles.iconAction}`} aria-expanded={diagnosticsOpen} aria-label={t('openDiagnostics')} title={t('openDiagnostics')} onClick={() => void openDiagnostics()}>⚠</button>
           <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}>•••</button>
           {/* A local canvas opens the SAME share menu a saved one does. It used to
@@ -3741,16 +3847,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onMoveEnd={onViewportChange}
           onInit={(instance) => { flowRef.current = instance; if (pendingViewport.current) void instance.setViewport(pendingViewport.current); }}
           fitView
-          fitViewOptions={{ padding: 0.12 }}
-          minZoom={0.35}
+          fitViewOptions={{ padding: 0.12, minZoom: CANVAS_FIT_MIN_ZOOM }}
+          minZoom={CANVAS_FIT_MIN_ZOOM}
           maxZoom={1.6}
           defaultEdgeOptions={{ type: 'smoothstep', markerEnd: { type: MarkerType.ArrowClosed }, style: { stroke: '#7b8aa0', strokeWidth: 1.5 } }}
           nodesDraggable={canEdit && !drawingMode}
           nodesConnectable={canEdit && !drawingMode}
           elementsSelectable
           deleteKeyCode={canEdit ? ['Backspace', 'Delete'] : null}
-          selectionOnDrag
-          multiSelectionKeyCode={['Meta', 'Control']}
+          // Pan/marquee, drag threshold and pinch behaviour come from ONE pure decision
+          // (`canvasPointerMode.ts`) rather than being spelled out here, so they can be
+          // asserted without mounting the board.
+          {...interactionProps}
           proOptions={{ hideAttribution: true }}
           onlyRenderVisibleElements
         >
@@ -3764,6 +3872,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             minimapMaskColor="var(--creation-minimap-mask, rgba(244,248,253,.72))"
             {...threeD.commandProps}
             extraControls={<>
+              {/* Pan vs marquee. A one-finger (or left-button) drag can only do one of
+                  them, so the choice is explicit rather than inferred — and making it
+                  explicit is what gives touch a marquee at all, since the modifier-key
+                  route it used to need does not exist on a phone. Hidden in 3D, where
+                  the scene owns its own navigation. */}
+              {!threeD.active && <CanvasRailToggle
+                pressed={canvasGesture === 'select'}
+                onClick={() => setCanvasGesture((current) => (current === 'select' ? 'pan' : 'select'))}
+                label={t('canvasGestureToggle')}
+                activeTitle={t('canvasGestureSelectActive')}
+                inactiveTitle={t('canvasGesturePanActive')}
+              ><MarqueeSelectIcon /></CanvasRailToggle>}
               <CanvasRailToggle
                 pressed={filesOpen}
                 onClick={() => setFilesOpen((value) => !value)}
@@ -3779,15 +3899,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         </ReactFlow>
         </BrainSurfaceProvider>
 
+        {/* The phone's board controls. Every command draws its glyph from the shared
+            canvas icon set, so the rail is one toolbar at one size rather than a
+            column of whatever a phone font makes of ⌗ / ⌘ / ◱ next to two real icons. */}
         <div className={styles.mobileCanvasActions} role="group" aria-label={t('canvasViewControls')}>
-          <button type="button" onClick={zoomInAction} aria-label={t('zoomIn')}>＋</button>
-          <button type="button" onClick={zoomOutAction} aria-label={t('zoomOut')}>−</button>
-          <button type="button" onClick={fitViewAction} aria-label={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')}>⌗</button>
-          <button type="button" onClick={cleanLayout} aria-label={t('arrangeObjects')}>⌘</button>
-          <button type="button" onClick={threeD.toggle} aria-pressed={threeD.active} aria-label={tCommands('threeD.toggle')}>◱</button>
-          {threeDControls && <button type="button" onClick={threeDControls.toggleDepth} aria-pressed={threeDControls.depthMode !== 'flow'} aria-label={tCommands('threeD.depthGroup')}>⧉</button>}
-          {threeDControls && <button type="button" onClick={threeDControls.toggleLayers} aria-pressed={threeDControls.layersVisible} aria-label={tCommands('threeD.layerGuides')}>▤</button>}
-          {threeDControls?.dropToLayers && <button type="button" onClick={threeDControls.dropToLayers} aria-label={tCommands('threeD.dropToLayers')}>⤓</button>}
+          <button type="button" onClick={zoomInAction} aria-label={t('zoomIn')}><ZoomInIcon /></button>
+          <button type="button" onClick={zoomOutAction} aria-label={t('zoomOut')}><ZoomOutIcon /></button>
+          <button type="button" onClick={fitViewAction} aria-label={threeDControls ? tCommands('threeD.reset') : t('fitCanvas')}>{threeDControls ? <ResetViewIcon /> : <FitViewIcon />}</button>
+          <button type="button" onClick={cleanLayout} aria-label={t('arrangeObjects')}><CleanLayoutIcon /></button>
+          <button type="button" onClick={threeD.toggle} aria-pressed={threeD.active} aria-label={tCommands('threeD.toggle')}><ThreeDIcon /></button>
+          {threeDControls && <button type="button" onClick={threeDControls.toggleDepth} aria-pressed={threeDControls.depthMode !== 'flow'} aria-label={tCommands('threeD.depthGroup')}><DepthIcon /></button>}
+          {threeDControls && <button type="button" onClick={threeDControls.toggleLayers} aria-pressed={threeDControls.layersVisible} aria-label={tCommands('threeD.layerGuides')}><LayerGuidesIcon /></button>}
+          {threeDControls?.dropToLayers && <button type="button" onClick={threeDControls.dropToLayers} aria-label={tCommands('threeD.dropToLayers')}><DropToLayersIcon /></button>}
           <button type="button" onClick={() => setFilesOpen((value) => !value)} aria-pressed={filesOpen} aria-label={tFiles('title')}><CanvasFilesIcon /></button>
           <button type="button" onClick={() => setOutlineOpen((value) => !value)} aria-pressed={outlineOpen} aria-label={t('canvasOutline')}><AccessibleOutlineIcon /></button>
         </div>
@@ -3833,7 +3956,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           })}</div>
         </aside>}
 
-        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} />}
+        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} />}
 
         {buildFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('build.focusLabel')}>
           <header><div><strong>{t('build.focusTitle')}</strong><small>{t('build.focusHint')}</small></div><button type="button" onClick={() => setBuildFocus(null)} aria-label={t('build.closeBuilder')}>×</button></header>
@@ -3948,7 +4071,7 @@ function RemoteCursors({ members, currentUserId, instance, container }: { member
   })}</div>;
 }
 
-function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onEditWorkflow, onSaveAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onExportArtifact }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onEditWorkflow: () => void; onSaveAgent: () => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onExportArtifact: (action: CanvasExportAction) => Promise<string> }) {
+function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onEditWorkflow, onSaveAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onExportArtifact }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onEditWorkflow: () => void; onSaveAgent: () => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onExportArtifact: (action: CanvasExportAction) => Promise<string> }) {
   const t = useTranslations('creationCanvas');
   const kind = node.data.kind;
   const [tab, setTab] = useState<'details' | 'activity'>('details');
@@ -4138,6 +4261,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
         <DatasetProfileSummary data={node.data} />
         <button type="button" className={styles.fullButton} onClick={() => onProfileDataset(node.id)}>{t('datasetProfileAction')}</button>
         <button type="button" className={styles.fullButton} onClick={onVisualizeDataset}>{t('datasetVisualizeAction')}</button>
+        <DatasetPlotAction data={node.data} onPlot={onPlotDataset} />
       </>}
       {kind === 'file' && <>
         <label>{t('fileNameLabel')}<input value={typeof node.data.fileName === 'string' ? node.data.fileName : node.data.title} onChange={(event) => onChange({ fileName: event.target.value })} /></label>
@@ -4210,7 +4334,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
           {(kind === 'chat' || kind === 'code' || kind === 'note' || kind === 'report' || kind === 'document' || kind === 'slides' || kind === 'knowledge' || kind === 'diagram' || kind === 'prd') && <button type="button" onClick={() => void runArtifactAction('copy')}>{t('copy')}</button>}
           {(kind === 'chat' || kind === 'code' || kind === 'note' || kind === 'report' || kind === 'document' || kind === 'slides' || kind === 'knowledge' || kind === 'prd') && <button type="button" onClick={() => void runArtifactAction('markdown')}>{t('downloadMarkdown')}</button>}
           {(kind === 'dataset' || kind === 'spreadsheet' || kind === 'table') && <button type="button" onClick={() => void runArtifactAction('csv')}>{t('downloadCsv')}</button>}
-          {(kind === 'document' || kind === 'knowledge' || kind === 'prd' || kind === 'report') && <button type="button" onClick={() => void runArtifactAction('docx')}>{t('downloadWord')}</button>}
+          {OFFICE_DOCUMENT_KINDS.has(kind) && <><button type="button" onClick={() => void runArtifactAction('docx')}>{t('downloadWord')}</button><button type="button" onClick={() => void runArtifactAction('pdf')}>{t('downloadPdf')}</button></>}
           {kind === 'slides' && <button type="button" onClick={() => void runArtifactAction('pptx')}>{t('downloadPowerPoint')}</button>}
           {kind === 'diagram' && <button type="button" onClick={() => void runArtifactAction('diagram')}>{t('downloadDiagram')}</button>}
           {(kind === 'dashboard' || kind === 'chart' || kind === 'evaluation' || kind === 'featureSummary' || kind === 'projectComparison') && <button type="button" onClick={() => void runArtifactAction('json')}>{t('downloadData')}</button>}
@@ -4221,6 +4345,28 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
     </div>
     <footer><span>{t('resourceRole', { role })}</span><code>{node.data.resourceId || `session:${node.id}`}</code><button className={styles.fullButton} disabled={!editable} onClick={() => kind === 'task' ? setActionStatus(t('taskDetailsSaved')) : onChange({ status: 'Saved' })}>{kind === 'task' ? t('saveTaskDetails') : t('saveChanges')}</button></footer>
   </aside>;
+}
+
+/**
+ * "Plot on a map", offered only when the rows can actually be plotted.
+ *
+ * It decides its own visibility rather than taking a `canPlot` prop, because the same
+ * `detectGeoColumns` call that answers "should this button exist" also answers "what
+ * would it plot" — splitting those across a parent and a child is how the two get to
+ * disagree. Absent (not disabled) when there are no coordinates: an inert control on a
+ * dataset that will never have geography is noise, whereas the button APPEARING the
+ * moment a lat/lng column lands is the affordance itself.
+ */
+function DatasetPlotAction({ data, onPlot }: { data: CreationNodeData; onPlot: () => void }) {
+  const t = useTranslations('creationCanvas');
+  const source = tabularFromObject(data as Record<string, unknown>);
+  if (!source.columns.length || !source.rows.length) return null;
+  const columns = detectGeoColumns(source);
+  if (!columns.latitude || !columns.longitude) return null;
+  return <>
+    <button type="button" className={styles.fullButton} onClick={onPlot}>{t('datasetPlotAction')}</button>
+    <p className={styles.inspectorHint}>{t('datasetPlotHint', { latitude: columns.latitude, longitude: columns.longitude })}</p>
+  </>;
 }
 
 /**

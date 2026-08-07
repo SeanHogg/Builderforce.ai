@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
 import { PwaToast, PwaToastDismissButton, PwaToastPrimaryButton, PwaToastText } from './PwaToast';
 import { usePwaToastSlot } from './pwaToastStack';
@@ -23,6 +24,7 @@ const AUTORELOAD_SECONDS = 60;
  *   5. "×" cancels the countdown and dismisses the banner for the session.
  */
 export function PwaUpdateBanner() {
+  const t = useTranslations('pwa');
   const [waitingSw, setWaitingSw] = useState<ServiceWorker | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(AUTORELOAD_SECONDS);
   const reloadingRef = useRef(false);
@@ -137,8 +139,8 @@ export function PwaUpdateBanner() {
 
   return (
     <PwaToast slot={slot}>
-      <PwaToastText>A new version is ready — updating in {secondsLeft}s.</PwaToastText>
-      <PwaToastPrimaryButton onClick={applyUpdate}>Update now</PwaToastPrimaryButton>
+      <PwaToastText>{t('updateReady', { seconds: secondsLeft })}</PwaToastText>
+      <PwaToastPrimaryButton onClick={applyUpdate}>{t('updateNow')}</PwaToastPrimaryButton>
       <PwaToastDismissButton onClick={dismiss} />
     </PwaToast>
   );

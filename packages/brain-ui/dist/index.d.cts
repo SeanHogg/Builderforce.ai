@@ -398,6 +398,10 @@ declare function PromptPanel({ input, actions, status, overlay, active, dragging
 interface PromptOptionsLabels extends ModelChoiceLabels {
     /** Trigger title/aria — the menu as a whole. */
     options: string;
+    /** Section heading for the conversation-mode block (Chat | Work). */
+    mode: string;
+    /** Section heading + row label for persistent project memory. */
+    memory: string;
     effort: string;
     effortQuick: string;
     effortBalanced: string;
@@ -437,9 +441,40 @@ interface PromptOptionsModel {
      *  the list is replaced by the reason, rather than offering a dead control. */
     canChoose?: boolean;
 }
+/** One selectable conversation mode. `value` is the host's stable, non-translatable id. */
+interface PromptOptionsModeChoice {
+    value: string;
+    label: string;
+    hint?: string;
+    icon?: string;
+}
+/**
+ * Conversation mode for this turn — on BuilderForce, Chat vs Work.
+ *
+ * It lives in the `/` menu rather than beside it for the same reason the model does:
+ * a composer that grows one pill per setting is a composer nobody can use on a phone.
+ * The trigger keeps naming the ARMED mode, so "can this turn dispatch real work?" is
+ * still answerable without opening anything.
+ */
+interface PromptOptionsMode {
+    value: string;
+    onChange: (value: string) => void;
+    choices: PromptOptionsModeChoice[];
+}
+/** Persistent memory for this conversation, when the host has one to offer. */
+interface PromptOptionsMemory {
+    enabled: boolean;
+    onChange: (on: boolean) => void;
+    /** What being on/off means here — shown under the label. */
+    describe?: (on: boolean) => string;
+    /** Why it cannot be used right now. Set ⇒ the row is inert and states the reason. */
+    unavailableReason?: string;
+}
 interface PromptOptionsMenuProps {
     labels?: Partial<PromptOptionsLabels>;
     disabled?: boolean;
+    mode?: PromptOptionsMode;
+    memory?: PromptOptionsMemory;
     effort?: Effort;
     onEffortChange?: (effort: Effort) => void;
     /** What a level really costs at this host's current state (answer/thinking budgets). */
@@ -452,15 +487,20 @@ interface PromptOptionsMenuProps {
     className?: string;
 }
 /**
- * The composer's `/` control: run shaping (effort, thinking), the model in use,
- * the model picker, and account settings — one affordance, shared by every
+ * The composer's `/` control: everything that shapes the NEXT TURN — the mode it
+ * runs in, whether it remembers, run shaping (effort, thinking), the model in use
+ * and the model picker, plus account settings. One affordance, shared by every
  * BuilderForce prompt surface (web Brain, Creation Canvas, the VS Code webview).
  *
- * The trigger states the active model next to the slash, so "what is running this
- * turn" is readable without opening anything; opening it is how you change it.
+ * Every one of those settings used to be its own pill in the composer's action row
+ * — a segmented Chat|Work control, a memory button, a model chip — which on a phone
+ * left a row of eight unlabelled circles and no room for the send button. They live
+ * here now, and the trigger states the two consequential ones (the armed mode, the
+ * model in use) so nothing has to be opened to read what will happen.
+ *
  * Self-gating: renders nothing until a host wires at least one section.
  */
-declare function PromptOptionsMenu({ labels: labelOverrides, disabled, effort, onEffortChange, describeEffort, thinking, onThinkingChange, describeThinking, model, onAccountSettings, className, }: PromptOptionsMenuProps): React.JSX.Element | null;
+declare function PromptOptionsMenu({ labels: labelOverrides, disabled, mode, memory, effort, onEffortChange, describeEffort, thinking, onThinkingChange, describeThinking, model, onAccountSettings, className, }: PromptOptionsMenuProps): React.JSX.Element | null;
 
 /**
  * Participant avatars — the shared way a chat renders WHO a participant is.
@@ -1816,4 +1856,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, ConsolidateForkControl, type ConsolidateForkControlProps, type ConsolidateForkLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_CONSOLIDATE_FORK_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsLabels, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsModel, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type ThinkSegment, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, evermindNextAction, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, promptOptionsLabels, selectPendingAskUser, serializeAskUser, splitThinkSegments, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, ConsolidateForkControl, type ConsolidateForkControlProps, type ConsolidateForkLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_CONSOLIDATE_FORK_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsLabels, type PromptOptionsMemory, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsMode, type PromptOptionsModeChoice, type PromptOptionsModel, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type ThinkSegment, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, evermindNextAction, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, promptOptionsLabels, selectPendingAskUser, serializeAskUser, splitThinkSegments, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };

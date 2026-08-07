@@ -19,6 +19,14 @@
  * cannot be a second, weaker security posture. That was the whole risk in giving
  * handlers a friendlier URL.
  *
+ * ── AND WHY A THIRD CALLER — THE BROWSER — IS OPT-IN ────────────────────────
+ * Both addresses above were built for callers that never preflight: a provider's
+ * webhook, and the site's own same-origin pages. A frontend hosted ANYWHERE ELSE
+ * is a browser making a cross-origin call, and it gets nothing unless the
+ * handler's spec names its origin in `cors`. The preflight is answered here,
+ * before method matching and before verification, so a browser asking permission
+ * never runs a handler's steps.
+ *
  * ── WHY A FAILURE STILL RETURNS 200 ─────────────────────────────────────────
  * An unmatched route or a failed verification is 4xx: the caller's problem to
  * see. But once a handler is MATCHED and VERIFIED, a step failing inside it
@@ -37,7 +45,7 @@ import { loadProjectSecretValues } from '../secrets/projectSecrets';
 import { listSiteRecordsForHandler } from '../ide/siteData';
 import { loadHandlersCached, projectDisplayName, recordBackendRequest, type RequestVerdict } from './index';
 import { executeHandler, type HandlerRuntimeDeps } from './handlerRuntime';
-import { matchHandler, type HandlerSpec } from './handlerSpec';
+import { allowedCorsOrigin, matchHandler, type HandlerSpec } from './handlerSpec';
 import {
   VERIFY_SECRET_NAME,
   VERIFY_SIGNATURE_HEADER,
@@ -75,6 +83,29 @@ const MAX_BODY_BYTES = 128 * 1024;
  * could drain an account's balance before anyone notices.
  */
 export const INGRESS_RPM = 300;
+
+/**
+ * How long a browser may cache one preflight answer.
+ *
+ * Ten minutes, not a day: the allow-list lives in a canvas file a collaborator
+ * can edit, and a REMOVED origin that keeps working for the rest of the day is
+ * an allow-list that does not mean what it says. Ten minutes still collapses a
+ * chatty page's preflights to roughly one.
+ */
+const CORS_MAX_AGE_SECONDS = 600;
+
+/**
+ * Response headers that let the caller's browser hand the reply to the page.
+ *
+ * `Vary: Origin` is emitted whenever the handler declares an allow-list AT ALL,
+ * including for a caller it refuses — otherwise a cache could serve the refused
+ * (header-less) answer to an origin that IS allowed, or the reverse.
+ */
+function corsResponseHeaders(handler: HandlerSpec, request: Request): Record<string, string> {
+  if (!handler.cors?.length) return {};
+  const allow = allowedCorsOrigin(handler, request.headers.get('origin'));
+  return { Vary: 'Origin', ...(allow ? { 'Access-Control-Allow-Origin': allow } : {}) };
+}
 
 /** Who the request is for, and how it addressed them. */
 export interface IngressTarget {
@@ -295,6 +326,10 @@ export async function dispatchIngressRequest(args: {
     return null;
   });
   if (limited && !limited.allowed) {
+    // No CORS headers here on purpose: knowing whether this caller is allowed
+    // means reading the handler specs, and the point of checking the limit first
+    // is that an over-rate request costs nothing. A browser sees an opaque
+    // failure; `Retry-After` is for the providers this limit exists to pace.
     await finish(429, 'rate-limited', `Over ${INGRESS_RPM} requests/minute for this ingress`);
     return {
       matched: true,
@@ -306,7 +341,14 @@ export async function dispatchIngressRequest(args: {
   }
 
   const { specs, errors } = await loadHandlersCached(env, env.UPLOADS, target.projectId);
-  const handler = matchHandler(specs, route, method);
+
+  // A CORS preflight asks about a method it is not using. Resolve the handler
+  // against the method the browser INTENDS, so `Access-Control-Request-Method:
+  // POST` is answered by the handler that will actually run.
+  const preflightMethod =
+    method === 'OPTIONS' ? request.headers.get('access-control-request-method')?.trim().toUpperCase() || null : null;
+
+  const handler = matchHandler(specs, route, preflightMethod ?? method);
   if (!handler) {
     // A broken spec for this exact route is the likeliest reason a handler is
     // "missing", so say so rather than reporting a bare 404 the author will
@@ -314,15 +356,56 @@ export async function dispatchIngressRequest(args: {
     const broken = errors.find((e) => e.path.includes(route.replace(/^\//, '')));
     const detail = broken
       ? `Handler ${broken.path} did not parse: ${broken.reason}`
-      : `No handler for ${method} ${route}`;
+      : `No handler for ${preflightMethod ?? method} ${route}`;
     await finish(404, 'no-handler', detail);
     return { matched: false, detail };
   }
 
+  // ── Preflight, answered BEFORE verification and before a single step ───────
+  // A preflight carries neither the real body nor the provider's signature, so
+  // running it as a normal request would fail verification on a signed handler
+  // and — on an `ANY` handler, which claims OPTIONS too — would spend an LLM
+  // call and a connector action to answer a question the browser asked only to
+  // find out whether it may send the real one.
+  if (preflightMethod) {
+    const allow = allowedCorsOrigin(handler, request.headers.get('origin'));
+    if (!allow) {
+      // Refused with a body that says why: a preflight failure otherwise reaches
+      // the developer as a bare "CORS error" with nothing to act on.
+      const detail = `Origin ${request.headers.get('origin') ?? '(none)'} is not in this handler's cors list`;
+      await finish(403, 'unverified', detail);
+      return { matched: true, response: new Response(detail, { status: 403, headers: { Vary: 'Origin' } }) };
+    }
+    // The requested headers are echoed rather than fixed: the browser is the one
+    // enforcing this list, and a handler cannot know which headers a caller's
+    // client library adds. `content-type` is the floor, because that alone is
+    // what turns a simple request into a preflighted one.
+    const requestedHeaders = request.headers.get('access-control-request-headers');
+    await finish(204, 'ok');
+    return {
+      matched: true,
+      response: new Response(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': allow,
+          'Access-Control-Allow-Methods': handler.method === 'ANY' ? preflightMethod : handler.method,
+          'Access-Control-Allow-Headers': requestedHeaders?.trim() || 'content-type',
+          'Access-Control-Max-Age': String(CORS_MAX_AGE_SECONDS),
+          Vary: 'Origin, Access-Control-Request-Headers',
+        },
+      }),
+    };
+  }
+
+  // From here the handler is known, so every reply can carry the headers that
+  // let the caller's page SEE it — including the failures. A 403 the browser
+  // hides is a debugging session spent on the wrong problem.
+  const cors = corsResponseHeaders(handler, request);
+
   const parsed = await readBody(request);
   if ('tooLarge' in parsed) {
     await finish(413, 'error', 'Request body too large');
-    return { matched: true, response: new Response('Request body too large', { status: 413 }) };
+    return { matched: true, response: new Response('Request body too large', { status: 413, headers: cors }) };
   }
 
   // Secrets are loaded ONLY for verification and never enter the template scope
@@ -333,7 +416,7 @@ export async function dispatchIngressRequest(args: {
   const verified = await verifyRequest(handler, request, parsed, secrets);
   if (!verified.ok) {
     await finish(403, 'unverified', verified.reason);
-    return { matched: true, response: new Response(verified.reason, { status: 403 }) };
+    return { matched: true, response: new Response(verified.reason, { status: 403, headers: cors }) };
   }
 
   const url = new URL(request.url);
@@ -363,11 +446,14 @@ export async function dispatchIngressRequest(args: {
     );
     return {
       matched: true,
-      response: new Response(execution.body, { status: execution.status, headers: execution.headers }),
+      response: new Response(execution.body, {
+        status: execution.status,
+        headers: { ...execution.headers, ...cors },
+      }),
     };
   } catch (error) {
     reportCaughtError(error, { source: 'application/backend/ingress.ts', operation: `handler:${handler.name}` });
     await finish(500, 'error', error instanceof Error ? error.message : 'Handler failed');
-    return { matched: true, response: new Response('Handler failed', { status: 500 }) };
+    return { matched: true, response: new Response('Handler failed', { status: 500, headers: cors }) };
   }
 }

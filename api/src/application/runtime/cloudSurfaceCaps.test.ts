@@ -24,8 +24,8 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
     expect(names(CLOUD_AGENT_TOOLS)).toEqual([
       'ask_human', 'claim_resource', 'delete_file', 'edit_file', 'finish', 'list_files',
       'memory_forget', 'memory_recall', 'memory_remember', 'read_file', 'release_resource',
-      'run_checks', 'search_code', 'web_fetch', 'workspace_note', 'workspace_read',
-      'write_file',
+      'run_checks', 'search_code', 'web_fetch', 'web_search', 'workspace_note',
+      'workspace_read', 'write_file',
     ]);
   });
 
@@ -40,21 +40,22 @@ describe('CLOUD_SURFACE_CAPS → durable/Worker toolset', () => {
   });
 
   it('backs `memory.forget` — a Postgres delete really deletes', () => {
-    // Split from `memory` for the same reason `web.search` is split from `web`: the
+    // Split from `memory` for the same reason `web.search` is a separate capability
+    // from `web` (a surface may back fetch without search): the
     // on-prem SSM store SUPERSEDES a belief rather than erasing it, so only a surface
     // whose delete is authoritative may advertise this.
     expect(CLOUD_SURFACE_CAPS.has('memory.forget')).toBe(true);
     expect(names(CLOUD_AGENT_TOOLS)).toContain('memory_forget');
   });
 
-  it('includes web_fetch but NOT web_search — search is TENANT-gated, not surface-wide', () => {
-    // `web` (fetch) is a property of the surface and is always on. `web.search` needs a
-    // BYO search key, so it is added per RUN by `cloudSurfaceCaps({ webSearch: true })`
-    // and must never leak into this base constant — see cloudWebSearch.test.ts.
+  it('includes BOTH web_fetch and web_search — search always has a backing', () => {
+    // `web.search` was tenant-gated while it needed a BYO key. `resolveWebSearchBacking`
+    // now always resolves a vendor (tenant key → operator key → keyless encyclopedic
+    // floor), so it belongs to the surface — see cloudWebSearch.test.ts.
     expect(CLOUD_SURFACE_CAPS.has('web')).toBe(true);
-    expect(CLOUD_SURFACE_CAPS.has('web.search')).toBe(false);
+    expect(CLOUD_SURFACE_CAPS.has('web.search')).toBe(true);
     expect(names(CLOUD_AGENT_TOOLS)).toContain('web_fetch');
-    expect(names(CLOUD_AGENT_TOOLS)).not.toContain('web_search');
+    expect(names(CLOUD_AGENT_TOOLS)).toContain('web_search');
   });
 
   it('has no shell tool — this surface cannot run a build/test and must not claim to', () => {

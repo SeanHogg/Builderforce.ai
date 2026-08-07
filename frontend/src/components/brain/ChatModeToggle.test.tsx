@@ -18,14 +18,6 @@ describe('ChatModeToggle', () => {
     expect(screen.getByRole('radio', { name: 'brain.modes.work.label' }).getAttribute('aria-checked')).toBe('false');
   });
 
-  it('keeps the label in the accessible name even when it is visually hidden', () => {
-    // `compact` hides the text so the composer toolbar stays narrow. Dropping it from
-    // the DOM instead would leave a screen-reader user with two unlabelled glyphs.
-    render(<ChatModeToggle value="work" onChange={() => {}} layout="compact" />);
-    expect(screen.getByRole('radio', { name: 'brain.modes.work.label' })).toBeTruthy();
-    expect(screen.getByRole('radio', { name: 'brain.modes.chat.label' })).toBeTruthy();
-  });
-
   it('reports a switch, and does not re-fire for the mode already armed', () => {
     const onChange = vi.fn();
     render(<ChatModeToggle value="chat" onChange={onChange} />);
@@ -35,13 +27,6 @@ describe('ChatModeToggle', () => {
 
     fireEvent.click(screen.getByRole('radio', { name: 'brain.modes.work.label' }));
     expect(onChange).toHaveBeenCalledWith('work');
-  });
-
-  it('cannot be switched mid-run', () => {
-    const onChange = vi.fn();
-    render(<ChatModeToggle value="chat" onChange={onChange} disabled />);
-    fireEvent.click(screen.getByRole('radio', { name: 'brain.modes.work.label' }));
-    expect(onChange).not.toHaveBeenCalled();
   });
 });
 

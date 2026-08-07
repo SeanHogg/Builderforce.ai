@@ -31,6 +31,7 @@ import { EMBED_ERROR_REPORTER } from '@/lib/embed/embedErrorReporter';
 import { AUTH_API_URL } from '@/lib/auth';
 import { DiscountCodeCapture } from '@/components/DiscountCodeCapture';
 import { CookieConsentManager } from '@/components/privacy/CookieConsentManager';
+import { SkipToContent } from '@/components/SkipToContent';
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://builderforce.ai';
 
@@ -155,9 +156,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             level; per-page schemas are injected in individual page components */}
       </head>
       <body>
-        <a className="skip-to-content" href="#main-content">Skip to main content</a>
         <Suspense fallback={null}><DiscountCodeCapture /></Suspense>
-        <CookieConsentManager />
 
         {/* Deep space starfield + nebula — fixed, z-index 0, behind all content */}
         <div className="stars" aria-hidden="true" />
@@ -169,6 +168,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Default-locale messages render statically; LocaleProvider swaps to the
             user's cookie locale on the client after hydration. */}
         <LocaleProvider>
+          {/* Both are translated, so both must sit INSIDE the locale provider —
+              the skip link first, so nothing focusable precedes it. */}
+          <SkipToContent />
+          <CookieConsentManager />
+
           <ErrorBoundary homePath="/dashboard" homeLabel="Go to Dashboard">
             {/* Chunk-load crashes self-heal (purge stale SW cache + reload onto
                 the current build) instead of hitting the generic crash page; any

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 
 type Consent = { version: 1; analytics: boolean; marketing: boolean; gpc: boolean; updatedAt: string };
 const KEY = 'builderforce-consent-v1';
@@ -29,6 +30,7 @@ function enableAnalytics() {
 /** A compact, non-modal consent surface. Optional tracking defaults off and a
  * browser GPC signal always overrides an older opt-in. */
 export function CookieConsentManager() {
+  const t = useTranslations('cookieConsent');
   const [consent, setConsent] = useState<Consent | null | undefined>(undefined);
   const [customizing, setCustomizing] = useState(false);
   const [analytics, setAnalytics] = useState(false);
@@ -76,55 +78,53 @@ export function CookieConsentManager() {
           </svg>
         </span>
         <div>
-          <h2 id="privacy-choice-title">Your privacy, your choice</h2>
-          <span>Optional analytics is off by default</span>
+          <h2 id="privacy-choice-title">{t('title')}</h2>
+          <span>{t('subtitle')}</span>
         </div>
-        {gpc && <span className="privacy-choice-gpc">GPC active</span>}
+        {gpc && <span className="privacy-choice-gpc">{t('gpcBadge')}</span>}
       </div>
 
       {customizing ? (
         <div className="privacy-choice-settings">
           <div className="privacy-choice-setting">
             <div>
-              <strong>Necessary</strong>
-              <span>Security, sign-in, and saved preferences</span>
+              <strong>{t('necessaryLabel')}</strong>
+              <span>{t('necessaryDesc')}</span>
             </div>
-            <span className="privacy-choice-always">Always on</span>
+            <span className="privacy-choice-always">{t('alwaysOn')}</span>
           </div>
           <label className="privacy-choice-setting">
             <div>
-              <strong>Analytics</strong>
-              <span>Helps us understand and improve BuilderForce</span>
+              <strong>{t('analyticsLabel')}</strong>
+              <span>{t('analyticsDesc')}</span>
             </div>
-            <input className="privacy-choice-toggle" type="checkbox" role="switch" checked={analytics} disabled={gpc} onChange={(e) => setAnalytics(e.target.checked)} aria-label="Allow analytics" />
+            <input className="privacy-choice-toggle" type="checkbox" role="switch" checked={analytics} disabled={gpc} onChange={(e) => setAnalytics(e.target.checked)} aria-label={t('allowAnalytics')} />
           </label>
-          {gpc && <p className="privacy-choice-gpc-note">Your browser’s Global Privacy Control keeps optional tracking off.</p>}
+          {gpc && <p className="privacy-choice-gpc-note">{t('gpcNote')}</p>}
         </div>
       ) : (
-        <p className="privacy-choice-copy">
-          We use necessary storage to run BuilderForce. With permission, analytics helps us improve it. We never sell your personal information, chats, or ideas.
-        </p>
+        <p className="privacy-choice-copy">{t('body')}</p>
       )}
 
       <div className="privacy-choice-actions">
         {customizing ? (
           <>
-            <button type="button" className="privacy-choice-button privacy-choice-secondary" onClick={() => save(false)}>Necessary only</button>
-            <button type="button" className="privacy-choice-button privacy-choice-primary" onClick={() => save(analytics)}>Save choices</button>
+            <button type="button" className="privacy-choice-button privacy-choice-secondary" onClick={() => save(false)}>{t('necessaryOnly')}</button>
+            <button type="button" className="privacy-choice-button privacy-choice-primary" onClick={() => save(analytics)}>{t('saveChoices')}</button>
           </>
         ) : (
           <>
-            <button type="button" className="privacy-choice-button privacy-choice-secondary" onClick={() => save(false)}>Necessary only</button>
-            <button type="button" className="privacy-choice-button privacy-choice-primary" disabled={gpc} onClick={() => save(true)}>Allow analytics</button>
+            <button type="button" className="privacy-choice-button privacy-choice-secondary" onClick={() => save(false)}>{t('necessaryOnly')}</button>
+            <button type="button" className="privacy-choice-button privacy-choice-primary" disabled={gpc} onClick={() => save(true)}>{t('allowAnalytics')}</button>
           </>
         )}
       </div>
 
       <div className="privacy-choice-footer">
-        {!customizing && <button type="button" onClick={() => setCustomizing(true)}>Customize</button>}
-        {customizing && <button type="button" onClick={() => setCustomizing(false)}>Back</button>}
+        {!customizing && <button type="button" onClick={() => setCustomizing(true)}>{t('customize')}</button>}
+        {customizing && <button type="button" onClick={() => setCustomizing(false)}>{t('back')}</button>}
         <span aria-hidden="true">·</span>
-        <Link href="/legal/cookies">Cookie policy</Link>
+        <Link href="/legal/cookies">{t('cookiePolicy')}</Link>
       </div>
     </aside>
   );

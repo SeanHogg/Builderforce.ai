@@ -94,7 +94,8 @@ export {
 // so a surface imports one thing rather than reaching into two.
 export {
   CHAT_MODES,
-  DEFAULT_CHAT_MODE,
+  NEW_CHAT_MODE,
+  RESTING_CHAT_MODE,
   CHAT_MODE_ICON,
   isChatMode,
   normalizeChatMode,

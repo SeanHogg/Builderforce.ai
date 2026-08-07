@@ -64,13 +64,14 @@ minified JSON, no prose, no code fence, with this shape:
 
 Handler:
 {"name":string,"route":"/path","method":"GET"|"POST"|"PUT"|"PATCH"|"DELETE"|"ANY",
- "verify":"none"|"twilio"|"shared-secret","description":string,
- "steps":[Step],"respond":Respond}
+ "verify":"none"|"twilio"|"stripe"|"shopify"|"shared-secret","description":string,
+ "cors":[string] (OPTIONAL),"steps":[Step],"respond":Respond}
 
 Step is ONE of:
  {"kind":"llm","id":string,"system":string,"prompt":string,"maxTokens":number}
  {"kind":"connector","id":string,"connector":string,"action":string,"input":object}
  {"kind":"set","id":string,"value":string}
+ {"kind":"data","id":string,"collection":string,"limit":number,"matchField":string,"matchValue":string}
 Any step may carry "when":string — it runs only if that template renders non-empty.
 
 Respond is ONE of:
@@ -86,6 +87,13 @@ Hard rules:
 - "verify" is REQUIRED on every handler. Use "twilio" for any Twilio webhook (SMS,
   voice, WhatsApp, status). Use "none" ONLY for an endpoint that is safe to call
   anonymously. An unverified endpoint that spends money or sends messages is wrong.
+- "cors" is OPTIONAL and lists the origins a BROWSER may call the handler from,
+  e.g. ["https://app.example.com"]. OMIT IT unless the brief says the frontend is
+  hosted somewhere else (its own CDN, a native app, an existing site) — the
+  project's own published site calls its handlers same-origin and needs none.
+  Never write ["*"] unless the brief explicitly asks for a public open API.
+- "data" reads back what the project's own site collected — use it to render a
+  page or a list from a collection a form on the site writes to.
 - "connector" must be one of the allowed keys given in the user message, and
   "action" must be one of that connector's listed actions. Do not invent either.
 - Step ids are lowercase identifiers, unique within the handler.

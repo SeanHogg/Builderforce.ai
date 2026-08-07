@@ -4,6 +4,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { marketingSessions } from '../../infrastructure/database/schema';
 import { GUEST_CHAT_LIMITS } from '../../domain/tenant/PlanLimits';
+import { bumpDailyCounter, dailyCounterKey, readDailyCounter } from './guestDailyCounter';
 import type { MarketingTouch } from '../marketing/MarketingService';
 
 /**
@@ -34,19 +35,7 @@ export interface GuestCapResult {
   alreadyConsumed: boolean;
 }
 
-/** UTC day key `YYYYMMDD` for the per-IP KV counter. */
-function utcDayKey(): string {
-  return new Date().toISOString().slice(0, 10).replace(/-/g, '');
-}
-
-/** Seconds until the next UTC midnight — the per-IP KV counter's TTL. */
-function secondsUntilUtcMidnight(): number {
-  const next = new Date();
-  next.setUTCHours(24, 0, 0, 0);
-  return Math.max(60, Math.ceil((next.getTime() - Date.now()) / 1000));
-}
-
-const ipCounterKey = (ip: string): string => `guestchat:ip:${utcDayKey()}:${ip}`;
+const ipCounterKey = (ip: string): string => dailyCounterKey('guestchat:ip', ip);
 
 export class GuestChatService {
   constructor(private readonly db: Db) {}
@@ -97,11 +86,8 @@ export class GuestChatService {
 
   /** Current per-IP guest message count today (0 when KV unbound or unset). */
   private async ipCountToday(env: Env, ip: string | null): Promise<number> {
-    const kv = env.AUTH_CACHE_KV;
-    if (!kv || !ip) return 0;
-    const raw = await kv.get(ipCounterKey(ip)).catch(() => null);
-    const n = raw ? Number(raw) : 0;
-    return Number.isFinite(n) ? n : 0;
+    if (!ip) return 0;
+    return readDailyCounter(env, ipCounterKey(ip));
   }
 
   /**
@@ -146,15 +132,8 @@ export class GuestChatService {
       })
       .where(eq(marketingSessions.visitorId, visitorId));
 
-    const kv = env.AUTH_CACHE_KV;
-    if (kv && ip) {
-      const current = await this.ipCountToday(env, ip);
-      await kv
-        .put(ipCounterKey(ip), String(current + 1), { expirationTtl: secondsUntilUtcMidnight() })
-        .catch((error) => { /* best-effort backstop — never fail the request */ 
-          reportCaughtError(error, { source: "application/guest/GuestChatService.ts", operation: "consumeMessage" });
-        });
-    }
+    // Best-effort backstop — never fails the request (see guestDailyCounter).
+    if (ip) await bumpDailyCounter(env, ipCounterKey(ip));
 
     const state = await this.visitorStateToday(visitorId);
     return Math.max(GUEST_CHAT_LIMITS.messagesDailyLimit - state.count, 0);

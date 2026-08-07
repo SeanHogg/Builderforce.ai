@@ -13,7 +13,7 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { CanvasCommands, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
+import { CANVAS_FIT_MIN_ZOOM, CanvasCommands, useCanvasCleanLayout } from '@/components/canvas/CanvasCommands';
 import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
@@ -124,6 +124,8 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
   const [busy, setBusy] = useState(false);
   const [minimapOpen, setMinimapOpen] = useState(true);
   const flowRef = useRef<ReactFlowInstance<Node, Edge> | null>(null);
+  /** The board's own box — the arrange command lays out for the shape it measures here. */
+  const boardRef = useRef<HTMLDivElement | null>(null);
   const threeD = useCanvasThreeD();
 
   const tasks = tasksQ.data;
@@ -178,10 +180,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
     if (built) { setNodes(built.flowNodes); setEdges(built.edges); }
   }, [built, setNodes, setEdges]);
 
-  const cleanLayout = useCallback(() => {
-    setNodes((current) => cleanCanvasLayout(current, edges));
-    window.setTimeout(() => void flowRef.current?.fitView({ padding: .18, maxZoom: 1, duration: 320 }), 0);
-  }, [edges, setNodes]);
+  const cleanLayout = useCanvasCleanLayout({ boardRef, instanceRef: flowRef, setNodes, edges });
 
   /**
    * How a task reads in the 3D space.
@@ -275,7 +274,7 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
       <Canvas3DControlsProvider>
         {/* The scene fills this box, so it has to be the box it is positioned
             against — see `.scene` in Canvas3DView.module.css. */}
-        <div style={{ position: 'relative', height: readOnly ? 360 : 520, border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
+        <div ref={boardRef} style={{ position: 'relative', height: readOnly ? 360 : 520, border: '1px solid var(--border-subtle)', borderRadius: 12, overflow: 'hidden' }}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -284,6 +283,8 @@ function OneProjectDependencyGraph({ projectId, readOnly }: { projectId: number;
             onEdgeClick={onEdgeClick}
             onInit={(instance) => { flowRef.current = instance; }}
             fitView
+            fitViewOptions={{ padding: 0.15, minZoom: CANVAS_FIT_MIN_ZOOM }}
+            minZoom={CANVAS_FIT_MIN_ZOOM}
             proOptions={{ hideAttribution: true }}
           >
             <Background color="var(--border-subtle)" gap={18} />

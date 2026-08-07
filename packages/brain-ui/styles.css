@@ -1012,6 +1012,25 @@
 
 .bf-pmenu__slash { font-size: 15px; line-height: 1; opacity: 0.85; }
 
+/* The ARMED mode, stated on the trigger. Chat vs Work decides whether a turn can
+   leave dispatched work behind, so it has to be readable without opening the menu —
+   it reads as a pill (not muted text like the model) because it is the consequential
+   one, and it is what replaced the segmented control that used to sit beside it. */
+.bf-pmenu__mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bf-accent-soft, rgba(110, 168, 254, 0.16));
+  color: var(--bf-text, inherit);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
 /* The active model, stated on the trigger: what runs the next turn is readable
    without opening anything. Truncates rather than widening the toolbar. */
 .bf-pmenu__model {
@@ -1069,7 +1088,11 @@
   cursor: pointer;
 }
 
-.bf-pmenu__item:hover { background: var(--bf-accent-soft, rgba(128, 128, 128, 0.16)); }
+.bf-pmenu__item:hover:not(:disabled) { background: var(--bf-accent-soft, rgba(128, 128, 128, 0.16)); }
+/* An option the host cannot offer right now (memory with no project behind it)
+   states its reason in place rather than disappearing — a control that vanishes
+   reads as a bug, a control that explains itself reads as an answer. */
+.bf-pmenu__item:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .bf-pmenu__ico { flex: 0 0 auto; width: 18px; text-align: center; font-size: 13px; }
 
@@ -1167,5 +1190,8 @@
    width it is given rather than pushing the composer into a horizontal scroll. */
 @media (max-width: 420px) {
   .bf-pmenu__pop { min-width: 0; width: min(320px, calc(100vw - 20px)); }
-  .bf-pmenu__trigger { max-width: 150px; }
+  .bf-pmenu__trigger { max-width: 190px; }
+  /* The mode pill keeps its width; the model name is what gives way, since the
+     menu is now the only place either one is shown. */
+  .bf-pmenu__model { max-width: 72px; }
 }

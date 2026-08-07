@@ -1,11 +1,26 @@
 /**
  * Web-search VENDOR PORT (+ its concrete adapters) — the missing half of the cloud
  * `web` capability. `web_fetch` reads a URL the agent already has; discovering that URL
- * needs a search engine, and a search engine is a metered third-party API. There is no
- * platform-funded search key: the credential is BYO per tenant (see
- * `webSearchCredential.ts`), so this module is deliberately a PORT with an id-keyed
+ * needs a search engine, so this module is deliberately a PORT with an id-keyed
  * registry rather than a hard-wired vendor — adding Tavily/Exa/SerpAPI later is one
  * adapter object plus one enum value, with no change to `cloudWeb.ts` or the engine.
+ *
+ * Vendors come in two kinds, and the distinction is the whole reason research works at
+ * all on a workspace with nothing configured:
+ *
+ *  • **Credentialed** ({@link CREDENTIALED_WEB_SEARCH_VENDOR_IDS}) — a general web
+ *    index, metered per query, key stored per tenant in `integration_credentials`
+ *    (see `webSearchCredential.ts`). Widest coverage, someone has to pay for it.
+ *  • **Keyless** ({@link KEYLESS_WEB_SEARCH_VENDOR_IDS}) — no account, no meter, a
+ *    licence that only asks for attribution. Narrower (encyclopedic, not the open
+ *    web), but it is REAL, citable, fetchable evidence rather than model recall.
+ *
+ * The keyless kind exists because search used to self-gate to nothing: a logged-out
+ * visitor or a fresh free workspace asked "research X and plot it" and the pipeline
+ * stopped at step one with an actionable-but-useless refusal. Geocoding was made
+ * keyless for exactly this reason (`application/web/geocode.ts`); this is the same
+ * decision applied to the step before it. A BYO or operator key still WINS — the
+ * keyless vendor is a floor, not a ceiling.
  *
  * Every adapter MUST go through {@link searchVendorRequest} rather than calling `fetch`
  * itself, so the safety posture `cloudWeb.ts` establishes for `web_fetch` — whole-call
@@ -19,12 +34,21 @@
  */
 
 import type { WebSearchResult } from '@builderforce/agent-tools';
-import { FETCH_TIMEOUT_MS, classifyWebEgress, htmlToText, readCapped } from './cloudWeb';
+import { classifyWebEgress, fetchVendorJson, htmlToText, type JsonFetchResult } from './cloudWeb';
+import { MEDIAWIKI_API_ENDPOINT, mediaWikiQuery } from '../web/mediaWiki';
 
-/** Vendor ids. Each MUST also exist as an `integration_provider` enum value, because
- *  that is where the tenant's key is stored (migration 0353). */
-export const WEB_SEARCH_VENDOR_IDS = ['brave_search'] as const;
-export type WebSearchVendorId = (typeof WEB_SEARCH_VENDOR_IDS)[number];
+/** Vendor ids that need a KEY. Each MUST also exist as an `integration_provider` enum
+ *  value, because that is where the tenant's key is stored (migration 0353). */
+export const CREDENTIALED_WEB_SEARCH_VENDOR_IDS = ['brave_search'] as const;
+
+/** Vendor ids that need NO account at all. Never looked up in `integration_credentials`
+ *  — there is nothing to store — so these ids are deliberately NOT integration
+ *  providers, and adding one here must not add a connectable integration. */
+export const KEYLESS_WEB_SEARCH_VENDOR_IDS = ['wikipedia'] as const;
+
+export type WebSearchVendorId =
+  | (typeof CREDENTIALED_WEB_SEARCH_VENDOR_IDS)[number]
+  | (typeof KEYLESS_WEB_SEARCH_VENDOR_IDS)[number];
 
 /** Results returned to the model per query. Enough to choose a source from, few enough
  *  that the tool result stays a handful of hundred tokens. */
@@ -37,46 +61,40 @@ export interface WebSearchVendor {
   readonly label: string;
   /** The vendor endpoint, recorded as the metered outbound fetch's URL. */
   readonly endpoint: string;
-  /** Which key the credential blob carries, for the "how do I configure this" error. */
-  readonly credentialField: string;
-  /** Run one query. Never throws — a vendor outage costs the agent one turn. */
-  search(query: string, apiKey: string): Promise<WebSearchResult>;
+  /** How wide this vendor's index is — carried into the tool result so the model can
+   *  describe its own evidence honestly instead of implying it swept the open web. */
+  readonly coverage: 'web' | 'encyclopedic';
+  /** Credit line the answer must carry when it uses this vendor's results. */
+  readonly attribution: string;
+  /** True when the adapter needs no credential at all. Keyless vendors are the floor
+   *  every surface — including a logged-out guest — can always fall back to. */
+  readonly keyless: boolean;
+  /** Which key the credential blob carries, for the "how do I configure this" copy.
+   *  Absent on a keyless vendor, which has no credential to configure. */
+  readonly credentialField?: string;
+  /** Run one query. Never throws — a vendor outage costs the agent one turn. `apiKey`
+   *  is null for a keyless vendor and MUST be ignored by it. */
+  search(query: string, apiKey: string | null): Promise<WebSearchResult>;
 }
 
-/** One bounded, timed request to a vendor's REST endpoint, decoded as JSON. Shared by
- *  every adapter so there is exactly ONE outbound HTTP path for search. Never throws:
- *  `{ ok: false, error }` describes the failure in the same voice `web_fetch` uses. */
-export async function searchVendorRequest(
+/** One bounded, timed request to a KEYED vendor's REST endpoint, decoded as JSON.
+ *
+ *  The transport itself is {@link fetchVendorJson} — shared with the geocoding adapters,
+ *  so there is one outbound JSON path in the app rather than one per capability. What
+ *  stays here is the only thing specific to search: the status hint. A 401/403 is the
+ *  case that actually matters operationally — the tenant's stored key is wrong or
+ *  expired, and the agent should stop retrying the tool rather than burn steps on it. */
+export function searchVendorRequest(
   url: string,
   headers: Record<string, string>,
-): Promise<{ ok: true; json: unknown } | { ok: false; error: string; status?: number }> {
-  try {
-    const res = await fetch(url, {
-      redirect: 'follow',
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      headers: { 'User-Agent': 'BuilderforceAgent/1.0 (+https://builderforce.ai)', Accept: 'application/json', ...headers },
-    });
-    // Read the body under the same byte cap as a page fetch: a vendor is trusted to be
-    // well-behaved, but "trusted" is not a size guarantee.
-    const { text } = await readCapped(res);
-    if (!res.ok) {
-      // 401/403 is the case that actually matters operationally — it means the tenant's
-      // stored key is wrong/expired, and the agent should stop retrying the tool.
-      const hint = res.status === 401 || res.status === 403
-        ? ' — the configured search API key was rejected'
-        : res.status === 429 ? ' — the search vendor rate-limited this key' : '';
-      return { ok: false, status: res.status, error: `search vendor returned HTTP ${res.status}${hint}` };
-    }
-    try {
-      return { ok: true, json: JSON.parse(text) as unknown };
-    } catch {
-      return { ok: false, error: 'search vendor returned a non-JSON response' };
-    }
-  } catch (e) {
-    const timedOut = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
-    const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, error: timedOut ? `search timed out after ${FETCH_TIMEOUT_MS}ms` : `search request failed: ${msg}` };
-  }
+): Promise<JsonFetchResult> {
+  return fetchVendorJson(url, {
+    label: 'search vendor',
+    headers,
+    statusHint: (status) => (status === 401 || status === 403
+      ? ' — the configured search API key was rejected'
+      : status === 429 ? ' — the search vendor rate-limited this key' : ''),
+  });
 }
 
 /** Flatten a vendor snippet to one line of prose. Brave (and most engines) return the
@@ -125,18 +143,90 @@ export const braveSearchVendor: WebSearchVendor = {
   id: 'brave_search',
   label: 'Brave Search',
   endpoint: 'https://api.search.brave.com/res/v1/web/search',
+  coverage: 'web',
+  attribution: 'Results from Brave Search',
+  keyless: false,
   credentialField: 'apiKey',
-  async search(query: string, apiKey: string): Promise<WebSearchResult> {
+  async search(query: string, apiKey: string | null): Promise<WebSearchResult> {
+    if (!apiKey) return { ok: false, query, error: 'Brave Search requires an API key.' };
     const url = `${braveSearchVendor.endpoint}?q=${encodeURIComponent(query)}&count=${MAX_SEARCH_RESULTS}`;
     const res = await searchVendorRequest(url, { 'X-Subscription-Token': apiKey });
     if (!res.ok) return { ok: false, query, error: res.error };
     const results = parseBraveResults(res.json);
-    return { ok: true, query, results };
+    return { ok: true, query, results, coverage: braveSearchVendor.coverage, attribution: braveSearchVendor.attribution };
+  },
+};
+
+/** Article title → its canonical public URL. MediaWiki's search API returns titles,
+ *  not links, and the model needs something `web_fetch` can actually read. */
+export function wikipediaArticleUrl(title: string): string {
+  return `https://en.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`;
+}
+
+/**
+ * Shape MediaWiki's `{ query: { search: [{ title, snippet }] } }` payload into the
+ * shared rows. Pure → unit-testable, same contract as {@link parseBraveResults}: the
+ * constructed URL still goes through the egress policy, because "we built this URL
+ * ourselves" is an assumption, and the one place an assumption like that is worth
+ * re-checking is the one that feeds `web_fetch`.
+ */
+export function parseWikipediaResults(json: unknown): Array<{ title?: string; url?: string; snippet?: string }> {
+  const rows = (json as { query?: { search?: unknown } } | null)?.query?.search;
+  const list = Array.isArray(rows) ? rows : [];
+  const out: Array<{ title?: string; url?: string; snippet?: string }> = [];
+  for (const row of list) {
+    if (out.length >= MAX_SEARCH_RESULTS) break;
+    const r = row as { title?: unknown; snippet?: unknown };
+    const title = typeof r.title === 'string' ? r.title.trim() : '';
+    if (!title) continue;
+    const url = wikipediaArticleUrl(title);
+    if (classifyWebEgress(url)) continue;
+    out.push({
+      url,
+      title: title.slice(0, 200),
+      // The snippet arrives with `<span class="searchmatch">` highlight markup — reuse
+      // the capability's own HTML→text reduction rather than a second tag-stripper.
+      ...(snippetToText(r.snippet) ? { snippet: snippetToText(r.snippet) } : {}),
+    });
+  }
+  return out;
+}
+
+/**
+ * Wikipedia (MediaWiki search API) — the KEYLESS floor.
+ *
+ * Chosen because it is the only general-subject index that is simultaneously free of
+ * an account, free of a per-query meter, and licence-clean to quote with attribution
+ * (CC BY-SA). It is a full-text search over every article, not the "instant answer"
+ * endpoints that return one paragraph — so "list the school districts in Michigan"
+ * returns real articles the agent can then `web_fetch` and build a dataset from.
+ *
+ * Its coverage is honestly narrower than a web engine's, which is why the result
+ * carries `coverage: 'encyclopedic'`: the answering surface tells the user what kind
+ * of index backed the research, and that connecting a key widens it.
+ */
+export const wikipediaSearchVendor: WebSearchVendor = {
+  id: 'wikipedia',
+  label: 'Wikipedia',
+  endpoint: MEDIAWIKI_API_ENDPOINT,
+  coverage: 'encyclopedic',
+  attribution: 'Results from Wikipedia, available under CC BY-SA 4.0',
+  keyless: true,
+  async search(query: string): Promise<WebSearchResult> {
+    // The same MediaWiki client the keyless BULK GEOCODER uses — one client, two
+    // adapters. See `web/mediaWiki.ts`.
+    const res = await mediaWikiQuery({
+      list: 'search', srsearch: query, srlimit: String(MAX_SEARCH_RESULTS), srprop: 'snippet',
+    });
+    if (!res.ok) return { ok: false, query, error: res.error };
+    const results = parseWikipediaResults(res.json);
+    return { ok: true, query, results, coverage: wikipediaSearchVendor.coverage, attribution: wikipediaSearchVendor.attribution };
   },
 };
 
 const VENDORS: Record<WebSearchVendorId, WebSearchVendor> = {
   brave_search: braveSearchVendor,
+  wikipedia: wikipediaSearchVendor,
 };
 
 /** Look up an adapter by id, or null when the id is not a wired vendor (e.g. a stored

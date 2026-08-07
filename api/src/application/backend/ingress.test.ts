@@ -154,6 +154,149 @@ describe('dispatchIngressRequest', () => {
     expect(result.response.status).toBe(503);
   });
 
+  it('sends no CORS headers when the handler declared no allow-list', async () => {
+    // The default a published site and a provider webhook both rely on.
+    const result = await dispatchIngressRequest({
+      env,
+      db: fakeDb() as never,
+      target,
+      request: new Request('https://acme.builderforce.ai/api/quote', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'https://elsewhere.test' },
+        body: '{}',
+      }),
+      route: '/quote',
+    });
+    if (!result.matched) throw new Error('unreachable');
+    expect(result.response.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('answers an allowed origin on the real request, and varies on Origin', async () => {
+    handlers = { specs: [spec({ cors: ['https://elsewhere.test'] })], errors: [] };
+    const result = await dispatchIngressRequest({
+      env,
+      db: fakeDb() as never,
+      target,
+      request: new Request('https://acme.builderforce.ai/api/quote', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'https://elsewhere.test' },
+        body: '{}',
+      }),
+      route: '/quote',
+    });
+    if (!result.matched) throw new Error('unreachable');
+    expect(result.response.status).toBe(200);
+    expect(result.response.headers.get('access-control-allow-origin')).toBe('https://elsewhere.test');
+    expect(result.response.headers.get('vary')).toBe('Origin');
+  });
+
+  it('varies on Origin even for a REFUSED caller, so no cache leaks the permission', async () => {
+    handlers = { specs: [spec({ cors: ['https://elsewhere.test'] })], errors: [] };
+    const result = await dispatchIngressRequest({
+      env,
+      db: fakeDb() as never,
+      target,
+      request: new Request('https://acme.builderforce.ai/api/quote', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'https://evil.test' },
+        body: '{}',
+      }),
+      route: '/quote',
+    });
+    if (!result.matched) throw new Error('unreachable');
+    expect(result.response.headers.get('access-control-allow-origin')).toBeNull();
+    expect(result.response.headers.get('vary')).toBe('Origin');
+  });
+
+  it('answers a preflight without running the handler', async () => {
+    // The point of handling OPTIONS before matching: an `ANY` handler claims
+    // every method, so a preflight would otherwise spend its steps to answer a
+    // question the browser asked only to find out whether it may send anything.
+    handlers = {
+      specs: [spec({ method: 'ANY', cors: ['https://elsewhere.test'], steps: [{ kind: 'set', id: 'a', value: 'x' }] })],
+      errors: [],
+    };
+    const result = await dispatchIngressRequest({
+      env,
+      db: fakeDb() as never,
+      target,
+      request: new Request('https://acme.builderforce.ai/api/quote', {
+        method: 'OPTIONS',
+        headers: {
+          origin: 'https://elsewhere.test',
+          'access-control-request-method': 'POST',
+          'access-control-request-headers': 'content-type, x-trace',
+        },
+      }),
+      route: '/quote',
+    });
+    if (!result.matched) throw new Error('unreachable');
+    expect(result.response.status).toBe(204);
+    expect(result.response.headers.get('access-control-allow-origin')).toBe('https://elsewhere.test');
+    // `ANY` reports the method the browser actually asked about.
+    expect(result.response.headers.get('access-control-allow-methods')).toBe('POST');
+    expect(result.response.headers.get('access-control-allow-headers')).toBe('content-type, x-trace');
+    expect(await result.response.text()).toBe('');
+  });
+
+  it('refuses a preflight from an origin the handler does not name', async () => {
+    handlers = { specs: [spec({ cors: ['https://elsewhere.test'] })], errors: [] };
+    const result = await dispatchIngressRequest({
+      env,
+      db: fakeDb() as never,
+      target,
+      request: new Request('https://acme.builderforce.ai/api/quote', {
+        method: 'OPTIONS',
+        headers: { origin: 'https://evil.test', 'access-control-request-method': 'POST' },
+      }),
+      route: '/quote',
+    });
+    if (!result.matched) throw new Error('unreachable');
+    expect(result.response.status).toBe(403);
+    expect(result.response.headers.get('access-control-allow-origin')).toBeNull();
+    // The refusal says why — a bare "CORS error" is nothing to act on.
+    expect(await result.response.text()).toContain('evil.test');
+  });
+
+  it('preflights the method the browser INTENDS, not OPTIONS', async () => {
+    // The handler claims POST only. Matching on OPTIONS would 404 the preflight
+    // and the real POST would never be sent.
+    handlers = { specs: [spec({ method: 'POST', cors: ['https://elsewhere.test'] })], errors: [] };
+    const result = await dispatchIngressRequest({
+      env,
+      db: fakeDb() as never,
+      target,
+      request: new Request('https://acme.builderforce.ai/api/quote', {
+        method: 'OPTIONS',
+        headers: { origin: 'https://elsewhere.test', 'access-control-request-method': 'POST' },
+      }),
+      route: '/quote',
+    });
+    if (!result.matched) throw new Error('unreachable');
+    expect(result.response.status).toBe(204);
+    expect(result.response.headers.get('access-control-allow-methods')).toBe('POST');
+  });
+
+  it('lets the browser SEE a verification failure it is allowed to read', async () => {
+    // A 403 with no CORS headers reaches the developer as a network error, and
+    // the afternoon goes on the wrong problem.
+    handlers = { specs: [spec({ verify: 'twilio', cors: ['https://elsewhere.test'] })], errors: [] };
+    const result = await dispatchIngressRequest({
+      env,
+      db: fakeDb([[]]) as never,
+      target,
+      request: new Request('https://acme.builderforce.ai/api/quote', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: 'https://elsewhere.test' },
+        body: '{}',
+      }),
+      route: '/quote',
+    });
+    if (!result.matched) throw new Error('unreachable');
+    expect(result.response.status).toBe(403);
+    expect(result.response.headers.get('access-control-allow-origin')).toBe('https://elsewhere.test');
+  });
+
   it('caps the flood well above provider throughput', () => {
     // A regression here is silent until a customer's messages start 429ing, so
     // the number is pinned rather than left to a future tuning pass.

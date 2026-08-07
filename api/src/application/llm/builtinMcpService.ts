@@ -51,10 +51,10 @@ import { resolveSegment } from '../../infrastructure/auth/segmentResolver';
 import type { McpToolEntry } from './mcpExtensionService';
 import type { Env } from '../../env';
 import { integrationCredentials } from '../../infrastructure/database/schema';
-import { fetchWebDocument } from '../web/webFetch';
+import { fetchWebDocumentCached } from '../web/webFetch';
 import { geocodeBatch, MAX_BATCH } from '../web/geocode';
-import { resolveWebSearchCredential } from '../runtime/webSearchCredential';
-import { normalizeSearchQuery } from '../runtime/cloudWeb';
+import { resolveWebSearchBacking } from '../runtime/webSearchCredential';
+import { normalizeSearchQuery, searchWeb } from '../runtime/cloudWeb';
 import { encryptCredentials } from '../integrations/credentialCrypto';
 import { MigrationService, type ImportMode } from '../migration/MigrationService';
 import { createMigrationStore } from '../migration/migrationStore';
@@ -2480,44 +2480,46 @@ const CATALOG: BuiltinTool[] = [
   },
 
   // ---- Web (server-side fetch) — read an external URL behind the SSRF guard and return its
-  //       readable text. No DB; delegates to fetchWebDocument (assertSafeUrl + HTML→text + size cap).
-  //       The browser Brain can't fetch cross-origin URLs (CORS), so the gateway does it here. ----
-  { tool: 'web.fetch', mutates: false, description: 'Read an external URL, file, or website (e.g. a GitHub file like https://github.com/owner/repo/blob/main/ROADMAP.md, a docs page, or an article). The platform fetches it server-side and returns its text content (HTML is stripped to readable text; GitHub/GitLab "blob" links are resolved to the raw file automatically). Use this whenever the user pastes a link and asks you to read, summarize, or work from it — do NOT claim you cannot access external URLs. Returns { url, title, text, truncated }.', parameters: obj({ url: { ...S, description: 'Absolute http(s) URL to fetch.' } }, ['url']), run: (_ctx, a) => fetchWebDocument(str(a.url)) },
+  //       readable text. No DB; delegates to fetchWebDocumentCached (assertSafeUrl + HTML→text
+  //       + size cap, behind the read-through cache — a research turn re-reads the same
+  //       source across steps). The browser Brain can't fetch cross-origin URLs (CORS), so
+  //       the gateway does it here. ----
+  { tool: 'web.fetch', mutates: false, description: 'Read an external URL, file, or website (e.g. a GitHub file like https://github.com/owner/repo/blob/main/ROADMAP.md, a docs page, or an article). The platform fetches it server-side and returns its text content (HTML is stripped to readable text; GitHub/GitLab "blob" links are resolved to the raw file automatically). Use this whenever the user pastes a link and asks you to read, summarize, or work from it — do NOT claim you cannot access external URLs. Returns { url, title, text, truncated }.', parameters: obj({ url: { ...S, description: 'Absolute http(s) URL to fetch.' } }, ['url']), run: (ctx, a) => fetchWebDocumentCached(ctx.env, str(a.url)) },
 
   // ---- Web search — the ENTRY POINT to research. `web.fetch` can only read a URL the
   //       model was already given; without search, "research X and collect the data"
   //       has no first step and the turn degrades to recalling X from weights.
-  //       Search is metered per query with no platform-funded key, so the backing is the
-  //       tenant's BYO credential (webSearchCredential → integration_credentials). Unlike
-  //       the cloud engine — which builds a per-run capability set and can simply omit an
-  //       unbacked tool — this CATALOG is static metadata, so the tool is always advertised
-  //       and says exactly what to connect when it is not. An actionable refusal beats an
-  //       invisible capability the user cannot discover is missing. ----
+  //       The backing is resolved by precedence (tenant BYO key → operator key → keyless
+  //       encyclopedic vendor), so this ALWAYS runs — including on a workspace with
+  //       nothing configured, which is the case that used to refuse. `coverage` in the
+  //       result tells the model which kind of index answered, so it can be honest about
+  //       its evidence and mention that connecting a key widens it. Execution (cache,
+  //       per-query metering, failed-query invalidation) is the shared `searchWeb`. ----
   {
     tool: 'web.search', mutates: false,
-    description: 'Search the public web and return ranked results ({ title, url, snippet }). Use this FIRST when the user asks you to research a subject, find sources, or collect facts you do not already hold — then read the promising results with web.fetch and build the artifact from what you actually read. Do not answer a research request from memory when this tool is available.',
+    description: 'Search the public web and return ranked results ({ title, url, snippet }) plus `coverage` and `attribution`. Use this FIRST when the user asks you to research a subject, find sources, or collect facts you do not already hold — then read the promising results with web.fetch and build the artifact from what you actually read. Do not answer a research request from memory. When `coverage` is "encyclopedic" the index is narrower than a full web engine: still cite what you found, and note that connecting a Brave Search key under Settings → Integrations widens it.',
     parameters: obj({ query: { ...S, description: 'What to search for, phrased as a search engine query.' } }, ['query']),
     run: async (ctx, a) => {
       const query = normalizeSearchQuery(str(a.query));
       if (!query) return { ok: false, error: 'A search query is required.' };
       if (!ctx.env) return { ok: false, error: 'Web search is unavailable on this surface.' };
-      const credential = await resolveWebSearchCredential(ctx.env, ctx.db, ctx.tenantId);
-      if (!credential) {
-        return { ok: false, query, error: 'No web-search key is connected for this workspace, so live search is off. Connect a Brave Search API key under Settings → Integrations to enable research. You can still read a specific URL with web.fetch.' };
-      }
-      return credential.vendor.search(query, credential.apiKey);
+      const backing = await resolveWebSearchBacking(ctx.env, ctx.db, ctx.tenantId);
+      return searchWeb(ctx.env, { ...backing, meter: { db: ctx.db, tenantId: ctx.tenantId } }, query);
     },
   },
 
   // ---- Geocoding — names to coordinates. The join between a researched dataset (which
   //       holds place NAMES) and a map (which needs NUMBERS); without it those two can
-  //       both exist on a canvas and never connect. Keyless by default, cached hard, and
-  //       paced to the vendor's courtesy limit — see application/web/geocode.ts. ----
+  //       both exist on a canvas and never connect. Keyless, cached hard, and resolved
+  //       bulk-first so a whole dataset lands in one call — see application/web/geocode.ts.
+  //       The description below states the RESUME contract explicitly, because the caller
+  //       is a model deciding whether to try again, and a partial result it reads as
+  //       terminal is exactly how a 200-row dataset ends up half-plotted. ----
   {
     tool: 'geo.geocode', mutates: false,
-    description: 'Convert place names (cities, counties, districts, schools, addresses, regions) into latitude/longitude coordinates plus a bounding box. Use this to turn a dataset of place names into something a Map object can plot: pass the name column values, then write the returned lat/lng back onto the dataset rows. Set outline:true for ONE enclosing region (e.g. "Michigan") to also get a simplified boundary polygon for the map background. Returns { results: [{ query, ok, lat, lng, displayName, boundingBox, kind }], attribution }.',
+    description: `Convert place names (cities, counties, districts, schools, addresses, regions) into latitude/longitude coordinates plus a bounding box. Use this to turn a dataset of place names into something a Map object can plot: pass the name column values, then write the returned lat/lng back onto the dataset rows. Pass the WHOLE list (up to ${MAX_BATCH}) in one call — do not pre-chunk it. Set outline:true for ONE enclosing region (e.g. "Michigan") to also get a simplified boundary polygon for the map background. Returns { results: [{ query, ok, lat, lng, displayName, boundingBox, kind }], resolved, unresolved, pending, truncated, attribution }. If "pending" is greater than 0, some names ran out of time budget rather than failing: call this tool AGAIN with the same list — everything already resolved is cached and returns instantly, so each call gets further. "unresolved" rows are different: those are names the geocoder does not recognise, and re-calling will not change them — re-spell them or add context instead.`,
     parameters: obj({
-      queries: { type: 'array', items: S, description: `Place names to resolve, at most ${MAX_BATCH} per call.` },
+      queries: { type: 'array', items: S, description: `Place names to resolve, at most ${MAX_BATCH} per call. Pass them all at once.` },
       context: { ...S, description: 'Region appended to every term to disambiguate, e.g. "Michigan, USA".' },
       countryCodes: { ...S, description: 'ISO-3166 alpha-2 filter, e.g. "us".' },
       outline: { ...B, description: 'Also return a simplified boundary polygon. Use for a single enclosing region, not for every point.' },

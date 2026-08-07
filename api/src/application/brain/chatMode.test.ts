@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { CHAT_MODES, DEFAULT_CHAT_MODE, isChatMode, normalizeChatMode, resolveChatMode } from './chatMode';
+import { CHAT_MODES, NEW_CHAT_MODE, RESTING_CHAT_MODE, isChatMode, normalizeChatMode, resolveChatMode } from './chatMode';
 
 describe('server chat mode', () => {
   it('mirrors the brain-embedded vocabulary', () => {
     // The two copies exist because the api cannot import a browser bundle. They are a
     // closed two-value set, so a drift here would be a silent behaviour split.
     expect(CHAT_MODES).toEqual(['chat', 'work']);
-    expect(DEFAULT_CHAT_MODE).toBe('chat');
+    expect(NEW_CHAT_MODE).toBe('work');
+    expect(RESTING_CHAT_MODE).toBe('chat');
     expect(isChatMode('work')).toBe(true);
     expect(isChatMode('workflow')).toBe(false);
   });
@@ -20,7 +21,7 @@ describe('server chat mode', () => {
     expect(normalizeChatMode('work')).toBe('work');
   });
 
-  it('resolves a stored value, falling back to the default', () => {
+  it('resolves a stored value, resting an unset one in chat rather than arming it', () => {
     expect(resolveChatMode({ origin: 'brainstorm', mode: 'work' })).toBe('work');
     expect(resolveChatMode({ origin: 'brainstorm', mode: 'chat' })).toBe('chat');
     expect(resolveChatMode({ origin: 'brainstorm', mode: null })).toBe('chat');

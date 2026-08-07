@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeSlot, PWA_TOAST_ROW_HEIGHT, type PwaToastId } from './pwaToastStack';
+import { computeSlot, type PwaToastId } from './pwaToastStack';
 
 describe('computeSlot', () => {
   it('puts a lone toast in slot 0 (normal bottom position)', () => {
@@ -21,9 +21,5 @@ describe('computeSlot', () => {
 
   it('returns -1 for an id that is not live', () => {
     expect(computeSlot(['update'], 'install')).toBe(-1);
-  });
-
-  it('exposes a positive row height for the offset', () => {
-    expect(PWA_TOAST_ROW_HEIGHT).toBeGreaterThan(0);
   });
 });

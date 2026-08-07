@@ -39,7 +39,7 @@ import {
   INTEGRATIONS, INTEGRATION_CATEGORIES, integrationAccent, integrationIcon, presetConfig,
   type Integration,
 } from './integrations';
-import { CanvasCommands, cleanCanvasLayout } from '@/components/canvas/CanvasCommands';
+import { CANVAS_FIT_MIN_ZOOM, CanvasCommands, useCanvasCleanLayout } from '@/components/canvas/CanvasCommands';
 import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
@@ -191,10 +191,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
   const canvasRef = useRef<HTMLDivElement>(null);
   const [paletteSearch, setPaletteSearch] = useState('');
 
-  const cleanLayout = useCallback(() => {
-    setNodes((current) => cleanCanvasLayout(current, edges));
-    window.setTimeout(() => void rfRef.current?.fitView({ padding: .18, maxZoom: 1, duration: 320 }), 0);
-  }, [edges, setNodes]);
+  const cleanLayout = useCanvasCleanLayout({ boardRef: canvasRef, instanceRef: rfRef, setNodes, edges });
 
   const threeD = useCanvasThreeD();
   /**
@@ -625,6 +622,8 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
             onNodeClick={(_, n) => setSelectedId(n.id)}
             onPaneClick={() => setSelectedId(null)}
             fitView
+            fitViewOptions={{ padding: 0.15, minZoom: CANVAS_FIT_MIN_ZOOM }}
+            minZoom={CANVAS_FIT_MIN_ZOOM}
             proOptions={{ hideAttribution: true }}
           >
             <Background color="var(--border-subtle)" gap={18} />

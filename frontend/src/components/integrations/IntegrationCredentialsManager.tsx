@@ -62,10 +62,14 @@ export const PROVIDER_META: Record<IntegrationProvider, ProviderMeta> = {
   monday: { label: 'monday.com', baseUrl: false, secrets: [{ key: 'token', label: 'API token' }], board: { externalId: 'required', hint: 'Board ID (numeric)' } },
   asana: { label: 'Asana', baseUrl: false, secrets: [{ key: 'accessToken', label: 'Personal access token' }], board: { externalId: 'required', hint: 'Project GID' } },
   clickup: { label: 'ClickUp', baseUrl: false, secrets: [{ key: 'token', label: 'API token', placeholder: 'pk_…' }], board: { externalId: 'required', hint: 'List ID' } },
-  // Not a board/ticket source: this key gives CLOUD AGENTS the `web_search` tool. They
-  // can already read a URL you give them; a search key lets them find one. Search bills
-  // per query, so the key is yours — with none saved, agents stay fetch-only.
-  brave_search: { label: 'Brave Search (agent web search)', baseUrl: false, secrets: [{ key: 'apiKey', label: 'Subscription token', placeholder: 'BSA…' }] },
+  // Not a board/ticket source: this key WIDENS research from the keyless encyclopedic
+  // index (which every workspace, and every logged-out visitor, already gets) to a
+  // general web index. Search bills per query, so the key is yours — with none saved,
+  // agents and the canvas still research, just against narrower coverage.
+  // The label is the BRAND NAME only: it is substituted into localized sentences
+  // ("Add {provider} key", "Edit {provider} key"), so an English parenthetical here
+  // both breaks those sentences and ships untranslatable copy through the catalog.
+  brave_search: { label: 'Brave Search', baseUrl: false, secrets: [{ key: 'apiKey', label: 'Subscription token', placeholder: 'BSA…' }] },
   // Google connectors — OAuth offline credentials (client id/secret + a refresh
   // token from Google's OAuth playground or your own consent flow). Gmail backs
   // the email workflow node; Drive can back a project's file storage.

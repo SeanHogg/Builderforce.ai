@@ -31,6 +31,10 @@ export type {
 export interface PromptOptionsLabels extends ModelChoiceLabels {
   /** Trigger title/aria — the menu as a whole. */
   options: string;
+  /** Section heading for the conversation-mode block (Chat | Work). */
+  mode: string;
+  /** Section heading + row label for persistent project memory. */
+  memory: string;
   effort: string;
   effortQuick: string;
   effortBalanced: string;
@@ -55,6 +59,8 @@ export interface PromptOptionsLabels extends ModelChoiceLabels {
 export const DEFAULT_PROMPT_OPTIONS_LABELS: PromptOptionsLabels = {
   ...DEFAULT_MODEL_CHOICE_LABELS,
   options: 'Options',
+  mode: 'Mode',
+  memory: 'Memory',
   effort: 'Effort',
   effortQuick: 'Quick',
   effortBalanced: 'Balanced',

@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { PwaToast, PwaToastDismissButton, PwaToastPrimaryButton, PwaToastText } from './PwaToast';
 import { usePwaToastSlot } from './pwaToastStack';
@@ -68,6 +69,7 @@ const getHiddenSnapshot = () => isStandalone() || recentlyDismissed(Date.now());
 const getServerHiddenSnapshot = () => true;
 
 export function PwaInstallPrompt() {
+  const t = useTranslations('pwa');
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [dismissed, setDismissed] = useState(false);
   const externallyHidden = useSyncExternalStore(subscribeNoop, getHiddenSnapshot, getServerHiddenSnapshot);
@@ -139,8 +141,8 @@ export function PwaInstallPrompt() {
   if (deferredPrompt) {
     return (
       <PwaToast slot={slot}>
-        <PwaToastText>Install Builderforce for a faster, full-screen app.</PwaToastText>
-        <PwaToastPrimaryButton onClick={install}>Install</PwaToastPrimaryButton>
+        <PwaToastText>{t('installPitch')}</PwaToastText>
+        <PwaToastPrimaryButton onClick={install}>{t('install')}</PwaToastPrimaryButton>
         <PwaToastDismissButton onClick={dismiss} />
       </PwaToast>
     );
@@ -149,10 +151,8 @@ export function PwaInstallPrompt() {
   // iOS Safari: never fires beforeinstallprompt and can't be prompted
   // programmatically — show the manual Add-to-Home-Screen steps instead.
   return (
-    <PwaToast nowrap={false} slot={slot}>
-      <PwaToastText>
-        Install Builderforce: tap the Share icon, then “Add to Home Screen”.
-      </PwaToastText>
+    <PwaToast slot={slot}>
+      <PwaToastText>{t('installIos')}</PwaToastText>
       <PwaToastDismissButton onClick={dismiss} />
     </PwaToast>
   );

@@ -3,8 +3,10 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import BrainBackdrop from '@/components/BrainBackdrop';
 import { ChatInput } from '@/components/ChatInput';
 import { createLocalCreationSession } from '@/lib/creationSessions';
+import { NEW_CHAT_MODE, type ChatMode } from '@/lib/brain';
 import { useIsMobile } from '@/lib/useIsMobile';
 import styles from './LandingCanvasHero.module.css';
 
@@ -25,10 +27,13 @@ import styles from './LandingCanvasHero.module.css';
  *    give a verdict. The preview paints instantly and hands off on first intent.
  * 2. The board is not rendered at all on narrow viewports — an infinite pan/zoom
  *    surface is the wrong first touch on a phone. Narrow gets the same copy and
- *    the same composer in normal flow.
+ *    the same composer in normal flow, over the Evermind brain animation that
+ *    the wide hero trades away for the board. The scene is a dark art surface in
+ *    both themes (like the canvas board), so the narrow hero declares its own
+ *    light-on-dark palette rather than inheriting the app shell's tokens.
  *
- * The board is also skipped on the server and the first client paint, so the
- * headline and composer are painted before any of it is laid out.
+ * Neither the board nor the brain is rendered on the server or the first client
+ * paint, so the headline and composer are painted before any of it is laid out.
  */
 
 /**
@@ -58,6 +63,9 @@ export function LandingCanvasHero() {
   const t = useTranslations('home');
   const [prompt, setPrompt] = useState('');
   const [focusToken, setFocusToken] = useState(0);
+  // The visitor's first turn is armed HERE, before the canvas exists — so the mode
+  // rides into the guest session rather than being a control that did nothing.
+  const [chatMode, setChatMode] = useState<ChatMode>(NEW_CHAT_MODE);
 
   // The board mounts only after the copy has painted, and only when the viewport
   // is wide enough to pan a board on. `useIsMobile` reports false on the server
@@ -66,6 +74,8 @@ export function LandingCanvasHero() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
   const showBoard = mounted && !isNarrow;
+  // Narrow gets the brain instead of the board — one of the two, never neither.
+  const showBrain = mounted && isNarrow;
 
   const objects = t.raw('canvas.objects') as CanvasObjectCopy[];
 
@@ -74,7 +84,7 @@ export function LandingCanvasHero() {
     if (!trimmed) return;
     // Creation starts without an account. The browser draft is claimed by
     // CreationSessionClient once the visitor signs in and has a workspace.
-    const sessionId = createLocalCreationSession(trimmed);
+    const sessionId = createLocalCreationSession(trimmed, chatMode);
     router.push(`/create/${sessionId}`);
   }
 
@@ -92,76 +102,82 @@ export function LandingCanvasHero() {
       onChange={setPrompt}
       onSubmit={() => startCreating(prompt)}
       focusToken={focusToken}
+      chatMode={chatMode}
+      onChatModeChange={setChatMode}
     />
   );
 
   return (
-    <section className={styles.hero}>
-      <span className={styles.badge}>
-        <span className={styles.badgeDot} aria-hidden="true" />
-        {t('heroBadge')}
-      </span>
+    <section className={`${styles.hero}${showBrain ? ` ${styles.heroBrain}` : ''}`}>
+      {showBrain && <BrainBackdrop className={styles.brain} />}
 
-      <h1 className={styles.title}>
-        {t.rich('heroTitle', { em: (chunks) => <em>{chunks}</em> })}
-      </h1>
-      <p className={styles.lede}>{t('heroSub')}</p>
+      <div className={styles.inner}>
+        <span className={styles.badge}>
+          <span className={styles.badgeDot} aria-hidden="true" />
+          {t('heroBadge')}
+        </span>
 
-      <div className={`${styles.stage} ${showBoard ? '' : styles.stageNarrow}`}>
-        {showBoard && (
-          <div className={styles.board} role="group" aria-label={t('canvas.boardAria')}>
-            <div className={styles.field}>
-              <svg
-                className={styles.wires}
-                viewBox="0 0 1240 500"
-                preserveAspectRatio="none"
-                aria-hidden="true"
-              >
-                <path className="solid" d="M227 100 C 300 100, 300 85, 372 85" />
-                <path d="M568 140 C 720 140, 840 300, 988 330" />
-                <path d="M240 313 C 500 313, 780 180, 1000 130" />
-              </svg>
+        <h1 className={styles.title}>
+          {t.rich('heroTitle', { em: (chunks) => <em>{chunks}</em> })}
+        </h1>
+        <p className={styles.lede}>{t('heroSub')}</p>
 
-              {objects.map((object, index) => (
-                <button
-                  key={object.title}
-                  type="button"
-                  className={styles.node}
-                  style={OBJECT_LAYOUT[index]?.style}
-                  onClick={() => seedPrompt(object.prefill)}
-                  aria-label={t('canvas.objectAction', { title: object.title })}
+        <div className={`${styles.stage} ${showBoard ? '' : styles.stageNarrow}`}>
+          {showBoard && (
+            <div className={styles.board} role="group" aria-label={t('canvas.boardAria')}>
+              <div className={styles.field}>
+                <svg
+                  className={styles.wires}
+                  viewBox="0 0 1240 500"
+                  preserveAspectRatio="none"
+                  aria-hidden="true"
                 >
-                  <span className={styles.nodeKind}>{object.kind}</span>
-                  <span className={styles.nodeTitle}>{object.title}</span>
-                  <span className={styles.nodeDetail}>{object.detail}</span>
+                  <path className="solid" d="M227 100 C 300 100, 300 85, 372 85" />
+                  <path d="M568 140 C 720 140, 840 300, 988 330" />
+                  <path d="M240 313 C 500 313, 780 180, 1000 130" />
+                </svg>
 
-                  {index === CHART_INDEX && (
-                    <span className={styles.spark} aria-hidden="true">
-                      {SPARK_BARS.map((height) => <i key={height} style={{ height }} />)}
-                    </span>
-                  )}
+                {objects.map((object, index) => (
+                  <button
+                    key={object.title}
+                    type="button"
+                    className={styles.node}
+                    style={OBJECT_LAYOUT[index]?.style}
+                    onClick={() => seedPrompt(object.prefill)}
+                    aria-label={t('canvas.objectAction', { title: object.title })}
+                  >
+                    <span className={styles.nodeKind}>{object.kind}</span>
+                    <span className={styles.nodeTitle}>{object.title}</span>
+                    <span className={styles.nodeDetail}>{object.detail}</span>
 
-                  {index === AGENT_INDEX && (
-                    <span className={styles.who}>
-                      <em className={styles.whoAvatar} aria-hidden="true">{t('canvas.agentInitials')}</em>
-                      <span className={styles.whoLabel}>{t('canvas.agentPresence')}</span>
-                    </span>
-                  )}
-                </button>
-              ))}
+                    {index === CHART_INDEX && (
+                      <span className={styles.spark} aria-hidden="true">
+                        {SPARK_BARS.map((height) => <i key={height} style={{ height }} />)}
+                      </span>
+                    )}
+
+                    {index === AGENT_INDEX && (
+                      <span className={styles.who}>
+                        <em className={styles.whoAvatar} aria-hidden="true">{t('canvas.agentInitials')}</em>
+                        <span className={styles.whoLabel}>{t('canvas.agentPresence')}</span>
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {composer}
             </div>
+          )}
 
-            {composer}
-          </div>
-        )}
+          {!showBoard && composer}
+        </div>
 
-        {!showBoard && composer}
+        <p className={styles.footRow}>
+          <strong>{t('canvas.guestNote')}</strong>
+          {!showBoard && mounted && <span className={styles.narrowNote}>{t('canvas.narrowNote')}</span>}
+        </p>
       </div>
-
-      <p className={styles.footRow}>
-        <strong>{t('canvas.guestNote')}</strong>
-        {!showBoard && mounted && <span className={styles.narrowNote}>{t('canvas.narrowNote')}</span>}
-      </p>
     </section>
   );
 }
@@ -170,12 +186,20 @@ export function LandingCanvasHero() {
  * The one composer. Rendered inside the board on wide viewports and in normal
  * flow on narrow ones — same state, same submit, so the "start creating" path
  * can never drift between the two layouts.
+ *
+ * It is the SAME `ChatInput` the canvas uses, with the same `/` menu, so the first
+ * prompt a visitor types is typed into the control they will keep using. What it
+ * does NOT offer is anything an account-less visitor cannot have: no attachments,
+ * no model pin, no memory — those need a tenant behind them, and a control that
+ * cannot do what it says is worse than no control.
  */
-function Composer({ value, onChange, onSubmit, focusToken }: {
+function Composer({ value, onChange, onSubmit, focusToken, chatMode, onChatModeChange }: {
   value: string;
   onChange: (next: string) => void;
   onSubmit: () => void;
   focusToken: number;
+  chatMode: ChatMode;
+  onChatModeChange: (mode: ChatMode) => void;
 }) {
   const t = useTranslations('home');
   const examples = t.raw('heroExamples') as string[];
@@ -192,6 +216,8 @@ function Composer({ value, onChange, onSubmit, focusToken }: {
         rows={2}
         submitOnEnter
         showVoice
+        chatMode={chatMode}
+        onChatModeChange={onChatModeChange}
         focusToken={focusToken}
       />
       <div className={styles.chips}>

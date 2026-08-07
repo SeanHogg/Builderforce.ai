@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   CHAT_MODES,
-  DEFAULT_CHAT_MODE,
+  NEW_CHAT_MODE,
+  RESTING_CHAT_MODE,
   isChatMode,
   normalizeChatMode,
   chatModeDirective,
@@ -10,10 +11,12 @@ import {
 } from './chatMode';
 
 describe('chat mode vocabulary', () => {
-  it('defaults to conversation, not execution', () => {
-    // The whole point of the split: asking a question must never be the thing that
-    // opens a ticket. A default of `work` would reinstate the defect.
-    expect(DEFAULT_CHAT_MODE).toBe('chat');
+  it('opens a NEW conversation in work, and rests an unreadable one in chat', () => {
+    // The two answers are deliberately different. A new conversation opens in Work
+    // because that is what the product is for; an unset/unknown STORED value must
+    // still resolve to a conversation, so a row that never opted in is never armed.
+    expect(NEW_CHAT_MODE).toBe('work');
+    expect(RESTING_CHAT_MODE).toBe('chat');
   });
 
   it('accepts only the known modes', () => {

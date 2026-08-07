@@ -4,7 +4,10 @@
  * and the Brave adapter's error contract.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { braveSearchVendor, parseBraveResults, snippetToText, webSearchVendor, MAX_SEARCH_RESULTS } from './webSearchVendors';
+import {
+  braveSearchVendor, parseBraveResults, parseWikipediaResults, snippetToText, webSearchVendor,
+  wikipediaArticleUrl, wikipediaSearchVendor, MAX_SEARCH_RESULTS,
+} from './webSearchVendors';
 
 /** A minimal Brave payload with `n` synthetic results. */
 function bravePayload(rows: Array<{ title?: unknown; url?: unknown; description?: unknown }>): unknown {
@@ -109,9 +112,78 @@ describe('braveSearchVendor', () => {
   });
 });
 
+describe('parseWikipediaResults', () => {
+  /** A minimal MediaWiki `list=search` payload. */
+  const payload = (rows: Array<{ title?: unknown; snippet?: unknown }>): unknown => ({ query: { search: rows } });
+
+  it('turns article titles into fetchable canonical URLs', () => {
+    const out = parseWikipediaResults(payload([
+      { title: 'Ann Arbor Public Schools', snippet: 'a <span class="searchmatch">district</span> in Michigan' },
+    ]));
+    expect(out).toEqual([{
+      url: 'https://en.wikipedia.org/wiki/Ann_Arbor_Public_Schools',
+      title: 'Ann Arbor Public Schools',
+      snippet: 'a district in Michigan',
+    }]);
+  });
+
+  it('percent-encodes a title so the URL survives punctuation', () => {
+    expect(wikipediaArticleUrl('Guns N\' Roses')).toBe("https://en.wikipedia.org/wiki/Guns_N'_Roses");
+    expect(wikipediaArticleUrl('C++')).toBe('https://en.wikipedia.org/wiki/C%2B%2B');
+  });
+
+  it('drops untitled rows and caps the result count', () => {
+    const rows = Array.from({ length: 25 }, (_, i) => ({ title: `Article ${i}` }));
+    rows.push({ title: '  ' });
+    expect(parseWikipediaResults(payload(rows))).toHaveLength(MAX_SEARCH_RESULTS);
+  });
+
+  it('tolerates a malformed / empty payload instead of throwing', () => {
+    for (const junk of [null, undefined, {}, { query: {} }, { query: { search: 'nope' } }, 'string']) {
+      expect(parseWikipediaResults(junk)).toEqual([]);
+    }
+  });
+});
+
+describe('wikipediaSearchVendor (the keyless floor)', () => {
+  it('searches with NO key and reports its narrower coverage', async () => {
+    const fn = stubFetch({ bodyText: JSON.stringify({ query: { search: [{ title: 'Detroit' }] } }) });
+    const r = await wikipediaSearchVendor.search('michigan school districts', null);
+
+    expect(r.ok).toBe(true);
+    expect(r.coverage).toBe('encyclopedic');
+    expect(r.attribution).toMatch(/CC BY-SA/);
+    expect(r.results).toEqual([{ url: 'https://en.wikipedia.org/wiki/Detroit', title: 'Detroit' }]);
+    const [url, init] = fn.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('en.wikipedia.org/w/api.php');
+    expect(url).toContain('srsearch=michigan+school+districts');
+    // No credential header of any kind — this is the whole point of the vendor.
+    expect(JSON.stringify(init.headers)).not.toMatch(/token|key|authorization/i);
+  });
+
+  it('turns a vendor outage into an error result, never a throw', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('boom'); }));
+    expect(await wikipediaSearchVendor.search('q', null)).toMatchObject({ ok: false });
+  });
+});
+
+describe('braveSearchVendor without a key', () => {
+  it('refuses rather than calling the vendor unauthenticated', async () => {
+    const fn = stubFetch({ bodyText: '{}' });
+    expect(await braveSearchVendor.search('q', null)).toMatchObject({ ok: false });
+    expect(fn).not.toHaveBeenCalled();
+  });
+});
+
 describe('webSearchVendor registry', () => {
   it('resolves a wired id and refuses an unknown one', () => {
     expect(webSearchVendor('brave_search')).toBe(braveSearchVendor);
+    expect(webSearchVendor('wikipedia')).toBe(wikipediaSearchVendor);
     expect(webSearchVendor('not_a_vendor')).toBeNull();
+  });
+
+  it('marks exactly the keyless vendors as keyless — the credential lookup filters on it', () => {
+    expect(wikipediaSearchVendor.keyless).toBe(true);
+    expect(braveSearchVendor.keyless).toBe(false);
   });
 });

@@ -1,6 +1,7 @@
 import type { Edge } from '@xyflow/react';
 import type { CreationFlowNode } from '@/components/creation-canvas/CreationNode';
 import type { CreationGraphInput } from '@/lib/builderforceApi';
+import { NEW_CHAT_MODE, normalizeChatMode, type ChatMode } from '@/lib/brain';
 
 export const LOCAL_CREATION_PREFIX = 'local-';
 const STORAGE_PREFIX = 'builderforce:create:';
@@ -9,6 +10,12 @@ export interface LocalCreationSnapshot {
   version: 1;
   title: string;
   initialPrompt?: string;
+  /**
+   * Conversation mode (0409) for a canvas that has nowhere on the server to keep it.
+   * A guest picks this in the composer BEFORE the canvas exists — on the homepage —
+   * so without it the choice was made and then silently dropped at the hand-off.
+   */
+  mode?: ChatMode;
   timeline?: Array<{ clientMessageId: string; role: 'user' | 'assistant' | 'system'; body: string; metadata?: { scope?: string; objectIds?: string[]; model?: string; error?: boolean; authoredBy?: { kind: 'agent' | 'brain' | 'human'; ref: string; name: string } }; createdAt: string }>;
   nodes: CreationFlowNode[];
   edges: Edge[];
@@ -24,7 +31,7 @@ export function isLocalCreationSession(sessionId: string): boolean {
   return sessionId.startsWith(LOCAL_CREATION_PREFIX);
 }
 
-export function createLocalCreationSession(prompt: string): string {
+export function createLocalCreationSession(prompt: string, mode: ChatMode = NEW_CHAT_MODE): string {
   const sessionId = `${LOCAL_CREATION_PREFIX}${crypto.randomUUID()}`;
   const now = new Date().toISOString();
   const nodeId = crypto.randomUUID();
@@ -55,6 +62,7 @@ export function createLocalCreationSession(prompt: string): string {
     version: 1,
     title,
     initialPrompt: prompt.trim(),
+    mode,
     timeline: prompt.trim() ? [{ clientMessageId: `initial:${crypto.randomUUID()}`, role: 'user', body: prompt.trim(), createdAt: now }] : [],
     updatedAt: now,
     nodes,
@@ -89,6 +97,7 @@ export function readLocalCreationSession(sessionId: string): LocalCreationSnapsh
       version: 1,
       title: typeof parsed.title === 'string' ? parsed.title : 'Untitled session',
       initialPrompt: typeof parsed.initialPrompt === 'string' ? parsed.initialPrompt : undefined,
+      mode: normalizeChatMode(parsed.mode),
       timeline: Array.isArray(parsed.timeline) ? parsed.timeline.filter((message): message is NonNullable<LocalCreationSnapshot['timeline']>[number] => !!message && typeof message.clientMessageId === 'string' && (message.role === 'user' || message.role === 'assistant' || message.role === 'system') && typeof message.body === 'string' && typeof message.createdAt === 'string') : [],
       nodes: parsed.nodes,
       edges: parsed.edges,
@@ -98,6 +107,30 @@ export function readLocalCreationSession(sessionId: string): LocalCreationSnapsh
   } catch {
     return null;
   }
+}
+
+/**
+ * Build the snapshot to write for a local canvas.
+ *
+ * The board (title, timeline, objects, connections, viewport) is what the canvas
+ * holds; the prompt the session was created from and the mode a guest armed are
+ * NOT — they live only in the stored snapshot. Three call sites hand-built this
+ * object from the board alone and read `initialPrompt` back off the previous
+ * snapshot by hand, which is three chances to forget the next carry-over field.
+ * `mode` was exactly that field. One builder, so a new one cannot be dropped.
+ */
+export function localCreationSnapshot(
+  sessionId: string,
+  board: Pick<LocalCreationSnapshot, 'title' | 'timeline' | 'nodes' | 'edges' | 'viewport'>,
+): LocalCreationSnapshot {
+  const prior = readLocalCreationSession(sessionId);
+  return {
+    version: 1,
+    initialPrompt: prior?.initialPrompt,
+    mode: prior?.mode,
+    ...board,
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 export function removeLocalCreationSession(sessionId: string): void {

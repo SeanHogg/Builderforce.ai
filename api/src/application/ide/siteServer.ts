@@ -310,7 +310,14 @@ async function serveSiteBackend(
   // API would — never with the SPA document, which a `fetch()` cannot use.
   const asset = await serveAsset(env, site, path.replace(/^\/+/, ''), true);
   if (asset.response.status !== 404) return asset.response;
-  return jsonResponse({ error: result.detail }, 404);
+  // Deliberately NOT `jsonResponse`: that one carries the datastore's open
+  // `Access-Control-Allow-Origin: *`, which here would let any page on the
+  // internet map a site's backend by reading which routes this 404 names.
+  // Cross-origin access to handlers is opt-in per handler (`cors` on the spec).
+  return new Response(JSON.stringify({ error: result.detail }), {
+    status: 404,
+    headers: { 'content-type': 'application/json; charset=utf-8' },
+  });
 }
 
 /** Accept both JSON and classic HTML form encodings, so a plain `<form>` with

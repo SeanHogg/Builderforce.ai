@@ -1,20 +1,29 @@
 'use client';
 
-import { ControlButton, Controls, MiniMap, type Edge, type Node } from '@xyflow/react';
+import { ControlButton, Controls, MiniMap, type Edge, type Node, type ReactFlowInstance } from '@xyflow/react';
 import { useTranslations } from 'next-intl';
-import type { CSSProperties, Dispatch, ReactNode, SetStateAction } from 'react';
+import { useCallback, type CSSProperties, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { useCanvas3DControls } from './canvas3dControls';
 import { canvasNodeFootprint, graphLayerRanks } from './canvasGraph';
 import styles from './CanvasCommands.module.css';
 
-function MinimapIcon() {
+/*
+ * The canvas icon set.
+ *
+ * Every canvas surface — the desktop command rail, the phone action rail, the
+ * session bar — draws from THIS set, on one 16×16 grid with one stroke weight.
+ * The phone rail used to spell its commands with Unicode glyphs (⌗ ⌘ ◱ ⤓), which
+ * a phone font renders at whatever size and weight it likes (and often not at
+ * all), so the two real icons next to them looked like a different toolbar.
+ */
+export function MinimapIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">
     <rect x="1.5" y="2" width="13" height="12" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.4" />
     <path d="M2 10.5 5.5 7l2.3 2.2L11 5.7l3 3" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
   </svg>;
 }
 
-function CleanLayoutIcon() {
+export function CleanLayoutIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">
     <rect x="1.75" y="2" width="4.25" height="4.25" rx=".8" fill="none" stroke="currentColor" strokeWidth="1.25" />
     <rect x="10" y="2" width="4.25" height="4.25" rx=".8" fill="none" stroke="currentColor" strokeWidth="1.25" />
@@ -24,50 +33,81 @@ function CleanLayoutIcon() {
   </svg>;
 }
 
-function ThreeDIcon() {
+export function ThreeDIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">
     <path d="M8 1.4 14 4.6v6.8L8 14.6 2 11.4V4.6z" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
     <path d="M2 4.6 8 7.9l6-3.3M8 7.9v6.7" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
   </svg>;
 }
 
-function DepthIcon() {
+export function DepthIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">
     <path d="M8 1.6 14.4 5 8 8.4 1.6 5z" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
     <path d="M2.4 8.2 8 11.1l5.6-2.9M2.4 11.4 8 14.3l5.6-2.9" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
   </svg>;
 }
 
-function LayerGuidesIcon() {
+/** Marquee-select: a dashed selection box with a pointer at its corner — the gesture the
+ *  toggle hands the primary drag to, drawn as the gesture rather than as a cursor. */
+export function MarqueeSelectIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <rect x="1.6" y="1.6" width="9.6" height="9.6" rx=".8" fill="none" stroke="currentColor" strokeWidth="1.2" strokeDasharray="2 1.6" />
+    <path d="M8.4 7.6 14.4 10l-2.5.9-.9 2.5z" fill="currentColor" stroke="currentColor" strokeWidth=".9" strokeLinejoin="round" />
+  </svg>;
+}
+
+export function LayerGuidesIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">
     <path d="M8 1.7 14.2 5 8 8.3 1.8 5z" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
     <path d="M2.4 8.6 8 11.6l5.6-3" fill="none" stroke="currentColor" strokeWidth="1.1" strokeDasharray="1.6 1.4" strokeLinejoin="round" />
   </svg>;
 }
 
-function DropToLayersIcon() {
+export function DropToLayersIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">
     <path d="M8 1.6v6.2m0 0L5.7 5.6M8 7.8l2.3-2.2" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
     <path d="M8 9.6 14.2 12.6 8 15.6 1.8 12.6z" fill="none" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
   </svg>;
 }
 
-function ZoomInIcon() {
+export function ZoomInIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">
     <path d="M8 3.2v9.6M3.2 8h9.6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
   </svg>;
 }
 
-function ZoomOutIcon() {
+export function ZoomOutIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">
     <path d="M3.2 8h9.6" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
   </svg>;
 }
 
-function ResetViewIcon() {
+export function ResetViewIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">
     <path d="M13 8a5 5 0 1 1-1.6-3.7" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     <path d="M13.2 1.9v3h-3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
+}
+
+/** Frame the whole board — the phone rail's counterpart to React Flow's fit-view. */
+export function FitViewIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M2 5.6V2.6h3M11 2.6h3v3M14 10.4v3h-3M5 13.4H2v-3" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    <rect x="5.9" y="6.1" width="4.2" height="3.8" rx=".8" fill="none" stroke="currentColor" strokeWidth="1.15" />
+  </svg>;
+}
+
+/** Take the canvas full screen. */
+export function FullscreenIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M2.2 6V2.2h3.8M10 2.2h3.8V6M13.8 10v3.8H10M6 13.8H2.2V10" fill="none" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>;
+}
+
+/** Leave full screen — the same corners, folded inwards. */
+export function ExitFullscreenIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M6.2 2.4v3.8H2.4M9.8 2.4v3.8h3.8M13.6 9.8H9.8v3.8M6.2 13.6V9.8H2.4" fill="none" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round" />
   </svg>;
 }
 
@@ -249,18 +289,41 @@ export function CanvasCommands({
 }
 
 /**
+ * Which way a board's dependency layers run: across a wide board, DOWN a tall
+ * one. A phone is the tall one — a layered graph laid out left-to-right there is
+ * several screens wide before the first fit, which is what made "arrange" hand
+ * back a board you then had to go looking for.
+ */
+export type CanvasLayoutOrientation = 'horizontal' | 'vertical';
+
+/** The orientation a board of this shape should be arranged for. */
+export function canvasLayoutOrientation(width: number, height: number): CanvasLayoutOrientation {
+  // Only a decisively tall board turns the graph; a near-square one keeps the
+  // left-to-right reading order that matches the arrows drawn between nodes.
+  return width > 0 && height > width * 1.15 ? 'vertical' : 'horizontal';
+}
+
+/**
  * Deterministically spaces nodes into graph layers, or a compact grid when there
  * are no connections. Shares its layering with the 3D view (see `canvasGraph`),
  * so arranging the board and tilting it tell the same story about dependencies.
+ *
+ * `orientation` is the axis the LAYERS advance on; nodes within a layer always
+ * spread along the other one. Callers get it from `canvasLayoutOrientation` (or
+ * from `useCanvasCleanLayout`, which measures the board for them).
  */
-export function cleanCanvasLayout<T extends Node>(nodes: T[], edges: Edge[]): T[] {
+export function cleanCanvasLayout<T extends Node>(nodes: T[], edges: Edge[], orientation: CanvasLayoutOrientation = 'horizontal'): T[] {
   if (nodes.length < 2) return nodes;
   const horizontalGap = 88;
   const verticalGap = 64;
+  const vertical = orientation === 'vertical';
   const { ranks, connected } = graphLayerRanks(nodes, edges);
 
   if (!connected) {
-    const columns = Math.max(1, Math.ceil(Math.sqrt(nodes.length)));
+    // A square-ish grid on a wide board; a narrow one on a tall board, so the
+    // block of unconnected objects runs down the screen rather than off it.
+    const square = Math.sqrt(nodes.length);
+    const columns = Math.max(1, vertical ? Math.round(square / 1.6) : Math.ceil(square));
     const columnWidths = Array.from({ length: columns }, () => 0);
     const rowHeights: number[] = [];
     nodes.forEach((node, index) => {
@@ -278,18 +341,66 @@ export function cleanCanvasLayout<T extends Node>(nodes: T[], edges: Edge[]): T[
   const layers = new Map<number, T[]>();
   for (const node of nodes) layers.set(ranks.get(node.id) ?? 0, [...(layers.get(ranks.get(node.id) ?? 0) ?? []), node]);
   const orderedLayers = [...layers.entries()].sort(([a], [b]) => a - b);
-  let x = 0;
   const positions = new Map<string, { x: number; y: number }>();
+  // `cross` walks the axis the layers advance on, `along` the axis they spread on.
+  let cross = 0;
   for (const [, layerNodes] of orderedLayers) {
-    let y = 0;
-    let layerWidth = 0;
+    let along = 0;
+    let thickness = 0;
     for (const node of layerNodes) {
       const size = canvasNodeFootprint(node);
-      positions.set(node.id, { x, y });
-      y += size.height + verticalGap;
-      layerWidth = Math.max(layerWidth, size.width);
+      positions.set(node.id, vertical ? { x: along, y: cross } : { x: cross, y: along });
+      along += vertical ? size.width + horizontalGap : size.height + verticalGap;
+      thickness = Math.max(thickness, vertical ? size.height : size.width);
     }
-    x += layerWidth + horizontalGap;
+    cross += thickness + (vertical ? verticalGap : horizontalGap);
   }
   return nodes.map((node) => ({ ...node, position: positions.get(node.id) ?? node.position }));
+}
+
+/**
+ * The zoom floor a FIT is allowed to reach, well below the floor a board sets for
+ * pinching. A phone screen is a fraction of the width an arranged graph needs, and
+ * a fit that stops at the pinch floor leaves most of the board off-screen — which
+ * is not a fit, it is a crop. Pinching keeps the board's own (higher) floor so a
+ * user cannot strand themselves in an unreadable view.
+ */
+export const CANVAS_FIT_MIN_ZOOM = 0.08;
+
+/**
+ * The arrange command every canvas puts on its rail: lay the objects out for the
+ * shape of THIS board, then frame the result.
+ *
+ * All five canvases had hand-copied the same three lines, all of them measuring
+ * nothing — so "arrange" meant "lay out for a wide screen" even on a phone, and
+ * the fit that followed stopped at the board's pinch floor with the board still
+ * running off the side. Measuring and framing belong with the layout, once.
+ */
+export function useCanvasCleanLayout<NodeType extends Node, EdgeType extends Edge>({
+  boardRef,
+  instanceRef,
+  setNodes,
+  edges,
+  padding = 0.18,
+  maxZoom = 1,
+}: {
+  /** The element the board is drawn in — its shape decides which way the graph runs. */
+  boardRef: { readonly current: HTMLElement | null };
+  instanceRef: { readonly current: ReactFlowInstance<NodeType, EdgeType> | null };
+  setNodes: Dispatch<SetStateAction<NodeType[]>>;
+  /** Omit for a board with no connections — it lays out as a grid either way. */
+  edges?: EdgeType[];
+  padding?: number;
+  maxZoom?: number;
+}): () => void {
+  return useCallback(() => {
+    const box = boardRef.current?.getBoundingClientRect();
+    const orientation = canvasLayoutOrientation(
+      box?.width ?? (typeof window === 'undefined' ? 0 : window.innerWidth),
+      box?.height ?? (typeof window === 'undefined' ? 0 : window.innerHeight),
+    );
+    setNodes((current) => cleanCanvasLayout(current, edges ?? [], orientation));
+    // Next frame: the fit has to read the positions we just set.
+    window.setTimeout(() => void instanceRef.current?.fitView({ padding, maxZoom, minZoom: CANVAS_FIT_MIN_ZOOM, duration: 320 }), 0);
+  }, [boardRef, instanceRef, setNodes, edges, padding, maxZoom]);
 }

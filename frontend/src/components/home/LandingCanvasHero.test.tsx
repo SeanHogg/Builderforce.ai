@@ -71,7 +71,9 @@ describe('LandingCanvasHero', () => {
     fireEvent.change(screen.getByLabelText('heroPromptPlaceholder'), { target: { value: 'Build me a pricing page' } });
     fireEvent.click(screen.getByText('send'));
 
-    expect(createLocalCreationSession).toHaveBeenCalledWith('Build me a pricing page');
+    // The armed mode rides into the guest session — the composer's `/` menu is the
+    // only place a visitor can set it, and it must survive the hand-off.
+    expect(createLocalCreationSession).toHaveBeenCalledWith('Build me a pricing page', 'work');
     expect(push).toHaveBeenCalledWith('/create/local-session-1');
   });
 

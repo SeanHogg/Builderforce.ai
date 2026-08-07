@@ -24,13 +24,13 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * same doc page across steps / across ticks" costs one real egress. A FAILED fetch is
  * invalidated immediately after (a transient 502 must not be pinned for the TTL).
  *
- * `search` is the second half, and it is CONDITIONAL. Search is a metered third-party
- * API with no platform-funded key, so the backing is only present when the tenant's own
- * BYO key resolves (`webSearchCredential.ts` → `integration_credentials`). No key means
- * no `search` method here, which means the engine omits `web.search` from the run's
- * capability set, which means the registry never advertises `web_search` — the surface
- * behaves exactly as it did before search existed. The agent is never handed a tool
- * that is certain to fail. The vendor itself is behind a port (`webSearchVendors.ts`).
+ * `search` is the second half, and it is ALWAYS present — but its BACKING varies. A
+ * tenant BYO key buys a general web index, an operator key funds one for everybody, and
+ * beneath both sits a keyless encyclopedic vendor so a fresh workspace (or a logged-out
+ * visitor) can still research something. Precedence lives in one place
+ * (`webSearchCredential.resolveWebSearchBacking`); the vendor itself is behind a port
+ * (`webSearchVendors.ts`); and {@link searchWeb} is the ONE cached, metered execution
+ * path every surface — cloud agent, Brain MCP tool, guest canvas — calls.
  */
 
 import type { WebCapability, WebFetchResult, WebSearchResult } from '@builderforce/agent-tools';
@@ -302,15 +302,79 @@ async function fetchUncached(url: string): Promise<WebFetchResult> {
   }
 }
 
-/** Everything the optional `search` half needs: which vendor adapter to call, the
- *  tenant's resolved key, and (when the run has a DB) the tenant to meter the query
- *  against. Assembled by the engine from {@link resolveWebSearchCredential}. */
+/** The never-throwing shape every JSON vendor call returns. `status` is present only
+ *  when a response actually arrived, so a caller can distinguish "the vendor said no"
+ *  from "we never reached it". */
+export type JsonFetchResult =
+  | { ok: true; json: unknown }
+  | { ok: false; error: string; status?: number };
+
+/**
+ * One bounded, timed GET against a third-party JSON API — THE outbound HTTP path for
+ * every vendor adapter in the app (search engines, geocoders).
+ *
+ * It lives here beside {@link readCapped} and {@link FETCH_TIMEOUT_MS} because those are
+ * the two guarantees it exists to enforce, and because a second adapter that rolls its
+ * own `fetch` inevitably rolls a weaker one — an unbounded body read, a missing timeout,
+ * or a User-Agent that does not identify us to a courtesy-limited public API. Callers
+ * supply only what genuinely varies: the label the error speaks in, extra headers, and
+ * any status-specific hint worth telling the model.
+ *
+ * Never throws: a vendor outage costs the caller one turn, not the run.
+ */
+export async function fetchVendorJson(url: string, opts: {
+  /** What the error text calls this dependency, e.g. `search vendor`, `geocoder`. */
+  label: string;
+  headers?: Record<string, string>;
+  /** JSON request body. Supplying one makes the call a POST and sets the content type —
+   *  most modern search APIs (Tavily, Exa, Linkup) are POST-with-a-body, while the
+   *  keyless ones are plain GETs, and the difference must not fork the transport. */
+  body?: unknown;
+  /** Extra clause appended to an HTTP-error message, e.g. "this key was rejected". */
+  statusHint?: (status: number) => string;
+} ): Promise<JsonFetchResult> {
+  const { label, headers, body, statusHint } = opts;
+  try {
+    const res = await fetch(url, {
+      method: body === undefined ? 'GET' : 'POST',
+      redirect: 'follow',
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      headers: {
+        'User-Agent': 'BuilderforceAgent/1.0 (+https://builderforce.ai)',
+        Accept: 'application/json',
+        ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+        ...headers,
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    // Read the body under the same byte cap as a page fetch: a vendor is trusted to be
+    // well-behaved, but "trusted" is not a size guarantee.
+    const { text } = await readCapped(res);
+    if (!res.ok) {
+      return { ok: false, status: res.status, error: `${label} returned HTTP ${res.status}${statusHint?.(res.status) ?? ''}` };
+    }
+    try {
+      return { ok: true, json: JSON.parse(text) as unknown };
+    } catch {
+      return { ok: false, error: `${label} returned a non-JSON response` };
+    }
+  } catch (e) {
+    const timedOut = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, error: timedOut ? `${label} timed out after ${FETCH_TIMEOUT_MS}ms` : `${label} request failed: ${msg}` };
+  }
+}
+
+/** Everything the `search` half needs: which vendor adapter to call, the resolved key
+ *  (null for a keyless vendor), and — when a tenant is in scope — who to meter the
+ *  query against. Assembled from {@link resolveWebSearchBacking}. */
 export interface CloudWebSearchBacking {
   vendor: WebSearchVendor;
-  apiKey: string;
+  apiKey: string | null;
   /** Consumption metering. Search bills per QUERY, so a real (uncached) query is one
    *  outbound fetch on the tenant's meter — same unit, same ledger as the Brain's
-   *  `/fetch-url` proxy. Omitted only where no tenant DB is in scope (tests). */
+   *  `/fetch-url` proxy. Omitted where no tenant DB is in scope: the logged-out guest
+   *  surface (metered by its own daily call cap instead) and tests. */
   meter?: { db: Db; tenantId: number };
 }
 
@@ -322,58 +386,66 @@ export function normalizeSearchQuery(raw: string): string {
 }
 
 /**
- * Build the cloud surface's `web` capability.
+ * Run ONE web search against a resolved backing — cached, metered, never throwing.
  *
- * `fetch` is unconditional. `search` is present ONLY when `args.search` is supplied —
- * i.e. only when a usable BYO key resolved for this tenant. With no backing the
- * returned object has no `search` method at all, so `WebCapability.search` is
- * `undefined` and the engine's capability set (and therefore the advertised toolset)
- * is byte-identical to the pre-search behaviour.
+ * This is the single execution path for search across every surface: the cloud agent's
+ * `web_search` tool, the Brain's `web.search` MCP tool, and the logged-out guest canvas.
+ * They differ only in which backing they hand in and whether a tenant meter is in scope;
+ * keeping the cache key, the TTL discipline and the ledger write here is what stops
+ * three copies of that policy drifting apart (the MCP tool previously had none of it,
+ * so an authed Brain research turn re-paid for every repeated query).
  */
-export function buildCloudWebCapability(args: { env: Env; search?: CloudWebSearchBacking | null }): WebCapability {
+export async function searchWeb(env: Env, backing: CloudWebSearchBacking, rawQuery: string): Promise<WebSearchResult> {
+  const { vendor, apiKey, meter } = backing;
+  const query = (rawQuery ?? '').trim();
+  if (!query) return { ok: false, query, error: 'query is required' };
+
+  // Cache on the NORMALIZED query but search on what the caller actually typed — the
+  // same read-through cache (L1 Map + L2 KV) and the same TTLs as web_fetch, for the
+  // same reason: a multi-step run re-asks the same question across ticks, and on a
+  // keyed vendor each repeat is also real vendor spend. The key carries the VENDOR, so
+  // a tenant with a BYO key never reads a keyless answer out of the shared cache.
+  const key = `web-search:${vendor.id}:${normalizeSearchQuery(query)}`;
+  const result = await getOrSetCached<WebSearchResult>(env, key, async () => {
+    // Metering lives INSIDE the loader so a cache hit is neither charged nor gated —
+    // only a query that actually hits the wire is metered.
+    if (meter) {
+      const cap = await enforceOutboundFetchCap(meter.db, meter.tenantId, env);
+      if (!cap.allowed) {
+        return {
+          ok: false,
+          query,
+          error: `monthly outbound-fetch allowance exhausted (${cap.used}/${cap.limit} on the ${cap.effectivePlan} plan) — web search is paused until it resets`,
+        };
+      }
+    }
+    const r = await vendor.search(query, apiKey);
+    if (r.ok && meter) {
+      await recordOutboundFetch(meter.db, meter.tenantId, vendor.endpoint)
+        .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudWeb.ts", operation: "searchWeb", context: { logMessage: '[cloud-web] search usage ledger write failed', details: { tenantId: meter.tenantId, vendor: vendor.id, error } } }));
+    }
+    return r;
+  }, {
+    kvTtlSeconds: CACHE_KV_TTL_SECONDS,
+    l1TtlMs: CACHE_L1_TTL_MS,
+  });
+  // A vendor blip (or a cap that resets) must be retryable on the next step, never
+  // pinned for the TTL — same rule as a failed fetch.
+  if (!result.ok) await invalidateCached(env, key)
+    .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudWeb.ts", operation: "searchWeb", context: { logMessage: '[cloud-web] failed-search cache invalidation failed', details: { vendor: vendor.id, key, error } } }));
+  return result;
+}
+
+/**
+ * Build the cloud surface's `web` capability. Both halves are always present: `fetch`
+ * because every surface has an HTTP client, `search` because {@link resolveWebSearchBacking}
+ * always resolves a vendor — a BYO key, an operator key, or the keyless floor.
+ */
+export function buildCloudWebCapability(args: { env: Env; search: CloudWebSearchBacking }): WebCapability {
   const { env, search } = args;
-  if (!search) return { fetch: (rawUrl: string) => fetchCached(env, rawUrl) };
-  const { vendor, apiKey, meter } = search;
   return {
     fetch: (rawUrl: string) => fetchCached(env, rawUrl),
-    async search(rawQuery: string): Promise<WebSearchResult> {
-      const query = (rawQuery ?? '').trim();
-      if (!query) return { ok: false, query, error: 'query is required' };
-
-      // Cache on the NORMALIZED query but search on what the agent actually typed —
-      // the same read-through cache (L1 Map + L2 KV) and the same TTLs as web_fetch,
-      // for the same reason: a multi-step run re-asks the same question across ticks,
-      // and here each repeat is also real vendor spend.
-      const key = `web-search:${vendor.id}:${normalizeSearchQuery(query)}`;
-      const result = await getOrSetCached<WebSearchResult>(env, key, async () => {
-        // Metering lives INSIDE the loader so a cache hit is neither charged nor
-        // gated — only a query that actually hits the wire is metered.
-        if (meter) {
-          const cap = await enforceOutboundFetchCap(meter.db, meter.tenantId, env);
-          if (!cap.allowed) {
-            return {
-              ok: false,
-              query,
-              error: `monthly outbound-fetch allowance exhausted (${cap.used}/${cap.limit} on the ${cap.effectivePlan} plan) — web search is paused until it resets`,
-            };
-          }
-        }
-        const r = await vendor.search(query, apiKey);
-        if (r.ok && meter) {
-          await recordOutboundFetch(meter.db, meter.tenantId, vendor.endpoint)
-            .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudWeb.ts", operation: "result", context: { logMessage: '[cloud-web] search usage ledger write failed', details: { tenantId: meter.tenantId, vendor: vendor.id, error } } }));
-        }
-        return r;
-      }, {
-        kvTtlSeconds: CACHE_KV_TTL_SECONDS,
-        l1TtlMs: CACHE_L1_TTL_MS,
-      });
-      // A vendor blip (or a cap that resets) must be retryable on the next step, never
-      // pinned for the TTL — same rule as a failed fetch.
-      if (!result.ok) await invalidateCached(env, key)
-        .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudWeb.ts", operation: "search", context: { logMessage: '[cloud-web] failed-search cache invalidation failed', details: { vendor: vendor.id, key, error } } }));
-      return result;
-    },
+    search: (rawQuery: string) => searchWeb(env, search, rawQuery),
   };
 }
 

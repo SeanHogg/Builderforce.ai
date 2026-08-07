@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { PromptPanel, PromptOptionsMenu, useMentionAutocomplete, type ChatModelOptions, type ChatModelSelection, type PromptOptionsLabels } from '@seanhogg/builderforce-brain-ui';
 import { effortProfile, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
-import type { BrainEffort } from '@/lib/brain';
+import { CHAT_MODES, CHAT_MODE_ICON, type BrainEffort, type ChatMode } from '@/lib/brain';
 export type { ChatModelOptions, ChatModelSelection } from '@seanhogg/builderforce-brain-ui';
 
 /** Browser Web Speech API (not in all TS libs). */
@@ -80,6 +80,20 @@ export interface ChatInputProps {
   /** False ⇒ the tenant may not pin a model (no paid plan, no connected provider):
    *  the `/` menu says why instead of offering a list the gateway would reject. */
   canChooseModel?: boolean;
+  /**
+   * Conversation mode for this turn — Chat (answer it) or Work (open it, staff it,
+   * dispatch it). Shown and changed in the `/` menu, and named on its trigger: this
+   * is the setting that decides whether a turn can leave real work behind, so it is
+   * readable without opening anything but does not cost the action row a control.
+   */
+  chatMode?: ChatMode;
+  onChatModeChange?: (mode: ChatMode) => void;
+  /** Persistent memory for this conversation, shown and changed in the `/` menu. */
+  memoryEnabled?: boolean;
+  onMemoryChange?: (on: boolean) => void;
+  /** Why memory is unusable right now — the `/` menu states it rather than offering
+   *  a toggle that would do nothing. */
+  memoryUnavailableReason?: string;
   /** When set, an "Auto mode" pill toggles this (auto-approve tool actions). */
   autoMode?: boolean;
   onAutoModeChange?: (on: boolean) => void;
@@ -332,6 +346,11 @@ export function ChatInput({
   onModelSelectionChange,
   effectiveModel,
   canChooseModel = true,
+  chatMode,
+  onChatModeChange,
+  memoryEnabled,
+  onMemoryChange,
+  memoryUnavailableReason,
   autoMode,
   onAutoModeChange,
   showBrainIcon = false,
@@ -347,6 +366,9 @@ export function ChatInput({
   focusToken,
 }: ChatInputProps) {
   const t = useTranslations('chatInput');
+  // The two mode names are the conversation's vocabulary, not the composer's — they
+  // are the SAME words the Brain empty state uses, from the same catalog namespace.
+  const tModes = useTranslations('brain.modes');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
@@ -378,6 +400,8 @@ export function ChatInput({
   // price) are formatted by the options builder instead — see useChatModelOptions.
   const optionLabels = useMemo<Partial<PromptOptionsLabels>>(() => ({
     options: t('options'),
+    mode: tModes('pickerAria'),
+    memory: t('memory'),
     effort: t('effort'),
     effortQuick: t('effort_quick'),
     effortBalanced: t('effort_balanced'),
@@ -411,6 +435,14 @@ export function ChatInput({
     modelLocked: t('modelLocked'),
     accountSettings: t('accountSettings'),
   }), [t]);
+
+  // Chat | Work, built from the SHARED mode list so a mode cannot exist in the
+  // vocabulary and be missing from the control that arms it.
+  const modeChoices = useMemo(
+    () => CHAT_MODES.map((mode) => ({ value: mode, label: tModes(`${mode}.label`), hint: tModes(`${mode}.hint`), icon: CHAT_MODE_ICON[mode] })),
+    [tModes],
+  );
+  const describeMemory = useCallback((on: boolean) => t(on ? 'memoryOnHint' : 'memoryOffHint'), [t]);
 
   // What each control really costs, read from the SHARED effort table so the copy
   // can never promise a budget the request does not send.
@@ -630,6 +662,8 @@ export function ChatInput({
             <PromptOptionsMenu
               labels={optionLabels}
               disabled={disabled}
+              mode={chatMode && onChatModeChange ? { value: chatMode, onChange: (next) => onChatModeChange(next as ChatMode), choices: modeChoices } : undefined}
+              memory={onMemoryChange ? { enabled: !!memoryEnabled, onChange: onMemoryChange, unavailableReason: memoryUnavailableReason, describe: describeMemory } : undefined}
               effort={effort}
               onEffortChange={onEffortChange}
               describeEffort={describeEffort}

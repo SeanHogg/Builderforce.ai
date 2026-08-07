@@ -91,6 +91,17 @@ const mono: React.CSSProperties = {
   lineHeight: 1.5,
 };
 
+/** Origins are typed one per line or comma-separated — whichever a person
+ *  reaches for. Validation stays on the server, like every other field here. */
+function parseOrigins(text: string): string[] {
+  const seen: string[] = [];
+  for (const part of text.split(/[\n,]/)) {
+    const value = part.trim();
+    if (value && !seen.includes(value)) seen.push(value);
+  }
+  return seen;
+}
+
 export interface HandlerEditorProps {
   projectId: number;
   /** Existing handler name, or null to create a new one. */
@@ -110,6 +121,7 @@ export default function HandlerEditor({ projectId, name, spec, onSaved, onCancel
   const [method, setMethod] = useState<HandlerMethod>(source.method);
   const [verify, setVerify] = useState<HandlerVerifyKind>(source.verify);
   const [verifySecret, setVerifySecret] = useState(source.verifySecret ?? '');
+  const [corsText, setCorsText] = useState((source.cors ?? []).join('\n'));
   const [description, setDescription] = useState(source.description ?? '');
   const [stepsText, setStepsText] = useState(JSON.stringify(source.steps ?? [], null, 2));
   const [respondText, setRespondText] = useState(JSON.stringify(source.respond ?? {}, null, 2));
@@ -136,6 +148,8 @@ export default function HandlerEditor({ projectId, name, spec, onSaved, onCancel
       return;
     }
 
+    const cors = parseOrigins(corsText);
+
     setBusy(true);
     try {
       await projectBackendApi.saveHandler(projectId, (handlerName || route.replace(/^\//, '')).trim(), {
@@ -147,6 +161,10 @@ export default function HandlerEditor({ projectId, name, spec, onSaved, onCancel
         // fields, so a value it does not render is a value it silently deletes —
         // and deleting this one repoints a Stripe endpoint at the wrong secret.
         ...(verify !== 'none' && verifySecret.trim() ? { verifySecret: verifySecret.trim().toUpperCase() } : {}),
+        // Omitted when empty rather than sent as `[]`: the api rejects an empty
+        // list, because "CORS is configured" and "no origin may call this" must
+        // not be the same document.
+        ...(cors.length ? { cors } : {}),
         ...(description.trim() ? { description: description.trim() } : {}),
         steps,
         respond,
@@ -247,6 +265,30 @@ export default function HandlerEditor({ projectId, name, spec, onSaved, onCancel
           {t('verifyNoneWarning')}
         </div>
       )}
+
+      {/* Cross-origin access sits with the other consequential fields, not in the
+          JSON: a handler spends connector credentials and model tokens, so who
+          may call it from a browser is a decision, not a detail. */}
+      <div>
+        <div style={label}>{t('handlerCors')}</div>
+        <textarea
+          value={corsText}
+          onChange={(e) => setCorsText(e.target.value)}
+          rows={2}
+          spellCheck={false}
+          placeholder={t('handlerCorsPlaceholder')}
+          aria-label={t('handlerCors')}
+          style={{ ...field, ...mono, resize: 'vertical' }}
+        />
+        <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 6, lineHeight: 1.5 }}>
+          {t('corsHelp')}
+        </div>
+        {parseOrigins(corsText).includes('*') && (
+          <div style={{ fontSize: 13, color: 'var(--warning, #9a6200)', marginTop: 6, lineHeight: 1.5 }}>
+            {t('corsWildcardWarning')}
+          </div>
+        )}
+      </div>
 
       <div>
         <div style={label}>{t('handlerDescription')}</div>

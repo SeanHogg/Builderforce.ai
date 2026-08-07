@@ -64,7 +64,7 @@ import {
   isStepMessage,
   getBrainCapability,
   normalizeChatMode,
-  DEFAULT_CHAT_MODE,
+  NEW_CHAT_MODE,
   type ChatMode,
   type WorkOptionId,
   type BrainCapabilityId,
@@ -224,8 +224,8 @@ export function BrainPanel({
    * ref so `startNewChat` reads the current value without being re-created (it is a
    * dependency of `ensureChatId`, which is captured into every run).
    */
-  const [pendingMode, setPendingMode] = useState<ChatMode>(DEFAULT_CHAT_MODE);
-  const pendingModeRef = useRef<ChatMode>(DEFAULT_CHAT_MODE);
+  const [pendingMode, setPendingMode] = useState<ChatMode>(NEW_CHAT_MODE);
+  const pendingModeRef = useRef<ChatMode>(NEW_CHAT_MODE);
   // eslint-disable-next-line react-hooks/refs
   pendingModeRef.current = pendingMode;
   /**
@@ -1357,6 +1357,11 @@ export function BrainPanel({
       onModelSelectionChange={setModelSelection}
       autoMode={autoApprove}
       onAutoModeChange={setAutoApproveMode}
+      // Chat | Work moved into the composer's `/` menu, which names the armed mode on
+      // its trigger. One control less in a row that a phone could not fit, and the two
+      // surfaces that have this setting now render it from the same place.
+      chatMode={chatMode}
+      onChatModeChange={selectMode}
       showVoice
       pendingAttachments={conv.pendingAttachments}
       onRemoveAttachment={conv.removeAttachment}
@@ -1364,9 +1369,6 @@ export function BrainPanel({
       onMention={setRecipientChoice}
       focusToken={composerFocusToken}
       contextControls={<>
-        {/* Chat | Work. First control in the row because it is the one that decides
-            whether this turn can open and dispatch real work. */}
-        <ChatModeToggle value={chatMode} onChange={selectMode} disabled={conv.sending} />
         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{tBrain('actingAs')}</span>
         <Select
           value={personaSel}
@@ -1465,7 +1467,7 @@ export function BrainPanel({
               a toolbar control the user finds afterwards. Choosing here rides into the
               chat `startNewChat` creates (see `pendingMode`). */}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'center' }}>
-            <ChatModeToggle value={chatMode} onChange={selectMode} layout="full" />
+            <ChatModeToggle value={chatMode} onChange={selectMode} />
             {/* File the conversation as it starts. New chats otherwise inherit the
                 global scope silently, so a user with no project in scope had no way to
                 put THIS conversation somewhere without first creating it. */}

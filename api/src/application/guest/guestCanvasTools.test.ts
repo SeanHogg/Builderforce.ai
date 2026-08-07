@@ -46,6 +46,27 @@ describe('restrictGuestTools', () => {
     expect(body.tool_choice).toBe('auto');
   });
 
+  it('keeps the research tools — without them a guest turn invents its facts', () => {
+    // These three are the ONLY server-executing tools a guest may hold, and they run
+    // through /api/guest/research/* (guest token + its own daily cap + SSRF guard).
+    // The names must match the MCP-advertised ones, because one canvas system prompt
+    // names them for both the authed and the logged-out surface.
+    const body = {
+      messages: [{ role: 'user', content: 'research the top 10 EV makers and chart it' }],
+      tools: [
+        tool('builtin_web_search'), tool('builtin_web_fetch'), tool('builtin_geo_geocode'),
+        tool('builtin_tasks_create'),
+      ],
+      tool_choice: 'auto',
+    } as ChatCompletionRequest;
+
+    restrictGuestTools(body);
+
+    expect(body.tools).toEqual([
+      tool('builtin_web_search'), tool('builtin_web_fetch'), tool('builtin_geo_geocode'),
+    ]);
+  });
+
   it('keeps ordinary guest chat tool-free', () => {
     const body = {
       messages: [{ role: 'user', content: 'hello' }],

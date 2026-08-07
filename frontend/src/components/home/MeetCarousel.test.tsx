@@ -62,12 +62,36 @@ describe('MeetCarousel', () => {
   it('supports arrows and an explicit autoplay pause control', () => {
     render(<MeetCarousel />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Next slide' }));
+    fireEvent.click(screen.getByRole('button', { name: 'home.carousel.next' }));
     expect(screen.getByText('02 / 03')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Pause automatic slide rotation' }));
+    fireEvent.click(screen.getByRole('button', { name: 'home.carousel.pause' }));
     act(() => vi.advanceTimersByTime(14000));
     expect(screen.getByText('02 / 03')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Resume automatic slide rotation' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'home.carousel.resume' })).toBeInTheDocument();
+  });
+
+  it('shows only the active slide, so a short slide never inherits a tall one', () => {
+    const { container } = render(<MeetCarousel />);
+    const active = () => container.querySelectorAll('.meet-slide.is-active');
+
+    expect(active()).toHaveLength(1);
+    expect(active()[0].id).toBe('meet-panel-0');
+    expect(container.querySelector('#meet-panel-1')?.getAttribute('aria-hidden')).toBe('true');
+
+    fireEvent.click(screen.getByRole('tab', { name: /home.pillarsHeading/ }));
+    expect(active()).toHaveLength(1);
+    expect(active()[0].id).toBe('meet-panel-2');
+  });
+
+  it('styles its own slides — the Create slide carries the panel frame', () => {
+    const { container } = render(<MeetCarousel />);
+
+    // Regression: these once relied on `.lp-create*` rules that lived in the
+    // landing page and were deleted with the old hero, leaving the slide bare.
+    expect(container.querySelector('.meet-slide.is-active .meet-panel')).toBeInTheDocument();
+    expect(container.querySelector('.meet-create-board')).toBeInTheDocument();
+    expect(container.querySelector('.meet-create-feature')).toBeInTheDocument();
+    expect(container.querySelector('.meet-create-flow')).toBeInTheDocument();
   });
 });

@@ -8249,6 +8249,9 @@ export interface HandlerSpecDocument {
   verify: HandlerVerifyKind;
   /** Overrides the kind's default secret name — Stripe issues one per endpoint. */
   verifySecret?: string;
+  /** Origins a browser may call this handler from. Absent means none — the
+   *  project's own site is same-origin and never needs it. `["*"]` means any. */
+  cors?: string[];
   description?: string;
   steps: unknown[];
   respond: Record<string, unknown>;

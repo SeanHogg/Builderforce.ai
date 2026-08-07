@@ -140,6 +140,21 @@ export interface HandlerSpec {
    * where the secret is per-ACCOUNT.
    */
   verifySecret?: string;
+  /**
+   * Origins allowed to call this handler from a BROWSER. Absent means none.
+   *
+   * Both handler addresses were built for callers that do not preflight — a
+   * provider's webhook (`/hooks/<token>/…`) and the site's own pages
+   * (`<site>/api/…`, same-origin). A page hosted anywhere else — a static export
+   * on someone's own CDN, a native app's webview — therefore could not call the
+   * backend it was built with, because the reply carried no CORS headers.
+   *
+   * It is an ALLOW-LIST and it is never defaulted, for the same reason `verify`
+   * is not: a handler can spend connector credentials and model tokens, so
+   * `Access-Control-Allow-Origin: *` must not be what you get by forgetting.
+   * `["*"]` is available, but only by typing it.
+   */
+  cors?: string[];
   description?: string;
   steps: HandlerStep[];
   respond: HandlerResponse;
@@ -147,6 +162,52 @@ export interface HandlerSpec {
 
 /** Same shape the vault enforces, so a spec cannot name a secret that cannot exist. */
 const VERIFY_SECRET_NAME_RE = /^[A-Z][A-Z0-9_]{0,127}$/;
+
+/** How many origins one handler may name. A list this long is a `*` in disguise. */
+const MAX_CORS_ORIGINS = 32;
+
+/**
+ * Normalise one allow-list entry to the exact string a browser sends in `Origin`,
+ * or null when it cannot be one.
+ *
+ * A path is rejected rather than trimmed: `https://example.com/app` looks like it
+ * scopes the permission to one part of a site, and it does not — the browser
+ * sends only the origin, so honouring it silently would grant the WHOLE site
+ * access under a spec that reads as though it did not.
+ */
+export function normalizeOrigin(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const value = raw.trim();
+  if (value === '*') return '*';
+  // The literal `Origin: null` a sandboxed iframe and a `file://` document send —
+  // the case a packaged native app's webview actually presents. Un-attributable,
+  // like `*`, and available on the same terms: only if you typed it.
+  if (value.toLowerCase() === 'null') return 'null';
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+  if (url.username || url.password) return null;
+  if (url.pathname !== '/' || url.search || url.hash) return null;
+  return url.origin.toLowerCase();
+}
+
+/**
+ * The `Access-Control-Allow-Origin` value for this caller, or null when the
+ * handler does not admit it.
+ *
+ * Returns `*` only when the spec literally says `*`; otherwise it echoes the
+ * caller's own origin, so an allow-list of three origins never widens into a
+ * blanket permission on the wire.
+ */
+export function allowedCorsOrigin(handler: HandlerSpec, requestOrigin: string | null): string | null {
+  if (!handler.cors?.length || !requestOrigin) return null;
+  if (handler.cors.includes('*')) return '*';
+  return handler.cors.includes(requestOrigin.trim().toLowerCase()) ? requestOrigin : null;
+}
 
 export type ParseResult =
   | { ok: true; spec: HandlerSpec }
@@ -322,6 +383,33 @@ export function parseHandlerSpec(raw: unknown, fallbackName: string): ParseResul
     verifySecret = raw.verifySecret;
   }
 
+  // Declared, never defaulted — the `verify` posture applied to the browser.
+  // An EMPTY list is rejected rather than treated as absent: it reads like
+  // "CORS is on here" and behaves like "no origin may call this", which is the
+  // exact shape of failure that survives review looking correct.
+  let cors: string[] | undefined;
+  if (raw.cors !== undefined) {
+    if (!Array.isArray(raw.cors)) return { ok: false, reason: 'cors must be an array of origins' };
+    if (raw.cors.length === 0) {
+      return { ok: false, reason: 'cors must name at least one origin — omit it entirely to allow none' };
+    }
+    if (raw.cors.length > MAX_CORS_ORIGINS) {
+      return { ok: false, reason: `cors may name at most ${MAX_CORS_ORIGINS} origins` };
+    }
+    const origins: string[] = [];
+    for (const entry of raw.cors) {
+      const origin = normalizeOrigin(entry);
+      if (!origin) {
+        return {
+          ok: false,
+          reason: `cors entry ${JSON.stringify(entry)} is not an origin — use scheme://host[:port], "*" or "null"`,
+        };
+      }
+      if (!origins.includes(origin)) origins.push(origin);
+    }
+    cors = origins;
+  }
+
   return {
     ok: true,
     spec: {
@@ -330,6 +418,7 @@ export function parseHandlerSpec(raw: unknown, fallbackName: string): ParseResul
       method: method as HandlerMethod,
       verify: raw.verify as VerifyKind,
       ...(verifySecret ? { verifySecret } : {}),
+      ...(cors ? { cors } : {}),
       ...(typeof raw.description === 'string' ? { description: raw.description } : {}),
       steps,
       respond,

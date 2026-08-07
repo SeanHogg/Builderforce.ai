@@ -11,6 +11,8 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  */
 
 import { assertSafeUrl, resolveAndAssertPublic, BlockedUrlError } from '../../infrastructure/net/ssrfGuard';
+import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import type { Env } from '../../env';
 
 /** Max decoded text returned to the model (chars). A roadmap/docs page fits
  *  comfortably; anything larger is truncated with a marker. */
@@ -206,6 +208,36 @@ export async function fetchWebDocument(rawUrl: string): Promise<WebFetchResult> 
   }
 
   return { url: finalUrl, requestedUrl, status: res.status, contentType, title, text, truncated };
+}
+
+/** How long a fetched document stays warm. Matches the cloud surface's `web_fetch`
+ *  cache (`cloudWeb.CACHE_KV_TTL_SECONDS`): long enough that one research turn reads a
+ *  source once, short enough that a page the user is actively editing goes stale fast. */
+const DOC_CACHE_KV_TTL_SECONDS = 600;
+const DOC_CACHE_L1_TTL_MS = 60_000;
+
+/**
+ * {@link fetchWebDocument} behind the canonical read-through cache (L1 Map + L2 KV).
+ *
+ * A research pipeline is re-read-heavy by construction: search returns sources, the
+ * model fetches one, reasons, then fetches it again a step later to quote it — and on
+ * the canvas the same board is often re-researched by several people in one session.
+ * Keyed on the NORMALIZED url (the github-blob rewrite happens first) so the two forms
+ * of the same file share one entry.
+ *
+ * Failures are not cached: {@link fetchWebDocument} throws on an SSRF-blocked or
+ * unreachable URL, and a throwing loader leaves the cache untouched, so a transient
+ * outage is retryable on the model's very next step. A non-2xx RESPONSE is a real
+ * answer from the origin and is cached like any other. `env` may be absent (tests,
+ * non-Worker callers) — the helper's contract is "no KV → call the loader".
+ */
+export async function fetchWebDocumentCached(env: Env | undefined, rawUrl: string): Promise<WebFetchResult> {
+  return getOrSetCached<WebFetchResult>(
+    env as Env,
+    `web-doc:${normalizeFetchUrl(rawUrl)}`,
+    () => fetchWebDocument(rawUrl),
+    { kvTtlSeconds: DOC_CACHE_KV_TTL_SECONDS, l1TtlMs: DOC_CACHE_L1_TTL_MS },
+  );
 }
 
 /** Read a response body as text but stop after `maxBytes` so a huge/streamed

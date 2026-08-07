@@ -123,7 +123,17 @@ describe('materialize', () => {
   it('verifies signatures in the generated Worker too', () => {
     const source = result.files[`${WORKER_DIR}src/index.ts`]!;
     expect(source).toContain('x-twilio-signature');
-    expect(source).toContain("return new Response(failure, { status: 403 })");
+    expect(source).toContain('return new Response(failure, { status: 403, headers: cors })');
+  });
+
+  it('honours the same cors allow-list as the platform-hosted ingress', () => {
+    // The two hosting strategies run the SAME specs. If `cors` meant something
+    // different here, switching strategy would silently open or close a frontend.
+    const source = result.files[`${WORKER_DIR}src/index.ts`]!;
+    expect(source).toContain('access-control-request-method');
+    expect(source).toContain("if (list.includes('*')) return '*';");
+    // Answered before verification and before a single step runs.
+    expect(source.indexOf('if (preflightMethod) {')).toBeLessThan(source.indexOf("handler.verify === 'twilio'"));
   });
 
   it('derives a DNS-safe Worker name from the project', () => {

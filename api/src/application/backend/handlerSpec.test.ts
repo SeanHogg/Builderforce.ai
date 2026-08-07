@@ -9,6 +9,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
+  allowedCorsOrigin,
   handlerNameFromPath,
   matchHandler,
   normalizeRoute,
@@ -115,6 +116,71 @@ describe('parseHandlerSpec', () => {
   it('rejects a non-object document', () => {
     expect(parseHandlerSpec('nope', 'x').ok).toBe(false);
     expect(parseHandlerSpec([1, 2], 'x').ok).toBe(false);
+  });
+
+  it('leaves cross-origin access OFF when `cors` is absent', () => {
+    // The property that makes the allow-list an allow-list: forgetting the field
+    // must not produce an endpoint any website can call from a visitor's browser.
+    const result = parseHandlerSpec(minimal(), 'x');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.spec.cors).toBeUndefined();
+  });
+
+  it('normalises and de-duplicates the cors allow-list', () => {
+    const result = parseHandlerSpec(
+      { ...minimal(), cors: ['https://Example.com', ' https://example.com ', 'http://localhost:5173'] },
+      'x',
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.spec.cors).toEqual(['https://example.com', 'http://localhost:5173']);
+  });
+
+  it('rejects an empty cors list rather than reading it as "none"', () => {
+    // `"cors": []` reads as "CORS is configured here" and behaves as the opposite.
+    const result = parseHandlerSpec({ ...minimal(), cors: [] }, 'x');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toContain('at least one origin');
+  });
+
+  it('rejects an entry that is not an origin', () => {
+    for (const bad of ['example.com', 'https://example.com/app', 'ftp://example.com', 42, '']) {
+      expect(parseHandlerSpec({ ...minimal(), cors: [bad] }, 'x').ok).toBe(false);
+    }
+    expect(parseHandlerSpec({ ...minimal(), cors: 'https://example.com' }, 'x').ok).toBe(false);
+  });
+
+  it('accepts the two un-attributable origins only when they are typed', () => {
+    const result = parseHandlerSpec({ ...minimal(), cors: ['*', 'NULL'] }, 'x');
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.spec.cors).toEqual(['*', 'null']);
+  });
+});
+
+describe('allowedCorsOrigin', () => {
+  const withCors = (cors?: string[]): HandlerSpec => ({
+    name: 'q', route: '/q', method: 'POST', verify: 'none', steps: [], respond: { kind: 'empty' },
+    ...(cors ? { cors } : {}),
+  });
+
+  it('admits nobody when the handler declared nothing', () => {
+    expect(allowedCorsOrigin(withCors(), 'https://example.com')).toBeNull();
+  });
+
+  it('echoes the caller rather than widening a list into a blanket permission', () => {
+    const handler = withCors(['https://example.com', 'https://other.test']);
+    expect(allowedCorsOrigin(handler, 'https://example.com')).toBe('https://example.com');
+    expect(allowedCorsOrigin(handler, 'https://evil.test')).toBeNull();
+    // Browsers send a lowercase origin, but a proxy in between may not.
+    expect(allowedCorsOrigin(handler, 'https://Example.com')).toBe('https://Example.com');
+  });
+
+  it('returns * only when the spec literally says *', () => {
+    expect(allowedCorsOrigin(withCors(['*']), 'https://anything.test')).toBe('*');
+  });
+
+  it('has nothing to allow when the caller sent no Origin at all', () => {
+    // A server-to-server webhook — the caller this endpoint was built for.
+    expect(allowedCorsOrigin(withCors(['*']), null)).toBeNull();
   });
 });
 

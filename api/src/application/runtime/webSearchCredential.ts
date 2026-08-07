@@ -1,38 +1,48 @@
 /**
- * Resolve the tenant's BYO web-search credential — the gate that decides whether a
- * cloud run gets the `web_search` tool at all.
+ * Resolve the web-search BACKING for a surface — which vendor adapter answers a query,
+ * and with whose key.
  *
- * Web search is metered per query by the vendor, so there is no platform-funded key:
- * the tenant brings their own. That key lives in `integration_credentials`, the SAME
- * per-tenant vault every other non-LLM vendor (github/jira/sentry/linear/…) uses —
- * per-tenant PBKDF2 key derivation, `is_enabled` health flag, one CRUD surface at
- * /api/integrations — rather than a parallel store invented for search. (The LLM BYO
- * table, `tenant_llm_provider_keys`, is deliberately NOT reused: its `provider` union
- * means "vendor that serves models", and widening it would leak a search vendor into
- * model routing, byo priority, and model-choice gating.)
+ * This used to be a gate: no BYO key, no `web_search` tool. That made research a paid
+ * feature by accident. A logged-out visitor on the public canvas, or a brand-new free
+ * workspace, asked "research X and chart it" and the pipeline stopped at its first step
+ * — while `geo.geocode`, the step AFTER it, worked keylessly for everyone. So this is
+ * now a PRECEDENCE, and it always resolves:
  *
- * Precedence mirrors the LLM BYO convention (tenant key wins, operator env is a floor):
- * a tenant row first, then an OPTIONAL operator-wide `BRAVE_SEARCH_API_KEY`. That env
- * var is unset by default and the platform ships no key — with neither configured this
- * returns null and the capability simply is not advertised.
+ *   1. the tenant's own key (`integration_credentials` — the SAME per-tenant vault every
+ *      other non-LLM vendor uses: per-tenant PBKDF2 derivation, `is_enabled` health
+ *      flag, one CRUD surface at /api/integrations),
+ *   2. an OPERATOR-wide key (`BRAVE_SEARCH_API_KEY`, unset by default — this exists so a
+ *      self-hoster CAN fund wide search for everyone, not because the platform does),
+ *   3. the KEYLESS vendor — no account, no meter, attribution-only licence. Narrower
+ *      coverage, stated as such in the result, but real citable sources.
+ *
+ * (The LLM BYO table, `tenant_llm_provider_keys`, is deliberately NOT reused: its
+ * `provider` union means "vendor that serves models", and widening it would leak a
+ * search vendor into model routing, BYO priority, and model-choice gating.)
  *
  * Nothing here is cached: a decrypted vendor secret must not land in the KV cache, and
- * this is one indexed lookup per RUN (not per step), not per request.
+ * this is one indexed lookup per RUN (not per step), not per request. The SEARCH itself
+ * is cached — see `cloudWeb.searchWeb`.
  */
 
 import { and, eq, inArray } from 'drizzle-orm';
+import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { integrationCredentials } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { decryptCredentials } from '../integrations/credentialCrypto';
-import { WEB_SEARCH_VENDOR_IDS, webSearchVendor, type WebSearchVendor } from './webSearchVendors';
+import {
+  CREDENTIALED_WEB_SEARCH_VENDOR_IDS, braveSearchVendor, webSearchVendor, wikipediaSearchVendor,
+  type WebSearchVendor,
+} from './webSearchVendors';
 
-export interface ResolvedWebSearchCredential {
+export interface ResolvedWebSearchBacking {
   vendor: WebSearchVendor;
-  apiKey: string;
-  /** Where the key came from — surfaced in the run log so an operator can tell a
-   *  tenant's own key from the (rare) operator-wide floor. */
-  source: 'tenant' | 'operator';
+  /** null for a keyless vendor — the adapter ignores it. */
+  apiKey: string | null;
+  /** Where the backing came from — surfaced in the run log so an operator can tell a
+   *  tenant's own key from the operator-wide floor from the keyless fallback. */
+  source: 'tenant' | 'operator' | 'keyless';
 }
 
 /** Field names a credential blob may carry the key under. `apiKey` is what the
@@ -51,20 +61,33 @@ function pickApiKey(creds: Record<string, unknown>): string | null {
 }
 
 /**
- * The tenant's usable search credential, or null when search must stay off.
- *
- * "Usable" is strict on purpose — a row that is disabled, undecryptable, empty, or for
- * a vendor this build has no adapter for all resolve to null, because the whole point
- * of self-gating is that an ADVERTISED `web_search` is one that can actually run. Never
- * throws: a DB hiccup degrades to "no search", never to a failed run.
+ * The backing available to a surface with NO tenant in scope — the operator key if the
+ * deployment funds one, else the keyless vendor. This is what the logged-out guest
+ * canvas searches with, and it is also the floor beneath every tenant lookup, so the
+ * "what does search fall back to" answer exists in exactly one place.
  */
-export async function resolveWebSearchCredential(
-  env: Env,
+export function platformWebSearchBacking(env: Env | undefined): ResolvedWebSearchBacking {
+  const operatorKey = env?.BRAVE_SEARCH_API_KEY?.trim();
+  if (operatorKey) return { vendor: braveSearchVendor, apiKey: operatorKey, source: 'operator' };
+  return { vendor: wikipediaSearchVendor, apiKey: null, source: 'keyless' };
+}
+
+/**
+ * The backing for one tenant. NEVER null: a tenant with no key still researches, just
+ * against a narrower index.
+ *
+ * The tenant lookup is strict on purpose — a row that is disabled, undecryptable, empty,
+ * or for a vendor this build has no adapter for is treated as absent and falls through
+ * to the platform floor, rather than producing a vendor that is certain to fail. Never
+ * throws: a DB hiccup degrades to the keyless floor, never to a failed run.
+ */
+export async function resolveWebSearchBacking(
+  env: Env | undefined,
   db: Db,
   tenantId: number,
-): Promise<ResolvedWebSearchCredential | null> {
+): Promise<ResolvedWebSearchBacking> {
   try {
-    const secret = env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET;
+    const secret = env?.INTEGRATION_ENCRYPTION_SECRET ?? env?.JWT_SECRET;
     if (secret) {
       const rows = await db
         .select({
@@ -77,27 +100,28 @@ export async function resolveWebSearchCredential(
           eq(integrationCredentials.tenantId, tenantId),
           eq(integrationCredentials.isEnabled, true),
           // `inArray` over the port's id list, so a second adapter needs no query edit.
-          inArray(integrationCredentials.provider, [...WEB_SEARCH_VENDOR_IDS]),
+          inArray(integrationCredentials.provider, [...CREDENTIALED_WEB_SEARCH_VENDOR_IDS]),
         ));
 
       for (const row of rows) {
         const vendor = webSearchVendor(row.provider);
-        if (!vendor) continue;
+        if (!vendor || vendor.keyless) continue;
         const creds = await decryptCredentials(row.credentialsEnc, row.iv, secret, tenantId);
         if (!creds) continue;
         const apiKey = pickApiKey(creds);
         if (apiKey) return { vendor, apiKey, source: 'tenant' };
       }
     }
-
-    // Operator-wide floor. Unset in every default deployment — this exists so a
-    // self-hoster CAN fund search for all their tenants, not because the platform does.
-    const operatorKey = env.BRAVE_SEARCH_API_KEY?.trim();
-    const brave = webSearchVendor('brave_search');
-    if (operatorKey && brave) return { vendor: brave, apiKey: operatorKey, source: 'operator' };
-
-    return null;
-  } catch {
-    return null;
+  } catch (error) {
+    // Fall through to the platform floor — a tenant lookup failure must not remove
+    // the capability, only the widening its key would have bought. Reported because a
+    // tenant that PAID for a key and silently got the keyless index is a real defect,
+    // and this is the only place it would ever be visible.
+    reportCaughtError(error, {
+      source: 'application/runtime/webSearchCredential.ts',
+      operation: 'resolveWebSearchBacking',
+      context: { tenantId },
+    });
   }
+  return platformWebSearchBacking(env);
 }

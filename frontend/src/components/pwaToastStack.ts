@@ -8,19 +8,17 @@ import { useEffect, useState } from 'react';
  * rendering at the *same* `bottom: 24` spot and overlapping.
  *
  * Each toast that is currently visible registers its `id` here while mounted;
- * the registry assigns a stable vertical order (lower `priority` sits at the
- * bottom, nearer the viewport edge) and reports each live toast its slot index.
- * A toast multiplies its slot by the row height to offset its own `bottom`, so
- * two live toasts stack rather than collide — and a single live toast sits in
- * the normal bottom position (slot 0). Neither component imports the other.
+ * the registry assigns a stable vertical order (lower `priority` sits nearer the
+ * anchored viewport edge) and reports each live toast its slot index. The slot
+ * drives an offset in `PwaToast.module.css`, so two live toasts stack rather
+ * than collide — and a single live toast sits in the normal position (slot 0).
+ * Neither component imports the other. The row height is the stylesheet's to
+ * decide: a phone anchors these to a different edge, at a different height.
  *
  * This is presentational-only state (no data), so a module-level store driven
  * through a subscription is the right primitive — mirrors the apiErrorEvent /
  * brainDataEvent buses already used for cross-component coordination.
  */
-
-/** Vertical gap between stacked toasts (toast height + breathing room), in px. */
-export const PWA_TOAST_ROW_HEIGHT = 64;
 
 /** Known toast ids with their stacking priority (lower = closer to the edge). */
 export type PwaToastId = 'update' | 'install';

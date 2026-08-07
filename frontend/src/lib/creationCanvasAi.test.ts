@@ -15,7 +15,7 @@ vi.mock('@/lib/brain/runtime', () => ({ brainConfig: { transport: {} } }));
 vi.mock('@/lib/brain/guestRuntime', () => ({ guestBrainConfig: { transport: {} } }));
 vi.mock('@/lib/guestRoomApi', () => ({ ensureGuestToken: mocks.ensureGuestToken }));
 
-const { runCreationCanvasAi } = await import('./creationCanvasAi');
+const { runCreationCanvasAi, MAX_CANVAS_TOOL_TURNS } = await import('./creationCanvasAi');
 
 describe('runCreationCanvasAi', () => {
   beforeEach(() => {
@@ -54,7 +54,12 @@ describe('runCreationCanvasAi', () => {
     expect(secondRequest.metadata.guestTurnId).toBe('user-submit-1');
     expect(firstRequest.metadata.guestTurnInput).toBe('build a new LLM');
     expect(secondRequest.metadata.guestTurnInput).toBe('build a new LLM');
-    expect(firstRequest.tools).toHaveLength(1);
+    // The canvas action PLUS the three research tools a logged-out board gets in place
+    // of the tenant MCP catalog. Without them the system prompt names tools the guest
+    // model was never given, and "research X and chart it" answers from memory.
+    expect(firstRequest.tools.map((t: { function: { name: string } }) => t.function.name)).toEqual([
+      'canvas_add_object', 'builtin_web_search', 'builtin_web_fetch', 'builtin_geo_geocode',
+    ]);
     expect(firstRequest.messages[1].content).toContain('kind "llm" is a conventional language-model blueprint');
     expect(firstRequest.messages[1].content).toContain('kind "evermind" is BuilderForce\'s self-learning Evermind model');
     expect(firstRequest.messages[1].content).toContain('"create a workflow" means call canvas_add_object');
@@ -158,7 +163,7 @@ describe('runCreationCanvasAi', () => {
       canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run }],
     });
 
-    expect(run).toHaveBeenCalledTimes(3);
+    expect(run).toHaveBeenCalledTimes(MAX_CANVAS_TOOL_TURNS);
     expect(answer).toBe('I added the requested content to the canvas.');
   });
 

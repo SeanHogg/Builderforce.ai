@@ -31,15 +31,16 @@ __export(src_exports, {
   CODE_CHANGE_TOOLS: () => CODE_CHANGE_TOOLS,
   CONSOLIDATION_MARKER_PREFIX: () => CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META: () => CONSOLIDATION_META,
-  DEFAULT_CHAT_MODE: () => DEFAULT_CHAT_MODE,
   DEFAULT_CHAT_TITLE: () => DEFAULT_CHAT_TITLE,
   DEFAULT_MODEL_CHOICE_LABELS: () => DEFAULT_MODEL_CHOICE_LABELS,
   DEFAULT_TOOL_LIMIT: () => DEFAULT_TOOL_LIMIT,
   EVERMIND_LEARN_MIN_CHARS: () => EVERMIND_LEARN_MIN_CHARS,
   MODEL_CATEGORIES: () => MODEL_CATEGORIES,
+  NEW_CHAT_MODE: () => NEW_CHAT_MODE,
   NOT_STARTED_TASK_STATUSES: () => NOT_STARTED_TASK_STATUSES,
   PROJECT_EVERMIND_MODEL_PREFIX: () => PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY: () => PROVENANCE_META_KEY,
+  RESTING_CHAT_MODE: () => RESTING_CHAT_MODE,
   STEP_MESSAGE_ROLE: () => STEP_MESSAGE_ROLE,
   TICKET_RECORDING_TOOLS: () => TICKET_RECORDING_TOOLS,
   TOOL_ROUTER_DESCRIBE: () => TOOL_ROUTER_DESCRIBE,
@@ -1203,12 +1204,13 @@ function chatWorkLinkingDirective(chatId) {
 
 // src/chatMode.ts
 var CHAT_MODES = ["chat", "work"];
-var DEFAULT_CHAT_MODE = "chat";
+var NEW_CHAT_MODE = "work";
+var RESTING_CHAT_MODE = "chat";
 function isChatMode(value) {
   return typeof value === "string" && CHAT_MODES.includes(value);
 }
 function normalizeChatMode(value) {
-  return isChatMode(value) ? value : DEFAULT_CHAT_MODE;
+  return isChatMode(value) ? value : RESTING_CHAT_MODE;
 }
 function chatConversationDirective() {
   return "MODE: CHAT. This conversation is a conversation. Your job is to understand the question and answer it.\n\u2022 Read, search, inspect and reason as much as the question needs \u2014 every read-only tool is available to you and using them is encouraged. Ground the answer in what you actually looked up.\n\u2022 Do NOT create, staff, re-status, or dispatch board work as a side effect of answering. Identifying that something ought to be done is part of a good answer; opening a ticket about it is not.\n\u2022 If the work plainly ought to be tracked, END the answer with one short line naming it and telling the user they can switch this conversation to Work mode to have it opened and run. Offer it once; do not repeat the offer on later turns.\n\u2022 The single exception: if the user explicitly asks you to create, assign, schedule or run something in THIS message, do it. An explicit instruction outranks the mode.";
@@ -1297,7 +1299,7 @@ function useBrainChats(options = {}) {
     setError("");
     try {
       const projectId = opts?.projectId !== void 0 ? opts.projectId : defaultProjectId();
-      const chat = await persistence.createChat({ title: opts?.title ?? "New chat", projectId, capability: opts?.capability ?? null, mode: opts?.mode ?? DEFAULT_CHAT_MODE });
+      const chat = await persistence.createChat({ title: opts?.title ?? "New chat", projectId, capability: opts?.capability ?? null, mode: opts?.mode ?? NEW_CHAT_MODE });
       setChats((prev) => [chat, ...prev]);
       setActiveChatId(chat.id);
       return chat;
@@ -4080,15 +4082,16 @@ function formatChatDiagnostics(d) {
   CODE_CHANGE_TOOLS,
   CONSOLIDATION_MARKER_PREFIX,
   CONSOLIDATION_META,
-  DEFAULT_CHAT_MODE,
   DEFAULT_CHAT_TITLE,
   DEFAULT_MODEL_CHOICE_LABELS,
   DEFAULT_TOOL_LIMIT,
   EVERMIND_LEARN_MIN_CHARS,
   MODEL_CATEGORIES,
+  NEW_CHAT_MODE,
   NOT_STARTED_TASK_STATUSES,
   PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY,
+  RESTING_CHAT_MODE,
   STEP_MESSAGE_ROLE,
   TICKET_RECORDING_TOOLS,
   TOOL_ROUTER_DESCRIBE,

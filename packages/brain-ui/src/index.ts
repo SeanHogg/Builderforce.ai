@@ -42,7 +42,13 @@ export type { PromptPanelProps } from './PromptPanel';
 // The composer's `/` control — run shaping, the model in use, and the model
 // picker in ONE affordance, so no host grows a second "which model" chip beside it.
 export { PromptOptionsMenu } from './promptOptions/PromptOptionsMenu';
-export type { PromptOptionsMenuProps, PromptOptionsModel } from './promptOptions/PromptOptionsMenu';
+export type {
+  PromptOptionsMemory,
+  PromptOptionsMenuProps,
+  PromptOptionsMode,
+  PromptOptionsModeChoice,
+  PromptOptionsModel,
+} from './promptOptions/PromptOptionsMenu';
 export { DEFAULT_PROMPT_OPTIONS_LABELS, promptOptionsLabels } from './promptOptions/types';
 export type { PromptOptionsLabels } from './promptOptions/types';
 // The model-choice domain itself lives in brain-embedded (the extension host shares

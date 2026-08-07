@@ -4,6 +4,311 @@
 
 ---
 
+## ✅ RESOLVED 2026-08-07 — Research works with no key and no account, including logged out
+
+Anonymous visitors and free workspaces were asking the canvas to research things
+and getting the model's weights instead of sources. Two independent gates caused
+it, and both are gone.
+
+**1. Search self-gated on a BYO key.** `web.search` resolved a tenant Brave
+credential or refused. Search is now a PRECEDENCE that always resolves —
+tenant BYO key → operator `BRAVE_SEARCH_API_KEY` → a KEYLESS encyclopedic
+vendor (Wikipedia's MediaWiki search API: no account, no meter, CC BY-SA with
+attribution). `resolveWebSearchCredential` → `resolveWebSearchBacking`
+(never null) plus `platformWebSearchBacking(env)` for tenant-less surfaces.
+Every result carries `coverage` (`web` | `encyclopedic`) and `attribution`, and
+every prompt that names the tool tells the model to report which index answered
+rather than filling gaps from memory. Consequently `web.search` moved into
+`CLOUD_SURFACE_CAPS` and the per-run `cloudSurfaceCaps({webSearch})` seam was
+deleted — the advertised schemas and the wired backing now come from one constant.
+
+**2. Guests had no research tools at all.** A logged-out canvas has no tenant, so
+it never loaded the MCP catalog that owns search/fetch/geocode — the canvas system
+prompt named `builtin_web_search` at a model that had never been given it, which
+fails silently. New public surface `POST /api/guest/research/{search,fetch,geocode}`
+(`application/guest/guestResearch.ts`): signed guest token as the credential, its
+own UTC-day visitor + IP call allowance (`GUEST_RESEARCH_LIMITS`), the PLATFORM
+search backing only (a guest can never reach a tenant's key), and the same SSRF
+guard + byte caps as every other surface. Client actions in
+`frontend/src/lib/guestResearchActions.ts` use the SAME advertised names, and
+`GUEST_CANVAS_TOOL_NAMES` lets exactly those three through the gateway.
+
+Also in this pass: the canvas tool loop went 3 → 8 rounds (a research pipeline is
+search → fetch → dataset → geocode → materialize, and 3 ran out mid-pipeline; the
+extra rounds are continuations of one turn, so they cost a guest no messages);
+`web.fetch` gained the read-through cache it never had (`fetchWebDocumentCached`);
+search execution collapsed into one cached+metered `searchWeb` shared by the cloud
+agent, the Brain MCP tool and the guest surface; `guestDailyCounter.ts` extracted
+the UTC-day KV counter that `GuestChatService` owned privately (and migrated it);
+and `geocode.ts`'s resume instruction was naming the catalog id `geo.geocode`
+instead of `builtin_geo_geocode` — the silent-failure mode
+`check-prompt-tool-names.mjs` exists to catch.
+
+Files: `api/src/application/runtime/{webSearchVendors,webSearchCredential,cloudWeb,cloudAgentTools,cloudAgentEngine}.ts`,
+`api/src/application/guest/{guestResearch,guestDailyCounter,guestCanvasTools,GuestChatService}.ts`,
+`api/src/presentation/routes/guestRoutes.ts`, `api/src/application/web/webFetch.ts`,
+`api/src/application/llm/builtinMcpService.ts`, `api/src/domain/tenant/PlanLimits.ts`,
+`packages/agent-tools/src/{capabilities,core-tools}.ts`,
+`frontend/src/lib/{guestResearchActions,creationCanvasAi}.ts`. No migration.
+
+---
+
+## ✅ RESOLVED 2026-08-07 — `geo.geocode` plots a whole dataset in one call
+
+The cap was twelve places, and the tool told the model to chunk the rest itself
+— which a model may simply not do, so a 200-row dataset ended up half-plotted
+or spread over a dozen prompted rounds. The cap was a *latency* budget:
+Nominatim asks for ~1 request/second, so twelve uncached places already cost
+~13s.
+
+**The batch now runs three passes, cheapest first** (`application/web/geocode.ts`):
+
+1. **cache** — `peekCached` over every term. Free, no network, no pacing.
+2. **bulk** — a new keyless `wikipediaGeocodeVendor` resolves up to
+   `BULK_CHUNK_SIZE` (50) names per *request* with no pacing at all, via
+   MediaWiki `prop=coordinates`. 200 places cost ~4 requests, not 200 paced
+   round-trips. Hits are written through the same cache key the paced pass
+   uses, so the next re-plot skips straight to pass 1.
+3. **paced** — whatever bulk could not name falls through to Nominatim, one at
+   a time, bounded by `FALLBACK_BUDGET_MS` (12s).
+
+`MAX_BATCH` is therefore no longer a latency budget at all — it is a
+result-size cap, raised 12 → **250** so a full US state's districts fit in one
+call. Anything still unresolved when the budget runs out comes back as a miss
+that *says* to call again, and the result separates **`pending`** (retry — it
+will get further) from **`unresolved`** (re-spell — retrying changes nothing).
+Because passes 1–2 persist, calling again resumes instead of restarting: a
+queue, without a queue.
+
+Supporting decisions worth keeping: `lookupMany` is optional on `GeocodeVendor`
+because it is a real vendor capability (Nominatim has no batch endpoint);
+absent-from-the-bulk-map means "ask the precise vendor", never "no such place";
+non-`earth` globes are refused (Olympus Mons must not land in Michigan); the
+bulk pass is skipped entirely when an outline is requested, since a point index
+has no boundary; bulk is offered both the context-biased title *and* the bare
+term in one request ("Ann Arbor, Michigan" is an article, "Ann Arbor Public
+Schools, Michigan, USA" is not); and `via` rides on the result (and through the
+cache) so a mixed batch credits **both** sources. Both adapters share one
+bounded/timed `geocodeRequest`. 35 tests in `geocode.test.ts`, up from 20.
+
+## ✅ RESOLVED 2026-08-07 — "Plot on a map" in the Dataset inspector
+
+A dataset whose rows already carried coordinates could only become a map by
+asking the AI: the sole path to `materializeAs: 'map'` was
+`canvas_query_dataset`, so an uploaded geocoded CSV cost a Brain turn to do
+what the UI could already see it could do.
+
+`DatasetPlotAction` (`CreationCanvas.tsx`) now offers it directly, spending no
+tokens and making no network call. It **decides its own visibility** — the same
+`detectGeoColumns` call that answers "should this button exist" answers "what
+would it plot", so those cannot disagree — and it is *absent*, not disabled,
+when there are no coordinates, so the button appearing the moment a lat/lng
+column lands is itself the affordance. Failures name the columns actually
+looked at rather than saying "cannot plot".
+
+Both materialization paths were unified on one builder, **`mapObjectFields`**
+in `lib/canvasGeo.ts`: field assembly, region/attribution sanitization, and the
+MultiPolygon → flat-rings flattening the patch sanitizer requires (the step a
+second call site would forget — Michigan is a MultiPolygon, and stored raw its
+outline silently empties). `status`/`summary` stay *inputs*, because the
+inspector's copy is localized and the Brain path's is model-facing English.
+Wired through `ACTIONS`/`CONNECTED_CANVAS_ACTIONS` as `dataset: 'plot'` so
+Brain can invoke the same adapter. Copy added to all five catalogs. 8 new tests
+in `canvasGeo.test.ts`.
+
+## ✅ RESOLVED 2026-08-07 — The Creation Canvas takes touch input
+
+The diagnosis in the old entry was half right. The board, `CreationNode.tsx`
+and `Canvas3DView` were *already* on pointer events — there were no mouse-only
+handlers left to convert. What actually made the board unusable by finger was
+its **React Flow configuration**, which described a mouse:
+
+- `selectionOnDrag` was set alongside the default `panOnDrag`, a contradiction
+  React Flow resolves in favour of panning. The marquee was therefore reachable
+  only by holding a modifier key — and a phone has none, so on touch there was
+  no way to select more than one object at all.
+- `nodeDragThreshold` was the default 1px. A finger never lands still, so
+  tapping an object to select it dragged it instead.
+- Double-tap-to-zoom competed with double-tap on an object.
+
+**`canvasPointerMode.ts`** now owns those decisions as a pure function of
+`{ gesture, pointer, drawing }`, and the component just spreads the result. A
+one-finger (or left-button) drag is a genuine either/or, so it is an explicit
+**gesture toggle** on the command rail (`MarqueeSelectIcon`), not a pointer
+sniff — which also fixes the desktop contradiction: `select` mode leaves
+middle/right-drag panning, and Shift-drag still marquees exactly as before, so
+a mouse keeps a pan gesture in both modes. Coarse pointers additionally get an
+8px drag threshold, no double-tap zoom, and no modifier multi-select
+advertised; pinch-zoom is never disabled, in either mode, because on touch it
+is the only pan/zoom gesture left while a finger is drawing a marquee.
+Drawing mode overrides both gestures so a stroke cannot move the board.
+
+Hit targets: `@media (pointer: coarse)` expands the 9px resize grips and 8px
+connection dots to the WCAG 2.2 44px minimum via a transparent `::before`, so
+the board looks identical everywhere and only the hit area changes — a 44px
+blue square at every corner of every selected node would bury the node.
+`COARSE_TARGET_MIN_PX` holds that number next to the code that reasons about it.
+
+Verification: the old entry deferred this work because
+`CreationCanvas.test.tsx` cannot give a verdict (the 3D-group hang — still
+open, still tracked). That is exactly why the decisions were extracted into a
+pure module: `canvasPointerMode.test.ts` asserts them directly (10 cases,
+including the pan/marquee invariant across all 8 state combinations) without
+mounting the board.
+
+Also folded in, since both hooks were the same subscription: `useIsMobile` and
+the new `useCoarsePointer` now sit on ONE **`useMediaQuery`** primitive, which
+carries the SSR-safe settle *and* the missing-`matchMedia` guard. jsdom does
+not implement `matchMedia`, so the unguarded version threw in any test that
+merely mounted a component using it — a guard that was previously copied into
+some call sites and forgotten in others.
+
+> **Deliberately unchanged:** `LandingCanvasHero` still does not render its
+> board below 900px. That board is a *seeded static preview*, not a mounted
+> `CreationCanvas`, so the touch work does not decide it — it is a layout
+> choice, tracked separately in the roadmap.
+
+---
+
+## ✅ RESOLVED 2026-08-07 — Homepage: the Create slide had no CSS, and mobile had no brain
+
+Replacing the brain hero with the seeded canvas board took the landing page's
+`.lp-create*` rules out with the old section — but the *first carousel slide*
+was still reaching for them. Every rule it used (`lp-create-layout`,
+`-features`, `-board`, `-toolbar`, `-object`, `-flow`) resolved to nothing, so
+slide 01 rendered as a wall of unstyled text under a full-height frame. Grep
+confirmed zero definitions anywhere in the tree.
+
+**The slide now owns its styling.** Every `meet-*` rule lives in
+`MeetCarousel.tsx` beside the markup it styles, so a section deleted elsewhere
+can never strip a slide again — and all three slides share ONE `.meet-panel`
+frame + `.meet-panel-head` grid instead of slide 01 having a private layout.
+Two tests lock it in: one asserts the Create slide carries the panel frame,
+board and flow strip; one asserts exactly one slide is ever active.
+
+**The frame follows the active slide's height.** The old flex track laid all
+three slides side by side, so the viewport was always as tall as the TALLEST
+one and the shorter slides sat under a slab of whitespace (`min-height:650px`
+/ `780px` were propping it up). Slides are now stacked in one grid cell with
+only the active one visible, and the frame's height is measured from it in a
+layout effect so the change animates rather than snaps. Measured: viewport =
+636/676/652 desktop and 1248/1432/1365 mobile — the active slide exactly, never
+the max. Without JS the active slide is still the only thing in flow.
+
+**Mobile.** Controls were colliding: three uppercase tab labels three-up at
+0.58rem (the third is a whole sentence) plus arrows floating in the nav's
+margin. Labels become dots below 700px (the slide's own heading already names
+it), arrows become bordered circles inside the panel's reserved bottom lane,
+CTAs go full-width, and the Evermind grid drops to one column.
+
+**The brain animation is back on mobile.** `LandingCanvasHero` renders
+`<BrainBackdrop>` behind the narrow hero — the board and the brain, never
+neither. The scene is fixed dark art (it paints its own near-black ground and
+composites in `lighter`, invisible over white), so `.heroBrain` DECLARES the
+dark theme's own tokens for both themes rather than inheriting the shell's, and
+88px of bottom padding keeps light-on-dark copy clear of the band where
+`.wb-fade` has already blended into the page's real `--bg`. The shared veil is
+pulled up and deepened and the cortex dimmed to 0.82 over the copy band, because
+a phone hero is short enough that the headline lands on the brightest part of
+the render.
+
+Also: slide 03's eyebrow was the full `home.rolesHeading` sentence set in
+uppercase (two wrapped lines on a phone) — now `home.carousel.deliveryEyebrow`,
+completing the 01/02/03 "Meet …" rhythm. All carousel chrome that was hardcoded
+English (kicker, arrows, pause/resume, tablist, "Evermind / Difference") moved
+to `home.carousel.*` in all five catalogs. Dead `.scrollHint` deleted.
+
+Files: `components/home/MeetCarousel.tsx`, `LandingCanvasHero.tsx`,
+`LandingCanvasHero.module.css`, `i18n/messages/{en,zh,es,fr,de}.json`.
+Verified with Playwright at 1440/390/360 in both themes: no horizontal overflow
+at any width.
+
+---
+
+## ✅ RESOLVED 2026-08-07 — The cookie-consent banner was hardcoded English
+
+Found while screenshotting the homepage. `CookieConsentManager` — the first
+thing a new visitor reads, and a compliance surface — had all 16 of its strings
+inline in English, including the GPC note and the policy link.
+
+The reason it had escaped i18n is structural, not an oversight: it was mounted
+in `layout.tsx` ABOVE `<LocaleProvider>`, where `useTranslations` throws. This
+app resolves locale on the CLIENT on purpose (server-side `cookies()` would opt
+every route out of static generation — see LocaleProvider's own note), so
+"translated" and "inside the provider" are the same requirement. The banner now
+renders as a child of `LocaleProvider` against a new `cookieConsent` namespace
+in all five catalogs.
+
+The skip link had the same shape and the same cause, so it went in the same
+pass: `<SkipToContent>` (client component, `common.skipToContent`) is now the
+provider's first child — nothing focusable precedes it, so the tab order is
+unchanged. Verified end-to-end with `NEXT_LOCALE=fr`: banner and skip link both
+render French.
+
+Files: `components/privacy/CookieConsentManager.tsx`, `components/SkipToContent.tsx`,
+`app/layout.tsx`, `i18n/messages/{en,zh,es,fr,de}.json`.
+
+---
+
+## ✅ RESOLVED 2026-08-07 — Handlers can answer a cross-origin browser caller
+
+Both handler addresses were built for callers that never preflight: a provider's
+webhook at `/hooks/<token>/<route>`, and the site's own same-origin pages at
+`<site>/api/<route>`. So a frontend hosted anywhere else — a static export on
+someone's own CDN, a native app's webview — could not call the backend it was
+built with. It got no CORS headers and the browser blocked it.
+
+**`cors` on the handler spec**, an allow-list parsed exactly the way `verify` is:
+declared, never defaulted. `handlerSpec.ts` normalises each entry to the literal
+string a browser sends in `Origin` (scheme + host + port, lowercased, deduped)
+and rejects anything that only looks like one — `example.com`, `ftp://…`, and
+notably `https://example.com/app`, because a path reads as though it scopes the
+permission to part of a site and does not. `["*"]` and `["null"]` (the origin a
+sandboxed iframe and a packaged webview send) are available only by typing them.
+An EMPTY list is an error, not a synonym for absent: `"cors": []` reads as "CORS
+is configured here" and behaves as the exact opposite.
+
+**Preflight is answered before method matching and before verification**
+(`ingress.ts`). A preflight carries neither the real body nor the provider's
+signature, and it names its intended method in `Access-Control-Request-Method` —
+so the handler is resolved against *that* method, not `OPTIONS`. This also closed
+a live defect: `matchHandler` falls back to `ANY`, so an `ANY` handler was
+already claiming OPTIONS and would have spent an LLM call and a connector action
+to answer a question the browser asked only to find out whether it may send
+anything. A refused preflight 403s with a body naming the origin, because a bare
+"CORS error" in devtools is nothing to act on.
+
+On the real request the headers ride every reply from a matched handler,
+including the 403 and the 413 — a verification failure the browser hides is an
+afternoon spent on the wrong problem. `Vary: Origin` is emitted whenever a
+handler declares an allow-list at all, *including for a caller it refuses*, so no
+cache can hand one origin's answer to another. The rate-limit 429 deliberately
+carries none: knowing whether the caller is allowed means reading the specs, and
+the point of checking the limit first is that an over-rate request costs nothing.
+
+**Both hosting strategies agree.** The generated `github-worker` Worker got the
+same preflight, the same allow-list matching and the same headers on its replies,
+verified by compiling the emitted source and driving it end-to-end — otherwise
+switching strategy would silently open or close a customer's frontend.
+
+Also in this pass: the site-origin fall-through 404 stopped answering with the
+datastore's open `Access-Control-Allow-Origin: *`, which let any page on the
+internet map a site's backend by reading which routes that 404 named. And the
+challenge planner's prompt, which had drifted from the parser it feeds — it
+advertised only 3 of the 5 `verify` kinds and omitted the `data` step entirely —
+now teaches the full vocabulary plus a rule to leave `cors` off unless the brief
+says the frontend lives elsewhere.
+
+Files: `backend/handlerSpec.ts` (`cors`, `normalizeOrigin`, `allowedCorsOrigin`),
+`backend/ingress.ts`, `backend/adapters/githubWorker.ts`,
+`backend/adapters/declarative.ts` (generated README), `ide/siteServer.ts`,
+`challenge/planChallenge.ts`, `HandlerEditor.tsx` + `builderforceApi.ts` +
+4 keys × 5 catalogs. Tests: 14 new across `handlerSpec.test.ts`,
+`ingress.test.ts` and `githubWorker.test.ts`; 189 pass in `backend/` +
+`challenge/`, frontend `tsgo --noEmit` clean.
+
+---
+
 ## ✅ RESOLVED 2026-08-06 — A published site can now run its own server code
 
 The hosting residuals logged when 0412 shipped. The data half was closed then —

@@ -102,7 +102,7 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   // happen inside the IDE surface it mounts, so they are not advertised here as
   // separate canvas-side actions that nothing implements.
   build: ['open'],
-  dataset: ['import', 'profile', 'visualize'], chart: ['refresh', 'drill'], dashboard: ['refresh', 'drill'], map: ['refresh', 'drill'],
+  dataset: ['import', 'profile', 'visualize', 'plot'], chart: ['refresh', 'drill'], dashboard: ['refresh', 'drill'], map: ['refresh', 'drill'],
   project: ['expand', 'compare'], task: ['assign', 'deliver'], agent: ['inspect', 'configure', 'assign'],
   evermind: ['teach', 'train', 'evaluate', 'publish'], voice: ['record', 'play'], video: ['generate', 'preview'], mcp: ['authenticate', 'execute'],
   image: ['generate', 'preview', 'export'], animation: ['generate', 'preview', 'export'], podcast: ['generate', 'preview', 'export'],

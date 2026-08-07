@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   detectGeoColumns,
   geoBoundsFor,
+  mapObjectFields,
   mapPointsFromRows,
   mercatorY,
   outlinePaths,
@@ -247,5 +248,49 @@ describe('sanitizeGeoBounds', () => {
     expect(sanitizeGeoBounds([41, 48, -90])).toBeNull();
     expect(sanitizeGeoBounds([41, 200, -90, -82])).toBeNull();
     expect(sanitizeGeoBounds('michigan')).toBeNull();
+  });
+});
+
+describe('mapObjectFields', () => {
+  const POINTS = [{ label: 'Detroit', lat: 42.33, lng: -83.04 }];
+  const COLUMNS = { latitude: 'lat', longitude: 'lng', label: 'name', value: 'students' };
+  const base = { title: 'Districts', status: '1 plotted', summary: 'Plotted.', points: POINTS, columns: COLUMNS, sourceDatasetId: 'ds-1' };
+
+  it('builds the map object from the points and the detected columns', () => {
+    expect(mapObjectFields(base)).toMatchObject({
+      title: 'Districts', mapTitle: 'Districts', mapPoints: POINTS,
+      mapValueLabel: 'students', sourceDatasetId: 'ds-1',
+    });
+  });
+
+  it('omits the value label when no numeric column was detected', () => {
+    const fields = mapObjectFields({ ...base, columns: { ...COLUMNS, value: null } });
+    expect(fields).not.toHaveProperty('mapValueLabel');
+  });
+
+  it('FLATTENS a MultiPolygon outline, which is what the patch sanitizer needs', () => {
+    // Michigan is a MultiPolygon; stored raw, its positions sit past the sanitizer's
+    // four-level depth limit and the outline silently empties. This is the shared step
+    // the second call site would otherwise have to remember.
+    const outline = { type: 'MultiPolygon', coordinates: [[[[-83, 42], [-84, 42], [-84, 43], [-83, 42]]]] };
+    expect(mapObjectFields({ ...base, outline }).mapOutline).toEqual([[[-83, 42], [-84, 42], [-84, 43], [-83, 42]]]);
+  });
+
+  it('accepts a geocoder boundingBox as the region and drops a malformed one', () => {
+    expect(mapObjectFields({ ...base, region: [41.7, 48.3, -90.4, -82.1] }).mapRegion).toEqual([41.7, 48.3, -90.4, -82.1]);
+    expect(mapObjectFields({ ...base, region: [48, 41, -82, -90] })).not.toHaveProperty('mapRegion');
+  });
+
+  it('drops blank or non-string region names and attributions rather than storing them', () => {
+    expect(mapObjectFields({ ...base, regionName: '   ', attribution: 42 })).not.toHaveProperty('mapRegionName');
+    expect(mapObjectFields({ ...base, regionName: '   ', attribution: 42 })).not.toHaveProperty('mapAttribution');
+    expect(mapObjectFields({ ...base, regionName: ' Michigan ', attribution: ' © OSM ' })).toMatchObject({
+      mapRegionName: 'Michigan', mapAttribution: '© OSM',
+    });
+  });
+
+  it('carries the caller’s own status and summary, so localized and model-facing copy can differ', () => {
+    const fields = mapObjectFields({ ...base, status: 'Auf Karte', summary: 'Zusammenfassung.' });
+    expect(fields).toMatchObject({ status: 'Auf Karte', summary: 'Zusammenfassung.' });
   });
 });

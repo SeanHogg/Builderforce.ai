@@ -598,6 +598,31 @@ const EXPECTED_SECRETS = ${json(requiredWorkerSecrets(ctx))} as string[];
 /** Default secret name per verification kind. A handler's own \`verifySecret\` wins. */
 const VERIFY_SECRET_DEFAULT: Record<string, string> = ${json(VERIFY_SECRET_NAME)};
 
+// ── Cross-origin access ─────────────────────────────────────────────────────
+
+/**
+ * A handler answers a BROWSER on another origin only if its spec named that
+ * origin in \`cors\`. Never defaulted, for the same reason \`verify\` is not: this
+ * Worker holds your connector credentials and your model budget, so an open
+ * \`Access-Control-Allow-Origin\` has to be something you typed.
+ *
+ * Returns the header value for this caller, or null when it is not admitted.
+ */
+function allowedOrigin(handler: any, requestOrigin: string | null): string | null {
+  const list: string[] = handler.cors ?? [];
+  if (!list.length || !requestOrigin) return null;
+  if (list.includes('*')) return '*';
+  return list.includes(requestOrigin.trim().toLowerCase()) ? requestOrigin : null;
+}
+
+/** \`Vary: Origin\` whenever the handler is origin-sensitive — including for a
+ *  caller it refuses, so no cache can hand one origin's answer to another. */
+function corsHeaders(handler: any, request: Request): Record<string, string> {
+  if (!(handler.cors ?? []).length) return {};
+  const allow = allowedOrigin(handler, request.headers.get('origin'));
+  return { Vary: 'Origin', ...(allow ? { 'Access-Control-Allow-Origin': allow } : {}) };
+}
+
 // ── Request handling ────────────────────────────────────────────────────────
 
 export default {
@@ -615,9 +640,40 @@ export default {
       });
     }
 
+    // A preflight asks about the method it INTENDS to use, so match on that one.
+    const preflightMethod = method === 'OPTIONS'
+      ? (request.headers.get('access-control-request-method') ?? '').trim().toUpperCase() || null
+      : null;
+
     const candidates = HANDLERS.filter((h: any) => h.route === route);
-    const handler: any = candidates.find((h: any) => h.method === method) ?? candidates.find((h: any) => h.method === 'ANY');
+    const wanted = preflightMethod ?? method;
+    const handler: any = candidates.find((h: any) => h.method === wanted) ?? candidates.find((h: any) => h.method === 'ANY');
     if (!handler) return new Response('Not found', { status: 404 });
+
+    // Answered before verification and before any step: a preflight carries
+    // neither a body nor a signature, and an \`ANY\` handler claims OPTIONS too —
+    // so running it would spend a model call to answer a permission question.
+    if (preflightMethod) {
+      const allow = allowedOrigin(handler, request.headers.get('origin'));
+      if (!allow) {
+        return new Response('Origin not allowed by this handler\\'s cors list', {
+          status: 403,
+          headers: { Vary: 'Origin' },
+        });
+      }
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': allow,
+          'Access-Control-Allow-Methods': handler.method === 'ANY' ? preflightMethod : handler.method,
+          'Access-Control-Allow-Headers': (request.headers.get('access-control-request-headers') ?? '').trim() || 'content-type',
+          'Access-Control-Max-Age': '600',
+          Vary: 'Origin, Access-Control-Request-Headers',
+        },
+      });
+    }
+
+    const cors = corsHeaders(handler, request);
 
     const rawBody = method === 'GET' || method === 'HEAD' ? '' : await request.text();
     const contentType = request.headers.get('content-type') ?? '';
@@ -638,17 +694,17 @@ export default {
 
     if (handler.verify === 'twilio') {
       const failure = await verifyTwilio(request.url, formParams, request.headers.get('${VERIFY_SIGNATURE_HEADER.twilio}'), verifySecret);
-      if (failure) return new Response(failure, { status: 403 });
+      if (failure) return new Response(failure, { status: 403, headers: cors });
     } else if (handler.verify === 'stripe') {
       const failure = await verifyStripe(rawBody, request.headers.get('${VERIFY_SIGNATURE_HEADER.stripe}'), verifySecret);
-      if (failure) return new Response(failure, { status: 403 });
+      if (failure) return new Response(failure, { status: 403, headers: cors });
     } else if (handler.verify === 'shopify') {
       const failure = await verifyShopify(rawBody, request.headers.get('${VERIFY_SIGNATURE_HEADER.shopify}'), verifySecret);
-      if (failure) return new Response(failure, { status: 403 });
+      if (failure) return new Response(failure, { status: 403, headers: cors });
     } else if (handler.verify === 'shared-secret') {
       const signature = request.headers.get('${VERIFY_SIGNATURE_HEADER['shared-secret']}') ?? request.headers.get('x-hub-signature-256');
       const failure = await verifySharedSecret(rawBody, signature, verifySecret);
-      if (failure) return new Response(failure, { status: 403 });
+      if (failure) return new Response(failure, { status: 403, headers: cors });
     }
 
     const steps: Record<string, any> = {};
@@ -687,18 +743,18 @@ export default {
     const respond = handler.respond;
     if (respond.kind === 'twiml') {
       return new Response(renderTwiml(renderValue(respond.nodes, scope)), {
-        headers: { 'Content-Type': 'text/xml; charset=utf-8' },
+        headers: { 'Content-Type': 'text/xml; charset=utf-8', ...cors },
       });
     }
     if (respond.kind === 'json') {
-      return Response.json(renderValue(respond.body, scope));
+      return Response.json(renderValue(respond.body, scope), { headers: cors });
     }
     if (respond.kind === 'text') {
       return new Response(renderTemplate(respond.text, scope), {
-        headers: { 'Content-Type': respond.contentType ?? 'text/plain; charset=utf-8' },
+        headers: { 'Content-Type': respond.contentType ?? 'text/plain; charset=utf-8', ...cors },
       });
     }
-    return new Response(null, { status: respond.status ?? 204 });
+    return new Response(null, { status: respond.status ?? 204, headers: cors });
   },
 };
 `;

@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useBrainConfig } from './config';
-import { DEFAULT_CHAT_MODE, normalizeChatMode, type ChatMode } from './chatMode';
+import { NEW_CHAT_MODE, normalizeChatMode, type ChatMode } from './chatMode';
 import type { BrainChat } from './types';
 
 /** The placeholder title `create()` stamps on an untitled chat. A chat still carrying
@@ -169,7 +169,7 @@ export function useBrainChats(options: UseBrainChatsOptions = {}): UseBrainChats
     setError('');
     try {
       const projectId = opts?.projectId !== undefined ? opts.projectId : defaultProjectId();
-      const chat = await persistence.createChat({ title: opts?.title ?? 'New chat', projectId, capability: opts?.capability ?? null, mode: opts?.mode ?? DEFAULT_CHAT_MODE });
+      const chat = await persistence.createChat({ title: opts?.title ?? 'New chat', projectId, capability: opts?.capability ?? null, mode: opts?.mode ?? NEW_CHAT_MODE });
       setChats((prev) => [chat, ...prev]);
       setActiveChatId(chat.id);
       return chat;

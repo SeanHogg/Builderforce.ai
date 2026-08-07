@@ -200,7 +200,8 @@ export type { CreatedWorkItemLink, LinkedTicketToAdvance } from './chatWorkLinki
 // shared agent loop (migration 0409).
 export {
   CHAT_MODES,
-  DEFAULT_CHAT_MODE,
+  NEW_CHAT_MODE,
+  RESTING_CHAT_MODE,
   isChatMode,
   normalizeChatMode,
   chatModeDirective,
