@@ -26,6 +26,10 @@ export function configSummary(kind: WorkflowNodeKind, config: Record<string, unk
       return [config.provider, config.model].filter(Boolean).join(' · ') || 'llm';
     case 'mcp':
       return [config.integration, config.operation].filter(Boolean).join(' · ') || 'tool';
+    case 'connector':
+      // Reads as "twilio · send_sms" on the canvas — which integration and which
+      // action is the whole identity of this node.
+      return [config.connector, config.action].filter(Boolean).join(' · ') || 'integration';
     case 'memory':
       return `${String(config.op ?? 'recall')}${config.query ? ` · ${String(config.query).slice(0, 24)}` : ''}`;
     case 'knowledge':

@@ -4,6 +4,133 @@
 
 ---
 
+## ✅ SHIPPED 2026-08-07 — Every connector is a workflow step, and the whole Twilio platform is reachable
+
+The question was "can a user create a workflow and add all of the Twilio
+features?" The honest answer was **no, and not just for Twilio**.
+
+### The finding
+
+The workflow executor's node kinds were `trigger, llm, transform, filter, branch,
+output, gmail, mcp`. There was no generic connector node. The connector catalog
+held ~170 actions that agents and webhook handlers could all call, and the
+workflow builder could reach exactly one vendor — `gmail`, a hardcoded node kind
+wrapping one integration. "Send an SMS when this happens" was not expressible in a
+workflow no matter how complete the catalog got, and every new vendor would have
+needed its own node kind, its own executor branch and its own palette entry.
+
+### The fix is one node, deliberately generic
+
+`application/workflow/connectorNode.ts` takes the connector key and action key as
+CONFIG rather than as code, so **a connector becomes a usable workflow step the
+moment it is published** — including one a tenant authored themselves in the
+connector builder. No code change, no deploy, no palette edit. Execution delegates
+to `executeConnectorAction`, the same function an agent's tool call uses, so the
+SSRF guard, credential decryption, timeouts, redaction and the call audit log all
+apply here without being re-implemented; a node that assembled its own HTTP
+request would have been a second unguarded egress path carrying tenant credentials.
+
+Templating goes beyond the other nodes' `{{input}}`: `{{input.From}}` reads one
+field out of a JSON payload, because that is what an action actually needs —
+`To: "{{input.From}}"` on an SMS reply is the common case, and without field
+access the only way to get it would be a `transform` node per field.
+
+Supporting it: `connectorActionCatalog.ts` (a cached per-tenant projection of
+every action WITH its parameters, invalidated by the same call every connector
+write already makes) and `GET /api/connectors/actions`. Choosing an action seeds
+the input box with that action's required parameters — the difference between a
+node you can fill in and one you need the vendor's docs to start.
+
+### The Twilio surface is now complete
+
+Twilio's platform list names nine surfaces. Four of them had no connector at all.
+
+| Surface | Delivered by |
+| --- | --- |
+| SMS / Messaging / WhatsApp / Voice | `twilio` (already shipped) |
+| Email | `sendgrid` (already shipped) |
+| Authentication | `twilio-verify` (already shipped) |
+| **Conversations** | `twilio-conversations` — NEW |
+| **Customer Data** | `twilio-segment` — NEW |
+| **Conversational AI** | `twilio-assistants` (text) + `<ConversationRelay>` TwiML (voice) — NEW |
+
+Each pins a fact that is expensive to get wrong: Conversations addresses SMS
+participants with `MessagingBinding.Address` / `.ProxyAddress` (the dot is the
+wire name, and a missing proxy address fails like a permissions error); Segment
+authenticates with the write key as the USERNAME and an EMPTY password;
+`<ConversationRelay>` is only valid inside `<Connect>` and only over `wss://`,
+so the parser rejects a non-secure socket at author time rather than dropping a
+live call. `twilioCoverage.test.ts` asserts all nine surfaces through the ACTION
+that delivers them, so a renamed action fails the build instead of quietly
+removing a product from the claim.
+
+### A workflow can now START from an inbound Twilio message
+
+The workflow webhook trigger only spoke generic HMAC — and Twilio cannot be made
+to send one, because it signs the URL plus the sorted form parameters with its own
+scheme. So a Twilio number could not start a workflow at all. The trigger now
+takes `verify: 'twilio'`, reusing `verifyTwilioSignature` rather than growing a
+second implementation, parses the form body so nodes read `{{input.From}}` /
+`{{input.Body}}`, and **replies with empty TwiML** — the previous JSON
+acknowledgement made Twilio log a malformed-document error on every message.
+Stored in the trigger's existing `config` column, so no migration.
+
+### The blueprint uses what it claims
+
+`twilio-omnichannel` gained `/voice-ai` (a live call handed to a conversational AI)
+and `/whatsapp/thread` (the turn appended to the customer's cross-channel
+Conversations thread), and every inbound SMS now writes a `Message Received` event
+to Segment in the same turn — folded into the SMS handler rather than a second
+endpoint, because Twilio delivers an inbound message to exactly one URL.
+
+Also removed in the same pass: a test asserting every required connector is called
+by a handler. It looked like the mirror of a good check and encoded a false rule —
+SendGrid is the brief's email half driven from the console, and Stripe's API key is
+needed to READ what its webhook refers to. Neither is called by a handler and both
+are genuinely required.
+
+## ✅ RESOLVED 2026-08-07 — One composer: Memory/Consolidate/Fork move into the `/` menu, and the web gains the plan chip
+
+The two prompt panels had drifted apart. The VS Code composer carried three
+extra always-visible pills — **Memory**, **Consolidate**, **Fork** — between the
+mode controls and Send; on a narrow side panel they crowded out the send button,
+and two of them were inert for most of a chat's life. The web composer had none
+of them in that row but also had no plan chip, so a free member could not see
+from inside a chat which plan was funding the turn — the state that makes a
+capped run look like a broken install.
+
+**The `/` menu grew a session slot.** `PromptOptionsSession` (canConsolidate ·
+consolidating · forking · onConsolidate · onFork) in
+`packages/brain-ui/src/promptOptions/PromptOptionsMenu.tsx` renders a
+**Conversation** group, kept last (above Account settings) because those two rows
+FIRE where everything above them ARMS the next turn. Both rows state their reason
+when inert (`sessionUnavailable`) instead of greying out silently.
+
+**Memory joined it on both surfaces.** The shared `memory` slot already existed
+but the web never passed it (BrainPanel hand-rolled a pill) and the extension
+hid its pill entirely when a chat had no project Evermind — a control that
+vanishes reads as a bug. It now stays and says why (`memoryUnavailable`).
+
+**The web composer gained `<PlanBadge/>`**, in the same position as the VS Code
+one (`frontend/src/components/ChatInput.tsx`). Its wrapper — not a conditional
+icon — carries the row's `marginLeft:auto` anchor, because the chip self-gates to
+nothing without a tenant, which would otherwise drop the right-alignment. For the
+same reason `useConsumption` now reads auth through `useOptionalAuth`: the
+composer also renders in trees with no `AuthProvider` (the marketing hero,
+tests), and no provider must mean no snapshot, not a crash.
+
+**Dead code dropped.** `packages/brain-ui/src/ConsolidateForkControl.tsx` (its
+only consumer migrated) and the extension's now-unused `IconBrain` /
+`IconConsolidate` / `IconFork`; the orphaned `brain.consolidate|consolidating|fork|forking|memoryToggleLabel|memoryOnTooltip|memoryOffTooltip`
+keys were removed from all five catalogs. New copy is localized in all five
+(`chatInput.*`) and in all five VS Code l10n bundles.
+
+Shipped: brain-ui 2026.7.42 · frontend 2026.7.190 · VSIX 2026.7.119 (packaged).
+Open residual (recipient + persona controls still differ per surface) → ROADMAP
+group 5.
+
+---
+
 ## ✅ RESOLVED 2026-08-07 — Every artifact leaves the canvas in its own native format, from one shared row
 
 Only the document card had downloads, and the one format most objects could

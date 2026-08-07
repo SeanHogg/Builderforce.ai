@@ -378,6 +378,11 @@ function renderNode(n: any): string {
     const inner = (g.prompts ?? []).map(renderPrompt).join('');
     return \`<Gather\${attr('action', g.action)}\${attr('input', g.input)}\${attr('numDigits', g.numDigits)}\${attr('timeout', g.timeout)}>\${inner}</Gather>\`;
   }
+  if (n.conversationRelay) {
+    const c = n.conversationRelay;
+    // Must be wrapped in <Connect> — bare <ConversationRelay> is rejected.
+    return \`<Connect><ConversationRelay\${attr('url', c.url)}\${attr('welcomeGreeting', c.welcomeGreeting)}\${attr('voice', c.voice)}\${attr('language', c.language)}\${attr('transcriptionProvider', c.transcriptionProvider)}\${attr('interruptible', c.interruptible)}\${attr('dtmfDetection', c.dtmfDetection)}/></Connect>\`;
+  }
   if (typeof n.dial === 'string') {
     return \`<Dial\${attr('callerId', n.callerId)}\${attr('timeout', n.timeout)}\${attr('action', n.action)}>\${escapeXml(n.dial)}</Dial>\`;
   }

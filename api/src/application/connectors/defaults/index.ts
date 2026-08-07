@@ -12,6 +12,7 @@
 
 import { parseConnectorManifest, type ConnectorManifest } from '../connectorManifest';
 import { COMMUNICATION_CONNECTORS } from './communication';
+import { TWILIO_CONNECTORS } from './twilio';
 import { BUSINESS_CONNECTORS } from './business';
 import { PRODUCTIVITY_CONNECTORS } from './productivity';
 import { DEVTOOLS_CONNECTORS } from './devtools';
@@ -19,6 +20,7 @@ import { GENERIC_CONNECTORS } from './generic';
 
 const ALL: readonly ConnectorManifest[] = [
   ...COMMUNICATION_CONNECTORS,
+  ...TWILIO_CONNECTORS,
   ...BUSINESS_CONNECTORS,
   ...PRODUCTIVITY_CONNECTORS,
   ...DEVTOOLS_CONNECTORS,

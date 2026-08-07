@@ -17,6 +17,11 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  *     node is marked `cancelled` and `dispositionFromDeps` cascades the cancel to
  *     every dependent (a prune is a skip, not a failure — the workflow can still
  *     end `completed`).
+ *   - connector → executed natively. The ONE node kind through which every
+ *     connector action (Twilio, SendGrid, Slack, Stripe, a tenant's own) is
+ *     reachable from a workflow; it delegates to `executeConnectorAction`, so a
+ *     workflow's outbound call gets the same SSRF guard, credential handling and
+ *     audit log an agent's does.
  *   - mcp → executed natively (0412). The Data + Marketing palette integrations
  *     all compile to this kind; the node resolves the tenant's stored credential
  *     and calls the provider through the shared catalog, so the connect form's
@@ -43,6 +48,7 @@ import { recordProxyUsage } from '../llm/usageLedger';
 import { contextFromInput, evaluateBool, renderTransform } from '../../domain/workflowExpr';
 import { credentialSecret } from '../integrations/credentialCrypto';
 import { executeMcpNode, type McpNodeConfig } from './mcpNode';
+import { executeConnectorNode, type ConnectorNodeConfig } from './connectorNode';
 import type { ProxyEnv } from '../llm/LlmProxyService';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
@@ -175,6 +181,21 @@ async function executeCloudNode(env: CloudExecutorEnv, node: NodeInput, inputTex
       const body = renderTemplate(typeof cfg.body === 'string' ? cfg.body : '{{input}}', inputText);
       const sent = await sendGmail(creds, { to, subject, body });
       return { output: JSON.stringify({ sent: true, id: sent.id, to }) };
+    }
+
+    case 'connector': {
+      // EVERY connector action — Twilio SMS/voice/WhatsApp, SendGrid, Slack,
+      // Stripe, a tenant's own connector — reaches a workflow through this one
+      // node. It takes the connector and action as CONFIG, so publishing a new
+      // connector makes it usable in a workflow with no change here.
+      if (!usageCtx) throw new Error('An integration node needs a tenant context to load your connection');
+      const outcome = await executeConnectorNode(
+        { db: usageCtx.db, env: env as unknown as Env, tenantId: usageCtx.tenantId },
+        node.config as ConnectorNodeConfig,
+        inputText,
+      );
+      if (!outcome.ok) throw new Error(outcome.error);
+      return { output: outcome.output };
     }
 
     case 'mcp': {

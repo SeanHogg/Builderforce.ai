@@ -44,6 +44,7 @@ import {
 import { executeConnectorAction, ConnectorCallError } from '../../application/connectors/connectorRuntime';
 import { manifestFromOpenApi, fetchOpenApiSpec, SpecFetchError } from '../../application/connectors/openapiImport';
 import { CONNECTOR_CATEGORIES } from '../../application/connectors/connectorManifest';
+import { connectorActionCatalog } from '../../application/connectors/connectorActionCatalog';
 
 function fail(c: Context<HonoEnv>, e: unknown) {
   if (e instanceof SpecFetchError) {
@@ -74,6 +75,17 @@ export function createConnectorRoutes(db: Db): Hono<HonoEnv> {
       connectionCountsByConnector(db, tenantId),
     ]);
     return c.json({ connectors: summarizeCatalog(entries, counts), categories: CONNECTOR_CATEGORIES });
+  });
+
+  // GET /api/connectors/actions — every callable action with its parameters.
+  //
+  // Declared BEFORE `/:key` or Hono would match "actions" as a connector key and
+  // 404 it. Feeds the workflow builder's connector node, which is how every
+  // connector — built-in or tenant-authored — becomes a workflow step without a
+  // code change.
+  router.get('/actions', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    return c.json({ connectors: await connectorActionCatalog(db, c.env as Env, tenantId) });
   });
 
   // GET /api/connectors/:key — the full manifest, for the detail panel and builder.

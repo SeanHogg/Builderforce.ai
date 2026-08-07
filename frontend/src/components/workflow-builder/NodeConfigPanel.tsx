@@ -6,6 +6,7 @@ import type { Node } from '@xyflow/react';
 import { NODE_KIND_MAP, isFieldVisible, type ConfigField } from './nodeKinds';
 import type { BuilderNodeData } from './BuilderNode';
 import { integrationForConfig, integrationIcon } from './integrations';
+import { ConnectorNodeFields } from './ConnectorNodeFields';
 import type { WorkflowTriggerInfo } from '@/lib/builderforceApi';
 
 const inputStyle: React.CSSProperties = {
@@ -112,6 +113,16 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
             ))}
           </Select>
         </label>
+      )}
+
+      {/* The connector node's options come from the tenant's live catalog rather
+          than a static field list, so it brings its own editor. */}
+      {node.data.kind === 'connector' && (
+        <ConnectorNodeFields
+          config={config}
+          setConfig={setConfig}
+          patchConfig={(patch) => onChange(node.id, { config: { ...config, ...patch } })}
+        />
       )}
 
       {/* Catalog fields for this kind — hide the raw `operation` field when an

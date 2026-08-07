@@ -12305,7 +12305,8 @@
       "Agents": "Agentes",
       "Models": "Modelos",
       "Collaborate": "Colaboración",
-      "Integrations": "Integraciones"
+      "Integrations": "Integraciones",
+      "Pitch": "Pitch"
     },
     "datasetRowLimit": "Tu plan admite hasta {limit} filas de datos por importación al lienzo.",
     "datasetNoColumns": "No se encontró ninguna columna en ese archivo.",
@@ -12847,7 +12848,11 @@
       "salesGoal": "Objetivo semanal de ventas",
       "salesMeeting": "Reunión de ventas",
       "diagram": "Diagrama",
-      "map": "Mapa"
+      "map": "Mapa",
+      "pitch": "Pitch",
+      "pitchScorecard": "Cuadro de puntuación",
+      "pitchQa": "Preguntas del jurado",
+      "pitchApplication": "Candidatura"
     },
     "canvasOutline": "Esquema accesible del lienzo",
     "canvasGestureToggle": "Arrastrar para seleccionar",
@@ -13555,7 +13560,165 @@
     "noticeConversationSaveFailedReason": "No se pudo guardar la conversación: {reason}",
     "noticePrdNotSavedReason": "El PRD del proyecto no se guardó: {reason}",
     "noticeGuestLimitReached": "Has usado tus {limit} mensajes de invitado gratuitos de hoy. Regístrate gratis para continuar: tu lienzo te acompaña.",
-    "noticeGuestLimitDevice": "Este dispositivo alcanzó su límite de invitado gratuito de hoy. Regístrate gratis para continuar: tu lienzo te acompaña."
+    "noticeGuestLimitDevice": "Este dispositivo alcanzó su límite de invitado gratuito de hoy. Regístrate gratis para continuar: tu lienzo te acompaña.",
+    "templateCategoryMarketplace": "Plantilla del marketplace",
+    "templateCategoryObjectPack": "Paquete de objetos",
+    "template": {
+      "sales-command-center": {
+        "name": "Centro de mando de ventas",
+        "description": "Gestiona segmentación, prospección, pipeline, objetivos y coaching desde un único lienzo colaborativo."
+      },
+      "campaign": {
+        "name": "Estudio de campañas",
+        "description": "Planifica una campaña, prototipa su landing y evalúa la evidencia de previsión."
+      },
+      "product-discovery": {
+        "name": "Descubrimiento de producto",
+        "description": "Sintetiza evidencia de clientes, prioriza funcionalidades y convierte conceptos en maquetas."
+      },
+      "data-story": {
+        "name": "Historia de datos",
+        "description": "Importa un conjunto de datos, crea visualizaciones en vivo y arma una narrativa ejecutiva."
+      },
+      "stand-up": {
+        "name": "Stand-up improvisado",
+        "description": "Reúne a personas y agentes, saca a la luz los bloqueos y genera trabajo de seguimiento."
+      },
+      "model-build": {
+        "name": "Laboratorio de modelos Evermind",
+        "description": "Prepara datos, enseña y ajusta Evermind, evalúalo y empaqueta el resultado."
+      },
+      "executive-review": {
+        "name": "Revisión ejecutiva",
+        "description": "Reúne salud del proyecto, prioridades, hoja de ruta y presentación en un único marco de decisión."
+      },
+      "creative-studio": {
+        "name": "Estudio creativo",
+        "description": "Crea vídeo, imágenes, animación, pódcasts y cómics con las capacidades creativas nativas de Builderforce."
+      },
+      "career-documents": {
+        "name": "Estudio de currículum y presentaciones",
+        "description": "Genera un currículum, archivos de apoyo, un documento paginado y una presentación desde un mismo brief."
+      },
+      "pitch-competition": {
+        "name": "Sala de guerra para concursos de pitch",
+        "description": "Preséntate a un concurso de pitch y gánalo: la candidatura escrita, el pitch cronometrado, el cuadro de puntuación, el ensayo de preguntas del jurado y la presentación, evaluados según las reglas del propio concurso."
+      },
+      "interactive-3d": {
+        "name": "Estudio de juegos y 3D",
+        "description": "Diseña juegos jugables, planos CAD y modelos 3D con persistencia de proyecto respaldada por MCP."
+      }
+    },
+    "pitch": {
+      "addQuestion": "Añadir una pregunta",
+      "answer": "Respuesta",
+      "answerEmpty": "Aún sin ensayar.",
+      "answerPlaceholder": "La respuesta, en el tiempo que realmente tendrías.",
+      "answeredCount": "{answered} de {total} respondidas",
+      "applicationHint": "Cumple cada regla y respeta cada límite antes de enviar.",
+      "beatEmpty": "Aún no hay nada escrito para este bloque.",
+      "beatsWritten": "{written}/{total} bloques escritos",
+      "blockedCount": "{count} bloqueos",
+      "budget": "Presupuesto",
+      "budgetedAcrossBeats": "Repartido en {count} bloques",
+      "category": "Categoría",
+      "charCount": "{chars} / {max} caracteres",
+      "chooseCategory": "Elige una categoría",
+      "competition": "Competición",
+      "competitionHint": "{pitch} de pitch, {qa} de preguntas del jurado, {criteria} criterios de evaluación.",
+      "complete": "completado",
+      "completePercent": "{value}% completado",
+      "criteriaCount": "{count} criterios",
+      "entryFor": "Candidatura a",
+      "evidence": "Evidencia",
+      "evidencePlaceholder": "La prueba que aceptaría un jurado.",
+      "gap": "Brecha",
+      "gapPlaceholder": "Lo que todavía falta.",
+      "gapPrefix": "Brecha: {gap}",
+      "judgeQa": "Preguntas del jurado",
+      "marksLostHere": "Aquí se pierden puntos",
+      "noLimit": "Sin límite de longitud",
+      "ofLimit": "de {limit} permitidos",
+      "officialRules": "Reglas oficiales",
+      "qaHint": "El jurado dispone de {qa}. Ensaya las respuestas que preferirías no tener que dar.",
+      "qaWindow": "Ventana de preguntas",
+      "question": "Pregunta",
+      "readinessHint": "Ponderado según cada criterio que publica esta competición.",
+      "readinessPercent": "{value}% listo",
+      "ready": "listo",
+      "readyToSubmit": "Listo para enviar",
+      "rehearsed": "ensayado",
+      "rehearsedOf": "{answered} de {total} ensayadas",
+      "runtime": "Duración",
+      "scoreOutOf": "Puntuar {name} sobre {max}",
+      "scoreValue": "{score} de {max}",
+      "scored": "evaluados",
+      "scoredAgainst": "Evaluado según",
+      "script": "Guion",
+      "seconds": "Segundos",
+      "spokenAt130": "Hablado a 130 palabras por minuto, con un límite de {limit}",
+      "label": {
+        "beat": {
+          "hook": "Gancho",
+          "problem": "Problema",
+          "solution": "Solución",
+          "demo": "Demo",
+          "traction": "Tracción",
+          "market": "Mercado y modelo",
+          "team": "Equipo",
+          "ask": "Petición",
+          "whatYouDo": "Qué hacéis",
+          "insight": "Idea clave",
+          "progress": "Progreso"
+        },
+        "criterion": {
+          "innovation": "Innovación y originalidad",
+          "viability": "Viabilidad",
+          "marketability": "Comercializabilidad",
+          "growth": "Potencial de crecimiento",
+          "impact": "Capacidad de impacto",
+          "team": "Equipo y personas",
+          "problem": "Claridad del problema",
+          "solution": "Solución y demo",
+          "traction": "Tracción",
+          "market": "Mercado y modelo",
+          "founders": "Fundadores",
+          "insight": "Idea clave",
+          "progress": "Progreso desde el inicio",
+          "clarity": "Claridad de pensamiento"
+        },
+        "rule": {
+          "launchWindow": "Producto o servicio lanzado después del 1 de enero de 2024",
+          "oneProduct": "Exactamente un producto o servicio por empresa",
+          "founderOwnership": "Los fundadores conservan participación",
+          "fundingCap": "Menos de 10 M$ de financiación acumulada",
+          "registered": "Registrada legalmente y en cumplimiento en su jurisdicción",
+          "categoryFit": "Encaja en una de las categorías oficiales",
+          "cohort": "Actualmente en la cohorte o programa que presenta",
+          "liveProduct": "El producto está en producción y se puede demostrar",
+          "incorporated": "La empresa está constituida",
+          "founderTime": "Al menos un fundador a tiempo completo",
+          "equity": "Los fundadores pueden aceptar las condiciones de capital del programa"
+        },
+        "answer": {
+          "oneLiner": "Descripción en una línea",
+          "problem": "Problema que resolvéis",
+          "solution": "Producto o servicio",
+          "differentiation": "Qué lo hace original",
+          "market": "Mercado y modelo de negocio",
+          "traction": "Tracción hasta la fecha",
+          "impact": "Impacto si tenéis éxito",
+          "team": "Equipo",
+          "funding": "Financiación captada hasta la fecha",
+          "ask": "Qué estáis pidiendo",
+          "whatYouDo": "¿Qué estáis creando?",
+          "insight": "¿Qué entendéis que otros no?",
+          "progress": "¿Qué habéis construido hasta ahora?",
+          "users": "¿Quiénes son vuestros usuarios y cómo sabéis que lo quieren?",
+          "founders": "Trayectoria de los fundadores"
+        }
+      }
+    }
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",
@@ -13968,5 +14131,20 @@
     "installPitch": "Instala Builderforce para una app más rápida y a pantalla completa.",
     "install": "Instalar",
     "installIos": "Instala Builderforce: toca Compartir y luego «Añadir a pantalla de inicio»."
+  },
+  "workflow": {
+    "connectorNode": {
+      "integration": "Integración",
+      "action": "Acción",
+      "input": "Entrada (JSON)",
+      "choosePlaceholder": "Elige…",
+      "loading": "Cargando integraciones…",
+      "loadFailed": "No se pudieron cargar tus integraciones.",
+      "parameters": "Parámetros",
+      "required": "obligatorio",
+      "templateHint": "'{{'input'}}' inserta la salida del nodo anterior; '{{'input.campo'}}' lee un campo concreto cuando esa salida es JSON.",
+      "mutatesWarning": "Esta acción cambia algo: envía un mensaje, hace una llamada o mueve dinero. Se ejecutará sin supervisión cada vez que se dispare este flujo.",
+      "connectionHint": "Necesita una conexión activa de {name} en Integraciones. El nodo falla de forma segura hasta que exista."
+    }
   }
 }

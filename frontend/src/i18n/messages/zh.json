@@ -12305,7 +12305,8 @@
       "Agents": "智能体",
       "Models": "模型",
       "Collaborate": "协作",
-      "Integrations": "集成"
+      "Integrations": "集成",
+      "Pitch": "路演"
     },
     "datasetRowLimit": "当前套餐每次画布导入最多支持 {limit} 行数据。",
     "datasetNoColumns": "该文件中未找到任何列。",
@@ -12847,7 +12848,11 @@
       "salesGoal": "每周销售目标",
       "salesMeeting": "销售会议",
       "diagram": "图表",
-      "map": "地图"
+      "map": "地图",
+      "pitch": "路演",
+      "pitchScorecard": "评分表",
+      "pitchQa": "评委问答",
+      "pitchApplication": "参赛申请"
     },
     "canvasOutline": "无障碍画布大纲",
     "canvasGestureToggle": "拖动以框选",
@@ -13555,7 +13560,165 @@
     "noticeConversationSaveFailedReason": "对话保存失败：{reason}",
     "noticePrdNotSavedReason": "项目 PRD 未保存：{reason}",
     "noticeGuestLimitReached": "你今天的 {limit} 条免费访客消息已用完。免费注册即可继续——你的画布会一并保留。",
-    "noticeGuestLimitDevice": "本设备今天的免费访客额度已用完。免费注册即可继续——你的画布会一并保留。"
+    "noticeGuestLimitDevice": "本设备今天的免费访客额度已用完。免费注册即可继续——你的画布会一并保留。",
+    "templateCategoryMarketplace": "应用市场模板",
+    "templateCategoryObjectPack": "对象组合包",
+    "template": {
+      "sales-command-center": {
+        "name": "销售指挥中心",
+        "description": "在一个协作画布上完成目标客户定位、外联触达、管道管理、目标设定与辅导。"
+      },
+      "campaign": {
+        "name": "营销活动工作室",
+        "description": "规划营销活动、制作落地页原型并评估预测依据。"
+      },
+      "product-discovery": {
+        "name": "产品探索",
+        "description": "汇总客户证据、排定功能优先级，并把概念扩展为原型图。"
+      },
+      "data-story": {
+        "name": "数据故事",
+        "description": "导入数据集、构建实时可视化，并组织成面向管理层的叙述。"
+      },
+      "stand-up": {
+        "name": "临时站会",
+        "description": "召集人员与智能体，暴露阻碍并生成后续工作。"
+      },
+      "model-build": {
+        "name": "Evermind 模型实验室",
+        "description": "准备数据、教学与调优 Evermind、进行评估并打包成果。"
+      },
+      "executive-review": {
+        "name": "管理层评审",
+        "description": "将项目健康度、优先级、路线图与演示汇入同一决策框架。"
+      },
+      "creative-studio": {
+        "name": "创意工作室",
+        "description": "通过 Builderforce 原生创意能力制作视频、图像、动画、播客与漫画。"
+      },
+      "career-documents": {
+        "name": "简历与演示工作室",
+        "description": "基于同一份源简介生成简历、配套文件、分页文档与演示文稿。"
+      },
+      "pitch-competition": {
+        "name": "路演比赛作战室",
+        "description": "参加路演比赛并赢下它：书面申请、限时路演、评分表、评委问答演练与演示文稿，全部依据赛事自身规则评分。"
+      },
+      "interactive-3d": {
+        "name": "游戏与 3D 工作室",
+        "description": "借助 MCP 支持的项目持久化设计可玩游戏、CAD 图纸与 3D 模型。"
+      }
+    },
+    "pitch": {
+      "addQuestion": "添加问题",
+      "answer": "回答",
+      "answerEmpty": "尚未演练。",
+      "answerPlaceholder": "用你实际拥有的时间作答。",
+      "answeredCount": "已回答 {answered}/{total}",
+      "applicationHint": "提交前请满足每条规则并遵守每项字数限制。",
+      "beatEmpty": "该环节尚未撰写内容。",
+      "beatsWritten": "已撰写 {written}/{total} 个环节",
+      "blockedCount": "{count} 项阻碍",
+      "budget": "预算",
+      "budgetedAcrossBeats": "分配于 {count} 个环节",
+      "category": "类别",
+      "charCount": "{chars} / {max} 字符",
+      "chooseCategory": "选择类别",
+      "competition": "赛事",
+      "competitionHint": "{pitch} 路演、{qa} 评委问答、{criteria} 项评分标准。",
+      "complete": "完成度",
+      "completePercent": "完成 {value}%",
+      "criteriaCount": "{count} 项标准",
+      "entryFor": "参赛项目",
+      "evidence": "佐证",
+      "evidencePlaceholder": "评委会认可的证据。",
+      "gap": "差距",
+      "gapPlaceholder": "目前还缺什么。",
+      "gapPrefix": "差距：{gap}",
+      "judgeQa": "评委问答",
+      "marksLostHere": "失分点",
+      "noLimit": "无字数限制",
+      "ofLimit": "限时 {limit}",
+      "officialRules": "官方规则",
+      "qaHint": "评委有 {qa} 提问时间。请优先演练你最不想被问到的问题。",
+      "qaWindow": "问答时段",
+      "question": "问题",
+      "readinessHint": "按该赛事公布的每项标准加权计算。",
+      "readinessPercent": "就绪度 {value}%",
+      "ready": "就绪",
+      "readyToSubmit": "可以提交",
+      "rehearsed": "已演练",
+      "rehearsedOf": "已演练 {answered}/{total}",
+      "runtime": "时长",
+      "scoreOutOf": "为「{name}」评分，满分 {max}",
+      "scoreValue": "{max} 分中的 {score} 分",
+      "scored": "已评分",
+      "scoredAgainst": "评分依据",
+      "script": "讲稿",
+      "seconds": "秒数",
+      "spokenAt130": "按每分钟 130 词计算，限时 {limit}",
+      "label": {
+        "beat": {
+          "hook": "开场钩子",
+          "problem": "问题",
+          "solution": "解决方案",
+          "demo": "演示",
+          "traction": "增长实绩",
+          "market": "市场与商业模式",
+          "team": "团队",
+          "ask": "诉求",
+          "whatYouDo": "你做的事",
+          "insight": "洞察",
+          "progress": "进展"
+        },
+        "criterion": {
+          "innovation": "创新性与原创性",
+          "viability": "可行性",
+          "marketability": "市场适销性",
+          "growth": "增长潜力",
+          "impact": "影响力潜能",
+          "team": "团队与成员",
+          "problem": "问题清晰度",
+          "solution": "解决方案与演示",
+          "traction": "增长实绩",
+          "market": "市场与商业模式",
+          "founders": "创始人",
+          "insight": "洞察",
+          "progress": "启动以来的进展",
+          "clarity": "思路清晰度"
+        },
+        "rule": {
+          "launchWindow": "产品或服务于 2024 年 1 月 1 日之后发布",
+          "oneProduct": "每家公司仅可提交一款产品或服务",
+          "founderOwnership": "创始人仍持有股权",
+          "fundingCap": "累计融资低于 1000 万美元",
+          "registered": "在所属司法辖区依法注册并合规",
+          "categoryFit": "符合官方参赛类别之一",
+          "cohort": "目前属于本期路演批次或项目",
+          "liveProduct": "产品已上线且可演示",
+          "incorporated": "公司已完成注册",
+          "founderTime": "至少一位创始人全职投入",
+          "equity": "创始人可接受该项目的股权条款"
+        },
+        "answer": {
+          "oneLiner": "一句话描述",
+          "problem": "你解决的问题",
+          "solution": "产品或服务",
+          "differentiation": "独特之处",
+          "market": "市场与商业模式",
+          "traction": "迄今的增长实绩",
+          "impact": "成功后的影响",
+          "team": "团队",
+          "funding": "迄今融资总额",
+          "ask": "你的诉求",
+          "whatYouDo": "你们在做什么？",
+          "insight": "你们理解而他人不理解的是什么？",
+          "progress": "目前已经做出了什么？",
+          "users": "你们的用户是谁？如何确认他们需要它？",
+          "founders": "创始人背景"
+        }
+      }
+    }
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -13968,5 +14131,20 @@
     "installPitch": "安装 Builderforce，获得更快的全屏应用体验。",
     "install": "安装",
     "installIos": "安装 Builderforce：点按“分享”，然后选择“添加到主屏幕”。"
+  },
+  "workflow": {
+    "connectorNode": {
+      "integration": "集成",
+      "action": "操作",
+      "input": "输入（JSON）",
+      "choosePlaceholder": "请选择…",
+      "loading": "正在加载集成…",
+      "loadFailed": "无法加载你的集成。",
+      "parameters": "参数",
+      "required": "必填",
+      "templateHint": "'{{'input'}}' 会插入上游节点的输出；当该输出为 JSON 时，'{{'input.字段'}}' 可读取其中的某个字段。",
+      "mutatesWarning": "该操作会产生实际影响 —— 发送消息、拨打电话或划转资金。每次触发此工作流时，它都会在无人值守的情况下执行。",
+      "connectionHint": "需要在「集成」中有一个可用的 {name} 连接。在此之前，该节点会安全地失败。"
+    }
   }
 }

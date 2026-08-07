@@ -73,6 +73,43 @@ export interface TwimlDial {
   /** Absolute or ingress-relative URL Twilio POSTs when the dialled leg ends. */
   action?: string;
 }
+/**
+ * `<ConversationRelay>` — hand a LIVE CALL to a conversational AI.
+ *
+ * Twilio streams the caller's speech to `url` over a WebSocket and speaks back
+ * whatever that socket returns, so the AI holds the conversation in real time
+ * instead of the call being a menu. This is the voice half of Twilio's
+ * Conversational AI surface; the text half is the `twilio-assistants` connector.
+ *
+ * ── WHY THIS IS A NODE AND NOT A CONNECTOR ACTION ───────────────────────────
+ * It is not a REST call. It is an instruction inside the TwiML a voice webhook
+ * ALREADY returns, and it takes over the call for its duration — so it belongs
+ * in the response vocabulary next to `<Gather>` and `<Dial>`, which is where an
+ * author is when they decide what the call should do next.
+ *
+ * `url` MUST be `wss://`. Twilio refuses a non-secure socket, and a handler that
+ * emitted one would fail mid-call rather than at author time — which is why the
+ * parser rejects it here instead.
+ */
+export interface TwimlConversationRelay {
+  conversationRelay: {
+    /** `wss://` endpoint Twilio streams the call audio to. */
+    url: string;
+    /** Spoken first, before the caller says anything. */
+    welcomeGreeting?: string;
+    /** Text-to-speech voice for the AI's replies. */
+    voice?: string;
+    /** BCP-47 language for both recognition and speech, e.g. `en-US`. */
+    language?: string;
+    /** Speech-to-text provider, when overriding the account default. */
+    transcriptionProvider?: string;
+    /** Let the caller talk over the AI. Off by default, as Twilio has it. */
+    interruptible?: boolean;
+    /** Send DTMF keypresses to the socket as well as speech. */
+    dtmfDetection?: boolean;
+  };
+}
+
 export interface TwimlRedirect { redirect: string }
 export interface TwimlHangup { hangup: true }
 export interface TwimlReject { reject: true; reason?: 'rejected' | 'busy' }
@@ -84,6 +121,7 @@ export type TwimlNode =
   | TwimlMessage
   | TwimlGather
   | TwimlDial
+  | TwimlConversationRelay
   | TwimlRedirect
   | TwimlHangup
   | TwimlReject
@@ -115,6 +153,15 @@ function renderNode(node: TwimlNode): string {
   }
   if ('dial' in node) {
     return `<Dial${attr('callerId', node.callerId)}${attr('timeout', node.timeout)}${attr('action', node.action)}>${escapeXml(node.dial)}</Dial>`;
+  }
+  if ('conversationRelay' in node) {
+    const c = node.conversationRelay;
+    // `<ConversationRelay>` is only valid INSIDE `<Connect>`; emitting it bare
+    // produces a document Twilio rejects, so the wrapper is written here rather
+    // than left to the author to remember.
+    return `<Connect><ConversationRelay${attr('url', c.url)}${attr('welcomeGreeting', c.welcomeGreeting)}` +
+      `${attr('voice', c.voice)}${attr('language', c.language)}${attr('transcriptionProvider', c.transcriptionProvider)}` +
+      `${attr('interruptible', c.interruptible)}${attr('dtmfDetection', c.dtmfDetection)}/></Connect>`;
   }
   if ('redirect' in node) return `<Redirect>${escapeXml(node.redirect)}</Redirect>`;
   if ('hangup' in node) return '<Hangup/>';
@@ -193,6 +240,26 @@ export function parseTwimlNode(raw: unknown): TwimlNode | null {
       ...(str(raw.callerId) ? { callerId: str(raw.callerId)! } : {}),
       ...(num(raw.timeout) !== undefined ? { timeout: num(raw.timeout)! } : {}),
       ...(str(raw.action) ? { action: str(raw.action)! } : {}),
+    };
+  }
+  if (isRecord(raw.conversationRelay)) {
+    const c = raw.conversationRelay;
+    const url = str(c.url);
+    // Rejected at AUTHOR time rather than mid-call: Twilio refuses a non-`wss://`
+    // socket, and discovering that when a customer is on the line is the worst
+    // possible moment. Returning null drops the node, which degrades the reply
+    // instead of producing a document Twilio cannot parse at all.
+    if (!url || !url.startsWith('wss://')) return null;
+    return {
+      conversationRelay: {
+        url,
+        ...(str(c.welcomeGreeting) ? { welcomeGreeting: str(c.welcomeGreeting)! } : {}),
+        ...(str(c.voice) ? { voice: str(c.voice)! } : {}),
+        ...(str(c.language) ? { language: str(c.language)! } : {}),
+        ...(str(c.transcriptionProvider) ? { transcriptionProvider: str(c.transcriptionProvider)! } : {}),
+        ...(typeof c.interruptible === 'boolean' ? { interruptible: c.interruptible } : {}),
+        ...(typeof c.dtmfDetection === 'boolean' ? { dtmfDetection: c.dtmfDetection } : {}),
+      },
     };
   }
   if (typeof raw.redirect === 'string') return { redirect: raw.redirect };

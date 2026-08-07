@@ -12305,7 +12305,8 @@
       "Agents": "Agenten",
       "Models": "Modelle",
       "Collaborate": "Zusammenarbeit",
-      "Integrations": "Integrationen"
+      "Integrations": "Integrationen",
+      "Pitch": "Pitch"
     },
     "datasetRowLimit": "Dein Tarif erlaubt bis zu {limit} Datenzeilen pro Canvas-Import.",
     "datasetNoColumns": "In dieser Datei wurden keine Spalten gefunden.",
@@ -12847,7 +12848,11 @@
       "salesGoal": "Wöchentliches Vertriebsziel",
       "salesMeeting": "Vertriebsgespräch",
       "diagram": "Diagramm",
-      "map": "Karte"
+      "map": "Karte",
+      "pitch": "Pitch",
+      "pitchScorecard": "Bewertungsbogen",
+      "pitchQa": "Jury-Fragen",
+      "pitchApplication": "Wettbewerbsbeitrag"
     },
     "canvasOutline": "Barrierefreie Leinwandübersicht",
     "canvasGestureToggle": "Ziehen zum Auswählen",
@@ -13555,7 +13560,165 @@
     "noticeConversationSaveFailedReason": "Konversation konnte nicht gespeichert werden: {reason}",
     "noticePrdNotSavedReason": "Projekt-PRD wurde nicht gespeichert: {reason}",
     "noticeGuestLimitReached": "Sie haben Ihre {limit} kostenlosen Gastnachrichten für heute aufgebraucht. Melden Sie sich kostenlos an, um weiterzumachen – Ihre Leinwand kommt mit.",
-    "noticeGuestLimitDevice": "Dieses Gerät hat sein kostenloses Gastlimit für heute erreicht. Melden Sie sich kostenlos an, um weiterzumachen – Ihre Leinwand kommt mit."
+    "noticeGuestLimitDevice": "Dieses Gerät hat sein kostenloses Gastlimit für heute erreicht. Melden Sie sich kostenlos an, um weiterzumachen – Ihre Leinwand kommt mit.",
+    "templateCategoryMarketplace": "Marketplace-Vorlage",
+    "templateCategoryObjectPack": "Objektpaket",
+    "template": {
+      "sales-command-center": {
+        "name": "Vertriebs-Kommandozentrale",
+        "description": "Zielgruppen, Ansprache, Pipeline, Ziele und Coaching auf einer gemeinsamen Arbeitsfläche steuern."
+      },
+      "campaign": {
+        "name": "Kampagnen-Studio",
+        "description": "Kampagne planen, Landingpage prototypisieren und Prognosebelege bewerten."
+      },
+      "product-discovery": {
+        "name": "Produkt-Discovery",
+        "description": "Kundenbelege bündeln, Funktionen priorisieren und Konzepte zu Mockups ausbauen."
+      },
+      "data-story": {
+        "name": "Datengeschichte",
+        "description": "Datensatz importieren, Live-Visualisierungen bauen und eine Management-Erzählung zusammenstellen."
+      },
+      "stand-up": {
+        "name": "Spontanes Stand-up",
+        "description": "Menschen und Agenten zusammenbringen, Blocker sichtbar machen und Folgearbeit anlegen."
+      },
+      "model-build": {
+        "name": "Evermind-Modelllabor",
+        "description": "Daten vorbereiten, Evermind trainieren und feinjustieren, bewerten und das Ergebnis paketieren."
+      },
+      "executive-review": {
+        "name": "Management-Review",
+        "description": "Projektgesundheit, Prioritäten, Roadmap und Präsentation in einem Entscheidungsrahmen vereinen."
+      },
+      "creative-studio": {
+        "name": "Kreativstudio",
+        "description": "Video, Bilder, Animation, Podcasts und Comics mit den nativen Kreativfunktionen von Builderforce erstellen."
+      },
+      "career-documents": {
+        "name": "Lebenslauf- und Präsentationsstudio",
+        "description": "Lebenslauf, Begleitdateien, ein paginiertes Dokument und eine Präsentation aus einem Briefing erzeugen."
+      },
+      "pitch-competition": {
+        "name": "Pitch-Wettbewerb-Lagezentrum",
+        "description": "An einem Pitch-Wettbewerb teilnehmen und ihn gewinnen: schriftliche Bewerbung, Pitch auf die Sekunde, Bewertungsbogen, Jury-Frageprobe und Deck — bewertet nach den Regeln des Wettbewerbs selbst."
+      },
+      "interactive-3d": {
+        "name": "Spiele- und 3D-Studio",
+        "description": "Spielbare Spiele, CAD-Zeichnungen und 3D-Modelle mit MCP-gestützter Projektpersistenz entwerfen."
+      }
+    },
+    "pitch": {
+      "addQuestion": "Frage hinzufügen",
+      "answer": "Antwort",
+      "answerEmpty": "Noch nicht geprobt.",
+      "answerPlaceholder": "Die Antwort, in der Zeit, die du wirklich hättest.",
+      "answeredCount": "{answered} von {total} beantwortet",
+      "applicationHint": "Erfülle jede Regel und bleibe in jedem Limit, bevor du einreichst.",
+      "beatEmpty": "Für diesen Abschnitt ist noch nichts geschrieben.",
+      "beatsWritten": "{written}/{total} Abschnitte geschrieben",
+      "blockedCount": "{count} Blocker",
+      "budget": "Budget",
+      "budgetedAcrossBeats": "Auf {count} Abschnitte verteilt",
+      "category": "Kategorie",
+      "charCount": "{chars} / {max} Zeichen",
+      "chooseCategory": "Kategorie wählen",
+      "competition": "Wettbewerb",
+      "competitionHint": "{pitch} Pitch, {qa} Jury-Fragen, {criteria} Bewertungskriterien.",
+      "complete": "vollständig",
+      "completePercent": "{value}% vollständig",
+      "criteriaCount": "{count} Kriterien",
+      "entryFor": "Bewerbung für",
+      "evidence": "Beleg",
+      "evidencePlaceholder": "Der Nachweis, den eine Jury akzeptieren würde.",
+      "gap": "Lücke",
+      "gapPlaceholder": "Was noch fehlt.",
+      "gapPrefix": "Lücke: {gap}",
+      "judgeQa": "Jury-Fragen",
+      "marksLostHere": "Hier gehen Punkte verloren",
+      "noLimit": "Keine Längenbegrenzung",
+      "ofLimit": "von {limit} erlaubt",
+      "officialRules": "Offizielle Regeln",
+      "qaHint": "Die Jury hat {qa}. Probe die Antworten, nach denen du lieber nicht gefragt würdest.",
+      "qaWindow": "Fragezeit",
+      "question": "Frage",
+      "readinessHint": "Gewichtet über jedes Kriterium, das dieser Wettbewerb veröffentlicht.",
+      "readinessPercent": "{value}% bereit",
+      "ready": "bereit",
+      "readyToSubmit": "Bereit zum Einreichen",
+      "rehearsed": "geprobt",
+      "rehearsedOf": "{answered} von {total} geprobt",
+      "runtime": "Laufzeit",
+      "scoreOutOf": "{name} von {max} bewerten",
+      "scoreValue": "{score} von {max}",
+      "scored": "bewertet",
+      "scoredAgainst": "Bewertet nach",
+      "script": "Skript",
+      "seconds": "Sekunden",
+      "spokenAt130": "Gesprochen mit 130 Wörtern pro Minute, bei einem Limit von {limit}",
+      "label": {
+        "beat": {
+          "hook": "Aufhänger",
+          "problem": "Problem",
+          "solution": "Lösung",
+          "demo": "Demo",
+          "traction": "Traktion",
+          "market": "Markt & Modell",
+          "team": "Team",
+          "ask": "Anliegen",
+          "whatYouDo": "Was ihr macht",
+          "insight": "Erkenntnis",
+          "progress": "Fortschritt"
+        },
+        "criterion": {
+          "innovation": "Innovation / Originalität",
+          "viability": "Tragfähigkeit",
+          "marketability": "Vermarktbarkeit",
+          "growth": "Wachstumspotenzial",
+          "impact": "Wirkungspotenzial",
+          "team": "Team / Menschen",
+          "problem": "Klarheit des Problems",
+          "solution": "Lösung & Demo",
+          "traction": "Traktion",
+          "market": "Markt & Modell",
+          "founders": "Gründerinnen und Gründer",
+          "insight": "Erkenntnis",
+          "progress": "Fortschritt seit dem Start",
+          "clarity": "Klarheit des Denkens"
+        },
+        "rule": {
+          "launchWindow": "Produkt oder Dienst nach dem 1. Januar 2024 gestartet",
+          "oneProduct": "Genau ein Produkt oder Dienst pro Unternehmen",
+          "founderOwnership": "Gründer halten weiterhin Anteile",
+          "fundingCap": "Weniger als 10 Mio. $ Gesamtfinanzierung",
+          "registered": "Rechtlich registriert und in der Jurisdiktion konform",
+          "categoryFit": "Passt in eine der offiziellen Kategorien",
+          "cohort": "Aktuell in der präsentierenden Kohorte oder im Programm",
+          "liveProduct": "Produkt ist live und vorführbar",
+          "incorporated": "Unternehmen ist gegründet",
+          "founderTime": "Mindestens ein Gründer in Vollzeit",
+          "equity": "Gründer können die Beteiligungsbedingungen des Programms akzeptieren"
+        },
+        "answer": {
+          "oneLiner": "Beschreibung in einem Satz",
+          "problem": "Problem, das ihr löst",
+          "solution": "Produkt oder Dienst",
+          "differentiation": "Was es originell macht",
+          "market": "Markt und Geschäftsmodell",
+          "traction": "Bisherige Traktion",
+          "impact": "Wirkung bei Erfolg",
+          "team": "Team",
+          "funding": "Bisher eingeworbene Finanzierung",
+          "ask": "Worum ihr bittet",
+          "whatYouDo": "Was baut ihr?",
+          "insight": "Was versteht ihr, das andere nicht verstehen?",
+          "progress": "Was habt ihr bisher gebaut?",
+          "users": "Wer sind eure Nutzer und woher wisst ihr, dass sie das wollen?",
+          "founders": "Hintergrund der Gründer"
+        }
+      }
+    }
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
@@ -13968,5 +14131,20 @@
     "installPitch": "Installiere Builderforce für eine schnellere Vollbild-App.",
     "install": "Installieren",
     "installIos": "Builderforce installieren: auf „Teilen“ tippen, dann „Zum Home-Bildschirm“."
+  },
+  "workflow": {
+    "connectorNode": {
+      "integration": "Integration",
+      "action": "Aktion",
+      "input": "Eingabe (JSON)",
+      "choosePlaceholder": "Auswählen…",
+      "loading": "Integrationen werden geladen…",
+      "loadFailed": "Ihre Integrationen konnten nicht geladen werden.",
+      "parameters": "Parameter",
+      "required": "erforderlich",
+      "templateHint": "'{{'input'}}' fügt die Ausgabe des vorherigen Knotens ein; '{{'input.feld'}}' liest daraus ein Feld, wenn die Ausgabe JSON ist.",
+      "mutatesWarning": "Diese Aktion verändert etwas – sie sendet eine Nachricht, tätigt einen Anruf oder bewegt Geld. Sie läuft bei jedem Auslösen dieses Workflows unbeaufsichtigt.",
+      "connectionHint": "Benötigt eine aktive {name}-Verbindung unter Integrationen. Bis dahin schlägt der Knoten bewusst fehl."
+    }
   }
 }

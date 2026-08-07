@@ -63,6 +63,21 @@ const handlers: Record<string, unknown> = {
         maxTokens: 160,
         temperature: 0.3,
       },
+      {
+        // The profile write rides in the SAME turn. Twilio delivers an inbound
+        // message to ONE url, so a second endpoint would never be called; and a
+        // failing step binds empty rather than aborting, so the CDP being down
+        // cannot cost the customer their reply.
+        id: 'profile',
+        kind: 'connector',
+        connector: 'twilio-segment',
+        action: 'track',
+        input: {
+          userId: '{{body.From}}',
+          event: 'Message Received',
+          properties: { channel: 'sms', body: '{{body.Body}}', to: '{{body.To}}' },
+        },
+      },
     ],
     // Replying in the TwiML rather than with a follow-up API call keeps the whole
     // exchange to ONE Twilio message billed against the trial's 100.
@@ -178,6 +193,73 @@ const handlers: Record<string, unknown> = {
   },
 
   /**
+   * The WhatsApp turn, written into the customer's SHARED thread.
+   *
+   * This is what Conversations is for and what the per-message APIs cannot do:
+   * one thread holds the SMS, the WhatsApp message and an agent's chat replies,
+   * so whoever picks the customer up next sees the whole history instead of one
+   * channel's slice of it. `UniqueName` is the customer's own address, so the
+   * thread is addressable without storing a SID anywhere.
+   */
+  'whatsapp-thread': {
+    name: 'whatsapp-thread',
+    route: '/whatsapp/thread',
+    method: 'POST',
+    verify: 'twilio',
+    description: 'Appends the WhatsApp turn to the customer’s cross-channel conversation thread.',
+    steps: [
+      {
+        id: 'thread',
+        kind: 'connector',
+        connector: 'twilio-conversations',
+        action: 'send_conversation_message',
+        input: {
+          ConversationSid: 'customer-{{body.From}}',
+          Author: '{{body.From}}',
+          Body: '{{body.Body}}',
+        },
+      },
+    ],
+    respond: { kind: 'empty', status: 204 },
+  },
+
+  /**
+   * Conversational AI on a LIVE CALL.
+   *
+   * `<ConversationRelay>` streams the caller's speech to an AI over a WebSocket
+   * and speaks the replies back, so the caller holds a conversation instead of
+   * pressing keys. This is the piece a phone menu cannot fake, and it is why the
+   * IVR above offers it as an option rather than replacing it: a keypad menu is
+   * still the fastest path for "press 1 for order status", and the AI is for
+   * everything a menu cannot anticipate.
+   *
+   * The socket is YOURS — point it at your own agent. It must be `wss://`;
+   * Twilio refuses anything else and the spec parser rejects it at author time
+   * rather than dropping a live call.
+   */
+  'voice-ai': {
+    name: 'voice-ai',
+    route: '/voice-ai',
+    method: 'POST',
+    verify: 'twilio',
+    description: 'Hands the live call to a conversational AI over ConversationRelay.',
+    steps: [],
+    respond: {
+      kind: 'twiml',
+      twiml: [
+        {
+          conversationRelay: {
+            url: 'wss://example.com/relay',
+            welcomeGreeting: 'Hi, you are through to {{project.name}}. What can I help you with?',
+            language: 'en-US',
+            interruptible: true,
+          },
+        },
+      ],
+    },
+  },
+
+  /**
    * Delivery-status callback. Returns 204 with no body: Twilio expects nothing
    * back here, and returning TwiML to a status callback is logged as an error.
    */
@@ -213,6 +295,8 @@ const CONSOLE_HTML = renderOpsConsole({
     { label: 'Inbound voice (IVR)', path: '/voice' },
     { label: 'IVR keypress', path: '/ivr' },
     { label: 'Inbound WhatsApp', path: '/whatsapp' },
+    { label: 'Conversational AI (voice)', path: '/voice-ai' },
+    { label: 'WhatsApp thread', path: '/whatsapp/thread' },
     { label: 'Delivery status', path: '/status' },
   ],
 });
@@ -233,8 +317,14 @@ project's Backend panel. There is no deploy step.
 | SMS | \`POST /sms\` | Two-way support. Classifies the inbound message and answers in the same turn. |
 | Voice | \`POST /voice\` | IVR. Speaks a menu and gathers a keypress. |
 | Voice | \`POST /ivr\` | Handles the keypress; option 3 sends the answer by SMS. |
+| Voice | \`POST /voice-ai\` | Hands the LIVE call to a conversational AI over ConversationRelay. |
 | WhatsApp | \`POST /whatsapp\` | Conversational support and survey capture. |
+| WhatsApp | \`POST /whatsapp/thread\` | Appends the turn to the customer's cross-channel Conversations thread. |
 | All | \`POST /status\` | Delivery-status callback. |
+
+Every inbound SMS also writes a \`Message Received\` event to **Segment** in the
+same turn, so the customer profile behind every channel stays current without a
+second endpoint.
 
 Email is outbound-only, so it is a connector action rather than a handler — send
 receipts, resets and onboarding mail with the **SendGrid** connector's
@@ -254,6 +344,17 @@ receipts, resets and onboarding mail with the **SendGrid** connector's
 4. **Connect SendGrid** and verify a sender, for the email half.
 5. **WhatsApp**: join the Twilio sandbox, then point the sandbox's inbound webhook
    at \`/whatsapp\`.
+6. **Connect Segment** (Customer Data). The write key is the USERNAME and the
+   password is left BLANK — Segment's Tracking API authenticates that way, and a
+   pasted write key in both fields is a 401 that looks like a wrong key.
+7. **Connect Conversations** if you want the shared thread. Same Account SID and
+   auth token as Twilio; it is a separate connector only because it answers on a
+   different API host.
+8. **Point \`/voice-ai\` at your own agent.** Edit the handler's
+   \`conversationRelay.url\` to your \`wss://\` endpoint. It MUST be \`wss://\` —
+   Twilio refuses anything else, and the spec parser rejects it at save time
+   rather than letting the call drop. Then set the number's voice webhook to
+   \`/voice-ai\` instead of \`/voice\` if you want the AI to answer first.
 
 ## Watch the trial balance
 
@@ -272,6 +373,10 @@ messages. Two things burn them faster than you expect:
 - Call it, hear the menu, press 3, and receive the SMS.
 - Message the WhatsApp sandbox and get a reply.
 - Send a receipt through SendGrid and see it in \`get_email_stats\`.
+- Call \`/voice-ai\` and hold a spoken conversation — no keypad.
+- Text the number, then check Segment: a \`Message Received\` event is on the profile.
+- Message WhatsApp and read the thread back with the Conversations connector's
+  \`list_conversation_messages\` — the SMS and the WhatsApp turn are in one history.
 - Check the Backend panel's delivery log — every inbound request, its verification
   verdict and its timing are recorded there.
 
@@ -290,6 +395,7 @@ export const twilioOmnichannelBlueprint: Blueprint = {
     'SMS, Voice (IVR), Email and WhatsApp on one backend: two-way support, a real phone menu, transactional email, conversational WhatsApp, and delivery-status tracking — with the trial allowances watched.',
   signals: ['twilio', 'sendgrid', 'whatsapp', 'twiml', 'ivr', 'sms'],
   capabilities: [
+    'crm',
     'sms',
     'mms',
     'whatsapp',
@@ -312,6 +418,16 @@ export const twilioOmnichannelBlueprint: Blueprint = {
       key: 'sendgrid',
       label: 'SendGrid',
       why: 'The email half of the brief — receipts, password resets, onboarding and re-engagement.',
+    },
+    {
+      key: 'twilio-segment',
+      label: 'Twilio Segment (Customer Data)',
+      why: 'One customer profile behind every channel, so a WhatsApp reply knows what the SMS said.',
+    },
+    {
+      key: 'twilio-conversations',
+      label: 'Twilio Conversations',
+      why: 'One threaded history per customer across SMS, WhatsApp and chat, instead of four disconnected inboxes.',
     },
   ],
   requiredSecrets: [

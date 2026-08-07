@@ -12305,7 +12305,8 @@
       "Agents": "Agents",
       "Models": "Modèles",
       "Collaborate": "Collaboration",
-      "Integrations": "Intégrations"
+      "Integrations": "Intégrations",
+      "Pitch": "Pitch"
     },
     "datasetRowLimit": "Votre offre autorise jusqu’à {limit} lignes de données par import dans le canevas.",
     "datasetNoColumns": "Aucune colonne n’a été trouvée dans ce fichier.",
@@ -12847,7 +12848,11 @@
       "salesGoal": "Objectif commercial hebdomadaire",
       "salesMeeting": "Réunion commerciale",
       "diagram": "Diagramme",
-      "map": "Carte"
+      "map": "Carte",
+      "pitch": "Pitch",
+      "pitchScorecard": "Grille de notation",
+      "pitchQa": "Questions du jury",
+      "pitchApplication": "Candidature"
     },
     "canvasOutline": "Plan accessible de la toile",
     "canvasGestureToggle": "Glisser pour sélectionner",
@@ -13555,7 +13560,165 @@
     "noticeConversationSaveFailedReason": "Échec de l'enregistrement de la conversation : {reason}",
     "noticePrdNotSavedReason": "Le PRD du projet n'a pas été enregistré : {reason}",
     "noticeGuestLimitReached": "Vous avez utilisé vos {limit} messages invité gratuits du jour. Inscrivez-vous gratuitement pour continuer : votre canevas vous suit.",
-    "noticeGuestLimitDevice": "Cet appareil a atteint sa limite invité gratuite du jour. Inscrivez-vous gratuitement pour continuer : votre canevas vous suit."
+    "noticeGuestLimitDevice": "Cet appareil a atteint sa limite invité gratuite du jour. Inscrivez-vous gratuitement pour continuer : votre canevas vous suit.",
+    "templateCategoryMarketplace": "Modèle de la marketplace",
+    "templateCategoryObjectPack": "Pack d’objets",
+    "template": {
+      "sales-command-center": {
+        "name": "Centre de commande commercial",
+        "description": "Pilotez ciblage, prospection, pipeline, objectifs et coaching depuis un seul canevas collaboratif."
+      },
+      "campaign": {
+        "name": "Studio de campagne",
+        "description": "Planifiez une campagne, prototypez sa page d’atterrissage et évaluez les prévisions."
+      },
+      "product-discovery": {
+        "name": "Découverte produit",
+        "description": "Synthétisez les retours clients, priorisez les fonctionnalités et transformez les concepts en maquettes."
+      },
+      "data-story": {
+        "name": "Récit de données",
+        "description": "Importez un jeu de données, construisez des visuels en direct et composez un récit pour la direction."
+      },
+      "stand-up": {
+        "name": "Stand-up improvisé",
+        "description": "Réunissez humains et agents, faites remonter les blocages et créez les suites à donner."
+      },
+      "model-build": {
+        "name": "Laboratoire de modèles Evermind",
+        "description": "Préparez les données, entraînez et ajustez Evermind, évaluez-le et empaquetez le résultat."
+      },
+      "executive-review": {
+        "name": "Revue de direction",
+        "description": "Rassemblez santé du projet, priorités, feuille de route et présentation dans un même cadre de décision."
+      },
+      "creative-studio": {
+        "name": "Studio créatif",
+        "description": "Composez vidéo, images, animation, podcasts et bandes dessinées avec les capacités créatives natives de Builderforce."
+      },
+      "career-documents": {
+        "name": "Studio CV et présentation",
+        "description": "Produisez un CV, des fichiers d’appui, un document paginé et une présentation à partir d’un seul brief."
+      },
+      "pitch-competition": {
+        "name": "War room de concours de pitch",
+        "description": "Participez à un concours de pitch et gagnez-le : la candidature écrite, le pitch chronométré, la grille de notation, l’entraînement aux questions du jury et le deck, évalués selon les règles du concours."
+      },
+      "interactive-3d": {
+        "name": "Studio jeux et 3D",
+        "description": "Concevez des jeux jouables, des plans CAO et des modèles 3D avec une persistance de projet basée sur MCP."
+      }
+    },
+    "pitch": {
+      "addQuestion": "Ajouter une question",
+      "answer": "Réponse",
+      "answerEmpty": "Pas encore répété.",
+      "answerPlaceholder": "La réponse, dans le temps dont vous disposeriez réellement.",
+      "answeredCount": "{answered} sur {total} traitées",
+      "applicationHint": "Respectez chaque règle et chaque limite avant d’envoyer.",
+      "beatEmpty": "Rien n’est encore rédigé pour cette séquence.",
+      "beatsWritten": "{written}/{total} séquences rédigées",
+      "blockedCount": "{count} blocages",
+      "budget": "Budget",
+      "budgetedAcrossBeats": "Réparti sur {count} séquences",
+      "category": "Catégorie",
+      "charCount": "{chars} / {max} caractères",
+      "chooseCategory": "Choisir une catégorie",
+      "competition": "Concours",
+      "competitionHint": "{pitch} de pitch, {qa} de questions du jury, {criteria} critères d’évaluation.",
+      "complete": "complété",
+      "completePercent": "{value}% complété",
+      "criteriaCount": "{count} critères",
+      "entryFor": "Candidature à",
+      "evidence": "Preuve",
+      "evidencePlaceholder": "La preuve qu’un jury accepterait.",
+      "gap": "Manque",
+      "gapPlaceholder": "Ce qui manque encore.",
+      "gapPrefix": "Manque : {gap}",
+      "judgeQa": "Questions du jury",
+      "marksLostHere": "Points perdus ici",
+      "noLimit": "Aucune limite de longueur",
+      "ofLimit": "sur {limit} autorisées",
+      "officialRules": "Règlement officiel",
+      "qaHint": "Le jury dispose de {qa}. Répétez les réponses que vous préféreriez ne pas avoir à donner.",
+      "qaWindow": "Temps de questions",
+      "question": "Question",
+      "readinessHint": "Pondéré sur chaque critère publié par ce concours.",
+      "readinessPercent": "{value}% prêt",
+      "ready": "prêt",
+      "readyToSubmit": "Prêt à envoyer",
+      "rehearsed": "répété",
+      "rehearsedOf": "{answered} sur {total} répétées",
+      "runtime": "Durée",
+      "scoreOutOf": "Noter {name} sur {max}",
+      "scoreValue": "{score} sur {max}",
+      "scored": "notés",
+      "scoredAgainst": "Évalué selon",
+      "script": "Texte",
+      "seconds": "Secondes",
+      "spokenAt130": "Prononcé à 130 mots/minute, pour une limite de {limit}",
+      "label": {
+        "beat": {
+          "hook": "Accroche",
+          "problem": "Problème",
+          "solution": "Solution",
+          "demo": "Démo",
+          "traction": "Traction",
+          "market": "Marché et modèle",
+          "team": "Équipe",
+          "ask": "Demande",
+          "whatYouDo": "Ce que vous faites",
+          "insight": "Intuition",
+          "progress": "Avancement"
+        },
+        "criterion": {
+          "innovation": "Innovation et originalité",
+          "viability": "Viabilité",
+          "marketability": "Commercialisabilité",
+          "growth": "Potentiel de croissance",
+          "impact": "Capacité d’impact",
+          "team": "Équipe et personnes",
+          "problem": "Clarté du problème",
+          "solution": "Solution et démo",
+          "traction": "Traction",
+          "market": "Marché et modèle",
+          "founders": "Fondateurs",
+          "insight": "Intuition",
+          "progress": "Avancement depuis le début",
+          "clarity": "Clarté du raisonnement"
+        },
+        "rule": {
+          "launchWindow": "Produit ou service lancé après le 1er janvier 2024",
+          "oneProduct": "Un seul produit ou service par entreprise",
+          "founderOwnership": "Les fondateurs détiennent encore une participation",
+          "fundingCap": "Moins de 10 M$ levés au total",
+          "registered": "Légalement enregistrée et conforme dans sa juridiction",
+          "categoryFit": "Correspond à l’une des catégories officielles",
+          "cohort": "Actuellement dans la cohorte ou le programme présenté",
+          "liveProduct": "Le produit est en ligne et démontrable",
+          "incorporated": "La société est constituée",
+          "founderTime": "Au moins un fondateur à plein temps",
+          "equity": "Les fondateurs peuvent accepter les conditions en capital du programme"
+        },
+        "answer": {
+          "oneLiner": "Description en une ligne",
+          "problem": "Problème que vous résolvez",
+          "solution": "Produit ou service",
+          "differentiation": "Ce qui le rend original",
+          "market": "Marché et modèle économique",
+          "traction": "Traction à ce jour",
+          "impact": "Impact en cas de réussite",
+          "team": "Équipe",
+          "funding": "Financement levé à ce jour",
+          "ask": "Ce que vous demandez",
+          "whatYouDo": "Que construisez-vous ?",
+          "insight": "Que comprenez-vous que les autres ignorent ?",
+          "progress": "Qu’avez-vous construit jusqu’ici ?",
+          "users": "Qui sont vos utilisateurs et comment savez-vous qu’ils en veulent ?",
+          "founders": "Parcours des fondateurs"
+        }
+      }
+    }
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",
@@ -13968,5 +14131,20 @@
     "installPitch": "Installez Builderforce pour une application plus rapide en plein écran.",
     "install": "Installer",
     "installIos": "Installez Builderforce : appuyez sur Partager, puis « Sur l’écran d’accueil »."
+  },
+  "workflow": {
+    "connectorNode": {
+      "integration": "Intégration",
+      "action": "Action",
+      "input": "Entrée (JSON)",
+      "choosePlaceholder": "Choisir…",
+      "loading": "Chargement des intégrations…",
+      "loadFailed": "Impossible de charger vos intégrations.",
+      "parameters": "Paramètres",
+      "required": "obligatoire",
+      "templateHint": "'{{'input'}}' insère la sortie du nœud précédent ; '{{'input.champ'}}' en lit un champ lorsque cette sortie est du JSON.",
+      "mutatesWarning": "Cette action modifie quelque chose : elle envoie un message, passe un appel ou déplace de l'argent. Elle s'exécutera sans surveillance à chaque déclenchement du flux.",
+      "connectionHint": "Nécessite une connexion {name} active dans Intégrations. Le nœud échoue en sécurité tant qu'il n'y en a pas."
+    }
   }
 }

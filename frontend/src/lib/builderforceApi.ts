@@ -958,6 +958,8 @@ export type EvermindBuildKind =
 export type WorkflowNodeKind =
   | 'trigger' | 'agent' | 'llm' | 'mcp' | 'memory' | 'knowledge' | 'train'
   | 'transform' | 'filter' | 'branch' | 'output' | 'gmail'
+  /** The ONE node through which every connector action is reachable. */
+  | 'connector'
   | EvermindBuildKind;
 
 export interface WorkflowDefNode {

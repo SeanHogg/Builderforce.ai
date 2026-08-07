@@ -75,7 +75,11 @@ export const NODE_KINDS: NodeKindMeta[] = [
       { key: 'cron', label: 'Cron schedule', type: 'text', placeholder: 'e.g. 0 9 * * 1-5', visibleWhen: { field: 'triggerType', equals: 'schedule' } },
       { key: 'timezone', label: 'Timezone', type: 'text', placeholder: 'e.g. UTC, America/New_York', visibleWhen: { field: 'triggerType', equals: 'schedule' } },
       { key: 'webhookPath', label: 'Webhook path', type: 'text', placeholder: 'e.g. /hooks/lead', visibleWhen: { field: 'triggerType', equals: 'webhook' } },
-      { key: 'secret', label: 'Signing secret', type: 'text', placeholder: 'Shared secret to verify payloads', visibleWhen: { field: 'triggerType', equals: 'webhook' } },
+      // Twilio cannot be made to send a generic HMAC header — it signs the URL
+      // plus the sorted form parameters with its own scheme. Without this choice
+      // a Twilio number could not start a workflow at all.
+      { key: 'verify', label: 'Verify caller as', type: 'select', options: ['hmac', 'twilio'], visibleWhen: { field: 'triggerType', equals: 'webhook' } },
+      { key: 'secret', label: 'Signing secret / Twilio auth token', type: 'text', placeholder: 'Shared secret, or your Twilio auth token', visibleWhen: { field: 'triggerType', equals: 'webhook' } },
       { key: 'boardEvent', label: 'Board event', type: 'select', options: ['task-created', 'task-moved', 'task-completed', 'comment-added'], visibleWhen: { field: 'triggerType', equals: 'board-event' } },
 
       // Reliability event filters (blank = fire on any). severity/affectedSystem apply
@@ -172,6 +176,19 @@ export const NODE_KINDS: NodeKindMeta[] = [
       { key: 'operation', label: 'Operation', type: 'text', placeholder: 'e.g. create-issue, query' },
       { key: 'params', label: 'Params (JSON)', type: 'textarea', placeholder: '{ "title": "..." }' },
     ],
+  },
+  {
+    kind: 'connector',
+    label: 'Integration action',
+    icon: '🔌',
+    group: 'Integrations',
+    accent: '#f97316',
+    blurb: 'Call any connected integration — SMS, voice, WhatsApp, email, CRM, payments.',
+    // No declared fields: this node's options come from the tenant's LIVE catalog
+    // (including connectors they authored), so it renders its own editor —
+    // see ConnectorNodeFields.tsx.
+    defaultConfig: { connector: '', action: '', input: '{}' },
+    fields: [],
   },
   {
     kind: 'gmail',

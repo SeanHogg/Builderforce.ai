@@ -12306,7 +12306,8 @@
       "Agents": "Agents",
       "Models": "Models",
       "Collaborate": "Collaborate",
-      "Integrations": "Integrations"
+      "Integrations": "Integrations",
+      "Pitch": "Pitch"
     },
     "datasetRowLimit": "This plan supports up to {limit} dataset rows per canvas import.",
     "datasetNoColumns": "No columns were found in that file.",
@@ -12848,7 +12849,11 @@
       "salesGoal": "Weekly sales goal",
       "salesMeeting": "Sales meeting",
       "diagram": "Diagram",
-      "map": "Map"
+      "map": "Map",
+      "pitch": "Pitch",
+      "pitchScorecard": "Pitch scorecard",
+      "pitchQa": "Judge Q&A",
+      "pitchApplication": "Competition entry"
     },
     "canvasOutline": "Accessible canvas outline",
     "canvasGestureToggle": "Drag to select",
@@ -13556,7 +13561,165 @@
     "noticeConversationSaveFailedReason": "Conversation save failed: {reason}",
     "noticePrdNotSavedReason": "Project PRD was not saved: {reason}",
     "noticeGuestLimitReached": "You've used your {limit} free guest messages for today. Sign up free to keep going — your canvas comes with you.",
-    "noticeGuestLimitDevice": "This device has reached its free guest limit for today. Sign up free to keep going — your canvas comes with you."
+    "noticeGuestLimitDevice": "This device has reached its free guest limit for today. Sign up free to keep going — your canvas comes with you.",
+    "templateCategoryMarketplace": "Marketplace template",
+    "templateCategoryObjectPack": "Object pack",
+    "template": {
+      "sales-command-center": {
+        "name": "Sales command center",
+        "description": "Run targeting, outreach, pipeline management, goals, and coaching from one collaborative canvas."
+      },
+      "campaign": {
+        "name": "Campaign studio",
+        "description": "Plan a campaign, prototype its landing page, and evaluate forecast evidence."
+      },
+      "product-discovery": {
+        "name": "Product discovery",
+        "description": "Synthesize customer evidence, prioritize features, and expand concepts into mockups."
+      },
+      "data-story": {
+        "name": "Data story",
+        "description": "Import a dataset, build live visuals, and assemble an executive narrative."
+      },
+      "stand-up": {
+        "name": "Impromptu stand-up",
+        "description": "Gather humans and agents, surface blockers, and create follow-up work."
+      },
+      "model-build": {
+        "name": "Evermind model lab",
+        "description": "Prepare data, teach and tune Evermind, evaluate it, and package the result."
+      },
+      "executive-review": {
+        "name": "Executive review",
+        "description": "Bring project health, priorities, roadmap, and presentation into one decision frame."
+      },
+      "creative-studio": {
+        "name": "Creative studio",
+        "description": "Compose video, images, animation, podcasts, and comics through Builderforce native creative capabilities."
+      },
+      "career-documents": {
+        "name": "Resume & presentation studio",
+        "description": "Build a resume, supporting files, a paged document, and a presentation from one source brief."
+      },
+      "pitch-competition": {
+        "name": "Pitch competition war room",
+        "description": "Enter a pitch competition and win it: the written entry, the timed pitch, the judging scorecard, the judge Q&A drill, and the deck — scored against the competition’s own rules."
+      },
+      "interactive-3d": {
+        "name": "Games & 3D studio",
+        "description": "Design playable games, CAD drawings, and 3D models with MCP-backed project persistence."
+      }
+    },
+    "pitch": {
+      "addQuestion": "Add a question",
+      "answer": "Answer",
+      "answerEmpty": "Not rehearsed yet.",
+      "answerPlaceholder": "The answer, in the time you would actually have.",
+      "answeredCount": "{answered} of {total} answered",
+      "applicationHint": "Clear every rule and stay inside every limit before you submit.",
+      "beatEmpty": "Nothing written for this beat yet.",
+      "beatsWritten": "{written}/{total} beats written",
+      "blockedCount": "{count} blockers",
+      "budget": "Budget",
+      "budgetedAcrossBeats": "Budgeted across {count} beats",
+      "category": "Category",
+      "charCount": "{chars} / {max} characters",
+      "chooseCategory": "Choose a category",
+      "competition": "Competition",
+      "competitionHint": "{pitch} pitch, {qa} judge Q&A, {criteria} judging criteria.",
+      "complete": "complete",
+      "completePercent": "{value}% complete",
+      "criteriaCount": "{count} criteria",
+      "entryFor": "Entry for",
+      "evidence": "Evidence",
+      "evidencePlaceholder": "The proof a judge would accept.",
+      "gap": "Gap",
+      "gapPlaceholder": "What is still missing.",
+      "gapPrefix": "Gap: {gap}",
+      "judgeQa": "Judge Q&A",
+      "marksLostHere": "Marks lost here",
+      "noLimit": "No length limit",
+      "ofLimit": "of {limit} allowed",
+      "officialRules": "Official rules",
+      "qaHint": "Judges get {qa}. Rehearse the answers you would rather not be asked.",
+      "qaWindow": "Q&A window",
+      "question": "Question",
+      "readinessHint": "Weighted across every criterion this competition publishes.",
+      "readinessPercent": "{value}% ready",
+      "ready": "ready",
+      "readyToSubmit": "Ready to submit",
+      "rehearsed": "rehearsed",
+      "rehearsedOf": "{answered} of {total} rehearsed",
+      "runtime": "Runtime",
+      "scoreOutOf": "Score {name} out of {max}",
+      "scoreValue": "{score} of {max}",
+      "scored": "scored",
+      "scoredAgainst": "Scored against",
+      "script": "Script",
+      "seconds": "Seconds",
+      "spokenAt130": "Spoken at 130 wpm, against a {limit} limit",
+      "label": {
+        "beat": {
+          "hook": "Hook",
+          "problem": "Problem",
+          "solution": "Solution",
+          "demo": "Demo",
+          "traction": "Traction",
+          "market": "Market & model",
+          "team": "Team",
+          "ask": "Ask",
+          "whatYouDo": "What you do",
+          "insight": "Insight",
+          "progress": "Progress"
+        },
+        "criterion": {
+          "innovation": "Innovation / originality",
+          "viability": "Viability",
+          "marketability": "Marketability",
+          "growth": "Potential for growth",
+          "impact": "Capacity for impact",
+          "team": "Team / people",
+          "problem": "Problem clarity",
+          "solution": "Solution & demo",
+          "traction": "Traction",
+          "market": "Market & model",
+          "founders": "Founders",
+          "insight": "Insight",
+          "progress": "Progress since starting",
+          "clarity": "Clarity of thought"
+        },
+        "rule": {
+          "launchWindow": "Product or service launched after 1 January 2024",
+          "oneProduct": "Exactly one product or service entered per company",
+          "founderOwnership": "Founders still hold an ownership stake",
+          "fundingCap": "Under $10M raised in combined funding",
+          "registered": "Legally registered and compliant in its jurisdiction",
+          "categoryFit": "Fits one of the official entry categories",
+          "cohort": "Currently in the presenting cohort or programme",
+          "liveProduct": "Product is live and demonstrable",
+          "incorporated": "Company is incorporated",
+          "founderTime": "At least one founder full time",
+          "equity": "Founders can accept the programme’s equity terms"
+        },
+        "answer": {
+          "oneLiner": "One-line description",
+          "problem": "Problem you solve",
+          "solution": "Product or service",
+          "differentiation": "What makes it original",
+          "market": "Market and business model",
+          "traction": "Traction to date",
+          "impact": "Impact if you succeed",
+          "team": "Team",
+          "funding": "Funding raised to date",
+          "ask": "What you are asking for",
+          "whatYouDo": "What are you making?",
+          "insight": "What do you understand that others do not?",
+          "progress": "What have you built so far?",
+          "users": "Who are your users and how do you know they want this?",
+          "founders": "Founder background"
+        }
+      }
+    }
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -13969,5 +14132,20 @@
     "installPitch": "Install Builderforce for a faster, full-screen app.",
     "install": "Install",
     "installIos": "Install Builderforce: tap Share, then “Add to Home Screen”."
+  },
+  "workflow": {
+    "connectorNode": {
+      "integration": "Integration",
+      "action": "Action",
+      "input": "Input (JSON)",
+      "choosePlaceholder": "Choose…",
+      "loading": "Loading integrations…",
+      "loadFailed": "Could not load your integrations.",
+      "parameters": "Parameters",
+      "required": "required",
+      "templateHint": "'{{'input'}}' inserts the upstream node's output; '{{'input.field'}}' reads one field from it when that output is JSON.",
+      "mutatesWarning": "This action changes something — it sends a message, places a call or moves money. It will run unattended every time this workflow fires.",
+      "connectionHint": "Needs a live {name} connection under Integrations. The node fails closed until one exists."
+    }
   }
 }

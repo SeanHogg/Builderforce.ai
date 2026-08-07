@@ -146,10 +146,51 @@ export interface OpenApiImportResult {
   totalOperations: number;
 }
 
+/** One parameter of one action, as a form needs it. */
+export interface CatalogParam {
+  name: string;
+  in: string;
+  type: string;
+  description: string;
+  required: boolean;
+  enum?: string[];
+}
+
+export interface CatalogAction {
+  key: string;
+  label: string;
+  description: string;
+  /** True when the action CHANGES something — sends a message, charges a card. */
+  mutates: boolean;
+  params: CatalogParam[];
+  /** Input object pre-seeded with every required parameter. */
+  inputTemplate: Record<string, string>;
+}
+
+export interface CatalogConnector {
+  key: string;
+  name: string;
+  description: string;
+  category: string;
+  icon: string;
+  origin: 'builtin' | 'tenant';
+  docsUrl?: string;
+  authFields: Array<{ key: string; label: string; required: boolean; secret: boolean }>;
+  actions: CatalogAction[];
+}
+
 export const connectorsApi = {
   /** Catalog: built-ins + this tenant's custom connectors, with connection counts. */
   catalog: (): Promise<{ connectors: ConnectorSummary[]; categories: ConnectorCategory[] }> =>
     apiRequest('/api/connectors'),
+
+  /**
+   * Every callable action with its parameters — what the workflow builder's
+   * connector node picks from. Server-cached, so opening the picker repeatedly
+   * is free.
+   */
+  actions: (): Promise<CatalogConnector[]> =>
+    apiRequest<{ connectors: CatalogConnector[] }>('/api/connectors/actions').then((r) => r.connectors ?? []),
 
   get: (key: string): Promise<ConnectorDetail> =>
     apiRequest(`/api/connectors/${encodeURIComponent(key)}`),

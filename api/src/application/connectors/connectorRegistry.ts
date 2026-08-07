@@ -43,7 +43,14 @@ const catalogCacheKey = (tenantId: number): string => `connectors:catalog:${tena
 
 /** Drop the cached catalog for a tenant. Call after ANY connector write. */
 export async function invalidateConnectorCatalog(env: Env, tenantId: number): Promise<void> {
-  await invalidateCached(env, catalogCacheKey(tenantId));
+  // The action catalog is a PROJECTION of this one, so it goes stale on exactly
+  // the same writes. Dropping both here means a caller cannot invalidate one and
+  // forget the other — which would leave a newly published connector missing from
+  // the workflow builder's picker for ten minutes after it appeared in the gallery.
+  await Promise.all([
+    invalidateCached(env, catalogCacheKey(tenantId)),
+    invalidateCached(env, `connector-action-catalog:${tenantId}`),
+  ]);
 }
 
 /** True when `key` names a built-in and therefore cannot be claimed by a tenant. */

@@ -82,3 +82,42 @@ describe('parseTwimlNode', () => {
     expect(parseTwimlNode({ reject: true, reason: 'whatever' })).toEqual({ reject: true });
   });
 });
+
+describe('ConversationRelay', () => {
+  it('wraps the relay in <Connect>, which Twilio requires', () => {
+    // A bare <ConversationRelay> is a document Twilio rejects mid-call, so the
+    // wrapper is written by the renderer rather than left to the author.
+    const xml = renderTwiml(parseTwimlNodes([
+      { conversationRelay: { url: 'wss://ai.example.com/relay', welcomeGreeting: 'Hi, how can I help?' } },
+    ]));
+    expect(xml).toContain('<Connect><ConversationRelay');
+    expect(xml).toContain('url="wss://ai.example.com/relay"');
+    expect(xml).toContain('welcomeGreeting="Hi, how can I help?"');
+    expect(xml).toContain('/></Connect>');
+  });
+
+  it('DROPS a relay whose socket is not wss:// rather than emitting one Twilio refuses', () => {
+    // Twilio will not open a non-secure socket. Failing at author time degrades
+    // the reply; failing at request time drops a call with a customer on it.
+    expect(parseTwimlNodes([{ conversationRelay: { url: 'ws://ai.example.com/relay' } }])).toEqual([]);
+    expect(parseTwimlNodes([{ conversationRelay: { url: 'https://ai.example.com/relay' } }])).toEqual([]);
+    expect(parseTwimlNodes([{ conversationRelay: {} }])).toEqual([]);
+  });
+
+  it('carries the voice/language/interruption options through', () => {
+    const xml = renderTwiml(parseTwimlNodes([
+      { conversationRelay: { url: 'wss://a.example.com/r', voice: 'en-US-Journey-O', language: 'en-US', interruptible: true, dtmfDetection: true } },
+    ]));
+    expect(xml).toContain('voice="en-US-Journey-O"');
+    expect(xml).toContain('language="en-US"');
+    expect(xml).toContain('interruptible="true"');
+    expect(xml).toContain('dtmfDetection="true"');
+  });
+
+  it('escapes a greeting that contains XML metacharacters', () => {
+    const xml = renderTwiml(parseTwimlNodes([
+      { conversationRelay: { url: 'wss://a.example.com/r', welcomeGreeting: 'Tom & "Jerry" <hi>' } },
+    ]));
+    expect(xml).toContain('Tom &amp; &quot;Jerry&quot; &lt;hi&gt;');
+  });
+});
