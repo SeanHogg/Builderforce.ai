@@ -460,30 +460,6 @@ select option {
   flex-wrap: wrap;
 }
 
-.bf-model {
-  font-size: 11px;
-  color: var(--bf-text-muted);
-  font-family: var(--bf-font-mono);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 40%;
-}
-
-/* Model chip as a button (opens the model picker). Inherits .bf-model sizing. */
-.bf-model--btn {
-  border: 1px solid var(--bf-border);
-  background: transparent;
-  border-radius: 999px;
-  padding: 2px 9px;
-  cursor: pointer;
-}
-
-.bf-model--btn:hover {
-  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
-  color: var(--bf-text);
-}
-
 /* Square icon button used across the composer toolbar (+, /, mic, send). */
 .bf-iconbtn {
   display: inline-flex;

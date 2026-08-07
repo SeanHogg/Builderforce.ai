@@ -24,6 +24,8 @@ import { Canvas3DControlsProvider, useCanvas3DControls, useCanvasThreeD } from '
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { CanvasOutlinePanel } from './CanvasOutlinePanel';
 import { CanvasFilesPanel } from './CanvasFilesPanel';
+import { CanvasHostActions } from './CanvasHostActions';
+import { canvasNavigate, canvasSurface, canvasWebOrigin, type CanvasHostCapture } from '@/lib/canvasHost';
 import { BrainDock } from './BrainDock';
 import { brainDockReservedWidth, brainDockWidth, DEFAULT_BRAIN_DOCK_PREFERENCES, readBrainDockPreferences, writeBrainDockPreferences, type BrainDockMode, type BrainDockPreferences } from './brainDockPreferences';
 import { BrainSurfaceProvider, type BrainSurfaceContextValue } from './brainSurfaceContext';
@@ -74,8 +76,8 @@ import { buildCreationCanvasDiagnosticsReport } from '@/lib/creationCanvasDiagno
 import { alignCanvasNodesLeft, arrangeCanvasNodes, canvasArrangementTargets, canvasNodeDimensions, canvasPlacementUnlocked, nextCanvasObjectPosition, type CanvasArrangement } from './creationCanvasLayout';
 import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove';
 import { useConfirm } from '@/components/ConfirmProvider';
-import { useLlmModels } from '@/lib/useLlmModels';
-import { ChatInput, type ChatModelOptions, type ChatModelSelection } from '@/components/ChatInput';
+import { useChatModelOptions } from '@/lib/useLlmModels';
+import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
 import { ChatModeToggle } from '@/components/brain/ChatModeToggle';
 import { DEFAULT_CHAT_MODE, normalizeChatMode, type ChatMode } from '@/lib/brain';
 import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
@@ -83,6 +85,13 @@ import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables,
 import { canvasDiagram, canvasDocument, canvasFiles, canvasObjectMarkdown, type CanvasFile } from '@/lib/canvasDocuments';
 import { listEvermindModels } from '@/lib/studioModelsApi';
 import { AITrainingPanel } from '@/components/AITrainingPanel';
+import { canvasProjectId, canvasProjectNodes, connectedCanvasProjectNode } from '@/lib/canvasProjectRef';
+import { canvasBuildBinding, canvasBuildModality, canvasBuildPatch, createCanvasBuild } from '@/lib/canvasBuild';
+import { deleteIdeProject, listIdeProjects } from '@/lib/api';
+import type { IdeProject } from '@/lib/types';
+import { CanvasBuildPanel } from './CanvasBuildPanel';
+import { useLocalizedModalities, useModalityCopy } from '@/lib/useModalityCopy';
+import type { ProjectModality } from '@/lib/modality';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
@@ -94,7 +103,7 @@ const INSPECTOR_WIDE_WIDTH = 520;
 const INSPECTOR_MAX_WIDTH = 720;
 const ACCOUNT_REQUIRED_OBJECT_ACTIONS = new Set(['publish', 'deliver', 'assign', 'authenticate', 'execute', 'record', 'train', 'start', 'compare']);
 const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
-  website: ['publish'], video: ['generate'],
+  website: ['publish'], video: ['generate'], build: ['open'],
   workflow: ['run'], dataset: ['visualize', 'profile'], project: ['expand', 'compare'],
   mockup: ['deliver'], mockupSet: ['expand', 'deliver'], standup: ['start'],
   evermind: ['train', 'evaluate', 'publish'],
@@ -417,6 +426,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [mergeReview, setMergeReview] = useState<MergeReview | null>(null);
   const [workflowFocus, setWorkflowFocus] = useState<{ nodeId: string; definitionId: string | null } | null>(null);
   const [trainingFocus, setTrainingFocus] = useState<{ nodeId: string; projectId: number | string; localOnly: boolean } | null>(null);
+  // The Builder object whose IDE workspace is open on top of the board.
+  const [buildFocus, setBuildFocus] = useState<{ nodeId: string; storageProjectId: number } | null>(null);
+  const [creatingBuild, setCreatingBuild] = useState(false);
   const [framePresets, setFramePresets] = useState<FramePreset[]>([]);
   const [serverTemplates, setServerTemplates] = useState<ServerCreationTemplate[]>([]);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -428,17 +440,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [brainRunStartedAt, setBrainRunStartedAt] = useState<number | null>(null);
   const [activeAgentIds, setActiveAgentIds] = useState<Set<string>>(() => new Set());
   const [modelSelection, setModelSelection] = useState<ChatModelSelection>({ mode: 'auto' });
-  const llmModels = useLlmModels();
-  const canvasModelOptions = useMemo<ChatModelOptions>(() => ({
-    configured: llmModels.tenantModels.map((model) => ({ id: model.ref, label: model.name })),
-    byo: llmModels.fundingSurface.byo.models.map(({ id, vendor }) => ({ id, vendor })),
-    free: llmModels.freeModels,
-    plan: llmModels.models,
-    paid: llmModels.premiumModels.map((model) => ({
-      id: model.id,
-      cost: `$${(model.pricing.prompt * 1_000_000).toFixed(2)} input / $${(model.pricing.completion * 1_000_000).toFixed(2)} output per 1M tokens + $0.01/request`,
-    })),
-  }), [llmModels]);
+  const { options: canvasModelOptions, canChooseModel } = useChatModelOptions();
   const [tourStep, setTourStep] = useState(0);
   const [notice, setNotice] = useState('Session saved');
 
@@ -552,7 +554,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const isComposingPrompt = prompt.trim().length > 0;
   const requireAccount = useCallback((action: string, title: string, description: string) => {
     setAccountGate({ action, title, description });
-    trackActivity('creation_account_gate_shown', { sessionId, metadata: { clientSurface: 'web', action } });
+    trackActivity('creation_account_gate_shown', { sessionId, metadata: { clientSurface: canvasSurface(), action } });
   }, [sessionId]);
   useEffect(() => {
     if (!palettePreferencesReady) return;
@@ -607,7 +609,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const next = { ...current, ...patch };
       if (persist) {
         writeBrainDockPreferences(next);
-        trackActivity('creation_brain_dock_preference', { sessionId, metadata: { clientSurface: 'web', ...next } });
+        trackActivity('creation_brain_dock_preference', { sessionId, metadata: { clientSurface: canvasSurface(), ...next } });
       }
       return next;
     });
@@ -695,7 +697,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!shareOpen || persistence !== 'server' || sessionRole !== 'owner') return;
     void creationSessionsApi.invitations.list(sessionId)
       .then((result) => setPendingInvitations(result.invitations.filter((invitation) => !invitation.acceptedAt && !invitation.revokedAt)))
-      .catch((error) => setNotice(error instanceof Error ? error.message : 'Invitations could not be loaded'));
+      .catch((error) => setNotice(error instanceof Error ? error.message : t('noticeInvitationsFailed')));
   }, [persistence, sessionId, sessionRole, shareOpen]);
 
   useEffect(() => {
@@ -710,7 +712,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           if (saved.viewport) { viewportRef.current = saved.viewport; pendingViewport.current = saved.viewport; void flowRef.current?.setViewport(saved.viewport); }
         }
         hydrated.current = true;
-        trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: 'web', persistence: 'local' } });
+        trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: canvasSurface(), persistence: 'local' } });
         return;
       }
       const openedAt = performance.now();
@@ -745,12 +747,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         lastSavedGraph.current = JSON.stringify({ nodes: loadedNodes, edges: loadedEdges });
         currentGraph.current = lastSavedGraph.current;
         hydrated.current = true;
-        trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: 'web', objectKinds: [...new Set(loadedNodes.map((node) => node.data.kind))] } });
+        trackActivity('creation_session_opened', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [...new Set(loadedNodes.map((node) => node.data.kind))] } });
         void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'succeeded', durationMs: performance.now() - openedAt }).catch(() => undefined);
-        setNotice('Session saved');
+        setNotice(t('noticeSessionSaved'));
       }).catch((error) => {
         void creationSessionsApi.recordOutcome(sessionId, { correlationId: sessionOpenCorrelation.current, action: 'session.open', phase: 'failed', durationMs: performance.now() - openedAt }).catch(() => undefined);
-        setNotice(error instanceof Error ? error.message : 'Could not load session');
+        setNotice(error instanceof Error ? error.message : t('noticeLoadSessionFailed'));
       }).finally(() => setLoadingSession(false));
     } catch { hydrated.current = true; }
   }, [persistence, sessionId, setEdges, setNodes]);
@@ -923,10 +925,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const snapshot: LocalCreationSnapshot = { version: 1, title, initialPrompt: prior?.initialPrompt, timeline: timeline.map((message) => ({ clientMessageId: message.clientMessageId, role: message.messageRole, body: message.body, metadata: message.metadata, createdAt: message.createdAt })), nodes, edges, viewport: viewportRef.current, updatedAt: new Date().toISOString() };
         persistSnapshot(snapshot);
         lastSavedGraph.current = serialized;
-        setNotice('Saved on this device');
+        setNotice(t('noticeSavedOnDevice'));
         return;
       }
-      setNotice('Saving changes…');
+      setNotice(t('noticeSavingChanges'));
       saveInFlight.current = true;
       const graph = creationGraphFromSnapshot({ nodes, edges });
       if (!pendingSave.current || pendingSave.current.serialized !== serialized) pendingSave.current = { serialized, key: crypto.randomUUID() };
@@ -936,7 +938,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         lastSavedGraph.current = serialized;
         setPersistedObjectIds(new Set(graph.objects.map((object) => object.id)));
         if (pendingSave.current?.key === saveAttempt.key) pendingSave.current = null;
-        setNotice('Session saved');
+        setNotice(t('noticeSessionSaved'));
       }).catch(async (error) => {
         if (error instanceof Error && error.message === 'Session changed') {
           try {
@@ -949,11 +951,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             setEdges(merged.edges);
             setPersistedObjectIds(new Set(remote.nodes.map((node) => node.id)));
             pendingSave.current = null;
-            setNotice('Concurrent changes merged; saving again…');
+            setNotice(t('noticeConcurrentMerged'));
             return;
           } catch { /* Fall through to the original conflict message. */ }
         }
-        setNotice(error instanceof Error ? error.message : 'Save failed');
+        setNotice(error instanceof Error ? error.message : t('noticeSaveFailed'));
       })
         .finally(() => { saveInFlight.current = false; });
     }, 300);
@@ -1001,7 +1003,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         revision.current = remoteRevision;
         lastSavedGraph.current = JSON.stringify(remote);
         currentGraph.current = lastSavedGraph.current;
-        setNotice('Updated by a collaborator');
+        setNotice(t('noticeUpdatedByCollaborator'));
       } catch { /* Presence and polling are best-effort; local edits continue. */ }
     };
     void reconcile();
@@ -1040,7 +1042,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         revision.current = detail.session.canvasRevision ?? detail.session.revision ?? remoteRevision;
         lastSavedGraph.current = JSON.stringify(remote);
         currentGraph.current = lastSavedGraph.current;
-        setNotice('Updated live by a collaborator');
+        setNotice(t('noticeUpdatedLive'));
       } catch { /* The presence reconciliation remains a durable fallback. */ }
     };
     const connect = () => {
@@ -1116,8 +1118,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const candidates = [...scopedNodes, ...nodes.filter((node) => !scopedNodeIds.has(node.id))];
     for (const node of candidates) {
       if (node.data.kind === 'project') {
-        const canonical = node.data.resourceId?.match(/^project:(\d+)$/)?.[1];
-        const numeric = canonical ? Number(canonical) : Number(node.data.projectId);
+        const numeric = canvasProjectId(node.data) ?? Number(node.data.projectId);
         if (Number.isInteger(numeric) && numeric > 0) return numeric;
       }
       const source = Number(node.data.sourceProjectId);
@@ -1131,7 +1132,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const updateNodeData = useCallback((nodeId: string, patch: Partial<CreationNodeData>) => {
     if (!canEdit || lockBlocked) return;
     setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, ...patch } } : node));
-    setNotice('Saving changes…');
+    setNotice(t('noticeSavingChanges'));
   }, [canEdit, lockBlocked, setNodes]);
 
   const updateSelected = useCallback((patch: Partial<CreationNodeData>) => {
@@ -1143,15 +1144,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!selectedId || !canEdit || lockBlocked) return;
     const preset = viewport === 'mobile' ? { width: 340, height: 620 } : viewport === 'tablet' ? { width: 520, height: 560 } : { width: 720, height: 460 };
     setNodes((current) => current.map((node) => node.id === selectedId ? { ...node, style: { ...node.style, ...preset }, data: { ...node.data, viewport } } : node));
-    setNotice(`Website viewport changed to ${viewport}`);
+    setNotice(t('noticeViewportChanged', { viewport }));
   }, [canEdit, lockBlocked, selectedId, setNodes]);
 
-  const appendTimeline = useCallback((role: 'user' | 'assistant' | 'system', body: string, metadata: CreationTimelineMessage['metadata'] = {}, clientMessageId = crypto.randomUUID()) => {
+  // `clientMessageId` is annotated rather than inferred from the default:
+  // `crypto.randomUUID()` is typed as the template literal `${string}-${string}…`
+  // in the DOM lib, which would narrow the PARAMETER to that shape and reject
+  // the ids callers legitimately pass through (a resumed message's own id).
+  const appendTimeline = useCallback((role: 'user' | 'assistant' | 'system', body: string, metadata: CreationTimelineMessage['metadata'] = {}, clientMessageId: string = crypto.randomUUID()) => {
     const message: CanvasTimelineMessage = { clientMessageId, messageRole: role, body, metadata, createdAt: new Date().toISOString() };
     setTimeline((current) => current.some((item) => item.clientMessageId === clientMessageId) ? current : [...current, message]);
     if (persistence === 'server') void creationSessionsApi.timeline.append(sessionId, { clientMessageId, role, body, metadata }).then((saved) => {
       setTimeline((current) => current.map((item) => item.clientMessageId === clientMessageId ? saved : item));
-    }).catch((error) => setNotice(error instanceof Error ? `Conversation save failed: ${error.message}` : 'Conversation save failed'));
+    }).catch((error) => setNotice(error instanceof Error ? `Conversation save failed: ${error.message}` : t('noticeConversationSaveFailed')));
     return clientMessageId;
   }, [persistence, sessionId]);
 
@@ -1172,7 +1177,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         await creationSessionsApi.lock(sessionId, lockedObjectId, action);
         if (!stopped) setLockBlocked(false);
       } catch (error) {
-        if (!stopped) { setLockBlocked(true); setNotice(error instanceof Error ? error.message : 'This object is being edited by another collaborator'); }
+        if (!stopped) { setLockBlocked(true); setNotice(error instanceof Error ? error.message : t('noticeObjectLocked')); }
       }
     };
     void acquire('acquire');
@@ -1226,19 +1231,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [setEdges, setNodes]);
 
   const undo = useCallback(() => {
-    const prior = undoStack.current.pop(); if (!prior) { setNotice('Nothing to undo'); return; }
-    redoStack.current.push(JSON.stringify({ nodes, edges })); restoreGraphState(prior); setNotice('Canvas change undone');
+    const prior = undoStack.current.pop(); if (!prior) { setNotice(t('noticeNothingToUndo')); return; }
+    redoStack.current.push(JSON.stringify({ nodes, edges })); restoreGraphState(prior); setNotice(t('noticeChangeUndone'));
   }, [edges, nodes, restoreGraphState]);
   const redo = useCallback(() => {
-    const next = redoStack.current.pop(); if (!next) { setNotice('Nothing to redo'); return; }
-    undoStack.current.push(JSON.stringify({ nodes, edges })); restoreGraphState(next); setNotice('Canvas change redone');
+    const next = redoStack.current.pop(); if (!next) { setNotice(t('noticeNothingToRedo')); return; }
+    undoStack.current.push(JSON.stringify({ nodes, edges })); restoreGraphState(next); setNotice(t('noticeChangeRedone'));
   }, [edges, nodes, restoreGraphState]);
 
   const selectionIds = useCallback(() => selectedIds.length ? selectedIds : selectedId ? [selectedId] : [], [selectedId, selectedIds]);
   const duplicateSelection = useCallback(() => {
     if (!canEdit) return;
     const ids = new Set(selectionIds());
-    if (!ids.size) { setNotice('Select one or more objects to duplicate'); return; }
+    if (!ids.size) { setNotice(t('noticeSelectToDuplicate')); return; }
     const idMap = new Map<string, string>();
     const copies = nodes.filter((node) => ids.has(node.id)).map((node) => {
       const id = crypto.randomUUID(); idMap.set(node.id, id);
@@ -1248,17 +1253,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNodes((current) => [...current.map((node) => ({ ...node, selected: false })), ...copies]);
     setEdges((current) => [...current, ...copiedEdges]);
     const nextIds = copies.map((node) => node.id); setSelectedIds(nextIds); setSelectedId(nextIds.length === 1 ? nextIds[0] : null);
-    setNotice(`${copies.length} object${copies.length === 1 ? '' : 's'} duplicated`);
+    setNotice(t('noticeObjectsDuplicated', { count: copies.length }));
   }, [canEdit, edges, nodes, selectionIds, setEdges, setNodes]);
 
   const copySelection = useCallback(() => {
     const ids = new Set(selectionIds());
-    if (!ids.size) { setNotice('Select one or more objects to copy'); return; }
+    if (!ids.size) { setNotice(t('noticeSelectToCopy')); return; }
     canvasClipboard.current = {
       nodes: nodes.filter((node) => ids.has(node.id)).map((node) => ({ ...node, data: { ...node.data } })),
       edges: edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)).map((edge) => ({ ...edge })),
     };
-    setNotice(`${ids.size} object${ids.size === 1 ? '' : 's'} copied`);
+    setNotice(t('noticeObjectsCopied', { count: ids.size }));
   }, [edges, nodes, selectionIds]);
 
   const pasteSelection = useCallback(() => {
@@ -1270,7 +1275,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     });
     const pastedEdges = canvasClipboard.current.edges.map((edge) => ({ ...edge, id: crypto.randomUUID(), source: idMap.get(edge.source)!, target: idMap.get(edge.target)! }));
     setNodes((current) => [...current.map((node) => ({ ...node, selected: false })), ...pasted]); setEdges((current) => [...current, ...pastedEdges]);
-    const ids = pasted.map((node) => node.id); setSelectedIds(ids); setSelectedId(ids.length === 1 ? ids[0] : null); setNotice(`${ids.length} object${ids.length === 1 ? '' : 's'} pasted`);
+    const ids = pasted.map((node) => node.id); setSelectedIds(ids); setSelectedId(ids.length === 1 ? ids[0] : null); setNotice(t('noticeObjectsPasted', { count: ids.length }));
   }, [canEdit, setEdges, setNodes]);
 
   const alignSelection = useCallback(() => {
@@ -1290,21 +1295,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const frameSelection = useCallback(() => {
     const ids = new Set(selectionIds());
     const chosen = nodes.filter((node) => ids.has(node.id));
-    if (!canEdit || chosen.length < 2) { setNotice('Select at least two objects to create a frame'); return; }
+    if (!canEdit || chosen.length < 2) { setNotice(t('noticeSelectTwoForFrame')); return; }
     const left = Math.min(...chosen.map((node) => node.position.x)) - 40;
     const top = Math.min(...chosen.map((node) => node.position.y)) - 70;
     const right = Math.max(...chosen.map((node) => node.position.x + canvasNodeDimensions(node).width)) + 40;
     const bottom = Math.max(...chosen.map((node) => node.position.y + canvasNodeDimensions(node).height)) + 40;
     const frame = newNode('frame', { x: left, y: top }); frame.style = { width: right - left, height: bottom - top }; frame.zIndex = -1;
     frame.data = { ...frame.data, title: 'Grouped objects', framePurpose: 'Organize this related work' };
-    setNodes((current) => [frame, ...current.map((node) => ({ ...node, selected: false }))]); setSelectedIds([frame.id]); setSelectedId(frame.id); setScopeMode('frame'); setNotice(`${chosen.length} objects framed`);
+    setNodes((current) => [frame, ...current.map((node) => ({ ...node, selected: false }))]); setSelectedIds([frame.id]); setSelectedId(frame.id); setScopeMode('frame'); setNotice(t('noticeObjectsFramed', { count: chosen.length }));
   }, [canEdit, nodes, selectionIds, setNodes]);
 
   const togglePlacementLock = useCallback(() => {
     const ids = new Set(selectionIds()); if (!canEdit || !ids.size) return;
     const shouldLock = nodes.some((node) => ids.has(node.id) && canvasPlacementUnlocked(node));
     setNodes((current) => current.map((node) => ids.has(node.id) ? { ...node, draggable: !shouldLock, data: { ...node.data, placementLocked: shouldLock } } : node));
-    setNotice(shouldLock ? 'Object placement locked' : 'Object placement unlocked');
+    setNotice(shouldLock ? 'Object placement locked' : t('noticePlacementUnlocked'));
   }, [canEdit, nodes, selectionIds, setNodes]);
 
   const toggleHidden = useCallback(() => {
@@ -1312,7 +1317,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const shouldHide = nodes.some((node) => ids.has(node.id) && node.data.placementHidden !== true);
     setNodes((current) => current.map((node) => ids.has(node.id) ? { ...node, hidden: shouldHide, data: { ...node.data, placementHidden: shouldHide } } : node));
     if (shouldHide) { setSelectedId(null); setSelectedIds([]); }
-    setNotice(shouldHide ? 'Objects hidden from the canvas' : 'Objects shown on the canvas');
+    setNotice(shouldHide ? 'Objects hidden from the canvas' : t('noticeObjectsShown'));
   }, [canEdit, nodes, selectionIds, setNodes]);
 
   /**
@@ -1410,7 +1415,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   const onConnect = useCallback((connection: Connection) => {
     setEdges((current) => addEdge({ ...connection, id: crypto.randomUUID(), type: 'smoothstep', data: { connectionKind }, label: connectionKind, markerEnd: { type: MarkerType.ArrowClosed } }, current));
-    trackActivity('creation_connection_added', { sessionId, metadata: { clientSurface: 'web', connectionKind } });
+    trackActivity('creation_connection_added', { sessionId, metadata: { clientSurface: canvasSurface(), connectionKind } });
     const source = nodes.find((node) => node.id === connection.source);
     const target = nodes.find((node) => node.id === connection.target);
     if (persistence === 'server' && source && target && source.data.kind !== 'chat' && target.data.kind !== 'chat') {
@@ -1468,7 +1473,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const node = newNode('drawing', { x: minX - 8, y: minY - 8 });
     node.style = { width: width + 16, height: height + 58 };
     node.data = { ...node.data, title: 'Canvas sketch', points: points.map((point) => ({ x: point.x - minX + 8, y: point.y - minY + 8 })), drawingWidth: width + 16, drawingHeight: height + 16, stroke: '#5b5ce2', strokeWidth: 3 };
-    setNodes((current) => [...current, node]); setSelectedId(node.id); setDrawingMode(false); setNotice('Sketch added');
+    setNodes((current) => [...current, node]); setSelectedId(node.id); setDrawingMode(false); setNotice(t('noticeSketchAdded'));
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   }, [drawingMode, setNodes]);
   const onViewportChange = useCallback((_event: MouseEvent | TouchEvent | null, viewport: { x: number; y: number; zoom: number }) => {
@@ -1479,16 +1484,25 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     persistSnapshot(snapshot);
   }, [edges, nodes, persistence, sessionId, storageKey, timeline, title]);
 
-  const addAtCenter = useCallback((kind: CreationObjectKind) => {
-    if (!canEdit) { setNotice('Your session role does not allow editing'); return; }
+  /** Place a new object at the middle of the viewport. `data` lets a caller that
+   *  already HAS the object's content (an editor capture) seed it in one step
+   *  rather than adding an empty object and patching it afterwards. */
+  const addAtCenter = useCallback((kind: CreationObjectKind, data?: Partial<CreationNodeData>) => {
+    if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
     const position = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 300 };
     const node = newNode(kind, position);
     if (kind === 'chat') node.data = { ...node.data, messages: timeline.map((message) => ({ role: message.messageRole, content: message.body, createdAt: message.createdAt })) };
+    if (data) node.data = { ...node.data, ...data };
     setNodes((current) => [...current, node]);
     setSelectedId(node.id); setSelectedIds([node.id]);
-    setNotice(`${node.data.title} added`);
-    trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: 'web', objectKinds: [kind] } });
-  }, [canEdit, sessionId, setNodes, timeline]);
+    setNotice(t('objectAdded', { title: node.data.title }));
+    trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
+  }, [canEdit, sessionId, setNodes, t, timeline]);
+
+  /** Place an object the EDITOR captured (active file, selection, problems, …). */
+  const addHostCapture = useCallback((capture: CanvasHostCapture) => {
+    addAtCenter(capture.kind, { title: capture.title, ...capture.content } as Partial<CreationNodeData>);
+  }, [addAtCenter]);
 
   /**
    * Files arriving from anywhere — dropped from the desktop, attached in the
@@ -1529,7 +1543,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // Never overwrite something the person is part-way through typing.
     if (suggestion) setPrompt((current) => current.trim() ? current : suggestion);
     openBrainDock();
-    trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: 'web', objectKinds: created.map((node) => node.data.kind), source } });
+    trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: created.map((node) => node.data.kind), source } });
   }, [canEdit, importLabel, openBrainDock, sessionId, setNodes, t]);
 
   const attachCanvasArtifact = useCallback(
@@ -1542,8 +1556,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const center = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 260 };
     const created = template.objects.map((item) => { const node = newNode(item.kind, { x: center.x + item.x - 520, y: center.y + item.y - 180 }); if (item.title) node.data = { ...node.data, title: item.title }; return node; });
     const createdEdges = (template.connections ?? []).map((edge) => ({ id: crypto.randomUUID(), source: created[edge.source].id, target: created[edge.target].id, type: 'smoothstep', label: edge.label }));
-    setNodes((current) => [...current, ...created]); setEdges((current) => [...current, ...createdEdges]); setTemplateOpen(false); setNotice(`${template.name} added from Marketplace`);
-    trackActivity('creation_object_pack_added', { sessionId, metadata: { clientSurface: 'web', templateId: template.id, objectKinds: template.objects.map((item) => item.kind) } });
+    setNodes((current) => [...current, ...created]); setEdges((current) => [...current, ...createdEdges]); setTemplateOpen(false); setNotice(t('noticeTemplateAddedMarketplace', { name: template.name }));
+    trackActivity('creation_object_pack_added', { sessionId, metadata: { clientSurface: canvasSurface(), templateId: template.id, objectKinds: template.objects.map((item) => item.kind) } });
     window.setTimeout(() => void flowRef.current?.fitView({ nodes: created.map(({ id }) => ({ id })), padding: .2, duration: 400 }), 0);
   }, [canEdit, sessionId, setEdges, setNodes]);
 
@@ -1551,7 +1565,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!canEdit) return;
     const position = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 260 };
     const node = newNode('frame', position); node.data = { ...preset.data, title: preset.name };
-    setNodes((current) => [...current, node]); setSelectedId(node.id); setTemplateOpen(false); setNotice(`${preset.name} frame added`);
+    setNodes((current) => [...current, node]); setSelectedId(node.id); setTemplateOpen(false); setNotice(t('noticeFramePresetAdded', { name: preset.name }));
   }, [canEdit, setNodes]);
 
   const saveFramePreset = useCallback(() => {
@@ -1560,38 +1574,38 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (persistence === 'server') {
       const graph = creationGraphFromSnapshot({ nodes: [{ ...selectedNode, id: crypto.randomUUID(), position: { x: 80, y: 80 } }], edges: [] });
       void creationSessionsApi.templates.create({ name: preset.name, description: 'Reusable Canvas frame', category: 'Frame', visibility: 'private', graph }).then(() => {
-        setNotice('Reusable frame saved to your account template library');
+        setNotice(t('noticeFrameSavedAccount'));
         return creationSessionsApi.templates.list();
-      }).then((result) => setServerTemplates(result.templates)).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not save template'));
+      }).then((result) => setServerTemplates(result.templates)).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeSaveTemplateFailed')));
       return;
     }
     setFramePresets((current) => { const next = [...current.filter((item) => item.name !== preset.name), preset].slice(-20); localStorage.setItem('builderforce:create-frame-presets', JSON.stringify(next)); return next; });
-    setNotice('Reusable frame saved to your template library');
+    setNotice(t('noticeFrameSavedLibrary'));
   }, [persistence, selectedNode]);
 
   const applyServerTemplate = useCallback((template: ServerCreationTemplate) => {
     if (persistence !== 'server' || !canEdit) return;
-    setNotice(`Adding ${template.name}…`);
+    setNotice(t('noticeAddingTemplate', { name: template.name }));
     void creationSessionsApi.templates.apply(sessionId, template.id, revision.current).then(async (result) => {
       revision.current = result.revision;
       const detail = await creationSessionsApi.get(sessionId);
       const flow = flowFromSession(detail);
-      setNodes(flow.nodes); setEdges(flow.edges); setPersistedObjectIds(new Set(flow.nodes.map((node) => node.id))); setTemplateOpen(false); setNotice(`${template.name} added`);
+      setNodes(flow.nodes); setEdges(flow.edges); setPersistedObjectIds(new Set(flow.nodes.map((node) => node.id))); setTemplateOpen(false); setNotice(t('noticeTemplateAdded', { name: template.name }));
       window.setTimeout(() => void flowRef.current?.fitView({ nodes: result.objectIds.map((id) => ({ id })), padding: .2, duration: 400 }), 0);
-    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not apply template'));
+    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeTemplateFailed')));
   }, [canEdit, persistence, sessionId, setEdges, setNodes]);
 
   const createBranch = useCallback(() => {
     if (persistence !== 'server') { requireAccount('branch', 'Create an account to branch this canvas', 'Branches need durable version history so you can compare and merge safely without losing your local work.'); return; }
-    setNotice('Creating an independent branch…');
+    setNotice(t('noticeCreatingBranch'));
     void creationSessionsApi.branch(sessionId, `${title} — branch`).then(async ({ session }) => {
-      window.location.href = `/create/${session.id}`;
-    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not create branch'));
+      canvasNavigate(`/create/${session.id}`);
+    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeCreateBranchFailed')));
   }, [persistence, requireAccount, sessionId, title]);
 
   const prepareMerge = useCallback(() => {
     if (!branchParentId || persistence !== 'server') return;
-    setNotice('Comparing branch with its parent…');
+    setNotice(t('noticeComparingBranch'));
     void creationSessionsApi.get(branchParentId).then((detail) => {
       const parent = flowFromSession(detail);
       const unused = new Set(parent.nodes.map((node) => node.id));
@@ -1601,8 +1615,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         return { key: `${source.data.kind}:${source.data.resourceId || source.data.title}:${index}`, source, target, choice: 'branch' };
       });
       setMergeReview({ parentId: branchParentId, parentRevision: detail.session.canvasRevision, parentNodes: parent.nodes, parentEdges: parent.edges, items });
-      setNotice(`${items.length} object decisions ready for review`);
-    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not compare branch'));
+      setNotice(t('noticeDecisionsReady', { count: items.length }));
+    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeCompareBranchFailed')));
   }, [branchParentId, nodes, persistence]);
 
   const applyMerge = useCallback(() => {
@@ -1618,19 +1632,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const parentOnly = new Set(merged.filter((node) => !consumedTargets.has(node.id)).map((node) => node.id));
     const retainedEdges = mergeReview.parentEdges.filter((edge) => parentOnly.has(edge.source) || parentOnly.has(edge.target));
     const graph = creationGraphFromSnapshot({ nodes: merged, edges: [...retainedEdges, ...branchEdges] });
-    setNotice('Applying reviewed merge…');
-    void creationSessionsApi.saveGraph(mergeReview.parentId, { ...graph, expectedRevision: mergeReview.parentRevision }).then(() => { window.location.href = `/create/${mergeReview.parentId}`; }).catch((error) => setNotice(error instanceof Error ? error.message : 'Merge could not be applied'));
+    setNotice(t('noticeApplyingMerge'));
+    void creationSessionsApi.saveGraph(mergeReview.parentId, { ...graph, expectedRevision: mergeReview.parentRevision }).then(() => { canvasNavigate(`/create/${mergeReview.parentId}`); }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeMergeFailed')));
   }, [edges, mergeReview]);
 
   const expandProject = useCallback(() => {
     const project = selectedNode?.data.kind === 'project' ? selectedNode : nodes.find((node) => node.data.kind === 'project');
     if (!project) {
-      setNotice('Add or select a project first');
+      setNotice(t('noticeAddOrSelectProject'));
       return;
     }
-    const projectId = project.data.resourceId?.startsWith('project:') ? Number(project.data.resourceId.slice('project:'.length)) : NaN;
-    if (persistence === 'server' && Number.isInteger(projectId) && projectId > 0) {
-      setNotice('Loading project relationships…');
+    const projectId = canvasProjectId(project.data);
+    if (persistence === 'server' && projectId != null) {
+      setNotice(t('noticeLoadingRelationships'));
       const lens = ['delivery', 'metrics', 'customer-feedback'].includes(String(project.data.projectLens))
         ? project.data.projectLens as 'delivery' | 'metrics' | 'customer-feedback'
         : 'everything';
@@ -1670,9 +1684,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const additions = related.filter((node) => node.data.resourceId ? !knownResources.has(node.data.resourceId) : !knownNative.has(String(node.data.expansionKey || `${node.data.kind}:${node.data.title}`)));
         setNodes((current) => [...current, ...additions]);
         setEdges((current) => [...current, ...additions.map((node) => ({ id: crypto.randomUUID(), source: project.id, target: node.id, type: 'smoothstep', label: node.data.kind }))]);
-        setNotice(additions.length ? `${additions.length} related project items added` : 'This project lens is already expanded');
-        trackActivity('creation_project_expanded', { sessionId, metadata: { clientSurface: 'web', projectId } });
-      }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not expand project'));
+        setNotice(additions.length ? `${additions.length} related project items added` : t('noticeLensAlreadyExpanded'));
+        trackActivity('creation_project_expanded', { sessionId, metadata: { clientSurface: canvasSurface(), projectId } });
+      }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeExpandProjectFailed')));
       return;
     }
     const related: CreationFlowNode[] = [
@@ -1684,19 +1698,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const additions = related.filter((candidate) => !nodes.some((node) => node.data.kind === candidate.data.kind && node.data.title === candidate.data.title));
     setNodes((current) => [...current, ...additions]);
     setEdges((current) => [...current, ...additions.map((candidate) => ({ id: crypto.randomUUID(), source: project.id, target: candidate.id, type: 'smoothstep' }))]);
-    setNotice('Project relationships added to canvas');
-    trackActivity('creation_project_expanded', { sessionId, metadata: { clientSurface: 'web', projectId: Number.isInteger(projectId) ? projectId : undefined } });
+    setNotice(t('noticeRelationshipsAdded'));
+    trackActivity('creation_project_expanded', { sessionId, metadata: { clientSurface: canvasSurface(), projectId: Number.isInteger(projectId) ? projectId : undefined } });
   }, [nodes, persistence, selectedNode, sessionId, setEdges, setNodes]);
 
   const compareProjects = useCallback(() => {
     if (persistence !== 'server') { requireAccount('compare', 'Create an account to compare projects', 'Project comparisons use live tenant projects, delivery metrics, feature evidence, and saved source references.'); return; }
-    const projectNodes = nodes.filter((node) => node.data.kind === 'project' && /^project:\d+$/.test(node.data.resourceId || '')).slice(0, 6);
-    if (projectNodes.length < 2) { setNotice('Add at least two saved projects to compare'); return; }
-    setNotice('Loading fresh project evidence…');
+    const projectNodes = canvasProjectNodes(nodes).slice(0, 6);
+    if (projectNodes.length < 2) { setNotice(t('noticeNeedTwoProjects')); return; }
+    setNotice(t('noticeLoadingEvidence'));
     void fetchProjects().then(async (available) => {
       const byId = new Map(available.map((project) => [project.id, project]));
       const evidence = await Promise.all(projectNodes.map(async (node) => {
-        const projectId = Number(node.data.resourceId!.slice('project:'.length));
+        const projectId = canvasProjectId(node.data)!;
         const project = byId.get(projectId);
         if (!project) throw new Error(`Project ${projectId} is no longer accessible`);
         const [velocity, tasks, quality] = await Promise.all([
@@ -1733,29 +1747,29 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         ]),
       };
       setNodes((current) => [...current.map((node) => {
-        const projectId = node.data.resourceId?.match(/^project:(\d+)$/)?.[1];
-        const project = projectId ? evidence.find((candidate) => candidate.projectId === Number(projectId)) : null;
+        const projectId = canvasProjectId(node.data);
+        const project = projectId ? evidence.find((candidate) => candidate.projectId === projectId) : null;
         return project ? { ...node, data: { ...node.data, ...project, qualityUpdatedAt: comparison.data.fetchedAt } } : node;
       }), comparison]);
       setEdges((current) => [...current, ...projectNodes.map((project) => ({ id: crypto.randomUUID(), source: project.id, target: comparison.id, label: 'compared in', type: 'smoothstep', animated: true }))]);
       setSelectedId(comparison.id);
-      setNotice('Evidence-backed project comparison added');
-      trackActivity('creation_projects_compared', { sessionId, metadata: { clientSurface: 'web', projectCount: projectNodes.length } });
-    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not compare projects'));
+      setNotice(t('noticeComparisonAdded'));
+      trackActivity('creation_projects_compared', { sessionId, metadata: { clientSurface: canvasSurface(), projectCount: projectNodes.length } });
+    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeCompareProjectsFailed')));
   }, [nodes, persistence, requireAccount, setEdges, setNodes]);
 
   const loadProjectQuality = useCallback(() => {
     const project = selectedNode?.data.kind === 'project' ? selectedNode : null;
-    const projectId = project?.data.resourceId?.match(/^project:(\d+)$/)?.[1];
-    if (!project || !projectId) {
+    const projectId = project ? canvasProjectId(project.data) : null;
+    if (!project || projectId == null) {
       if (persistence === 'local') requireAccount('diagnostics', 'Create an account to load project quality', 'Quality diagnostics are saved against a canonical project and include current results, gaps, and remediation recommendations.');
-      else setNotice('Attach a saved project before loading quality diagnostics');
+      else setNotice(t('noticeAttachForQuality'));
       return;
     }
     const validationCorrelationId = crypto.randomUUID();
     const validationStartedAt = performance.now();
     void creationSessionsApi.recordOutcome(sessionId, { correlationId: validationCorrelationId, action: 'artifact.validate', phase: 'started', projectId: Number(projectId), artifactId: project.id }).catch(() => undefined);
-    setNotice('Loading project quality diagnostics…');
+    setNotice(t('noticeLoadingQuality'));
     void toolsApi.projectScore(Number(projectId)).then((quality) => {
       const diagnostics = quality.diagnostics.map((diagnostic) => ({
         toolId: diagnostic.toolId, name: diagnostic.name, icon: diagnostic.icon,
@@ -1778,11 +1792,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         : [...current.map((node) => node.id === project.id ? { ...node, data: { ...node.data, ...qualityData } } : node), qualityNode]);
       if (!existing) setEdges((current) => [...current, { id: crypto.randomUUID(), source: project.id, target: qualityNode.id, label: 'quality evidence', type: 'smoothstep', animated: true }]);
       setSelectedId(qualityNode.id);
-      setNotice(diagnostics.length ? `${diagnostics.length} quality diagnostics added to the canvas` : 'Quality card added — run a diagnostic to establish a score');
+      setNotice(diagnostics.length ? `${diagnostics.length} quality diagnostics added to the canvas` : t('noticeQualityCardAdded'));
       void creationSessionsApi.recordOutcome(sessionId, { correlationId: validationCorrelationId, action: 'artifact.validate', phase: 'validated', projectId: Number(projectId), artifactId: project.id, durationMs: performance.now() - validationStartedAt, metricKey: 'validation_pass', metricValue: Number(quality.result.score ?? 0) >= 70 ? 1 : 0, unit: 'boolean', metadata: { score: quality.result.score, diagnosticCount: diagnostics.length } }).catch(() => undefined);
     }).catch((error) => {
       void creationSessionsApi.recordOutcome(sessionId, { correlationId: validationCorrelationId, action: 'artifact.validate', phase: 'failed', projectId: Number(projectId), artifactId: project.id, durationMs: performance.now() - validationStartedAt }).catch(() => undefined);
-      setNotice(error instanceof Error ? error.message : 'Could not load project quality');
+      setNotice(error instanceof Error ? error.message : t('noticeLoadQualityFailed'));
     });
   }, [nodes, persistence, requireAccount, selectedNode, setEdges, setNodes]);
 
@@ -1797,7 +1811,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const agent = configuredAgentRef == null
       ? nodes.find((node) => node.data.kind === 'agent')
       : nodes.find((node) => node.data.kind === 'agent' && (node.data.resourceId || node.id) === configuredAgentRef);
-    const projectId = project?.data.resourceId?.startsWith('project:') ? Number(project.data.resourceId.slice('project:'.length)) : NaN;
+    const projectId = (project ? canvasProjectId(project.data) : null) ?? NaN;
     const addTaskNode = (resourceId: string, status: string, detail: Partial<CreationNodeData> = {}) => {
       const taskId = crypto.randomUUID();
       const task: CreationFlowNode = {
@@ -1815,7 +1829,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const deliverable: CreationDeliverable = { id: deliveryCorrelationId, action: 'deliver', artifactKind: 'project-task', status: 'running', createdAt: new Date().toISOString(), provider: 'builderforce-tasks', resourceRef: `project:${projectId}` };
       setNodes((current) => current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status: 'Delivering…', deliverables: withCreationDeliverable(node.data, deliverable) } } : node));
       void creationSessionsApi.recordOutcome(sessionId, { correlationId: deliveryCorrelationId, action: 'artifact.deliver', phase: 'started', projectId, artifactId: selectedNode.id, metadata: { kind: selectedNode.data.kind } }).catch(() => undefined);
-      setNotice('Creating delivery task…');
+      setNotice(t('noticeCreatingDelivery'));
       const agentRef = agent?.data.resourceId?.startsWith('agent:') ? agent.data.resourceId.slice('agent:'.length) : undefined;
       void tasksApi.create({
         projectId,
@@ -1827,36 +1841,36 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const delivered: CreationDeliverable = { ...deliverable, status: 'delivered', completedAt: new Date().toISOString(), resourceRef: `task:${created.id}`, validation: { status: 'passed', detail: `Task ${created.key || created.id} created in ${project?.data.title || `project ${projectId}`}` }, metadata: { projectId, taskId: created.id, agentRef: agentRef || null } };
         setNodes((current) => current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status: 'Delivered', deliverables: withCreationDeliverable(node.data, delivered) } } : node));
         const canvasTaskId = addTaskNode(`task:${created.id}`, created.status || (agentRef ? 'Assigned' : 'Ready'), { taskKey: created.key, priority: created.priority, content: created.description || undefined, agentRef: created.assignedAgentRef || undefined });
-        trackActivity('creation_artifact_delivered', { sessionId, metadata: { clientSurface: 'web', objectKinds: [selectedNode.data.kind], projectId } });
+        trackActivity('creation_artifact_delivered', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [selectedNode.data.kind], projectId } });
         void creationSessionsApi.recordOutcome(sessionId, { correlationId: deliveryCorrelationId, action: 'artifact.deliver', phase: 'succeeded', projectId, artifactId: selectedNode.id, durationMs: performance.now() - deliveryStartedAt, metricKey: 'delivered_outcomes', metricValue: 1, unit: 'count', metadata: { taskId: created.id, agentAssigned: !!agentRef } }).catch(() => undefined);
         if (agentRef) {
-          trackActivity('creation_agent_assigned', { sessionId, metadata: { clientSurface: 'web', projectId } });
+          trackActivity('creation_agent_assigned', { sessionId, metadata: { clientSurface: canvasSurface(), projectId } });
           let execution;
           try {
             execution = await runtimeApi.submitExecution({ taskId: created.id, sessionId });
           } catch (error) {
             setNodes((current) => current.map((node) => node.id === canvasTaskId ? { ...node, data: { ...node.data, status: 'Agent start failed' } } : node));
-            setNotice(`Delivery task ${created.id} was created, but the agent could not start: ${error instanceof Error ? error.message : 'runtime unavailable'}`);
+            setNotice(t('noticeDeliveryAgentFailed', { id: created.id, reason: error instanceof Error ? error.message : t('runtimeUnavailable') }));
             return;
           }
           if (isAwaitingApprovalExecution(execution)) {
             setNodes((current) => current.map((node) => node.id === canvasTaskId ? { ...node, data: { ...node.data, status: 'Awaiting approval' } } : node));
-            setNotice('Delivery task created; agent run is awaiting approval');
+            setNotice(t('noticeDeliveryAwaitingApproval'));
           } else {
-            setNotice('Delivery task created and agent started');
+            setNotice(t('noticeDeliveryStarted'));
             const follow = async (remaining = 80) => {
               try {
                 const live = await runtimeApi.get(execution.id);
                 const status = String(live.status || 'running').replaceAll('_', ' ');
                 setNodes((current) => current.map((node) => node.id === canvasTaskId ? { ...node, data: { ...node.data, status, executionId: execution.id, executionUpdatedAt: new Date().toISOString() } } : node));
                 if (!['completed', 'failed', 'cancelled', 'canceled'].includes(String(live.status)) && remaining > 0) window.setTimeout(() => void follow(remaining - 1), 3_000);
-                else setNotice(`Agent delivery ${status}`);
+                else setNotice(t('noticeAgentDelivery', { status }));
               } catch { if (remaining > 0) window.setTimeout(() => void follow(remaining - 1), 5_000); }
             };
             void follow();
           }
         } else {
-          setNotice('Mockup delivered to the project as a task');
+          setNotice(t('noticeMockupDelivered'));
         }
       }).catch((error) => {
         const message = error instanceof Error ? error.message : 'Could not create delivery task';
@@ -1868,7 +1882,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return;
     }
     addTaskNode(`draft-task:${crypto.randomUUID()}`, 'Draft');
-    setNotice('Add a real project to deliver this task');
+    setNotice(t('noticeNeedProjectForDelivery'));
   }, [nodes, persistence, requireAccount, selectedNode, sessionId, setEdges, setNodes]);
 
   const expandMockupSet = useCallback(() => {
@@ -1879,21 +1893,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const additions = labels.map((label, index): CreationFlowNode => ({ id: crypto.randomUUID(), type: 'creation', position: { x: selectedNode.position.x + 440 + (index % 2) * 330, y: selectedNode.position.y - 180 + Math.floor(index / 2) * 220 }, data: { kind: 'mockup', title: label, status: 'Ready for review', subtitle: `High-fidelity concept ${index + 1} of ${labels.length}.` } }));
     setNodes((current) => [...current, ...additions]);
     setEdges((current) => [...current, ...additions.map((node) => ({ id: crypto.randomUUID(), source: selectedNode.id, target: node.id, type: 'smoothstep', label: 'contains', animated: true }))]);
-    setNotice(`${additions.length} mockups expanded on the canvas`);
+    setNotice(t('noticeMockupsExpanded', { count: additions.length }));
   }, [selectedNode, setEdges, setNodes]);
 
   const attachEvermindProject = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'evermind') return;
     const evermindNodeId = selectedNode.id;
-    const project = nodes.find((node) => node.data.kind === 'project' && /^project:\d+$/.test(node.data.resourceId || ''));
-    if (!project) { setNotice('Add a saved project to the canvas first'); return; }
-    const projectId = Number(project.data.resourceId!.slice('project:'.length));
+    const project = canvasProjectNodes(nodes)[0];
+    if (!project) { setNotice(t('noticeNeedSavedProject')); return; }
+    const projectId = canvasProjectId(project.data)!;
     setNodes((current) => current.map((node) => node.id === evermindNodeId ? { ...node, data: { ...node.data, resourceId: `evermind:${projectId}`, projectId, status: 'Syncing project…' } } : node));
     setEdges((current) => current.some((edge) => edge.source === project.id && edge.target === selectedNode.id) ? current : [...current, { id: crypto.randomUUID(), source: project.id, target: selectedNode.id, label: 'owns model', type: 'smoothstep' }]);
     void Promise.all([getProjectEvermindHead(projectId), getProjectEvermindContributions(projectId)]).then(([head, activity]) => {
       setEvermindLiveByNodeId((current) => ({ ...current, [evermindNodeId]: projectEvermindNodePatch(head, activity) }));
-      setNotice('Evermind attached to project');
-    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not load Evermind'));
+      setNotice(t('noticeEvermindAttached'));
+    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeLoadEvermindFailed')));
   }, [nodes, selectedNode, setEdges, setNodes]);
 
   const expandEvermindPipeline = useCallback(() => {
@@ -1903,7 +1917,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const start = existing.find((node) => node.data.pipelineStep === 1) ?? existing[0]!;
       setSelectedId(start.id); setSelectedIds([start.id]);
       window.setTimeout(() => void flowRef.current?.fitView({ nodes: [selectedNode, ...existing].map((node) => ({ id: node.id })), padding: .16, duration: 400 }), 0);
-      setNotice('Step 1 of 5 — choose a CSV or TSV in the Details panel');
+      setNotice(t('noticeDatasetStepOne'));
       return;
     }
     const specs: Array<{ kind: CreationObjectKind; title: string; status: string; x: number; y: number; step: number; instruction: string; detail?: Partial<CreationNodeData> }> = [
@@ -1930,21 +1944,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setEdges((current) => [...current, ...sequence.map((edge) => ({ ...edge, id: crypto.randomUUID(), type: 'smoothstep', animated: true, markerEnd: { type: MarkerType.ArrowClosed } }))]);
     setSelectedId(dataset!.id); setSelectedIds([dataset!.id]);
     window.setTimeout(() => void flowRef.current?.fitView({ nodes: [selectedNode, ...created].map((node) => ({ id: node.id })), padding: .16, duration: 400 }), 0);
-    setNotice('Step 1 of 5 — choose a CSV or TSV in the Details panel');
+    setNotice(t('noticeDatasetStepOne'));
   }, [nodes, selectedNode, setEdges, setNodes]);
 
   const openEvermindTraining = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'evermind') return;
     expandEvermindPipeline();
     const attached = selectedNode.data.resourceId?.match(/^evermind:(\d+)$/)?.[1];
-    const projectNode = nodes.find((node) => node.data.kind === 'project' && /^project:\d+$/.test(node.data.resourceId || ''));
-    const projectId = attached ?? projectNode?.data.resourceId?.slice('project:'.length);
+    const projectNode = canvasProjectNodes(nodes)[0];
+    const projectId = attached ? Number(attached) : projectNode ? canvasProjectId(projectNode.data) : null;
     if (persistence === 'server' && !projectId) {
-      setNotice('Add or attach a saved project before creating a workspace training job');
+      setNotice(t('noticeNeedProjectForTraining'));
       return;
     }
-    setTrainingFocus({ nodeId: selectedNode.id, projectId: projectId ? Number(projectId) : `local-${sessionId}`, localOnly: persistence === 'local' });
-    setNotice(persistence === 'local' ? 'Local-only adapter studio opened' : 'Adapter studio opened for this Evermind');
+    setTrainingFocus({ nodeId: selectedNode.id, projectId: projectId ?? `local-${sessionId}`, localOnly: persistence === 'local' });
+    setNotice(persistence === 'local' ? 'Local-only adapter studio opened' : t('noticeAdapterStudioOpened'));
   }, [expandEvermindPipeline, nodes, persistence, selectedNode, sessionId]);
 
   const evaluateEvermind = useCallback((nodeId?: string) => {
@@ -1952,8 +1966,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       ?? (selectedNode?.data.kind === 'evermind' ? selectedNode : null);
     if (!target) return;
     const jobId = typeof target.data.trainingJobId === 'string' ? target.data.trainingJobId : '';
-    if (!jobId) { setNotice('Train a workspace adapter before running the model evaluation'); return; }
-    setNotice('Evaluating the trained adapter against its dataset…');
+    if (!jobId) { setNotice(t('noticeTrainBeforeEval')); return; }
+    setNotice(t('noticeEvaluatingAdapter'));
     void evaluateModel(jobId).then((result) => {
       const existing = nodes.find((node) => node.data.kind === 'evaluation' && node.data.modelEvaluationFor === target.id);
       const evaluation = existing ?? newNode('evaluation', { x: target.position.x + 560, y: target.position.y });
@@ -1974,15 +1988,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       };
       setNodes((current) => existing ? current.map((node) => node.id === existing.id ? evaluation : node) : [...current, evaluation]);
       setEdges((current) => current.some((edge) => edge.source === target.id && edge.target === evaluation.id) ? current : [...current, { id: crypto.randomUUID(), source: target.id, target: evaluation.id, type: 'smoothstep', label: 'evaluated by', animated: true }]);
-      setNotice(`Evermind evaluation complete: ${(result.score * 100).toFixed(0)}%`);
-    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Evermind evaluation failed'));
+      setNotice(t('noticeEvermindEvalComplete', { score: (result.score * 100).toFixed(0) }));
+    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeEvermindEvalFailed')));
   }, [nodes, selectedNode, setEdges, setNodes]);
 
   const startStandup = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'standup') return;
     if (persistence === 'local') { requireAccount('start', 'Create an account to start a collaborative stand-up', 'A live stand-up needs durable participants, shared activity, follow-up tasks, and tenant permissions.'); return; }
     const people = nodes.filter((node) => node.data.kind === 'staff' || node.data.kind === 'agent').slice(0, 25);
-    if (!people.length) { setNotice('Add staff members or agents to the canvas first'); return; }
+    if (!people.length) { setNotice(t('noticeNeedPeopleOnCanvas')); return; }
     const participants = people.map((node) => ({
       kind: node.data.kind === 'agent' ? 'agent' : 'human',
       ref: node.data.resourceId?.split(':').slice(1).join(':') || node.id,
@@ -1993,19 +2007,19 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNodes((current) => current.map((node) => node.id === selectedNode.id ? { ...node, data: { ...node.data, status: resourceId ? 'Live' : 'Draft', participants, resourceId: resourceId || node.data.resourceId, summary: `${participants.length} participants gathered. Brain will ask each person for progress, blockers, and next actions, then create follow-up work on this canvas.` } } : node));
       setEdges((current) => [...current, ...people.filter((person) => !current.some((edge) => edge.source === person.id && edge.target === selectedNode.id)).map((person) => ({ id: crypto.randomUUID(), source: person.id, target: selectedNode.id, label: 'joins', type: 'smoothstep' }))]);
     };
-    const project = nodes.find((node) => node.data.kind === 'project' && /^project:\d+$/.test(node.data.resourceId || ''));
-    const projectId = project ? Number(project.data.resourceId!.slice('project:'.length)) : null;
+    const project = canvasProjectNodes(nodes)[0];
+    const projectId = project ? canvasProjectId(project.data) : null;
     if (persistence === 'server' && projectId) {
-      setNotice('Starting canonical stand-up…');
+      setNotice(t('noticeStartingStandup'));
       void ceremonySessionsApi.start(projectId, 'standup', participants.map(({ kind, ref, name }) => ({ kind, ref, name }))).then((result) => {
         const ceremonyId = result.session?.id;
         applyStandup(ceremonyId ? `ceremony:${ceremonyId}` : undefined);
-        setNotice(ceremonyId ? 'Live stand-up started' : 'Stand-up frame prepared');
-      }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not start stand-up'));
+        setNotice(ceremonyId ? 'Live stand-up started' : t('noticeStandupFramePrepared'));
+      }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeStartStandupFailed')));
       return;
     }
     applyStandup();
-    setNotice('Add a project to start a live stand-up');
+    setNotice(t('noticeNeedProjectForStandup'));
   }, [nodes, persistence, requireAccount, selectedNode, setEdges, setNodes]);
 
   const onDrop = useCallback((event: React.DragEvent) => {
@@ -2054,10 +2068,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     run: async (raw: unknown) => {
       if (persistence !== 'server') return { error: 'Canonical project PRDs require a saved session' };
       const requested = Number((raw as { projectId?: unknown })?.projectId);
-      const available = nodes.flatMap((node) => {
-        const match = node.data.kind === 'project' ? node.data.resourceId?.match(/^project:(\d+)$/) : null;
-        return match ? [Number(match[1])] : [];
-      });
+      const available = canvasProjectNodes(nodes).map((node) => canvasProjectId(node.data)!);
       const projectId = Number.isInteger(requested) && requested > 0 ? requested : available.length === 1 ? available[0]! : NaN;
       if (!Number.isInteger(projectId) || projectId <= 0) return { error: available.length ? 'Specify which canvas project to read' : 'Add a canonical project to the canvas first' };
       return creationSessionsApi.projectPrdContext(sessionId, projectId);
@@ -2122,7 +2133,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (persistence !== 'server') return { error: 'Create an account and save the session before creating a canonical project PRD' };
       const args = raw as { projectId?: unknown; title?: unknown; markdown?: unknown; status?: unknown };
       const requested = Number(args.projectId);
-      const projectNodes = nodes.filter((node) => node.data.kind === 'project' && /^project:\d+$/.test(String(node.data.resourceId || '')));
+      const projectNodes = canvasProjectNodes(nodes);
       const project = Number.isInteger(requested) && requested > 0
         ? projectNodes.find((node) => node.data.resourceId === `project:${requested}`)
         : projectNodes.length === 1 ? projectNodes[0] : undefined;
@@ -2130,7 +2141,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const title = typeof args.title === 'string' ? args.title.trim().slice(0, 160) : '';
       const markdown = typeof args.markdown === 'string' ? args.markdown.trim() : '';
       if (!title || !markdown) return { error: 'A project PRD requires a title and complete Markdown content' };
-      const projectId = Number(project.data.resourceId!.slice('project:'.length));
+      const projectId = canvasProjectId(project.data)!;
       const node = newNode('prd', { x: project.position.x + 390, y: project.position.y });
       node.data = {
         ...node.data, title, markdown, content: markdown,
@@ -2461,7 +2472,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     knowledge.data = { ...knowledge.data, title: `${agent.data.title} knowledge`, status: 'Ready', markdown: authored, content: authored, sources: [{ label: 'Authored in Agent inspector', resource: `session:${agent.id}` }] };
     setNodes((current) => [...current, knowledge]);
     setEdges((current) => [...current, { id: crypto.randomUUID(), source: knowledge.id, target: agent.id, type: 'smoothstep', label: 'grounds', animated: true, data: { connectionKind: 'reference' } }]);
-    setNotice('Knowledge added and connected to the agent');
+    setNotice(t('noticeKnowledgeConnected'));
   }, [canEdit, nodes, setEdges, setNodes]);
 
   const runAgentTest = useCallback(async (agentId: string, testPrompt: string, expected: string) => {
@@ -2481,7 +2492,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       knowledge: knowledge.map((node) => ({ id: node.id, ...creationObjectDefinition(node.data.kind).contextAdapter(node.data) })),
     });
     setNodes((current) => current.map((node) => node.id === agentId ? { ...node, data: { ...node.data, testPrompt, testExpected: expected, testStatus: 'Running', testResponse: '' } } : node));
-    setNotice(`Testing ${agent.data.title}…`);
+    setNotice(t('noticeTestingAgent', { name: agent.data.title }));
     try {
       const response = await runCreationCanvasAi({
         prompt: testPrompt.trim(), canvasSnapshot: snapshot, persistence, canvasActions: [],
@@ -2504,7 +2515,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const passed = scored.filter((item) => item.passed).length;
         return updated.map((node) => node.id === evaluation.id ? { ...node, data: { ...node.data, testResults: results, runCount: results.length, passRate: scored.length ? Math.round(passed / scored.length * 100) : null, lastRunAt: result.runAt, verdict: status, status: 'Tested', gaps: score.missing, recommendations: score.missing.map((item) => `Improve the response so it demonstrates: ${item}`) } } : node);
       });
-      setNotice(`${agent.data.title} test ${status.toLowerCase()}`);
+      setNotice(t('noticeAgentTestResult', { name: agent.data.title, status: status.toLowerCase() }));
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Agent test failed';
       setNodes((current) => current.map((node) => node.id === agentId ? { ...node, data: { ...node.data, testStatus: `Error · ${message}` } } : node));
@@ -2515,10 +2526,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const evaluateCanvas = useCallback((promptOverride?: string) => {
     const requestText = (promptOverride ?? prompt).trim();
     if (!requestText || thinking) return;
-    trackActivity('creation_prompt_submitted', { sessionId, metadata: { clientSurface: 'web', scope: resolvedScopeMode, objectKinds: [...new Set(scopedNodes.map((node) => node.data.kind))] } });
+    trackActivity('creation_prompt_submitted', { sessionId, metadata: { clientSurface: canvasSurface(), scope: resolvedScopeMode, objectKinds: [...new Set(scopedNodes.map((node) => node.data.kind))] } });
     setThinking(true);
     setBrainRunStartedAt(Date.now());
-    setNotice('Brain is evaluating connected objects…');
+    setNotice(t('noticeBrainEvaluating'));
     const initialMessage = initialPromptSubmitted.current ? timeline.find((message) => (message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:')) && message.body === requestText) : undefined;
     const promptAuthor = persistence === 'server' ? members.find((member) => member.userId === currentUserId) : null;
     const requestMessageId = appendTimeline('user', requestText, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], authoredBy: { kind: 'human', ref: currentUserId || 'local', name: promptAuthor?.displayName || 'You' } }, initialMessage?.clientMessageId);
@@ -2571,10 +2582,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         if (persistence === 'server' && canonicalAgents.length) {
           try {
             const existingChatId = nodes.find((node) => node.data.kind === 'chat')?.data.resourceId?.match(/^chat:(\d+)$/)?.[1];
-            const projectId = nodes.find((node) => node.data.kind === 'project')?.data.resourceId?.match(/^project:(\d+)$/)?.[1];
+            const projectId = canvasProjectNodes(nodes).map((node) => canvasProjectId(node.data))[0] ?? null;
             const groupTurn = await runCanonicalCanvasGroupTurn({
               chatId: existingChatId ? Number(existingChatId) : null,
-              title, projectId: projectId ? Number(projectId) : null,
+              title, projectId,
               sessionId, prompt: request, agents: canonicalAgents,
             });
             setNodes((current) => current.map((node) => node.id === brainId ? { ...node, data: { ...node.data, resourceId: `chat:${groupTurn.chatId}`, status: 'Canonical group chat' } } : node));
@@ -2667,14 +2678,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         }
         setThinking(false);
         setActiveAgentIds(new Set());
-        setNotice(changes.length ? shouldAutoApply ? `Applying ${changes.length} Brain changes…` : `${changes.length} Brain changes await review` : 'Brain finished evaluating the canvas');
-        trackActivity('creation_ai_evaluation_completed', { sessionId, metadata: { clientSurface: 'web', proposedChangeCount: changes.length, objectKinds: [...new Set(nodes.map((node) => node.data.kind))] } });
+        setNotice(changes.length ? shouldAutoApply ? `Applying ${changes.length} Brain changes…` : `${changes.length} Brain changes await review` : t('noticeBrainFinished'));
+        trackActivity('creation_ai_evaluation_completed', { sessionId, metadata: { clientSurface: canvasSurface(), proposedChangeCount: changes.length, objectKinds: [...new Set(nodes.map((node) => node.data.kind))] } });
         if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'succeeded', actorType: 'brain', durationMs: performance.now() - promptStartedAt, metricKey: 'artifacts_proposed', metricValue: changes.length, unit: 'count' }).catch(() => undefined);
       }).catch((error) => {
         appendTimeline('system', error instanceof Error ? error.message : 'Brain could not complete this request', { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:error`);
         setThinking(false);
         setActiveAgentIds(new Set());
-        setNotice(error instanceof Error ? error.message : 'Brain could not complete this request');
+        setNotice(error instanceof Error ? error.message : t('noticeBrainFailed'));
         if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'failed', actorType: 'brain', durationMs: performance.now() - promptStartedAt }).catch(() => undefined);
       });
       return;
@@ -2688,7 +2699,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const slides: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1040, y: 315 }, data: { kind: 'slides', title: request.includes('executive') ? 'Executive team presentation' : 'Sales presentation', status: 'AI generated' } };
         setNodes((current) => [...current, roadmap, slides]);
         setEdges((current) => associateBrainWithArtifacts([...current, ...(project ? [{ id: crypto.randomUUID(), source: project.id, target: roadmap.id, type: 'smoothstep' as const }] : []), { id: crypto.randomUUID(), source: roadmap.id, target: slides.id, type: 'smoothstep', label: 'presents', animated: true }], brain?.id || '', [roadmap.id], 'Created with Brain'));
-        setSelectedId(roadmap.id); setThinking(false); setPrompt(''); setNotice('Roadmap added to canvas'); return;
+        setSelectedId(roadmap.id); setThinking(false); setPrompt(''); setNotice(t('noticeRoadmapAdded')); return;
       }
       if (request.includes('top 10') || request.includes('requested features')) {
         const brain = nodes.find((node) => node.data.kind === 'chat');
@@ -2696,7 +2707,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         const mockups: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1040, y: 300 }, data: { kind: 'mockupSet', title: 'Top 10 feature mockups', status: 'Ready for review', subtitle: 'Ten linked high-fidelity concepts generated from user feedback.', items: ['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration'], sources: [{ label: 'Customer feedback evidence', resource: '/api/feedback' }] } };
         setNodes((current) => [...current, summary, mockups]);
         setEdges((current) => associateBrainWithArtifacts([...current, { id: crypto.randomUUID(), source: summary.id, target: mockups.id, type: 'smoothstep', animated: true }], brain?.id || '', [summary.id], 'Created with Brain'));
-        setSelectedId(mockups.id); setThinking(false); setPrompt(''); setNotice('Feature summary and mockups added'); return;
+        setSelectedId(mockups.id); setThinking(false); setPrompt(''); setNotice(t('noticeFeatureSummaryAdded')); return;
       }
       const evaluationId = crypto.randomUUID();
       setNodes((current) => [...current, { id: evaluationId, type: 'creation', position: { x: 560, y: 315 }, data: { kind: 'evaluation', title: 'Canvas evaluation', status: 'AI evaluation' } }]);
@@ -2707,7 +2718,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setSelectedId(evaluationId);
       setThinking(false);
       setPrompt('');
-      setNotice('Evaluation added to canvas');
+      setNotice(t('noticeEvaluationAdded'));
     }, 850);
   }, [appendTimeline, canvasActions, confirm, currentUserId, effectiveSelectedIds, edges, evermindProjectId, members, memoryEnabled, modelSelection, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, thinking, timeline, title]);
 
@@ -2735,14 +2746,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     let materializedAdditions = additions;
     const canonicalPrds = additions.filter((change) => change.node.data.kind === 'prd' && change.node.data.canonicalPrdPending === true);
     if (canonicalPrds.length) {
-      setNotice('Saving reviewed PRD to its project…');
+      setNotice(t('noticeSavingPrd'));
       try {
         materializedAdditions = await Promise.all(additions.map(async (change) => {
           if (!canonicalPrds.includes(change)) return change;
           return { ...change, node: await persistCanonicalProjectPrd(change.node) };
         }));
       } catch (error) {
-        setNotice(error instanceof Error ? `Project PRD was not saved: ${error.message}` : 'Project PRD was not saved');
+        setNotice(error instanceof Error ? `Project PRD was not saved: ${error.message}` : t('noticePrdNotSaved'));
         return;
       }
     }
@@ -2785,7 +2796,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setProposedChanges([]);
     setAcceptedProposalIds(new Set());
     setNotice(canonicalPrds.length ? `${canonicalPrds.length} project PRD${canonicalPrds.length === 1 ? '' : 's'} saved and ${selected.length} reviewed Brain changes applied` : `${selected.length} reviewed Brain changes applied`);
-    trackActivity('creation_change_set_applied', { sessionId, metadata: { clientSurface: 'web', commandCount: selected.length } });
+    trackActivity('creation_change_set_applied', { sessionId, metadata: { clientSurface: canvasSurface(), commandCount: selected.length } });
   }, [acceptedProposalIds, nodes, proposedChanges, selectedId, sessionId, setEdges, setNodes]);
 
   useEffect(() => {
@@ -2804,14 +2815,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setAcceptedProposalIds(new Set());
     proposalBuffer.current = [];
     setAutoApplyPending(false);
-    setNotice('Brain changes rejected; canvas unchanged');
+    setNotice(t('noticeChangesRejected'));
   }, []);
 
   const runWorkflow = useCallback((workflowId?: string) => {
-    if (!canRun) { setNotice('Runner or owner access is required'); return; }
+    if (!canRun) { setNotice(t('noticeNeedRunnerAccess')); return; }
     const requestedTarget = typeof workflowId === 'string' ? nodes.find((node) => node.id === workflowId && node.data.kind === 'workflow') : null;
     const target = requestedTarget ?? (selectedNode?.data.kind === 'workflow' ? selectedNode : nodes.find((node) => node.data.kind === 'workflow'));
-    if (!target) { setNotice('Add a workflow to run it'); return; }
+    if (!target) { setNotice(t('noticeNeedWorkflow')); return; }
     const targetId = target.id;
     const deliveryId = crypto.randomUUID();
     const started: CreationDeliverable = { id: deliveryId, action: 'run', artifactKind: 'workflow-run', status: 'running', createdAt: new Date().toISOString(), provider: 'builderforce-workflows' };
@@ -2819,11 +2830,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const definitionId = target.data.resourceId?.startsWith('workflow:') ? target.data.resourceId.slice('workflow:'.length) : '';
     if (persistence === 'server' && target.data.workflowExecutable === false) {
       setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: target.data.status } } : node));
-      setNotice('This object is a workflow run record. Add or open its Workflow definition to start a new run.');
+      setNotice(t('noticeWorkflowRunRecord'));
       return;
     }
     if (persistence === 'server' && definitionId) {
-      setNotice('Starting canonical workflow…');
+      setNotice(t('noticeStartingWorkflow'));
       void workflowDefinitions.get(definitionId).then((definition) => {
         if (!definition.runTargetRuntime) throw new Error('Choose a run target in the Workflow inspector before running it');
         return workflowDefinitions.run(definitionId, {
@@ -2833,7 +2844,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         });
       }).then((run) => {
         setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Running', workflowRunId: run.workflowId, workflowTaskCount: run.taskCount, deliverables: withCreationDeliverable(node.data, { ...started, resourceRef: `workflow-run:${run.workflowId}`, metadata: { taskCount: run.taskCount } }) } } : node));
-        setNotice(`Workflow started · ${run.taskCount} task${run.taskCount === 1 ? '' : 's'}`);
+        setNotice(t('noticeWorkflowStarted', { count: run.taskCount }));
         const pollRun = (remaining: number) => {
           if (remaining <= 0) return;
           window.setTimeout(() => {
@@ -2848,7 +2859,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 const terminalDeliverable: CreationDeliverable | null = terminal ? { ...started, status: normalized === 'completed' || normalized === 'complete' ? 'delivered' : 'failed', completedAt: currentRun.completedAt || new Date().toISOString(), resourceRef: `workflow-run:${run.workflowId}`, validation: { status: normalized === 'completed' || normalized === 'complete' ? 'passed' : 'failed', detail: `Workflow ${currentRun.status}` }, metadata: { taskCount: run.taskCount }, ...(!(normalized === 'completed' || normalized === 'complete') ? { error: `Workflow ${currentRun.status}` } : {}) } : null;
                 return { ...node, data: { ...node.data, status: label, workflowRunStatus: currentRun.status, workflowCompletedAt: currentRun.completedAt, ...(terminalDeliverable ? { deliverables: withCreationDeliverable(node.data, terminalDeliverable) } : {}) } };
               }));
-              if (terminal) setNotice(`Workflow ${label.toLowerCase()}`);
+              if (terminal) setNotice(t('noticeWorkflowStatus', { status: label.toLowerCase() }));
               else pollRun(remaining - 1);
             }).catch(() => pollRun(remaining - 1));
           }, 2_000);
@@ -2862,7 +2873,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       });
       return;
     }
-    setNotice(persistence === 'local' ? 'Draft workflow running locally…' : 'Link a saved Workflow definition before running it');
+    setNotice(persistence === 'local' ? 'Draft workflow running locally…' : t('noticeLinkWorkflowFirst'));
     if (persistence !== 'local') {
       setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Draft' } } : node));
       return;
@@ -2870,7 +2881,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     window.setTimeout(() => {
       const completed: CreationDeliverable = { ...started, status: 'delivered', completedAt: new Date().toISOString(), provider: 'browser-draft', validation: { status: 'passed', detail: 'Local draft workflow completed' } };
       setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Complete', deliverables: withCreationDeliverable(node.data, completed) } } : node));
-      setNotice('Workflow completed');
+      setNotice(t('noticeWorkflowCompleted'));
     }, 1400);
   }, [canRun, nodes, persistence, selectedNode, setNodes]);
 
@@ -2895,24 +2906,23 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const publishWebsite = useCallback((websiteId?: string) => {
     const target = nodes.find((node) => node.id === websiteId && node.data.kind === 'website')
       ?? (selectedNode?.data.kind === 'website' ? selectedNode : nodes.find((node) => node.data.kind === 'website'));
-    if (!target) { setNotice('Add a Website object to publish'); return; }
+    if (!target) { setNotice(t('noticeNeedWebsite')); return; }
     if (persistence !== 'server') { requireAccount('publish', 'Create an account to publish', 'Save this session to publish the Website as a live Builderforce site.'); return; }
-    const connectedProject = nodes.find((node) => node.data.kind === 'project' && /^project:\d+$/.test(node.data.resourceId || '') && edges.some((edge) => (edge.source === target.id && edge.target === node.id) || (edge.target === target.id && edge.source === node.id)))
-      ?? nodes.find((node) => node.data.kind === 'project' && /^project:\d+$/.test(node.data.resourceId || ''));
-    const projectId = connectedProject?.data.resourceId?.match(/^project:(\d+)$/)?.[1];
-    if (!projectId) { setNotice('Connect this Website to a saved Project before publishing'); return; }
+    const connectedProject = connectedCanvasProjectNode(nodes, edges, target.id);
+    const projectId = connectedProject ? canvasProjectId(connectedProject.data) : null;
+    if (projectId == null) { setNotice(t('noticeConnectWebsite')); return; }
     const deliveryId = crypto.randomUUID();
     const correlationId = `deliver:${deliveryId}`;
     const startedAt = performance.now();
     const started: CreationDeliverable = { id: deliveryId, action: 'publish', artifactKind: 'website', status: 'running', createdAt: new Date().toISOString(), provider: 'builderforce-sites', resourceRef: `project:${projectId}` };
     setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Publishing…', deliverables: withCreationDeliverable(node.data, started) } } : node));
-    setNotice('Building and publishing the Website…');
+    setNotice(t('noticePublishingWebsite'));
     void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'website.publish', phase: 'started', artifactId: target.id, projectId: Number(projectId) }).catch(() => undefined);
     const subdomain = typeof target.data.subdomain === 'string' ? target.data.subdomain : undefined;
     void publishSite(projectId, buildWebsiteAssets(target.data), subdomain).then((site) => {
       const delivered: CreationDeliverable = { ...started, status: 'delivered', completedAt: new Date().toISOString(), url: site.url, pathUrl: site.pathUrl, mimeType: 'text/html', resourceRef: `site:${site.subdomain}`, validation: { status: 'passed', detail: `${site.assetCount} assets published (${site.totalBytes} bytes)` }, metadata: { versionToken: site.versionToken, assetCount: site.assetCount, totalBytes: site.totalBytes } };
       setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Published', url: site.url, siteUrl: site.url, pathUrl: site.pathUrl, subdomain: site.subdomain, deliverables: withCreationDeliverable(node.data, delivered) } } : node));
-      setNotice(`Website published to ${site.url}`);
+      setNotice(t('noticeWebsitePublished', { url: site.url }));
       void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'website.publish', phase: 'succeeded', artifactId: target.id, projectId: Number(projectId), durationMs: performance.now() - startedAt, metricKey: 'deliverables_completed', metricValue: 1, unit: 'count', metadata: { url: site.url, versionToken: site.versionToken } }).catch(() => undefined);
     }).catch((error) => {
       const message = error instanceof Error ? error.message : 'Website publish failed';
@@ -2923,17 +2933,101 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     });
   }, [edges, nodes, persistence, requireAccount, selectedNode, sessionId, setNodes]);
 
+  /**
+   * Open a Builder object's IDE workspace on the board, creating the backing IDE
+   * project first when the object is not bound yet. Creation goes through the
+   * same `/api/ide-projects` route the IDE dashboard uses, so the workspace is
+   * seeded with its modality's starter template and opens runnable — the
+   * in-browser website/app builder, on the canvas.
+   */
+  const openBuild = useCallback((buildId?: string) => {
+    const target = nodes.find((node) => node.id === buildId && node.data.kind === 'build')
+      ?? (selectedNode?.data.kind === 'build' ? selectedNode : nodes.find((node) => node.data.kind === 'build'));
+    if (!target) { setNotice(t('build.selectFirst')); return; }
+    const bound = canvasBuildBinding(target.data);
+    if (bound) { setBuildFocus({ nodeId: target.id, storageProjectId: bound.storageProjectId }); return; }
+    if (persistence !== 'server') { requireAccount('open', t('build.gateTitle'), t('build.gateDescription')); return; }
+    if (creatingBuild) return;
+    setCreatingBuild(true);
+    setNotice(t('build.creating'));
+    const container = connectedCanvasProjectNode(nodes, edges, target.id);
+    void createCanvasBuild({
+      title: target.data.title,
+      modality: canvasBuildModality(target.data),
+      containerProjectId: container ? canvasProjectId(container.data) : null,
+    })
+      .then((ide) => {
+        const patch = canvasBuildPatch(ide);
+        setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, ...patch } } : node));
+        setBuildFocus({ nodeId: target.id, storageProjectId: ide.storageProjectId });
+        setNotice(t('build.created'));
+      })
+      .catch((error) => setNotice(error instanceof Error ? error.message : t('build.createFailed')))
+      .finally(() => setCreatingBuild(false));
+  }, [creatingBuild, edges, nodes, persistence, requireAccount, selectedNode, setNodes, t]);
+
+  /** Bind a Builder object to an IDE project that already exists, instead of
+   *  provisioning a second workspace for work that is already under way. */
+  const attachBuild = useCallback((nodeId: string, ide: IdeProject) => {
+    setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, ...canvasBuildPatch(ide) } } : node));
+    setBuildFocus({ nodeId, storageProjectId: ide.storageProjectId });
+    setNotice(t('build.attached'));
+  }, [setNodes, t]);
+
+  /**
+   * Delete the IDE project a Builder object provisioned, and return the object to
+   * its unbound state. Removing the OBJECT deliberately leaves the workspace alone
+   * — an IDE project is a first-class child of a Project and outlives the session
+   * that spawned it — so this is the explicit way to discard the files too.
+   */
+  const deleteBuildWorkspace = useCallback(async (nodeId: string) => {
+    const target = nodes.find((node) => node.id === nodeId);
+    const binding = target ? canvasBuildBinding(target.data) : null;
+    if (!target || !binding) return;
+    if (!(await confirm({ message: t('build.deleteConfirm', { title: target.data.title }), destructive: true }))) return;
+    try {
+      await deleteIdeProject(binding.ideProjectId);
+      setBuildFocus((current) => current?.nodeId === nodeId ? null : current);
+      setNodes((current) => current.map((node) => node.id === nodeId
+        ? { ...node, data: { ...node.data, resourceId: undefined, ideProjectId: undefined, storageProjectId: undefined, storageProjectPublicId: undefined, siteUrl: undefined, url: undefined, pathUrl: undefined, status: 'Not created' } }
+        : node));
+      setNotice(t('build.workspaceDeleted'));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : t('build.deleteWorkspaceFailed'));
+    }
+  }, [confirm, nodes, setNodes, t]);
+
+  /**
+   * Grow an authored Website object into a real codebase: add a Builder object
+   * beside it, connect the two, and open the workspace. The static site stays
+   * publishable while the code project takes over — no object loses its contract.
+   */
+  const buildWebsiteWithCode = useCallback((websiteId: string) => {
+    const source = nodes.find((node) => node.id === websiteId);
+    if (!source) return;
+    const existing = nodes.find((node) => node.data.kind === 'build'
+      && edges.some((edge) => (edge.source === websiteId && edge.target === node.id) || (edge.target === websiteId && edge.source === node.id)));
+    if (existing) { openBuild(existing.id); return; }
+    const build = newNode('build', nextCanvasObjectPosition(nodes, { x: source.position.x + 520, y: source.position.y }, typeof window !== 'undefined' && window.innerWidth <= 760, 'build'));
+    build.data = { ...build.data, title: source.data.title, modality: canvasBuildModality(source.data) };
+    setNodes((current) => [...current, build]);
+    setEdges((current) => [...current, { id: crypto.randomUUID(), source: websiteId, target: build.id, type: 'smoothstep', label: t('build.edgeLabel'), data: { connectionKind: 'delivery' } }]);
+    setSelectedId(build.id);
+    setSelectedIds([build.id]);
+    setNotice(t('build.addedFromWebsite'));
+  }, [edges, nodes, openBuild, setEdges, setNodes, t]);
+
   const generateVideo = useCallback((videoId?: string) => {
     const target = nodes.find((node) => node.id === videoId && node.data.kind === 'video')
       ?? (selectedNode?.data.kind === 'video' ? selectedNode : nodes.find((node) => node.data.kind === 'video'));
-    if (!target) { setNotice('Add a Video object to generate'); return; }
+    if (!target) { setNotice(t('noticeNeedVideo')); return; }
     if (persistence !== 'server') { requireAccount('generate', 'Create an account to generate video', 'Save this session to run a published Evermind video model.'); return; }
     const deliveryId = crypto.randomUUID();
     const correlationId = `deliver:${deliveryId}`;
     const startedAt = performance.now();
     const started: CreationDeliverable = { id: deliveryId, action: 'generate', artifactKind: 'video', status: 'running', createdAt: new Date().toISOString(), provider: 'evermind' };
     setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Generating…', deliverables: withCreationDeliverable(node.data, started) } } : node));
-    setNotice('Generating video with Evermind…');
+    setNotice(t('noticeGeneratingVideo'));
     void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'video.generate', phase: 'started', artifactId: target.id }).catch(() => undefined);
     void listEvermindModels().then((models) => {
       const configured = typeof target.data.modelSlug === 'string' ? target.data.modelSlug : typeof target.data.model === 'string' ? target.data.model : '';
@@ -2944,7 +3038,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const previewUrl = media.frames[0] ? mediaFrameDataUrl(media.frames[0], media.width, media.height, media.channels) : null;
       const delivered: CreationDeliverable = { ...started, status: 'delivered', completedAt: new Date().toISOString(), mimeType: media.modality === 'video' ? 'application/x-builderforce-video-frames' : 'image/png', resourceRef: media.model, validation: { status: media.frameCount > 0 ? 'passed' : 'failed', detail: `${media.frameCount} ${media.width}×${media.height} frames generated` }, metadata: { modelSlug: model.slug, frameCount: media.frameCount, width: media.width, height: media.height, channels: media.channels, usage: media.usage } };
       setNodes((current) => current.map((node) => node.id === target.id ? { ...node, data: { ...node.data, status: 'Generated', modelSlug: model.slug, frameCount: media.frameCount, videoWidth: media.width, videoHeight: media.height, generatedFrames: media.frames, ...(previewUrl ? { videoUrl: previewUrl } : {}), deliverables: withCreationDeliverable(node.data, delivered) } } : node));
-      setNotice(`${media.frameCount}-frame video generated with ${model.name}`);
+      setNotice(t('noticeVideoGenerated', { frames: media.frameCount, model: model.name }));
       void creationSessionsApi.recordOutcome(sessionId, { correlationId, action: 'video.generate', phase: 'succeeded', actorType: 'system', artifactId: target.id, durationMs: performance.now() - startedAt, metricKey: 'deliverables_completed', metricValue: 1, unit: 'count', metadata: { model: model.slug, frameCount: media.frameCount } }).catch(() => undefined);
     }).catch((error) => {
       const message = error instanceof Error ? error.message : 'Video generation failed';
@@ -3136,6 +3230,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const finish = () => setPendingBrainActions((current) => current.slice(1));
     if (target.data.kind === 'workflow' && pending.action === 'run') runWorkflow();
     else if (target.data.kind === 'website' && pending.action === 'publish') publishWebsite(target.id);
+    else if (target.data.kind === 'build' && pending.action === 'open') openBuild(target.id);
     else if (target.data.kind === 'video' && pending.action === 'generate') generateVideo(target.id);
     else if (CREATIVE_GENERATOR_KINDS.has(target.data.kind)) runCreativeAction(target.id, pending.action);
     else if (target.data.kind === 'dataset' && pending.action === 'visualize') visualizeDataset();
@@ -3151,58 +3246,58 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     else if (target.data.kind === 'slides' && pending.action === 'present') setPresentMode(true);
     else if (target.data.kind === 'evermind' && pending.action === 'publish') {
       openEvermindTraining();
-      setNotice('Use the trained package section to publish and test this Evermind');
+      setNotice(t('noticeUseTrainedPackage'));
     }
     else {
-      setNotice(`${pending.action} did not run because this ${creationObjectDefinition(target.data.kind).label} has no connected delivery adapter`);
+      setNotice(t('noticeNoDeliveryAdapter', { action: pending.action, kind: creationObjectDefinition(target.data.kind).label }));
     }
     finish();
-  }, [compareProjects, deliverMockup, evaluateEvermind, expandMockupSet, expandProject, exportArtifact, generateVideo, nodes, openEvermindTraining, pendingBrainActions, persistence, profileDataset, publishWebsite, runCreativeAction, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
+  }, [compareProjects, deliverMockup, evaluateEvermind, expandMockupSet, expandProject, exportArtifact, generateVideo, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, profileDataset, publishWebsite, runCreativeAction, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
 
   const openHistory = useCallback(() => {
     setHistoryOpen(true);
     if (persistence !== 'server') return;
     void creationSessionsApi.history.list(sessionId).then((result) => setHistory(result.snapshots))
-      .catch((error) => setNotice(error instanceof Error ? error.message : 'Could not load history'));
+      .catch((error) => setNotice(error instanceof Error ? error.message : t('noticeLoadHistoryFailed')));
   }, [persistence, sessionId]);
 
   const restoreRevision = useCallback((targetRevision: number) => {
     if (!canEdit || persistence !== 'server') return;
-    setNotice(`Restoring revision ${targetRevision}…`);
+    setNotice(t('noticeRestoringRevision', { revision: targetRevision }));
     void creationSessionsApi.history.get(sessionId, targetRevision).then((snapshot) => {
       const restored = flowFromSnapshotGraph(snapshot.graph);
       setNodes(restored.nodes);
       setEdges(restored.edges);
       setHistoryOpen(false);
-      setNotice(`Revision ${targetRevision} restored; saving as a new revision…`);
-    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not restore revision'));
+      setNotice(t('noticeRevisionRestored', { revision: targetRevision }));
+    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeRestoreRevisionFailed')));
   }, [canEdit, persistence, sessionId, setEdges, setNodes]);
 
   const createCheckpoint = useCallback(() => {
     if (persistence !== 'server' || !canEdit) return;
     const label = window.prompt('Name this checkpoint')?.trim(); if (!label) return;
     void creationSessionsApi.history.checkpoint(sessionId, label).then(() => {
-      setNotice(`Checkpoint “${label}” saved`);
+      setNotice(t('noticeCheckpointSaved', { label }));
       return creationSessionsApi.history.list(sessionId);
-    }).then((result) => setHistory(result.snapshots)).catch((error) => setNotice(error instanceof Error ? error.message : 'Could not save checkpoint'));
+    }).then((result) => setHistory(result.snapshots)).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeSaveCheckpointFailed')));
   }, [canEdit, persistence, sessionId]);
 
   const exportSession = useCallback(() => {
     const filename = `${safeDownloadName(title)}.builderforce-canvas.json`;
-    setNotice('Preparing Canvas export…');
+    setNotice(t('noticePreparingExport'));
     if (persistence === 'local') {
       downloadJson({
         format: 'builderforce.creation-session.v1', exportedAt: new Date().toISOString(),
         session: { id: sessionId, title, persistence: 'local' }, nodes, edges, timeline,
         viewport: flowRef.current?.getViewport() ?? viewportRef.current,
       }, filename);
-      setNotice('Canvas export downloaded');
+      setNotice(t('noticeExportDownloaded'));
       return;
     }
     void creationSessionsApi.export(sessionId).then((payload) => {
       downloadJson(payload, filename);
-      setNotice('Canvas export downloaded');
-    }).catch((error) => setNotice(error instanceof Error ? error.message : 'Canvas export failed'));
+      setNotice(t('noticeExportDownloaded'));
+    }).catch((error) => setNotice(error instanceof Error ? error.message : t('noticeExportFailed')));
   }, [edges, nodes, persistence, sessionId, timeline, title]);
 
   const minimapColor = useCallback((node: CreationFlowNode) => {
@@ -3352,7 +3447,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setOutcomeMetricsLoading(true);
     void creationSessionsApi.outcomeMetrics(sessionId)
       .then(setOutcomeMetrics)
-      .catch((error) => setOutcomeMetricsError(error instanceof Error ? error.message : 'Outcome metrics could not be loaded'))
+      .catch((error) => setOutcomeMetricsError(error instanceof Error ? error.message : t('noticeOutcomeMetricsFailed')))
       .finally(() => setOutcomeMetricsLoading(false));
   }, [persistence, sessionId]);
 
@@ -3452,7 +3547,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     modelSelection={modelSelection}
     modelOptions={canvasModelOptions}
     onModelSelectionChange={setModelSelection}
-    modelTrigger="slash"
+    canChooseModel={canChooseModel}
     modeControls={
       <button type="button" className={`${styles.memoryButton} ${memoryEnabled ? styles.memoryButtonActive : ''}`} aria-pressed={memoryEnabled} aria-label={t('memory')} disabled={evermindProjectId == null || persistence !== 'server'} title={evermindProjectId == null ? t('memoryNeedsProject') : memoryEnabled ? t('memoryEnabled') : t('memoryDisabled')} onClick={() => setMemoryMode(!memoryEnabled)}><span aria-hidden>🧠</span><span className={styles.composerActionLabel}>{t('memory')}</span></button>
     }
@@ -3480,6 +3575,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             ).slice(0, 4).map((member, index) => <button key={member.userId} type="button" data-typing={'typing' in member && member.typing ? 'true' : 'false'} aria-pressed={followingUserId === member.userId} title={`${member.displayName || t('collaborator')} · ${member.role}${'typing' in member && member.typing ? ` · ${t('writingPrompt')}` : ''}${member.userId !== currentUserId ? ` · ${t('clickToFollow')}` : ''}`} onClick={() => { if (member.userId !== currentUserId && member.userId !== 'local') setFollowingUserId((current) => current === member.userId ? null : member.userId); }} className={[styles.avatarPink, styles.avatarOrange, styles.avatarGreen][index % 3]}>{(member.displayName || 'U').split(/\s+/).map((part) => part[0]).join('').slice(0, 2).toUpperCase()}</button>)}
             <button aria-label={t('inviteCollaborator')} onClick={() => setShareOpen(true)}>+</button>
           </div>
+          {/* Editor-only capture actions. Renders nothing on the web — it asks the
+              host port whether an editor is present rather than being told. */}
+          <CanvasHostActions
+            selectedNode={selectedNode ?? null}
+            disabled={!canEdit || lockBlocked}
+            onCapture={addHostCapture}
+            onError={setNotice}
+          />
           <div className={styles.undoRedoGroup} role="group" aria-label={t('canvasHistory')}>
             <button className={styles.secondaryButton} onClick={undo} aria-label={t('undoCanvasChange')}>↶</button>
             <button className={styles.secondaryButton} onClick={redo} aria-label={t('redoCanvasChange')}>↷</button>
@@ -3527,7 +3630,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                 <button type="button" onClick={() => requireAccount('save', t('gateSaveSessionTitle'), t('gateSaveBody'))}>{t('sharedSaveToKeep')}</button>
               </div>
             </> : <button disabled={roomBusy} onClick={() => void startSharedSession()}>{roomBusy ? t('sharedStarting') : t('sharedStart')}</button>) : <>
-              <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder={t('emailPlaceholder')} /><select aria-label={t('invitationRole')} value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await copyTextToClipboard(`${window.location.origin}${result.acceptPath}`); setPendingInvitations((current) => [...current.filter((item) => item.id !== result.invitationId), { id: result.invitationId, email: result.email, role: result.role as CreationSessionSummary['role'], expiresAt: result.expiresAt, acceptedAt: null, revokedAt: null, createdAt: new Date().toISOString() }]); setNotice(result.emailSent ? t('invitationEmailed') : t('invitationSavedLinkCopied')); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice(result.emailSent ? t('collaboratorInvitedEmail') : t('collaboratorInvited')); } setInviteEmail(''); }).catch((error) => setNotice(error instanceof Error ? error.message : t('inviteFailed'))); }}>{t('invite')}</button></div>
+              <div><input value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder={t('emailPlaceholder')} /><select aria-label={t('invitationRole')} value={inviteRole} onChange={(event) => setInviteRole(event.target.value as CreationSessionSummary['role'])}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select><button disabled={!inviteEmail.trim()} onClick={() => { void creationSessionsApi.invite(sessionId, { email: inviteEmail.trim() }, inviteRole).then(async (result) => { if ('acceptPath' in result) { await copyTextToClipboard(`${canvasWebOrigin()}${result.acceptPath}`); setPendingInvitations((current) => [...current.filter((item) => item.id !== result.invitationId), { id: result.invitationId, email: result.email, role: result.role as CreationSessionSummary['role'], expiresAt: result.expiresAt, acceptedAt: null, revokedAt: null, createdAt: new Date().toISOString() }]); setNotice(result.emailSent ? t('invitationEmailed') : t('invitationSavedLinkCopied')); } else { const detail = await creationSessionsApi.get(sessionId); setAllMembers(detail.members); setNotice(result.emailSent ? t('collaboratorInvitedEmail') : t('collaboratorInvited')); } setInviteEmail(''); }).catch((error) => setNotice(error instanceof Error ? error.message : t('inviteFailed'))); }}>{t('invite')}</button></div>
               {sessionRole === 'owner' && <div aria-label={t('sessionMembers')}>{allMembers.map((member) => <div key={member.userId} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto', alignItems: 'center', gap: 6, marginTop: 8 }}>
                 <span>{member.displayName || t('collaborator')}{member.userId === currentUserId ? ` ${t('youSuffix')}` : ''}</span>
                 <select aria-label={t('roleFor', { name: member.displayName || member.userId })} value={member.role} onChange={(event) => { const role = event.target.value as CreationSessionSummary['role']; void creationSessionsApi.members.update(sessionId, member.userId, role).then(() => setAllMembers((current) => current.map((item) => item.userId === member.userId ? { ...item, role } : item))).catch((error) => setNotice(error instanceof Error ? error.message : t('roleUpdateFailed'))); }}><option value="viewer">{t('roleViewer')}</option><option value="commenter">{t('roleCommenter')}</option><option value="editor">{t('roleEditor')}</option><option value="runner">{t('roleRunner')}</option><option value="owner">{t('roleOwner')}</option></select>
@@ -3556,8 +3659,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <p>{accountGate.description}</p>
           <div className={styles.accountGateBenefits}><span>{`✓ ${t('gateBenefitKeep')}`}</span><span>{`✓ ${t('gateBenefitUnlock')}`}</span><span>{`✓ ${t('gateBenefitCollaborate')}`}</span></div>
           <div className={styles.accountGateActions}>
-            <button type="button" className={styles.primaryButton} onClick={() => { trackActivity('creation_account_gate_accepted', { sessionId, metadata: { clientSurface: 'web', action: accountGate.action } }); window.location.href = `/register?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>{t('createFreeAccount')}</button>
-            <button type="button" className={styles.secondaryButton} onClick={() => { window.location.href = `/login?next=${encodeURIComponent(`/create/${sessionId}`)}`; }}>{t('signIn')}</button>
+            <button type="button" className={styles.primaryButton} onClick={() => { trackActivity('creation_account_gate_accepted', { sessionId, metadata: { clientSurface: canvasSurface(), action: accountGate.action } }); canvasNavigate(`/register?next=${encodeURIComponent(`/create/${sessionId}`)}`); }}>{t('createFreeAccount')}</button>
+            <button type="button" className={styles.secondaryButton} onClick={() => { canvasNavigate(`/login?next=${encodeURIComponent(`/create/${sessionId}`)}`); }}>{t('signIn')}</button>
           </div>
           <button type="button" className={styles.accountGateLater} onClick={() => setAccountGate(null)}>{t('notNowKeepLocal')}</button>
         </section>
@@ -3601,7 +3704,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         {tourStep > 0 && <div style={{ position: 'absolute', zIndex: 30, top: 18, left: '50%', transform: 'translateX(-50%)', width: 'min(430px, calc(100% - 32px))', padding: 16, borderRadius: 14, background: 'var(--bg-elevated, white)', boxShadow: '0 14px 44px rgba(25,40,70,.22)', border: '1px solid var(--border-subtle)' }}>
           <strong>{t(`tourTitle${tourStep}` as 'tourTitle1')}</strong>
           <p style={{ margin: '7px 0 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{t(`tourBody${tourStep}` as 'tourBody1')}</p>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><small>{t('tourStep', { step: tourStep })}</small><span style={{ display: 'flex', gap: 7 }}><button className={styles.secondaryButton} onClick={() => { localStorage.setItem(tourStorageKey, '1'); setTourStep(0); }}>{t('dismiss')}</button><button className={styles.primaryButton} onClick={() => { trackActivity('creation_tutorial_step_completed', { sessionId, metadata: { clientSurface: 'web', step: tourStep } }); if (tourStep < 6) setTourStep((step) => step + 1); else { localStorage.setItem(tourStorageKey, '1'); setTourStep(0); } }}>{tourStep < 6 ? t('next') : t('startCreating')}</button></span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><small>{t('tourStep', { step: tourStep })}</small><span style={{ display: 'flex', gap: 7 }}><button className={styles.secondaryButton} onClick={() => { localStorage.setItem(tourStorageKey, '1'); setTourStep(0); }}>{t('dismiss')}</button><button className={styles.primaryButton} onClick={() => { trackActivity('creation_tutorial_step_completed', { sessionId, metadata: { clientSurface: canvasSurface(), step: tourStep } }); if (tourStep < 6) setTourStep((step) => step + 1); else { localStorage.setItem(tourStorageKey, '1'); setTourStep(0); } }}>{tourStep < 6 ? t('next') : t('startCreating')}</button></span></div>
         </div>}
         <BrainSurfaceProvider value={brainSurface}>
         <ReactFlow<CreationFlowNode, Edge>
@@ -3709,11 +3812,22 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           })}</div>
         </aside>}
 
-        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} />}
+        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} />}
+
+        {buildFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('build.focusLabel')}>
+          <header><div><strong>{t('build.focusTitle')}</strong><small>{t('build.focusHint')}</small></div><button type="button" onClick={() => setBuildFocus(null)} aria-label={t('build.closeBuilder')}>×</button></header>
+          <div className={styles.buildFocusBody}>
+            <CanvasBuildPanel
+              storageProjectId={buildFocus.storageProjectId}
+              onClose={() => setBuildFocus(null)}
+              onProjectRenamed={(name) => setNodes((current) => current.map((node) => node.id === buildFocus.nodeId ? { ...node, data: { ...node.data, title: name } } : node))}
+            />
+          </div>
+        </section>}
 
         {workflowFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('workflowFocusEditor')}>
           <header><div><strong>{t('editWorkflowOnCanvas')}</strong><small>{t('editWorkflowHint')}</small></div><button type="button" onClick={() => setWorkflowFocus(null)} aria-label={t('closeWorkflowEditor')}>×</button></header>
-          <div className={styles.workflowFocusBody}><ReactFlowProvider><WorkflowBuilder definitionId={workflowFocus.definitionId} embedded onSaved={(definitionId, name) => { setWorkflowFocus((current) => current ? { ...current, definitionId } : current); setNodes((current) => current.map((node) => node.id === workflowFocus.nodeId ? { ...node, data: { ...node.data, title: name, resourceId: `workflow:${definitionId}`, workflowExecutable: true, resourceSubtype: 'definition', status: 'Saved' } } : node)); setNotice(t('workflowSaved')); }} onRunStarted={(workflowId) => { setNodes((current) => current.map((node) => node.id === workflowFocus.nodeId ? { ...node, data: { ...node.data, status: 'Running', workflowRunId: workflowId } } : node)); setNotice(`Workflow run ${workflowId} started`); }} /></ReactFlowProvider></div>
+          <div className={styles.workflowFocusBody}><ReactFlowProvider><WorkflowBuilder definitionId={workflowFocus.definitionId} embedded onSaved={(definitionId, name) => { setWorkflowFocus((current) => current ? { ...current, definitionId } : current); setNodes((current) => current.map((node) => node.id === workflowFocus.nodeId ? { ...node, data: { ...node.data, title: name, resourceId: `workflow:${definitionId}`, workflowExecutable: true, resourceSubtype: 'definition', status: 'Saved' } } : node)); setNotice(t('workflowSaved')); }} onRunStarted={(workflowId) => { setNodes((current) => current.map((node) => node.id === workflowFocus.nodeId ? { ...node, data: { ...node.data, status: 'Running', workflowRunId: workflowId } } : node)); setNotice(t('noticeWorkflowRunStarted', { id: workflowId })); }} /></ReactFlowProvider></div>
         </section>}
 
         {trainingFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('evermindAdapterStudio')}>
@@ -3733,7 +3847,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               }}
               onModelPublished={(model) => {
                 setNodes((current) => current.map((node) => node.id === trainingFocus.nodeId ? { ...node, data: { ...node.data, status: 'Published', model: model.ref, modelSlug: model.slug, evermindRef: model.evermindRef, publishedAt: new Date().toISOString() } } : node));
-                setNotice(`Evermind published and callable as ${model.ref}`);
+                setNotice(t('noticeEvermindPublished', { ref: model.ref }));
               }}
             />
           </div>
@@ -3813,7 +3927,7 @@ function RemoteCursors({ members, currentUserId, instance, container }: { member
   })}</div>;
 }
 
-function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onGenerateVideo, onRunCreativeAction, onEditWorkflow, onSaveAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onExportArtifact }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onEditWorkflow: () => void; onSaveAgent: () => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onExportArtifact: (action: CanvasExportAction) => Promise<string> }) {
+function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onEditWorkflow, onSaveAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onExportArtifact }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onEditWorkflow: () => void; onSaveAgent: () => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onExportArtifact: (action: CanvasExportAction) => Promise<string> }) {
   const t = useTranslations('creationCanvas');
   const kind = node.data.kind;
   const [tab, setTab] = useState<'details' | 'activity'>('details');
@@ -3992,7 +4106,8 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
         <p className={styles.inspectorHint}>{deliveryAgent?.data.resourceId ? t('deliveryConnectedHint') : t('deliveryPendingHint')}</p>
       </section>}
       {kind === 'staff' && <><label>{t('role')}<input value={node.data.role || ''} onChange={(event) => onChange({ role: event.target.value })} /></label><label>{t('currentFocus')}<textarea value={node.data.focus || ''} onChange={(event) => onChange({ focus: event.target.value })} rows={4} /></label></>}
-      {(kind === 'website' || kind === 'prototype') && <><label>{t('headline')}<input value={typeof node.data.websiteHeadline === 'string' ? node.data.websiteHeadline : 'Fall in love with every look'} onChange={(event) => onChange({ websiteHeadline: event.target.value })} /></label><label>{t('supportingCopy')}<textarea rows={3} value={typeof node.data.websiteBody === 'string' ? node.data.websiteBody : 'New arrivals for the season ahead.'} onChange={(event) => onChange({ websiteBody: event.target.value })} /></label><label>{t('callToAction')}<input value={typeof node.data.websiteCta === 'string' ? node.data.websiteCta : 'Shop the collection'} onChange={(event) => onChange({ websiteCta: event.target.value })} /></label><label>{t('accentColor')}<input type="color" value={typeof node.data.websiteAccent === 'string' ? node.data.websiteAccent : '#3978f6'} onChange={(event) => onChange({ websiteAccent: event.target.value })} /></label><label>{t('viewport')}<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onWebsiteViewportChange(event.target.value as 'desktop' | 'tablet' | 'mobile')}><option value="desktop">{t('viewportDesktop')}</option><option value="tablet">{t('viewportTablet')}</option><option value="mobile">{t('viewportMobile')}</option></select></label>{kind === 'website' && <><label>{t('subdomain')}<input value={typeof node.data.subdomain === 'string' ? node.data.subdomain : ''} placeholder={t('subdomainPlaceholder')} onChange={(event) => onChange({ subdomain: event.target.value })} /></label><button type="button" className={styles.fullButton} onClick={onPublishWebsite}>{t('publishWebsite')}</button>{typeof node.data.siteUrl === 'string' && <a href={node.data.siteUrl} target="_blank" rel="noreferrer">{t('openPublishedSite')}</a>}</>}<p className={styles.inspectorHint}>{t('websiteLiveHint')}</p></>}
+      {(kind === 'website' || kind === 'prototype') && <><label>{t('headline')}<input value={typeof node.data.websiteHeadline === 'string' ? node.data.websiteHeadline : 'Fall in love with every look'} onChange={(event) => onChange({ websiteHeadline: event.target.value })} /></label><label>{t('supportingCopy')}<textarea rows={3} value={typeof node.data.websiteBody === 'string' ? node.data.websiteBody : 'New arrivals for the season ahead.'} onChange={(event) => onChange({ websiteBody: event.target.value })} /></label><label>{t('callToAction')}<input value={typeof node.data.websiteCta === 'string' ? node.data.websiteCta : 'Shop the collection'} onChange={(event) => onChange({ websiteCta: event.target.value })} /></label><label>{t('accentColor')}<input type="color" value={typeof node.data.websiteAccent === 'string' ? node.data.websiteAccent : '#3978f6'} onChange={(event) => onChange({ websiteAccent: event.target.value })} /></label><label>{t('viewport')}<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onWebsiteViewportChange(event.target.value as 'desktop' | 'tablet' | 'mobile')}><option value="desktop">{t('viewportDesktop')}</option><option value="tablet">{t('viewportTablet')}</option><option value="mobile">{t('viewportMobile')}</option></select></label>{kind === 'website' && <><label>{t('subdomain')}<input value={typeof node.data.subdomain === 'string' ? node.data.subdomain : ''} placeholder={t('subdomainPlaceholder')} onChange={(event) => onChange({ subdomain: event.target.value })} /></label><button type="button" className={styles.fullButton} onClick={onPublishWebsite}>{t('publishWebsite')}</button>{typeof node.data.siteUrl === 'string' && <a href={node.data.siteUrl} target="_blank" rel="noreferrer">{t('openPublishedSite')}</a>}<button type="button" className={styles.secondaryFullButton} onClick={onBuildWebsiteWithCode}>{t('build.websiteWithCode')}</button><p className={styles.inspectorHint}>{t('build.websiteWithCodeHint')}</p></>}<p className={styles.inspectorHint}>{t('websiteLiveHint')}</p></>}
+      {kind === 'build' && <BuildInspectorSection node={node} editable={editable} creating={creatingBuild} persistence={persistence} onChange={onChange} onOpenBuild={onOpenBuild} onAttachBuild={onAttachBuild} onDeleteBuildWorkspace={onDeleteBuildWorkspace} />}
       {kind === 'video' && <><label>{t('prompt')}<textarea rows={5} value={typeof node.data.prompt === 'string' ? node.data.prompt : ''} onChange={(event) => onChange({ prompt: event.target.value })} placeholder={t('videoPromptPlaceholder')} /></label><label>{t('publishedEvermindModel')}<input value={typeof node.data.modelSlug === 'string' ? node.data.modelSlug : ''} onChange={(event) => onChange({ modelSlug: event.target.value })} placeholder={t('mediaModelPlaceholder')} /></label><label>{t('frames')}<input type="number" min="1" max="64" value={typeof node.data.maxFrames === 'number' ? node.data.maxFrames : 16} onChange={(event) => onChange({ maxFrames: Math.max(1, Math.min(64, Number(event.target.value) || 16)) })} /></label><button type="button" className={styles.fullButton} onClick={onGenerateVideo}>{t('generateVideo')}</button>{typeof node.data.videoUrl === 'string' && <img src={node.data.videoUrl} alt={t('videoFirstFrame')} style={{ width: '100%', borderRadius: 10 }} />}</>}
       {kind === 'workflow' && <><label>{t('executionTarget')}<select value={typeof node.data.runTarget === 'string' ? node.data.runTarget : 'builderforce'} onChange={(event) => onChange({ runTarget: event.target.value })}><option value="builderforce">BuilderForce.AI</option><option value="campaign-strategist">Campaign Strategist</option></select></label><label>{t('approvalMode')}<select value={typeof node.data.approvalMode === 'string' ? node.data.approvalMode : 'required'} onChange={(event) => onChange({ approvalMode: event.target.value })}><option value="required">{t('approvalRequiredBeforePublish')}</option><option value="autonomous">{t('fullyAutonomous')}</option></select></label><button type="button" className={styles.fullButton} onClick={onEditWorkflow}>{t('editWorkflowOnCanvas')}</button><button className={styles.fullButton} onClick={onRun}>{`▶ ${t('runWorkflow')}`}</button></>}
       {kind === 'dashboard' && <><label>{t('dateRange')}<select value={typeof node.data.dateRange === 'string' ? node.data.dateRange : '30d'} onChange={(event) => onChange({ dateRange: event.target.value })}><option value="30d">{t('last30Days')}</option><option value="7d">{t('last7Days')}</option><option value="qtd">{t('quarterToDate')}</option></select></label><button type="button" className={styles.fullButton} onClick={() => onChange({ fetchedAt: new Date().toISOString(), status: 'Live' })}>{t('refreshLiveData')}</button></>}
@@ -4122,14 +4237,73 @@ function SourceList({ sources }: { sources: unknown }) {
   return <div className={styles.sourceList}><strong>{t('evidenceSources')}</strong>{sources.map((source, index) => { const item = source as { label?: string; resource?: string }; return <div key={`${item.resource}-${index}`}><span>{index + 1}</span><p><b>{item.label || t('source')}</b><code>{item.resource || t('canonicalApi')}</code></p></div>; })}</div>;
 }
 
+/**
+ * Builder inspector — pick what to build, then open the workspace.
+ *
+ * The type list is the IDE's own modality registry, so the Canvas offers exactly
+ * the project types the IDE does and each one seeds its own starter template.
+ * Type is fixed once the workspace exists, matching the IDE (a project's modality
+ * is set at creation, not switched mid-session).
+ */
+function BuildInspectorSection({ node, editable, creating, persistence, onChange, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace }: {
+  node: CreationFlowNode;
+  editable: boolean;
+  creating: boolean;
+  persistence: 'local' | 'server';
+  onChange: (patch: Partial<CreationNodeData>) => void;
+  onOpenBuild: () => void;
+  onAttachBuild: (ide: IdeProject) => void;
+  onDeleteBuildWorkspace: () => void;
+}) {
+  const t = useTranslations('creationCanvas.build');
+  const modalities = useLocalizedModalities();
+  const active = useModalityCopy()(typeof node.data.modality === 'string' ? node.data.modality : null);
+  const binding = canvasBuildBinding(node.data);
+  // Existing workspaces, so a Builder object can adopt work already under way
+  // instead of only ever provisioning a second one. Only fetched while unbound.
+  const [existing, setExisting] = useState<IdeProject[]>([]);
+  useEffect(() => {
+    if (binding || persistence !== 'server') { setExisting([]); return; }
+    let alive = true;
+    void listIdeProjects().then((projects) => { if (alive) setExisting(projects); }).catch(() => { if (alive) setExisting([]); });
+    return () => { alive = false; };
+  }, [binding, persistence]);
+  return <section data-inspector-section="build">
+    <label>{t('typeLabel')}
+      <select
+        value={active.id}
+        disabled={!editable || !!binding || creating}
+        onChange={(event) => onChange({ modality: event.target.value as ProjectModality })}
+      >
+        {modalities.map((modality) => <option key={modality.id} value={modality.id} disabled={!!modality.comingSoon}>{modality.icon} {modality.label}</option>)}
+      </select>
+    </label>
+    <p className={styles.inspectorHint}>{binding ? t('typeLockedHint') : active.tagline}</p>
+    <button type="button" className={styles.fullButton} disabled={!editable || creating} onClick={onOpenBuild}>
+      {creating ? t('creating') : binding ? t('openBuilder') : t('createWorkspace')}
+    </button>
+    {!binding && existing.length > 0 && <label>{t('attachLabel')}
+      <select
+        value=""
+        disabled={!editable || creating}
+        onChange={(event) => { const chosen = existing.find((project) => String(project.id) === event.target.value); if (chosen) onAttachBuild(chosen); }}
+      >
+        <option value="">{t('attachPlaceholder')}</option>
+        {existing.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+      </select>
+    </label>}
+    {binding && <a href={`/ide/${binding.storageProjectPublicId}`} target="_blank" rel="noreferrer">{t('openFullPage')}</a>}
+    <p className={styles.inspectorHint}>{binding ? t('boundHint') : t('unboundHint')}</p>
+    {binding && <>
+      <button type="button" className={styles.secondaryFullButton} disabled={!editable} onClick={onDeleteBuildWorkspace}>{t('deleteWorkspace')}</button>
+      <p className={styles.inspectorHint}>{t('deleteWorkspaceHint')}</p>
+    </>}
+  </section>;
+}
+
 function CanvasVoiceInspector({ node, persistence, onChange }: { node: CreationFlowNode; persistence: 'local' | 'server'; onChange: (patch: Partial<CreationNodeData>) => void }) {
   const t = useTranslations('creationCanvas');
-  const storageProjectId = useMemo(() => {
-    const ref = node.data.resourceId;
-    if (!ref?.startsWith('project:')) return null;
-    const value = Number(ref.slice('project:'.length));
-    return Number.isInteger(value) && value > 0 ? value : null;
-  }, [node.data.resourceId]);
+  const storageProjectId = useMemo(() => canvasProjectId(node.data), [node.data]);
   const voice = useVoiceStudio({ enabled: persistence === 'server', storageProjectId });
   const loadedNode = useRef<string | null>(null);
   const savedResult = useRef<unknown>(null);
@@ -4209,7 +4383,7 @@ function ActivityInspector({ sessionId, objectId, persistence, role, members }: 
   const [comments, setComments] = useState<CreationSessionComment[]>([]);
   const [activity, setActivity] = useState<CreationSessionActivity[]>([]);
   const [draft, setDraft] = useState('');
-  const [status, setStatus] = useState(persistence === 'local' ? 'Save this session to collaborate.' : 'Loading activity…');
+  const [status, setStatus] = useState(persistence === 'local' ? 'Save this session to collaborate.' : t('noticeLoadingActivity'));
   const canComment = role !== 'viewer';
 
   const reload = useCallback(async () => {
@@ -4221,9 +4395,9 @@ function ActivityInspector({ sessionId, objectId, persistence, role, members }: 
       ]);
       setComments(commentResult.comments);
       setActivity(activityResult.activity.filter((item) => !item.objectId || item.objectId === objectId));
-      setStatus(commentResult.comments.length || activityResult.activity.length ? '' : 'No activity on this object yet.');
+      setStatus(commentResult.comments.length || activityResult.activity.length ? '' : t('noticeNoActivityYet'));
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'Could not load activity');
+      setStatus(error instanceof Error ? error.message : t('noticeLoadActivityFailed'));
     }
   }, [objectId, persistence, sessionId]);
 
@@ -4239,7 +4413,7 @@ function ActivityInspector({ sessionId, objectId, persistence, role, members }: 
       setDraft('');
       setStatus('Comment posted');
       void reload();
-    }).catch((error) => setStatus(error instanceof Error ? error.message : 'Could not post comment'));
+    }).catch((error) => setStatus(error instanceof Error ? error.message : t('noticePostCommentFailed')));
   };
 
   const resolve = (comment: CreationSessionComment) => {

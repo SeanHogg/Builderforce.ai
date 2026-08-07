@@ -20,6 +20,7 @@ import { buildDatabase } from '../../infrastructure/database/connection';
 import { projectRepositories, projects } from '../../infrastructure/database/schema';
 import { verifyGitHubOidcToken } from '../../application/ide/githubOidc';
 import { publishStaticSite, assetsFromFormData } from '../../application/ide/publishStaticSite';
+import { recordWorkerDeployment } from '../../application/backend';
 
 export function createDeployRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -80,6 +81,59 @@ export function createDeployRoutes(): Hono<HonoEnv> {
 
     const { ok: _ok, ...body } = result;
     return c.json({ ...body, repository: verified.claims.repository, sha: verified.claims.sha }, 201);
+  });
+
+  /**
+   * The `github-worker` backend reporting where it landed.
+   *
+   * Same trust model as `/github` above — the OIDC token proves the repository,
+   * the repo↔project binding is the authorization — but a different payload: this
+   * one carries no assets, only the deployed origin. Without it the strategy is
+   * generate-only and the UI keeps offering the Builderforce ingress as the place
+   * to point webhooks, which for a customer-hosted Worker is the wrong address.
+   */
+  router.post('/worker', async (c) => {
+    const auth = c.req.header('Authorization') ?? '';
+    const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+    if (!token) {
+      return c.json({ error: 'Missing GitHub OIDC token. The workflow needs `id-token: write`.' }, 401);
+    }
+
+    const verified = await verifyGitHubOidcToken(c.env, token);
+    if (!verified.ok) return c.json({ error: verified.error }, 401);
+
+    const body = await c.req.json<{ url?: unknown }>().catch(() => ({}) as { url?: unknown });
+    if (typeof body.url !== 'string' || !body.url.trim()) {
+      return c.json({ error: 'url is required' }, 400);
+    }
+
+    const [owner, repo] = verified.claims.repository.split('/');
+    const db = buildDatabase(c.env);
+    const [binding] = await db
+      .select({ projectId: projectRepositories.projectId, tenantId: projectRepositories.tenantId })
+      .from(projectRepositories)
+      .where(and(
+        eq(projectRepositories.provider, 'github'),
+        sql`lower(${projectRepositories.owner}) = lower(${owner})`,
+        sql`lower(${projectRepositories.repo}) = lower(${repo})`,
+      ))
+      .orderBy(desc(projectRepositories.isDefault), asc(projectRepositories.createdAt))
+      .limit(1);
+
+    if (!binding) {
+      return c.json({
+        error: `Repository "${verified.claims.repository}" is not linked to a Builderforce project.`,
+      }, 404);
+    }
+
+    const recorded = await recordWorkerDeployment(c.env, db, {
+      tenantId: Number(binding.tenantId),
+      projectId: Number(binding.projectId),
+      url: body.url.trim(),
+    });
+    if (!recorded.ok) return c.json({ error: recorded.reason }, 400);
+
+    return c.json({ url: recorded.url, repository: verified.claims.repository, sha: verified.claims.sha }, 201);
   });
 
   return router;

@@ -1,10 +1,11 @@
 {
   "name": "builderforce-frontend",
-  "version": "2026.7.174",
+  "version": "2026.7.179",
   "private": true,
   "scripts": {
     "clean": "node -e \"const fs=require('fs');const p='.next';if(fs.existsSync(p)){fs.rmSync(p,{recursive:true});console.log('Removed .next');}else{console.log('.next not found');}\"",
     "dev": "next dev",
+    "prebuild": "node scripts/copy-ort-runtime.mjs",
     "build": "next build",
     "cf-build": "npm run build && npx @cloudflare/next-on-pages && echo '_worker.js' > .vercel/output/static/.assetsignore && node scripts/strip-worker-assets.js && node scripts/stamp-sw-version.js && sed -i 's/\\br\\.fetch\\b/(r||self).fetch/g' .vercel/output/static/_worker.js/index.js",
     "cf-deploy": "npm run cf-build && npx wrangler deploy --no-bundle",
@@ -47,7 +48,7 @@
     "mp4-muxer": "^5.2.2",
     "next": "15.5.2",
     "next-intl": "^4.13.0",
-    "onnxruntime-web": "^1.21.0",
+    "onnxruntime-web": "1.22.0-dev.20250409-89f8206ba4",
     "react": "^18",
     "react-dom": "^18",
     "react-markdown": "^10.1.0",

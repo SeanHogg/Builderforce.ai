@@ -1,6 +1,6 @@
 /** Shared, transport-neutral Creation Canvas contract used by web and VSIX. */
 export const CREATION_OBJECT_KINDS = [
-  'workflow', 'project', 'website', 'dashboard', 'chat', 'agent', 'staff', 'evaluation', 'dataset',
+  'workflow', 'project', 'website', 'build', 'dashboard', 'chat', 'agent', 'staff', 'evaluation', 'dataset',
   'table', 'spreadsheet', 'chart', 'map', 'report', 'kpi', 'prototype', 'code', 'browser', 'llm', 'voice', 'video',
   'image', 'animation', 'podcast', 'comic', 'game', 'cad', 'model3d', 'resume', 'template',
   'document', 'slides', 'diagram', 'knowledge', 'file', 'url', 'note', 'drawing', 'frame', 'comment', 'timer',

@@ -1021,8 +1021,327 @@ function PromptPanel({
   );
 }
 
+// src/promptOptions/PromptOptionsMenu.tsx
+import { useEffect as useEffect2, useMemo as useMemo4, useRef as useRef2, useState as useState4 } from "react";
+
+// src/promptOptions/modelItems.ts
+import { PROJECT_EVERMIND_MODEL_PREFIX } from "@seanhogg/builderforce-brain-embedded";
+function perMillionUsd(rate) {
+  return `$${(rate * 1e6).toFixed(2)}`;
+}
+function premiumCostLabel(pricing, template) {
+  return template.replace("{input}", perMillionUsd(pricing.prompt)).replace("{output}", perMillionUsd(pricing.completion));
+}
+var MODEL_CATEGORIES = ["auto", "byo", "free", "plan", "paid", "configured"];
+function modelCategoryLabel(category, labels) {
+  switch (category) {
+    case "auto":
+      return labels.categoryAuto;
+    case "byo":
+      return labels.categoryByo;
+    case "free":
+      return labels.categoryFree;
+    case "plan":
+      return labels.categoryPlan;
+    case "paid":
+      return labels.categoryPaid;
+    case "configured":
+      return labels.categoryConfigured;
+  }
+}
+function buildModelItems(options, labels) {
+  const items = [
+    { key: "auto", label: labels.autoLabel, detail: labels.autoDetail, category: "auto", selection: { mode: "auto" } }
+  ];
+  const normalized = (value) => typeof value === "string" ? { id: value } : value;
+  const seen = /* @__PURE__ */ new Set();
+  const add = (id, label, detail, category) => {
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    items.push({ key: `model:${id}`, label, detail, category, selection: { mode: "model", model: id } });
+  };
+  for (const value of options.free) {
+    const model = normalized(value);
+    add(model.id, model.id, model.cost ?? labels.freeDetail, "free");
+  }
+  const free = new Set(options.free.map((value) => normalized(value).id));
+  for (const value of options.plan) {
+    const model = normalized(value);
+    if (!free.has(model.id)) add(model.id, model.id, model.cost ?? labels.planDetail, "plan");
+  }
+  for (const value of options.paid) {
+    const model = normalized(value);
+    add(model.id, model.id, model.cost ?? labels.paidDetail, "paid");
+  }
+  if (options.byo.length) {
+    items.push({ key: "byo_pool", label: labels.poolLabel, detail: labels.poolDetail, category: "byo", selection: { mode: "byo_pool" } });
+  }
+  for (const model of options.byo) {
+    add(model.id, model.id, model.cost ?? labels.byoDetail.replace("{vendor}", model.vendor), "byo");
+  }
+  for (const model of options.configured ?? []) add(model.id, model.label, model.id, "configured");
+  return items;
+}
+function activeModelKey(selection) {
+  return selection.mode === "model" ? `model:${selection.model}` : selection.mode;
+}
+function filterModelItems(items, labels, query, category) {
+  const needle = query.trim().toLowerCase();
+  return items.filter((item) => (category === "all" || item.category === category) && (!needle || `${item.label} ${item.detail} ${modelCategoryLabel(item.category, labels)}`.toLowerCase().includes(needle)));
+}
+function modelInUse(selection, items, labels, effective) {
+  const resolve = (model) => {
+    const item = items.find((entry) => entry.key === `model:${model}`);
+    if (item) return { name: item.label, detail: item.detail };
+    return model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX) ? { name: labels.evermindLabel, detail: labels.evermindDetail } : { name: model, detail: labels.autoDetail };
+  };
+  if (selection.mode === "model") return resolve(selection.model);
+  if (selection.mode === "byo_pool") return { name: labels.poolLabel, detail: labels.poolDetail };
+  if (effective) return resolve(effective);
+  return { name: labels.autoLabel, detail: labels.autoDetail };
+}
+
+// src/promptOptions/types.ts
+var DEFAULT_PROMPT_OPTIONS_LABELS = {
+  options: "Options",
+  effort: "Effort",
+  effortQuick: "Quick",
+  effortBalanced: "Balanced",
+  effortThorough: "Thorough",
+  thinking: "Thinking",
+  on: "On",
+  off: "Off",
+  model: "Model",
+  modelInUse: "Model in use",
+  searchModels: "Search models\u2026",
+  filterModels: "Filter models",
+  chooseModel: "Choose model",
+  noModels: "No matching models",
+  all: "All",
+  categoryAuto: "Auto",
+  categoryByo: "BYO",
+  categoryFree: "Free",
+  categoryPlan: "Plan",
+  categoryPaid: "Paid",
+  categoryConfigured: "Configured",
+  autoLabel: "Auto",
+  autoDetail: "Routed per turn \u2014 your connected accounts first, then your plan.",
+  poolLabel: "BYO pool",
+  poolDetail: "Tries your connected accounts in the order configured in Account settings.",
+  freeDetail: "Free \xB7 included with BuilderForce",
+  planDetail: "Included with your BuilderForce plan",
+  paidDetail: "Premium \u2014 metered at cost + 1\xA2 per request",
+  paidCostDetail: "{input} input / {output} output per 1M tokens + $0.01 per request",
+  byoDetail: "Billed to your own {vendor} account \u2014 no plan credit used.",
+  configuredDetail: "Saved workspace LLM configuration",
+  evermindLabel: "Project Evermind",
+  evermindDetail: "Your project's own learned Evermind model.",
+  modelLocked: "Model choice needs a paid plan or a connected provider account.",
+  accountSettings: "Account settings"
+};
+function promptOptionsLabels(overrides) {
+  return overrides ? { ...DEFAULT_PROMPT_OPTIONS_LABELS, ...overrides } : DEFAULT_PROMPT_OPTIONS_LABELS;
+}
+
+// src/promptOptions/PromptOptionsMenu.tsx
+import { Fragment as Fragment3, jsx as jsx8, jsxs as jsxs8 } from "react/jsx-runtime";
+var EFFORT_LEVELS = ["quick", "balanced", "thorough"];
+var EFFORT_ICON = { quick: "\u{1F3C3}", balanced: "\u2696\uFE0F", thorough: "\u{1F3AF}" };
+function PromptOptionsMenu({
+  labels: labelOverrides,
+  disabled = false,
+  effort,
+  onEffortChange,
+  describeEffort,
+  thinking,
+  onThinkingChange,
+  describeThinking,
+  model,
+  onAccountSettings,
+  className
+}) {
+  const labels = useMemo4(() => promptOptionsLabels(labelOverrides), [labelOverrides]);
+  const [open, setOpen] = useState4(false);
+  const [query, setQuery] = useState4("");
+  const [filter, setFilter] = useState4("all");
+  const rootRef = useRef2(null);
+  useEffect2(() => {
+    if (!open) return;
+    const onDown = (event) => {
+      if (rootRef.current && !rootRef.current.contains(event.target)) setOpen(false);
+    };
+    const onKey = (event) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const items = useMemo4(() => model ? buildModelItems(model.options, labels) : [], [model, labels]);
+  const inUse = useMemo4(
+    () => model ? modelInUse(model.selection, items, labels, model.effective) : null,
+    [model, items, labels]
+  );
+  const categories = useMemo4(
+    () => MODEL_CATEGORIES.filter((category) => items.some((item) => item.category === category)),
+    [items]
+  );
+  const visible = useMemo4(() => filterModelItems(items, labels, query, filter), [items, labels, query, filter]);
+  if (!onEffortChange && !onThinkingChange && !model && !onAccountSettings) return null;
+  const canChoose = model?.canChoose !== false;
+  const activeKey = model ? activeModelKey(model.selection) : "";
+  const title = inUse ? `${labels.options} \xB7 ${labels.modelInUse}: ${inUse.name}` : labels.options;
+  return /* @__PURE__ */ jsxs8("div", { ref: rootRef, className: ["bf-pmenu", className].filter(Boolean).join(" "), children: [
+    /* @__PURE__ */ jsxs8(
+      "button",
+      {
+        type: "button",
+        className: `bf-pmenu__trigger${open ? " is-open" : ""}`,
+        disabled,
+        title,
+        "aria-label": title,
+        "aria-haspopup": "menu",
+        "aria-expanded": open,
+        onClick: () => setOpen((value) => !value),
+        children: [
+          /* @__PURE__ */ jsx8("span", { className: "bf-pmenu__slash", "aria-hidden": "true", children: "/" }),
+          inUse && /* @__PURE__ */ jsx8("span", { className: "bf-pmenu__model", children: inUse.name })
+        ]
+      }
+    ),
+    open && /* @__PURE__ */ jsxs8("div", { className: "bf-pmenu__pop", role: "menu", children: [
+      onEffortChange && /* @__PURE__ */ jsxs8(Fragment3, { children: [
+        /* @__PURE__ */ jsx8("div", { className: "bf-pmenu__group", children: labels.effort }),
+        EFFORT_LEVELS.map((level) => /* @__PURE__ */ jsxs8(
+          "button",
+          {
+            type: "button",
+            role: "menuitemradio",
+            "aria-checked": effort === level,
+            className: `bf-pmenu__item${effort === level ? " is-active" : ""}`,
+            onClick: () => onEffortChange(level),
+            children: [
+              /* @__PURE__ */ jsx8("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: EFFORT_ICON[level] }),
+              /* @__PURE__ */ jsxs8("span", { className: "bf-pmenu__lbl", children: [
+                level === "quick" ? labels.effortQuick : level === "balanced" ? labels.effortBalanced : labels.effortThorough,
+                describeEffort && /* @__PURE__ */ jsx8("span", { className: "bf-pmenu__desc", children: describeEffort(level) })
+              ] }),
+              /* @__PURE__ */ jsx8("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: effort === level ? "\u2713" : "" })
+            ]
+          },
+          level
+        ))
+      ] }),
+      onThinkingChange && /* @__PURE__ */ jsxs8(Fragment3, { children: [
+        onEffortChange && /* @__PURE__ */ jsx8("div", { className: "bf-pmenu__sep" }),
+        /* @__PURE__ */ jsxs8(
+          "button",
+          {
+            type: "button",
+            role: "menuitemcheckbox",
+            "aria-checked": !!thinking,
+            className: `bf-pmenu__item${thinking ? " is-active" : ""}`,
+            onClick: () => onThinkingChange(!thinking),
+            children: [
+              /* @__PURE__ */ jsx8("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F4AD}" }),
+              /* @__PURE__ */ jsxs8("span", { className: "bf-pmenu__lbl", children: [
+                labels.thinking,
+                describeThinking && /* @__PURE__ */ jsx8("span", { className: "bf-pmenu__desc", children: describeThinking(!!thinking) })
+              ] }),
+              /* @__PURE__ */ jsx8("span", { className: "bf-pmenu__hint", children: thinking ? labels.on : labels.off }),
+              /* @__PURE__ */ jsx8("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: thinking ? "\u2713" : "" })
+            ]
+          }
+        )
+      ] }),
+      model && inUse && /* @__PURE__ */ jsxs8(Fragment3, { children: [
+        (onEffortChange || onThinkingChange) && /* @__PURE__ */ jsx8("div", { className: "bf-pmenu__sep" }),
+        /* @__PURE__ */ jsx8("div", { className: "bf-pmenu__group", children: labels.model }),
+        /* @__PURE__ */ jsxs8("div", { className: "bf-pmenu__info", children: [
+          /* @__PURE__ */ jsx8("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F9E0}" }),
+          /* @__PURE__ */ jsxs8("span", { className: "bf-pmenu__lbl", children: [
+            inUse.name,
+            /* @__PURE__ */ jsx8("span", { className: "bf-pmenu__desc", children: inUse.detail })
+          ] })
+        ] }),
+        canChoose ? /* @__PURE__ */ jsxs8(Fragment3, { children: [
+          /* @__PURE__ */ jsx8(
+            "input",
+            {
+              className: "bf-pmenu__search",
+              value: query,
+              onChange: (event) => setQuery(event.target.value),
+              placeholder: labels.searchModels,
+              "aria-label": labels.searchModels
+            }
+          ),
+          /* @__PURE__ */ jsx8("div", { className: "bf-pmenu__filters", "aria-label": labels.filterModels, children: ["all", ...categories].map((category) => /* @__PURE__ */ jsx8(
+            "button",
+            {
+              type: "button",
+              className: `bf-pmenu__filter${filter === category ? " is-active" : ""}`,
+              "aria-pressed": filter === category,
+              onClick: () => setFilter(category),
+              children: category === "all" ? labels.all : modelCategoryLabel(category, labels)
+            },
+            category
+          )) }),
+          /* @__PURE__ */ jsxs8("div", { className: "bf-pmenu__list", role: "listbox", "aria-label": labels.chooseModel, children: [
+            visible.map((item) => /* @__PURE__ */ jsxs8(
+              "button",
+              {
+                type: "button",
+                role: "option",
+                "aria-selected": item.key === activeKey,
+                className: `bf-pmenu__option${item.key === activeKey ? " is-active" : ""}`,
+                onClick: () => {
+                  model.onChange(item.selection);
+                  setQuery("");
+                  setOpen(false);
+                },
+                children: [
+                  /* @__PURE__ */ jsx8("span", { className: "bf-pmenu__optName", children: item.label }),
+                  /* @__PURE__ */ jsx8("span", { className: "bf-pmenu__optTag", children: modelCategoryLabel(item.category, labels) }),
+                  /* @__PURE__ */ jsx8("span", { className: "bf-pmenu__optDetail", children: item.detail })
+                ]
+              },
+              item.key
+            )),
+            !visible.length && /* @__PURE__ */ jsx8("div", { className: "bf-pmenu__empty", children: labels.noModels })
+          ] })
+        ] }) : /* @__PURE__ */ jsxs8("div", { className: "bf-pmenu__info", children: [
+          /* @__PURE__ */ jsx8("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F512}" }),
+          /* @__PURE__ */ jsx8("span", { className: "bf-pmenu__lbl", children: /* @__PURE__ */ jsx8("span", { className: "bf-pmenu__desc", children: labels.modelLocked }) })
+        ] })
+      ] }),
+      onAccountSettings && /* @__PURE__ */ jsxs8(Fragment3, { children: [
+        /* @__PURE__ */ jsx8("div", { className: "bf-pmenu__sep" }),
+        /* @__PURE__ */ jsxs8(
+          "button",
+          {
+            type: "button",
+            role: "menuitem",
+            className: "bf-pmenu__item",
+            onClick: () => {
+              setOpen(false);
+              onAccountSettings();
+            },
+            children: [
+              /* @__PURE__ */ jsx8("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u2699" }),
+              /* @__PURE__ */ jsx8("span", { className: "bf-pmenu__lbl", children: labels.accountSettings })
+            ]
+          }
+        )
+      ] })
+    ] })
+  ] });
+}
+
 // src/HealthRing.tsx
-import { jsx as jsx8, jsxs as jsxs8 } from "react/jsx-runtime";
+import { jsx as jsx9, jsxs as jsxs9 } from "react/jsx-runtime";
 function healthRingColor(percent, muted = false) {
   if (muted) return "var(--bf-health-muted, #9ca3af)";
   if (percent >= 100) return "var(--bf-health-done, #16a34a)";
@@ -1038,9 +1357,9 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
   const dash = pct / 100 * c;
   const color = healthRingColor(pct, muted);
   const label = ariaLabel ?? `${pct}% complete`;
-  return /* @__PURE__ */ jsxs8("span", { className: "bf-health-ring", style: { display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 2 }, children: [
-    /* @__PURE__ */ jsxs8("svg", { width: size, height: size, viewBox: `0 0 ${size} ${size}`, role: "img", "aria-label": label, children: [
-      /* @__PURE__ */ jsx8(
+  return /* @__PURE__ */ jsxs9("span", { className: "bf-health-ring", style: { display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 2 }, children: [
+    /* @__PURE__ */ jsxs9("svg", { width: size, height: size, viewBox: `0 0 ${size} ${size}`, role: "img", "aria-label": label, children: [
+      /* @__PURE__ */ jsx9(
         "circle",
         {
           cx: size / 2,
@@ -1051,7 +1370,7 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
           strokeWidth: stroke
         }
       ),
-      /* @__PURE__ */ jsx8(
+      /* @__PURE__ */ jsx9(
         "circle",
         {
           cx: size / 2,
@@ -1065,7 +1384,7 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
           transform: `rotate(-90 ${size / 2} ${size / 2})`
         }
       ),
-      /* @__PURE__ */ jsx8(
+      /* @__PURE__ */ jsx9(
         "text",
         {
           x: "50%",
@@ -1078,12 +1397,12 @@ function HealthRing({ percent, size = 40, stroke = 4, caption, muted = false, ar
         }
       )
     ] }),
-    caption ? /* @__PURE__ */ jsx8("span", { style: { fontSize: 10, color: "var(--bf-health-caption, var(--bf-text-muted, #6b7280))", lineHeight: 1 }, children: caption }) : null
+    caption ? /* @__PURE__ */ jsx9("span", { style: { fontSize: 10, color: "var(--bf-health-caption, var(--bf-text-muted, #6b7280))", lineHeight: 1 }, children: caption }) : null
   ] });
 }
 
 // src/chatTickets/ChatTicketsPanel.tsx
-import { memo, useCallback, useEffect as useEffect2, useMemo as useMemo4, useRef as useRef2, useState as useState4 } from "react";
+import { memo, useCallback, useEffect as useEffect3, useMemo as useMemo5, useRef as useRef3, useState as useState5 } from "react";
 
 // src/optionStyle.ts
 var nativeOptionStyle = {
@@ -1161,23 +1480,23 @@ var DEFAULT_CHAT_TICKETS_LABELS = {
 };
 
 // src/chatTickets/ChatTicketsPanel.tsx
-import { jsx as jsx9, jsxs as jsxs9 } from "react/jsx-runtime";
+import { jsx as jsx10, jsxs as jsxs10 } from "react/jsx-runtime";
 var RUNNABLE = new Set(RUNNABLE_KINDS);
 var COLLAPSE_THRESHOLD = 8;
 function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, onChanged, refreshSignal, visibility, onSetVisibility, onOpenTicket }) {
-  const [tickets, setTickets] = useState4([]);
-  const [agents, setAgents] = useState4([]);
-  const [members, setMembers] = useState4([]);
-  const [pool, setPool] = useState4([]);
-  const [questions, setQuestions] = useState4([]);
-  const [panel, setPanel] = useState4(null);
-  const [lineageKey, setLineageKey] = useState4(null);
-  const [lineage, setLineage] = useState4([]);
-  const [runKey, setRunKey] = useState4(null);
-  const [msg, setMsg] = useState4(null);
-  const [busy, setBusy] = useState4(false);
-  const [collapsed, setCollapsed] = useState4(null);
-  const userCollapsed = useRef2(false);
+  const [tickets, setTickets] = useState5([]);
+  const [agents, setAgents] = useState5([]);
+  const [members, setMembers] = useState5([]);
+  const [pool, setPool] = useState5([]);
+  const [questions, setQuestions] = useState5([]);
+  const [panel, setPanel] = useState5(null);
+  const [lineageKey, setLineageKey] = useState5(null);
+  const [lineage, setLineage] = useState5([]);
+  const [runKey, setRunKey] = useState5(null);
+  const [msg, setMsg] = useState5(null);
+  const [busy, setBusy] = useState5(false);
+  const [collapsed, setCollapsed] = useState5(null);
+  const userCollapsed = useRef3(false);
   const load = useCallback(async () => {
     const [tk, ag, mem, qs] = await Promise.all([
       adapter.listTickets(chatId).catch(() => []),
@@ -1191,10 +1510,10 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     setQuestions(qs);
     if (!userCollapsed.current) setCollapsed(tk.length > COLLAPSE_THRESHOLD);
   }, [adapter, chatId]);
-  useEffect2(() => {
+  useEffect3(() => {
     void load();
   }, [load, refreshSignal]);
-  useEffect2(() => {
+  useEffect3(() => {
     adapter.loadAgentPool().then(setPool).catch(() => setPool([]));
   }, [adapter]);
   const flash = (m) => {
@@ -1234,7 +1553,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
       setBusy(false);
     }
   };
-  const agg = useMemo4(() => {
+  const agg = useMemo5(() => {
     let done = 0, total = 0, sumPct = 0;
     for (const tk of tickets) {
       done += tk.done;
@@ -1249,8 +1568,8 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
     userCollapsed.current = true;
     setCollapsed(!isCollapsed);
   };
-  return /* @__PURE__ */ jsxs9("div", { style: S.root, children: [
-    tickets.length > 0 && /* @__PURE__ */ jsxs9(
+  return /* @__PURE__ */ jsxs10("div", { style: S.root, children: [
+    tickets.length > 0 && /* @__PURE__ */ jsxs10(
       "button",
       {
         type: "button",
@@ -1259,10 +1578,10 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         title: isCollapsed ? labels.showTickets : labels.hideTickets,
         style: S.ticketsHeader,
         children: [
-          /* @__PURE__ */ jsx9("span", { "aria-hidden": true, style: { ...S.caret, transform: isCollapsed ? "rotate(0deg)" : "rotate(90deg)" }, children: "\u25B8" }),
-          /* @__PURE__ */ jsx9(HealthRing, { percent: agg.pct, size: 22, muted: false, ariaLabel: labels.overallAria(agg.pct) }),
-          /* @__PURE__ */ jsx9("span", { style: S.ticketsCount, children: labels.ticketCount(tickets.length) }),
-          /* @__PURE__ */ jsxs9("span", { style: S.ticketsAgg, children: [
+          /* @__PURE__ */ jsx10("span", { "aria-hidden": true, style: { ...S.caret, transform: isCollapsed ? "rotate(0deg)" : "rotate(90deg)" }, children: "\u25B8" }),
+          /* @__PURE__ */ jsx10(HealthRing, { percent: agg.pct, size: 22, muted: false, ariaLabel: labels.overallAria(agg.pct) }),
+          /* @__PURE__ */ jsx10("span", { style: S.ticketsCount, children: labels.ticketCount(tickets.length) }),
+          /* @__PURE__ */ jsxs10("span", { style: S.ticketsAgg, children: [
             agg.pct,
             "%",
             agg.total > 0 ? ` \xB7 ${agg.done}/${agg.total}` : ""
@@ -1270,22 +1589,22 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         ]
       }
     ),
-    !isCollapsed && /* @__PURE__ */ jsx9("div", { style: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }, children: tickets.length === 0 ? /* @__PURE__ */ jsx9("span", { style: S.muted, children: labels.none }) : tickets.map((tk) => {
+    !isCollapsed && /* @__PURE__ */ jsx10("div", { style: { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }, children: tickets.length === 0 ? /* @__PURE__ */ jsx10("span", { style: S.muted, children: labels.none }) : tickets.map((tk) => {
       const key = `${tk.kind}:${tk.ref}`;
-      return /* @__PURE__ */ jsxs9("div", { style: S.chip, children: [
-        /* @__PURE__ */ jsx9(HealthRing, { percent: tk.progressPct, size: 36, caption: tk.total > 0 ? `${tk.done}/${tk.total}` : void 0, muted: !tk.exists, ariaLabel: labels.ringAria(tk.label, tk.progressPct) }),
-        /* @__PURE__ */ jsxs9("div", { style: { display: "flex", flexDirection: "column", minWidth: 0, maxWidth: 160 }, children: [
-          onOpenTicket && tk.exists ? /* @__PURE__ */ jsx9("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S.ticketLink, children: tk.label }) : /* @__PURE__ */ jsx9("span", { style: S.ticketLabel, title: tk.label, children: tk.label }),
-          /* @__PURE__ */ jsxs9("span", { style: S.ticketMeta, children: [
+      return /* @__PURE__ */ jsxs10("div", { style: S.chip, children: [
+        /* @__PURE__ */ jsx10(HealthRing, { percent: tk.progressPct, size: 36, caption: tk.total > 0 ? `${tk.done}/${tk.total}` : void 0, muted: !tk.exists, ariaLabel: labels.ringAria(tk.label, tk.progressPct) }),
+        /* @__PURE__ */ jsxs10("div", { style: { display: "flex", flexDirection: "column", minWidth: 0, maxWidth: 160 }, children: [
+          onOpenTicket && tk.exists ? /* @__PURE__ */ jsx10("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S.ticketLink, children: tk.label }) : /* @__PURE__ */ jsx10("span", { style: S.ticketLabel, title: tk.label, children: tk.label }),
+          /* @__PURE__ */ jsxs10("span", { style: S.ticketMeta, children: [
             labels.kind[tk.kind],
             " \xB7 ",
             tk.status,
             tk.linkType === "created" ? ` \xB7 ${labels.spawned}` : ""
           ] })
         ] }),
-        /* @__PURE__ */ jsxs9("div", { style: { display: "flex", gap: 2 }, children: [
-          onOpenTicket && tk.exists && /* @__PURE__ */ jsx9("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S.icon, children: "\u2197" }),
-          RUNNABLE.has(tk.kind) && tk.exists && /* @__PURE__ */ jsx9(
+        /* @__PURE__ */ jsxs10("div", { style: { display: "flex", gap: 2 }, children: [
+          onOpenTicket && tk.exists && /* @__PURE__ */ jsx10("button", { type: "button", title: `${labels.open} \xB7 ${tk.label}`, onClick: () => onOpenTicket(tk), style: S.icon, children: "\u2197" }),
+          RUNNABLE.has(tk.kind) && tk.exists && /* @__PURE__ */ jsx10(
             "button",
             {
               type: "button",
@@ -1297,62 +1616,62 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
               children: "\u25B6"
             }
           ),
-          /* @__PURE__ */ jsx9("button", { type: "button", title: labels.lineage, onClick: () => void openLineage(tk), style: S.icon, children: "\u2443" }),
-          /* @__PURE__ */ jsx9("button", { type: "button", title: labels.unlink, disabled: busy, onClick: () => void unlink(tk), style: S.icon, children: "\u2715" })
+          /* @__PURE__ */ jsx10("button", { type: "button", title: labels.lineage, onClick: () => void openLineage(tk), style: S.icon, children: "\u2443" }),
+          /* @__PURE__ */ jsx10("button", { type: "button", title: labels.unlink, disabled: busy, onClick: () => void unlink(tk), style: S.icon, children: "\u2715" })
         ] }),
-        runKey === key && /* @__PURE__ */ jsxs9("select", { "aria-label": labels.pickAgent, value: "", onChange: (e) => {
+        runKey === key && /* @__PURE__ */ jsxs10("select", { "aria-label": labels.pickAgent, value: "", onChange: (e) => {
           if (e.target.value) void runTicket(tk, e.target.value);
         }, style: S.select, children: [
-          /* @__PURE__ */ jsx9("option", { style: S.option, value: "", children: labels.pickAgent }),
-          agents.map((a) => /* @__PURE__ */ jsxs9("option", { style: S.option, value: a.agentRef, children: [
+          /* @__PURE__ */ jsx10("option", { style: S.option, value: "", children: labels.pickAgent }),
+          agents.map((a) => /* @__PURE__ */ jsxs10("option", { style: S.option, value: a.agentRef, children: [
             "\u2605 ",
             poolName(a.agentRef)
           ] }, a.id)),
-          pool.filter((p) => !agents.some((a) => a.agentRef === p.ref)).map((p) => /* @__PURE__ */ jsx9("option", { style: S.option, value: p.ref, children: p.name }, p.ref))
+          pool.filter((p) => !agents.some((a) => a.agentRef === p.ref)).map((p) => /* @__PURE__ */ jsx10("option", { style: S.option, value: p.ref, children: p.name }, p.ref))
         ] })
       ] }, tk.linkId);
     }) }),
-    lineageKey && /* @__PURE__ */ jsxs9("div", { style: S.drawer, children: [
-      /* @__PURE__ */ jsx9("strong", { style: { color: V.text }, children: labels.lineageTitle }),
-      lineage.length === 0 ? /* @__PURE__ */ jsx9("span", { style: { marginLeft: 8, ...S.muted }, children: labels.lineageEmpty }) : /* @__PURE__ */ jsx9("ul", { style: { margin: "4px 0 0", paddingLeft: 18 }, children: lineage.map((c) => /* @__PURE__ */ jsxs9("li", { style: { marginBottom: 2 }, children: [
-        /* @__PURE__ */ jsx9("span", { style: { fontWeight: c.chatId === chatId ? 700 : 400 }, children: c.title }),
-        c.linkType === "created" ? /* @__PURE__ */ jsx9("em", { style: { color: V.accent, marginLeft: 6 }, children: labels.spawned }) : null,
-        c.isArchived ? /* @__PURE__ */ jsxs9("span", { style: { marginLeft: 6, ...S.muted }, children: [
+    lineageKey && /* @__PURE__ */ jsxs10("div", { style: S.drawer, children: [
+      /* @__PURE__ */ jsx10("strong", { style: { color: V.text }, children: labels.lineageTitle }),
+      lineage.length === 0 ? /* @__PURE__ */ jsx10("span", { style: { marginLeft: 8, ...S.muted }, children: labels.lineageEmpty }) : /* @__PURE__ */ jsx10("ul", { style: { margin: "4px 0 0", paddingLeft: 18 }, children: lineage.map((c) => /* @__PURE__ */ jsxs10("li", { style: { marginBottom: 2 }, children: [
+        /* @__PURE__ */ jsx10("span", { style: { fontWeight: c.chatId === chatId ? 700 : 400 }, children: c.title }),
+        c.linkType === "created" ? /* @__PURE__ */ jsx10("em", { style: { color: V.accent, marginLeft: 6 }, children: labels.spawned }) : null,
+        c.isArchived ? /* @__PURE__ */ jsxs10("span", { style: { marginLeft: 6, ...S.muted }, children: [
           "(",
           labels.merged,
           ")"
         ] }) : null
       ] }, c.chatId)) })
     ] }),
-    /* @__PURE__ */ jsxs9("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsxs9("button", { type: "button", onClick: () => setPanel(panel === "link" ? null : "link"), style: S.pill(panel === "link"), children: [
+    /* @__PURE__ */ jsxs10("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ jsxs10("button", { type: "button", onClick: () => setPanel(panel === "link" ? null : "link"), style: S.pill(panel === "link"), children: [
         "\uFF0B ",
         labels.link
       ] }),
-      /* @__PURE__ */ jsxs9("button", { type: "button", onClick: () => setPanel(panel === "agents" ? null : "agents"), style: S.pill(panel === "agents"), children: [
+      /* @__PURE__ */ jsxs10("button", { type: "button", onClick: () => setPanel(panel === "agents" ? null : "agents"), style: S.pill(panel === "agents"), children: [
         "\u{1F465} ",
         labels.agents,
         agents.length ? ` (${agents.length})` : ""
       ] }),
-      /* @__PURE__ */ jsxs9("button", { type: "button", onClick: () => setPanel(panel === "people" ? null : "people"), style: S.pill(panel === "people"), children: [
+      /* @__PURE__ */ jsxs10("button", { type: "button", onClick: () => setPanel(panel === "people" ? null : "people"), style: S.pill(panel === "people"), children: [
         "\u{1F464} ",
         labels.people,
         members.length ? ` (${members.length})` : ""
       ] }),
-      /* @__PURE__ */ jsxs9("button", { type: "button", onClick: () => setPanel(panel === "merge" ? null : "merge"), style: S.pill(panel === "merge"), children: [
+      /* @__PURE__ */ jsxs10("button", { type: "button", onClick: () => setPanel(panel === "merge" ? null : "merge"), style: S.pill(panel === "merge"), children: [
         "\u29C9 ",
         labels.merge
       ] }),
-      questions.length > 0 && /* @__PURE__ */ jsxs9("button", { type: "button", onClick: () => setPanel(panel === "questions" ? null : "questions"), style: S.pill(panel === "questions"), children: [
+      questions.length > 0 && /* @__PURE__ */ jsxs10("button", { type: "button", onClick: () => setPanel(panel === "questions" ? null : "questions"), style: S.pill(panel === "questions"), children: [
         "\u2753 ",
         labels.questions,
         " (",
         questions.length,
         ")"
       ] }),
-      msg && /* @__PURE__ */ jsx9("span", { style: { fontSize: 12, color: V.accent, alignSelf: "center" }, children: msg })
+      msg && /* @__PURE__ */ jsx10("span", { style: { fontSize: 12, color: V.accent, alignSelf: "center" }, children: msg })
     ] }),
-    panel === "link" && /* @__PURE__ */ jsx9(LinkForm, { search: adapter.searchTickets, projectId, existing: tickets, labels, onLink: async (kind, ref, linkType) => {
+    panel === "link" && /* @__PURE__ */ jsx10(LinkForm, { search: adapter.searchTickets, projectId, existing: tickets, labels, onLink: async (kind, ref, linkType) => {
       try {
         await adapter.linkTicket(chatId, { kind, ref, linkType });
         await load();
@@ -1360,7 +1679,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         flash(e instanceof Error ? e.message : labels.linkFailed);
       }
     } }),
-    panel === "agents" && /* @__PURE__ */ jsx9(
+    panel === "agents" && /* @__PURE__ */ jsx10(
       AgentsSection,
       {
         agents,
@@ -1389,7 +1708,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         busy
       }
     ),
-    panel === "people" && /* @__PURE__ */ jsx9(
+    panel === "people" && /* @__PURE__ */ jsx10(
       PeopleSection,
       {
         members,
@@ -1422,7 +1741,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         busy
       }
     ),
-    panel === "merge" && /* @__PURE__ */ jsx9(
+    panel === "merge" && /* @__PURE__ */ jsx10(
       MergeSection,
       {
         chatId,
@@ -1442,7 +1761,7 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
         busy
       }
     ),
-    panel === "questions" && /* @__PURE__ */ jsx9(
+    panel === "questions" && /* @__PURE__ */ jsx10(
       QuestionsSection,
       {
         questions,
@@ -1457,14 +1776,14 @@ function ChatTicketsPanelInner({ chatId, projectId, chatList, adapter, labels, o
   ] });
 }
 function QuestionsSection({ questions, labels, onAnswer }) {
-  const [answers, setAnswers] = useState4({});
-  const [sending, setSending] = useState4(null);
-  return /* @__PURE__ */ jsx9("div", { style: S.drawer, children: questions.length === 0 ? /* @__PURE__ */ jsx9("span", { style: S.muted, children: labels.noQuestions }) : questions.map((q, index) => {
+  const [answers, setAnswers] = useState5({});
+  const [sending, setSending] = useState5(null);
+  return /* @__PURE__ */ jsx10("div", { style: S.drawer, children: questions.length === 0 ? /* @__PURE__ */ jsx10("span", { style: S.muted, children: labels.noQuestions }) : questions.map((q, index) => {
     const value = answers[q.id] ?? "";
-    return /* @__PURE__ */ jsxs9("div", { style: { padding: "10px 0", borderBottom: index < questions.length - 1 ? `1px solid ${V.border}` : void 0 }, children: [
-      /* @__PURE__ */ jsx9("div", { style: { color: V.text, fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap", marginBottom: 8 }, children: q.description }),
-      /* @__PURE__ */ jsxs9("div", { style: { display: "flex", gap: 8, alignItems: "flex-start" }, children: [
-        /* @__PURE__ */ jsx9(
+    return /* @__PURE__ */ jsxs10("div", { style: { padding: "10px 0", borderBottom: index < questions.length - 1 ? `1px solid ${V.border}` : void 0 }, children: [
+      /* @__PURE__ */ jsx10("div", { style: { color: V.text, fontSize: 13, lineHeight: 1.45, whiteSpace: "pre-wrap", marginBottom: 8 }, children: q.description }),
+      /* @__PURE__ */ jsxs10("div", { style: { display: "flex", gap: 8, alignItems: "flex-start" }, children: [
+        /* @__PURE__ */ jsx10(
           "textarea",
           {
             value,
@@ -1475,7 +1794,7 @@ function QuestionsSection({ questions, labels, onAnswer }) {
             style: { ...S.select, flex: 1, resize: "vertical", minHeight: 54, fontFamily: "inherit" }
           }
         ),
-        /* @__PURE__ */ jsx9("button", { type: "button", disabled: !value.trim() || sending === q.id, style: S.pill(true), onClick: () => {
+        /* @__PURE__ */ jsx10("button", { type: "button", disabled: !value.trim() || sending === q.id, style: S.pill(true), onClick: () => {
           setSending(q.id);
           void onAnswer(q.id, value.trim()).finally(() => setSending(null));
         }, children: sending === q.id ? labels.answering : labels.submitAnswer })
@@ -1485,14 +1804,14 @@ function QuestionsSection({ questions, labels, onAnswer }) {
 }
 var SEARCH_LIMIT = 40;
 function LinkForm({ search, projectId, existing, labels, onLink }) {
-  const [kind, setKind] = useState4("task");
-  const [ref, setRef] = useState4("");
-  const [query, setQuery] = useState4("");
-  const [linkType, setLinkType] = useState4("linked");
-  const [busy, setBusy] = useState4(false);
-  const [results, setResults] = useState4([]);
-  const [loading, setLoading] = useState4(false);
-  useEffect2(() => {
+  const [kind, setKind] = useState5("task");
+  const [ref, setRef] = useState5("");
+  const [query, setQuery] = useState5("");
+  const [linkType, setLinkType] = useState5("linked");
+  const [busy, setBusy] = useState5(false);
+  const [results, setResults] = useState5([]);
+  const [loading, setLoading] = useState5(false);
+  useEffect3(() => {
     let live = true;
     setLoading(true);
     const h = setTimeout(() => {
@@ -1509,12 +1828,12 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
       clearTimeout(h);
     };
   }, [search, kind, query, projectId]);
-  const shown = useMemo4(
+  const shown = useMemo5(
     () => results.filter((o) => !existing.some((e) => e.kind === kind && e.ref === o.ref)),
     [results, existing, kind]
   );
   const atCap = results.length >= SEARCH_LIMIT;
-  useEffect2(() => {
+  useEffect3(() => {
     if (ref && !shown.some((o) => o.ref === ref)) setRef("");
   }, [shown, ref]);
   const submit = async () => {
@@ -1528,13 +1847,13 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
       setBusy(false);
     }
   };
-  return /* @__PURE__ */ jsxs9("div", { style: S.section, children: [
-    /* @__PURE__ */ jsx9("select", { "aria-label": labels.kindLabel, value: kind, onChange: (e) => {
+  return /* @__PURE__ */ jsxs10("div", { style: S.section, children: [
+    /* @__PURE__ */ jsx10("select", { "aria-label": labels.kindLabel, value: kind, onChange: (e) => {
       setKind(e.target.value);
       setRef("");
       setQuery("");
-    }, style: S.select, children: TICKET_KINDS.map((k) => /* @__PURE__ */ jsx9("option", { style: S.option, value: k, children: labels.kind[k] }, k)) }),
-    /* @__PURE__ */ jsx9(
+    }, style: S.select, children: TICKET_KINDS.map((k) => /* @__PURE__ */ jsx10("option", { style: S.option, value: k, children: labels.kind[k] }, k)) }),
+    /* @__PURE__ */ jsx10(
       "input",
       {
         type: "search",
@@ -1545,43 +1864,43 @@ function LinkForm({ search, projectId, existing, labels, onLink }) {
         style: { ...S.select, minWidth: 150 }
       }
     ),
-    /* @__PURE__ */ jsxs9("select", { "aria-label": labels.pickTicket, value: ref, onChange: (e) => setRef(e.target.value), style: { ...S.select, minWidth: 200 }, children: [
-      /* @__PURE__ */ jsx9("option", { style: S.option, value: "", children: labels.pickTicket }),
-      shown.map((o) => /* @__PURE__ */ jsx9("option", { style: S.option, value: o.ref, children: o.label }, o.ref))
+    /* @__PURE__ */ jsxs10("select", { "aria-label": labels.pickTicket, value: ref, onChange: (e) => setRef(e.target.value), style: { ...S.select, minWidth: 200 }, children: [
+      /* @__PURE__ */ jsx10("option", { style: S.option, value: "", children: labels.pickTicket }),
+      shown.map((o) => /* @__PURE__ */ jsx10("option", { style: S.option, value: o.ref, children: o.label }, o.ref))
     ] }),
-    loading ? /* @__PURE__ */ jsx9("span", { style: S.muted, children: labels.searching }) : shown.length === 0 ? /* @__PURE__ */ jsx9("span", { style: S.muted, children: labels.noMatches }) : atCap ? /* @__PURE__ */ jsx9("span", { style: S.muted, children: labels.refine }) : null,
-    /* @__PURE__ */ jsxs9("select", { "aria-label": labels.linkTypeLabel, value: linkType, onChange: (e) => setLinkType(e.target.value), style: S.select, children: [
-      /* @__PURE__ */ jsx9("option", { style: S.option, value: "linked", children: labels.linkTypeLinked }),
-      /* @__PURE__ */ jsx9("option", { style: S.option, value: "created", children: labels.linkTypeCreated })
+    loading ? /* @__PURE__ */ jsx10("span", { style: S.muted, children: labels.searching }) : shown.length === 0 ? /* @__PURE__ */ jsx10("span", { style: S.muted, children: labels.noMatches }) : atCap ? /* @__PURE__ */ jsx10("span", { style: S.muted, children: labels.refine }) : null,
+    /* @__PURE__ */ jsxs10("select", { "aria-label": labels.linkTypeLabel, value: linkType, onChange: (e) => setLinkType(e.target.value), style: S.select, children: [
+      /* @__PURE__ */ jsx10("option", { style: S.option, value: "linked", children: labels.linkTypeLinked }),
+      /* @__PURE__ */ jsx10("option", { style: S.option, value: "created", children: labels.linkTypeCreated })
     ] }),
-    /* @__PURE__ */ jsx9("button", { type: "button", onClick: () => void submit(), disabled: busy || !ref, style: S.pill(true), children: busy ? "\u2026" : labels.linkAction })
+    /* @__PURE__ */ jsx10("button", { type: "button", onClick: () => void submit(), disabled: busy || !ref, style: S.pill(true), children: busy ? "\u2026" : labels.linkAction })
   ] });
 }
 function AgentsSection({ agents, pool, labels, onInvite, onRemove, busy }) {
   const poolName = (ref) => pool.find((p) => p.ref === ref)?.name ?? ref;
   const uninvited = pool.filter((p) => !agents.some((a) => a.agentRef === p.ref));
-  return /* @__PURE__ */ jsxs9("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
-    /* @__PURE__ */ jsx9("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: agents.length === 0 ? /* @__PURE__ */ jsx9("span", { style: S.muted, children: labels.noAgents }) : agents.map((a) => /* @__PURE__ */ jsxs9("span", { style: S.agentChip, children: [
-      /* @__PURE__ */ jsx9("span", { "aria-hidden": true, children: "\u{1F916}" }),
+  return /* @__PURE__ */ jsxs10("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
+    /* @__PURE__ */ jsx10("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: agents.length === 0 ? /* @__PURE__ */ jsx10("span", { style: S.muted, children: labels.noAgents }) : agents.map((a) => /* @__PURE__ */ jsxs10("span", { style: S.agentChip, children: [
+      /* @__PURE__ */ jsx10("span", { "aria-hidden": true, children: "\u{1F916}" }),
       poolName(a.agentRef),
-      /* @__PURE__ */ jsx9("button", { type: "button", title: labels.removeAgent, disabled: busy, onClick: () => void onRemove(a.id), style: { ...S.icon, fontSize: 11 }, children: "\u2715" })
+      /* @__PURE__ */ jsx10("button", { type: "button", title: labels.removeAgent, disabled: busy, onClick: () => void onRemove(a.id), style: { ...S.icon, fontSize: 11 }, children: "\u2715" })
     ] }, a.id)) }),
-    /* @__PURE__ */ jsxs9("select", { "aria-label": labels.inviteAgent, value: "", onChange: (e) => {
+    /* @__PURE__ */ jsxs10("select", { "aria-label": labels.inviteAgent, value: "", onChange: (e) => {
       const p = pool.find((x) => x.ref === e.target.value);
       if (p) void onInvite(p.ref, p.kind);
     }, style: { ...S.select, maxWidth: 260 }, children: [
-      /* @__PURE__ */ jsx9("option", { style: S.option, value: "", children: labels.inviteAgent }),
-      uninvited.map((p) => /* @__PURE__ */ jsxs9("option", { style: S.option, value: p.ref, children: [
+      /* @__PURE__ */ jsx10("option", { style: S.option, value: "", children: labels.inviteAgent }),
+      uninvited.map((p) => /* @__PURE__ */ jsxs10("option", { style: S.option, value: p.ref, children: [
         p.name,
         " \u2014 ",
         p.meta
       ] }, p.ref))
     ] }),
-    /* @__PURE__ */ jsx9("span", { style: { fontSize: 11, ...S.muted }, children: labels.agentsHint })
+    /* @__PURE__ */ jsx10("span", { style: { fontSize: 11, ...S.muted }, children: labels.agentsHint })
   ] });
 }
 function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite, onRemove, busy }) {
-  const [email, setEmail] = useState4("");
+  const [email, setEmail] = useState5("");
   const submit = async () => {
     const e = email.trim();
     if (!e) return;
@@ -1589,18 +1908,18 @@ function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite,
     setEmail("");
   };
   const locked = visibility === "locked";
-  return /* @__PURE__ */ jsxs9("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
-    visibility && onSetVisibility && /* @__PURE__ */ jsxs9("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsx9("button", { type: "button", disabled: busy, onClick: () => void onSetVisibility(locked ? "shared" : "locked"), style: S.pill(locked), children: locked ? `\u{1F512} ${labels.visibilityLocked}` : `\u{1F513} ${labels.visibilityShared}` }),
-      /* @__PURE__ */ jsx9("span", { style: { fontSize: 11, ...S.muted }, children: labels.lockHint })
+  return /* @__PURE__ */ jsxs10("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
+    visibility && onSetVisibility && /* @__PURE__ */ jsxs10("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ jsx10("button", { type: "button", disabled: busy, onClick: () => void onSetVisibility(locked ? "shared" : "locked"), style: S.pill(locked), children: locked ? `\u{1F512} ${labels.visibilityLocked}` : `\u{1F513} ${labels.visibilityShared}` }),
+      /* @__PURE__ */ jsx10("span", { style: { fontSize: 11, ...S.muted }, children: labels.lockHint })
     ] }),
-    /* @__PURE__ */ jsx9("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: members.length === 0 ? /* @__PURE__ */ jsx9("span", { style: S.muted, children: labels.noPeople }) : members.map((m) => /* @__PURE__ */ jsxs9("span", { style: S.agentChip, children: [
-      /* @__PURE__ */ jsx9("span", { "aria-hidden": true, children: m.status === "pending" ? "\u2709\uFE0F" : "\u{1F464}" }),
+    /* @__PURE__ */ jsx10("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" }, children: members.length === 0 ? /* @__PURE__ */ jsx10("span", { style: S.muted, children: labels.noPeople }) : members.map((m) => /* @__PURE__ */ jsxs10("span", { style: S.agentChip, children: [
+      /* @__PURE__ */ jsx10("span", { "aria-hidden": true, children: m.status === "pending" ? "\u2709\uFE0F" : "\u{1F464}" }),
       m.name,
-      /* @__PURE__ */ jsx9("button", { type: "button", title: labels.removePerson, disabled: busy, onClick: () => void onRemove(m.id), style: { ...S.icon, fontSize: 11 }, children: "\u2715" })
+      /* @__PURE__ */ jsx10("button", { type: "button", title: labels.removePerson, disabled: busy, onClick: () => void onRemove(m.id), style: { ...S.icon, fontSize: 11 }, children: "\u2715" })
     ] }, m.id)) }),
-    /* @__PURE__ */ jsxs9("div", { style: { display: "flex", gap: 6 }, children: [
-      /* @__PURE__ */ jsx9(
+    /* @__PURE__ */ jsxs10("div", { style: { display: "flex", gap: 6 }, children: [
+      /* @__PURE__ */ jsx10(
         "input",
         {
           type: "email",
@@ -1615,22 +1934,22 @@ function PeopleSection({ members, labels, visibility, onSetVisibility, onInvite,
           style: { ...S.select, flex: 1, maxWidth: 260 }
         }
       ),
-      /* @__PURE__ */ jsx9("button", { type: "button", disabled: busy || !email.trim(), onClick: () => void submit(), style: S.pill(false), children: "\uFF0B" })
+      /* @__PURE__ */ jsx10("button", { type: "button", disabled: busy || !email.trim(), onClick: () => void submit(), style: S.pill(false), children: "\uFF0B" })
     ] }),
-    /* @__PURE__ */ jsx9("span", { style: { fontSize: 11, ...S.muted }, children: labels.invitePersonHint })
+    /* @__PURE__ */ jsx10("span", { style: { fontSize: 11, ...S.muted }, children: labels.invitePersonHint })
   ] });
 }
 function MergeSection({ chatId, chatList, labels, onMerge, busy }) {
-  const [selected, setSelected] = useState4([]);
+  const [selected, setSelected] = useState5([]);
   const candidates = chatList.filter((c) => c.id !== chatId);
   const toggle = (id) => setSelected((s) => s.includes(id) ? s.filter((x) => x !== id) : [...s, id]);
-  return /* @__PURE__ */ jsxs9("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
-    /* @__PURE__ */ jsx9("span", { style: { fontSize: 12, color: V.text2 }, children: labels.mergeHint }),
-    /* @__PURE__ */ jsx9("div", { style: { maxHeight: 160, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }, children: candidates.length === 0 ? /* @__PURE__ */ jsx9("span", { style: S.muted, children: labels.mergeNoOthers }) : candidates.map((c) => /* @__PURE__ */ jsxs9("label", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "3px 4px", cursor: "pointer" }, children: [
-      /* @__PURE__ */ jsx9("input", { type: "checkbox", checked: selected.includes(c.id), onChange: () => toggle(c.id) }),
-      /* @__PURE__ */ jsx9("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: c.title })
+  return /* @__PURE__ */ jsxs10("div", { style: { ...S.section, flexDirection: "column", alignItems: "stretch" }, children: [
+    /* @__PURE__ */ jsx10("span", { style: { fontSize: 12, color: V.text2 }, children: labels.mergeHint }),
+    /* @__PURE__ */ jsx10("div", { style: { maxHeight: 160, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }, children: candidates.length === 0 ? /* @__PURE__ */ jsx10("span", { style: S.muted, children: labels.mergeNoOthers }) : candidates.map((c) => /* @__PURE__ */ jsxs10("label", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 12, padding: "3px 4px", cursor: "pointer" }, children: [
+      /* @__PURE__ */ jsx10("input", { type: "checkbox", checked: selected.includes(c.id), onChange: () => toggle(c.id) }),
+      /* @__PURE__ */ jsx10("span", { style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: c.title })
     ] }, c.id)) }),
-    /* @__PURE__ */ jsx9("button", { type: "button", onClick: () => {
+    /* @__PURE__ */ jsx10("button", { type: "button", onClick: () => {
       if (selected.length) void onMerge(selected).then(() => setSelected([]));
     }, disabled: busy || selected.length === 0, style: S.pill(true), children: busy ? "\u2026" : labels.mergeAction(selected.length) })
   ] });
@@ -1687,12 +2006,12 @@ var S = {
 };
 
 // src/chatTickets/useChatParticipants.ts
-import { useEffect as useEffect3, useMemo as useMemo5, useState as useState5 } from "react";
+import { useEffect as useEffect4, useMemo as useMemo6, useState as useState6 } from "react";
 function useChatParticipants(adapter, chatId, refreshSignal = 0) {
-  const [pool, setPool] = useState5([]);
-  const [invited, setInvited] = useState5([]);
-  const [members, setMembers] = useState5([]);
-  useEffect3(() => {
+  const [pool, setPool] = useState6([]);
+  const [invited, setInvited] = useState6([]);
+  const [members, setMembers] = useState6([]);
+  useEffect4(() => {
     let ok = true;
     adapter.loadAgentPool().then((p) => {
       if (ok) setPool(p);
@@ -1703,7 +2022,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
       ok = false;
     };
   }, [adapter]);
-  useEffect3(() => {
+  useEffect4(() => {
     if (chatId == null) {
       setInvited([]);
       setMembers([]);
@@ -1724,7 +2043,7 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
       ok = false;
     };
   }, [adapter, chatId, refreshSignal]);
-  return useMemo5(
+  return useMemo6(
     () => [
       ...invited.map((a) => ({
         kind: "agent",
@@ -1739,17 +2058,17 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
 }
 
 // src/mention/MentionAutocomplete.tsx
-import { useCallback as useCallback2, useEffect as useEffect4, useMemo as useMemo6, useState as useState6 } from "react";
+import { useCallback as useCallback2, useEffect as useEffect5, useMemo as useMemo7, useState as useState7 } from "react";
 import {
   activeMentionToken,
   filterMentionCandidates
 } from "@seanhogg/builderforce-brain-embedded";
-import { jsx as jsx10, jsxs as jsxs10 } from "react/jsx-runtime";
+import { jsx as jsx11, jsxs as jsxs11 } from "react/jsx-runtime";
 function useMentionAutocomplete(opts) {
   const { textareaRef, value, setValue, participants, onPick, labels, disabled } = opts;
-  const [token, setToken] = useState6(null);
-  const [index, setIndex] = useState6(0);
-  const matches = useMemo6(
+  const [token, setToken] = useState7(null);
+  const [index, setIndex] = useState7(0);
+  const matches = useMemo7(
     () => token && !disabled ? filterMentionCandidates(participants, token.query) : [],
     [token, participants, disabled]
   );
@@ -1764,7 +2083,7 @@ function useMentionAutocomplete(opts) {
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, participants.length]);
-  useEffect4(() => {
+  useEffect5(() => {
     recompute();
   }, [value, recompute]);
   const choose = useCallback2((r) => {
@@ -1813,13 +2132,13 @@ function useMentionAutocomplete(opts) {
         return false;
     }
   }, [open, matches, index, choose]);
-  const popup = open ? /* @__PURE__ */ jsx10(MentionPopup, { matches, index, labels, onHover: setIndex, onPick: choose }) : null;
+  const popup = open ? /* @__PURE__ */ jsx11(MentionPopup, { matches, index, labels, onHover: setIndex, onPick: choose }) : null;
   return { onKeyDown, onSelect: recompute, popup, open };
 }
 function MentionPopup({ matches, index, labels, onHover, onPick }) {
-  return /* @__PURE__ */ jsx10("div", { style: POP.anchor, children: /* @__PURE__ */ jsxs10("ul", { role: "listbox", "aria-label": labels?.title ?? "Direct to", style: POP.list, children: [
-    labels?.title && /* @__PURE__ */ jsx10("li", { "aria-hidden": true, style: POP.group, children: labels.title }),
-    matches.map((m, i) => /* @__PURE__ */ jsxs10(
+  return /* @__PURE__ */ jsx11("div", { style: POP.anchor, children: /* @__PURE__ */ jsxs11("ul", { role: "listbox", "aria-label": labels?.title ?? "Direct to", style: POP.list, children: [
+    labels?.title && /* @__PURE__ */ jsx11("li", { "aria-hidden": true, style: POP.group, children: labels.title }),
+    matches.map((m, i) => /* @__PURE__ */ jsxs11(
       "li",
       {
         role: "option",
@@ -1831,9 +2150,9 @@ function MentionPopup({ matches, index, labels, onHover, onPick }) {
         onMouseEnter: () => onHover(i),
         style: POP.item(i === index),
         children: [
-          /* @__PURE__ */ jsx10(Avatar, { name: m.name, kind: m.kind, size: 20 }),
-          /* @__PURE__ */ jsx10("span", { style: POP.name, children: m.name }),
-          /* @__PURE__ */ jsx10("span", { style: POP.kind, children: m.kind === "agent" ? labels?.agent ?? "Agent" : labels?.human ?? "Person" })
+          /* @__PURE__ */ jsx11(Avatar, { name: m.name, kind: m.kind, size: 20 }),
+          /* @__PURE__ */ jsx11("span", { style: POP.name, children: m.name }),
+          /* @__PURE__ */ jsx11("span", { style: POP.kind, children: m.kind === "agent" ? labels?.agent ?? "Agent" : labels?.human ?? "Person" })
         ]
       },
       `${m.kind}:${m.ref}`
@@ -1877,7 +2196,7 @@ var POP = {
 };
 
 // src/evermind/EvermindConsole.tsx
-import { useCallback as useCallback8, useEffect as useEffect7, useId, useMemo as useMemo8, useRef as useRef5, useState as useState11 } from "react";
+import { useCallback as useCallback8, useEffect as useEffect8, useId, useMemo as useMemo9, useRef as useRef6, useState as useState12 } from "react";
 
 // src/evermind/types.ts
 function defaultFormatWhen(atMs) {
@@ -2092,7 +2411,7 @@ function evermindNextAction(input) {
 }
 
 // src/evermind/EvermindTestBench.tsx
-import { useCallback as useCallback3, useState as useState7 } from "react";
+import { useCallback as useCallback3, useState as useState8 } from "react";
 
 // src/evermind/consoleStyles.ts
 var C = {
@@ -2255,11 +2574,11 @@ var warnBox = {
 };
 
 // src/evermind/EvermindTestBench.tsx
-import { jsx as jsx11, jsxs as jsxs11 } from "react/jsx-runtime";
+import { jsx as jsx12, jsxs as jsxs12 } from "react/jsx-runtime";
 function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
-  const [prompt, setPrompt] = useState7("");
-  const [running, setRunning] = useState7(false);
-  const [error, setError] = useState7(null);
+  const [prompt, setPrompt] = useState8("");
+  const [running, setRunning] = useState8(false);
+  const [error, setError] = useState8(null);
   const run = useCallback3(async (withPrompt) => {
     setRunning(true);
     setError(null);
@@ -2275,10 +2594,10 @@ function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
   const busy = disabled || running;
   const canRunPrompt = prompt.trim().length >= 3;
   const passed = result?.samples.filter((s) => s.coherent).length ?? 0;
-  return /* @__PURE__ */ jsxs11("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ jsx11("div", { style: fieldTitle, children: t.testTitle }),
-    /* @__PURE__ */ jsx11("div", { style: fieldHint, children: t.testHint }),
-    /* @__PURE__ */ jsx11(
+  return /* @__PURE__ */ jsxs12("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ jsx12("div", { style: fieldTitle, children: t.testTitle }),
+    /* @__PURE__ */ jsx12("div", { style: fieldHint, children: t.testHint }),
+    /* @__PURE__ */ jsx12(
       "textarea",
       {
         value: prompt,
@@ -2289,32 +2608,32 @@ function EvermindTestBench({ t, disabled, onProbe, result, onResult }) {
         style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" }
       }
     ),
-    /* @__PURE__ */ jsxs11("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsx11("button", { type: "button", onClick: () => void run(true), disabled: busy || !canRunPrompt, style: primaryBtn(busy || !canRunPrompt), children: running ? t.testRunning : t.testRunCta }),
-      /* @__PURE__ */ jsx11("button", { type: "button", onClick: () => void run(false), disabled: busy, style: secondaryBtn(busy), children: t.testReadinessCta })
+    /* @__PURE__ */ jsxs12("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ jsx12("button", { type: "button", onClick: () => void run(true), disabled: busy || !canRunPrompt, style: primaryBtn(busy || !canRunPrompt), children: running ? t.testRunning : t.testRunCta }),
+      /* @__PURE__ */ jsx12("button", { type: "button", onClick: () => void run(false), disabled: busy, style: secondaryBtn(busy), children: t.testReadinessCta })
     ] }),
-    error && /* @__PURE__ */ jsx11("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error }),
-    result && /* @__PURE__ */ jsxs11("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginTop: 2 }, children: [
-      /* @__PURE__ */ jsxs11("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-        /* @__PURE__ */ jsx11("span", { style: { ...fieldTitle, flex: "1 1 auto", minWidth: 0 }, children: result.mode === "readiness" ? t.testResultReadiness(passed, result.samples.length) : t.testResultPrompt }),
-        /* @__PURE__ */ jsx11("span", { style: verdictTag(result.ready ? "ok" : "bad"), children: result.ready ? t.testServable : t.testRefused })
+    error && /* @__PURE__ */ jsx12("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error }),
+    result && /* @__PURE__ */ jsxs12("div", { style: { display: "flex", flexDirection: "column", gap: 8, marginTop: 2 }, children: [
+      /* @__PURE__ */ jsxs12("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+        /* @__PURE__ */ jsx12("span", { style: { ...fieldTitle, flex: "1 1 auto", minWidth: 0 }, children: result.mode === "readiness" ? t.testResultReadiness(passed, result.samples.length) : t.testResultPrompt }),
+        /* @__PURE__ */ jsx12("span", { style: verdictTag(result.ready ? "ok" : "bad"), children: result.ready ? t.testServable : t.testRefused })
       ] }),
-      /* @__PURE__ */ jsx11("p", { style: { margin: 0, fontSize: "0.74rem", lineHeight: 1.5, color: result.ready ? C.text2 : C.danger }, children: result.ready ? t.testVerdictReady : t.testVerdictNotReady }),
-      result.samples.map((s, i) => /* @__PURE__ */ jsxs11("div", { style: { display: "flex", flexDirection: "column", gap: 4 }, children: [
-        result.samples.length > 1 && /* @__PURE__ */ jsxs11("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-          /* @__PURE__ */ jsx11("span", { style: verdictTag(s.coherent ? "ok" : "bad"), children: s.coherent ? t.testServable : t.testRefused }),
-          /* @__PURE__ */ jsx11("span", { style: { fontSize: "0.72rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: s.prompt })
+      /* @__PURE__ */ jsx12("p", { style: { margin: 0, fontSize: "0.74rem", lineHeight: 1.5, color: result.ready ? C.text2 : C.danger }, children: result.ready ? t.testVerdictReady : t.testVerdictNotReady }),
+      result.samples.map((s, i) => /* @__PURE__ */ jsxs12("div", { style: { display: "flex", flexDirection: "column", gap: 4 }, children: [
+        result.samples.length > 1 && /* @__PURE__ */ jsxs12("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+          /* @__PURE__ */ jsx12("span", { style: verdictTag(s.coherent ? "ok" : "bad"), children: s.coherent ? t.testServable : t.testRefused }),
+          /* @__PURE__ */ jsx12("span", { style: { fontSize: "0.72rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: s.prompt })
         ] }),
-        /* @__PURE__ */ jsx11("div", { style: outputBox, children: s.text.trim() || t.testEmptyOutput }),
-        !s.coherent && s.detail && /* @__PURE__ */ jsx11("p", { style: { ...italic, color: C.danger, fontStyle: "normal", fontSize: "0.72rem" }, children: t.testRefusedBecause(s.detail) })
+        /* @__PURE__ */ jsx12("div", { style: outputBox, children: s.text.trim() || t.testEmptyOutput }),
+        !s.coherent && s.detail && /* @__PURE__ */ jsx12("p", { style: { ...italic, color: C.danger, fontStyle: "normal", fontSize: "0.72rem" }, children: t.testRefusedBecause(s.detail) })
       ] }, `${s.prompt}-${i}`))
     ] })
   ] });
 }
 
 // src/evermind/EvermindMaintenance.tsx
-import { useCallback as useCallback4, useState as useState8 } from "react";
-import { jsx as jsx12, jsxs as jsxs12 } from "react/jsx-runtime";
+import { useCallback as useCallback4, useState as useState9 } from "react";
+import { jsx as jsx13, jsxs as jsxs13 } from "react/jsx-runtime";
 function EvermindMaintenance({
   t,
   disabled,
@@ -2323,8 +2642,8 @@ function EvermindMaintenance({
   onReindex,
   onCleanup
 }) {
-  const [slug, setSlug] = useState8("");
-  const [pending, setPending] = useState8(null);
+  const [slug, setSlug] = useState9("");
+  const [pending, setPending] = useState9(null);
   const doReseed = useCallback4(async () => {
     setPending(null);
     await onReseed?.(slug || void 0);
@@ -2334,24 +2653,24 @@ function EvermindMaintenance({
     await onCleanup?.();
   }, [onCleanup]);
   if (!onReseed && !onReindex && !onCleanup) return null;
-  return /* @__PURE__ */ jsxs12("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ jsx12("div", { style: fieldTitle, children: t.maintenanceTitle }),
-    /* @__PURE__ */ jsx12("div", { style: fieldHint, children: t.maintenanceHint }),
-    onReindex && /* @__PURE__ */ jsx12(
+  return /* @__PURE__ */ jsxs13("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ jsx13("div", { style: fieldTitle, children: t.maintenanceTitle }),
+    /* @__PURE__ */ jsx13("div", { style: fieldHint, children: t.maintenanceHint }),
+    onReindex && /* @__PURE__ */ jsx13(
       Row,
       {
         title: t.reindexLabel,
         hint: t.reindexHint,
-        action: /* @__PURE__ */ jsx12("button", { type: "button", onClick: () => void onReindex(), disabled, style: secondaryBtn(disabled), children: t.reindexCta })
+        action: /* @__PURE__ */ jsx13("button", { type: "button", onClick: () => void onReindex(), disabled, style: secondaryBtn(disabled), children: t.reindexCta })
       }
     ),
-    onCleanup && /* @__PURE__ */ jsx12(
+    onCleanup && /* @__PURE__ */ jsx13(
       Row,
       {
         title: t.cleanupLabel,
         hint: t.cleanupHint,
-        action: /* @__PURE__ */ jsx12("button", { type: "button", onClick: () => setPending("cleanup"), disabled: disabled || pending === "cleanup", style: secondaryBtn(disabled || pending === "cleanup"), children: t.cleanupCta }),
-        confirm: pending === "cleanup" ? /* @__PURE__ */ jsx12(
+        action: /* @__PURE__ */ jsx13("button", { type: "button", onClick: () => setPending("cleanup"), disabled: disabled || pending === "cleanup", style: secondaryBtn(disabled || pending === "cleanup"), children: t.cleanupCta }),
+        confirm: pending === "cleanup" ? /* @__PURE__ */ jsx13(
           Confirm,
           {
             message: t.cleanupConfirm,
@@ -2364,13 +2683,13 @@ function EvermindMaintenance({
         ) : null
       }
     ),
-    onReseed && /* @__PURE__ */ jsx12(
+    onReseed && /* @__PURE__ */ jsx13(
       Row,
       {
         title: t.reseedLabel,
         hint: t.reseedHint,
-        action: /* @__PURE__ */ jsxs12("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }, children: [
-          /* @__PURE__ */ jsxs12(
+        action: /* @__PURE__ */ jsxs13("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-end" }, children: [
+          /* @__PURE__ */ jsxs13(
             "select",
             {
               value: slug,
@@ -2379,14 +2698,14 @@ function EvermindMaintenance({
               "aria-label": t.reseedLabel,
               style: { ...select, maxWidth: 200 },
               children: [
-                /* @__PURE__ */ jsx12("option", { value: "", style: optionStyle, children: t.reseedStarterOption }),
-                seedModels.map((m) => /* @__PURE__ */ jsx12("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug))
+                /* @__PURE__ */ jsx13("option", { value: "", style: optionStyle, children: t.reseedStarterOption }),
+                seedModels.map((m) => /* @__PURE__ */ jsx13("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug))
               ]
             }
           ),
-          /* @__PURE__ */ jsx12("button", { type: "button", onClick: () => setPending("reseed"), disabled: disabled || pending === "reseed", style: dangerBtn(disabled || pending === "reseed"), children: t.reseedCta })
+          /* @__PURE__ */ jsx13("button", { type: "button", onClick: () => setPending("reseed"), disabled: disabled || pending === "reseed", style: dangerBtn(disabled || pending === "reseed"), children: t.reseedCta })
         ] }),
-        confirm: pending === "reseed" ? /* @__PURE__ */ jsx12(
+        confirm: pending === "reseed" ? /* @__PURE__ */ jsx13(
           Confirm,
           {
             message: t.reseedConfirm,
@@ -2403,13 +2722,13 @@ function EvermindMaintenance({
   ] });
 }
 function Row({ title, hint, action, confirm }) {
-  return /* @__PURE__ */ jsxs12("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-    /* @__PURE__ */ jsxs12("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsxs12("div", { style: { flex: "1 1 200px", minWidth: 0 }, children: [
-        /* @__PURE__ */ jsx12("div", { style: { fontSize: "0.8rem", fontWeight: 600, color: C.text }, children: title }),
-        /* @__PURE__ */ jsx12("div", { style: fieldHint, children: hint })
+  return /* @__PURE__ */ jsxs13("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+    /* @__PURE__ */ jsxs13("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ jsxs13("div", { style: { flex: "1 1 200px", minWidth: 0 }, children: [
+        /* @__PURE__ */ jsx13("div", { style: { fontSize: "0.8rem", fontWeight: 600, color: C.text }, children: title }),
+        /* @__PURE__ */ jsx13("div", { style: fieldHint, children: hint })
       ] }),
-      /* @__PURE__ */ jsx12("div", { style: { flex: "0 1 auto" }, children: action })
+      /* @__PURE__ */ jsx13("div", { style: { flex: "0 1 auto" }, children: action })
     ] }),
     confirm
   ] });
@@ -2423,18 +2742,18 @@ function Confirm({
   onConfirm,
   onCancel
 }) {
-  return /* @__PURE__ */ jsxs12("div", { style: { ...warnBox, display: "flex", flexDirection: "column", gap: 8 }, role: "alertdialog", "aria-label": message, children: [
-    /* @__PURE__ */ jsx12("span", { children: message }),
-    /* @__PURE__ */ jsxs12("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsx12("button", { type: "button", onClick: onConfirm, disabled, style: danger ? dangerBtn(disabled) : secondaryBtn(disabled), children: confirmLabel }),
-      /* @__PURE__ */ jsx12("button", { type: "button", onClick: onCancel, disabled, style: secondaryBtn(disabled), children: cancelLabel })
+  return /* @__PURE__ */ jsxs13("div", { style: { ...warnBox, display: "flex", flexDirection: "column", gap: 8 }, role: "alertdialog", "aria-label": message, children: [
+    /* @__PURE__ */ jsx13("span", { children: message }),
+    /* @__PURE__ */ jsxs13("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ jsx13("button", { type: "button", onClick: onConfirm, disabled, style: danger ? dangerBtn(disabled) : secondaryBtn(disabled), children: confirmLabel }),
+      /* @__PURE__ */ jsx13("button", { type: "button", onClick: onCancel, disabled, style: secondaryBtn(disabled), children: cancelLabel })
     ] })
   ] });
 }
 
 // src/evermind/EvermindAnalyzer.tsx
-import { useCallback as useCallback5, useEffect as useEffect5, useMemo as useMemo7, useState as useState9 } from "react";
-import { Fragment as Fragment3, jsx as jsx13, jsxs as jsxs13 } from "react/jsx-runtime";
+import { useCallback as useCallback5, useEffect as useEffect6, useMemo as useMemo8, useState as useState10 } from "react";
+import { Fragment as Fragment4, jsx as jsx14, jsxs as jsxs14 } from "react/jsx-runtime";
 var TONE = {
   ok: "ok",
   incoherent: "bad",
@@ -2444,12 +2763,12 @@ var TONE = {
   redundant: "warn"
 };
 function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysis, onAnalysis }) {
-  const [selected, setSelected] = useState9(/* @__PURE__ */ new Set());
-  const [running, setRunning] = useState9(false);
-  const [applying, setApplying] = useState9(false);
-  const [repair, setRepair] = useState9(null);
-  const [error, setError] = useState9(null);
-  useEffect5(() => {
+  const [selected, setSelected] = useState10(/* @__PURE__ */ new Set());
+  const [running, setRunning] = useState10(false);
+  const [applying, setApplying] = useState10(false);
+  const [repair, setRepair] = useState10(null);
+  const [error, setError] = useState10(null);
+  useEffect6(() => {
     setSelected(new Set(analysis?.findings.map((f) => f.id) ?? []));
   }, [analysis]);
   const run = useCallback5(async () => {
@@ -2490,16 +2809,16 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
     });
   }, []);
   const findings = analysis?.findings ?? [];
-  const allSelected = useMemo7(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
+  const allSelected = useMemo8(() => findings.length > 0 && findings.every((f) => selected.has(f.id)), [findings, selected]);
   const busy = disabled || running || applying;
-  return /* @__PURE__ */ jsxs13("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ jsx13("div", { style: fieldTitle, children: t.analyzeTitle }),
-    /* @__PURE__ */ jsx13("div", { style: fieldHint, children: t.analyzeHint }),
-    /* @__PURE__ */ jsxs13("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsx13("button", { type: "button", onClick: () => void run(), disabled: busy, style: secondaryBtn(busy), children: running ? t.analyzing : t.analyzeCta }),
-      findings.length > 0 && onApply && /* @__PURE__ */ jsxs13(Fragment3, { children: [
-        /* @__PURE__ */ jsx13("button", { type: "button", onClick: () => void apply(), disabled: busy || selected.size === 0, style: primaryBtn(busy || selected.size === 0), children: applying ? t.analyzeApplying : t.analyzeApplyCta(selected.size) }),
-        /* @__PURE__ */ jsx13(
+  return /* @__PURE__ */ jsxs14("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ jsx14("div", { style: fieldTitle, children: t.analyzeTitle }),
+    /* @__PURE__ */ jsx14("div", { style: fieldHint, children: t.analyzeHint }),
+    /* @__PURE__ */ jsxs14("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ jsx14("button", { type: "button", onClick: () => void run(), disabled: busy, style: secondaryBtn(busy), children: running ? t.analyzing : t.analyzeCta }),
+      findings.length > 0 && onApply && /* @__PURE__ */ jsxs14(Fragment4, { children: [
+        /* @__PURE__ */ jsx14("button", { type: "button", onClick: () => void apply(), disabled: busy || selected.size === 0, style: primaryBtn(busy || selected.size === 0), children: applying ? t.analyzeApplying : t.analyzeApplyCta(selected.size) }),
+        /* @__PURE__ */ jsx14(
           "button",
           {
             type: "button",
@@ -2511,16 +2830,16 @@ function EvermindAnalyzer({ t, disabled, onAnalyze, onApply, onRepaired, analysi
         )
       ] })
     ] }),
-    error && /* @__PURE__ */ jsx13("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error }),
-    repair && /* @__PURE__ */ jsxs13("p", { style: { margin: 0, fontSize: "0.76rem", color: C.accent }, role: "status", children: [
+    error && /* @__PURE__ */ jsx14("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error }),
+    repair && /* @__PURE__ */ jsxs14("p", { style: { margin: 0, fontSize: "0.76rem", color: C.accent }, role: "status", children: [
       t.analyzeApplied(repair.corrected, repair.forgotten, repair.version),
       repair.skipped.length > 0 ? ` ${t.analyzeSkipped(repair.skipped.length)}` : ""
     ] }),
-    analysis?.warning && /* @__PURE__ */ jsx13("p", { style: warnBox, role: "note", children: analysis.warning }),
-    analysis && findings.length === 0 && /* @__PURE__ */ jsx13("p", { style: italic, children: t.analyzeClean(analysis.analyzed) }),
-    analysis && findings.length > 0 && /* @__PURE__ */ jsxs13(Fragment3, { children: [
-      /* @__PURE__ */ jsx13("p", { style: { margin: 0, fontSize: "0.74rem", color: C.text2 }, children: analysis.model ? t.analyzeSummary(findings.length, analysis.analyzed, analysis.model) : t.analyzeSummaryLocal(findings.length, analysis.analyzed) }),
-      /* @__PURE__ */ jsx13("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: findings.map((f) => /* @__PURE__ */ jsx13(
+    analysis?.warning && /* @__PURE__ */ jsx14("p", { style: warnBox, role: "note", children: analysis.warning }),
+    analysis && findings.length === 0 && /* @__PURE__ */ jsx14("p", { style: italic, children: t.analyzeClean(analysis.analyzed) }),
+    analysis && findings.length > 0 && /* @__PURE__ */ jsxs14(Fragment4, { children: [
+      /* @__PURE__ */ jsx14("p", { style: { margin: 0, fontSize: "0.74rem", color: C.text2 }, children: analysis.model ? t.analyzeSummary(findings.length, analysis.analyzed, analysis.model) : t.analyzeSummaryLocal(findings.length, analysis.analyzed) }),
+      /* @__PURE__ */ jsx14("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: findings.map((f) => /* @__PURE__ */ jsx14(
         FindingRow,
         {
           t,
@@ -2544,7 +2863,7 @@ function FindingRow({
   onToggle
 }) {
   const tone = TONE[finding.verdict] ?? "warn";
-  return /* @__PURE__ */ jsxs13("li", { style: {
+  return /* @__PURE__ */ jsxs14("li", { style: {
     background: C.surface2,
     border: `1px solid ${selected ? C.accent : C.border}`,
     borderRadius: 8,
@@ -2553,8 +2872,8 @@ function FindingRow({
     flexDirection: "column",
     gap: 5
   }, children: [
-    /* @__PURE__ */ jsxs13("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-      selectable && /* @__PURE__ */ jsx13(
+    /* @__PURE__ */ jsxs14("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+      selectable && /* @__PURE__ */ jsx14(
         "input",
         {
           type: "checkbox",
@@ -2565,25 +2884,25 @@ function FindingRow({
           style: { margin: 0, cursor: disabled ? "not-allowed" : "pointer" }
         }
       ),
-      /* @__PURE__ */ jsx13("span", { style: verdictTag(tone), children: t.analyzeVerdict(finding.verdict) }),
-      finding.prompt && /* @__PURE__ */ jsx13("span", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: finding.prompt })
+      /* @__PURE__ */ jsx14("span", { style: verdictTag(tone), children: t.analyzeVerdict(finding.verdict) }),
+      finding.prompt && /* @__PURE__ */ jsx14("span", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: finding.prompt })
     ] }),
-    /* @__PURE__ */ jsx13("div", { style: { fontSize: "0.74rem", lineHeight: 1.45, color: C.text }, children: finding.issue }),
-    /* @__PURE__ */ jsx13("div", { style: { ...outputBox, maxHeight: 96, fontSize: "0.7rem", color: C.text2 }, children: finding.excerpt }),
-    finding.correction && /* @__PURE__ */ jsxs13("div", { style: { display: "flex", flexDirection: "column", gap: 3 }, children: [
-      /* @__PURE__ */ jsx13("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.analyzeCorrectionLabel }),
-      /* @__PURE__ */ jsx13("div", { style: { ...outputBox, maxHeight: 140, fontSize: "0.7rem" }, children: finding.correction })
+    /* @__PURE__ */ jsx14("div", { style: { fontSize: "0.74rem", lineHeight: 1.45, color: C.text }, children: finding.issue }),
+    /* @__PURE__ */ jsx14("div", { style: { ...outputBox, maxHeight: 96, fontSize: "0.7rem", color: C.text2 }, children: finding.excerpt }),
+    finding.correction && /* @__PURE__ */ jsxs14("div", { style: { display: "flex", flexDirection: "column", gap: 3 }, children: [
+      /* @__PURE__ */ jsx14("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.analyzeCorrectionLabel }),
+      /* @__PURE__ */ jsx14("div", { style: { ...outputBox, maxHeight: 140, fontSize: "0.7rem" }, children: finding.correction })
     ] })
   ] });
 }
 
 // src/evermind/EvermindDiagnostics.tsx
-import { useCallback as useCallback6, useEffect as useEffect6, useRef as useRef3, useState as useState10 } from "react";
-import { Fragment as Fragment4, jsx as jsx14, jsxs as jsxs14 } from "react/jsx-runtime";
+import { useCallback as useCallback6, useEffect as useEffect7, useRef as useRef4, useState as useState11 } from "react";
+import { Fragment as Fragment5, jsx as jsx15, jsxs as jsxs15 } from "react/jsx-runtime";
 function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
-  const [report, setReport] = useState10(null);
-  const [copied, setCopied] = useState10(false);
-  const [revealed, setRevealed] = useState10(false);
+  const [report, setReport] = useState11(null);
+  const [copied, setCopied] = useState11(false);
+  const [revealed, setRevealed] = useState11(false);
   const copy = useCallback6(async () => {
     const text2 = buildReport();
     setReport(text2);
@@ -2604,22 +2923,22 @@ function useDiagnosticsCopy({ buildReport, onCopy, onManualFallback }) {
 }
 function EvermindDiagnostics({ t, disabled, copy }) {
   const { report, copied, revealed } = copy;
-  const areaRef = useRef3(null);
-  useEffect6(() => {
+  const areaRef = useRef4(null);
+  useEffect7(() => {
     if (!revealed) return;
     areaRef.current?.focus();
     areaRef.current?.select();
   }, [revealed]);
-  return /* @__PURE__ */ jsxs14("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ jsx14("div", { style: fieldTitle, children: t.diagnosticsTitle }),
-    /* @__PURE__ */ jsx14("div", { style: fieldHint, children: t.diagnosticsHint }),
-    /* @__PURE__ */ jsxs14("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsx14("button", { type: "button", onClick: () => void copy.copy(), disabled, style: secondaryBtn(disabled), children: t.diagnosticsCta }),
-      report !== null && /* @__PURE__ */ jsx14("button", { type: "button", onClick: copy.toggleReveal, style: linkBtn, children: revealed ? t.diagnosticsHide : t.diagnosticsShow })
+  return /* @__PURE__ */ jsxs15("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ jsx15("div", { style: fieldTitle, children: t.diagnosticsTitle }),
+    /* @__PURE__ */ jsx15("div", { style: fieldHint, children: t.diagnosticsHint }),
+    /* @__PURE__ */ jsxs15("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ jsx15("button", { type: "button", onClick: () => void copy.copy(), disabled, style: secondaryBtn(disabled), children: t.diagnosticsCta }),
+      report !== null && /* @__PURE__ */ jsx15("button", { type: "button", onClick: copy.toggleReveal, style: linkBtn, children: revealed ? t.diagnosticsHide : t.diagnosticsShow })
     ] }),
-    revealed && report !== null && /* @__PURE__ */ jsxs14(Fragment4, { children: [
-      !copied && /* @__PURE__ */ jsx14("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, lineHeight: 1.4 }, children: t.diagnosticsManualHint }),
-      /* @__PURE__ */ jsx14(
+    revealed && report !== null && /* @__PURE__ */ jsxs15(Fragment5, { children: [
+      !copied && /* @__PURE__ */ jsx15("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, lineHeight: 1.4 }, children: t.diagnosticsManualHint }),
+      /* @__PURE__ */ jsx15(
         "textarea",
         {
           ref: areaRef,
@@ -2636,10 +2955,10 @@ function EvermindDiagnostics({ t, disabled, copy }) {
 }
 
 // src/evermind/ConsoleTabs.tsx
-import { useCallback as useCallback7, useRef as useRef4 } from "react";
-import { jsx as jsx15, jsxs as jsxs15 } from "react/jsx-runtime";
+import { useCallback as useCallback7, useRef as useRef5 } from "react";
+import { jsx as jsx16, jsxs as jsxs16 } from "react/jsx-runtime";
 function ConsoleTabs({ tabs, activeId, onSelect, label, idPrefix }) {
-  const stripRef = useRef4(null);
+  const stripRef = useRef5(null);
   const onKeyDown = useCallback7((e) => {
     const keys = ["ArrowLeft", "ArrowRight", "Home", "End"];
     if (!keys.includes(e.key)) return;
@@ -2653,8 +2972,8 @@ function ConsoleTabs({ tabs, activeId, onSelect, label, idPrefix }) {
     stripRef.current?.querySelector(`[id="${idPrefix}-tab-${target.id}"]`)?.focus();
   }, [activeId, idPrefix, onSelect, tabs]);
   const active = tabs.find((t) => t.id === activeId) ?? tabs[0];
-  return /* @__PURE__ */ jsxs15("div", { style: { display: "flex", flexDirection: "column", gap: 10 }, children: [
-    /* @__PURE__ */ jsx15(
+  return /* @__PURE__ */ jsxs16("div", { style: { display: "flex", flexDirection: "column", gap: 10 }, children: [
+    /* @__PURE__ */ jsx16(
       "div",
       {
         ref: stripRef,
@@ -2671,7 +2990,7 @@ function ConsoleTabs({ tabs, activeId, onSelect, label, idPrefix }) {
         },
         children: tabs.map((tab) => {
           const selected = tab.id === active?.id;
-          return /* @__PURE__ */ jsxs15(
+          return /* @__PURE__ */ jsxs16(
             "button",
             {
               id: `${idPrefix}-tab-${tab.id}`,
@@ -2700,7 +3019,7 @@ function ConsoleTabs({ tabs, activeId, onSelect, label, idPrefix }) {
               },
               children: [
                 tab.label,
-                tab.badge && /* @__PURE__ */ jsx15(
+                tab.badge && /* @__PURE__ */ jsx16(
                   "span",
                   {
                     "aria-hidden": true,
@@ -2725,7 +3044,7 @@ function ConsoleTabs({ tabs, activeId, onSelect, label, idPrefix }) {
         })
       }
     ),
-    active && /* @__PURE__ */ jsx15(
+    active && /* @__PURE__ */ jsx16(
       "div",
       {
         id: `${idPrefix}-panel-${active.id}`,
@@ -2916,26 +3235,26 @@ function buildEvermindDiagnostics(input) {
 }
 
 // src/evermind/EvermindConsole.tsx
-import { Fragment as Fragment5, jsx as jsx16, jsxs as jsxs16 } from "react/jsx-runtime";
+import { Fragment as Fragment6, jsx as jsx17, jsxs as jsxs17 } from "react/jsx-runtime";
 function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectName, showRecent = true, showHeaderRefresh = true, refreshSignal, onValidate, host = "web" }) {
-  const t = useMemo8(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
-  const [data, setData] = useState11(null);
-  const [targets, setTargets] = useState11(null);
-  const [seedModels, setSeedModels] = useState11([]);
-  const [teacherOpts, setTeacherOpts] = useState11(null);
-  const [selectedSlug, setSelectedSlug] = useState11("");
-  const [teachPrompt, setTeachPrompt] = useState11("");
-  const [teachText, setTeachText] = useState11("");
-  const [busy, setBusy] = useState11(false);
-  const [validating, setValidating] = useState11(false);
-  const [validateResult, setValidateResult] = useState11(null);
-  const [notice, setNotice] = useState11(null);
-  const [error, setError] = useState11(null);
-  const [loaded, setLoaded] = useState11(false);
-  const [tab, setTab] = useState11("teach");
-  const [probeResult, setProbeResult] = useState11(null);
-  const [analysis, setAnalysis] = useState11(null);
-  const [loadFailed, setLoadFailed] = useState11(false);
+  const t = useMemo9(() => ({ ...DEFAULT_EVERMIND_LABELS, ...labels ?? {} }), [labels]);
+  const [data, setData] = useState12(null);
+  const [targets, setTargets] = useState12(null);
+  const [seedModels, setSeedModels] = useState12([]);
+  const [teacherOpts, setTeacherOpts] = useState12(null);
+  const [selectedSlug, setSelectedSlug] = useState12("");
+  const [teachPrompt, setTeachPrompt] = useState12("");
+  const [teachText, setTeachText] = useState12("");
+  const [busy, setBusy] = useState12(false);
+  const [validating, setValidating] = useState12(false);
+  const [validateResult, setValidateResult] = useState12(null);
+  const [notice, setNotice] = useState12(null);
+  const [error, setError] = useState12(null);
+  const [loaded, setLoaded] = useState12(false);
+  const [tab, setTab] = useState12("teach");
+  const [probeResult, setProbeResult] = useState12(null);
+  const [analysis, setAnalysis] = useState12(null);
+  const [loadFailed, setLoadFailed] = useState12(false);
   const reload = useCallback8(async () => {
     const targetsP = adapter.loadTargets?.().catch(() => null);
     try {
@@ -2953,11 +3272,11 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       if (tg) setTargets(tg);
     }
   }, [adapter]);
-  useEffect7(() => {
+  useEffect8(() => {
     setLoaded(false);
     void reload();
   }, [reload]);
-  useEffect7(() => {
+  useEffect8(() => {
     if (!canManage) return;
     let cancelled = false;
     void adapter.loadSeedModels().then((m) => {
@@ -2975,15 +3294,15 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       cancelled = true;
     };
   }, [adapter, canManage]);
-  useEffect7(() => {
+  useEffect8(() => {
     if (!refreshMs) return;
     const id = setInterval(() => {
       if (!busy) void reload();
     }, refreshMs);
     return () => clearInterval(id);
   }, [refreshMs, busy, reload]);
-  const lastRefreshSignal = useRef5(refreshSignal);
-  useEffect7(() => {
+  const lastRefreshSignal = useRef6(refreshSignal);
+  useEffect8(() => {
     if (refreshSignal == null || refreshSignal === lastRefreshSignal.current) return;
     lastRefreshSignal.current = refreshSignal;
     void reload();
@@ -3038,7 +3357,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     onCopy: adapter.copyText,
     onManualFallback: () => setTab("maintain")
   });
-  if (!loaded) return /* @__PURE__ */ jsx16(Section, { "aria-busy": true, children: /* @__PURE__ */ jsx16("p", { style: { margin: 0, color: C.text2, fontSize: "0.82rem" }, children: t.loading }) });
+  if (!loaded) return /* @__PURE__ */ jsx17(Section, { "aria-busy": true, children: /* @__PURE__ */ jsx17("p", { style: { margin: 0, color: C.text2, fontSize: "0.82rem" }, children: t.loading }) });
   const seeded = !!data?.seeded;
   const frozen = data?.mode === "offline-frozen";
   const inherited = !!data?.inherited;
@@ -3056,22 +3375,22 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     probe: probeResult
   }) : null;
   const scopeName = projectName?.trim();
-  const Header = /* @__PURE__ */ jsxs16("header", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-    /* @__PURE__ */ jsx16("span", { "aria-hidden": true, style: { fontSize: "1.05rem" }, children: "\u{1F9E0}" }),
-    /* @__PURE__ */ jsx16("h3", { style: { margin: 0, fontSize: "0.95rem", fontWeight: 700, color: C.text }, children: t.title }),
-    scopeName && /* @__PURE__ */ jsxs16("span", { style: { fontSize: "0.8rem", color: C.text2 }, title: scopeName, children: [
+  const Header = /* @__PURE__ */ jsxs17("header", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+    /* @__PURE__ */ jsx17("span", { "aria-hidden": true, style: { fontSize: "1.05rem" }, children: "\u{1F9E0}" }),
+    /* @__PURE__ */ jsx17("h3", { style: { margin: 0, fontSize: "0.95rem", fontWeight: 700, color: C.text }, children: t.title }),
+    scopeName && /* @__PURE__ */ jsxs17("span", { style: { fontSize: "0.8rem", color: C.text2 }, title: scopeName, children: [
       "\xB7 ",
       scopeName
     ] }),
-    !loadFailed && /* @__PURE__ */ jsx16("span", { style: pill(seeded), children: seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded }),
-    !loadFailed && seeded && /* @__PURE__ */ jsx16(RegressionChip, { t, evalPoint: data?.eval ?? null }),
-    !loadFailed && quarantined && /* @__PURE__ */ jsxs16("span", { style: quarantinePill, title: t.quarantinedHint(quarantineReason), children: [
+    !loadFailed && /* @__PURE__ */ jsx17("span", { style: pill(seeded), children: seeded ? t.statusSeeded(data?.version ?? 0) : t.statusUnseeded }),
+    !loadFailed && seeded && /* @__PURE__ */ jsx17(RegressionChip, { t, evalPoint: data?.eval ?? null }),
+    !loadFailed && quarantined && /* @__PURE__ */ jsxs17("span", { style: quarantinePill, title: t.quarantinedHint(quarantineReason), children: [
       "\u26A0 ",
       t.quarantinedBadge
     ] }),
-    diagnostics.copied && /* @__PURE__ */ jsx16("span", { role: "status", style: { fontSize: "0.72rem", color: C.accent }, children: t.diagnosticsCopied }),
-    /* @__PURE__ */ jsxs16("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6 }, children: [
-      /* @__PURE__ */ jsxs16(
+    diagnostics.copied && /* @__PURE__ */ jsx17("span", { role: "status", style: { fontSize: "0.72rem", color: C.accent }, children: t.diagnosticsCopied }),
+    /* @__PURE__ */ jsxs17("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6 }, children: [
+      /* @__PURE__ */ jsxs17(
         "button",
         {
           type: "button",
@@ -3080,19 +3399,19 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           title: t.diagnosticsCta,
           "aria-label": t.diagnosticsCta,
           children: [
-            /* @__PURE__ */ jsx16("span", { "aria-hidden": true, children: diagnostics.copied ? "\u2713" : "\u29C9" }),
+            /* @__PURE__ */ jsx17("span", { "aria-hidden": true, children: diagnostics.copied ? "\u2713" : "\u29C9" }),
             t.diagnosticsTitle
           ]
         }
       ),
-      showHeaderRefresh && /* @__PURE__ */ jsx16("button", { type: "button", onClick: () => void reload(), disabled: busy, style: { ...ghostBtn, marginLeft: 0 }, title: t.refresh, "aria-label": t.refresh, children: "\u21BB" })
+      showHeaderRefresh && /* @__PURE__ */ jsx17("button", { type: "button", onClick: () => void reload(), disabled: busy, style: { ...ghostBtn, marginLeft: 0 }, title: t.refresh, "aria-label": t.refresh, children: "\u21BB" })
     ] })
   ] });
   if (loadFailed) {
-    return /* @__PURE__ */ jsxs16(Section, { "aria-label": t.title, children: [
+    return /* @__PURE__ */ jsxs17(Section, { "aria-label": t.title, children: [
       Header,
-      /* @__PURE__ */ jsx16("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.danger }, role: "alert", children: t.errorGeneric }),
-      /* @__PURE__ */ jsx16("button", { type: "button", onClick: () => void reload(), disabled: busy, style: primaryBtn(busy), children: t.refresh })
+      /* @__PURE__ */ jsx17("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.danger }, role: "alert", children: t.errorGeneric }),
+      /* @__PURE__ */ jsx17("button", { type: "button", onClick: () => void reload(), disabled: busy, style: primaryBtn(busy), children: t.refresh })
     ] });
   }
   const tabs = [];
@@ -3104,8 +3423,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       // The queue depth belongs here: "3 waiting" is a prompt to press Learn now, and
       // it is the one number that changes while you are on another tab.
       ...head.pending > 0 ? { badge: String(head.pending), badgeTone: "info" } : {},
-      content: /* @__PURE__ */ jsxs16(Fragment5, { children: [
-        /* @__PURE__ */ jsx16(
+      content: /* @__PURE__ */ jsxs17(Fragment6, { children: [
+        /* @__PURE__ */ jsx17(
           TeacherPicker,
           {
             t,
@@ -3116,7 +3435,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
             onChange: (m) => run(() => adapter.setTeacher(m || null))
           }
         ),
-        /* @__PURE__ */ jsx16(
+        /* @__PURE__ */ jsx17(
           TeachBox,
           {
             t,
@@ -3144,9 +3463,9 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
             onValidate: () => runValidate(head.teacherModel ? teachPrompt : teachPrompt.trim() || teachText)
           }
         ),
-        validateResult && /* @__PURE__ */ jsx16(ValidateResults, { t, result: validateResult, onClear: clearValidate }),
-        canManage && /* @__PURE__ */ jsxs16("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }, children: [
-          /* @__PURE__ */ jsx16(
+        validateResult && /* @__PURE__ */ jsx17(ValidateResults, { t, result: validateResult, onClear: clearValidate }),
+        canManage && /* @__PURE__ */ jsxs17("div", { style: { display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }, children: [
+          /* @__PURE__ */ jsx17(
             "button",
             {
               type: "button",
@@ -3159,13 +3478,13 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
               children: busy ? t.flushing : t.flushCta
             }
           ),
-          head.pending > 0 && /* @__PURE__ */ jsxs16("span", { style: { fontSize: "0.74rem", color: C.text2 }, children: [
+          head.pending > 0 && /* @__PURE__ */ jsxs17("span", { style: { fontSize: "0.74rem", color: C.text2 }, children: [
             t.pendingLabel,
             ": ",
             head.pending
           ] })
         ] }),
-        canManage && adapter.importMemory && /* @__PURE__ */ jsx16(
+        canManage && adapter.importMemory && /* @__PURE__ */ jsx17(
           ImportBox,
           {
             t,
@@ -3190,7 +3509,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         // A failed readiness check follows you to the other tabs. A refusal you can only
         // see while standing on the tab that found it is a refusal you forget.
         ...refused ? { badge: "!", badgeTone: "bad" } : {},
-        content: /* @__PURE__ */ jsx16(
+        content: /* @__PURE__ */ jsx17(
           EvermindTestBench,
           {
             t,
@@ -3208,7 +3527,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         id: "check",
         label: t.tabCheck,
         ...issues > 0 ? { badge: String(issues), badgeTone: "bad" } : {},
-        content: /* @__PURE__ */ jsx16(
+        content: /* @__PURE__ */ jsx17(
           EvermindAnalyzer,
           {
             t,
@@ -3225,8 +3544,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
     tabs.push({
       id: "maintain",
       label: t.tabMaintain,
-      content: /* @__PURE__ */ jsxs16(Fragment5, { children: [
-        canManage && /* @__PURE__ */ jsx16(
+      content: /* @__PURE__ */ jsxs17(Fragment6, { children: [
+        canManage && /* @__PURE__ */ jsx17(
           EvermindMaintenance,
           {
             t,
@@ -3252,15 +3571,15 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
             } : {}
           }
         ),
-        /* @__PURE__ */ jsx16(EvermindDiagnostics, { t, disabled: busy, copy: diagnostics })
+        /* @__PURE__ */ jsx17(EvermindDiagnostics, { t, disabled: busy, copy: diagnostics })
       ] })
     });
   }
-  return /* @__PURE__ */ jsxs16(Section, { "aria-label": t.title, children: [
+  return /* @__PURE__ */ jsxs17(Section, { "aria-label": t.title, children: [
     Header,
-    /* @__PURE__ */ jsx16("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.text2 }, children: t.description }),
-    !canManage && /* @__PURE__ */ jsx16("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, fontStyle: "italic" }, children: t.managerOnlyHint }),
-    inherited && /* @__PURE__ */ jsx16(
+    /* @__PURE__ */ jsx17("p", { style: { margin: 0, fontSize: "0.8rem", lineHeight: 1.5, color: C.text2 }, children: t.description }),
+    !canManage && /* @__PURE__ */ jsx17("p", { style: { margin: 0, fontSize: "0.72rem", color: C.text2, fontStyle: "italic" }, children: t.managerOnlyHint }),
+    inherited && /* @__PURE__ */ jsx17(
       "p",
       {
         style: { margin: 0, fontSize: "0.72rem", lineHeight: 1.5, color: C.text2, fontStyle: "italic" },
@@ -3268,14 +3587,14 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         children: t.inheritedHint
       }
     ),
-    quarantined && /* @__PURE__ */ jsx16("p", { style: warnBox, role: "alert", children: t.quarantinedHint(quarantineReason) }),
-    nextAction && /* @__PURE__ */ jsx16(NextActionCard, { action: nextAction, canAct: canManage && !busy && !inherited, onAction: () => {
+    quarantined && /* @__PURE__ */ jsx17("p", { style: warnBox, role: "alert", children: t.quarantinedHint(quarantineReason) }),
+    nextAction && /* @__PURE__ */ jsx17(NextActionCard, { action: nextAction, canAct: canManage && !busy && !inherited, onAction: () => {
       if (nextAction.id === "test") setTab("test");
       else if (nextAction.id === "teacher" || nextAction.id === "merge" || nextAction.id === "learn") setTab("teach");
       else if (nextAction.id === "check") setTab("check");
       else if (nextAction.id === "enable") void run(() => adapter.setInference(true));
     } }),
-    targets && /* @__PURE__ */ jsx16(TargetsList, { t, targets }),
+    targets && /* @__PURE__ */ jsx17(TargetsList, { t, targets }),
     inherited ? (
       // INHERITED — read-only. This build has no `project_evermind` row of its own;
       // it is displaying its container project's. Every write endpoint keeps exact-id
@@ -3284,8 +3603,8 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
       // rendering the container's unchanged stats. Rendering the stats WITHOUT the
       // controls is the honest surface — the model is genuinely shared and genuinely
       // shown; it is just not managed from here.
-      /* @__PURE__ */ jsx16(StatRow, { t, data })
-    ) : !seeded ? /* @__PURE__ */ jsx16(
+      /* @__PURE__ */ jsx17(StatRow, { t, data })
+    ) : !seeded ? /* @__PURE__ */ jsx17(
       SeedControls,
       {
         t,
@@ -3296,9 +3615,9 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
         onSelect: setSelectedSlug,
         onSeed: () => selectedSlug && run(() => adapter.seedFromModel(selectedSlug))
       }
-    ) : /* @__PURE__ */ jsxs16(Fragment5, { children: [
-      /* @__PURE__ */ jsx16(StatRow, { t, data }),
-      /* @__PURE__ */ jsx16(
+    ) : /* @__PURE__ */ jsxs17(Fragment6, { children: [
+      /* @__PURE__ */ jsx17(StatRow, { t, data }),
+      /* @__PURE__ */ jsx17(
         ToggleRow,
         {
           label: t.inferenceLabel,
@@ -3310,7 +3629,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           onToggle: () => run(() => adapter.setInference(!data?.inferenceEnabled))
         }
       ),
-      /* @__PURE__ */ jsx16(
+      /* @__PURE__ */ jsx17(
         ToggleRow,
         {
           label: t.learningLabel,
@@ -3322,7 +3641,7 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           onToggle: () => run(() => adapter.setMode(frozen ? "connected" : "offline-frozen"))
         }
       ),
-      /* @__PURE__ */ jsx16(
+      /* @__PURE__ */ jsx17(
         ConsoleTabs,
         {
           tabs,
@@ -3332,26 +3651,26 @@ function EvermindConsole({ adapter, canManage, labels, refreshMs = 2e4, projectN
           idPrefix: `ev${panelId}`
         }
       ),
-      showRecent && /* @__PURE__ */ jsx16(RecentList, { t, entries: data?.recent ?? [] })
+      showRecent && /* @__PURE__ */ jsx17(RecentList, { t, entries: data?.recent ?? [] })
     ] }),
-    notice && /* @__PURE__ */ jsx16("p", { style: { margin: 0, fontSize: "0.74rem", color: C.accent }, role: "status", children: notice }),
-    error && /* @__PURE__ */ jsx16("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error })
+    notice && /* @__PURE__ */ jsx17("p", { style: { margin: 0, fontSize: "0.74rem", color: C.accent }, role: "status", children: notice }),
+    error && /* @__PURE__ */ jsx17("p", { style: { margin: 0, fontSize: "0.76rem", color: C.danger }, role: "alert", children: error })
   ] });
 }
 function NextActionCard({ action, canAct, onAction }) {
   const color = action.tone === "danger" ? C.danger : action.tone === "attention" ? C.warnText : action.tone === "good" ? C.accent : C.text2;
   const actionable = !["seed", "none"].includes(action.id);
-  return /* @__PURE__ */ jsxs16("section", { "aria-label": "Recommended next action", style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: "6px 12px", alignItems: "center", padding: "11px 12px", border: `1px solid ${color}`, borderRadius: 10, background: C.surface2 }, children: [
-    /* @__PURE__ */ jsx16("span", { style: { gridColumn: "1 / -1", color, fontSize: "0.62rem", fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }, children: "Recommended next action" }),
-    /* @__PURE__ */ jsxs16("div", { style: { minWidth: 0 }, children: [
-      /* @__PURE__ */ jsx16("strong", { style: { display: "block", color: C.text, fontSize: "0.82rem" }, children: action.title }),
-      /* @__PURE__ */ jsx16("p", { style: { margin: "3px 0 0", color: C.text2, fontSize: "0.72rem", lineHeight: 1.45 }, children: action.detail }),
-      /* @__PURE__ */ jsxs16("small", { style: { display: "block", marginTop: 5, color, fontSize: "0.66rem", fontWeight: 700 }, children: [
+  return /* @__PURE__ */ jsxs17("section", { "aria-label": "Recommended next action", style: { display: "grid", gridTemplateColumns: "minmax(0,1fr) auto", gap: "6px 12px", alignItems: "center", padding: "11px 12px", border: `1px solid ${color}`, borderRadius: 10, background: C.surface2 }, children: [
+    /* @__PURE__ */ jsx17("span", { style: { gridColumn: "1 / -1", color, fontSize: "0.62rem", fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }, children: "Recommended next action" }),
+    /* @__PURE__ */ jsxs17("div", { style: { minWidth: 0 }, children: [
+      /* @__PURE__ */ jsx17("strong", { style: { display: "block", color: C.text, fontSize: "0.82rem" }, children: action.title }),
+      /* @__PURE__ */ jsx17("p", { style: { margin: "3px 0 0", color: C.text2, fontSize: "0.72rem", lineHeight: 1.45 }, children: action.detail }),
+      /* @__PURE__ */ jsxs17("small", { style: { display: "block", marginTop: 5, color, fontSize: "0.66rem", fontWeight: 700 }, children: [
         "Go to: ",
         action.destination
       ] })
     ] }),
-    actionable && /* @__PURE__ */ jsx16("button", { type: "button", disabled: !canAct, onClick: onAction, style: { border: `1px solid ${color}`, borderRadius: 8, padding: "7px 10px", background: "transparent", color, fontSize: "0.7rem", fontWeight: 800, cursor: canAct ? "pointer" : "not-allowed", opacity: canAct ? 1 : 0.55 }, children: action.cta })
+    actionable && /* @__PURE__ */ jsx17("button", { type: "button", disabled: !canAct, onClick: onAction, style: { border: `1px solid ${color}`, borderRadius: 8, padding: "7px 10px", background: "transparent", color, fontSize: "0.7rem", fontWeight: 800, cursor: canAct ? "pointer" : "not-allowed", opacity: canAct ? 1 : 0.55 }, children: action.cta })
   ] });
 }
 function RegressionChip({ t, evalPoint }) {
@@ -3363,7 +3682,7 @@ function RegressionChip({ t, evalPoint }) {
   const color = tone === "up" ? "#22c55e" : tone === "down" ? "#f87171" : C.text2;
   const label = tone === "flat" ? t.evalFlat : t.evalDelta(pct.toFixed(1));
   const title = t.evalTooltip(evalPoint.version, evalPoint.baseLoss.toFixed(3), evalPoint.newLoss.toFixed(3), evalPoint.evalSize);
-  return /* @__PURE__ */ jsxs16(
+  return /* @__PURE__ */ jsxs17(
     "span",
     {
       title,
@@ -3380,14 +3699,14 @@ function RegressionChip({ t, evalPoint }) {
         padding: "2px 8px"
       },
       children: [
-        /* @__PURE__ */ jsx16("span", { "aria-hidden": true, children: arrow }),
+        /* @__PURE__ */ jsx17("span", { "aria-hidden": true, children: arrow }),
         label
       ]
     }
   );
 }
 function Section({ children, ...rest }) {
-  return /* @__PURE__ */ jsx16(
+  return /* @__PURE__ */ jsx17(
     "section",
     {
       ...rest,
@@ -3413,13 +3732,13 @@ function SeedControls({
   onSelect,
   onSeed
 }) {
-  if (!canManage) return /* @__PURE__ */ jsx16("p", { style: italic, children: t.notSetUp });
-  if (models.length === 0) return /* @__PURE__ */ jsx16("p", { style: italic, children: t.noModels });
-  return /* @__PURE__ */ jsxs16("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: [
-    /* @__PURE__ */ jsx16("label", { style: fieldLabel, children: t.pickModelLabel }),
-    /* @__PURE__ */ jsxs16("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }, children: [
-      /* @__PURE__ */ jsx16("select", { value: selectedSlug, onChange: (e) => onSelect(e.target.value), disabled: busy, style: { ...select, flex: "1 1 200px" }, children: models.map((m) => /* @__PURE__ */ jsx16("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug)) }),
-      /* @__PURE__ */ jsx16("button", { type: "button", onClick: onSeed, disabled: busy || !selectedSlug, style: primaryBtn(busy || !selectedSlug), children: busy ? t.working : t.enableCta })
+  if (!canManage) return /* @__PURE__ */ jsx17("p", { style: italic, children: t.notSetUp });
+  if (models.length === 0) return /* @__PURE__ */ jsx17("p", { style: italic, children: t.noModels });
+  return /* @__PURE__ */ jsxs17("div", { style: { display: "flex", flexDirection: "column", gap: 8 }, children: [
+    /* @__PURE__ */ jsx17("label", { style: fieldLabel, children: t.pickModelLabel }),
+    /* @__PURE__ */ jsxs17("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }, children: [
+      /* @__PURE__ */ jsx17("select", { value: selectedSlug, onChange: (e) => onSelect(e.target.value), disabled: busy, style: { ...select, flex: "1 1 200px" }, children: models.map((m) => /* @__PURE__ */ jsx17("option", { value: m.slug, style: optionStyle, children: m.name }, m.slug)) }),
+      /* @__PURE__ */ jsx17("button", { type: "button", onClick: onSeed, disabled: busy || !selectedSlug, style: primaryBtn(busy || !selectedSlug), children: busy ? t.working : t.enableCta })
     ] })
   ] });
 }
@@ -3431,9 +3750,9 @@ function StatRow({ t, data }) {
     { label: t.pendingLabel, value: String(data.pending) },
     { label: t.lastLearnedLabel, value: last }
   ];
-  return /* @__PURE__ */ jsx16("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: 8 }, children: stats.map((s) => /* @__PURE__ */ jsxs16("div", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px" }, children: [
-    /* @__PURE__ */ jsx16("div", { style: { fontSize: "0.66rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: s.label }),
-    /* @__PURE__ */ jsx16("div", { style: { fontSize: "0.9rem", fontWeight: 700, color: C.text, marginTop: 2, wordBreak: "break-word" }, children: s.value })
+  return /* @__PURE__ */ jsx17("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(88px, 1fr))", gap: 8 }, children: stats.map((s) => /* @__PURE__ */ jsxs17("div", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px" }, children: [
+    /* @__PURE__ */ jsx17("div", { style: { fontSize: "0.66rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: s.label }),
+    /* @__PURE__ */ jsx17("div", { style: { fontSize: "0.9rem", fontWeight: 700, color: C.text, marginTop: 2, wordBreak: "break-word" }, children: s.value })
   ] }, s.label)) });
 }
 function ToggleRow({
@@ -3445,12 +3764,12 @@ function ToggleRow({
   onText,
   offText
 }) {
-  return /* @__PURE__ */ jsxs16("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }, children: [
-    /* @__PURE__ */ jsxs16("div", { style: { flex: "1 1 200px", minWidth: 0 }, children: [
-      /* @__PURE__ */ jsx16("div", { style: fieldTitle, children: label }),
-      /* @__PURE__ */ jsx16("div", { style: fieldHint, children: hint })
+  return /* @__PURE__ */ jsxs17("div", { style: { display: "flex", gap: 10, alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap" }, children: [
+    /* @__PURE__ */ jsxs17("div", { style: { flex: "1 1 200px", minWidth: 0 }, children: [
+      /* @__PURE__ */ jsx17("div", { style: fieldTitle, children: label }),
+      /* @__PURE__ */ jsx17("div", { style: fieldHint, children: hint })
     ] }),
-    /* @__PURE__ */ jsx16(
+    /* @__PURE__ */ jsx17(
       "button",
       {
         type: "button",
@@ -3484,16 +3803,16 @@ function TeacherPicker({
 }) {
   const models = opts?.models ?? [];
   const options = value && !models.includes(value) ? [value, ...models] : models;
-  return /* @__PURE__ */ jsxs16("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-    /* @__PURE__ */ jsxs16("div", { children: [
-      /* @__PURE__ */ jsx16("div", { style: fieldTitle, children: t.teacherLabel }),
-      /* @__PURE__ */ jsx16("div", { style: fieldHint, children: t.teacherHint })
+  return /* @__PURE__ */ jsxs17("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+    /* @__PURE__ */ jsxs17("div", { children: [
+      /* @__PURE__ */ jsx17("div", { style: fieldTitle, children: t.teacherLabel }),
+      /* @__PURE__ */ jsx17("div", { style: fieldHint, children: t.teacherHint })
     ] }),
-    !canManage ? /* @__PURE__ */ jsx16("div", { style: { ...select, color: C.text2 }, children: value || t.teacherNone }) : opts && !opts.isPaid ? /* @__PURE__ */ jsx16("p", { style: italic, children: t.teacherPaidOnly }) : /* @__PURE__ */ jsxs16("select", { value, onChange: (e) => onChange(e.target.value), disabled: busy, "aria-label": t.teacherLabel, style: { ...select, maxWidth: 340 }, children: [
-      /* @__PURE__ */ jsx16("option", { value: "", style: optionStyle, children: t.teacherNone }),
-      options.map((m) => /* @__PURE__ */ jsx16("option", { value: m, style: optionStyle, children: m }, m))
+    !canManage ? /* @__PURE__ */ jsx17("div", { style: { ...select, color: C.text2 }, children: value || t.teacherNone }) : opts && !opts.isPaid ? /* @__PURE__ */ jsx17("p", { style: italic, children: t.teacherPaidOnly }) : /* @__PURE__ */ jsxs17("select", { value, onChange: (e) => onChange(e.target.value), disabled: busy, "aria-label": t.teacherLabel, style: { ...select, maxWidth: 340 }, children: [
+      /* @__PURE__ */ jsx17("option", { value: "", style: optionStyle, children: t.teacherNone }),
+      options.map((m) => /* @__PURE__ */ jsx17("option", { value: m, style: optionStyle, children: m }, m))
     ] }),
-    value && /* @__PURE__ */ jsx16("div", { style: { fontSize: "0.72rem", lineHeight: 1.4, color: C.accent, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 8px" }, children: t.teacherActiveHint(value) })
+    value && /* @__PURE__ */ jsx17("div", { style: { fontSize: "0.72rem", lineHeight: 1.4, color: C.accent, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 8px" }, children: t.teacherActiveHint(value) })
   ] });
 }
 function TeachBox({
@@ -3511,66 +3830,66 @@ function TeachBox({
   const teaching = !!teacherModel;
   const canTeach = teaching ? prompt.trim().length >= 20 : text2.trim().length >= 20;
   const canValidate = (teaching ? prompt : prompt.trim() || text2).trim().length >= 3;
-  return /* @__PURE__ */ jsxs16("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ jsx16("div", { style: fieldTitle, children: teaching ? t.teachTeacherTitle : t.teachTitle }),
-    /* @__PURE__ */ jsx16("div", { style: fieldHint, children: teaching ? t.teachTeacherHint(teacherModel) : t.teachHint }),
-    teaching ? /* @__PURE__ */ jsx16("textarea", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachTaskPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } }) : /* @__PURE__ */ jsxs16(Fragment5, { children: [
-      /* @__PURE__ */ jsx16("input", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachPromptPlaceholder, style: { ...select, width: "100%" } }),
-      /* @__PURE__ */ jsx16("textarea", { value: text2, onChange: (e) => onText(e.target.value), disabled: busy, placeholder: t.teachTextPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } })
+  return /* @__PURE__ */ jsxs17("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ jsx17("div", { style: fieldTitle, children: teaching ? t.teachTeacherTitle : t.teachTitle }),
+    /* @__PURE__ */ jsx17("div", { style: fieldHint, children: teaching ? t.teachTeacherHint(teacherModel) : t.teachHint }),
+    teaching ? /* @__PURE__ */ jsx17("textarea", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachTaskPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } }) : /* @__PURE__ */ jsxs17(Fragment6, { children: [
+      /* @__PURE__ */ jsx17("input", { value: prompt, onChange: (e) => onPrompt(e.target.value), disabled: busy, placeholder: t.teachPromptPlaceholder, style: { ...select, width: "100%" } }),
+      /* @__PURE__ */ jsx17("textarea", { value: text2, onChange: (e) => onText(e.target.value), disabled: busy, placeholder: t.teachTextPlaceholder, rows: 3, style: { ...select, width: "100%", resize: "vertical", fontFamily: "inherit" } })
     ] }),
-    /* @__PURE__ */ jsxs16("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsx16("button", { type: "button", onClick: onTeach, disabled: busy || !canTeach, style: primaryBtn(busy || !canTeach), children: busy ? t.teaching : teaching ? t.teachTeacherCta : t.teachCta }),
-      /* @__PURE__ */ jsx16("button", { type: "button", onClick: onValidate, disabled: busy || validating || !canValidate, style: secondaryBtn(busy || validating || !canValidate), title: t.validateHint, children: validating ? t.validating : t.validateCta })
+    /* @__PURE__ */ jsxs17("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ jsx17("button", { type: "button", onClick: onTeach, disabled: busy || !canTeach, style: primaryBtn(busy || !canTeach), children: busy ? t.teaching : teaching ? t.teachTeacherCta : t.teachCta }),
+      /* @__PURE__ */ jsx17("button", { type: "button", onClick: onValidate, disabled: busy || validating || !canValidate, style: secondaryBtn(busy || validating || !canValidate), title: t.validateHint, children: validating ? t.validating : t.validateCta })
     ] })
   ] });
 }
 function ImportBox({ t, busy, frozen, onImport }) {
   const disabled = busy || frozen;
-  return /* @__PURE__ */ jsxs16("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ jsx16("div", { style: fieldTitle, children: t.importTitle }),
-    /* @__PURE__ */ jsx16("div", { style: fieldHint, children: t.importHint }),
-    /* @__PURE__ */ jsx16("button", { type: "button", onClick: onImport, disabled, style: { ...secondaryBtn(disabled), alignSelf: "flex-start" }, children: busy ? t.importing : t.importCta })
+  return /* @__PURE__ */ jsxs17("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ jsx17("div", { style: fieldTitle, children: t.importTitle }),
+    /* @__PURE__ */ jsx17("div", { style: fieldHint, children: t.importHint }),
+    /* @__PURE__ */ jsx17("button", { type: "button", onClick: onImport, disabled, style: { ...secondaryBtn(disabled), alignSelf: "flex-start" }, children: busy ? t.importing : t.importCta })
   ] });
 }
 function ValidateResults({ t, result, onClear }) {
-  return /* @__PURE__ */ jsxs16("div", { style: { display: "flex", flexDirection: "column", gap: 6, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px" }, children: [
-    /* @__PURE__ */ jsxs16("div", { style: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsx16("span", { style: { ...fieldTitle, flex: 1, minWidth: 0 }, children: t.validateResultTitle(result.prompt) }),
-      /* @__PURE__ */ jsx16("span", { style: { fontSize: "0.64rem", fontWeight: 600, color: C.text2, border: `1px solid ${C.border}`, borderRadius: 999, padding: "1px 8px" }, children: t.validateMethod(result.method) }),
-      /* @__PURE__ */ jsx16("button", { type: "button", onClick: onClear, style: { ...ghostBtn, marginLeft: 0 }, children: t.validateClear })
+  return /* @__PURE__ */ jsxs17("div", { style: { display: "flex", flexDirection: "column", gap: 6, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 12px" }, children: [
+    /* @__PURE__ */ jsxs17("div", { style: { display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ jsx17("span", { style: { ...fieldTitle, flex: 1, minWidth: 0 }, children: t.validateResultTitle(result.prompt) }),
+      /* @__PURE__ */ jsx17("span", { style: { fontSize: "0.64rem", fontWeight: 600, color: C.text2, border: `1px solid ${C.border}`, borderRadius: 999, padding: "1px 8px" }, children: t.validateMethod(result.method) }),
+      /* @__PURE__ */ jsx17("button", { type: "button", onClick: onClear, style: { ...ghostBtn, marginLeft: 0 }, children: t.validateClear })
     ] }),
-    result.matches.length === 0 ? /* @__PURE__ */ jsx16("p", { style: italic, children: t.validateEmpty }) : /* @__PURE__ */ jsx16("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: result.matches.map((m) => {
+    result.matches.length === 0 ? /* @__PURE__ */ jsx17("p", { style: italic, children: t.validateEmpty }) : /* @__PURE__ */ jsx17("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: result.matches.map((m) => {
       const primary = m.id === result.primaryId;
       const pct = Math.round(m.score * 100);
-      return /* @__PURE__ */ jsxs16("li", { style: { display: "flex", flexDirection: "column", gap: 4, border: `1px solid ${primary ? C.accent : C.border}`, borderRadius: 6, padding: "6px 8px", background: C.surface }, children: [
-        /* @__PURE__ */ jsxs16("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-          primary && /* @__PURE__ */ jsx16("span", { style: tag(false), children: t.validatePrimaryBadge }),
-          /* @__PURE__ */ jsx16("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(m.version) }),
-          /* @__PURE__ */ jsx16("span", { style: { marginLeft: "auto", fontSize: "0.68rem", fontWeight: 700, color: C.accent }, children: t.validateScore(pct) })
+      return /* @__PURE__ */ jsxs17("li", { style: { display: "flex", flexDirection: "column", gap: 4, border: `1px solid ${primary ? C.accent : C.border}`, borderRadius: 6, padding: "6px 8px", background: C.surface }, children: [
+        /* @__PURE__ */ jsxs17("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+          primary && /* @__PURE__ */ jsx17("span", { style: tag(false), children: t.validatePrimaryBadge }),
+          /* @__PURE__ */ jsx17("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(m.version) }),
+          /* @__PURE__ */ jsx17("span", { style: { marginLeft: "auto", fontSize: "0.68rem", fontWeight: 700, color: C.accent }, children: t.validateScore(pct) })
         ] }),
-        /* @__PURE__ */ jsx16("div", { style: { height: 4, borderRadius: 999, background: C.border, overflow: "hidden" }, children: /* @__PURE__ */ jsx16("div", { style: { width: `${pct}%`, height: "100%", background: C.accent } }) }),
-        m.prompt && /* @__PURE__ */ jsx16("div", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: m.prompt }),
-        m.text && /* @__PURE__ */ jsx16("div", { style: { fontSize: "0.72rem", color: C.text2, lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 54, overflow: "hidden" }, children: m.text })
+        /* @__PURE__ */ jsx17("div", { style: { height: 4, borderRadius: 999, background: C.border, overflow: "hidden" }, children: /* @__PURE__ */ jsx17("div", { style: { width: `${pct}%`, height: "100%", background: C.accent } }) }),
+        m.prompt && /* @__PURE__ */ jsx17("div", { style: { fontSize: "0.74rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: m.prompt }),
+        m.text && /* @__PURE__ */ jsx17("div", { style: { fontSize: "0.72rem", color: C.text2, lineHeight: 1.4, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 54, overflow: "hidden" }, children: m.text })
       ] }, m.id);
     }) })
   ] });
 }
 function TargetsList({ t, targets }) {
-  return /* @__PURE__ */ jsxs16("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ jsx16("div", { style: fieldTitle, children: t.targetsTitle }),
-    /* @__PURE__ */ jsx16("div", { style: fieldHint, children: t.targetsHint }),
-    targets.length === 0 ? /* @__PURE__ */ jsx16("p", { style: italic, children: t.targetsEmpty }) : /* @__PURE__ */ jsx16("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: targets.map((tg, i) => /* @__PURE__ */ jsxs16(
+  return /* @__PURE__ */ jsxs17("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ jsx17("div", { style: fieldTitle, children: t.targetsTitle }),
+    /* @__PURE__ */ jsx17("div", { style: fieldHint, children: t.targetsHint }),
+    targets.length === 0 ? /* @__PURE__ */ jsx17("p", { style: italic, children: t.targetsEmpty }) : /* @__PURE__ */ jsx17("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: targets.map((tg, i) => /* @__PURE__ */ jsxs17(
       "li",
       {
         style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" },
         children: [
-          /* @__PURE__ */ jsx16("span", { style: tag(false), children: i === 0 ? t.targetSelfBadge : t.targetBuildBadge }),
-          /* @__PURE__ */ jsx16("span", { style: { fontSize: "0.78rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: tg.name }),
-          /* @__PURE__ */ jsx16("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.targetProjectId(tg.projectId) }),
-          /* @__PURE__ */ jsxs16("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-            /* @__PURE__ */ jsx16("span", { style: targetChip, children: tg.seeded ? t.targetSeeded(tg.version) : t.targetUnseeded }),
-            /* @__PURE__ */ jsx16("span", { style: targetChip, children: tg.mode === "connected" ? t.targetConnected : t.targetFrozen }),
-            tg.inferenceEnabled && /* @__PURE__ */ jsx16("span", { style: { ...targetChip, color: C.accent, borderColor: C.accent }, children: t.targetInferenceOn })
+          /* @__PURE__ */ jsx17("span", { style: tag(false), children: i === 0 ? t.targetSelfBadge : t.targetBuildBadge }),
+          /* @__PURE__ */ jsx17("span", { style: { fontSize: "0.78rem", fontWeight: 600, color: C.text, wordBreak: "break-word", minWidth: 0 }, children: tg.name }),
+          /* @__PURE__ */ jsx17("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.targetProjectId(tg.projectId) }),
+          /* @__PURE__ */ jsxs17("span", { style: { marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+            /* @__PURE__ */ jsx17("span", { style: targetChip, children: tg.seeded ? t.targetSeeded(tg.version) : t.targetUnseeded }),
+            /* @__PURE__ */ jsx17("span", { style: targetChip, children: tg.mode === "connected" ? t.targetConnected : t.targetFrozen }),
+            tg.inferenceEnabled && /* @__PURE__ */ jsx17("span", { style: { ...targetChip, color: C.accent, borderColor: C.accent }, children: t.targetInferenceOn })
           ] })
         ]
       },
@@ -3579,32 +3898,32 @@ function TargetsList({ t, targets }) {
   ] });
 }
 function RecentList({ t, entries }) {
-  return /* @__PURE__ */ jsxs16("div", { style: sectionBlock, children: [
-    /* @__PURE__ */ jsx16("div", { style: fieldTitle, children: t.inspectTitle }),
-    entries.length === 0 ? /* @__PURE__ */ jsx16("p", { style: italic, children: t.inspectEmpty }) : /* @__PURE__ */ jsx16("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: entries.map((e) => /* @__PURE__ */ jsx16(RecentRow, { t, entry: e }, e.id)) })
+  return /* @__PURE__ */ jsxs17("div", { style: sectionBlock, children: [
+    /* @__PURE__ */ jsx17("div", { style: fieldTitle, children: t.inspectTitle }),
+    entries.length === 0 ? /* @__PURE__ */ jsx17("p", { style: italic, children: t.inspectEmpty }) : /* @__PURE__ */ jsx17("ul", { style: { listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }, children: entries.map((e) => /* @__PURE__ */ jsx17(RecentRow, { t, entry: e }, e.id)) })
   ] });
 }
 function RecentRow({ t, entry }) {
-  const [open, setOpen] = useState11(false);
+  const [open, setOpen] = useState12(false);
   const status = evermindLearnedStatus(entry);
   const faulted = status.state === "fault";
   const body = entry.kind === "delta" ? t.deltaEntry : faulted ? "" : entry.text ?? "";
   const hasDetail = entry.kind !== "delta" && (!!entry.prompt || !!entry.text || faulted);
-  return /* @__PURE__ */ jsxs16("li", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 3 }, children: [
-    /* @__PURE__ */ jsxs16("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
-      /* @__PURE__ */ jsx16("span", { style: tag(entry.kind === "delta"), children: entry.kind === "delta" ? t.kindDelta : t.kindText }),
-      /* @__PURE__ */ jsx16("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(entry.version) }),
-      /* @__PURE__ */ jsx16("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.weightTag(entry.weight) }),
-      faulted && /* @__PURE__ */ jsx16("span", { style: faultTag, children: t.notDistilled }),
-      status.state === "distilled" && status.teacherModel && /* @__PURE__ */ jsx16("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.distilledBy(status.teacherModel) }),
-      /* @__PURE__ */ jsx16("span", { style: { marginLeft: "auto", fontSize: "0.68rem", color: C.text2 }, children: t.formatWhen(entry.at) })
+  return /* @__PURE__ */ jsxs17("li", { style: { background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 3 }, children: [
+    /* @__PURE__ */ jsxs17("div", { style: { display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }, children: [
+      /* @__PURE__ */ jsx17("span", { style: tag(entry.kind === "delta"), children: entry.kind === "delta" ? t.kindDelta : t.kindText }),
+      /* @__PURE__ */ jsx17("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.versionTag(entry.version) }),
+      /* @__PURE__ */ jsx17("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.weightTag(entry.weight) }),
+      faulted && /* @__PURE__ */ jsx17("span", { style: faultTag, children: t.notDistilled }),
+      status.state === "distilled" && status.teacherModel && /* @__PURE__ */ jsx17("span", { style: { fontSize: "0.68rem", color: C.text2 }, children: t.distilledBy(status.teacherModel) }),
+      /* @__PURE__ */ jsx17("span", { style: { marginLeft: "auto", fontSize: "0.68rem", color: C.text2 }, children: t.formatWhen(entry.at) })
     ] }),
-    entry.prompt && /* @__PURE__ */ jsx16("div", { style: { fontSize: "0.76rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: entry.prompt }),
-    open ? /* @__PURE__ */ jsx16("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 2 }, children: faulted ? /* @__PURE__ */ jsx16("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.5 }, children: t.teacherFault(status.teacherModel ?? "", status.reason) }) : entry.text && /* @__PURE__ */ jsxs16("div", { children: [
-      /* @__PURE__ */ jsx16("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.detailTextLabel }),
-      /* @__PURE__ */ jsx16("div", { style: { fontSize: "0.74rem", color: C.text, lineHeight: 1.5, wordBreak: "break-word", whiteSpace: "pre-wrap" }, children: entry.text })
-    ] }) }) : body && /* @__PURE__ */ jsx16("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.45, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 72, overflow: "hidden" }, children: body }),
-    hasDetail && /* @__PURE__ */ jsx16("button", { type: "button", onClick: () => setOpen((v) => !v), style: { ...linkBtn, alignSelf: "flex-start" }, children: open ? t.hideDetail : t.viewDetail })
+    entry.prompt && /* @__PURE__ */ jsx17("div", { style: { fontSize: "0.76rem", fontWeight: 600, color: C.text, wordBreak: "break-word" }, children: entry.prompt }),
+    open ? /* @__PURE__ */ jsx17("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 2 }, children: faulted ? /* @__PURE__ */ jsx17("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.5 }, children: t.teacherFault(status.teacherModel ?? "", status.reason) }) : entry.text && /* @__PURE__ */ jsxs17("div", { children: [
+      /* @__PURE__ */ jsx17("div", { style: { fontSize: "0.62rem", textTransform: "uppercase", letterSpacing: "0.04em", color: C.text2 }, children: t.detailTextLabel }),
+      /* @__PURE__ */ jsx17("div", { style: { fontSize: "0.74rem", color: C.text, lineHeight: 1.5, wordBreak: "break-word", whiteSpace: "pre-wrap" }, children: entry.text })
+    ] }) }) : body && /* @__PURE__ */ jsx17("div", { style: { fontSize: "0.74rem", color: C.text2, lineHeight: 1.45, wordBreak: "break-word", whiteSpace: "pre-wrap", maxHeight: 72, overflow: "hidden" }, children: body }),
+    hasDetail && /* @__PURE__ */ jsx17("button", { type: "button", onClick: () => setOpen((v) => !v), style: { ...linkBtn, alignSelf: "flex-start" }, children: open ? t.hideDetail : t.viewDetail })
   ] });
 }
 var faultTag = {
@@ -3640,10 +3959,10 @@ var targetChip = {
 };
 
 // src/project360/Project360View.tsx
-import { useMemo as useMemo9, useState as useState12 } from "react";
+import { useMemo as useMemo10, useState as useState13 } from "react";
 
 // src/project360/Sunburst.tsx
-import { jsx as jsx17, jsxs as jsxs17 } from "react/jsx-runtime";
+import { jsx as jsx18, jsxs as jsxs18 } from "react/jsx-runtime";
 var CX = 160;
 var CY = 160;
 var R_CENTER = 46;
@@ -3683,7 +4002,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
   const nPillars = pillars.length || 1;
   const pillarSpan = 360 / nPillars;
   const dimsByPillar = pillars.map((p) => dimensions.filter((d) => d.pillar === p.key));
-  return /* @__PURE__ */ jsxs17(
+  return /* @__PURE__ */ jsxs18(
     "svg",
     {
       className: "bf-360-wheel",
@@ -3698,8 +4017,8 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
           const dims = dimsByPillar[pi];
           const dimSpan = pillarSpan / (dims.length || 1);
           const pLabel = labelAt((R_INNER_0 + R_INNER_1) / 2, pMid);
-          return /* @__PURE__ */ jsxs17("g", { children: [
-            /* @__PURE__ */ jsx17(
+          return /* @__PURE__ */ jsxs18("g", { children: [
+            /* @__PURE__ */ jsx18(
               "path",
               {
                 d: sector(R_INNER_0, R_INNER_1, pStart + 0.6, pEnd - 0.6),
@@ -3708,7 +4027,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                 className: "bf-360-arc bf-360-arc--pillar"
               }
             ),
-            /* @__PURE__ */ jsx17(
+            /* @__PURE__ */ jsx18(
               "text",
               {
                 x: pLabel.x,
@@ -3726,7 +4045,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
               const isSel = selected === dim.key;
               const lab = labelAt((R_OUTER_0 + R_OUTER_1) / 2, dMid);
               const lines = twoLines(dim.label);
-              return /* @__PURE__ */ jsxs17(
+              return /* @__PURE__ */ jsxs18(
                 "g",
                 {
                   className: "bf-360-arc-group",
@@ -3735,7 +4054,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                   "aria-pressed": isSel,
                   "aria-label": `${dim.label}: ${dim.score} of 100`,
                   children: [
-                    /* @__PURE__ */ jsx17(
+                    /* @__PURE__ */ jsx18(
                       "path",
                       {
                         d: sector(R_OUTER_0, R_OUTER_1, dStart + 0.6, dEnd - 0.6),
@@ -3744,7 +4063,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                         className: `bf-360-arc bf-360-arc--dim${isSel ? " is-selected" : ""}`
                       }
                     ),
-                    /* @__PURE__ */ jsx17(
+                    /* @__PURE__ */ jsx18(
                       "text",
                       {
                         x: lab.x,
@@ -3752,7 +4071,7 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
                         className: "bf-360-arc-label",
                         textAnchor: "middle",
                         dominantBaseline: "central",
-                        children: lines.map((ln, li) => /* @__PURE__ */ jsx17("tspan", { x: lab.x, dy: li === 0 ? lines.length > 1 ? "-0.5em" : "0" : "1em", children: ln }, li))
+                        children: lines.map((ln, li) => /* @__PURE__ */ jsx18("tspan", { x: lab.x, dy: li === 0 ? lines.length > 1 ? "-0.5em" : "0" : "1em", children: ln }, li))
                       }
                     )
                   ]
@@ -3762,10 +4081,10 @@ function Sunburst({ pillars, dimensions, overall, selected, onSelect, ariaLabel 
             })
           ] }, pillar.key);
         }),
-        /* @__PURE__ */ jsx17("circle", { cx: CX, cy: CY, r: R_CENTER, className: "bf-360-center", onClick: () => onSelect?.(null), role: "button", "aria-label": "Clear selection" }),
-        /* @__PURE__ */ jsx17("circle", { cx: CX, cy: CY, r: R_CENTER, fill: "none", stroke: overall.color, strokeWidth: 3, className: "bf-360-center-ring" }),
-        /* @__PURE__ */ jsx17("text", { x: CX, y: CY - 8, className: "bf-360-center-score", textAnchor: "middle", dominantBaseline: "central", fill: overall.color, children: overall.score }),
-        /* @__PURE__ */ jsx17("text", { x: CX, y: CY + 14, className: "bf-360-center-label", textAnchor: "middle", dominantBaseline: "central", children: "HEALTH" })
+        /* @__PURE__ */ jsx18("circle", { cx: CX, cy: CY, r: R_CENTER, className: "bf-360-center", onClick: () => onSelect?.(null), role: "button", "aria-label": "Clear selection" }),
+        /* @__PURE__ */ jsx18("circle", { cx: CX, cy: CY, r: R_CENTER, fill: "none", stroke: overall.color, strokeWidth: 3, className: "bf-360-center-ring" }),
+        /* @__PURE__ */ jsx18("text", { x: CX, y: CY - 8, className: "bf-360-center-score", textAnchor: "middle", dominantBaseline: "central", fill: overall.color, children: overall.score }),
+        /* @__PURE__ */ jsx18("text", { x: CX, y: CY + 14, className: "bf-360-center-label", textAnchor: "middle", dominantBaseline: "central", children: "HEALTH" })
       ]
     }
   );
@@ -3804,25 +4123,25 @@ var DEFAULT_PROJECT360_LABELS = {
 };
 
 // src/project360/Project360View.tsx
-import { Fragment as Fragment6, jsx as jsx18, jsxs as jsxs18 } from "react/jsx-runtime";
+import { Fragment as Fragment7, jsx as jsx19, jsxs as jsxs19 } from "react/jsx-runtime";
 var STATUS_ORDER = ["working", "awaiting", "blocked", "idle", "available"];
 function Project360View({ data, loading, error, labels, onAction, onRefresh }) {
-  const L = useMemo9(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
-  const [selected, setSelected] = useState12(null);
-  const sortedWorkforce = useMemo9(
+  const L = useMemo10(() => ({ ...DEFAULT_PROJECT360_LABELS, ...labels ?? {} }), [labels]);
+  const [selected, setSelected] = useState13(null);
+  const sortedWorkforce = useMemo10(
     () => [...data?.workforce ?? []].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status)),
     [data?.workforce]
   );
   if (error) {
-    return /* @__PURE__ */ jsxs18("div", { className: "bf-360-state", children: [
-      /* @__PURE__ */ jsx18("div", { className: "bf-360-state__title", children: L.loadError }),
-      /* @__PURE__ */ jsx18("div", { className: "bf-360-state__hint", children: error }),
-      onRefresh && /* @__PURE__ */ jsx18("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
+    return /* @__PURE__ */ jsxs19("div", { className: "bf-360-state", children: [
+      /* @__PURE__ */ jsx19("div", { className: "bf-360-state__title", children: L.loadError }),
+      /* @__PURE__ */ jsx19("div", { className: "bf-360-state__hint", children: error }),
+      onRefresh && /* @__PURE__ */ jsx19("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
     ] });
   }
   if (!data || loading) {
-    return /* @__PURE__ */ jsxs18("div", { className: "bf-360-state", children: [
-      /* @__PURE__ */ jsx18("div", { className: "bf-360-spinner" }),
+    return /* @__PURE__ */ jsxs19("div", { className: "bf-360-state", children: [
+      /* @__PURE__ */ jsx19("div", { className: "bf-360-spinner" }),
       L.connecting
     ] });
   }
@@ -3842,24 +4161,24 @@ Gaps:
 ${lines}`
     });
   };
-  return /* @__PURE__ */ jsxs18("div", { className: "bf-360", children: [
-    /* @__PURE__ */ jsxs18("header", { className: "bf-360-head", children: [
-      /* @__PURE__ */ jsxs18("div", { className: "bf-360-head__id", children: [
-        /* @__PURE__ */ jsx18("span", { className: "bf-360-head__title", children: project.name }),
-        project.key && /* @__PURE__ */ jsx18("span", { className: "bf-360-head__key", children: project.key })
+  return /* @__PURE__ */ jsxs19("div", { className: "bf-360", children: [
+    /* @__PURE__ */ jsxs19("header", { className: "bf-360-head", children: [
+      /* @__PURE__ */ jsxs19("div", { className: "bf-360-head__id", children: [
+        /* @__PURE__ */ jsx19("span", { className: "bf-360-head__title", children: project.name }),
+        project.key && /* @__PURE__ */ jsx19("span", { className: "bf-360-head__key", children: project.key })
       ] }),
-      /* @__PURE__ */ jsx18("div", { className: "bf-360-head__spacer" }),
-      /* @__PURE__ */ jsx18("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard }),
-      gaps.length > 0 && /* @__PURE__ */ jsx18("button", { className: "bf-btn bf-btn--primary", onClick: improveAll, children: L.improveAll }),
-      onRefresh && /* @__PURE__ */ jsx18("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
+      /* @__PURE__ */ jsx19("div", { className: "bf-360-head__spacer" }),
+      /* @__PURE__ */ jsx19("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard }),
+      gaps.length > 0 && /* @__PURE__ */ jsx19("button", { className: "bf-btn bf-btn--primary", onClick: improveAll, children: L.improveAll }),
+      onRefresh && /* @__PURE__ */ jsx19("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
     ] }),
-    !hasData ? /* @__PURE__ */ jsxs18("div", { className: "bf-360-state", children: [
-      /* @__PURE__ */ jsx18("div", { className: "bf-360-state__title", children: L.noData }),
-      /* @__PURE__ */ jsx18("div", { className: "bf-360-state__hint", children: L.noDataHint }),
-      /* @__PURE__ */ jsx18("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard })
-    ] }) : /* @__PURE__ */ jsxs18("div", { className: "bf-360-grid", children: [
-      /* @__PURE__ */ jsxs18("section", { className: "bf-360-col bf-360-col--wheel", children: [
-        /* @__PURE__ */ jsx18(
+    !hasData ? /* @__PURE__ */ jsxs19("div", { className: "bf-360-state", children: [
+      /* @__PURE__ */ jsx19("div", { className: "bf-360-state__title", children: L.noData }),
+      /* @__PURE__ */ jsx19("div", { className: "bf-360-state__hint", children: L.noDataHint }),
+      /* @__PURE__ */ jsx19("button", { className: "bf-btn", onClick: () => onAction?.({ kind: "board", label: L.openBoard }), children: L.openBoard })
+    ] }) : /* @__PURE__ */ jsxs19("div", { className: "bf-360-grid", children: [
+      /* @__PURE__ */ jsxs19("section", { className: "bf-360-col bf-360-col--wheel", children: [
+        /* @__PURE__ */ jsx19(
           Sunburst,
           {
             pillars,
@@ -3870,83 +4189,83 @@ ${lines}`
             ariaLabel: `${project.name} health wheel`
           }
         ),
-        /* @__PURE__ */ jsxs18("div", { className: "bf-360-overall", children: [
-          /* @__PURE__ */ jsx18("div", { className: "bf-360-progress", "aria-label": `${L.progress} ${overall.progressPct}%`, children: /* @__PURE__ */ jsx18("div", { className: "bf-360-progress__fill", style: { width: `${overall.progressPct}%`, background: overall.color } }) }),
-          /* @__PURE__ */ jsxs18("div", { className: "bf-360-progress__label", children: [
+        /* @__PURE__ */ jsxs19("div", { className: "bf-360-overall", children: [
+          /* @__PURE__ */ jsx19("div", { className: "bf-360-progress", "aria-label": `${L.progress} ${overall.progressPct}%`, children: /* @__PURE__ */ jsx19("div", { className: "bf-360-progress__fill", style: { width: `${overall.progressPct}%`, background: overall.color } }) }),
+          /* @__PURE__ */ jsxs19("div", { className: "bf-360-progress__label", children: [
             L.progress,
             ": ",
             overall.progressPct,
             "%"
           ] }),
-          /* @__PURE__ */ jsxs18("div", { className: "bf-360-counts", children: [
-            /* @__PURE__ */ jsx18(Count, { n: counts.open, label: L.counts_open }),
-            /* @__PURE__ */ jsx18(Count, { n: counts.blocked, label: L.counts_blocked, tone: counts.blocked ? "warn" : void 0 }),
-            /* @__PURE__ */ jsx18(Count, { n: counts.overdue, label: L.counts_overdue, tone: counts.overdue ? "bad" : void 0 }),
-            /* @__PURE__ */ jsx18(Count, { n: counts.activeRuns, label: L.counts_running, tone: counts.activeRuns ? "good" : void 0 })
+          /* @__PURE__ */ jsxs19("div", { className: "bf-360-counts", children: [
+            /* @__PURE__ */ jsx19(Count, { n: counts.open, label: L.counts_open }),
+            /* @__PURE__ */ jsx19(Count, { n: counts.blocked, label: L.counts_blocked, tone: counts.blocked ? "warn" : void 0 }),
+            /* @__PURE__ */ jsx19(Count, { n: counts.overdue, label: L.counts_overdue, tone: counts.overdue ? "bad" : void 0 }),
+            /* @__PURE__ */ jsx19(Count, { n: counts.activeRuns, label: L.counts_running, tone: counts.activeRuns ? "good" : void 0 })
           ] })
         ] })
       ] }),
-      /* @__PURE__ */ jsxs18("section", { className: "bf-360-col bf-360-col--detail", children: [
-        /* @__PURE__ */ jsxs18("div", { className: "bf-360-legend-head", children: [
-          /* @__PURE__ */ jsx18("span", { children: selectedDim ? selectedDim.label : L.allDimensions }),
-          selectedDim && /* @__PURE__ */ jsxs18("button", { className: "bf-360-clear", onClick: () => setSelected(null), children: [
+      /* @__PURE__ */ jsxs19("section", { className: "bf-360-col bf-360-col--detail", children: [
+        /* @__PURE__ */ jsxs19("div", { className: "bf-360-legend-head", children: [
+          /* @__PURE__ */ jsx19("span", { children: selectedDim ? selectedDim.label : L.allDimensions }),
+          selectedDim && /* @__PURE__ */ jsxs19("button", { className: "bf-360-clear", onClick: () => setSelected(null), children: [
             L.allDimensions,
             " \u2715"
           ] })
         ] }),
-        selectedDim ? /* @__PURE__ */ jsxs18("div", { className: "bf-360-dim-detail", children: [
-          /* @__PURE__ */ jsx18(ScoreDot, { score: selectedDim.score, color: selectedDim.color }),
-          /* @__PURE__ */ jsx18("div", { className: "bf-360-dim-detail__summary", children: selectedDim.summary })
-        ] }) : /* @__PURE__ */ jsx18("ul", { className: "bf-360-dim-list", children: dimensions.map((d) => /* @__PURE__ */ jsx18("li", { children: /* @__PURE__ */ jsxs18(
+        selectedDim ? /* @__PURE__ */ jsxs19("div", { className: "bf-360-dim-detail", children: [
+          /* @__PURE__ */ jsx19(ScoreDot, { score: selectedDim.score, color: selectedDim.color }),
+          /* @__PURE__ */ jsx19("div", { className: "bf-360-dim-detail__summary", children: selectedDim.summary })
+        ] }) : /* @__PURE__ */ jsx19("ul", { className: "bf-360-dim-list", children: dimensions.map((d) => /* @__PURE__ */ jsx19("li", { children: /* @__PURE__ */ jsxs19(
           "button",
           {
             className: "bf-360-dim-row",
             onClick: () => setSelected(d.key),
             children: [
-              /* @__PURE__ */ jsx18(ScoreDot, { score: d.score, color: d.color }),
-              /* @__PURE__ */ jsx18("span", { className: "bf-360-dim-row__label", children: d.label }),
-              /* @__PURE__ */ jsx18("span", { className: "bf-360-dim-row__summary", children: d.summary })
+              /* @__PURE__ */ jsx19(ScoreDot, { score: d.score, color: d.color }),
+              /* @__PURE__ */ jsx19("span", { className: "bf-360-dim-row__label", children: d.label }),
+              /* @__PURE__ */ jsx19("span", { className: "bf-360-dim-row__summary", children: d.summary })
             ]
           }
         ) }, d.key)) })
       ] })
     ] }),
-    hasData && /* @__PURE__ */ jsxs18(Fragment6, { children: [
-      /* @__PURE__ */ jsxs18("section", { className: "bf-360-section", children: [
-        /* @__PURE__ */ jsxs18("h3", { className: "bf-360-section__title", children: [
+    hasData && /* @__PURE__ */ jsxs19(Fragment7, { children: [
+      /* @__PURE__ */ jsxs19("section", { className: "bf-360-section", children: [
+        /* @__PURE__ */ jsxs19("h3", { className: "bf-360-section__title", children: [
           L.missingItems,
-          shownGaps.length > 0 && /* @__PURE__ */ jsx18("span", { className: "bf-360-section__count", children: shownGaps.length })
+          shownGaps.length > 0 && /* @__PURE__ */ jsx19("span", { className: "bf-360-section__count", children: shownGaps.length })
         ] }),
-        shownGaps.length === 0 ? /* @__PURE__ */ jsx18("p", { className: "bf-360-empty", children: L.noGaps }) : /* @__PURE__ */ jsx18("ul", { className: "bf-360-gaps", children: shownGaps.map((g) => /* @__PURE__ */ jsx18(GapRow, { gap: g, onAction }, g.id)) })
+        shownGaps.length === 0 ? /* @__PURE__ */ jsx19("p", { className: "bf-360-empty", children: L.noGaps }) : /* @__PURE__ */ jsx19("ul", { className: "bf-360-gaps", children: shownGaps.map((g) => /* @__PURE__ */ jsx19(GapRow, { gap: g, onAction }, g.id)) })
       ] }),
-      /* @__PURE__ */ jsxs18("section", { className: "bf-360-section", children: [
-        /* @__PURE__ */ jsxs18("h3", { className: "bf-360-section__title", children: [
+      /* @__PURE__ */ jsxs19("section", { className: "bf-360-section", children: [
+        /* @__PURE__ */ jsxs19("h3", { className: "bf-360-section__title", children: [
           L.workforce,
-          workforce.length > 0 && /* @__PURE__ */ jsx18("span", { className: "bf-360-section__count", children: workforce.length })
+          workforce.length > 0 && /* @__PURE__ */ jsx19("span", { className: "bf-360-section__count", children: workforce.length })
         ] }),
-        workforce.length === 0 ? /* @__PURE__ */ jsx18("p", { className: "bf-360-empty", children: L.noWorkforce }) : /* @__PURE__ */ jsx18("ul", { className: "bf-360-people", children: sortedWorkforce.map((m) => /* @__PURE__ */ jsx18(MemberRow, { member: m, labels: L, onAction }, m.ref)) })
+        workforce.length === 0 ? /* @__PURE__ */ jsx19("p", { className: "bf-360-empty", children: L.noWorkforce }) : /* @__PURE__ */ jsx19("ul", { className: "bf-360-people", children: sortedWorkforce.map((m) => /* @__PURE__ */ jsx19(MemberRow, { member: m, labels: L, onAction }, m.ref)) })
       ] })
     ] })
   ] });
 }
 function Count({ n, label, tone }) {
-  return /* @__PURE__ */ jsxs18("span", { className: `bf-360-count${tone ? ` bf-360-count--${tone}` : ""}`, children: [
-    /* @__PURE__ */ jsx18("b", { children: n }),
+  return /* @__PURE__ */ jsxs19("span", { className: `bf-360-count${tone ? ` bf-360-count--${tone}` : ""}`, children: [
+    /* @__PURE__ */ jsx19("b", { children: n }),
     " ",
     label
   ] });
 }
 function ScoreDot({ score, color }) {
-  return /* @__PURE__ */ jsx18("span", { className: "bf-360-scoredot", style: { borderColor: color, color }, children: score });
+  return /* @__PURE__ */ jsx19("span", { className: "bf-360-scoredot", style: { borderColor: color, color }, children: score });
 }
 function GapRow({ gap, onAction }) {
-  return /* @__PURE__ */ jsxs18("li", { className: `bf-360-gap bf-360-gap--${gap.severity}`, children: [
-    /* @__PURE__ */ jsx18("span", { className: `bf-360-sev bf-360-sev--${gap.severity}`, "aria-hidden": true }),
-    /* @__PURE__ */ jsxs18("div", { className: "bf-360-gap__body", children: [
-      /* @__PURE__ */ jsx18("div", { className: "bf-360-gap__title", children: gap.title }),
-      gap.detail && /* @__PURE__ */ jsx18("div", { className: "bf-360-gap__detail", children: gap.detail })
+  return /* @__PURE__ */ jsxs19("li", { className: `bf-360-gap bf-360-gap--${gap.severity}`, children: [
+    /* @__PURE__ */ jsx19("span", { className: `bf-360-sev bf-360-sev--${gap.severity}`, "aria-hidden": true }),
+    /* @__PURE__ */ jsxs19("div", { className: "bf-360-gap__body", children: [
+      /* @__PURE__ */ jsx19("div", { className: "bf-360-gap__title", children: gap.title }),
+      gap.detail && /* @__PURE__ */ jsx19("div", { className: "bf-360-gap__detail", children: gap.detail })
     ] }),
-    gap.action && /* @__PURE__ */ jsx18("button", { className: "bf-btn bf-360-gap__cta", onClick: () => onAction?.(gap.action), children: gap.action.label })
+    gap.action && /* @__PURE__ */ jsx19("button", { className: "bf-btn bf-360-gap__cta", onClick: () => onAction?.(gap.action), children: gap.action.label })
   ] });
 }
 function MemberRow({ member, labels, onAction }) {
@@ -3958,25 +4277,25 @@ function MemberRow({ member, labels, onAction }) {
     available: labels.status_available
   }[member.status];
   const task = member.taskId != null ? { id: member.taskId, key: member.taskKey, title: member.taskTitle ?? "", taskType: member.taskType } : void 0;
-  return /* @__PURE__ */ jsxs18("li", { className: "bf-360-person", children: [
-    /* @__PURE__ */ jsx18("span", { className: `bf-360-dot bf-360-dot--${member.status}`, title: statusLabel, "aria-label": statusLabel }),
-    /* @__PURE__ */ jsxs18("div", { className: "bf-360-person__body", children: [
-      /* @__PURE__ */ jsxs18("div", { className: "bf-360-person__top", children: [
-        /* @__PURE__ */ jsx18("span", { className: "bf-360-person__name", children: member.name }),
-        /* @__PURE__ */ jsx18("span", { className: `bf-360-kind bf-360-kind--${member.kind}`, children: member.kind }),
-        /* @__PURE__ */ jsx18("span", { className: "bf-360-person__status", children: statusLabel })
+  return /* @__PURE__ */ jsxs19("li", { className: "bf-360-person", children: [
+    /* @__PURE__ */ jsx19("span", { className: `bf-360-dot bf-360-dot--${member.status}`, title: statusLabel, "aria-label": statusLabel }),
+    /* @__PURE__ */ jsxs19("div", { className: "bf-360-person__body", children: [
+      /* @__PURE__ */ jsxs19("div", { className: "bf-360-person__top", children: [
+        /* @__PURE__ */ jsx19("span", { className: "bf-360-person__name", children: member.name }),
+        /* @__PURE__ */ jsx19("span", { className: `bf-360-kind bf-360-kind--${member.kind}`, children: member.kind }),
+        /* @__PURE__ */ jsx19("span", { className: "bf-360-person__status", children: statusLabel })
       ] }),
-      /* @__PURE__ */ jsx18("div", { className: "bf-360-person__reason", children: member.reason })
+      /* @__PURE__ */ jsx19("div", { className: "bf-360-person__reason", children: member.reason })
     ] }),
-    task && /* @__PURE__ */ jsxs18("div", { className: "bf-360-person__actions", children: [
-      (member.status === "idle" || member.status === "available") && member.kind !== "human" && /* @__PURE__ */ jsx18("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "run-task", label: labels.member_run, task }), children: labels.member_run }),
-      /* @__PURE__ */ jsx18("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "open-task", label: labels.member_open, task }), children: labels.member_open })
+    task && /* @__PURE__ */ jsxs19("div", { className: "bf-360-person__actions", children: [
+      (member.status === "idle" || member.status === "available") && member.kind !== "human" && /* @__PURE__ */ jsx19("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "run-task", label: labels.member_run, task }), children: labels.member_run }),
+      /* @__PURE__ */ jsx19("button", { className: "bf-btn bf-360-person__btn", onClick: () => onAction?.({ kind: "open-task", label: labels.member_open, task }), children: labels.member_open })
     ] })
   ] });
 }
 
 // src/projectList/ProjectListView.tsx
-import { useMemo as useMemo10 } from "react";
+import { useMemo as useMemo11 } from "react";
 
 // src/projectList/types.ts
 var DEFAULT_PROJECT_LIST_LABELS = {
@@ -3989,66 +4308,66 @@ var DEFAULT_PROJECT_LIST_LABELS = {
 };
 
 // src/projectList/ProjectListView.tsx
-import { jsx as jsx19, jsxs as jsxs19 } from "react/jsx-runtime";
+import { jsx as jsx20, jsxs as jsxs20 } from "react/jsx-runtime";
 function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }) {
-  const L = useMemo10(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
-  const header = /* @__PURE__ */ jsxs19("header", { className: "bf-list-head", children: [
-    /* @__PURE__ */ jsxs19("div", { className: "bf-list-head__id", children: [
-      /* @__PURE__ */ jsx19("span", { className: "bf-list-head__title", children: title }),
-      data && /* @__PURE__ */ jsxs19("span", { className: "bf-list-head__count", children: [
+  const L = useMemo11(() => ({ ...DEFAULT_PROJECT_LIST_LABELS, ...labels ?? {} }), [labels]);
+  const header = /* @__PURE__ */ jsxs20("header", { className: "bf-list-head", children: [
+    /* @__PURE__ */ jsxs20("div", { className: "bf-list-head__id", children: [
+      /* @__PURE__ */ jsx20("span", { className: "bf-list-head__title", children: title }),
+      data && /* @__PURE__ */ jsxs20("span", { className: "bf-list-head__count", children: [
         data.total,
         " ",
         L.items
       ] })
     ] }),
-    subtitle && /* @__PURE__ */ jsx19("div", { className: "bf-list-head__sub", children: subtitle }),
-    /* @__PURE__ */ jsx19("div", { className: "bf-list-head__spacer" }),
-    onRefresh && /* @__PURE__ */ jsx19("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
+    subtitle && /* @__PURE__ */ jsx20("div", { className: "bf-list-head__sub", children: subtitle }),
+    /* @__PURE__ */ jsx20("div", { className: "bf-list-head__spacer" }),
+    onRefresh && /* @__PURE__ */ jsx20("button", { className: "bf-btn bf-btn--icon", title: L.refresh, "aria-label": L.refresh, onClick: onRefresh, children: "\u27F3" })
   ] });
   if (error) {
-    return /* @__PURE__ */ jsxs19("div", { className: "bf-list", children: [
+    return /* @__PURE__ */ jsxs20("div", { className: "bf-list", children: [
       header,
-      /* @__PURE__ */ jsxs19("div", { className: "bf-360-state", children: [
-        /* @__PURE__ */ jsx19("div", { className: "bf-360-state__title", children: L.loadError }),
-        /* @__PURE__ */ jsx19("div", { className: "bf-360-state__hint", children: error }),
-        onRefresh && /* @__PURE__ */ jsx19("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
+      /* @__PURE__ */ jsxs20("div", { className: "bf-360-state", children: [
+        /* @__PURE__ */ jsx20("div", { className: "bf-360-state__title", children: L.loadError }),
+        /* @__PURE__ */ jsx20("div", { className: "bf-360-state__hint", children: error }),
+        onRefresh && /* @__PURE__ */ jsx20("button", { className: "bf-btn", onClick: onRefresh, children: L.refresh })
       ] })
     ] });
   }
   if (!data || loading) {
-    return /* @__PURE__ */ jsxs19("div", { className: "bf-list", children: [
+    return /* @__PURE__ */ jsxs20("div", { className: "bf-list", children: [
       header,
-      /* @__PURE__ */ jsxs19("div", { className: "bf-360-state", children: [
-        /* @__PURE__ */ jsx19("div", { className: "bf-360-spinner" }),
+      /* @__PURE__ */ jsxs20("div", { className: "bf-360-state", children: [
+        /* @__PURE__ */ jsx20("div", { className: "bf-360-spinner" }),
         L.connecting
       ] })
     ] });
   }
   if (data.total === 0) {
-    return /* @__PURE__ */ jsxs19("div", { className: "bf-list", children: [
+    return /* @__PURE__ */ jsxs20("div", { className: "bf-list", children: [
       header,
-      /* @__PURE__ */ jsxs19("div", { className: "bf-360-state", children: [
-        /* @__PURE__ */ jsx19("div", { className: "bf-360-state__title", children: L.empty }),
-        L.emptyHint && /* @__PURE__ */ jsx19("div", { className: "bf-360-state__hint", children: L.emptyHint })
+      /* @__PURE__ */ jsxs20("div", { className: "bf-360-state", children: [
+        /* @__PURE__ */ jsx20("div", { className: "bf-360-state__title", children: L.empty }),
+        L.emptyHint && /* @__PURE__ */ jsx20("div", { className: "bf-360-state__hint", children: L.emptyHint })
       ] })
     ] });
   }
-  return /* @__PURE__ */ jsxs19("div", { className: "bf-list", children: [
+  return /* @__PURE__ */ jsxs20("div", { className: "bf-list", children: [
     header,
-    data.groups.filter((g) => g.items.length > 0).map((g) => /* @__PURE__ */ jsxs19("section", { className: "bf-list-group", children: [
-      /* @__PURE__ */ jsxs19("h3", { className: "bf-list-group__title", children: [
-        /* @__PURE__ */ jsx19("span", { className: `bf-list-group__dot bf-list-tone--${g.tone ?? "default"}`, "aria-hidden": true }),
+    data.groups.filter((g) => g.items.length > 0).map((g) => /* @__PURE__ */ jsxs20("section", { className: "bf-list-group", children: [
+      /* @__PURE__ */ jsxs20("h3", { className: "bf-list-group__title", children: [
+        /* @__PURE__ */ jsx20("span", { className: `bf-list-group__dot bf-list-tone--${g.tone ?? "default"}`, "aria-hidden": true }),
         g.label,
-        /* @__PURE__ */ jsx19("span", { className: "bf-360-section__count", children: g.items.length })
+        /* @__PURE__ */ jsx20("span", { className: "bf-360-section__count", children: g.items.length })
       ] }),
-      /* @__PURE__ */ jsx19("ul", { className: "bf-list-rows", children: g.items.map((it) => /* @__PURE__ */ jsx19(Row2, { item: it, onAction }, it.id)) })
+      /* @__PURE__ */ jsx20("ul", { className: "bf-list-rows", children: g.items.map((it) => /* @__PURE__ */ jsx20(Row2, { item: it, onAction }, it.id)) })
     ] }, g.key))
   ] });
 }
 function Row2({ item, onAction }) {
   const act = item.action;
   const clickable = !!act && !!onAction;
-  return /* @__PURE__ */ jsx19("li", { className: "bf-list-row", children: /* @__PURE__ */ jsxs19(
+  return /* @__PURE__ */ jsx20("li", { className: "bf-list-row", children: /* @__PURE__ */ jsxs20(
     "button",
     {
       className: "bf-list-row__main",
@@ -4056,12 +4375,12 @@ function Row2({ item, onAction }) {
       onClick: clickable ? () => onAction(act) : void 0,
       title: clickable ? act.label : void 0,
       children: [
-        item.key && /* @__PURE__ */ jsx19("span", { className: "bf-list-row__key", children: item.key }),
-        /* @__PURE__ */ jsxs19("span", { className: "bf-list-row__body", children: [
-          /* @__PURE__ */ jsx19("span", { className: "bf-list-row__title", children: item.title }),
-          item.subtitle && /* @__PURE__ */ jsx19("span", { className: "bf-list-row__sub", children: item.subtitle })
+        item.key && /* @__PURE__ */ jsx20("span", { className: "bf-list-row__key", children: item.key }),
+        /* @__PURE__ */ jsxs20("span", { className: "bf-list-row__body", children: [
+          /* @__PURE__ */ jsx20("span", { className: "bf-list-row__title", children: item.title }),
+          item.subtitle && /* @__PURE__ */ jsx20("span", { className: "bf-list-row__sub", children: item.subtitle })
         ] }),
-        item.badges && item.badges.length > 0 && /* @__PURE__ */ jsx19("span", { className: "bf-list-row__badges", children: item.badges.map((b, i) => /* @__PURE__ */ jsx19("span", { className: `bf-list-badge bf-list-tone--${b.tone ?? "default"}`, children: b.label }, i)) })
+        item.badges && item.badges.length > 0 && /* @__PURE__ */ jsx20("span", { className: "bf-list-row__badges", children: item.badges.map((b, i) => /* @__PURE__ */ jsx20("span", { className: `bf-list-badge bf-list-tone--${b.tone ?? "default"}`, children: b.label }, i)) })
       ]
     }
   ) });
@@ -4079,31 +4398,43 @@ export {
   DEFAULT_EVERMIND_LABELS,
   DEFAULT_PROJECT360_LABELS,
   DEFAULT_PROJECT_LIST_LABELS,
+  DEFAULT_PROMPT_OPTIONS_LABELS,
   DEFAULT_TIMELINE_LABELS,
   EvermindConsole,
   HealthRing,
+  MODEL_CATEGORIES,
   Markdown,
+  PROJECT_EVERMIND_MODEL_PREFIX,
   ParticipantBadge,
   PendingQuestionBanner,
   Project360View,
   ProjectListView,
+  PromptOptionsMenu,
   PromptPanel,
   QuestionCard,
   RUNNABLE_KINDS,
   Sunburst,
   TICKET_KINDS,
+  activeModelKey,
   askUserAnchorId,
   attachmentsOf,
   avatarColor,
+  buildModelItems,
   buildSettledTimeline,
   buildTimeline,
   evermindLearnedStatus,
   evermindNextAction,
+  filterModelItems,
   formatDuration,
   formatPayload,
   healthRingColor,
   initialsOf,
+  modelCategoryLabel,
+  modelInUse,
   parseAskUser,
+  perMillionUsd,
+  premiumCostLabel,
+  promptOptionsLabels,
   selectPendingAskUser,
   serializeAskUser,
   splitThinkSegments,

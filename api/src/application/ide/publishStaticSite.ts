@@ -27,6 +27,7 @@ import {
   invalidateSite,
   contentTypeFor,
 } from './siteHosting';
+import { ensureDefaultCollection } from './siteData';
 
 /** A single built file, dist-relative. */
 export interface PublishAsset {
@@ -131,7 +132,7 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
   }
 
   const versionToken = newVersionToken();
-  await db
+  const [siteRow] = await db
     .insert(projectSites)
     .values({
       projectId,
@@ -157,10 +158,26 @@ export async function publishStaticSite(input: PublishInput): Promise<PublishRes
         publishedAt: sql`NOW()`,
         updatedAt: sql`NOW()`,
       },
-    });
+    })
+    .returning({ id: projectSites.id });
   await invalidateSite(env, subdomain);
 
   const url = `https://${subdomain}.${HOSTING_APEX}`;
+
+  // Give the new site a working backend with zero setup: a `signups` collection
+  // means a form on the page someone just published already has somewhere to
+  // post. Same best-effort posture as the QA target below — a published site
+  // must never fail to publish because a convenience row could not be written.
+  if (siteRow?.id) {
+    try {
+      await ensureDefaultCollection(db, tenantId, siteRow.id, projectId);
+    } catch (error) {
+      reportCaughtError(error, {
+        source: 'application/ide/publishStaticSite.ts',
+        operation: 'ensureDefaultCollection',
+      });
+    }
+  }
 
   // Wire deploy → test: a published site is a testable target. Keep the project's
   // default QA target pointed at the live URL (create it the first time, refresh

@@ -12,18 +12,24 @@ export function makeNonce(): string {
 
 /**
  * The shared HTML shell for the bundled-React webview panels (Brain / Project 360 /
- * project pages). Identical CSP (`default-src 'none'`, a nonce'd module script, and
- * the gateway origin allowed in `connect-src` with an `https:` fallback) and asset
- * wiring across all three — only the `<title>` differs per surface.
+ * project pages / the Creation Canvas). Identical CSP (`default-src 'none'`, a
+ * nonce'd module script, and the gateway origin allowed in `connect-src` with an
+ * `https:` fallback) and asset wiring across all of them — only the `<title>`, the
+ * asset directory and the canvas's extra capabilities differ per surface.
+ *
+ * `assetDir` selects which bundle to load: `webview` (the Brain app) or `canvas`
+ * (the Creation Canvas, built separately because it pulls in xyflow/xlsx/mermaid
+ * and the chat panel should not pay for them).
  */
 export function renderWebviewHtml(
   webview: vscode.Webview,
   ctx: vscode.ExtensionContext,
-  opts: { title: string },
+  opts: { title: string; assetDir?: "webview" | "canvas"; codeSplit?: boolean; richMedia?: boolean },
 ): string {
   const nonce = makeNonce();
+  const dir = opts.assetDir ?? "webview";
   const asset = (f: string) =>
-    webview.asWebviewUri(vscode.Uri.joinPath(ctx.extensionUri, "media", "webview", f));
+    webview.asWebviewUri(vscode.Uri.joinPath(ctx.extensionUri, "media", dir, f));
   // The React app fetches the gateway/API directly; allow that origin in connect-src.
   let apiOrigin = "https://api.builderforce.ai";
   try {
@@ -31,13 +37,29 @@ export function renderWebviewHtml(
   } catch {
     /* keep default */
   }
+  // A nonce authorises the ENTRY script only — it does not extend to modules that
+  // script imports. The canvas bundle is code-split (the Evermind engines, the
+  // voice studio and mermaid load on demand), so its chunks must be allowed by
+  // origin or every lazy feature dies at the import.
+  const scriptSrc = opts.codeSplit
+    ? `'nonce-${nonce}' ${webview.cspSource} 'wasm-unsafe-eval'`
+    : `'nonce-${nonce}'`;
   const csp = [
     `default-src 'none'`,
     `img-src ${webview.cspSource} https: data: blob:`,
     `style-src ${webview.cspSource} 'unsafe-inline'`,
-    `script-src 'nonce-${nonce}'`,
+    `script-src ${scriptSrc}`,
     `font-src ${webview.cspSource} data:`,
-    `connect-src ${apiOrigin} https:`,
+    `connect-src ${apiOrigin} https: blob: data:`,
+    // The canvas renders generated artefacts: website/mockup previews in frames,
+    // audio + video deliverables, and WebGPU/WASM training in a worker.
+    ...(opts.richMedia
+      ? [
+          `frame-src ${webview.cspSource} blob: data:`,
+          `media-src ${webview.cspSource} https: blob: data:`,
+          `worker-src ${webview.cspSource} blob:`,
+        ]
+      : []),
   ].join("; ");
   return `<!DOCTYPE html>
 <html lang="en">

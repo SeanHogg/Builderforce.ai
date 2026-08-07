@@ -15,7 +15,7 @@
  *   - Snapshots are synced to Cloudflare R2 via the existing artifact endpoint
  */
 
-import { hasWebGPUSupport } from '@seanhogg/builderforce-studio';
+import { hasWebGPUSupport } from '@seanhogg/builderforce-studio/capabilities';
 import type { MambaConfig, MambaStateSnapshot, MambaAgentState } from './types';
 
 // ---------------------------------------------------------------------------

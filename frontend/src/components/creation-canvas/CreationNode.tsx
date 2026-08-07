@@ -16,6 +16,8 @@ import { useBrainSurface } from './brainSurfaceContext';
 import { highlightToneFor, profileTabular, tabularFromObject, workbookSheets, type TabularCell, type TabularHighlightRule } from '@/lib/canvasTabularData';
 import { outlinePaths, projectMap, sanitizeGeoBounds, sanitizeMapPoints } from '@/lib/canvasGeo';
 import { creativePreviewImageUrl } from '@/lib/creationDeliverables';
+import { canvasBuildBinding } from '@/lib/canvasBuild';
+import { useModalityCopy } from '@/lib/useModalityCopy';
 import { canvasDiagram, canvasDocument, canvasSlides } from '@/lib/canvasDocuments';
 import { drawioLabelLines, drawioShapePolygon, parseDrawioXml, resolveDrawioXml, type DrawioGraph } from '@/lib/drawioDiagram';
 import { MermaidDiagram } from '@/components/MermaidDiagram';
@@ -245,6 +247,34 @@ function WebsiteBody({ data }: { data: CreationNodeData }) {
         <div className={styles.heroArt} style={{ color: accent }}>{data.title.slice(0, 2).toUpperCase()}</div>
       </div>
       <div className={styles.siteBenefits}><span>{t('freeShipping')}</span><span>{t('easyReturns')}</span><span>{t('secureCheckout')}</span></div>
+    </div>
+  );
+}
+
+/**
+ * Builder tile — the canvas face of a real IDE project. It reports the binding
+ * (type, workspace state, published URL) and leaves every capability to the IDE
+ * surface the inspector opens, so nothing here duplicates the builder itself.
+ */
+function BuildBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.build');
+  const modality = useModalityCopy()(typeof data.modality === 'string' ? data.modality : null);
+  const binding = canvasBuildBinding(data);
+  const siteUrl = [data.siteUrl, data.url, data.pathUrl].find((value) => typeof value === 'string' && value) as string | undefined;
+  return (
+    <div className={styles.buildBody}>
+      <div className={styles.buildType}>
+        <span aria-hidden>{modality.icon}</span>
+        <strong>{modality.label}</strong>
+        <em data-bound={binding ? 'true' : 'false'}>{binding ? t('tileReady') : t('tileNotCreated')}</em>
+      </div>
+      <p>{binding ? t('tileBoundHint') : t('tileUnboundHint')}</p>
+      <div className={styles.pills}>
+        {modality.showRunButton && <span>{t('pillDevServer')}</span>}
+        {modality.showChecks && <span>{t('pillChecks')}</span>}
+        <span>{t('pillPublish')}</span>
+      </div>
+      {siteUrl && <a className={styles.buildLink} href={siteUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()}>{siteUrl}</a>}
     </div>
   );
 }
@@ -1219,7 +1249,7 @@ function useAuthoredNodeSize(id: string): { width?: number; height?: number } {
 export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onEditData }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
   const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame'].includes(data.kind);
-  const specialized = new Set(['workflow','website','prototype','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram']);
+  const specialized = new Set(['workflow','website','build','prototype','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram']);
   const authoredSize = useAuthoredNodeSize(id);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || '#f8f6ff'), borderColor: String(data.frameBorder || '#9d8bea') } : undefined;
   const cardStyle = { ...frameStyle, ...authoredSize };
@@ -1245,6 +1275,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {typeof data.pipelineStep === 'number' && <div className={styles.pipelineNodeGuide} data-start={data.pipelineStart === true ? 'true' : 'false'}><b>{data.pipelineStart === true ? t('startHere') : t('stepOfFive', { step: data.pipelineStep })}</b><span>{String(data.pipelineInstruction || t('pipelineFallback'))}</span></div>}
         {data.kind === 'workflow' && <WorkflowBody data={data} />}
         {(data.kind === 'website' || data.kind === 'prototype') && <WebsiteBody data={data} />}
+        {data.kind === 'build' && <BuildBody data={data} />}
         {(data.kind === 'dashboard' || data.kind === 'chart' || data.kind === 'report') && <DashboardBody data={data} />}
         {data.kind === 'map' && <MapBody data={data} />}
         {data.kind === 'evaluation' && <EvaluationBody data={data} onOpen={() => onOpenDetails?.(id, 'evaluation')} />}

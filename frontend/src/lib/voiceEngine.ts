@@ -15,6 +15,7 @@
 import { getApiBaseUrl, apiRequestStream } from './apiClient';
 import { getStoredTenantToken } from './auth';
 import type { PcmAudio } from './captureAudio';
+import { canvasWasmBaseUrl } from './canvasHost';
 
 type StudioModule = typeof import('@seanhogg/builderforce-studio');
 type VoiceModule = typeof import('@seanhogg/builderforce-voice');
@@ -38,6 +39,22 @@ interface OnDeviceEngine {
 
 let studioPromise: Promise<OnDeviceEngine | null> | null = null;
 
+/**
+ * Point the ONNX runtime at a host-served copy of its `.wasm`, when the host
+ * serves one. A no-op on the web, where the bundler already emitted the runtime
+ * beside the app and the default relative resolution is correct.
+ *
+ * Loading `onnxruntime-web` here is deliberate: it is the same module instance
+ * the studio import below resolves to, and it must be configured BEFORE the
+ * first session initialises, because `wasmPaths` is read at init.
+ */
+async function configureOnnxRuntime(): Promise<void> {
+  const base = canvasWasmBaseUrl();
+  if (!base) return;
+  const ort = await import('onnxruntime-web');
+  ort.env.wasm.wasmPaths = base.endsWith('/') ? base : `${base}/`;
+}
+
 /** Lazily construct the on-device engine. Returns null on SSR, a missing studio
  *  package, or any load failure (caller falls back to the server path). */
 export async function getOnDeviceEngine(): Promise<OnDeviceEngine | null> {
@@ -45,6 +62,13 @@ export async function getOnDeviceEngine(): Promise<OnDeviceEngine | null> {
   if (!studioPromise) {
     studioPromise = (async () => {
       try {
+        // The ONNX runtime resolves its ~21 MB `.wasm` relative to the bundle
+        // unless told otherwise. That is right on the web (Next serves it from
+        // the app's own static assets) but not in an editor webview, where
+        // shipping it would put 21 MB of runtime into every VSIX download for a
+        // feature most sessions never open. A host that serves the runtime
+        // itself says so through the port, and it is fetched on first use.
+        await configureOnnxRuntime();
         const studio: StudioModule = await import('@seanhogg/builderforce-studio');
         const engine = new studio.VoiceCloneEngine();
         return {

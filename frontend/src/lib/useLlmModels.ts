@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
+import { perMillionUsd, type ChatModelOptions } from '@seanhogg/builderforce-brain-ui';
 import { llmApi, tenantModelApi, type ByoModel, type PremiumModelInfo, type TenantModel } from './builderforceApi';
 import { getPremiumModelCatalog, type ModelRecord } from './modelCatalog';
 import { getStoredTenantToken } from './auth';
@@ -149,4 +151,31 @@ export function useLlmModels(): LlmModelLists {
     return () => { alive = false; };
   }, []);
   return state;
+}
+
+/**
+ * The composer's model surface, grouped by WHO PAYS — the exact shape the shared
+ * `/` options menu consumes. Every chat surface (Brain panel, Creation Canvas)
+ * reads it from here, so no two composers can offer different lists or price the
+ * same premium model differently.
+ */
+export function useChatModelOptions(): { options: ChatModelOptions; canChooseModel: boolean } {
+  const lists = useLlmModels();
+  const t = useTranslations('chatInput');
+  // The two funding lines that carry per-row values (the vendor billed, the metered
+  // price) are formatted HERE, through next-intl, and ride each row's `cost` — the
+  // menu's own label defaults only cover rows a host does not price itself.
+  return useMemo(() => ({
+    options: {
+      configured: lists.tenantModels.map((model) => ({ id: model.ref, label: model.name })),
+      byo: lists.fundingSurface.byo.models.map(({ id, vendor }) => ({ id, vendor, cost: t('byoDetail', { vendor }) })),
+      free: lists.freeModels,
+      plan: lists.models,
+      paid: lists.premiumModels.map((model) => ({
+        id: model.id,
+        cost: t('paidCostDetail', { input: perMillionUsd(model.pricing.prompt), output: perMillionUsd(model.pricing.completion) }),
+      })),
+    },
+    canChooseModel: lists.canChooseModel,
+  }), [lists, t]);
 }

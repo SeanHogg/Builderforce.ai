@@ -61,6 +61,11 @@ export const NAV_GROUPS: NavGroup[] = [
   // Brainstorm, Workflow Builder, and IDE are creation modes within one canvas.
   // Legacy routes stay matched so old deep links retain a clear active home.
   { id: 'create', labelKey: 'group.create', icon: '✦', href: '/create', match: ['/create', '/brainstorm', '/workflows', '/ide'] },
+  // Its own destination rather than a tab of Create: this is the front door for
+  // "paste a brief, get a working system", which starts from a piece of text
+  // rather than from a canvas, and ends in a project the other destinations then
+  // operate on.
+  { id: 'challenges', labelKey: 'group.challenges', icon: '🎯', href: '/challenges', match: ['/challenges'] },
   {
     id: 'projects', labelKey: 'group.projects', icon: '▦', href: '/projects',
     match: ['/projects', '/tasks', '/pmo', '/ceremonies', '/kanban-templates'],

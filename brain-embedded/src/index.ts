@@ -256,7 +256,7 @@ export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment, Everm
 export { STEP_MESSAGE_ROLE, isStepMessage, attachEvermindLearn, formatEvermindLearnStep } from './types';
 
 // "Copy diagnostics" — pure serializer for the chat's identity + Evermind wiring state
-export { formatChatDiagnostics, classifyModelFunding, allowanceState } from './chatDiagnostics';
+export { formatChatDiagnostics, classifyModelFunding, allowanceState, PROJECT_EVERMIND_MODEL_PREFIX } from './chatDiagnostics';
 export { getMcpToolStatus, setMcpToolStatus, type McpToolStatus } from './mcpToolStatus';
 export { selectToolsForTurn, DEFAULT_TOOL_LIMIT, type ToolSelection } from './selectTools';
 // The tool ROUTER — three fixed tools that keep the whole catalog reachable even when

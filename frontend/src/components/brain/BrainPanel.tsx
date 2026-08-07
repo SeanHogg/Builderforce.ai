@@ -78,7 +78,7 @@ import {
 import type { BrainChat, BrainMessage, BrainChatTraceRow } from '@/lib/builderforceApi';
 import { agentAssignmentsApi, reposApi, runtimeApi, brain, type AgentAssignment, type ProjectRepository, type ChatAgentInvite, type ChatMemberInfo, type TicketKind } from '@/lib/builderforceApi';
 import { fetchConsumptionSnapshot } from '@/lib/useConsumption';
-import { useLlmModels } from '@/lib/useLlmModels';
+import { useChatModelOptions, useLlmModels } from '@/lib/useLlmModels';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { PlanBadge } from '@/components/PlanBadge';
 import { BrainErrorBanner } from './BrainErrorBanner';
@@ -560,16 +560,7 @@ export function BrainPanel({
   // — because the run loop needs it to fail over when a model will not emit tool
   // calls; the diagnostics capture below reads the same cached object.
   const llmModels = useLlmModels();
-  const modelOptions = useMemo(() => ({
-    configured: llmModels.tenantModels.map((model) => ({ id: model.ref, label: model.name })),
-    byo: llmModels.fundingSurface.byo.models.map(({ id, vendor }) => ({ id, vendor })),
-    free: llmModels.freeModels,
-    plan: llmModels.models,
-    paid: llmModels.premiumModels.map((model) => ({
-      id: model.id,
-      cost: `$${(model.pricing.prompt * 1_000_000).toFixed(2)} input / $${(model.pricing.completion * 1_000_000).toFixed(2)} output per 1M tokens + $0.01/request`,
-    })),
-  }), [llmModels]);
+  const { options: modelOptions, canChooseModel } = useChatModelOptions();
   const selectedModel = modelSelection.mode === 'model' ? modelSelection.model : undefined;
   // Tool-call failover: the SHARED selector over that surface, so "which model next"
   // is decided in one place for every host rather than per surface.
@@ -1362,6 +1353,7 @@ export function BrainPanel({
       accountSettingsHref="/settings"
       modelSelection={modelSelection}
       modelOptions={modelOptions}
+      canChooseModel={canChooseModel}
       onModelSelectionChange={setModelSelection}
       autoMode={autoApprove}
       onAutoModeChange={setAutoApproveMode}

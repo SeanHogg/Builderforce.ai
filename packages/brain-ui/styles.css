@@ -973,3 +973,199 @@
   .bf-list-row__main { flex-wrap: wrap; }
   .bf-list-row__badges { justify-content: flex-start; }
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   PromptOptionsMenu — the composer's `/` control (run shaping + the model in
+   use + the model picker). One component on every prompt surface, so its look
+   comes from here rather than from each host's composer stylesheet.
+
+   Colours are layered vars: a host's composer tokens first (the web app's
+   --chat-input-*), then the shared --bf-* theme mapping both hosts define, then
+   a literal. That keeps it native in the web app's light/dark themes AND in the
+   editor's, with no host-side rules to keep in sync.
+   ────────────────────────────────────────────────────────────────────────── */
+.bf-pmenu { position: relative; display: inline-flex; flex: 0 0 auto; min-width: 0; }
+
+.bf-pmenu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 220px;
+  min-width: 0;
+  height: var(--chat-ctl-size, 30px);
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid var(--chat-input-border, var(--bf-border, rgba(128, 128, 128, 0.35)));
+  background: transparent;
+  color: var(--bf-text, inherit);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.bf-pmenu__trigger:hover:not(:disabled) {
+  background: var(--bf-surface-2, rgba(128, 128, 128, 0.12));
+}
+
+.bf-pmenu__trigger.is-open { background: var(--bf-surface-2, rgba(128, 128, 128, 0.16)); }
+.bf-pmenu__trigger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.bf-pmenu__slash { font-size: 15px; line-height: 1; opacity: 0.85; }
+
+/* The active model, stated on the trigger: what runs the next turn is readable
+   without opening anything. Truncates rather than widening the toolbar. */
+.bf-pmenu__model {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--bf-text-muted, #8a8a8a);
+  font-family: var(--bf-font-mono, ui-monospace, monospace);
+}
+
+.bf-pmenu__pop {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 6px);
+  z-index: 10000;
+  width: max-content;
+  min-width: 250px;
+  max-width: min(360px, calc(100vw - 24px));
+  padding: 5px;
+  border-radius: 10px;
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.35));
+  background: var(--bf-surface, #1b1b1b);
+  color: var(--bf-text, inherit);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.32);
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+}
+
+.bf-pmenu__group {
+  padding: 6px 9px 3px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--bf-text-muted, #8a8a8a);
+}
+
+.bf-pmenu__sep { height: 1px; margin: 5px 6px; background: var(--bf-border, rgba(128, 128, 128, 0.35)); }
+
+.bf-pmenu__item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bf-pmenu__item:hover { background: var(--bf-accent-soft, rgba(128, 128, 128, 0.16)); }
+
+.bf-pmenu__ico { flex: 0 0 auto; width: 18px; text-align: center; font-size: 13px; }
+
+.bf-pmenu__lbl {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  word-break: break-word;
+}
+
+.bf-pmenu__desc { font-size: 10.5px; line-height: 1.35; color: var(--bf-text-muted, #8a8a8a); }
+.bf-pmenu__item:hover .bf-pmenu__desc { color: inherit; opacity: 0.8; }
+
+.bf-pmenu__hint {
+  flex: 0 0 auto;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bf-text-muted, #8a8a8a);
+}
+
+.bf-pmenu__check { flex: 0 0 auto; width: 12px; font-size: 11px; color: var(--bf-accent, #6ea8fe); }
+
+/* Read-only "model in use" row — same metrics as an item, not interactive. */
+.bf-pmenu__info {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 5px 9px 7px;
+  font-size: 12px;
+}
+
+.bf-pmenu__search {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 2px 0 6px;
+  padding: 6px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.35));
+  background: var(--bf-surface-2, rgba(128, 128, 128, 0.1));
+  color: var(--bf-text, inherit);
+  font: inherit;
+  font-size: 12px;
+}
+
+.bf-pmenu__search:focus { outline: none; border-color: var(--bf-accent, #6ea8fe); }
+
+.bf-pmenu__filters { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+
+.bf-pmenu__filter {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--bf-border, rgba(128, 128, 128, 0.35));
+  background: transparent;
+  color: var(--bf-text-muted, #8a8a8a);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.bf-pmenu__filter.is-active {
+  border-color: var(--bf-accent, #6ea8fe);
+  color: var(--bf-text, inherit);
+  background: var(--bf-accent-soft, rgba(110, 168, 254, 0.14));
+}
+
+.bf-pmenu__list { display: grid; gap: 3px; max-height: 240px; overflow-y: auto; }
+
+.bf-pmenu__option {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.bf-pmenu__option:hover { background: var(--bf-accent-soft, rgba(128, 128, 128, 0.16)); }
+.bf-pmenu__option.is-active { border-color: var(--bf-accent, #6ea8fe); background: var(--bf-accent-soft, rgba(110, 168, 254, 0.14)); }
+.bf-pmenu__optName { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.bf-pmenu__optTag { font-size: 10px; color: var(--bf-text-muted, #8a8a8a); }
+.bf-pmenu__optDetail { grid-column: 1 / -1; font-size: 10.5px; line-height: 1.35; color: var(--bf-text-muted, #8a8a8a); }
+.bf-pmenu__empty { padding: 16px; text-align: center; font-size: 11px; color: var(--bf-text-muted, #8a8a8a); }
+
+/* Narrow panels (a 300px editor sidebar, a phone): let the popover use the full
+   width it is given rather than pushing the composer into a horizontal scroll. */
+@media (max-width: 420px) {
+  .bf-pmenu__pop { min-width: 0; width: min(320px, calc(100vw - 20px)); }
+  .bf-pmenu__trigger { max-width: 150px; }
+}

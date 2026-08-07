@@ -5,7 +5,7 @@ import { getBaseUrl, getWebBaseUrl, SECRET_KEY, fetchPersonalityBlock, fetchLimb
 import { attentionFor, sessionTabIcon, sessionTabPrefix } from "./attention";
 import { getGroundingSummary } from "./grounding";
 import { getEditorContext, getEditorContextLive, watchEditorContext } from "./editorContext";
-import { resolveEffectiveModelChoice } from "./modelState";
+import { resolveEffectiveModelChoice, setSelectedModel, setSelectedModelPool } from "./modelState";
 import { getSelectedProject } from "./projectState";
 import { getProjectNames } from "./projectNames";
 import { WebviewPanelBase, type WebviewInbound } from "./webviewShared";
@@ -31,6 +31,11 @@ interface BrainInbound extends WebviewInbound {
   /** For `open.web`: a path on the web app to open in the browser (the host owns the
    *  web base URL), e.g. the pricing or billing page behind an upgrade click. */
   path?: string;
+  /** For `model.set`: the composer's model choice — 'auto' (gateway routes),
+   *  'byo_pool' (the tenant's connected accounts in priority order), or 'model'
+   *  with `model` set to the id to pin. */
+  mode?: string;
+  model?: string;
 }
 
 /** A work item to auto-link to the chat the intent opens, so the conversation is
@@ -165,18 +170,34 @@ function buildLabels(): Record<string, string> {
     // Thinking toggle description — `{budget}` is the current effort's thinking budget.
     "app.thinkingOnDesc": t("The model reasons before answering, with a {budget}-token thinking budget at this effort. Slower, better on hard problems."),
     "app.thinkingOffDesc": t("Off — the model answers directly. Turn on for a reasoning pass before the answer."),
-    // "Model in use" block: which model is in force and which purse funds it.
-    // `{provider}` in the BYO line is the title-cased vendor (e.g. Anthropic).
+    // The `/` menu's MODEL block: which model is in force, which purse funds it, and
+    // the list the user picks from (the panel offers the same models the QuickPick
+    // does). `{provider}` in the BYO line is the connected vendor (e.g. Anthropic);
+    // `{input}`/`{output}` in the cost line are the formatted per-1M-token rates.
+    "app.model": t("Model"),
     "app.modelInUse": t("Model in use"),
-    "app.modelAuto": t("Auto — the gateway chooses"),
     "app.modelAutoShort": t("Auto"),
-    "app.modelPool": t("Pool — your BYO priority order"),
     "app.modelPoolShort": t("Pool"),
+    "app.searchModels": t("Search models…"),
+    "app.filterModels": t("Filter models"),
+    "app.noModels": t("No matching models"),
+    "app.all": t("All"),
+    "app.categoryByo": t("BYO"),
+    "app.categoryFree": t("Free"),
+    "app.categoryPlan": t("Plan"),
+    "app.categoryPaid": t("Paid"),
+    "app.categoryConfigured": t("Configured"),
+    "app.modelEvermind": t("Project Evermind"),
+    "app.modelLocked": t("Model choice needs a paid plan or a connected provider account."),
+    "app.modelCost": t("{input} input / {output} output per 1M tokens + $0.01 per request"),
     "app.modelFundingPool": t("Tries your connected accounts in the order configured in Account settings."),
     "app.modelFundingAuto": t("Routed per turn: your connected accounts first, then your plan."),
     "app.modelFundingByo": t("Billed to your own {provider} account — no plan credit used."),
+    "app.modelFundingFree": t("Free — included with BuilderForce."),
     "app.modelFundingPlan": t("Included in your plan."),
     "app.modelFundingPremium": t("Premium — metered at cost + 1¢ per request."),
+    "app.modelFundingConfigured": t("Saved workspace LLM configuration"),
+    "app.modelFundingEvermind": t("Your project's own learned Evermind model."),
     "app.accountSettings": t("Account settings"),
     "app.autoMode": t("Auto mode"),
     "app.autoModeHint": t("Auto-approve tool actions without asking"),
@@ -388,12 +409,18 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
       case "diagnose":
         void vscode.commands.executeCommand("builderforce.diagnose");
         break;
-      // Composer `/` menu → account settings, and the model chip → model picker.
+      // Composer `/` menu → account settings.
       case "settings":
         void vscode.commands.executeCommand("builderforce.openSettings");
         break;
-      case "pickModel":
-        void vscode.commands.executeCommand("builderforce.pickModel");
+      // Composer `/` menu → model choice. The panel owns the LIST (it reads the same
+      // gateway surface the QuickPick does), but the CHOICE is host state: it drives
+      // BOTH editor chat surfaces and outlives this panel, so it is set here. Setting
+      // it fires onModelChange → refresh() → a fresh `init`, which is how the menu
+      // learns what the pick actually resolved to (entitlement may drop a pin).
+      case "model.set":
+        if (msg.mode === "byo_pool") setSelectedModelPool();
+        else setSelectedModel(msg.mode === "model" && typeof msg.model === "string" ? msg.model : undefined);
         break;
       // Composer `+` menu → "Add context": pick a workspace file (or the active
       // editor selection) and hand its text back so the webview attaches it.

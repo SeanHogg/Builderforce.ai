@@ -37,10 +37,13 @@ import { authedFetch } from './authedFetch';
 import {
   BrainTimeline, ChatTicketsPanel, DEFAULT_CHAT_TICKETS_LABELS, Avatar, useChatParticipants,
   useMentionAutocomplete, ChatErrorBanner,
-  PromptPanel,
+  PromptPanel, PromptOptionsMenu,
   PendingQuestionBanner, selectPendingAskUser, askUserAnchorId,
   type BrainTimelineLabels,
+  type ChatModelSelection,
+  type PromptOptionsLabels,
 } from '@seanhogg/builderforce-brain-ui';
+import { loadComposerModels, invalidateModelSurface, type ComposerModelSurface } from './modelOptions';
 import { createChatTicketsAdapter } from './chatTicketsAdapter';
 import { adoptChatProject } from './adoptChatProject';
 import { EvermindStatusBadge } from './EvermindStatusBadge';
@@ -211,21 +214,6 @@ function buildComposerDirectives(o: { effort: Effort; web: boolean }): string {
 }
 
 /**
- * The subset of `GET /llm/v1/models` the composer needs to say WHO PAYS for the
- * active model. Same payload the extension's model picker consumes (see
- * `gateway.ts`) — the webview reads it directly because the funding line is a
- * per-render UI concern, not host state.
- */
-interface ModelSurface {
-  data?: Array<{ id?: string }>;
-  /** The curated tool-calling / coding subset of the pool — what a tool-call
-   *  failover should draw from first (see nextFallbackModel). */
-  codingModels?: string[];
-  byo?: { providers?: string[]; models?: Array<{ id?: string; vendor?: string }> };
-  canUsePremiumModels?: boolean;
-}
-
-/**
  * One line describing what an Effort level ACTUALLY does, built from the shared
  * effort table so the copy can never claim a budget the request doesn't send.
  * The thinking budget is only mentioned when the Thinking toggle is on — that is
@@ -251,58 +239,55 @@ const EFFORT_DESC_FALLBACK: Record<Effort, string> = {
   thorough: 'Deepest and slowest — exhaustive, verifies its work. Up to {answer} answer tokens.',
 };
 
-/** Title-case a provider key ('anthropic' → 'Anthropic') for display. */
-function providerLabel(vendor: string): string {
-  return vendor.replace(/^./, (ch) => ch.toUpperCase());
-}
-
 /**
- * Explain the model currently in force: its name plus which purse funds it —
- * the tenant's OWN connected account (BYO, billed to their key), the plan pool
- * (included), or the premium tier (metered at cost + 1¢/request). Returns null
- * for an unresolved surface so the caller renders nothing rather than guessing.
+ * The `/` menu's copy, from the host's localized bundle. The menu itself is the
+ * SHARED control (`PromptOptionsMenu`) — the same one the web composer renders —
+ * so both surfaces read one implementation and only supply their own strings.
  */
-function describeModelFunding(
-  model: string | undefined,
-  surface: ModelSurface | null,
-  t: (key: string, fallback: string) => string,
-  routingMode: 'auto' | 'byo_pool' = 'auto',
-): { name: string; funding: string } | null {
-  if (!surface) return null;
-  if (!model && routingMode === 'byo_pool') return {
-    name: t('app.modelPool', 'Pool — your BYO priority order'),
-    funding: t('app.modelFundingPool', 'Tries your connected accounts in the order configured in Account settings.'),
+function promptMenuLabels(t: (key: string, fallback: string) => string): PromptOptionsLabels {
+  return {
+    options: t('app.options', 'Options'),
+    effort: t('app.effort', 'Effort'),
+    effortQuick: t('app.effortQuick', 'Quick'),
+    effortBalanced: t('app.effortBalanced', 'Balanced'),
+    effortThorough: t('app.effortThorough', 'Thorough'),
+    thinking: t('app.thinking', 'Thinking'),
+    on: t('app.on', 'On'),
+    off: t('app.off', 'Off'),
+    model: t('app.model', 'Model'),
+    modelInUse: t('app.modelInUse', 'Model in use'),
+    searchModels: t('app.searchModels', 'Search models…'),
+    filterModels: t('app.filterModels', 'Filter models'),
+    chooseModel: t('app.pickModel', 'Change model'),
+    noModels: t('app.noModels', 'No matching models'),
+    all: t('app.all', 'All'),
+    categoryAuto: t('app.modelAutoShort', 'Auto'),
+    categoryByo: t('app.categoryByo', 'BYO'),
+    categoryFree: t('app.categoryFree', 'Free'),
+    categoryPlan: t('app.categoryPlan', 'Plan'),
+    categoryPaid: t('app.categoryPaid', 'Paid'),
+    categoryConfigured: t('app.categoryConfigured', 'Configured'),
+    autoLabel: t('app.modelAutoShort', 'Auto'),
+    autoDetail: t('app.modelFundingAuto', 'Routed per turn: your connected accounts first, then your plan.'),
+    poolLabel: t('app.modelPoolShort', 'Pool'),
+    poolDetail: t('app.modelFundingPool', 'Tries your connected accounts in the order configured in Account settings.'),
+    freeDetail: t('app.modelFundingFree', 'Free — included with BuilderForce.'),
+    planDetail: t('app.modelFundingPlan', 'Included in your plan.'),
+    paidDetail: t('app.modelFundingPremium', 'Premium — metered at cost + 1¢ per request.'),
+    paidCostDetail: t('app.modelCost', '{input} input / {output} output per 1M tokens + $0.01 per request'),
+    byoDetail: t('app.modelFundingByo', 'Billed to your own {provider} account — no plan credit used.').replace('{provider}', '{vendor}'),
+    configuredDetail: t('app.modelFundingConfigured', 'Saved workspace LLM configuration'),
+    evermindLabel: t('app.modelEvermind', 'Project Evermind'),
+    evermindDetail: t('app.modelFundingEvermind', "Your project's own learned Evermind model."),
+    modelLocked: t('app.modelLocked', 'Model choice needs a paid plan or a connected provider account.'),
+    accountSettings: t('app.accountSettings', 'Account settings'),
   };
-  // SHARED classifier (see classifyModelFunding) — the diagnostics report records the
-  // same key this sentence is rendered from, so the two can't drift.
-  const funding = classifyModelFunding(model, surface);
-  if (funding === 'auto') {
-    return {
-      name: t('app.modelAuto', 'Auto — the gateway chooses'),
-      funding: t('app.modelFundingAuto', 'Routed per turn: your connected accounts first, then your plan.'),
-    };
-  }
-  if (funding.startsWith('byo:')) {
-    return {
-      name: model!,
-      funding: t('app.modelFundingByo', 'Billed to your own {provider} account — no plan credit used.')
-        .replace('{provider}', providerLabel(funding.slice(4))),
-    };
-  }
-  if (funding === 'plan') {
-    return { name: model!, funding: t('app.modelFundingPlan', 'Included in your plan.') };
-  }
-  // Not in the plan pool and not BYO-servable ⇒ the premium (metered) tier.
-  return { name: model!, funding: t('app.modelFundingPremium', 'Premium — metered at cost + 1¢ per request.') };
 }
 
 /* Toolbar glyphs — inline SVG so they render crisply in the editor's light AND
    dark themes (they inherit currentColor) with no icon-font dependency. */
 const IconPlus = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M8 3.25v9.5M3.25 8h9.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-);
-const IconSlash = () => (
-  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M10.25 3 5.75 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>
 );
 const IconMic = () => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="6" y="2" width="4" height="7.5" rx="2" fill="currentColor" /><path d="M3.75 8a4.25 4.25 0 0 0 8.5 0M8 12.25V14" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" /></svg>
@@ -437,7 +422,10 @@ export function App() {
 
   useEffect(() => {
     const offInit = onInit(setInit);
-    const offToken = onTokenChange(() => force((n) => n + 1));
+    // A re-mint can be a different tenant (sign-out/in, workspace switch), and model
+    // entitlements are per tenant — drop the cached surface so the `/` menu never
+    // offers the previous tenant's models.
+    const offToken = onTokenChange(() => { invalidateModelSurface(); force((n) => n + 1); });
     return () => { offInit(); offToken(); };
   }, []);
 
@@ -573,12 +561,9 @@ function Chat({ init }: { init: InitData }) {
     writeStored(EFFORT_KEY, next);
   }, []);
   const [thinking, setThinkingState] = useState(() => readStored(THINKING_KEY) === '1');
-  const toggleThinking = useCallback(() => {
-    setThinkingState((prev) => {
-      const next = !prev;
-      writeStored(THINKING_KEY, next ? '1' : '0');
-      return next;
-    });
+  const setThinking = useCallback((next: boolean) => {
+    setThinkingState(next);
+    writeStored(THINKING_KEY, next ? '1' : '0');
   }, []);
   const [webBrowsing, setWebBrowsing] = useState(false);
   // The per-turn LIMBIC/affective block for the CURRENT turn — fetched from the host
@@ -767,25 +752,40 @@ function Chat({ init }: { init: InitData }) {
   const effortMaxTokens = effortProfile(effort).maxTokens;
   const reasoning = useMemo(() => reasoningForRun({ effort, thinking }), [effort, thinking]);
 
-  // Which model is in force, and WHO PAYS for it. A BYO tenant connects their own
-  // provider key precisely so their turns stop drawing on the plan — but the composer
-  // never said which was happening, so "what do these do?" had no answer for the one
-  // thing that costs money. `GET /llm/v1/models` already returns the tenant's connected
-  // providers and their servable models; read it once and classify the active model.
-  // Purely informational: any failure just leaves the funding line off.
-  const [modelSurface, setModelSurface] = useState<ModelSurface | null>(null);
+  // Which models this tenant may run, which one is in force, and WHO PAYS for it —
+  // everything the `/` menu needs to both SHOW and CHANGE the model without leaving
+  // the panel. A BYO tenant connects their own provider key precisely so their turns
+  // stop drawing on the plan, so the funding line rides every row. Cached per base
+  // URL (see modelOptions.ts); any failure degrades to "auto only". The labels are
+  // keyed on the host's bundle, not on `t` (rebuilt every render), so the fetch below
+  // re-runs on a new init frame rather than on every keystroke.
+  const promptLabels = useMemo(() => promptMenuLabels(makeT(init.labels)), [init.labels]);
+  const [modelChoices, setModelChoices] = useState<ComposerModelSurface | null>(null);
+  const costLine = promptLabels.paidCostDetail;
   useEffect(() => {
     let cancelled = false;
-    apiReq<ModelSurface>('/llm/v1/models')
-      .then((r) => { if (!cancelled) setModelSurface(r); })
-      .catch(() => { /* best-effort — the menu simply omits the funding line */ });
+    loadComposerModels(apiReq, init.baseUrl, { paidCostDetail: costLine })
+      .then((r) => { if (!cancelled) setModelChoices(r); })
+      .catch(() => { /* best-effort — the menu falls back to Auto */ });
     return () => { cancelled = true; };
-  }, [apiReq]);
+  }, [apiReq, init.baseUrl, costLine]);
+  const modelSurface = modelChoices?.surface ?? null;
 
-  const modelFunding = useMemo(
-    () => describeModelFunding(init.model, modelSurface, t, init.routingMode),
-    [init.model, init.routingMode, modelSurface, t],
+  // The user's CHOICE, reconstructed from what the host resolved: a strict pin, the
+  // BYO pool, or auto (in which case `init.model` is whatever auto landed on — the
+  // configured default or the project's Evermind pin — and the menu names it).
+  const modelSelection = useMemo<ChatModelSelection>(
+    () => (init.modelStrict && init.model
+      ? { mode: 'model', model: init.model }
+      : init.routingMode === 'byo_pool' ? { mode: 'byo_pool' } : { mode: 'auto' }),
+    [init.model, init.modelStrict, init.routingMode],
   );
+  // Changing the model is host state (it drives BOTH editor chat surfaces and
+  // survives this panel), so the pick crosses the bridge; the host re-posts `init`
+  // and the menu re-renders from it.
+  const chooseModel = useCallback((selection: ChatModelSelection) => {
+    post('model.set', selection.mode === 'model' ? { mode: 'model', model: selection.model } : { mode: selection.mode });
+  }, []);
 
   // Tool-call failover: hand the run loop the SHARED selector over the surface above,
   // so "which model next" is decided in one place for every host rather than here.
@@ -1798,65 +1798,33 @@ function Chat({ init }: { init: InitData }) {
             )}
           </PopoverMenu>
 
-          {/* / : effort, thinking, the model in force, and account settings.
+          {/* / : effort, thinking, WHICH MODEL IS RUNNING (and switching it), and
+              account settings. The SHARED control — the same component the web
+              composer renders — so the editor can't drift from it, and so model
+              choice lives in the panel instead of a chip that punted to a QuickPick.
               Every row states its REAL effect (answer budget, thinking budget, who
               pays) — the levels used to be bare adjectives that changed nothing but
               prose, which is exactly why users couldn't tell what they did. */}
-          <PopoverMenu align="left" title={t('app.options', 'Options')} trigger={<IconSlash />}>
-            {(close) => (
-              <>
-                <div className="bf-menu__group">{t('app.effort', 'Effort')}</div>
-                <MenuItem
-                  icon="🏃"
-                  label={t('app.effortQuick', 'Quick')}
-                  desc={effortDesc('quick', thinking, t)}
-                  active={effort === 'quick'}
-                  onClick={() => setEffort('quick')}
-                />
-                <MenuItem
-                  icon="⚖️"
-                  label={t('app.effortBalanced', 'Balanced')}
-                  desc={effortDesc('balanced', thinking, t)}
-                  active={effort === 'balanced'}
-                  onClick={() => setEffort('balanced')}
-                />
-                <MenuItem
-                  icon="🎯"
-                  label={t('app.effortThorough', 'Thorough')}
-                  desc={effortDesc('thorough', thinking, t)}
-                  active={effort === 'thorough'}
-                  onClick={() => setEffort('thorough')}
-                />
-                <div className="bf-menu__sep" />
-                <MenuItem
-                  icon="💭"
-                  label={t('app.thinking', 'Thinking')}
-                  desc={thinking
-                    ? t('app.thinkingOnDesc', 'The model reasons before answering, with a {budget}-token thinking budget at this effort. Slower, better on hard problems.')
-                        .replace('{budget}', effortProfile(effort).thinkingBudgetTokens.toLocaleString())
-                    : t('app.thinkingOffDesc', 'Off — the model answers directly. Turn on for a reasoning pass before the answer.')}
-                  hint={thinking ? t('app.on', 'On') : t('app.off', 'Off')}
-                  active={thinking}
-                  onClick={toggleThinking}
-                />
-                {modelFunding && (
-                  <>
-                    <div className="bf-menu__sep" />
-                    <div className="bf-menu__group">{t('app.modelInUse', 'Model in use')}</div>
-                    <div className="bf-menu__info">
-                      <span className="bf-menu__ico" aria-hidden="true">🧠</span>
-                      <span className="bf-menu__lbl">
-                        {modelFunding.name}
-                        <span className="bf-menu__desc">{modelFunding.funding}</span>
-                      </span>
-                    </div>
-                  </>
-                )}
-                <div className="bf-menu__sep" />
-                <MenuItem icon="⚙" label={t('app.accountSettings', 'Account settings')} onClick={() => { close(); post('settings'); }} />
-              </>
-            )}
-          </PopoverMenu>
+          <PromptOptionsMenu
+            labels={promptLabels}
+            effort={effort}
+            onEffortChange={setEffort}
+            describeEffort={(level) => effortDesc(level, thinking, t)}
+            thinking={thinking}
+            onThinkingChange={setThinking}
+            describeThinking={(on) => (on
+              ? t('app.thinkingOnDesc', 'The model reasons before answering, with a {budget}-token thinking budget at this effort. Slower, better on hard problems.')
+                  .replace('{budget}', effortProfile(effort).thinkingBudgetTokens.toLocaleString())
+              : t('app.thinkingOffDesc', 'Off — the model answers directly. Turn on for a reasoning pass before the answer.'))}
+            model={modelChoices ? {
+              selection: modelSelection,
+              options: modelChoices.options,
+              onChange: chooseModel,
+              effective: init.model,
+              canChoose: modelChoices.canChooseModel,
+            } : undefined}
+            onAccountSettings={() => post('settings')}
+          />
 
           {/* Auto mode = auto-approve tool actions (same gate as the confirm dialog). */}
           <button
@@ -1928,15 +1896,6 @@ function Chat({ init }: { init: InitData }) {
           {/* Evermind posture for the active project — parity with the web Brain
               composer. Self-gates (renders nothing until a seeded Evermind). */}
           <EvermindStatusBadge baseUrl={init.baseUrl} projectId={associatedProjectId} t={t} />
-
-          <button
-            type="button"
-            className="bf-model bf-model--btn"
-            title={t('app.pickModel', 'Change model')}
-            onClick={() => post('pickModel')}
-          >
-            {init.model ?? (init.routingMode === 'byo_pool' ? t('app.modelPoolShort', 'Pool') : t('app.modelAutoShort', 'Auto'))}
-          </button>
 
           {/* Speech-to-text — only where the runtime supports it, and never while a
               run is streaming (the composer is otherwise showing Stop). */}

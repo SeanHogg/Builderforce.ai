@@ -8104,3 +8104,210 @@ export const creationSessionsApi = {
   openResource: (resourceType: 'chat' | 'workflow' | 'agent', resourceId: string | number) =>
     request<{ sessionId: string; objectId: string; created: boolean }>(`/api/creation-sessions/resources/${resourceType}/${encodeURIComponent(String(resourceId))}/open`, { method: 'POST' }),
 };
+
+// ---------------------------------------------------------------------------
+// Challenges — paste a brief, get a working system
+// ---------------------------------------------------------------------------
+
+export interface ChallengeSpec {
+  title: string;
+  sponsor: string | null;
+  goal: string;
+  capabilities: string[];
+  integrations: string[];
+  deliverables: string[];
+  constraints: string[];
+  successCriteria: string[];
+}
+
+export interface ChallengeRequiredConnector { key: string; label: string; why: string }
+export interface ChallengeRequiredSecret { name: string; label: string; where: string }
+
+export interface ChallengePlan {
+  blueprintKey: string;
+  blueprintName: string;
+  matchScore: number;
+  matchReasons: string[];
+  considered: Array<{ key: string; name: string; score: number; reasons: string[] }>;
+  strategy: 'declarative' | 'github-worker';
+  summary: string;
+  files: Record<string, string>;
+  handlers: Record<string, unknown>;
+  handlerWarnings: string[];
+  tasks: Array<{ title: string; description: string; order: number }>;
+  requiredConnectors: ChallengeRequiredConnector[];
+  requiredSecrets: ChallengeRequiredSecret[];
+  successCriteria: string[];
+}
+
+export interface Challenge {
+  id: string;
+  title: string;
+  sponsor: string | null;
+  status: 'parsed' | 'planned' | 'building' | 'built' | 'failed';
+  blueprintKey: string | null;
+  projectId: number | null;
+  brief: string;
+  spec: ChallengeSpec;
+  plan: ChallengePlan;
+  error: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
+/** A remaining human action before the built system is live. */
+export interface ChallengeSetupStep {
+  key: string;
+  label: string;
+  detail: string;
+  url?: string;
+  blocking: boolean;
+}
+
+export interface ChallengeBuildResult {
+  projectId: number;
+  projectKey: string;
+  ingressUrl: string;
+  filesWritten: string[];
+  handlersWritten: string[];
+  tasksCreated: number;
+  tasksSkipped: number;
+  readiness: ChallengeSetupStep[];
+  warnings: string[];
+}
+
+export interface BlueprintSummary {
+  key: string;
+  name: string;
+  summary: string;
+  capabilities: string[];
+  strategy: string;
+  requiredConnectors: ChallengeRequiredConnector[];
+  requiredSecrets: ChallengeRequiredSecret[];
+  handlerCount: number;
+  successCriteria: string[];
+}
+
+export interface HostingStrategySummary {
+  key: string;
+  label: string;
+  summary: string;
+  zeroSetup: boolean;
+}
+
+export const challengeApi = {
+  list: (): Promise<Challenge[]> =>
+    request<{ challenges: Challenge[] }>('/api/challenges').then((r) => r.challenges),
+
+  get: (id: string): Promise<Challenge> =>
+    request<{ challenge: Challenge }>(`/api/challenges/${encodeURIComponent(id)}`).then((r) => r.challenge),
+
+  /** Read + plan a pasted brief. Builds nothing. */
+  create: (brief: string, projectId?: number): Promise<Challenge> =>
+    request<{ challenge: Challenge }>('/api/challenges', {
+      method: 'POST',
+      body: JSON.stringify({ brief, projectId }),
+    }).then((r) => r.challenge),
+
+  /** Re-read the same brief — useful after connecting an integration. */
+  replan: (id: string): Promise<Challenge> =>
+    request<{ challenge: Challenge }>(`/api/challenges/${encodeURIComponent(id)}/replan`, { method: 'POST' })
+      .then((r) => r.challenge),
+
+  /** Materialise the plan: canvas files, live handlers, tickets. Idempotent. */
+  build: (id: string): Promise<{ challenge: Challenge | null; result: ChallengeBuildResult }> =>
+    request<{ challenge: Challenge | null; result: ChallengeBuildResult }>(
+      `/api/challenges/${encodeURIComponent(id)}/build`,
+      { method: 'POST' },
+    ),
+
+  remove: (id: string): Promise<{ ok: boolean }> =>
+    request<{ ok: boolean }>(`/api/challenges/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  blueprints: (): Promise<{ blueprints: BlueprintSummary[]; strategies: HostingStrategySummary[] }> =>
+    request<{ blueprints: BlueprintSummary[]; strategies: HostingStrategySummary[] }>('/api/challenges/blueprints'),
+};
+
+// ---------------------------------------------------------------------------
+// Project backends — the server-side half of a project
+// ---------------------------------------------------------------------------
+
+export interface ProjectBackendHandler {
+  name: string;
+  route: string;
+  method: string;
+  verify: 'none' | 'twilio' | 'shared-secret';
+  description: string | null;
+  url: string;
+  stepCount: number;
+}
+
+export interface ProjectSecretSummary {
+  id: string;
+  name: string;
+  description: string | null;
+  hint: string | null;
+  updatedAt: string | null;
+}
+
+export interface ProjectBackendView {
+  backend: {
+    strategy: 'declarative' | 'github-worker';
+    status: string;
+    ingressUrl: string;
+    deployedUrl: string | null;
+    lastDeployedAt: string | null;
+    handlerCount: number;
+  };
+  strategies: HostingStrategySummary[];
+  handlers: ProjectBackendHandler[];
+  handlerErrors: Array<{ path: string; reason: string }>;
+  secrets: ProjectSecretSummary[];
+  missingSecrets: string[];
+}
+
+export interface ProjectBackendRequestRow {
+  id: number;
+  route: string;
+  method: string;
+  statusCode: number;
+  verdict: 'ok' | 'unverified' | 'no-handler' | 'error';
+  durationMs: number | null;
+  error: string | null;
+  createdAt: string | null;
+}
+
+export const projectBackendApi = {
+  get: (projectId: number): Promise<ProjectBackendView> =>
+    request<ProjectBackendView>(`/api/projects/${projectId}/backend`),
+
+  setStrategy: (projectId: number, strategy: string) =>
+    request<{ backend: { strategy: string; ingressUrl: string } }>(`/api/projects/${projectId}/backend`, {
+      method: 'PATCH',
+      body: JSON.stringify({ strategy }),
+    }),
+
+  /** Re-run the hosting strategy (regenerate the endpoint map / the Worker). */
+  materialize: (projectId: number) =>
+    request<{ result: { setupSteps: ChallengeSetupStep[]; written: string[]; handlerCount: number } }>(
+      `/api/projects/${projectId}/backend/materialize`,
+      { method: 'POST' },
+    ),
+
+  requests: (projectId: number): Promise<ProjectBackendRequestRow[]> =>
+    request<{ requests: ProjectBackendRequestRow[] }>(`/api/projects/${projectId}/backend/requests`)
+      .then((r) => r.requests),
+
+  /** Store or rotate a secret. The value is never readable afterwards. */
+  setSecret: (projectId: number, name: string, value: string, description?: string) =>
+    request<{ ok: boolean; secrets: ProjectSecretSummary[] }>(
+      `/api/projects/${projectId}/backend/secrets/${encodeURIComponent(name)}`,
+      { method: 'PUT', body: JSON.stringify({ value, description }) },
+    ),
+
+  deleteSecret: (projectId: number, name: string) =>
+    request<{ ok: boolean; secrets: ProjectSecretSummary[] }>(
+      `/api/projects/${projectId}/backend/secrets/${encodeURIComponent(name)}`,
+      { method: 'DELETE' },
+    ),
+};

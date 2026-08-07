@@ -187,6 +187,30 @@ function getEmailProvider(env: EmailEnv): EmailProvider | null {
   return null;
 }
 
+/**
+ * Send a fully-composed message as-is.
+ *
+ * Every other sender in this file renders a PLATFORM template — our chrome, our
+ * footer, our From. Tenant marketing campaigns are the one case where the body
+ * and the From belong to the tenant (they authored it and verified the sending
+ * domain), so they cannot go through `deliver`. They must still go through the
+ * same provider cascade — Resend with the SendPulse quota fallback — rather than
+ * standing up a second HTTP client, which is what this exports.
+ *
+ * Throws `EmailDeliveryError` when no provider is configured: a campaign that
+ * silently sends to nobody is worse than one that fails loudly.
+ */
+export async function sendRawEmail(
+  env: EmailEnv,
+  message: { to: string; subject: string; html: string; from?: string },
+): Promise<void> {
+  const provider = getEmailProvider(env);
+  if (!provider) {
+    throw new EmailDeliveryError('No email provider is configured', 'resend', null);
+  }
+  await provider.send(message);
+}
+
 // ---------------------------------------------------------------------------
 // Template helpers
 // ---------------------------------------------------------------------------

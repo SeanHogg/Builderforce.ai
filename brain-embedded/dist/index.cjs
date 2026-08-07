@@ -36,6 +36,7 @@ __export(src_exports, {
   DEFAULT_TOOL_LIMIT: () => DEFAULT_TOOL_LIMIT,
   EVERMIND_LEARN_MIN_CHARS: () => EVERMIND_LEARN_MIN_CHARS,
   NOT_STARTED_TASK_STATUSES: () => NOT_STARTED_TASK_STATUSES,
+  PROJECT_EVERMIND_MODEL_PREFIX: () => PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY: () => PROVENANCE_META_KEY,
   STEP_MESSAGE_ROLE: () => STEP_MESSAGE_ROLE,
   TICKET_RECORDING_TOOLS: () => TICKET_RECORDING_TOOLS,
@@ -3749,11 +3750,13 @@ function takePendingPrompt() {
 // src/chatDiagnostics.ts
 function classifyModelFunding(model, surface) {
   if (!model) return "auto";
+  if (model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX)) return "evermind";
   const byo = (surface?.byo?.models ?? []).find((m) => m.id === model);
   if (byo?.vendor) return `byo:${byo.vendor}`;
   if ((surface?.data ?? []).some((m) => m.id === model)) return "plan";
   return "premium";
 }
+var PROJECT_EVERMIND_MODEL_PREFIX = "project_evermind:";
 function fmtProject(id, name) {
   if (id == null) return "none";
   return name ? `${name} (#${id})` : `#${id}`;
@@ -3962,6 +3965,7 @@ function formatChatDiagnostics(d) {
   DEFAULT_TOOL_LIMIT,
   EVERMIND_LEARN_MIN_CHARS,
   NOT_STARTED_TASK_STATUSES,
+  PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY,
   STEP_MESSAGE_ROLE,
   TICKET_RECORDING_TOOLS,

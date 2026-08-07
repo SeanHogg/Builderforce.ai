@@ -693,7 +693,8 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
   it('uses the compact composer controls for models, artifacts, and memory', async () => {
     const { container } = render(<CreationCanvas sessionId="compact-composer-test" persistence="local" />);
 
-    expect(screen.getByRole('button', { name: 'Choose model' })).toHaveTextContent('/');
+    // Model choice lives in the shared `/` control, which also states the model in use.
+    expect(screen.getByRole('button', { name: /Options · Model in use/ })).toHaveTextContent('/');
     expect(screen.getByRole('button', { name: 'Memory' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
     expect(screen.getByRole('menuitem', { name: /Upload from computer/ })).toBeInTheDocument();

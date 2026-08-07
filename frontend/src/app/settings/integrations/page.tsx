@@ -6,14 +6,20 @@ import PageContainer from '@/components/PageContainer';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { ProviderKeysSettings } from '@/components/ProviderKeysSettings';
 import { IntegrationsGallery } from '@/components/integrations/IntegrationsGallery';
+import { ConnectorsGallery } from '@/components/connectors/ConnectorsGallery';
 import { EmbedIntegrationSettings } from '@/components/settings/EmbedIntegrationSettings';
 import { ApiKeysContent } from '@/components/settings/ApiKeysContent';
 import { getStoredTenant } from '@/lib/auth';
 
-type Category = 'all' | 'models' | 'apps' | 'developer' | 'embed';
+type Category = 'all' | 'models' | 'connectors' | 'apps' | 'developer' | 'embed';
 const CATEGORIES: Array<{ id: Category; icon: string }> = [
   { id: 'all', icon: '' },
   { id: 'models', icon: '🧠' },
+  // Connectors are the BREADTH surface (declarative manifests, any HTTPS API);
+  // "apps" below is the narrower set of two-way synced board providers. They are
+  // separate sections because connecting Jira as a board and calling Jira's API as
+  // a tool are different jobs with different contracts.
+  { id: 'connectors', icon: '🔗' },
   { id: 'apps', icon: '🔌' },
   { id: 'developer', icon: '🔑' },
   { id: 'embed', icon: '⌗' },
@@ -62,6 +68,7 @@ export default function SettingsIntegrationsPage() {
       </div>
 
       {show('models') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.models')}</h2><ProviderKeysSettings search={search} viewMode={viewMode} priorityOpen={priorityOpen} onPriorityClose={() => setPriorityOpen(false)} onLeaderChange={setPriorityLeader} /></section>}
+      {show('connectors') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.connectors')}</h2><ConnectorsGallery search={search} viewMode={viewMode} /></section>}
       {show('apps') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.apps')}</h2><IntegrationsGallery search={search} viewMode={viewMode} /></section>}
       {isOwner && show('developer') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.developer')}</h2><ApiKeysContent embedded showProviderKeys={false} search={search} externalViewMode={viewMode} /></section>}
       {show('embed') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('embedHeading')}</h2><EmbedIntegrationSettings /></section>}

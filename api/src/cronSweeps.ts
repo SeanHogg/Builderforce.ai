@@ -38,6 +38,8 @@ import { runWebScanSweep } from './application/security/webSecurityScan';
 import { runReleaseDigest } from './application/email/releaseDigest';
 import { runDueTriggers } from './application/workflow/runDueTriggers';
 import { processPendingCloudWorkflows } from './application/workflow/cloudExecutor';
+import { runCampaignSendSweep } from './application/marketing/campaignEngine';
+import { runCustomDomainSweep } from './application/ide/customDomain';
 import { reapStaleExecutions } from './application/runtime/staleExecutionReaper';
 import { reconcileGithubActionsRuns } from './application/runtime/githubActionsReconcile';
 import { runExecutionLifecycleOutboxSweep } from './application/runtime/executionLifecycleOutbox';
@@ -202,6 +204,26 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
       await runDueTriggers(env);
       await processPendingCloudWorkflows(env);
       return null;
+    },
+  },
+  {
+    key: 'campaign-send',
+    cadence: 'frequent',
+    description: 'Advance every in-flight marketing campaign by one batch of recipients.',
+    run: async ({ env }) => {
+      const r = await runCampaignSendSweep(env, buildDatabase(env));
+      return r.sent > 0 || r.failed > 0
+        ? `campaigns=${r.campaigns} sent=${r.sent} failed=${r.failed}`
+        : null;
+    },
+  },
+  {
+    key: 'custom-domains',
+    cadence: 'frequent',
+    description: 'Re-check custom domains waiting on their DNS proof or certificate; activate the ready ones.',
+    run: async ({ env }) => {
+      const r = await runCustomDomainSweep(env, buildDatabase(env));
+      return r.activated > 0 ? `checked=${r.checked} activated=${r.activated}` : null;
     },
   },
   {

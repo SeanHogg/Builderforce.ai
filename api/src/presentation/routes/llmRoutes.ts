@@ -65,6 +65,11 @@ import { originAllowed, deserializeScopes } from '../../application/llm/tenantAp
 import { listToolsForTenant, callMcpTool } from '../../application/llm/mcpExtensionService';
 import { listBuiltinTools, callBuiltinTool, BUILTIN_EXTENSION_ID } from '../../application/llm/builtinMcpService';
 import {
+  listConnectorTools,
+  callConnectorTool,
+  CONNECTOR_EXTENSION_ID,
+} from '../../application/connectors/connectorTools';
+import {
   setTenantProviderKey,
   setTenantProviderOAuth,
   resolveAnthropicAuth,
@@ -2002,8 +2007,16 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return respondToAccessError(c, err);
     }
     const db = buildDatabase(c.env);
-    // First-party platform tools (in-process) + the tenant's external MCP servers.
-    const tools = [...listBuiltinTools(), ...await listToolsForTenant(db, access.tenantId, c.env.JWT_SECRET, fetch, c.env as Env)];
+    // THREE sources, one list: first-party platform tools (in-process), the
+    // tenant's CONNECTED connectors (declarative manifests, executed by
+    // connectorRuntime), and the tenant's external MCP servers. The two
+    // network-bound sources are fetched concurrently — the MCP leg calls every
+    // customer server, and serialising a cached DB read behind it is free latency.
+    const [connectorTools, extensionTools] = await Promise.all([
+      listConnectorTools(db, access.tenantId, c.env as Env),
+      listToolsForTenant(db, access.tenantId, c.env.JWT_SECRET, fetch, c.env as Env),
+    ]);
+    const tools = [...listBuiltinTools(), ...connectorTools, ...extensionTools];
     return c.json({ tools });
   });
 
@@ -2025,9 +2038,15 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     }
     const db = buildDatabase(c.env);
     try {
-      // First-party platform tools run in-process; everything else relays to the
-      // tenant's external MCP server.
-      const result = body.extensionId === BUILTIN_EXTENSION_ID
+      // First-party platform tools run in-process; connector actions go through the
+      // shared connector runtime (SSRF-guarded, audited); everything else relays to
+      // the tenant's external MCP server.
+      const result = body.extensionId === CONNECTOR_EXTENSION_ID
+        ? await callConnectorTool({
+            db, env: c.env as Env, tenantId: access.tenantId,
+            tool: body.tool, arguments: body.arguments,
+          })
+        : body.extensionId === BUILTIN_EXTENSION_ID
         ? await callBuiltinTool(db, {
             tenantId: access.tenantId, tool: body.tool, arguments: body.arguments,
             env: c.env as Env, userId: access.userId, role: access.role,

@@ -130,6 +130,7 @@ import { createQaRoutes }           from './presentation/routes/qaRoutes';
 import { createRepoAnalysisRoutes } from './presentation/routes/repoAnalysisRoutes';
 import { createStudioVoiceCloneRoutes } from './presentation/routes/studioVoiceCloneRoutes';
 import { createIntegrationRoutes }  from './presentation/routes/integrationRoutes';
+import { createConnectorRoutes }    from './presentation/routes/connectorRoutes';
 import { createContributorRoutes }  from './presentation/routes/contributorRoutes';
 import { runRepoActivitySweep }      from './application/contributors/runRepoActivitySweep';
 import { createDevTeamRoutes }      from './presentation/routes/devTeamRoutes';
@@ -140,9 +141,14 @@ import { createPromptLibraryRoutes } from './presentation/routes/promptLibraryRo
 import { createBrainRoutes }       from './presentation/routes/brainRoutes';
 import { createBrainFilesRoutes }  from './presentation/routes/brainFilesRoutes';
 import { createSitesRoutes, tryServeHostedSite } from './presentation/routes/sitesRoutes';
+import { createSiteManageRoutes } from './presentation/routes/siteManageRoutes';
+import { createGrowthRoutes, createCampaignTrackRoutes } from './presentation/routes/campaignRoutes';
 import { maybeHandlePreviewIngress } from './application/runtime/previewIngress';
 import { createIdeRoutes }         from './presentation/routes/ideRoutes';
 import { createCompileRoutes }     from './presentation/routes/compileRoutes';
+import { createChallengeRoutes }   from './presentation/routes/challengeRoutes';
+import { createProjectBackendRoutes } from './presentation/routes/projectBackendRoutes';
+import { createHooksRoutes }       from './presentation/routes/hooksRoutes';
 import { createIdeProjectRoutes }  from './presentation/routes/ideProjectRoutes';
 import { createIdeAiRoutes }       from './presentation/routes/ideAiRoutes';
 import { BrainService }            from './application/brain/BrainService';
@@ -336,7 +342,17 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // auth. Reserved/platform hosts (api.builderforce.ai, www, …) return null from
   // subdomainFromHost and fall through to next() and normal routing.
   app.use('*', async (c, next) => {
-    const res = await tryServeHostedSite(c.env, c.req.header('host'), c.req.path);
+    // `executionCtx` is unavailable in some test harnesses; without it the
+    // traffic flush is awaited inline rather than skipped, so a request is
+    // never served uncounted.
+    let waitUntil: ((p: Promise<unknown>) => void) | undefined;
+    try {
+      const ctx = c.executionCtx;
+      waitUntil = (p) => ctx.waitUntil(p);
+    } catch {
+      waitUntil = undefined;
+    }
+    const res = await tryServeHostedSite(c.env, c.req.raw, waitUntil);
     if (res) return res;
     return next();
   });
@@ -487,7 +503,19 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Published IDE (Designer) sites — public static hosting from R2. Served at
   // <sub>.builderforce.ai via the wildcard route; the path form
   // /api/sites/<sub>/... is the always-on fallback. No JWT (these are public websites).
+  // Project backend ingress — where a provider's webhook lands (an inbound SMS,
+  // an IVR leg on a live call, a delivery-status callback). Public by necessity:
+  // Twilio cannot present a session. Authentication is per MESSAGE — each handler
+  // declares how its caller is proved and an unverified request never runs a step.
+  // The token in the path only prevents enumeration. See hooksRoutes.ts.
+  app.route('/hooks', createHooksRoutes(db));
+
   app.route('/api/sites', createSitesRoutes());
+
+  // Campaign open / click / unsubscribe. Hit by a recipient's MAIL CLIENT, so it
+  // is mounted here with the other unauthenticated public surfaces — the only
+  // credential is the unguessable per-recipient token in the path.
+  app.route('/api/campaign-track', createCampaignTrackRoutes(db));
 
   // Public Developer API (Bearer <developer_api_key> for read-only; tenant JWT for key management)
   app.route('/api/v1', createPublicApiRoutes(db));
@@ -630,6 +658,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
 
   // Phase 6 — Dev Analytics & Team Intelligence
   app.route('/api/integrations',    createIntegrationRoutes(db, env.INTEGRATION_ENCRYPTION_SECRET ?? env.JWT_SECRET));
+  app.route('/api/connectors',      createConnectorRoutes(db));
   app.route('/api/contributors',    createContributorRoutes(db));
   app.route('/api/dev-teams',       createDevTeamRoutes(db));
   app.route('/api/reports',         createReportRoutes(db));
@@ -664,6 +693,12 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/teams',        createTeamRoutes(db));
   app.route('/api/ide',       createIdeRoutes());
   app.route('/api/compile',   createCompileRoutes(db, runtimeService));
+  // Paste a brief (a contest, an RFP, a hackathon prompt) → extracted requirements,
+  // a matched blueprint, a plan, and — on an explicit second call — a built project.
+  app.route('/api/challenges', createChallengeRoutes(db));
+  // Operating a project's server-side half: hosting strategy, live handlers, the
+  // per-project secret vault, and the inbound-delivery log.
+  app.route('/api/projects',  createProjectBackendRoutes(db));
   app.route('/api/ide-projects', createIdeProjectRoutes(projectService, db));
   app.route('/api/ai',        createIdeAiRoutes(projectService));
   app.route('/api/studio/models', createEvermindModelRoutes(db));
@@ -676,6 +711,16 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/projects',  createProjectFactsRoutes(db));
   app.route('/api/agent/projects', createProjectFactsAgentRoutes(db));
   app.route('/api/studio',    createStudioRoutes());
+
+  // Owner-side control of a published site: custom domain, form collections and
+  // their submissions, and the traffic rollup (migration 0412).
+  app.route('/api/projects',  createSiteManageRoutes(db));
+  // Tenant marketing — audiences, verified senders, campaigns, sending. Mounted
+  // at /api/growth, NOT /api/marketing: that prefix already belongs to our own
+  // marketing-site visitor telemetry (marketingRoutes.ts), whose `/track`
+  // endpoint is deliberately anonymous and must not inherit this router's
+  // authMiddleware.
+  app.route('/api/growth', createGrowthRoutes(db));
 
   // Cloud Agent Boards
   app.route('/api/boards',            createBoardRoutes(db));

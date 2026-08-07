@@ -128,7 +128,19 @@ export const projectSites = pgTable('project_sites', {
   r2Prefix:      text('r2_prefix').notNull(),
   versionToken:  varchar('version_token', { length: 32 }).notNull(),
   indexDocument: varchar('index_document', { length: 128 }).notNull().default('index.html'),
-  customDomain:  varchar('custom_domain', { length: 255 }),
+  /** Vanity hostname the tenant owns. Only routable once BOTH ownership is
+   *  proven and a certificate exists, so it is meaningless without the
+   *  lifecycle columns below (0412). `unset → pending_dns → pending_certificate
+   *  → active`, or `failed`. */
+  customDomain:            varchar('custom_domain', { length: 255 }),
+  customDomainStatus:      varchar('custom_domain_status', { length: 24 }).notNull().default('unset'),
+  /** Published by the tenant as a TXT record at `_builderforce-challenge.<domain>`
+   *  and resolved over DNS-over-HTTPS, so proving ownership needs no zone access. */
+  customDomainToken:       varchar('custom_domain_token', { length: 64 }),
+  customDomainVerifiedAt:  timestamp('custom_domain_verified_at'),
+  /** Cloudflare for SaaS custom-hostname id, once the cert has been requested. */
+  customDomainHostnameId:  varchar('custom_domain_hostname_id', { length: 64 }),
+  customDomainError:       text('custom_domain_error'),
   assetCount:    integer('asset_count').notNull().default(0),
   totalBytes:    bigint('total_bytes', { mode: 'number' }).notNull().default(0),
   publishedAt:   timestamp('published_at'),
@@ -1327,3 +1339,119 @@ export const taskFileChanges = pgTable('task_file_changes', {
 }, (t) => ({
   byTask: index('idx_task_file_changes_task').on(t.taskId, t.createdAt),
 }));
+
+
+// ---------------------------------------------------------------------------
+// Challenge pipeline + project backends (migration 0411)
+// ---------------------------------------------------------------------------
+
+/**
+ * A project's own credential vault — the values ITS deployed backend runs with.
+ *
+ * Deliberately separate from `connector_connections`: a connection is "the
+ * tenant's production Slack, callable by agents"; a project secret is scoped to
+ * one project's running system (the Twilio auth token its webhook verifier needs,
+ * a signing key, a partner API key). Collapsing them would let any deployed
+ * project backend read every credential the tenant owns.
+ *
+ * `valueEnc`/`iv` are AES-256-GCM sealed with the per-tenant derived key — the
+ * same `credentialCrypto` contract every other credential store uses. `hint` is
+ * the last 4 plaintext characters so the UI can identify WHICH token is stored
+ * without ever reading the value back.
+ */
+export const projectSecrets = pgTable('project_secrets', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  projectId:      integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** Env-var style name (`[A-Z][A-Z0-9_]*`), validated in the application. */
+  name:           varchar('name', { length: 128 }).notNull(),
+  valueEnc:       text('value_enc').notNull(),
+  iv:             varchar('iv', { length: 64 }).notNull(),
+  description:    text('description'),
+  hint:           varchar('hint', { length: 8 }),
+  createdByUserId: varchar('created_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_project_secrets_project_name').on(t.projectId, t.name),
+  index('idx_project_secrets_project').on(t.projectId),
+]);
+
+/**
+ * Where a project's SERVER-SIDE half runs. One row per project.
+ *
+ * `strategy` names a BackendHostingStrategy (application/backend/hostingStrategy):
+ * `declarative` (handlers/*.json in the canvas, executed by this worker at
+ * `/hooks/<ingressToken>/…`) or `github-worker` (a real Worker generated into the
+ * user's repo and deployed to THEIR Cloudflare account).
+ *
+ * `ingressToken` is the unguessable public path segment webhooks are delivered
+ * to. It is NOT a bearer secret — per-handler provider signature verification is
+ * the real authentication; the token only prevents enumeration.
+ */
+export const projectBackends = pgTable('project_backends', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  projectId:      integer('project_id').notNull().unique().references(() => projects.id, { onDelete: 'cascade' }),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  strategy:       varchar('strategy', { length: 32 }).notNull().default('declarative'),
+  status:         varchar('status', { length: 16 }).notNull().default('active'),
+  ingressToken:   varchar('ingress_token', { length: 48 }).notNull().unique(),
+  deployedUrl:    varchar('deployed_url', { length: 500 }),
+  lastDeployedAt: timestamp('last_deployed_at'),
+  handlerCount:   integer('handler_count').notNull().default(0),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_project_backends_tenant').on(t.tenantId),
+]);
+
+/**
+ * One row per inbound webhook delivery — the "did Twilio actually reach us, and
+ * what did we say back?" trail. Bodies are NOT stored (they carry message content
+ * and customer PII); the shape, verdict and timing are.
+ */
+export const projectBackendRequests = pgTable('project_backend_requests', {
+  id:          bigserial('id', { mode: 'number' }).primaryKey(),
+  projectId:   integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  route:       varchar('route', { length: 255 }).notNull(),
+  method:      varchar('method', { length: 8 }).notNull(),
+  statusCode:  integer('status_code').notNull(),
+  /** 'ok' | 'unverified' | 'no-handler' | 'error' */
+  verdict:     varchar('verdict', { length: 24 }).notNull(),
+  durationMs:  integer('duration_ms'),
+  error:       text('error'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_project_backend_requests_project_time').on(t.projectId, t.createdAt),
+]);
+
+/**
+ * A pasted brief (a contest, an RFP, a hackathon prompt) and everything the
+ * platform derived from it.
+ *
+ * `spec` is the extracted structured requirement set; `plan` is what the platform
+ * decided to build. Both persist so a challenge is re-openable and "why did it
+ * build that?" is answerable without re-running the model.
+ */
+export const challenges = pgTable('challenges', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** Set once BUILT; null while the challenge is only parsed + planned. */
+  projectId:     integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  title:         varchar('title', { length: 255 }).notNull(),
+  sponsor:       varchar('sponsor', { length: 255 }),
+  brief:         text('brief').notNull(),
+  spec:          jsonb('spec').notNull().default(sql`'{}'::jsonb`),
+  plan:          jsonb('plan').notNull().default(sql`'{}'::jsonb`),
+  blueprintKey:  varchar('blueprint_key', { length: 64 }),
+  /** 'parsed' → 'planned' → 'building' → 'built' → 'failed' */
+  status:        varchar('status', { length: 16 }).notNull().default('parsed'),
+  error:         text('error'),
+  createdByUserId: varchar('created_by_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_challenges_tenant_time').on(t.tenantId, t.createdAt),
+  index('idx_challenges_project').on(t.projectId),
+]);

@@ -70,7 +70,14 @@ export interface InitData {
    *  the host decides via `init` which surface this panel is — the Brain chat (default),
    *  Project 360, or a list-shaped project page (Backlog / PRDs) — same bundle, same
    *  transport, one code path. */
-  view?: 'brain' | 'project360' | 'backlog' | 'prd' | 'roadmap' | 'retros' | 'poker' | 'evermind';
+  view?: 'brain' | 'project360' | 'backlog' | 'prd' | 'roadmap' | 'retros' | 'poker' | 'evermind' | 'canvas';
+  /** For `view: 'canvas'` — the durable Creation Session this panel is editing.
+   *  `webOrigin` builds shareable links: a webview's own origin is
+   *  `vscode-webview://…`, which is useless to whoever receives an invitation. */
+  session?: { id: string; title: string; webOrigin: string };
+  /** The editor's active colour theme, so the canvas picks the matching palette
+   *  (the board declares both itself; `light` is the opt-out). Re-sent on change. */
+  colorTheme?: 'light' | 'dark';
   /** The sidebar's active BuilderForce project — injected into the system prompt so
    *  the Brain scopes platform tools to it, and used to scope new chats. */
   project?: { id: number; name: string };

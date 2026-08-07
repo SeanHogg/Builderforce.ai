@@ -20,7 +20,7 @@ import {
 } from '@/lib/api';
 import { getApiBaseUrl } from '@/lib/apiClient';
 import { downloadBlob } from '@/lib/download';
-import { hasWebGPUSupport } from '@seanhogg/builderforce-studio';
+import { hasWebGPUSupport } from '@seanhogg/builderforce-studio/capabilities';
 import { WebGPUTrainer, canTrainInBrowser, type BrowserLoRAArtifact, type TrainingDataMode, type TrainingStep } from '@/lib/webgpu-trainer';
 import { benchmarkPublishedModel, listEvermindModels, publishEvermindModel, rollbackPublishedEvermindModel, testPublishedEvermindModel, type PublishedEvermindModel, type PublishedEvermindResult } from '@/lib/studioModelsApi';
 import { MambaEngine } from '@/lib/mamba-engine';

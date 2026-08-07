@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { fetchSite, publishSite, type SiteInfo } from '@/lib/api';
 import { GitHubDeployPanel } from './ide/GitHubDeployPanel';
+import { SiteDomainPanel, SiteFormsPanel, SiteTrafficPanel } from './site/SiteGrowthPanels';
 
 interface SitePublishPanelProps {
   projectId: number;
@@ -159,6 +160,12 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
 
       {/* The CI half: same site, built by GitHub instead of the browser. */}
       <GitHubDeployPanel projectId={projectId} subdomain={site?.subdomain ?? undefined} />
+
+      {/* Everything that happens AFTER the deploy. Each panel gates itself on
+          there being a published site, so no condition is duplicated here. */}
+      <SiteDomainPanel projectId={projectId} />
+      <SiteFormsPanel projectId={projectId} />
+      <SiteTrafficPanel projectId={projectId} />
     </div>
   );
 }

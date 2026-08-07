@@ -2,6 +2,12 @@
 
 All notable changes to the BuilderForce VS Code extension are documented here.
 
+## [2026.7.115] — Pick your model from the composer, without leaving the chat
+
+- **The model now lives in the `/` menu, next to Effort and Thinking.** The composer used to carry a separate chip that only told you the model's name; changing it threw you into a VS Code quick-pick, and the panel could never show you what was actually on offer. Now the `/` control names the model in use right on the button, and opening it gives you the full list — searchable, filtered by who pays (Free, Plan, Paid, BYO, your saved LLM configs) — with the funding line on every row, so you can see that a pick is billed to your own connected account rather than your plan allowance before you make it. The old chip is gone; **Change model** remains in the Sessions view overflow and the command palette.
+- **"Auto" now tells you what auto actually chose.** Previously an auto-routed chat just said "Auto" — it never named the model the gateway resolved for it, including a project's own Evermind model, which was reported as a metered premium model it is not.
+- **The `/` menu is now the same control on the web and in the editor**, so a change to either one can no longer leave the other behind.
+
 ## [2026.7.109] — The Evermind panel is now tabbed, and you can send its diagnostics to someone
 
 - **The Evermind panel's four jobs are now four tabs — Teach, Test, Check and Maintain.** They used to be stacked one under the other, which turned the sidebar into a scroll marathon: "Replace the model" sat a page and a half below the state it was meant to repair. Each tab is now one job, and the things that are always true — the version, what it has learned, whether it is serving replies, and any quarantine warning — stay pinned above the tabs, so you can never replace a model without seeing why it stopped working. Arrow keys move between tabs.

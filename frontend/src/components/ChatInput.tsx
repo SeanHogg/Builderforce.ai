@@ -1,13 +1,13 @@
 'use client';
 
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { PromptPanel, useMentionAutocomplete } from '@seanhogg/builderforce-brain-ui';
-import type { DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
+import { PromptPanel, PromptOptionsMenu, useMentionAutocomplete, type ChatModelOptions, type ChatModelSelection, type PromptOptionsLabels } from '@seanhogg/builderforce-brain-ui';
+import { effortProfile, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import type { BrainEffort } from '@/lib/brain';
-import { ModelSelectionPicker, type ChatModelOptions, type ChatModelSelection } from './ModelSelectionPicker';
-export type { ChatModelOptions, ChatModelSelection } from './ModelSelectionPicker';
+export type { ChatModelOptions, ChatModelSelection } from '@seanhogg/builderforce-brain-ui';
 
 /** Browser Web Speech API (not in all TS libs). */
 type SpeechRecognitionInstance = {
@@ -69,12 +69,17 @@ export interface ChatInputProps {
   onThinkingChange?: (on: boolean) => void;
   /** When set, the `/` options menu shows an "Account settings" link to this href. */
   accountSettingsHref?: string;
-  /** Model routing for the next turn. A named model is sent as a strict pin. */
+  /** Model routing for the next turn, shown and changed in the `/` menu. A named
+   *  model is sent as a strict pin. */
   modelSelection?: ChatModelSelection;
   modelOptions?: ChatModelOptions;
   onModelSelectionChange?: (selection: ChatModelSelection) => void;
-  /** Render model selection as a compact `/` control instead of a labeled picker. */
-  modelTrigger?: 'label' | 'slash';
+  /** The model the gateway will actually use while the selection is `auto`, when
+   *  the host knows it — so the menu names what is running, not just "Auto". */
+  effectiveModel?: string;
+  /** False ⇒ the tenant may not pin a model (no paid plan, no connected provider):
+   *  the `/` menu says why instead of offering a list the gateway would reject. */
+  canChooseModel?: boolean;
   /** When set, an "Auto mode" pill toggles this (auto-approve tool actions). */
   autoMode?: boolean;
   onAutoModeChange?: (on: boolean) => void;
@@ -198,15 +203,6 @@ function SendArrowIcon() {
   );
 }
 
-/** Forward slash (options menu trigger) */
-function SlashIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <line x1="15" y1="5" x2="9" y2="19" />
-    </svg>
-  );
-}
-
 /** Lightning bolt (auto mode) */
 function BoltIcon() {
   return (
@@ -269,14 +265,13 @@ function ComposerMenu({ trigger, title, disabled, children }: {
   );
 }
 
-/** One row in a {@link ComposerMenu}: icon + label, optional hint/active check, button or link. */
-function MenuRow({ icon, label, hint, active, onClick, href }: {
+/** One row in a {@link ComposerMenu}: icon + label, optional hint/active check. */
+function MenuRow({ icon, label, hint, active, onClick }: {
   icon: React.ReactNode;
   label: string;
   hint?: string;
   active?: boolean;
   onClick?: () => void;
-  href?: string;
 }) {
   const [hover, setHover] = useState(false);
   const style: React.CSSProperties = {
@@ -303,14 +298,7 @@ function MenuRow({ icon, label, hint, active, onClick, href }: {
     </>
   );
   const shared = { style, role: 'menuitem' as const, onMouseEnter: () => setHover(true), onMouseLeave: () => setHover(false) };
-  return href
-    ? <Link href={href} {...shared}>{body}</Link>
-    : <button type="button" onClick={onClick} {...shared}>{body}</button>;
-}
-
-/** Section heading inside a menu (e.g. "Effort"). */
-function menuGroupStyle(): React.CSSProperties {
-  return { padding: '6px 9px 3px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--text-muted)' };
+  return <button type="button" onClick={onClick} {...shared}>{body}</button>;
 }
 
 /**
@@ -342,7 +330,8 @@ export function ChatInput({
   modelSelection,
   modelOptions,
   onModelSelectionChange,
-  modelTrigger = 'label',
+  effectiveModel,
+  canChooseModel = true,
   autoMode,
   onAutoModeChange,
   showBrainIcon = false,
@@ -376,13 +365,66 @@ export function ChatInput({
     const end = el.value.length;
     el.setSelectionRange(end, end);
   }, [focusToken]);
+  const router = useRouter();
   const canSubmit = value.trim().length > 0 && !disabled;
   // "Activated" once the user is typing in / focused on the composer — the whole
   // box lights up in accent (blue), the same treatment as the VS Code composer so
   // the experience matches across every modality.
   const active = focused || value.trim().length > 0;
-  // The `/` options menu appears when the consumer wires any of its controls.
-  const hasOptionsMenu = !!(onEffortChange || onThinkingChange || accountSettingsHref);
+
+  // The `/` menu's copy. Localized here (next-intl) and handed to the SHARED
+  // control, so the web and the editor render the same menu from their own bundles.
+  // The per-row funding lines that interpolate a value (the BYO vendor, the metered
+  // price) are formatted by the options builder instead — see useChatModelOptions.
+  const optionLabels = useMemo<Partial<PromptOptionsLabels>>(() => ({
+    options: t('options'),
+    effort: t('effort'),
+    effortQuick: t('effort_quick'),
+    effortBalanced: t('effort_balanced'),
+    effortThorough: t('effort_thorough'),
+    thinking: t('thinking'),
+    on: t('on'),
+    off: t('off'),
+    model: t('model'),
+    modelInUse: t('modelInUse'),
+    searchModels: t('searchModels'),
+    filterModels: t('filterModels'),
+    chooseModel: t('chooseModel'),
+    noModels: t('noModels'),
+    all: t('all'),
+    categoryAuto: t('categoryAuto'),
+    categoryByo: t('categoryByo'),
+    categoryFree: t('categoryFree'),
+    categoryPlan: t('categoryPlan'),
+    categoryPaid: t('categoryPaid'),
+    categoryConfigured: t('categoryConfigured'),
+    autoLabel: t('categoryAuto'),
+    autoDetail: t('autoDetail'),
+    poolLabel: t('poolLabel'),
+    poolDetail: t('poolDetail'),
+    freeDetail: t('freeDetail'),
+    planDetail: t('planDetail'),
+    paidDetail: t('paidDetail'),
+    configuredDetail: t('configuredDetail'),
+    evermindLabel: t('evermindLabel'),
+    evermindDetail: t('evermindDetail'),
+    modelLocked: t('modelLocked'),
+    accountSettings: t('accountSettings'),
+  }), [t]);
+
+  // What each control really costs, read from the SHARED effort table so the copy
+  // can never promise a budget the request does not send.
+  const describeEffort = useCallback((level: BrainEffort) => {
+    const { maxTokens, thinkingBudgetTokens } = effortProfile(level);
+    const base = t(`effortDesc_${level}`, { answer: maxTokens.toLocaleString() });
+    return thinking ? `${base} ${t('effortDescThinking', { thinking: thinkingBudgetTokens.toLocaleString() })}` : base;
+  }, [t, thinking]);
+  const describeThinking = useCallback(
+    (on: boolean) => (on
+      ? t('thinkingOnDesc', { budget: effortProfile(effort ?? 'balanced').thinkingBudgetTokens.toLocaleString() })
+      : t('thinkingOffDesc')),
+    [t, effort],
+  );
 
   // The textarea always takes its own full-width row on top (so typed text is
   // never crushed into a sliver in a narrow side-panel), and the control buttons
@@ -582,44 +624,24 @@ export function ChatInput({
             </ComposerMenu>
               </>
             )}
-            {modelTrigger === 'slash' && onModelSelectionChange && modelOptions && modelSelection && (
-          <ModelSelectionPicker selection={modelSelection} options={modelOptions} onChange={onModelSelectionChange} disabled={disabled} triggerVariant="slash" />
-            )}
+            {/* `/` : effort, thinking, WHICH MODEL IS RUNNING and how to change it,
+                and account settings — the one shared control, so this composer can
+                never grow a second "which model" chip beside it again. */}
+            <PromptOptionsMenu
+              labels={optionLabels}
+              disabled={disabled}
+              effort={effort}
+              onEffortChange={onEffortChange}
+              describeEffort={describeEffort}
+              thinking={thinking}
+              onThinkingChange={onThinkingChange}
+              describeThinking={describeThinking}
+              model={onModelSelectionChange && modelOptions && modelSelection
+                ? { selection: modelSelection, options: modelOptions, onChange: onModelSelectionChange, effective: effectiveModel, canChoose: canChooseModel }
+                : undefined}
+              onAccountSettings={accountSettingsHref ? () => router.push(accountSettingsHref) : undefined}
+            />
             {contextControls}
-            {hasOptionsMenu && (
-          <ComposerMenu title={t('options')} disabled={disabled} trigger={<SlashIcon />}>
-            {(close) => (
-              <>
-                {onEffortChange && (
-                  <>
-                    <div style={menuGroupStyle()}>{t('effort')}</div>
-                    {(['quick', 'balanced', 'thorough'] as const).map((e) => (
-                      <MenuRow
-                        key={e}
-                        icon={e === 'quick' ? '🏃' : e === 'balanced' ? '⚖️' : '🎯'}
-                        label={t(`effort_${e}`)}
-                        active={effort === e}
-                        onClick={() => onEffortChange(e)}
-                      />
-                    ))}
-                  </>
-                )}
-                {onThinkingChange && (
-                  <MenuRow
-                    icon="💭"
-                    label={t('thinking')}
-                    hint={thinking ? t('on') : t('off')}
-                    active={!!thinking}
-                    onClick={() => onThinkingChange(!thinking)}
-                  />
-                )}
-                {accountSettingsHref && (
-                  <MenuRow icon="⚙️" label={t('accountSettings')} href={accountSettingsHref} onClick={close} />
-                )}
-              </>
-            )}
-          </ComposerMenu>
-            )}
             {onAutoModeChange && (
           <button
             type="button"
@@ -646,9 +668,6 @@ export function ChatInput({
             <BoltIcon />
             <span>{t('autoMode')}</span>
           </button>
-            )}
-            {modelTrigger !== 'slash' && onModelSelectionChange && modelOptions && modelSelection && (
-          <ModelSelectionPicker selection={modelSelection} options={modelOptions} onChange={onModelSelectionChange} disabled={disabled} />
             )}
             {modeControls}
             {showBrainIcon && (

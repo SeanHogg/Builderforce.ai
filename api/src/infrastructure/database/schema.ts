@@ -22,3 +22,4 @@ export * from './schema/collaboration';
 export * from './schema/commerce';
 export * from './schema/governance';
 export * from './schema/platform';
+export * from './schema/growth';

@@ -1,6 +1,11 @@
 # Unscoped Drizzle statements against tenant-owned tables, as path:count.
 # Counts may only go DOWN — see scripts/check-tenant-scope.mjs.
 # Regenerate with: node scripts/check-tenant-scope.mjs --update
+# application/backend/index.ts — the ONE statement here is backendByIngressToken(),
+# which resolves a PUBLIC webhook ingress token to its project. It runs before any
+# tenant is known (that row IS the tenant resolution), so there is no predicate to
+# add. Every other read/write in that module is scopedToTenant. Not debt; if this
+# count ever rises, the new statement is.
 application/activity/autonomyWiringAudit.ts:2
 application/activity/ticketLifecycleLedger.ts:4
 application/agent/AgentAssignmentService.ts:1
@@ -12,11 +17,12 @@ application/artifact/capabilityContext.ts:1
 application/audit/ticketAuditService.ts:4
 application/auth/DeviceAuthService.ts:6
 application/auth/sessionRevocation.ts:2
+application/backend/index.ts:1
 application/boardsync/drizzleStore.ts:8
 application/boardsync/runBoardSyncSweep.ts:1
-application/brain/brainEvermindLearning.ts:1
 application/brain/BrainService.ts:8
 application/brain/ChatTicketService.ts:5
+application/brain/brainEvermindLearning.ts:1
 application/calendar/calendarService.ts:1
 application/ceremony/ceremonyMeeting.ts:4
 application/ceremony/ceremonyNotifier.ts:3
@@ -52,8 +58,8 @@ application/llm/tenantApiKeyService.ts:1
 application/llm/tenantModelService.ts:1
 application/maintenance/parkAgeTimeout.ts:1
 application/maintenance/retentionPurge.ts:4
-application/manager/coordinateTicket.ts:2
 application/manager/ManagerService.ts:1
+application/manager/coordinateTicket.ts:2
 application/manager/runManagerSweep.ts:1
 application/manager/stallWatch.ts:2
 application/manager/triageStage.ts:2
@@ -88,8 +94,8 @@ application/security/SecurityAuditService.ts:3
 application/security/securityDispatch.ts:1
 application/security/sessionCounts.ts:1
 application/studio/voiceCloneService.ts:3
-application/swimlane/canonicalBoard.ts:1
 application/swimlane/DrizzleCoordinatorStore.ts:4
+application/swimlane/canonicalBoard.ts:1
 application/swimlane/evaluateAutoRun.ts:3
 application/swimlane/findOrCreateBoard.ts:1
 application/swimlane/laneRequirementGate.ts:5

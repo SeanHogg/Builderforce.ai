@@ -31,7 +31,7 @@ import {
   type BaseQuant,
   type EvermindLMConfig,
 } from '@seanhogg/builderforce-memory-engine';
-import { hasWebGPUSupport } from '@seanhogg/builderforce-studio';
+import { hasWebGPUSupport } from '@seanhogg/builderforce-studio/capabilities';
 import { downloadDataset, uploadArtifact, updateTrainingJob, streamTrainingLogs } from './api';
 import type { TrainingLog } from './types';
 

@@ -352,6 +352,16 @@ export interface Env {
   /** App URL used to build checkout success/cancel redirect URLs (e.g. "https://builderforce.ai") */
   APP_URL?: string;
 
+  /**
+   * Canonical public origin of THIS API, used to build addresses handed to third
+   * parties — a project's webhook ingress URL, and the gateway URL baked into a
+   * generated Worker. It cannot be derived from the request: the same worker is
+   * reachable as `api.builderforce.ai` AND as `builderforce.ai/gateway/*`, and a
+   * webhook URL pasted into Twilio's console must not depend on which one the
+   * user happened to be on when they copied it. Defaults to the api subdomain.
+   */
+  API_ORIGIN?: string;
+
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   /** Pro plan flat-rate prices */
@@ -483,6 +493,35 @@ export interface Env {
    *  CLOUDFLARE_TURN_API_TOKEN */
   CLOUDFLARE_TURN_KEY_ID?: string;
   CLOUDFLARE_TURN_API_TOKEN?: string;
+
+  /** Cloudflare for SaaS — custom domains on published sites.
+   *
+   *  A tenant's own hostname (`shop.example.com`) lives on a zone we do not
+   *  control, so serving it over HTTPS needs a certificate issued through
+   *  Cloudflare for SaaS custom hostnames. OWNERSHIP verification does not need
+   *  these (it resolves a TXT record over DNS-over-HTTPS); only the certificate
+   *  does. When either is unset the domain flow still runs and still verifies,
+   *  but parks at `pending_certificate` with that reason stated — see
+   *  application/ide/customDomain.ts.
+   *
+   *  `CLOUDFLARE_ZONE_ID` is the builderforce.ai zone id (dashboard → Overview).
+   *  The token needs the `Zone → SSL and Certificates → Edit` permission on that
+   *  zone: wrangler secret put CLOUDFLARE_SAAS_API_TOKEN */
+  CLOUDFLARE_ZONE_ID?: string;
+  CLOUDFLARE_SAAS_API_TOKEN?: string;
+
+  /** Salt for the one-way hash of a site visitor's IP (`site_records.ip_hash`,
+   *  daily visitor counting). Falls back to JWT_SECRET so the feature works
+   *  un-provisioned; set a dedicated value so rotating it cannot invalidate
+   *  sessions: wrangler secret put SITE_VISITOR_SALT */
+  SITE_VISITOR_SALT?: string;
+
+  /** Origin baked into marketing-email tracking links (open pixel, click
+   *  redirect, unsubscribe). MUST be stable forever — links already delivered
+   *  keep resolving against it. Defaults to `https://builderforce.ai/gateway`,
+   *  the same-origin gateway path corporate networks reliably allow. Override
+   *  only for a separate deployment: wrangler secret put CAMPAIGN_TRACKING_ORIGIN */
+  CAMPAIGN_TRACKING_ORIGIN?: string;
 }
 
 /**
@@ -496,6 +535,27 @@ export function resolveAppBaseUrl(env: { APP_URL?: string }): string {
     .split(',')[0]!
     .trim()
     .replace(/\/$/, '');
+}
+
+/**
+ * The canonical public origin of THIS API — the one to hand to a third party.
+ *
+ * Deliberately NOT derived from the incoming request. The worker answers on both
+ * `api.builderforce.ai` and `builderforce.ai/gateway/*`, so building a webhook
+ * URL from `c.req.url` would produce a different address depending on which host
+ * the user's browser happened to be on, and a URL already pasted into a provider
+ * console would keep working while the one shown in the UI quietly changed.
+ * Falls back to the api subdomain of the configured app origin.
+ */
+export function resolveApiOrigin(env: { API_ORIGIN?: string; APP_URL?: string }): string {
+  if (env.API_ORIGIN) return env.API_ORIGIN.split(',')[0]!.trim().replace(/\/$/, '');
+  const app = resolveAppBaseUrl(env);
+  try {
+    const url = new URL(app);
+    return url.hostname.startsWith('api.') ? url.origin : `${url.protocol}//api.${url.hostname.replace(/^www\./, '')}`;
+  } catch {
+    return 'https://api.builderforce.ai';
+  }
 }
 
 /** Variables injected into Hono context by the auth middleware. */

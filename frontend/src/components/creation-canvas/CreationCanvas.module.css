@@ -96,11 +96,23 @@
   border-radius: 8px; padding: 8px 13px; border: 1px solid var(--canvas-line); cursor: pointer; font-family:inherit; font-size:12px; font-weight:650;
 }
 .primaryButton, .fullButton { background: var(--canvas-blue); color: #fff; border-color: var(--canvas-blue); }
+/* Full-width, but a secondary choice next to the section's primary action. */
+.secondaryFullButton { border-radius:8px; padding:8px 13px; border:1px solid var(--canvas-line); background:var(--canvas-panel-muted); color:var(--canvas-ink); font:650 12px inherit; font-family:inherit; cursor:pointer; }
+.secondaryFullButton:disabled { opacity:.5; cursor:not-allowed; }
 .secondaryButton { background: var(--canvas-panel); color: var(--canvas-ink); }
 .undoRedoGroup { display:inline-flex; gap:0; overflow:hidden; border:1px solid var(--canvas-line); border-radius:8px; }
 .undoRedoGroup .secondaryButton { width:36px; height:34px; display:grid; place-items:center; padding:0; border:0; border-radius:0; }
 .undoRedoGroup .secondaryButton + .secondaryButton { border-left:1px solid var(--canvas-line); }
 .undoRedoGroup .secondaryButton:hover,.undoRedoGroup .secondaryButton:focus-visible { z-index:1; background:var(--canvas-hover); outline:none; }
+/* Editor-only capture actions (VS Code). Same segmented-group shape as undo/redo
+   so the session bar reads as one row of controls rather than a bolted-on strip;
+   it inherits the canvas palette, so both themes come from the tokens above. */
+.hostActions { display:inline-flex; gap:0; overflow:hidden; border:1px solid var(--canvas-line); border-radius:8px; }
+.hostActions .secondaryButton { width:36px; height:34px; display:grid; place-items:center; padding:0; border:0; border-radius:0; font-size:14px; }
+.hostActions .secondaryButton + .secondaryButton { border-left:1px solid var(--canvas-line); }
+.hostActions .secondaryButton:hover,.hostActions .secondaryButton:focus-visible { z-index:1; background:var(--canvas-hover); outline:none; }
+.hostActions .secondaryButton:disabled { opacity:.45; cursor:not-allowed; }
+.hostActions .secondaryButton[aria-busy='true'] { opacity:.6; }
 .saveButtonShort { display:none; }
 .iconAction { width:34px; min-width:34px; height:34px; display:inline-grid; place-items:center; padding:0; font-size:14px; line-height:1; }
 .iconAction[aria-pressed='true'] { border-color:var(--canvas-blue); color:var(--canvas-blue); background:color-mix(in srgb,var(--canvas-blue) 12%,var(--canvas-panel)); }
@@ -357,6 +369,26 @@
   .heroArt { min-height:105px; order:-1; }
   .siteBenefits { flex-wrap:wrap; gap:5px; }
 }
+
+/* Builder tile — a canvas object bound to a real IDE project. Palette comes from
+   the board's own --canvas-* tokens, so it reads correctly in light AND dark. */
+.buildBody { display:flex; flex:1; min-height:0; flex-direction:column; gap:7px; }
+.buildType { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+.buildType > span { width:22px; height:22px; flex:none; display:grid; place-items:center; border-radius:7px; background:color-mix(in srgb,var(--canvas-blue) 15%,var(--canvas-panel)); color:var(--canvas-accent-ink); font-size:12px; }
+.buildType strong { color:var(--canvas-ink); font-size:11px; }
+.buildType em { padding:2px 6px; border-radius:999px; background:var(--canvas-panel-muted); color:var(--canvas-muted); font:650 8px var(--font-sans); font-style:normal; white-space:nowrap; }
+.buildType em[data-bound='true'] { background:var(--tone-success-bg); color:var(--tone-success-ink); }
+.buildBody > p { margin:0; color:var(--canvas-ink-soft); font-size:9px; line-height:1.5; }
+.buildLink { margin-top:auto; color:var(--canvas-accent-ink); font-size:9px; overflow-wrap:anywhere; }
+
+/* The IDE surface opened from a Builder object. Fills the focus overlay; the IDE
+   owns its own chrome, so this only supplies the box it lives in.
+   The builder is a genuinely wide surface (file tree + editor + preview + right
+   rail). Below its working width it SCROLLS inside this box rather than crushing
+   its panes — the page itself never scrolls sideways. */
+.buildFocusBody { display:flex; flex:1; min-height:0; min-width:0; flex-direction:column; overflow-x:auto; overflow-y:hidden; }
+.buildFocusBody > * { min-width:900px; }
+@media (min-width:960px) { .buildFocusBody > * { min-width:0; } }
 
 .kpis { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; }.kpis div { display: grid; gap: 3px; padding: 8px; border: 1px solid #e0e7f0; border-radius: 8px; }.kpis small,.charts small { color: #75849a; }.kpis strong { font-size: 17px; }.kpis em { color: #1bab75; font-size: 8px; font-style: normal; }
 .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }.charts > div { min-height: 85px; padding: 8px; border: 1px solid #e0e7f0; border-radius: 8px; }
