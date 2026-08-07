@@ -3535,6 +3535,117 @@ function takePendingPrompt() {
   }
 }
 
+// src/modelChoice.ts
+var PROJECT_EVERMIND_MODEL_PREFIX = "project_evermind:";
+var DEFAULT_MODEL_CHOICE_LABELS = {
+  categoryAuto: "Auto",
+  categoryByo: "BYO",
+  categoryFree: "Free",
+  categoryPlan: "Plan",
+  categoryPaid: "Paid",
+  categoryConfigured: "Configured",
+  autoLabel: "Auto",
+  autoDetail: "Routed per turn \u2014 your connected accounts first, then your plan.",
+  poolLabel: "BYO pool",
+  poolDetail: "Tries your connected accounts in the order configured in Account settings.",
+  freeDetail: "Free \xB7 included with BuilderForce",
+  planDetail: "Included with your BuilderForce plan",
+  paidDetail: "Premium \u2014 metered at cost + 1\xA2 per request",
+  paidCostDetail: "{input} input / {output} output per 1M tokens + $0.01 per request",
+  byoDetail: "Billed to your own {vendor} account \u2014 no plan credit used.",
+  configuredDetail: "Saved workspace LLM configuration",
+  evermindLabel: "Project Evermind",
+  evermindDetail: "Your project's own learned Evermind model."
+};
+var BYO_VENDOR_LABELS = {
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+  "kimi-code": "Kimi Code",
+  moonshot: "Moonshot AI",
+  google: "Google",
+  meta: "Meta",
+  xai: "xAI",
+  mistral: "Mistral",
+  deepseek: "DeepSeek"
+};
+function byoVendorLabel(vendor) {
+  return BYO_VENDOR_LABELS[vendor] ?? vendor.replace(/^./, (ch) => ch.toUpperCase());
+}
+function perMillionUsd(rate) {
+  return `$${(rate * 1e6).toFixed(2)}`;
+}
+function premiumCostLabel(pricing, template) {
+  return template.replace("{input}", perMillionUsd(pricing.prompt)).replace("{output}", perMillionUsd(pricing.completion));
+}
+var MODEL_CATEGORIES = ["auto", "byo", "free", "plan", "paid", "configured"];
+function modelCategoryLabel(category, labels) {
+  switch (category) {
+    case "auto":
+      return labels.categoryAuto;
+    case "byo":
+      return labels.categoryByo;
+    case "free":
+      return labels.categoryFree;
+    case "plan":
+      return labels.categoryPlan;
+    case "paid":
+      return labels.categoryPaid;
+    case "configured":
+      return labels.categoryConfigured;
+  }
+}
+function buildModelItems(options, labels) {
+  const items = [
+    { key: "auto", label: labels.autoLabel, detail: labels.autoDetail, category: "auto", selection: { mode: "auto" } }
+  ];
+  const normalized = (value) => typeof value === "string" ? { id: value } : value;
+  const seen = /* @__PURE__ */ new Set();
+  const add = (id, label, detail, category) => {
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    items.push({ key: `model:${id}`, label, detail, category, selection: { mode: "model", model: id } });
+  };
+  for (const value of options.free) {
+    const model = normalized(value);
+    add(model.id, model.id, model.cost ?? labels.freeDetail, "free");
+  }
+  const free = new Set(options.free.map((value) => normalized(value).id));
+  for (const value of options.plan) {
+    const model = normalized(value);
+    if (!free.has(model.id)) add(model.id, model.id, model.cost ?? labels.planDetail, "plan");
+  }
+  for (const value of options.paid) {
+    const model = normalized(value);
+    add(model.id, model.id, model.cost ?? labels.paidDetail, "paid");
+  }
+  if (options.byo.length) {
+    items.push({ key: "byo_pool", label: labels.poolLabel, detail: labels.poolDetail, category: "byo", selection: { mode: "byo_pool" } });
+  }
+  for (const model of options.byo) {
+    add(model.id, model.id, model.cost ?? labels.byoDetail.replace("{vendor}", byoVendorLabel(model.vendor)), "byo");
+  }
+  for (const model of options.configured ?? []) add(model.id, model.label, model.id, "configured");
+  return items;
+}
+function activeModelKey(selection) {
+  return selection.mode === "model" ? `model:${selection.model}` : selection.mode;
+}
+function filterModelItems(items, labels, query, category) {
+  const needle = query.trim().toLowerCase();
+  return items.filter((item) => (category === "all" || item.category === category) && (!needle || `${item.label} ${item.detail} ${modelCategoryLabel(item.category, labels)}`.toLowerCase().includes(needle)));
+}
+function modelInUse(selection, items, labels, effective) {
+  const resolve = (model) => {
+    const item = items.find((entry) => entry.key === `model:${model}`);
+    if (item) return { name: item.label, detail: item.detail };
+    return model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX) ? { name: labels.evermindLabel, detail: labels.evermindDetail } : { name: model, detail: labels.autoDetail };
+  };
+  if (selection.mode === "model") return resolve(selection.model);
+  if (selection.mode === "byo_pool") return { name: labels.poolLabel, detail: labels.poolDetail };
+  if (effective) return resolve(effective);
+  return { name: labels.autoLabel, detail: labels.autoDetail };
+}
+
 // src/chatDiagnostics.ts
 function classifyModelFunding(model, surface) {
   if (!model) return "auto";
@@ -3544,7 +3655,6 @@ function classifyModelFunding(model, surface) {
   if ((surface?.data ?? []).some((m) => m.id === model)) return "plan";
   return "premium";
 }
-var PROJECT_EVERMIND_MODEL_PREFIX = "project_evermind:";
 function fmtProject(id, name) {
   if (id == null) return "none";
   return name ? `${name} (#${id})` : `#${id}`;
@@ -3749,8 +3859,10 @@ export {
   CONSOLIDATION_META,
   DEFAULT_CHAT_MODE,
   DEFAULT_CHAT_TITLE,
+  DEFAULT_MODEL_CHOICE_LABELS,
   DEFAULT_TOOL_LIMIT,
   EVERMIND_LEARN_MIN_CHARS,
+  MODEL_CATEGORIES,
   NOT_STARTED_TASK_STATUSES,
   PROJECT_EVERMIND_MODEL_PREFIX,
   PROVENANCE_META_KEY,
@@ -3762,14 +3874,17 @@ export {
   XmlToolCallFilter,
   accountUsedInTrace,
   activeMentionToken,
+  activeModelKey,
   allowanceState,
   announcesUntakenAction,
   attachEvermindLearn,
   brainRequestError,
   buildBrainTriageReport,
+  buildModelItems,
   byoReasonHint,
   byoUnresolvedInTrace,
   byoUnresolvedSummary,
+  byoVendorLabel,
   catalogToolNamesMentionedIn,
   chatConversationDirective,
   chatErrorAction,
@@ -3794,6 +3909,7 @@ export {
   fetchApiVersionVia,
   fetchMcpToolEntries,
   filterMentionCandidates,
+  filterModelItems,
   findTools,
   formatBrainDiagnostics,
   formatBrainProvenance,
@@ -3822,7 +3938,9 @@ export {
   linkedTicketsToAdvance,
   mcpActionsFrom,
   mentionRecipient,
+  modelCategoryLabel,
   modelFailoversInTrace,
+  modelInUse,
   modelsUsedInTrace,
   narratedUnadvertisedInTrace,
   nextFallbackModel,
@@ -3832,6 +3950,8 @@ export {
   parseMessageAuthor,
   parseMessageProvenance,
   parseStepMessage,
+  perMillionUsd,
+  premiumCostLabel,
   prepareImageDataUrl,
   reasoningForRun,
   resetApiVersionCache,

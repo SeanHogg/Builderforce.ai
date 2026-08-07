@@ -1,20 +1,17 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
 import { FEATURES, STATS, WORKFLOW_PROOF_DEMOS } from '@/lib/content';
-import { createLocalCreationSession } from '@/lib/creationSessions';
 import { BLOG_POSTS } from '@/lib/blogData';
 import { ArticleCardGrid } from '@/components/blog/ArticleCard';
 import QuickStart from '@/components/QuickStart';
-import BrainBackdrop from '@/components/BrainBackdrop';
 import { DemoShowcase } from '@/components/demo/DemoShowcase';
-import { ChatInput } from '@/components/ChatInput';
 import { AUTH_API_URL } from '@/lib/auth';
+import { LandingCanvasHero } from '@/components/home/LandingCanvasHero';
 import { MeetCarousel } from '@/components/home/MeetCarousel';
 
 // Visible copy is sourced from the `home`, `features`, `compare` and `evermind`
@@ -29,9 +26,7 @@ type PricingTeaser = { name: string; perks: string[] };
 type WorkflowProofCopy = { title: string; audience: string; outcome: string; steps: string[]; evidence: string };
 
 export default function LandingPage() {
-  const router = useRouter();
   const t = useTranslations();
-  const [prompt, setPrompt] = useState('');
   const [nlEmail, setNlEmail] = useState('');
   const [nlStatus, setNlStatus] = useState<'idle'|'sending'|'ok'|'error'>('idle');
   const [publicPlanPrices, setPublicPlanPrices] = useState<{ pro: number } | null>(null);
@@ -44,15 +39,6 @@ export default function LandingPage() {
       .catch(() => { /* Pricing CTA remains available; never invent a fallback price. */ });
     return () => { active = false; };
   }, []);
-
-  function handlePromptSubmit() {
-    const text = prompt.trim();
-    if (!text) return;
-    // Creation starts without an account. The complete browser draft is claimed
-    // by CreationSessionClient once the visitor signs in and has a workspace.
-    const sessionId = createLocalCreationSession(text);
-    router.push(`/create/${sessionId}`);
-  }
 
   async function handleNewsletterSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -83,106 +69,8 @@ export default function LandingPage() {
           flex-direction: column;
         }
 
-        /* ════════════════════ HERO ════════════════════ */
-        .lp-hero {
-          position: relative;
-          overflow: hidden;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          text-align: center;
-          min-height: 84vh;
-          padding: 56px 24px 170px;
-          gap: 0;
-          isolation: isolate; /* own stacking context so the wave sits behind content only */
-        }
-        /* Hero content rides above the Evermind brain backdrop. */
-        .lp-hero-content {
-          position: relative;
-          z-index: 1;
-          width: 100%;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-        }
-        /* Hero headline — the single dominant line (bolt.new-clean). */
-        .lp-hero-title {
-          font-family: var(--font-display);
-          font-size: clamp(2.4rem, 6vw, 4rem);
-          font-weight: 700;
-          line-height: 1.04;
-          letter-spacing: -0.02em;
-          color: rgba(236, 242, 255, 0.98);
-          margin: 0 0 14px;
-          max-width: 16ch;
-          animation: fadeInUp 0.8s ease-out both;
-        }
-        .lp-hero-title em {
-          font-style: italic;
-          background: linear-gradient(135deg, var(--coral-bright), var(--cyan-bright));
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-        }
-        .lp-hero-sub {
-          font-size: clamp(1rem, 2.2vw, 1.2rem);
-          color: rgba(214, 224, 244, 0.78);
-          line-height: 1.55;
-          max-width: 540px;
-          margin: 0 0 34px;
-          animation: fadeInUp 0.9s ease-out 0.15s both;
-        }
-
-        /* Prompt row — the prompt sits centred (the mascot now lives below it,
-           centred on the page, rather than in a right-hand column). */
-        .lp-prompt-row {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          width: 100%;
-        }
-        .lp-prompt-col {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          width: 100%;
-          max-width: 640px;
-        }
-
-        /* Badge */
-        .lp-badge {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          background: rgba(3, 10, 28, 0.78);
-          border: 1px solid rgba(70, 224, 255, 0.48);
-          border-radius: 999px;
-          padding: 5px 16px;
-          font-family: var(--font-display);
-          font-size: 0.72rem;
-          font-weight: 600;
-          color: rgba(240, 248, 255, 0.96);
-          text-shadow: 0 1px 8px rgba(0, 0, 0, 0.9);
-          box-shadow: 0 4px 18px rgba(0, 0, 0, 0.28);
-          letter-spacing: 0.12em;
-          text-transform: uppercase;
-          margin-bottom: 28px;
-          animation: fadeInUp 0.6s ease-out both;
-        }
-        .lp-badge-dot {
-          width: 6px;
-          height: 6px;
-          border-radius: 50%;
-          background: var(--cyan-bright);
-          box-shadow: 0 0 8px var(--cyan-glow);
-          animation: pulse 2.2s ease-in-out infinite;
-        }
-        @keyframes pulse {
-          0%, 100% { transform: scale(1); opacity: 1; }
-          50%       { transform: scale(0.75); opacity: 0.55; }
-        }
+        /* The hero lives in <LandingCanvasHero> (CSS module) — it renders the
+           seeded board, so it owns its own layout and theme tokens. */
 
         @keyframes fadeInUp {
           from { opacity: 0; transform: translateY(22px); }
@@ -238,39 +126,6 @@ export default function LandingPage() {
           box-shadow: 0 12px 32px var(--shadow-coral-soft);
         }
 
-        /* ════════ HERO PROMPT INPUT ════════ */
-        .lp-prompt {
-          width: 100%;
-          max-width: 640px;
-          animation: fadeInUp 0.9s ease-out 0.45s both;
-          --prompt-panel-bg: var(--surface-card);
-          --prompt-panel-border: var(--border-accent);
-          --prompt-panel-shadow: 0 12px 40px var(--shadow-coral-soft), inset 0 1px 0 var(--surface-inset-highlight);
-        }
-        .lp-prompt-examples {
-          display: flex;
-          flex-wrap: wrap;
-          justify-content: center;
-          gap: 8px;
-          max-width: 640px;
-          margin: 16px 0 4px;
-          animation: fadeInUp 0.9s ease-out 0.55s both;
-        }
-        .lp-chip {
-          padding: 7px 14px;
-          border-radius: 999px;
-          border: 1px solid var(--border-subtle);
-          background: var(--surface-card);
-          color: var(--text-secondary);
-          font-size: 0.82rem;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        }
-        .lp-chip:hover {
-          border-color: var(--border-accent);
-          color: var(--text-primary);
-          background: var(--surface-interactive);
-        }
         .lp-actions { margin-top: 28px; }
 
         /* ════════ STATS STRIP ════════ */
@@ -327,171 +182,6 @@ export default function LandingPage() {
           font-size: 0.8rem;
           color: var(--text-muted);
           line-height: 1.3;
-        }
-
-        /* ════════ EVERMIND ════════ */
-        .lp-evermind-eyebrow {
-          display: inline-block;
-          font-family: var(--font-display);
-          font-size: 0.72rem;
-          font-weight: 600;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: var(--cyan-bright);
-          margin-bottom: 10px;
-        }
-        .lp-evermind-edges {
-          display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 14px;
-          margin-top: 22px;
-        }
-        @media (max-width: 640px) {
-          .lp-evermind-edges { grid-template-columns: 1fr; }
-        }
-        .lp-evermind-edge {
-          display: flex;
-          flex-direction: column;
-          gap: 4px;
-          padding: 16px 18px;
-          border-radius: 14px;
-          border: 1px solid var(--border-subtle);
-          background: var(--surface-card);
-          backdrop-filter: blur(12px);
-        }
-        .lp-evermind-edge-label {
-          font-family: var(--font-display);
-          font-weight: 700;
-          font-size: 0.9rem;
-          background: linear-gradient(135deg, var(--coral-bright), var(--cyan-bright));
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          background-clip: text;
-        }
-        .lp-evermind-edge-desc {
-          font-size: 0.82rem;
-          color: var(--text-secondary);
-          line-height: 1.55;
-        }
-
-        /* ════════ CREATION CANVAS ════════ */
-        .lp-create {
-          position: relative;
-          overflow: hidden;
-          padding: 34px;
-          border: 1px solid var(--border-accent);
-          border-radius: 24px;
-          background:
-            radial-gradient(circle at 78% 30%, rgba(77,158,255,.12), transparent 34%),
-            linear-gradient(145deg, rgba(255,107,92,.08), var(--surface-card) 44%, rgba(0,229,204,.05));
-          box-shadow: inset 0 1px 0 var(--surface-inset-highlight), 0 24px 70px rgba(0,0,0,.12);
-        }
-        .lp-create::before {
-          content: '';
-          position: absolute;
-          inset: 0;
-          pointer-events: none;
-          opacity: .28;
-          background-image: radial-gradient(var(--border-subtle) 1px, transparent 1px);
-          background-size: 24px 24px;
-          mask-image: linear-gradient(90deg, transparent 28%, #000 58%);
-        }
-        .lp-create-head { position: relative; z-index: 1; max-width: 820px; }
-        .lp-create-eyebrow {
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          margin-bottom: 10px;
-          color: var(--coral-bright);
-          font: 700 .72rem/1 var(--font-display);
-          letter-spacing: .18em;
-          text-transform: uppercase;
-        }
-        .lp-create-layout {
-          position: relative;
-          z-index: 1;
-          display: grid;
-          grid-template-columns: minmax(250px,.75fr) minmax(520px,1.5fr);
-          gap: 30px;
-          align-items: stretch;
-          margin-top: 28px;
-        }
-        .lp-create-features { display: grid; gap: 10px; align-content: center; }
-        .lp-create-feature {
-          padding: 15px 16px;
-          border-left: 2px solid var(--coral-bright);
-          background: color-mix(in srgb, var(--bg-surface) 48%, transparent);
-          border-radius: 0 12px 12px 0;
-        }
-        .lp-create-feature strong {
-          display: block;
-          margin-bottom: 4px;
-          color: var(--text-primary);
-          font: 650 .9rem/1.3 var(--font-display);
-        }
-        .lp-create-feature span { color: var(--text-secondary); font-size: .8rem; line-height: 1.5; }
-        .lp-create-board {
-          position: relative;
-          min-height: 350px;
-          overflow: hidden;
-          border: 1px solid var(--border-subtle);
-          border-radius: 18px;
-          background-color: color-mix(in srgb, var(--bg-surface) 86%, transparent);
-          background-image: radial-gradient(var(--border-subtle) 1px, transparent 1px);
-          background-size: 22px 22px;
-          box-shadow: 0 18px 48px rgba(0,0,0,.22);
-        }
-        .lp-create-toolbar {
-          display: flex;
-          align-items: center;
-          gap: 7px;
-          height: 38px;
-          padding: 0 13px;
-          border-bottom: 1px solid var(--border-subtle);
-          background: var(--bg-elevated);
-          color: var(--text-muted);
-          font-size: .7rem;
-        }
-        .lp-create-toolbar i { width: 7px; height: 7px; border-radius: 50%; background: var(--coral-bright); }
-        .lp-create-toolbar i:nth-child(2) { background: #f5c451; }
-        .lp-create-toolbar i:nth-child(3) { background: var(--cyan-bright); }
-        .lp-create-toolbar span { margin-left: 5px; }
-        .lp-create-object {
-          position: absolute;
-          width: 190px;
-          padding: 13px 14px;
-          border: 1px solid var(--border-subtle);
-          border-radius: 12px;
-          background: var(--surface-card-strong);
-          box-shadow: 0 12px 30px rgba(0,0,0,.25);
-        }
-        .lp-create-object:nth-of-type(2) { left: 5%; top: 22%; }
-        .lp-create-object:nth-of-type(3) { right: 7%; top: 15%; width: 210px; }
-        .lp-create-object:nth-of-type(4) { left: 20%; bottom: 10%; width: 205px; }
-        .lp-create-object:nth-of-type(5) { right: 4%; bottom: 14%; }
-        .lp-create-object strong { display: block; color: var(--text-primary); font-size: .78rem; margin-bottom: 5px; }
-        .lp-create-object small { display: block; color: var(--text-muted); font-size: .68rem; line-height: 1.45; }
-        .lp-create-flow {
-          position: relative;
-          z-index: 1;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          flex-wrap: wrap;
-          gap: 8px;
-          margin-top: 22px;
-          color: var(--text-secondary);
-          font-size: .74rem;
-        }
-        .lp-create-flow b { color: var(--coral-bright); font-size: .85rem; }
-        @media (max-width: 900px) {
-          .lp-create-layout { grid-template-columns: 1fr; }
-        }
-        @media (max-width: 640px) {
-          .lp-create { padding: 26px 20px; }
-          .lp-create-board { min-height: auto; padding: 50px 12px 12px; display: grid; gap: 10px; }
-          .lp-create-toolbar { position: absolute; inset: 0 0 auto; }
-          .lp-create-object, .lp-create-object:nth-of-type(n) { position: static; width: auto; }
         }
 
         /* ════════ FEATURES ════════ */
@@ -580,17 +270,6 @@ export default function LandingPage() {
 
         @media (max-width: 640px) {
           .lp-cta-box { padding: 40px 24px; }
-          /* Keep the artwork's canvas in place, but start the copy immediately
-             below the mobile header instead of vertically centering it. */
-          .lp-hero {
-            justify-content: flex-start;
-            min-height: 0;
-            padding: 18px 20px;
-          }
-          /* Preserve the backdrop's original viewport-based geometry even
-             though the content section now ends directly after the chips. */
-          .lp-hero-wave { bottom: auto; height: 84vh; }
-          .lp-badge { margin-bottom: 18px; }
         }
       `}</style>
 
@@ -598,50 +277,10 @@ export default function LandingPage() {
 
       <div className="lp">
         <main>
-        {/* ── Hero ── */}
-        <section className="lp-hero">
-          {/* Evermind — the platform's brain — behind the hero: information
-              packets travel the synapses, hubs stand for the key aspects of the
-              platform. Pure backdrop; content sits above via .lp-hero-content. */}
-          <BrainBackdrop className="lp-hero-wave" />
-          <div className="lp-hero-content">
-          <div className="lp-badge">
-            <span className="lp-badge-dot" />
-            {t('home.heroBadge')}
-          </div>
-
-          {/* One dominant headline + one subline, then the prompt — the hero's
-              single primary action (bolt.new-clean; no competing paragraphs). */}
-          <h1 className="lp-hero-title">
-            {t.rich('home.heroTitle', { em: (c) => <em>{c}</em> })}
-          </h1>
-          <p className="lp-hero-sub">{t('home.heroSub')}</p>
-
-          <div className="lp-prompt-row">
-            <div className="lp-prompt-col">
-              <ChatInput
-                className="lp-prompt"
-                value={prompt}
-                onChange={setPrompt}
-                onSubmit={handlePromptSubmit}
-                placeholder={t('home.heroPromptPlaceholder')}
-                ariaLabel={t('home.heroPromptAria')}
-                submitLabel={t('home.heroGetStarted')}
-                rows={3}
-                submitOnEnter
-                showVoice
-              />
-              <div className="lp-prompt-examples">
-                {(t.raw('home.heroExamples') as string[]).map((ex) => (
-                  <button key={ex} type="button" className="lp-chip" onClick={() => setPrompt(ex)}>
-                    {ex}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-          </div>
-        </section>
+        {/* ── Hero: the Creation Canvas itself, seeded and running. The visitor
+            starts a real guest session from the board; everything below this is
+            the marketing page they scrolled for (and what crawlers index). ── */}
+        <LandingCanvasHero />
 
         {/* ── One rotating product story: Create → Evermind → governed delivery ── */}
         <MeetCarousel />

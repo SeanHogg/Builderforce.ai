@@ -18,6 +18,7 @@
  * can call it.
  */
 
+import { assertSafeUrl, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
 import {
   MAX_ACTIONS_PER_CONNECTOR,
   parseConnectorManifest,
@@ -30,6 +31,60 @@ import {
 } from './connectorManifest';
 
 type Json = Record<string, unknown>;
+
+/** A spec bigger than this is not an API description, it is a denial-of-service. */
+export const MAX_SPEC_BYTES = 5 * 1024 * 1024;
+
+/** A spec fetch that failed for a reason the caller should show verbatim. */
+export class SpecFetchError extends Error {
+  constructor(message: string, public readonly status = 400) {
+    super(message);
+    this.name = 'SpecFetchError';
+  }
+}
+
+/**
+ * Fetch a tenant-supplied OpenAPI spec by URL, server-side.
+ *
+ * This lives here rather than in the route because it is the same class of
+ * request a connector action makes — an outbound fetch to a URL a customer
+ * chose, issued by our worker from inside our network — and so it gets the
+ * identical guard: literal check, DNS re-resolution against the public ranges,
+ * and `redirect: 'manual'` so a 302 cannot bounce it to an internal target
+ * after the check has passed.
+ */
+export async function fetchOpenApiSpec(specUrl: string): Promise<{ spec: unknown; baseUrl: string }> {
+  let safe: URL;
+  try {
+    safe = assertSafeUrl(specUrl, { allowHttp: false });
+    await resolveAndAssertPublic(safe.hostname);
+  } catch (e) {
+    throw new SpecFetchError(e instanceof Error ? e.message : 'Blocked spec URL');
+  }
+
+  let text: string;
+  try {
+    const res = await fetch(safe.toString(), {
+      headers: { Accept: 'application/json' },
+      redirect: 'manual',
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) throw new SpecFetchError(`Could not fetch the spec (${res.status})`);
+    text = await res.text();
+  } catch (e) {
+    if (e instanceof SpecFetchError) throw e;
+    throw new SpecFetchError(e instanceof Error ? e.message : 'Could not read the spec');
+  }
+  if (text.length > MAX_SPEC_BYTES) {
+    throw new SpecFetchError(`The spec is larger than ${MAX_SPEC_BYTES / 1024 / 1024}MB`, 413);
+  }
+
+  try {
+    return { spec: JSON.parse(text), baseUrl: safe.origin };
+  } catch {
+    throw new SpecFetchError('The spec URL did not return JSON (YAML is not supported — paste the JSON form)');
+  }
+}
 
 const METHODS: ConnectorMethod[] = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
 /** HTTP verbs that change state — the default for `mutates` on an imported action. */

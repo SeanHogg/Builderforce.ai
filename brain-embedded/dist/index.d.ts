@@ -2459,9 +2459,6 @@ declare function classifyModelFunding(model: string | null | undefined, surface:
         }>;
     };
 } | null | undefined): string;
-/** The gateway pin that expands to a project's CURRENT Evermind head at call time.
- *  Mirrors `PROJECT_EVERMIND_MODEL_PREFIX` on the gateway (api/.../projectEvermind.ts). */
-declare const PROJECT_EVERMIND_MODEL_PREFIX = "project_evermind:";
 /** Everything the diagnostics block needs — already gathered by the host (pure in). */
 interface ChatDiagnosticsData {
     surface?: string;
@@ -2542,6 +2539,137 @@ declare function allowanceState(meter: {
  * the reader can tell "not gathered" from "genuinely empty".
  */
 declare function formatChatDiagnostics(d: ChatDiagnosticsData): string[];
+
+/**
+ * WHICH MODELS a chat surface may offer, in WHAT ORDER, and WHO PAYS for each —
+ * the model-choice domain, with no UI in it.
+ *
+ * It lives here rather than in the React UI package because three very different
+ * surfaces have to agree on it: the shared `/` composer menu (web + VS Code
+ * webview), and the VS Code extension HOST's `Change model` QuickPick, which runs
+ * in the Node extension process and cannot import React. When each owned its own
+ * list they drifted on grouping order, on how a connected provider was named, and
+ * on the sentence that told the user who was being billed.
+ */
+/** The gateway pin that expands to a project's CURRENT Evermind head at call time.
+ *  Mirrors `PROJECT_EVERMIND_MODEL_PREFIX` on the gateway (api/.../projectEvermind.ts). */
+declare const PROJECT_EVERMIND_MODEL_PREFIX = "project_evermind:";
+/** What the user picked. `auto` lets the gateway route; `byo_pool` walks the
+ *  tenant's connected accounts in their configured priority order; `model` is a
+ *  strict pin. */
+type ChatModelSelection = {
+    mode: 'auto';
+} | {
+    mode: 'byo_pool';
+} | {
+    mode: 'model';
+    model: string;
+};
+/** The selectable model surface, grouped by WHO PAYS (see {@link ModelCategory}). */
+interface ChatModelOptions {
+    /** Tenant-defined named LLM configs (`tenant_model:<slug>`). */
+    configured?: Array<{
+        id: string;
+        label: string;
+    }>;
+    /** Models the tenant's own connected provider accounts can serve. */
+    byo: Array<{
+        id: string;
+        vendor: string;
+        cost?: string;
+    }>;
+    free: Array<string | {
+        id: string;
+        cost?: string;
+    }>;
+    plan: Array<string | {
+        id: string;
+        cost?: string;
+    }>;
+    paid: Array<string | {
+        id: string;
+        cost?: string;
+    }>;
+}
+/** Funding tier of a model row — the axis the list is grouped and filtered by. */
+type ModelCategory = 'auto' | 'byo' | 'free' | 'plan' | 'paid' | 'configured';
+/** One row in the model list. `detail` is the funding sentence for that row. */
+interface ModelItem {
+    key: string;
+    label: string;
+    detail: string;
+    category: ModelCategory;
+    selection: ChatModelSelection;
+}
+/**
+ * The strings a model list needs. Hosts pass their own localized bundle (the web
+ * app via next-intl, the VS Code surfaces via `vscode.l10n`); the English defaults
+ * keep the list readable unmapped. The composer menu's own chrome extends this
+ * (see `PromptOptionsLabels` in brain-ui).
+ */
+interface ModelChoiceLabels {
+    categoryAuto: string;
+    categoryByo: string;
+    categoryFree: string;
+    categoryPlan: string;
+    categoryPaid: string;
+    categoryConfigured: string;
+    autoLabel: string;
+    autoDetail: string;
+    poolLabel: string;
+    poolDetail: string;
+    freeDetail: string;
+    planDetail: string;
+    paidDetail: string;
+    /** Per-model premium price line. `{input}` / `{output}` are the formatted
+     *  per-1M-token rates (see {@link premiumCostLabel}). */
+    paidCostDetail: string;
+    /** `{vendor}` is substituted with the connected provider's display name. */
+    byoDetail: string;
+    configuredDetail: string;
+    /** Display name for a `project_evermind:<id>` pin (the raw pin is not a model name). */
+    evermindLabel: string;
+    /** Funding line for a `project_evermind:<id>` pin (a plan feature, not a catalog model). */
+    evermindDetail: string;
+}
+declare const DEFAULT_MODEL_CHOICE_LABELS: ModelChoiceLabels;
+declare function byoVendorLabel(vendor: string): string;
+/** A gateway per-token rate as the per-1M-token price every surface quotes. */
+declare function perMillionUsd(rate: number): string;
+/**
+ * What a premium (metered) model costs, formatted from the gateway's per-token
+ * rates against the host's localized `paidCostDetail` line. For a host with an
+ * ICU formatter (the web app) prefer interpolating {@link perMillionUsd} through
+ * it; this is the plain-substitution path for hosts without one.
+ */
+declare function premiumCostLabel(pricing: {
+    prompt: number;
+    completion: number;
+}, template: string): string;
+/** The categories, in display order. Only the populated ones are ever offered. */
+declare const MODEL_CATEGORIES: ModelCategory[];
+declare function modelCategoryLabel(category: ModelCategory, labels: ModelChoiceLabels): string;
+/**
+ * Every selectable route, ordered by what it COSTS the user: BuilderForce
+ * collections (free → plan → paid) lead, then the tenant's own connected
+ * accounts (BYO pool + its models, in the server-supplied provider priority
+ * order), then saved workspace LLM configs. A model already listed in a cheaper
+ * group is never repeated.
+ */
+declare function buildModelItems(options: ChatModelOptions, labels: ModelChoiceLabels): ModelItem[];
+/** The key identifying the active row (matches {@link ModelItem.key}). */
+declare function activeModelKey(selection: ChatModelSelection): string;
+/** Search + category narrowing. Matches label, funding detail, and category name. */
+declare function filterModelItems(items: ModelItem[], labels: ModelChoiceLabels, query: string, category: 'all' | ModelCategory): ModelItem[];
+/**
+ * What is ACTUALLY running the next turn, said in one line: the pinned model, the
+ * BYO pool, or — under `auto` — whatever the host resolved (a configured default
+ * or a project-Evermind pin), which is the thing the user came to the menu to read.
+ */
+declare function modelInUse(selection: ChatModelSelection, items: ModelItem[], labels: ModelChoiceLabels, effective?: string): {
+    name: string;
+    detail: string;
+};
 
 /**
  * Last-known state of the MCP tool catalog fetch — a module singleton, mirroring
@@ -2700,4 +2828,4 @@ declare function handleRouterCall(catalog: BrainToolSpec[], name: string, args: 
     };
 };
 
-export { ADDRESSED_TO_META_KEY, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AllowanceState, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, ChatErrorAction, type ChatInputAttachment, type ChatMode, type CompletionMetadata, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_MODE, DEFAULT_CHAT_TITLE, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, NOT_STARTED_TASK_STATUSES, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PersistedStep, type PreparedImage, type ProvenanceAccount, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolExposure, type ToolSelection, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, allowanceState, attachEvermindLearn, buildBrainTriageReport, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, handleRouterCall, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mcpActionsFrom, mentionRecipient, modelFailoversInTrace, modelsUsedInTrace, narratedUnadvertisedInTrace, normalizeChatMode, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parseStepMessage, prepareImageDataUrl, reasoningForRun, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, routerToolSpecs, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolExposureInTrace, toolSpecsFor, traceWithPersistedSteps, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };
+export { ADDRESSED_TO_META_KEY, API_VERSION_TTL_MS, AUTHORED_BY_META_KEY, type AllowanceState, type AssembledToolCall, type BrainAction, type BrainActionsContextValue, BrainActionsProvider, type BrainChat, type BrainConfig, BrainContextProvider, type BrainContextValue, type BrainDiagnostics, type BrainMessage, type BrainModality, type BrainPageContext, type BrainPersistenceAdapter, BrainProvider, type BrainRunRequest, type BrainRunSnapshot, type BrainRuntime, type BrainToolSpec, type BrainTraceEvent, type BrainTransport, type BuildBrainTriageOptions, type ByoUnresolvedEntry, CHAT_MODES, CODE_CHANGE_TOOLS, CONSOLIDATION_MARKER_PREFIX, CONSOLIDATION_META, type ChatCompletionMessage, type ChatDiagnosticsAccount, type ChatDiagnosticsData, type ChatDiagnosticsEvermind, type ChatDiagnosticsMeter, ChatErrorAction, type ChatInputAttachment, type ChatMode, type ChatModelOptions, type ChatModelSelection, type CompletionMetadata, type ContentPart, type CreatedWorkItemLink, DEFAULT_CHAT_MODE, DEFAULT_CHAT_TITLE, DEFAULT_MODEL_CHOICE_LABELS, DEFAULT_TOOL_LIMIT, type DirectedRecipient, EVERMIND_LEARN_MIN_CHARS, type Effort, type EffortProfile, type EvermindLearnOutcome, type EvermindLearnTarget, type EvermindRecallItem, type EvermindRecallResult, type EvermindRunHooks, type GlobalRunState, type ImageUrlContentPart, type LinkedTicketToAdvance, MODEL_CATEGORIES, type McpToolEntry, type McpToolResultInfo, type McpToolStatus, type MentionToken, type MessageProvenance, type ModelCategory, type ModelChoiceLabels, type ModelItem, NOT_STARTED_TASK_STATUSES, PROJECT_EVERMIND_MODEL_PREFIX, PROVENANCE_META_KEY, type ParsedXmlToolCall, type PersistedStep, type PreparedImage, type ProvenanceAccount, type ReasoningIntent, type ReasoningLevel, type RecipientChoice, STEP_MESSAGE_ROLE, type StreamChatOptions, type StreamChatResult, type StreamHandlers, TICKET_RECORDING_TOOLS, TOOL_ROUTER_DESCRIBE, TOOL_ROUTER_FIND, TOOL_ROUTER_INVOKE, type TextContentPart, type ToolCatalogMatch, type ToolExposure, type ToolSelection, type UseBrainChats, type UseBrainChatsOptions, type UseBrainConversation, type UseBrainConversationOptions, type UseMcpExtensionsOptions, XmlToolCallFilter, accountUsedInTrace, activeMentionToken, activeModelKey, allowanceState, attachEvermindLearn, buildBrainTriageReport, buildModelItems, byoReasonHint, byoUnresolvedInTrace, byoUnresolvedSummary, byoVendorLabel, chatConversationDirective, chatModeDirective, chatWorkDirective, chatWorkLinkingDirective, classifyModelFunding, clearRunError, codeChangeFile, computeBrainDiagnostics, consolidationMarkerContent, consolidationMetadata, countReconciledMemories, deriveChatTitle, describeTool, detectAnnouncedButUnmadeToolCall, detectUnbackedTicketClaim, detectUnbackedWriteClaim, effortProfile, extractXmlToolCalls, fetchApiVersionVia, fetchMcpToolEntries, filterMentionCandidates, filterModelItems, findTools, formatBrainDiagnostics, formatBrainProvenance, formatChatDiagnostics, formatEvermindLearnStep, formatEvermindMemoryBlock, getGlobalRunState, getLastResolvedModel, getMcpToolStatus, getRunSnapshot, getRunTrace, handleRouterCall, isChatMode, isCodeChangeTool, isConnectedAccountUnused, isConsolidationMarker, isDirectedToParticipant, isEffort, isEvermindModel, isFailedToolResult, isRouterTool, isRunning, isStepMessage, isTicketRecordingTool, lastConsolidationIndex, linkedTicketsToAdvance, mcpActionsFrom, mentionRecipient, modelCategoryLabel, modelFailoversInTrace, modelInUse, modelsUsedInTrace, narratedUnadvertisedInTrace, normalizeChatMode, parseByoUnresolved, parseDirectedRecipient, parseMessageAuthor, parseMessageProvenance, parseStepMessage, perMillionUsd, premiumCostLabel, prepareImageDataUrl, reasoningForRun, resetApiVersionCache, resetBrainRunStore, resolveRecipient, resolveRunConfirm, routerToolSpecs, startRun as runBrainLoop, savePendingPrompt, scopeToConsolidation, selectToolsForTurn, setLastResolvedModel, setMcpToolStatus, stallRecoveriesInTrace, stallUnrecoveredInTrace, startRun, stepSig, stopRun, streamChatCompletion, subscribeRun, subscribeRunStore, subscribeToChatMessages, takePendingPrompt, toolExposureInTrace, toolSpecsFor, traceWithPersistedSteps, useBrainActions, useBrainChats, useBrainConfig, useBrainContext, useBrainConversation, useMcpExtensions, useOptionalBrainContext, useRegisterBrainActions, withDirectedMetadata, withProvenanceMetadata, workItemLinkFromCreate };

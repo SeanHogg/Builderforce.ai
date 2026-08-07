@@ -5479,7 +5479,7 @@
   "home": {
     "heroBadge": "Leinwand · Menschen + KI-Agenten",
     "heroTitle": "Jede Idee wird <em>real.</em>",
-    "heroSub": "Ein visueller Arbeitsbereich, in dem Ihr Team und KI-Agenten Websites, Workflows, Modelle, Datengeschichten und Produkte entwerfen, erstellen, prüfen und liefern — ohne Tool-Wildwuchs.",
+    "heroSub": "Eine Leinwand, auf der Ihr Team und KI-Agenten entwerfen, bauen, prüfen und ausliefern – ohne Tool-Wildwuchs.",
     "heroPromptPlaceholder": "Was möchten Sie erstellen?",
     "heroPromptAria": "Beschreiben Sie, was Sie erstellen möchten",
     "heroGetStarted": "Jetzt erstellen",
@@ -5488,6 +5488,46 @@
       "Kundenfeedback visualisieren und Top-Funktionen gestalten",
       "Einen Kundensupport-Agenten bauen, bewerten und ausliefern"
     ],
+    "canvas": {
+      "boardAria": "Beispiel einer Creation Canvas – verbundene Objekte als Startpunkt",
+      "objectAction": "Mit diesem Objekt beginnen: {title}",
+      "agentInitials": "UA",
+      "agentPresence": "Live · zuweisbar",
+      "guestNote": "Eine echte Leinwand. Nichts verlässt dieses Gerät, bis Sie sich anmelden.",
+      "narrowNote": "Auf einem größeren Bildschirm öffnen, um die vollständige Leinwand zu sehen.",
+      "objects": [
+        {
+          "kind": "Datensatz",
+          "title": "pipeline_Q3.csv",
+          "detail": "1.284 Zeilen · 9 Spalten",
+          "prefill": "Stelle die Gewinnrate je Kanal aus diesem Datensatz dar"
+        },
+        {
+          "kind": "Diagramm",
+          "title": "Gewinnrate je Kanal",
+          "detail": "Aus den Daten berechnet, nicht abgetippt",
+          "prefill": "Mach aus diesem Diagramm ein einseitiges Board-Update"
+        },
+        {
+          "kind": "Agent",
+          "title": "Umsatzanalyst",
+          "detail": "Liest die Daten, schreibt das Briefing",
+          "prefill": "Lass den Umsatzanalysten die Pipeline dieses Quartals prüfen"
+        },
+        {
+          "kind": "Workflow",
+          "title": "Verlängerungs-Ansprache",
+          "detail": "4 Schritte · 2 Freigaben",
+          "prefill": "Erstelle einen Verlängerungs-Workflow mit zwei Freigaben"
+        },
+        {
+          "kind": "Dokument",
+          "title": "Einseitiges Board-Update",
+          "detail": "Aus dem Diagramm oben verfasst",
+          "prefill": "Verfasse aus dieser Analyse ein einseitiges Board-Update"
+        }
+      ]
+    },
     "createCanvas": {
       "eyebrow": "Create kennenlernen",
       "heading": "Eine Leinwand. Alles, was Sie sich vorstellen können.",
@@ -13440,7 +13480,13 @@
     "noticeSaveFailed": "Speichern fehlgeschlagen",
     "noticeStandupFramePrepared": "Stand-up-Rahmen vorbereitet",
     "noticeObjectLocked": "Dieses Objekt wird von einer anderen Person bearbeitet",
-    "noticeLensAlreadyExpanded": "Diese Projektansicht ist bereits erweitert"
+    "noticeLensAlreadyExpanded": "Diese Projektansicht ist bereits erweitert",
+    "noticeGuestAiUnavailable": "Die KI ist gerade nicht verfügbar. Ihre Leinwand bleibt auf diesem Gerät bearbeitbar – versuchen Sie es gleich noch einmal.",
+    "noticeAgentTestFailed": "Agententest fehlgeschlagen",
+    "noticeAgentGroupFailed": "Der Agentenzug konnte nicht abgeschlossen werden",
+    "noticeAgentTestStatusError": "Fehler · {reason}",
+    "noticeAgentGroupTurnFailed": "Die Agentengruppe konnte ihren Zug nicht abschließen: {reason}",
+    "noticeClaimFailed": "Diese Sitzung konnte noch nicht gespeichert werden"
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",

@@ -36,10 +36,18 @@ import {
 } from '../../application/backend';
 import { matchHandler, type HandlerSpec } from '../../application/backend/handlerSpec';
 import { executeHandler, type HandlerRuntimeDeps } from '../../application/backend/handlerRuntime';
-import { VERIFY_SECRET_NAME, verifySharedSecret, verifyTwilioSignature } from '../../application/backend/webhookVerification';
+import {
+  VERIFY_SECRET_NAME,
+  VERIFY_SIGNATURE_HEADER,
+  verifyShopifySignature,
+  verifySharedSecret,
+  verifyStripeSignature,
+  verifyTwilioSignature,
+} from '../../application/backend/webhookVerification';
 import { loadProjectSecretValues } from '../../application/secrets/projectSecrets';
 import { executeConnectorAction } from '../../application/connectors/connectorRuntime';
 import { completeForTenant } from '../../application/llm/tenantProxy';
+import { checkSlidingWindow } from '../../application/ratelimit/slidingWindow';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 
 /** Headers a handler template may read. An allow-list, so an author cannot
@@ -57,6 +65,21 @@ const READABLE_HEADERS = new Set([
 /** Inbound bodies are capped well below a webhook's realistic size — an oversized
  *  body on a public endpoint is an attack, not a message. */
 const MAX_BODY_BYTES = 128 * 1024;
+
+/**
+ * Deliveries per minute accepted per ingress token.
+ *
+ * The token→backend lookup is cached including the negative result, so spraying
+ * random tokens is already cheap. What this caps is a flood at a VALID token,
+ * where each request costs an R2 list plus a GET per handler and a verified one
+ * can spend a connector call or an LLM step.
+ *
+ * 300/min is deliberately well above real provider throughput — Twilio sends at
+ * one message per second per number by default, so this covers a project with
+ * several numbers plus a status callback for each — and well below a rate that
+ * could drain an account's balance before anyone notices.
+ */
+const INGRESS_RPM = 300;
 
 interface ParsedBody {
   body: Record<string, unknown>;
@@ -105,22 +128,39 @@ async function verifyRequest(
   parsed: ParsedBody,
   secrets: Record<string, string>,
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const header = (name: string) => request.headers.get(name);
+  const secretFor = (kind: Exclude<typeof handler.verify, 'none'>) => secrets[VERIFY_SECRET_NAME[kind]] ?? '';
+
   switch (handler.verify) {
     case 'none':
       return { ok: true };
     case 'twilio':
       return verifyTwilioSignature({
         url: request.url,
-        signature: request.headers.get('x-twilio-signature'),
-        authToken: secrets[VERIFY_SECRET_NAME.twilio] ?? '',
+        signature: header(VERIFY_SIGNATURE_HEADER.twilio),
+        authToken: secretFor('twilio'),
         formParams: parsed.formParams,
         rawBody: parsed.rawBody,
         isForm: parsed.isForm,
       });
+    case 'stripe':
+      return verifyStripeSignature({
+        signature: header(VERIFY_SIGNATURE_HEADER.stripe),
+        secret: secretFor('stripe'),
+        rawBody: parsed.rawBody,
+      });
+    case 'shopify':
+      return verifyShopifySignature({
+        signature: header(VERIFY_SIGNATURE_HEADER.shopify),
+        secret: secretFor('shopify'),
+        rawBody: parsed.rawBody,
+      });
     case 'shared-secret':
+      // GitHub's header name is accepted too: a customer wiring a GitHub webhook
+      // has no way to rename it, and the payload format is identical.
       return verifySharedSecret({
-        signature: request.headers.get('x-builderforce-signature') ?? request.headers.get('x-hub-signature-256'),
-        secret: secrets[VERIFY_SECRET_NAME['shared-secret']] ?? '',
+        signature: header(VERIFY_SIGNATURE_HEADER['shared-secret']) ?? header('x-hub-signature-256'),
+        secret: secretFor('shared-secret'),
         rawBody: parsed.rawBody,
       });
   }
@@ -210,6 +250,19 @@ export function createHooksRoutes(db: Db): Hono<HonoEnv> {
         ...(error ? { error } : {}),
       });
     };
+
+    // Cap the flood BEFORE the R2 reads and any step execution — the point of the
+    // limit is that an over-rate request costs nothing. A 429 with `Retry-After`
+    // is also the answer a provider handles best: Twilio backs off and re-delivers
+    // rather than treating the message as permanently failed.
+    const limited = await checkSlidingWindow(env, `ingress:${token}`, INGRESS_RPM).catch((error) => {
+      reportCaughtError(error, { source: 'presentation/routes/hooksRoutes.ts', operation: 'ingressRateLimit' });
+      return null;
+    });
+    if (limited && !limited.allowed) {
+      await finish(429, 'rate-limited', `Over ${INGRESS_RPM} requests/minute for this ingress`);
+      return c.text('Too many requests', 429, { 'Retry-After': String(limited.retryAfterSeconds) });
+    }
 
     const { specs, errors } = await loadHandlers(env.UPLOADS, backend.projectId);
     const handler = matchHandler(specs, route, method);

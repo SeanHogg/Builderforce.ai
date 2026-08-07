@@ -196,10 +196,24 @@ function snapshotHasTabularRows(snapshot: string): boolean {
   }
 }
 
+/**
+ * A guest turn could not start because no guest token could be obtained. Thrown
+ * as a TYPE rather than a message so the surface can say it in the visitor's own
+ * language — this path is reachable from the public landing canvas, where a raw
+ * English string would be the first thing the product ever says to them.
+ */
+export class GuestAiUnavailableError extends Error {
+  readonly code = 'guest-ai-unavailable' as const;
+  constructor() {
+    super('guest-ai-unavailable');
+    this.name = 'GuestAiUnavailableError';
+  }
+}
+
 /** Run a small, bounded agent loop over the active canvas and shared MCP catalog. */
 export async function runCreationCanvasAi(options: CanvasAiOptions): Promise<string> {
   if (options.persistence === 'local' && !(await ensureGuestToken())) {
-    throw new Error('Guest AI is unavailable. Your canvas remains editable on this device.');
+    throw new GuestAiUnavailableError();
   }
   const config = options.persistence === 'server' ? brainConfig : guestBrainConfig;
   const transport = config.transport;

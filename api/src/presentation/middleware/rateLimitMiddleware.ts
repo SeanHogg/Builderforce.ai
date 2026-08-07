@@ -25,6 +25,7 @@ import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { tenants } from '../../infrastructure/database/schema';
 import { buildDatabase } from '../../infrastructure/database/connection';
+import { checkSlidingWindow } from '../../application/ratelimit/slidingWindow';
 import { resolveBearerTenantId } from '../routes/llmRoutes';
 
 /** Requests-per-minute limits by plan. */
@@ -87,22 +88,12 @@ export const rateLimitMiddleware: MiddlewareHandler<RateLimitHonoEnv> = async (c
     return next();
   }
 
-  // Call the rate limiter DO
+  // Call the rate limiter DO through the shared counter — the same primitive the
+  // public `/hooks/*` ingress uses, so there is one implementation of "count this
+  // request against a bucket" rather than two that can drift.
   try {
-    const stub = env.TENANT_RATE_LIMITER.get(
-      env.TENANT_RATE_LIMITER.idFromName(String(tenantId)),
-    );
-    const res = await stub.fetch(new Request('https://internal/check', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ limit: rpm, windowMs: 60_000 }),
-    }));
-    const data = await res.json<{
-      allowed: boolean;
-      current: number;
-      limit: number;
-      resetAt: string;
-    }>();
+    const data = await checkSlidingWindow(env, String(tenantId), rpm);
+    if (!data) return next();
 
     // Always set rate limit headers
     c.header('X-RateLimit-Limit',     String(data.limit));
@@ -110,10 +101,7 @@ export const rateLimitMiddleware: MiddlewareHandler<RateLimitHonoEnv> = async (c
     c.header('X-RateLimit-Reset',     data.resetAt);
 
     if (!data.allowed) {
-      const retryAfterSec = Math.ceil(
-        (new Date(data.resetAt).getTime() - Date.now()) / 1000,
-      );
-      c.header('Retry-After', String(retryAfterSec));
+      c.header('Retry-After', String(data.retryAfterSeconds));
       return c.json(
         { error: 'Rate limit exceeded. Please slow down.', resetAt: data.resetAt },
         429,

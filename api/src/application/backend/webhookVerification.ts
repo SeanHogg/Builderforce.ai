@@ -22,7 +22,7 @@
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 
 /** How a handler proves who called it. Declared per handler, never inferred. */
-export const VERIFY_KINDS = ['none', 'twilio', 'shared-secret'] as const;
+export const VERIFY_KINDS = ['none', 'twilio', 'stripe', 'shopify', 'shared-secret'] as const;
 export type VerifyKind = (typeof VERIFY_KINDS)[number];
 
 export function isVerifyKind(v: unknown): v is VerifyKind {
@@ -32,8 +32,29 @@ export function isVerifyKind(v: unknown): v is VerifyKind {
 /** Project secret each verification kind reads its key from. */
 export const VERIFY_SECRET_NAME: Record<Exclude<VerifyKind, 'none'>, string> = {
   twilio: 'TWILIO_AUTH_TOKEN',
+  stripe: 'STRIPE_WEBHOOK_SECRET',
+  shopify: 'SHOPIFY_WEBHOOK_SECRET',
   'shared-secret': 'WEBHOOK_SHARED_SECRET',
 };
+
+/** The header each kind reads its signature from — one table, used by the ingress
+ *  AND by the generated Worker, so the two cannot disagree about where to look. */
+export const VERIFY_SIGNATURE_HEADER: Record<Exclude<VerifyKind, 'none'>, string> = {
+  twilio: 'x-twilio-signature',
+  stripe: 'stripe-signature',
+  shopify: 'x-shopify-hmac-sha256',
+  'shared-secret': 'x-builderforce-signature',
+};
+
+/**
+ * How far a Stripe signature's timestamp may be from now.
+ *
+ * Stripe includes the signing timestamp INSIDE the signed payload precisely so a
+ * captured webhook cannot be replayed forever. Checking the signature without
+ * checking the age throws that away — which is why "verify the HMAC" is not, on
+ * its own, verifying a Stripe webhook. Five minutes is Stripe's own recommendation.
+ */
+export const STRIPE_TIMESTAMP_TOLERANCE_SECONDS = 300;
 
 export type VerifyResult =
   | { ok: true }
@@ -132,6 +153,97 @@ export async function verifyTwilioSignature(args: {
     reportCaughtError(error, {
       source: 'application/backend/webhookVerification.ts',
       operation: 'verifyTwilioSignature',
+    });
+    return { ok: false, reason: 'Signature verification failed' };
+  }
+}
+
+/**
+ * Verify Stripe's `Stripe-Signature`.
+ *
+ * Stripe does NOT send a bare HMAC of the body, which is the mistake that makes a
+ * plausible-looking Stripe integration reject every real event. The header is a
+ * comma-separated list — `t=<unix>,v1=<hex>,v1=<hex>` — and the signed payload is
+ * `"<t>.<rawBody>"`. Three consequences this handles:
+ *
+ *   • the timestamp is part of the MAC, so it cannot be trusted before the MAC is
+ *     checked, and cannot be ignored after — an unchecked age turns a captured
+ *     webhook into a replay that is valid forever;
+ *   • `v1` can repeat during a secret rotation, and ANY of them matching is a
+ *     pass, so a rotation does not drop events;
+ *   • the raw body must be the bytes Stripe sent — re-serialising the parsed JSON
+ *     changes key order and whitespace and breaks the MAC. The ingress keeps the
+ *     raw text for exactly this reason.
+ */
+export async function verifyStripeSignature(args: {
+  signature: string | null;
+  secret: string;
+  rawBody: string;
+  /** Injected so the tolerance window is testable without freezing the clock. */
+  nowSeconds?: number;
+}): Promise<VerifyResult> {
+  const { signature, secret, rawBody } = args;
+  if (!signature) return { ok: false, reason: 'Missing Stripe-Signature header' };
+  if (!secret) return { ok: false, reason: `${VERIFY_SECRET_NAME.stripe} is not set for this project` };
+
+  let timestamp = '';
+  const candidates: string[] = [];
+  for (const part of signature.split(',')) {
+    const [key, value] = part.trim().split('=');
+    if (key === 't' && value) timestamp = value;
+    else if (key === 'v1' && value) candidates.push(value);
+  }
+  if (!timestamp || candidates.length === 0) {
+    return { ok: false, reason: 'Stripe-Signature is missing t= or v1=' };
+  }
+
+  const now = args.nowSeconds ?? Math.floor(Date.now() / 1000);
+  const age = Math.abs(now - Number(timestamp));
+  if (!Number.isFinite(age) || age > STRIPE_TIMESTAMP_TOLERANCE_SECONDS) {
+    return { ok: false, reason: 'Stripe signature timestamp is outside the tolerance window' };
+  }
+
+  try {
+    const expected = toHex(await hmac('SHA-256', secret, `${timestamp}.${rawBody}`));
+    // Every candidate is compared — no early exit — so a rotation with two valid
+    // signatures does not leak which one matched through timing.
+    let matched = false;
+    for (const candidate of candidates) matched = timingSafeEqual(expected, candidate) || matched;
+    return matched ? { ok: true } : { ok: false, reason: 'Signature does not match' };
+  } catch (error) {
+    reportCaughtError(error, {
+      source: 'application/backend/webhookVerification.ts',
+      operation: 'verifyStripeSignature',
+    });
+    return { ok: false, reason: 'Signature verification failed' };
+  }
+}
+
+/**
+ * Verify Shopify's `X-Shopify-Hmac-Sha256`.
+ *
+ * Same algorithm as the generic shared secret, different ENCODING: Shopify sends
+ * base64, not hex, and with no `sha256=` prefix. Comparing a hex digest against a
+ * base64 signature fails 100% of the time and looks exactly like a wrong secret,
+ * which is why this is its own kind rather than a note in the docs.
+ */
+export async function verifyShopifySignature(args: {
+  signature: string | null;
+  secret: string;
+  rawBody: string;
+}): Promise<VerifyResult> {
+  const { signature, secret, rawBody } = args;
+  if (!signature) return { ok: false, reason: 'Missing X-Shopify-Hmac-Sha256 header' };
+  if (!secret) return { ok: false, reason: `${VERIFY_SECRET_NAME.shopify} is not set for this project` };
+  try {
+    const expected = toBase64(await hmac('SHA-256', secret, rawBody));
+    return timingSafeEqual(expected, signature.trim())
+      ? { ok: true }
+      : { ok: false, reason: 'Signature does not match' };
+  } catch (error) {
+    reportCaughtError(error, {
+      source: 'application/backend/webhookVerification.ts',
+      operation: 'verifyShopifySignature',
     });
     return { ok: false, reason: 'Signature verification failed' };
   }

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { Effort } from '@seanhogg/builderforce-brain-embedded';
 import {
   activeModelKey,
   buildModelItems,
@@ -7,8 +6,12 @@ import {
   MODEL_CATEGORIES,
   modelCategoryLabel,
   modelInUse,
-} from './modelItems';
-import { promptOptionsLabels, type ChatModelOptions, type ChatModelSelection, type ModelCategory, type PromptOptionsLabels } from './types';
+  type ChatModelOptions,
+  type ChatModelSelection,
+  type Effort,
+  type ModelCategory,
+} from '@seanhogg/builderforce-brain-embedded';
+import { promptOptionsLabels, type PromptOptionsLabels } from './types';
 
 /** Model wiring for the `/` menu. Omit it on a surface with no model choice. */
 export interface PromptOptionsModel {

@@ -24,6 +24,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { connectorConnections, connectorCallLogs } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { assertSafeUrl, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
 import { credentialSecret, decryptCredentials } from '../integrations/credentialCrypto';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
@@ -480,7 +481,7 @@ export async function executeConnectorAction(args: {
     await db
       .update(connectorConnections)
       .set({ lastUsedAt: sql`NOW()` })
-      .where(eq(connectorConnections.id, connection.id))
+      .where(scopedToTenant(connectorConnections, tenantId, eq(connectorConnections.id, connection.id)))
       .catch(() => undefined);
   }
 

@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeModelKey, buildModelItems, filterModelItems, modelInUse } from './modelItems';
-import { DEFAULT_PROMPT_OPTIONS_LABELS as L } from './types';
-import type { ChatModelOptions } from './types';
+import { activeModelKey, buildModelItems, filterModelItems, modelInUse, DEFAULT_MODEL_CHOICE_LABELS as L, type ChatModelOptions } from './modelChoice';
 
 const options: ChatModelOptions = {
   configured: [{ id: 'tenant_model:reviewer', label: 'Review specialist' }],

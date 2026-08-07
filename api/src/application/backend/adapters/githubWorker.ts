@@ -425,6 +425,38 @@ async function verifySharedSecret(rawBody: string, signature: string | null, sec
   return timingSafeEqual(expected, provided) ? null : 'Signature does not match';
 }
 
+/**
+ * Stripe signs \`"<timestamp>.<rawBody>"\`, not the body — and the timestamp is
+ * inside the MAC so a captured event cannot be replayed forever. Both halves are
+ * required; checking the HMAC alone is the common mistake.
+ */
+async function verifyStripe(rawBody: string, signature: string | null, secret: string | undefined): Promise<string | null> {
+  if (!signature) return 'Missing Stripe-Signature header';
+  if (!secret) return '${VERIFY_SECRET_NAME.stripe} is not set';
+  let timestamp = '';
+  const candidates: string[] = [];
+  for (const part of signature.split(',')) {
+    const [k, v] = part.trim().split('=');
+    if (k === 't' && v) timestamp = v;
+    else if (k === 'v1' && v) candidates.push(v);
+  }
+  if (!timestamp || !candidates.length) return 'Stripe-Signature is missing t= or v1=';
+  const age = Math.abs(Math.floor(Date.now() / 1000) - Number(timestamp));
+  if (!Number.isFinite(age) || age > ${STRIPE_TIMESTAMP_TOLERANCE_SECONDS}) return 'Stripe signature timestamp is outside the tolerance window';
+  const expected = toHex(await hmac('SHA-256', secret, \`\${timestamp}.\${rawBody}\`));
+  let matched = false;
+  for (const candidate of candidates) matched = timingSafeEqual(expected, candidate) || matched;
+  return matched ? null : 'Signature does not match';
+}
+
+/** Shopify sends BASE64, not hex — comparing a hex digest to it never matches. */
+async function verifyShopify(rawBody: string, signature: string | null, secret: string | undefined): Promise<string | null> {
+  if (!signature) return 'Missing X-Shopify-Hmac-Sha256 header';
+  if (!secret) return '${VERIFY_SECRET_NAME.shopify} is not set';
+  const expected = toBase64(await hmac('SHA-256', secret, rawBody));
+  return timingSafeEqual(expected, signature.trim()) ? null : 'Signature does not match';
+}
+
 // ── Steps ───────────────────────────────────────────────────────────────────
 
 function setDeep(target: any, path: string, value: any): void {
@@ -546,6 +578,17 @@ async function callLlm(env: Env, args: { system?: string; prompt: string; maxTok
   }
 }
 
+/**
+ * Which of the secrets this Worker expects are actually bound.
+ *
+ * NAMES AND BOOLEANS ONLY — never a value, never a prefix. Unauthenticated on
+ * purpose: an unset verification secret means the endpoint already rejects every
+ * request, so "TWILIO_AUTH_TOKEN is not set" tells an attacker nothing they could
+ * not learn by sending one request, while it tells the OWNER the one thing that
+ * is otherwise invisible until a provider reports a failure.
+ */
+const EXPECTED_SECRETS = ${json(requiredWorkerSecrets(ctx))} as string[];
+
 // ── Request handling ────────────────────────────────────────────────────────
 
 export default {
@@ -553,6 +596,15 @@ export default {
     const url = new URL(request.url);
     const route = url.pathname.replace(/\\/+$/, '') || '/';
     const method = request.method.toUpperCase();
+
+    if (route === '${WORKER_HEALTH_PATH}') {
+      return Response.json({
+        ok: true,
+        worker: ${JSON.stringify(ctx.projectName)},
+        secrets: Object.fromEntries(EXPECTED_SECRETS.map((n) => [n, Boolean(env[n])])),
+        handlers: HANDLERS.map((h: any) => ({ method: h.method, route: h.route, verify: h.verify })),
+      });
+    }
 
     const candidates = HANDLERS.filter((h: any) => h.route === route);
     const handler: any = candidates.find((h: any) => h.method === method) ?? candidates.find((h: any) => h.method === 'ANY');
@@ -632,6 +684,17 @@ export default {
 };
 `;
 }
+
+/**
+ * Path the generated Worker answers its own readiness on.
+ *
+ * The deployed URL round-trips back over OIDC, so the platform knows WHERE the
+ * Worker landed — but not whether the customer ever added the repository secrets
+ * the deploy workflow pushes. Without this, "deployed" and "will 403 every
+ * request" look identical from our side, and the customer finds out when Twilio
+ * does.
+ */
+export const WORKER_HEALTH_PATH = '/__builderforce/health';
 
 /** DNS-safe Worker name derived from the project. */
 function workerNameFor(ctx: MaterializeContext): string {

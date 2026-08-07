@@ -24,9 +24,16 @@ import {
   findProjectForTenant,
   HOSTING_STRATEGIES,
   ingressUrlFor,
+  isBackendStatus,
   loadHandlers,
   materializeBackend,
+  probeWorkerHealth,
+  readHandlerDocument,
   recentBackendRequests,
+  removeHandler,
+  saveHandler,
+  setBackendStatus,
+  BACKEND_STATUSES,
 } from '../../application/backend';
 import { isBackendStrategy } from '../../application/backend/hostingStrategy';
 import { BUILTIN_CONNECTORS } from '../../application/connectors/defaults';
@@ -61,6 +68,38 @@ function connectorsFor(handlers: Awaited<ReturnType<typeof loadHandlers>>['specs
   return [...keys].map((k) => BUILTIN_CONNECTORS.get(k)).filter((m): m is NonNullable<typeof m> => !!m);
 }
 
+/**
+ * Re-run the project's hosting strategy against whatever is in the canvas now.
+ *
+ * Every write that changes what the backend DOES calls this, so the generated
+ * artefacts — the declarative endpoint map, the `github-worker` Worker source —
+ * are never a snapshot of an older set of handlers. Editing a handler and having
+ * the Worker still ship the previous one is the exact drift the declarative
+ * strategy was designed to avoid; the other strategy has to be kept honest by
+ * hand, and this is that hand.
+ */
+async function regenerate(
+  db: Db,
+  env: Env & { UPLOADS?: R2Bucket },
+  tenantId: number,
+  project: { id: number; name: string },
+) {
+  if (!env.UPLOADS) return null;
+  const { specs } = await loadHandlers(env.UPLOADS, project.id);
+  const secrets = await listProjectSecrets(db, tenantId, project.id);
+  return materializeBackend({
+    db,
+    env,
+    bucket: env.UPLOADS,
+    tenantId,
+    projectId: project.id,
+    projectName: project.name,
+    connectors: connectorsFor(specs),
+    secretNames: secrets.map((s) => s.name),
+    requiredSecretNames: requiredSecretsFor(specs),
+  });
+}
+
 export function createProjectBackendRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
@@ -77,8 +116,16 @@ export function createProjectBackendRoutes(db: Db): Hono<HonoEnv> {
     const required = requiredSecretsFor(specs);
     const have = new Set(secrets.map((s) => s.name));
 
+    // For a deployed Worker the live question is not "did it deploy" but "is it
+    // credentialled" — so the readiness probe rides along with the panel's first
+    // load instead of being a second call the UI has to remember to make. Only
+    // for that strategy, and cached, so a declarative project pays nothing.
+    const health =
+      backend.strategy === 'github-worker' ? await probeWorkerHealth(env, backend.deployedUrl) : null;
+
     const ingressUrl = ingressUrlFor(env, backend.ingressToken);
     return c.json({
+      workerHealth: health,
       backend: {
         strategy: backend.strategy,
         status: backend.status,
@@ -96,6 +143,10 @@ export function createProjectBackendRoutes(db: Db): Hono<HonoEnv> {
         description: s.description ?? null,
         url: `${ingressUrl}${s.route === '/' ? '' : s.route}`,
         stepCount: s.steps.length,
+        // The parsed spec rides along: a project has a handful of handlers, and
+        // the editor needing one round-trip PER handler to open a form would be
+        // an N+1 on a panel whose whole job is showing them all at once.
+        spec: s,
       })),
       handlerErrors: errors,
       secrets,
@@ -109,12 +160,85 @@ export function createProjectBackendRoutes(db: Db): Hono<HonoEnv> {
     const project = await assertProject(db, tenantId, c.req.param('projectId'));
     if (!project) return c.json({ error: 'Project not found' }, 404);
 
-    const body = await c.req.json<{ strategy?: unknown }>().catch(() => ({}) as never);
-    if (!isBackendStrategy(body.strategy)) {
+    const env = c.env as Env;
+    const body = await c.req.json<{ strategy?: unknown; status?: unknown }>().catch(() => ({}) as never);
+
+    // Both fields are optional, but a PATCH that names NEITHER is a caller bug
+    // rather than a no-op worth pretending succeeded.
+    if (body.strategy === undefined && body.status === undefined) {
+      return c.json({ error: 'Provide strategy and/or status' }, 400);
+    }
+    if (body.strategy !== undefined && !isBackendStrategy(body.strategy)) {
       return c.json({ error: `strategy must be one of: ${HOSTING_STRATEGIES.map((s) => s.key).join(', ')}` }, 400);
     }
-    const backend = await ensureProjectBackend(c.env as Env, db, tenantId, project.id, body.strategy);
-    return c.json({ backend: { strategy: backend.strategy, ingressUrl: ingressUrlFor(c.env as Env, backend.ingressToken) } });
+    if (body.status !== undefined && !isBackendStatus(body.status)) {
+      return c.json({ error: `status must be one of: ${BACKEND_STATUSES.join(', ')}` }, 400);
+    }
+
+    let backend = await ensureProjectBackend(
+      env,
+      db,
+      tenantId,
+      project.id,
+      isBackendStrategy(body.strategy) ? body.strategy : undefined,
+    );
+    if (isBackendStatus(body.status)) {
+      backend = await setBackendStatus(env, db, tenantId, project.id, body.status);
+    }
+    return c.json({
+      backend: {
+        strategy: backend.strategy,
+        status: backend.status,
+        ingressUrl: ingressUrlFor(env, backend.ingressToken),
+      },
+    });
+  });
+
+  // ── Handlers ─────────────────────────────────────────────────────────────
+  // The authoring path for the canvas documents the ingress executes. Writes go
+  // through the same parser the ingress uses, so an unsaveable spec and an
+  // unservable one are the same set.
+
+  router.get('/:projectId/backend/handlers/:name', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const project = await assertProject(db, tenantId, c.req.param('projectId'));
+    if (!project) return c.json({ error: 'Project not found' }, 404);
+
+    const env = c.env as Env & { UPLOADS?: R2Bucket };
+    if (!env.UPLOADS) return c.json({ error: 'Storage is not configured' }, 503);
+    const document = await readHandlerDocument(env.UPLOADS, project.id, c.req.param('name'));
+    if (document === null) return c.json({ error: 'Handler not found' }, 404);
+    return c.json({ document });
+  });
+
+  router.put('/:projectId/backend/handlers/:name', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const project = await assertProject(db, tenantId, c.req.param('projectId'));
+    if (!project) return c.json({ error: 'Project not found' }, 404);
+
+    const env = c.env as Env & { UPLOADS?: R2Bucket };
+    if (!env.UPLOADS) return c.json({ error: 'Storage is not configured' }, 503);
+
+    const body = await c.req.json<{ document?: unknown }>().catch(() => ({}) as never);
+    const saved = await saveHandler(env.UPLOADS, project.id, c.req.param('name'), body.document);
+    if (!saved.ok) return c.json({ error: saved.reason }, saved.status);
+
+    await regenerate(db, env, tenantId, project);
+    return c.json({ ok: true, path: saved.path, spec: saved.spec });
+  });
+
+  router.delete('/:projectId/backend/handlers/:name', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const project = await assertProject(db, tenantId, c.req.param('projectId'));
+    if (!project) return c.json({ error: 'Project not found' }, 404);
+
+    const env = c.env as Env & { UPLOADS?: R2Bucket };
+    if (!env.UPLOADS) return c.json({ error: 'Storage is not configured' }, 503);
+    if (!(await removeHandler(env.UPLOADS, project.id, c.req.param('name')))) {
+      return c.json({ error: 'Invalid handler name' }, 400);
+    }
+    await regenerate(db, env, tenantId, project);
+    return c.json({ ok: true });
   });
 
   /** Re-run the strategy. On `declarative` this regenerates the endpoint map; on
@@ -126,21 +250,7 @@ export function createProjectBackendRoutes(db: Db): Hono<HonoEnv> {
 
     const env = c.env as Env & { UPLOADS?: R2Bucket };
     if (!env.UPLOADS) return c.json({ error: 'Storage is not configured' }, 503);
-
-    const { specs } = await loadHandlers(env.UPLOADS, project.id);
-    const secrets = await listProjectSecrets(db, tenantId, project.id);
-    const result = await materializeBackend({
-      db,
-      env,
-      bucket: env.UPLOADS,
-      tenantId,
-      projectId: project.id,
-      projectName: project.name,
-      connectors: connectorsFor(specs),
-      secretNames: secrets.map((s) => s.name),
-      requiredSecretNames: requiredSecretsFor(specs),
-    });
-    return c.json({ result });
+    return c.json({ result: await regenerate(db, env, tenantId, project) });
   });
 
   router.get('/:projectId/backend/requests', async (c) => {

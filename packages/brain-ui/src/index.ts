@@ -44,13 +44,16 @@ export type { PromptPanelProps } from './PromptPanel';
 export { PromptOptionsMenu } from './promptOptions/PromptOptionsMenu';
 export type { PromptOptionsMenuProps, PromptOptionsModel } from './promptOptions/PromptOptionsMenu';
 export { DEFAULT_PROMPT_OPTIONS_LABELS, promptOptionsLabels } from './promptOptions/types';
+export type { PromptOptionsLabels } from './promptOptions/types';
+// The model-choice domain itself lives in brain-embedded (the extension host shares
+// it and cannot import React); re-exported here so a UI consumer has one import site.
 export type {
   ChatModelOptions,
   ChatModelSelection,
   ModelCategory,
+  ModelChoiceLabels,
   ModelItem,
-  PromptOptionsLabels,
-} from './promptOptions/types';
+} from '@seanhogg/builderforce-brain-embedded';
 export {
   buildModelItems,
   filterModelItems,
@@ -59,9 +62,10 @@ export {
   modelInUse,
   premiumCostLabel,
   perMillionUsd,
+  byoVendorLabel,
   MODEL_CATEGORIES,
   PROJECT_EVERMIND_MODEL_PREFIX,
-} from './promptOptions/modelItems';
+} from '@seanhogg/builderforce-brain-embedded';
 
 export { Avatar, ParticipantBadge, initialsOf, avatarColor } from './ParticipantBadge';
 export type { AvatarProps } from './ParticipantBadge';

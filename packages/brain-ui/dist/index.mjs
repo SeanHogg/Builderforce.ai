@@ -1023,86 +1023,19 @@ function PromptPanel({
 
 // src/promptOptions/PromptOptionsMenu.tsx
 import { useEffect as useEffect2, useMemo as useMemo4, useRef as useRef2, useState as useState4 } from "react";
-
-// src/promptOptions/modelItems.ts
-import { PROJECT_EVERMIND_MODEL_PREFIX } from "@seanhogg/builderforce-brain-embedded";
-function perMillionUsd(rate) {
-  return `$${(rate * 1e6).toFixed(2)}`;
-}
-function premiumCostLabel(pricing, template) {
-  return template.replace("{input}", perMillionUsd(pricing.prompt)).replace("{output}", perMillionUsd(pricing.completion));
-}
-var MODEL_CATEGORIES = ["auto", "byo", "free", "plan", "paid", "configured"];
-function modelCategoryLabel(category, labels) {
-  switch (category) {
-    case "auto":
-      return labels.categoryAuto;
-    case "byo":
-      return labels.categoryByo;
-    case "free":
-      return labels.categoryFree;
-    case "plan":
-      return labels.categoryPlan;
-    case "paid":
-      return labels.categoryPaid;
-    case "configured":
-      return labels.categoryConfigured;
-  }
-}
-function buildModelItems(options, labels) {
-  const items = [
-    { key: "auto", label: labels.autoLabel, detail: labels.autoDetail, category: "auto", selection: { mode: "auto" } }
-  ];
-  const normalized = (value) => typeof value === "string" ? { id: value } : value;
-  const seen = /* @__PURE__ */ new Set();
-  const add = (id, label, detail, category) => {
-    if (!id || seen.has(id)) return;
-    seen.add(id);
-    items.push({ key: `model:${id}`, label, detail, category, selection: { mode: "model", model: id } });
-  };
-  for (const value of options.free) {
-    const model = normalized(value);
-    add(model.id, model.id, model.cost ?? labels.freeDetail, "free");
-  }
-  const free = new Set(options.free.map((value) => normalized(value).id));
-  for (const value of options.plan) {
-    const model = normalized(value);
-    if (!free.has(model.id)) add(model.id, model.id, model.cost ?? labels.planDetail, "plan");
-  }
-  for (const value of options.paid) {
-    const model = normalized(value);
-    add(model.id, model.id, model.cost ?? labels.paidDetail, "paid");
-  }
-  if (options.byo.length) {
-    items.push({ key: "byo_pool", label: labels.poolLabel, detail: labels.poolDetail, category: "byo", selection: { mode: "byo_pool" } });
-  }
-  for (const model of options.byo) {
-    add(model.id, model.id, model.cost ?? labels.byoDetail.replace("{vendor}", model.vendor), "byo");
-  }
-  for (const model of options.configured ?? []) add(model.id, model.label, model.id, "configured");
-  return items;
-}
-function activeModelKey(selection) {
-  return selection.mode === "model" ? `model:${selection.model}` : selection.mode;
-}
-function filterModelItems(items, labels, query, category) {
-  const needle = query.trim().toLowerCase();
-  return items.filter((item) => (category === "all" || item.category === category) && (!needle || `${item.label} ${item.detail} ${modelCategoryLabel(item.category, labels)}`.toLowerCase().includes(needle)));
-}
-function modelInUse(selection, items, labels, effective) {
-  const resolve = (model) => {
-    const item = items.find((entry) => entry.key === `model:${model}`);
-    if (item) return { name: item.label, detail: item.detail };
-    return model.startsWith(PROJECT_EVERMIND_MODEL_PREFIX) ? { name: labels.evermindLabel, detail: labels.evermindDetail } : { name: model, detail: labels.autoDetail };
-  };
-  if (selection.mode === "model") return resolve(selection.model);
-  if (selection.mode === "byo_pool") return { name: labels.poolLabel, detail: labels.poolDetail };
-  if (effective) return resolve(effective);
-  return { name: labels.autoLabel, detail: labels.autoDetail };
-}
+import {
+  activeModelKey,
+  buildModelItems,
+  filterModelItems,
+  MODEL_CATEGORIES,
+  modelCategoryLabel,
+  modelInUse
+} from "@seanhogg/builderforce-brain-embedded";
 
 // src/promptOptions/types.ts
+import { DEFAULT_MODEL_CHOICE_LABELS } from "@seanhogg/builderforce-brain-embedded";
 var DEFAULT_PROMPT_OPTIONS_LABELS = {
+  ...DEFAULT_MODEL_CHOICE_LABELS,
   options: "Options",
   effort: "Effort",
   effortQuick: "Quick",
@@ -1118,24 +1051,6 @@ var DEFAULT_PROMPT_OPTIONS_LABELS = {
   chooseModel: "Choose model",
   noModels: "No matching models",
   all: "All",
-  categoryAuto: "Auto",
-  categoryByo: "BYO",
-  categoryFree: "Free",
-  categoryPlan: "Plan",
-  categoryPaid: "Paid",
-  categoryConfigured: "Configured",
-  autoLabel: "Auto",
-  autoDetail: "Routed per turn \u2014 your connected accounts first, then your plan.",
-  poolLabel: "BYO pool",
-  poolDetail: "Tries your connected accounts in the order configured in Account settings.",
-  freeDetail: "Free \xB7 included with BuilderForce",
-  planDetail: "Included with your BuilderForce plan",
-  paidDetail: "Premium \u2014 metered at cost + 1\xA2 per request",
-  paidCostDetail: "{input} input / {output} output per 1M tokens + $0.01 per request",
-  byoDetail: "Billed to your own {vendor} account \u2014 no plan credit used.",
-  configuredDetail: "Saved workspace LLM configuration",
-  evermindLabel: "Project Evermind",
-  evermindDetail: "Your project's own learned Evermind model.",
   modelLocked: "Model choice needs a paid plan or a connected provider account.",
   accountSettings: "Account settings"
 };
@@ -1339,6 +1254,20 @@ function PromptOptionsMenu({
     ] })
   ] });
 }
+
+// src/index.ts
+import {
+  buildModelItems as buildModelItems2,
+  filterModelItems as filterModelItems2,
+  activeModelKey as activeModelKey2,
+  modelCategoryLabel as modelCategoryLabel2,
+  modelInUse as modelInUse2,
+  premiumCostLabel,
+  perMillionUsd,
+  byoVendorLabel,
+  MODEL_CATEGORIES as MODEL_CATEGORIES2,
+  PROJECT_EVERMIND_MODEL_PREFIX
+} from "@seanhogg/builderforce-brain-embedded";
 
 // src/HealthRing.tsx
 import { jsx as jsx9, jsxs as jsxs9 } from "react/jsx-runtime";
@@ -4402,7 +4331,7 @@ export {
   DEFAULT_TIMELINE_LABELS,
   EvermindConsole,
   HealthRing,
-  MODEL_CATEGORIES,
+  MODEL_CATEGORIES2 as MODEL_CATEGORIES,
   Markdown,
   PROJECT_EVERMIND_MODEL_PREFIX,
   ParticipantBadge,
@@ -4415,22 +4344,23 @@ export {
   RUNNABLE_KINDS,
   Sunburst,
   TICKET_KINDS,
-  activeModelKey,
+  activeModelKey2 as activeModelKey,
   askUserAnchorId,
   attachmentsOf,
   avatarColor,
-  buildModelItems,
+  buildModelItems2 as buildModelItems,
   buildSettledTimeline,
   buildTimeline,
+  byoVendorLabel,
   evermindLearnedStatus,
   evermindNextAction,
-  filterModelItems,
+  filterModelItems2 as filterModelItems,
   formatDuration,
   formatPayload,
   healthRingColor,
   initialsOf,
-  modelCategoryLabel,
-  modelInUse,
+  modelCategoryLabel2 as modelCategoryLabel,
+  modelInUse2 as modelInUse,
   parseAskUser,
   perMillionUsd,
   premiumCostLabel,

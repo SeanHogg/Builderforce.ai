@@ -5479,7 +5479,7 @@
   "home": {
     "heroBadge": "画布 · 人类 + AI 智能体",
     "heroTitle": "每个想法都变成<em>现实。</em>",
-    "heroSub": "一个可视化工作空间，让你的团队与 AI 智能体共同设计、创建、审核并交付网站、工作流、模型、数据故事和产品，无需在众多工具间切换。",
+    "heroSub": "一块画布，让你的团队与 AI 智能体共同设计、构建、评审并交付——无需在多个工具之间来回切换。",
     "heroPromptPlaceholder": "你想创造什么？",
     "heroPromptAria": "描述你想创造的内容",
     "heroGetStarted": "开始创作",
@@ -5488,6 +5488,46 @@
       "可视化客户反馈并制作热门功能原型",
       "构建、评估并交付客户支持智能体"
     ],
+    "canvas": {
+      "boardAria": "创作画布示例——可直接作为起点的关联对象",
+      "objectAction": "从这个对象开始：{title}",
+      "agentInitials": "收益",
+      "agentPresence": "在线 · 可指派",
+      "guestNote": "这是一块真实的画布。在你登录之前，内容不会离开本设备。",
+      "narrowNote": "在更大的屏幕上打开可使用完整画布。",
+      "objects": [
+        {
+          "kind": "数据集",
+          "title": "Q3_pipeline.csv",
+          "detail": "1,284 行 · 9 列",
+          "prefill": "用这个数据集绘制各渠道的赢单率"
+        },
+        {
+          "kind": "图表",
+          "title": "各渠道赢单率",
+          "detail": "由数据集计算得出，而非手动录入",
+          "prefill": "把这张图表整理成一页董事会汇报"
+        },
+        {
+          "kind": "智能体",
+          "title": "收益分析师",
+          "detail": "读取数据，撰写简报",
+          "prefill": "让收益分析师评审本季度的销售管道"
+        },
+        {
+          "kind": "工作流",
+          "title": "续约触达",
+          "detail": "4 个步骤 · 2 次审批",
+          "prefill": "创建一个带两次审批的续约触达工作流"
+        },
+        {
+          "kind": "文档",
+          "title": "董事会一页纸",
+          "detail": "根据上方图表起草",
+          "prefill": "根据这份分析起草一页董事会汇报"
+        }
+      ]
+    },
     "createCanvas": {
       "eyebrow": "认识 Create",
       "heading": "一个画布，承载你的所有想象。",
@@ -13440,7 +13480,13 @@
     "noticeSaveFailed": "保存失败",
     "noticeStandupFramePrepared": "站会框架已准备好",
     "noticeObjectLocked": "此对象正由其他协作者编辑",
-    "noticeLensAlreadyExpanded": "此项目视图已展开"
+    "noticeLensAlreadyExpanded": "此项目视图已展开",
+    "noticeGuestAiUnavailable": "AI 目前不可用。你的画布在本设备上仍可编辑——请稍后再试一次。",
+    "noticeAgentTestFailed": "智能体测试失败",
+    "noticeAgentGroupFailed": "该智能体回合未能完成",
+    "noticeAgentTestStatusError": "错误 · {reason}",
+    "noticeAgentGroupTurnFailed": "智能体小组未能完成本回合：{reason}",
+    "noticeClaimFailed": "暂时无法保存此会话"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",

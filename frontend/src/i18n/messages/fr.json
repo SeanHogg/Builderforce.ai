@@ -5479,7 +5479,7 @@
   "home": {
     "heroBadge": "Canevas · Humains + agents IA",
     "heroTitle": "Toute idée devient <em>réelle.</em>",
-    "heroSub": "Un espace visuel où votre équipe et les agents IA conçoivent, créent, révisent et livrent sites, workflows, modèles, récits de données et produits, sans multiplier les outils.",
+    "heroSub": "Un canevas où votre équipe et vos agents IA conçoivent, construisent, révisent et livrent — sans dispersion des outils.",
     "heroPromptPlaceholder": "Que voulez-vous créer ?",
     "heroPromptAria": "Décrivez ce que vous voulez créer",
     "heroGetStarted": "Commencer à créer",
@@ -5488,6 +5488,46 @@
       "Visualiser les retours clients et maquetter les fonctions clés",
       "Créer, évaluer et livrer un agent de support client"
     ],
+    "canvas": {
+      "boardAria": "Exemple de canevas de création — des objets connectés comme point de départ",
+      "objectAction": "Partir de cet objet : {title}",
+      "agentInitials": "AR",
+      "agentPresence": "En direct · assignable",
+      "guestNote": "Un vrai canevas. Rien ne quitte cet appareil tant que vous ne vous connectez pas.",
+      "narrowNote": "Ouvrez sur un écran plus grand pour afficher le canevas complet.",
+      "objects": [
+        {
+          "kind": "Jeu de données",
+          "title": "pipeline_T3.csv",
+          "detail": "1 284 lignes · 9 colonnes",
+          "prefill": "Trace le taux de réussite par canal à partir de ce jeu de données"
+        },
+        {
+          "kind": "Graphique",
+          "title": "Taux de réussite par canal",
+          "detail": "Calculé depuis les données, pas ressaisi",
+          "prefill": "Transforme ce graphique en note d'une page pour le conseil"
+        },
+        {
+          "kind": "Agent",
+          "title": "Analyste revenus",
+          "detail": "Lit les données, rédige la note",
+          "prefill": "Demande à l'analyste revenus d'examiner le pipeline du trimestre"
+        },
+        {
+          "kind": "Flux de travail",
+          "title": "Relance de renouvellement",
+          "detail": "4 étapes · 2 validations",
+          "prefill": "Crée un flux de relance de renouvellement avec deux validations"
+        },
+        {
+          "kind": "Document",
+          "title": "Note d'une page",
+          "detail": "Rédigée à partir du graphique ci-dessus",
+          "prefill": "Rédige une note d'une page pour le conseil à partir de cette analyse"
+        }
+      ]
+    },
     "createCanvas": {
       "eyebrow": "Découvrez Create",
       "heading": "Un canevas. Tout ce que vous pouvez imaginer.",
@@ -13440,7 +13480,13 @@
     "noticeSaveFailed": "Échec de l’enregistrement",
     "noticeStandupFramePrepared": "Cadre du stand-up préparé",
     "noticeObjectLocked": "Un autre collaborateur modifie cet objet",
-    "noticeLensAlreadyExpanded": "Cette vue du projet est déjà développée"
+    "noticeLensAlreadyExpanded": "Cette vue du projet est déjà développée",
+    "noticeGuestAiUnavailable": "L'IA est indisponible pour le moment. Votre canevas reste modifiable sur cet appareil — réessayez dans un instant.",
+    "noticeAgentTestFailed": "Le test de l'agent a échoué",
+    "noticeAgentGroupFailed": "Le tour de l'agent n'a pas pu être terminé",
+    "noticeAgentTestStatusError": "Erreur · {reason}",
+    "noticeAgentGroupTurnFailed": "Le groupe d'agents n'a pas pu terminer son tour : {reason}",
+    "noticeClaimFailed": "Impossible d'enregistrer cette session pour le moment"
   },
   "canvasCommands": {
     "cleanLayout": "Réorganiser la toile",

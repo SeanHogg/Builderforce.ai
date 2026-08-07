@@ -5479,7 +5479,7 @@
   "home": {
     "heroBadge": "Lienzo · Personas + agentes de IA",
     "heroTitle": "Cualquier idea se hace <em>real.</em>",
-    "heroSub": "Un espacio visual donde tu equipo y los agentes de IA diseñan, crean, revisan y entregan sitios, flujos de trabajo, modelos, historias de datos y productos, sin dispersarse entre herramientas.",
+    "heroSub": "Un lienzo donde tu equipo y los agentes de IA diseñan, construyen, revisan y entregan, sin dispersión de herramientas.",
     "heroPromptPlaceholder": "¿Qué quieres crear?",
     "heroPromptAria": "Describe lo que quieres crear",
     "heroGetStarted": "Empezar a crear",
@@ -5488,6 +5488,46 @@
       "Visualiza comentarios y diseña las funciones principales",
       "Crea, evalúa y entrega un agente de atención al cliente"
     ],
+    "canvas": {
+      "boardAria": "Lienzo de creación de ejemplo: objetos conectados desde los que puedes empezar",
+      "objectAction": "Empezar desde este objeto: {title}",
+      "agentInitials": "AN",
+      "agentPresence": "En vivo · asignable",
+      "guestNote": "Un lienzo real. Nada sale de este dispositivo hasta que inicies sesión.",
+      "narrowNote": "Ábrelo en una pantalla más grande para ver el lienzo completo.",
+      "objects": [
+        {
+          "kind": "Conjunto de datos",
+          "title": "pipeline_T3.csv",
+          "detail": "1.284 filas · 9 columnas",
+          "prefill": "Grafica la tasa de éxito por canal con este conjunto de datos"
+        },
+        {
+          "kind": "Gráfico",
+          "title": "Tasa de éxito por canal",
+          "detail": "Calculado desde los datos, no reescrito",
+          "prefill": "Convierte este gráfico en un informe de una página para el consejo"
+        },
+        {
+          "kind": "Agente",
+          "title": "Analista de ingresos",
+          "detail": "Lee los datos y redacta el informe",
+          "prefill": "Que el analista de ingresos revise el pipeline de este trimestre"
+        },
+        {
+          "kind": "Flujo de trabajo",
+          "title": "Contacto de renovación",
+          "detail": "4 pasos · 2 aprobaciones",
+          "prefill": "Crea un flujo de contacto de renovación con dos aprobaciones"
+        },
+        {
+          "kind": "Documento",
+          "title": "Informe de una página",
+          "detail": "Redactado a partir del gráfico anterior",
+          "prefill": "Redacta un informe de una página para el consejo con este análisis"
+        }
+      ]
+    },
     "createCanvas": {
       "eyebrow": "Conoce Create",
       "heading": "Un lienzo. Todo lo que puedas imaginar.",
@@ -13440,7 +13480,13 @@
     "noticeSaveFailed": "Error al guardar",
     "noticeStandupFramePrepared": "Marco de la reunión diaria preparado",
     "noticeObjectLocked": "Otro colaborador está editando este objeto",
-    "noticeLensAlreadyExpanded": "Esta vista del proyecto ya está expandida"
+    "noticeLensAlreadyExpanded": "Esta vista del proyecto ya está expandida",
+    "noticeGuestAiUnavailable": "La IA no está disponible ahora mismo. Tu lienzo sigue siendo editable en este dispositivo; vuelve a intentarlo en un momento.",
+    "noticeAgentTestFailed": "La prueba del agente falló",
+    "noticeAgentGroupFailed": "No se pudo completar el turno del agente",
+    "noticeAgentTestStatusError": "Error · {reason}",
+    "noticeAgentGroupTurnFailed": "El grupo de agentes no pudo completar su turno: {reason}",
+    "noticeClaimFailed": "Todavía no se pudo guardar esta sesión"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",

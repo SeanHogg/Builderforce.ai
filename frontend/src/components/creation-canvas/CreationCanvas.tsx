@@ -41,7 +41,7 @@ import {
   createGuestRoom, leaveGuestRoom, fetchGuestRoomCanvas, pushGuestRoomCanvas,
   getActiveGuestRoom, getGuestDisplayName, setGuestDisplayName,
 } from '@/lib/guestRoomApi';
-import { runCreationCanvasAi } from '@/lib/creationCanvasAi';
+import { GuestAiUnavailableError, runCreationCanvasAi } from '@/lib/creationCanvasAi';
 import type { BrainAction, BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import '@seanhogg/builderforce-brain-ui/styles.css';
 import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
@@ -377,6 +377,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   /** The import engine is a plain module, so it is handed the catalog rather
    * than reaching for one — every string it produces stays translated. */
   const importLabel = useCallback<ImportTranslator>((key, values) => tImport(key as never, values as never), [tImport]);
+  /**
+   * The one place a failed AI turn becomes words. Known failures the visitor can
+   * act on are said in their own language; anything else keeps the underlying
+   * message, which is what makes a real error debuggable. Every turn site routes
+   * through here so the guest path can never regress to a raw English throw.
+   */
+  const describeTurnError = useCallback((error: unknown, fallbackKey: 'noticeBrainFailed' | 'noticeAgentTestFailed' | 'noticeAgentGroupFailed') => {
+    if (error instanceof GuestAiUnavailableError) return t('noticeGuestAiUnavailable');
+    return error instanceof Error && error.message ? error.message : t(fallbackKey);
+  }, [t]);
   const confirm = useConfirm();
   const toast = useToast();
   const storageKey = creationStorageKey(sessionId);
@@ -2517,11 +2527,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       });
       setNotice(t('noticeAgentTestResult', { name: agent.data.title, status: status.toLowerCase() }));
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Agent test failed';
-      setNodes((current) => current.map((node) => node.id === agentId ? { ...node, data: { ...node.data, testStatus: `Error · ${message}` } } : node));
+      const message = describeTurnError(error, 'noticeAgentTestFailed');
+      setNodes((current) => current.map((node) => node.id === agentId ? { ...node, data: { ...node.data, testStatus: t('noticeAgentTestStatusError', { reason: message }) } } : node));
       setNotice(message);
     }
-  }, [edges, modelSelection, nodes, persistence, setEdges, setNodes]);
+  }, [describeTurnError, edges, modelSelection, nodes, persistence, setEdges, setNodes, t]);
 
   const evaluateCanvas = useCallback((promptOverride?: string) => {
     const requestText = (promptOverride ?? prompt).trim();
@@ -2603,8 +2613,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               });
             }
           } catch (error) {
-            const detail = error instanceof Error ? error.message : 'Canonical agent turn failed';
-            appendTimeline('system', `The canonical agent group could not complete its turn: ${detail}`, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:agent-group-error`);
+            const detail = describeTurnError(error, 'noticeAgentGroupFailed');
+            appendTimeline('system', t('noticeAgentGroupTurnFailed', { reason: detail }), { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:agent-group-error`);
           }
         } else if (connectedAgentNodes.length) {
           // Guest drafts cannot call the tenant workforce runtime. Keep ideation
@@ -2682,10 +2692,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         trackActivity('creation_ai_evaluation_completed', { sessionId, metadata: { clientSurface: canvasSurface(), proposedChangeCount: changes.length, objectKinds: [...new Set(nodes.map((node) => node.data.kind))] } });
         if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'succeeded', actorType: 'brain', durationMs: performance.now() - promptStartedAt, metricKey: 'artifacts_proposed', metricValue: changes.length, unit: 'count' }).catch(() => undefined);
       }).catch((error) => {
-        appendTimeline('system', error instanceof Error ? error.message : 'Brain could not complete this request', { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:error`);
+        const detail = describeTurnError(error, 'noticeBrainFailed');
+        appendTimeline('system', detail, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:error`);
         setThinking(false);
         setActiveAgentIds(new Set());
-        setNotice(error instanceof Error ? error.message : t('noticeBrainFailed'));
+        setNotice(detail);
         if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'failed', actorType: 'brain', durationMs: performance.now() - promptStartedAt }).catch(() => undefined);
       });
       return;
@@ -2720,7 +2731,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setPrompt('');
       setNotice(t('noticeEvaluationAdded'));
     }, 850);
-  }, [appendTimeline, canvasActions, confirm, currentUserId, effectiveSelectedIds, edges, evermindProjectId, members, memoryEnabled, modelSelection, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, thinking, timeline, title]);
+  }, [appendTimeline, canvasActions, confirm, currentUserId, describeTurnError, effectiveSelectedIds, edges, evermindProjectId, members, memoryEnabled, modelSelection, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, t, thinking, timeline, title]);
 
   useEffect(() => {
     if (!hydrated.current || initialPromptSubmitted.current || thinking) return;

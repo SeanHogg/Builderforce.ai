@@ -109,11 +109,8 @@ export function classifyModelFunding(
   return 'premium';
 }
 
-/** The gateway pin that expands to a project's CURRENT Evermind head at call time.
- *  Mirrors `PROJECT_EVERMIND_MODEL_PREFIX` on the gateway (api/.../projectEvermind.ts). */
-export const PROJECT_EVERMIND_MODEL_PREFIX = 'project_evermind:';
-
 import { DEFAULT_TOOL_LIMIT } from './selectTools';
+import { PROJECT_EVERMIND_MODEL_PREFIX } from './modelChoice';
 
 /** Everything the diagnostics block needs — already gathered by the host (pure in). */
 export interface ChatDiagnosticsData {

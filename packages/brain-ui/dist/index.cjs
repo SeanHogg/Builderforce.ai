@@ -46,9 +46,9 @@ __export(src_exports, {
   DEFAULT_TIMELINE_LABELS: () => DEFAULT_TIMELINE_LABELS,
   EvermindConsole: () => EvermindConsole,
   HealthRing: () => HealthRing,
-  MODEL_CATEGORIES: () => MODEL_CATEGORIES,
+  MODEL_CATEGORIES: () => import_builderforce_brain_embedded6.MODEL_CATEGORIES,
   Markdown: () => Markdown,
-  PROJECT_EVERMIND_MODEL_PREFIX: () => import_builderforce_brain_embedded3.PROJECT_EVERMIND_MODEL_PREFIX,
+  PROJECT_EVERMIND_MODEL_PREFIX: () => import_builderforce_brain_embedded6.PROJECT_EVERMIND_MODEL_PREFIX,
   ParticipantBadge: () => ParticipantBadge,
   PendingQuestionBanner: () => PendingQuestionBanner,
   Project360View: () => Project360View,
@@ -59,25 +59,26 @@ __export(src_exports, {
   RUNNABLE_KINDS: () => RUNNABLE_KINDS,
   Sunburst: () => Sunburst,
   TICKET_KINDS: () => TICKET_KINDS,
-  activeModelKey: () => activeModelKey,
+  activeModelKey: () => import_builderforce_brain_embedded6.activeModelKey,
   askUserAnchorId: () => askUserAnchorId,
   attachmentsOf: () => attachmentsOf,
   avatarColor: () => avatarColor,
-  buildModelItems: () => buildModelItems,
+  buildModelItems: () => import_builderforce_brain_embedded6.buildModelItems,
   buildSettledTimeline: () => buildSettledTimeline,
   buildTimeline: () => buildTimeline,
+  byoVendorLabel: () => import_builderforce_brain_embedded6.byoVendorLabel,
   evermindLearnedStatus: () => evermindLearnedStatus,
   evermindNextAction: () => evermindNextAction,
-  filterModelItems: () => filterModelItems,
+  filterModelItems: () => import_builderforce_brain_embedded6.filterModelItems,
   formatDuration: () => formatDuration,
   formatPayload: () => formatPayload,
   healthRingColor: () => healthRingColor,
   initialsOf: () => initialsOf,
-  modelCategoryLabel: () => modelCategoryLabel,
-  modelInUse: () => modelInUse,
+  modelCategoryLabel: () => import_builderforce_brain_embedded6.modelCategoryLabel,
+  modelInUse: () => import_builderforce_brain_embedded6.modelInUse,
   parseAskUser: () => parseAskUser,
-  perMillionUsd: () => perMillionUsd,
-  premiumCostLabel: () => premiumCostLabel,
+  perMillionUsd: () => import_builderforce_brain_embedded6.perMillionUsd,
+  premiumCostLabel: () => import_builderforce_brain_embedded6.premiumCostLabel,
   promptOptionsLabels: () => promptOptionsLabels,
   selectPendingAskUser: () => selectPendingAskUser,
   serializeAskUser: () => serializeAskUser,
@@ -1114,86 +1115,12 @@ function PromptPanel({
 
 // src/promptOptions/PromptOptionsMenu.tsx
 var import_react4 = require("react");
-
-// src/promptOptions/modelItems.ts
-var import_builderforce_brain_embedded3 = require("@seanhogg/builderforce-brain-embedded");
-function perMillionUsd(rate) {
-  return `$${(rate * 1e6).toFixed(2)}`;
-}
-function premiumCostLabel(pricing, template) {
-  return template.replace("{input}", perMillionUsd(pricing.prompt)).replace("{output}", perMillionUsd(pricing.completion));
-}
-var MODEL_CATEGORIES = ["auto", "byo", "free", "plan", "paid", "configured"];
-function modelCategoryLabel(category, labels) {
-  switch (category) {
-    case "auto":
-      return labels.categoryAuto;
-    case "byo":
-      return labels.categoryByo;
-    case "free":
-      return labels.categoryFree;
-    case "plan":
-      return labels.categoryPlan;
-    case "paid":
-      return labels.categoryPaid;
-    case "configured":
-      return labels.categoryConfigured;
-  }
-}
-function buildModelItems(options, labels) {
-  const items = [
-    { key: "auto", label: labels.autoLabel, detail: labels.autoDetail, category: "auto", selection: { mode: "auto" } }
-  ];
-  const normalized = (value) => typeof value === "string" ? { id: value } : value;
-  const seen = /* @__PURE__ */ new Set();
-  const add = (id, label, detail, category) => {
-    if (!id || seen.has(id)) return;
-    seen.add(id);
-    items.push({ key: `model:${id}`, label, detail, category, selection: { mode: "model", model: id } });
-  };
-  for (const value of options.free) {
-    const model = normalized(value);
-    add(model.id, model.id, model.cost ?? labels.freeDetail, "free");
-  }
-  const free = new Set(options.free.map((value) => normalized(value).id));
-  for (const value of options.plan) {
-    const model = normalized(value);
-    if (!free.has(model.id)) add(model.id, model.id, model.cost ?? labels.planDetail, "plan");
-  }
-  for (const value of options.paid) {
-    const model = normalized(value);
-    add(model.id, model.id, model.cost ?? labels.paidDetail, "paid");
-  }
-  if (options.byo.length) {
-    items.push({ key: "byo_pool", label: labels.poolLabel, detail: labels.poolDetail, category: "byo", selection: { mode: "byo_pool" } });
-  }
-  for (const model of options.byo) {
-    add(model.id, model.id, model.cost ?? labels.byoDetail.replace("{vendor}", model.vendor), "byo");
-  }
-  for (const model of options.configured ?? []) add(model.id, model.label, model.id, "configured");
-  return items;
-}
-function activeModelKey(selection) {
-  return selection.mode === "model" ? `model:${selection.model}` : selection.mode;
-}
-function filterModelItems(items, labels, query, category) {
-  const needle = query.trim().toLowerCase();
-  return items.filter((item) => (category === "all" || item.category === category) && (!needle || `${item.label} ${item.detail} ${modelCategoryLabel(item.category, labels)}`.toLowerCase().includes(needle)));
-}
-function modelInUse(selection, items, labels, effective) {
-  const resolve = (model) => {
-    const item = items.find((entry) => entry.key === `model:${model}`);
-    if (item) return { name: item.label, detail: item.detail };
-    return model.startsWith(import_builderforce_brain_embedded3.PROJECT_EVERMIND_MODEL_PREFIX) ? { name: labels.evermindLabel, detail: labels.evermindDetail } : { name: model, detail: labels.autoDetail };
-  };
-  if (selection.mode === "model") return resolve(selection.model);
-  if (selection.mode === "byo_pool") return { name: labels.poolLabel, detail: labels.poolDetail };
-  if (effective) return resolve(effective);
-  return { name: labels.autoLabel, detail: labels.autoDetail };
-}
+var import_builderforce_brain_embedded4 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/promptOptions/types.ts
+var import_builderforce_brain_embedded3 = require("@seanhogg/builderforce-brain-embedded");
 var DEFAULT_PROMPT_OPTIONS_LABELS = {
+  ...import_builderforce_brain_embedded3.DEFAULT_MODEL_CHOICE_LABELS,
   options: "Options",
   effort: "Effort",
   effortQuick: "Quick",
@@ -1209,24 +1136,6 @@ var DEFAULT_PROMPT_OPTIONS_LABELS = {
   chooseModel: "Choose model",
   noModels: "No matching models",
   all: "All",
-  categoryAuto: "Auto",
-  categoryByo: "BYO",
-  categoryFree: "Free",
-  categoryPlan: "Plan",
-  categoryPaid: "Paid",
-  categoryConfigured: "Configured",
-  autoLabel: "Auto",
-  autoDetail: "Routed per turn \u2014 your connected accounts first, then your plan.",
-  poolLabel: "BYO pool",
-  poolDetail: "Tries your connected accounts in the order configured in Account settings.",
-  freeDetail: "Free \xB7 included with BuilderForce",
-  planDetail: "Included with your BuilderForce plan",
-  paidDetail: "Premium \u2014 metered at cost + 1\xA2 per request",
-  paidCostDetail: "{input} input / {output} output per 1M tokens + $0.01 per request",
-  byoDetail: "Billed to your own {vendor} account \u2014 no plan credit used.",
-  configuredDetail: "Saved workspace LLM configuration",
-  evermindLabel: "Project Evermind",
-  evermindDetail: "Your project's own learned Evermind model.",
   modelLocked: "Model choice needs a paid plan or a connected provider account.",
   accountSettings: "Account settings"
 };
@@ -1271,19 +1180,19 @@ function PromptOptionsMenu({
       document.removeEventListener("keydown", onKey);
     };
   }, [open]);
-  const items = (0, import_react4.useMemo)(() => model ? buildModelItems(model.options, labels) : [], [model, labels]);
+  const items = (0, import_react4.useMemo)(() => model ? (0, import_builderforce_brain_embedded4.buildModelItems)(model.options, labels) : [], [model, labels]);
   const inUse = (0, import_react4.useMemo)(
-    () => model ? modelInUse(model.selection, items, labels, model.effective) : null,
+    () => model ? (0, import_builderforce_brain_embedded4.modelInUse)(model.selection, items, labels, model.effective) : null,
     [model, items, labels]
   );
   const categories = (0, import_react4.useMemo)(
-    () => MODEL_CATEGORIES.filter((category) => items.some((item) => item.category === category)),
+    () => import_builderforce_brain_embedded4.MODEL_CATEGORIES.filter((category) => items.some((item) => item.category === category)),
     [items]
   );
-  const visible = (0, import_react4.useMemo)(() => filterModelItems(items, labels, query, filter), [items, labels, query, filter]);
+  const visible = (0, import_react4.useMemo)(() => (0, import_builderforce_brain_embedded4.filterModelItems)(items, labels, query, filter), [items, labels, query, filter]);
   if (!onEffortChange && !onThinkingChange && !model && !onAccountSettings) return null;
   const canChoose = model?.canChoose !== false;
-  const activeKey = model ? activeModelKey(model.selection) : "";
+  const activeKey = model ? (0, import_builderforce_brain_embedded4.activeModelKey)(model.selection) : "";
   const title = inUse ? `${labels.options} \xB7 ${labels.modelInUse}: ${inUse.name}` : labels.options;
   return /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)("div", { ref: rootRef, className: ["bf-pmenu", className].filter(Boolean).join(" "), children: [
     /* @__PURE__ */ (0, import_jsx_runtime8.jsxs)(
@@ -1376,7 +1285,7 @@ function PromptOptionsMenu({
               className: `bf-pmenu__filter${filter === category ? " is-active" : ""}`,
               "aria-pressed": filter === category,
               onClick: () => setFilter(category),
-              children: category === "all" ? labels.all : modelCategoryLabel(category, labels)
+              children: category === "all" ? labels.all : (0, import_builderforce_brain_embedded4.modelCategoryLabel)(category, labels)
             },
             category
           )) }),
@@ -1395,7 +1304,7 @@ function PromptOptionsMenu({
                 },
                 children: [
                   /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__optName", children: item.label }),
-                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__optTag", children: modelCategoryLabel(item.category, labels) }),
+                  /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__optTag", children: (0, import_builderforce_brain_embedded4.modelCategoryLabel)(item.category, labels) }),
                   /* @__PURE__ */ (0, import_jsx_runtime8.jsx)("span", { className: "bf-pmenu__optDetail", children: item.detail })
                 ]
               },
@@ -1430,6 +1339,9 @@ function PromptOptionsMenu({
     ] })
   ] });
 }
+
+// src/index.ts
+var import_builderforce_brain_embedded6 = require("@seanhogg/builderforce-brain-embedded");
 
 // src/HealthRing.tsx
 var import_jsx_runtime9 = require("react/jsx-runtime");
@@ -2150,14 +2062,14 @@ function useChatParticipants(adapter, chatId, refreshSignal = 0) {
 
 // src/mention/MentionAutocomplete.tsx
 var import_react7 = require("react");
-var import_builderforce_brain_embedded4 = require("@seanhogg/builderforce-brain-embedded");
+var import_builderforce_brain_embedded5 = require("@seanhogg/builderforce-brain-embedded");
 var import_jsx_runtime11 = require("react/jsx-runtime");
 function useMentionAutocomplete(opts) {
   const { textareaRef, value, setValue, participants, onPick, labels, disabled } = opts;
   const [token, setToken] = (0, import_react7.useState)(null);
   const [index, setIndex] = (0, import_react7.useState)(0);
   const matches = (0, import_react7.useMemo)(
-    () => token && !disabled ? (0, import_builderforce_brain_embedded4.filterMentionCandidates)(participants, token.query) : [],
+    () => token && !disabled ? (0, import_builderforce_brain_embedded5.filterMentionCandidates)(participants, token.query) : [],
     [token, participants, disabled]
   );
   const open = !disabled && token != null && matches.length > 0;
@@ -2167,7 +2079,7 @@ function useMentionAutocomplete(opts) {
       setToken(null);
       return;
     }
-    const next = (0, import_builderforce_brain_embedded4.activeMentionToken)(el.value, el.selectionStart ?? el.value.length);
+    const next = (0, import_builderforce_brain_embedded5.activeMentionToken)(el.value, el.selectionStart ?? el.value.length);
     setToken(next);
     setIndex(0);
   }, [textareaRef, disabled, participants.length]);
@@ -2176,7 +2088,7 @@ function useMentionAutocomplete(opts) {
   }, [value, recompute]);
   const choose = (0, import_react7.useCallback)((r) => {
     const el = textareaRef.current;
-    const tk = token ?? (el ? (0, import_builderforce_brain_embedded4.activeMentionToken)(el.value, el.selectionStart ?? 0) : null);
+    const tk = token ?? (el ? (0, import_builderforce_brain_embedded5.activeMentionToken)(el.value, el.selectionStart ?? 0) : null);
     if (tk) {
       let after = value.slice(tk.end);
       if (after.startsWith(" ")) after = after.slice(1);
@@ -4511,6 +4423,7 @@ function Row2({ item, onAction }) {
   buildModelItems,
   buildSettledTimeline,
   buildTimeline,
+  byoVendorLabel,
   evermindLearnedStatus,
   evermindNextAction,
   filterModelItems,

@@ -19,10 +19,11 @@ import { resolveApiOrigin } from '../../env';
 import { projectBackendRequests, projectBackends, projects } from '../../infrastructure/database/schema';
 import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
-import { listWorkspaceFiles, readWorkspaceFile, writeWorkspaceFile } from '../ide/workspaceStore';
+import { assertSafeUrl, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
+import { deleteWorkspaceFile, listWorkspaceFiles, readWorkspaceFile, writeWorkspaceFile } from '../ide/workspaceStore';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { declarativeStrategy } from './adapters/declarative';
-import { githubWorkerStrategy } from './adapters/githubWorker';
+import { githubWorkerStrategy, WORKER_HEALTH_PATH } from './adapters/githubWorker';
 import {
   isBackendStrategy,
   type BackendHostingStrategy,
@@ -181,6 +182,49 @@ export async function invalidateIngress(env: Env, token: string): Promise<void> 
   await invalidateCached(env, ingressCacheKey(token));
 }
 
+// ---------------------------------------------------------------------------
+// Kill switch
+// ---------------------------------------------------------------------------
+
+/** The two states a backend can be in. `paused` makes every ingress request 404. */
+export const BACKEND_STATUSES = ['active', 'paused'] as const;
+export type BackendStatus = (typeof BACKEND_STATUSES)[number];
+
+export function isBackendStatus(value: unknown): value is BackendStatus {
+  return typeof value === 'string' && (BACKEND_STATUSES as readonly string[]).includes(value);
+}
+
+/**
+ * Pause or resume a project's public ingress.
+ *
+ * `backendByIngressToken` already refuses to resolve a non-`active` row, so this
+ * is the whole kill switch — but until now nothing WROTE the column, which meant
+ * the only way to stop a misbehaving or compromised endpoint was a DBA with a
+ * psql session. A public URL that can be created from the product but only
+ * stopped from the database is not a finished feature.
+ *
+ * The cache invalidation is the load-bearing half: the ingress resolution is
+ * cached for five minutes, so a pause that skipped it would keep serving for
+ * five more minutes — exactly the window in which someone is trying to stop it.
+ */
+export async function setBackendStatus(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  projectId: number,
+  status: BackendStatus,
+): Promise<ProjectBackend> {
+  const backend = await ensureProjectBackend(env, db, tenantId, projectId);
+  if (backend.status === status) return backend;
+
+  await db
+    .update(projectBackends)
+    .set({ status, updatedAt: new Date() })
+    .where(scopedToTenant(projectBackends, tenantId, eq(projectBackends.id, backend.id)));
+  await invalidateIngress(env, backend.ingressToken);
+  return { ...backend, status };
+}
+
 /**
  * Resolve a project id to `{ id, name }` for the caller's tenant, or null.
  *
@@ -263,6 +307,78 @@ export async function loadHandlers(bucket: R2Bucket, projectId: number): Promise
 
   specs.sort((a, b) => (a.route < b.route ? -1 : a.route > b.route ? 1 : a.name < b.name ? -1 : 1));
   return { specs, errors };
+}
+
+/** Handler file names are canvas paths, so they are constrained like one. */
+const HANDLER_NAME_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+
+export const handlerPathFor = (name: string): string => `${HANDLERS_DIR}${name}.json`;
+
+export type HandlerWriteResult =
+  | { ok: true; path: string; spec: HandlerSpec }
+  | { ok: false; reason: string; status: 400 | 409 | 503 };
+
+/**
+ * Create or replace one handler in the canvas.
+ *
+ * The document is parsed with the SAME parser the ingress uses before it is
+ * written, so a spec that would 404 at delivery time cannot be saved in the first
+ * place. That is the whole point of having an authoring path: the alternative —
+ * hand-editing JSON and discovering the mistake when a provider reports a failed
+ * webhook — is how the feature felt before this existed.
+ */
+export async function saveHandler(
+  bucket: R2Bucket,
+  projectId: number,
+  name: string,
+  document: unknown,
+): Promise<HandlerWriteResult> {
+  const clean = name.trim().toLowerCase();
+  if (!HANDLER_NAME_RE.test(clean)) {
+    return { ok: false, reason: 'Handler name must be lowercase letters, digits, "-" or "_"', status: 400 };
+  }
+  const parsed = parseHandlerSpec(document, clean);
+  if (!parsed.ok) return { ok: false, reason: parsed.reason, status: 400 };
+
+  // Two handlers claiming the same route+method would make which one answers a
+  // function of R2 listing order. Reject rather than shadow.
+  const existing = await loadHandlers(bucket, projectId);
+  const collision = existing.specs.find(
+    (s) => s.name !== clean && s.route === parsed.spec.route && s.method === parsed.spec.method,
+  );
+  if (collision) {
+    return { ok: false, reason: `${collision.name} already serves ${parsed.spec.method} ${parsed.spec.route}`, status: 409 };
+  }
+
+  const path = handlerPathFor(clean);
+  const write = await writeWorkspaceFile(bucket, projectId, path, `${JSON.stringify(document, null, 2)}\n`);
+  if (!write.ok) return { ok: false, reason: write.reason, status: 400 };
+  return { ok: true, path, spec: { ...parsed.spec, name: clean } };
+}
+
+/** Remove a handler. Idempotent — deleting one that is already gone is not an error. */
+export async function removeHandler(bucket: R2Bucket, projectId: number, name: string): Promise<boolean> {
+  const clean = name.trim().toLowerCase();
+  if (!HANDLER_NAME_RE.test(clean)) return false;
+  await deleteWorkspaceFile(bucket, projectId, handlerPathFor(clean));
+  return true;
+}
+
+/** The raw canvas document for one handler — what the editor loads and round-trips. */
+export async function readHandlerDocument(
+  bucket: R2Bucket,
+  projectId: number,
+  name: string,
+): Promise<unknown | null> {
+  const clean = name.trim().toLowerCase();
+  if (!HANDLER_NAME_RE.test(clean)) return null;
+  const raw = await readWorkspaceFile(bucket, projectId, handlerPathFor(clean));
+  if (raw === null) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -371,14 +487,100 @@ export async function recordWorkerDeployment(
     .set({ deployedUrl: parsed.origin, lastDeployedAt: new Date(), updatedAt: new Date() })
     .where(scopedToTenant(projectBackends, args.tenantId, eq(projectBackends.id, backend.id)));
   await invalidateIngress(env, backend.ingressToken);
+  // A redeploy is exactly when the secret bindings may have changed, so the
+  // cached readiness for both the old and the new address has to go.
+  await invalidateWorkerHealth(env, backend.deployedUrl);
+  await invalidateWorkerHealth(env, parsed.origin);
   return { ok: true, url: parsed.origin };
+}
+
+// ---------------------------------------------------------------------------
+// Deployed-Worker readiness
+// ---------------------------------------------------------------------------
+
+export interface WorkerHealth {
+  reachable: boolean;
+  /** Expected secret name → whether the Worker has it bound. Names only. */
+  secrets: Record<string, boolean>;
+  /** Routes the DEPLOYED Worker serves — which can lag the canvas. */
+  handlers: Array<{ method: string; route: string; verify?: string }>;
+  reason?: string;
+}
+
+/**
+ * Ask a deployed `github-worker` backend whether it is actually credentialled.
+ *
+ * The deploy workflow SKIPS a secret that is absent from the repository rather
+ * than pushing it empty, which is the right failure posture but leaves the
+ * platform unable to tell "deployed" from "deployed and will 403 everything".
+ * This closes that: the generated Worker reports which of its expected secrets
+ * are bound, by name, and the panel can say so before a provider does.
+ *
+ * Guarded like any other server-side fetch to a customer-controlled URL, and
+ * cached briefly — the panel polls it, and a health check that hammers the
+ * customer's Worker is its own problem.
+ */
+export async function probeWorkerHealth(env: Env, deployedUrl: string | null): Promise<WorkerHealth | null> {
+  if (!deployedUrl) return null;
+
+  return getOrSetCached<WorkerHealth>(
+    env,
+    `project-backend:worker-health:${deployedUrl}`,
+    async () => {
+      let target: URL;
+      try {
+        target = assertSafeUrl(new URL(WORKER_HEALTH_PATH, deployedUrl).toString(), { allowHttp: false });
+        await resolveAndAssertPublic(target.hostname);
+      } catch (error) {
+        return { reachable: false, secrets: {}, handlers: [], reason: error instanceof Error ? error.message : 'Blocked URL' };
+      }
+
+      try {
+        const res = await fetch(target.toString(), {
+          headers: { Accept: 'application/json' },
+          redirect: 'manual',
+          signal: AbortSignal.timeout(8_000),
+        });
+        if (!res.ok) {
+          // An older generated Worker predates the health route. Say that rather
+          // than reporting the deployment as broken.
+          const reason = res.status === 404
+            ? 'This Worker was generated before the health route existed — re-run Rebuild and push.'
+            : `Health check returned ${res.status}`;
+          return { reachable: false, secrets: {}, handlers: [], reason };
+        }
+        const data = (await res.json()) as Partial<WorkerHealth> & { secrets?: Record<string, unknown> };
+        const secrets: Record<string, boolean> = {};
+        for (const [name, bound] of Object.entries(data.secrets ?? {})) secrets[name] = bound === true;
+        return {
+          reachable: true,
+          secrets,
+          handlers: Array.isArray(data.handlers) ? data.handlers : [],
+        };
+      } catch (error) {
+        return {
+          reachable: false,
+          secrets: {},
+          handlers: [],
+          reason: error instanceof Error ? error.message : 'Could not reach the Worker',
+        };
+      }
+    },
+    { kvTtlSeconds: 30, l1TtlMs: 15_000 },
+  );
+}
+
+/** Drop the cached readiness — called after a redeploy report, whose whole point
+ *  is that the answer just changed. */
+export async function invalidateWorkerHealth(env: Env, deployedUrl: string | null): Promise<void> {
+  if (deployedUrl) await invalidateCached(env, `project-backend:worker-health:${deployedUrl}`);
 }
 
 // ---------------------------------------------------------------------------
 // Request log
 // ---------------------------------------------------------------------------
 
-export type RequestVerdict = 'ok' | 'unverified' | 'no-handler' | 'error';
+export type RequestVerdict = 'ok' | 'unverified' | 'no-handler' | 'rate-limited' | 'error';
 
 /**
  * Record one inbound delivery. Best-effort: an audit-write failure must never

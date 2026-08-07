@@ -1,7 +1,7 @@
 import * as React from 'react';
 import React__default, { HTMLAttributes, ReactNode } from 'react';
-import { BrainMessage, BrainTraceEvent, ChatErrorAction, Effort, DirectedRecipient, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
-export { PROJECT_EVERMIND_MODEL_PREFIX } from '@seanhogg/builderforce-brain-embedded';
+import { BrainMessage, BrainTraceEvent, ChatErrorAction, ModelChoiceLabels, Effort, ChatModelSelection, ChatModelOptions, DirectedRecipient, EvermindRecallItem, EvermindLearnTarget, ChatInputAttachment } from '@seanhogg/builderforce-brain-embedded';
+export { ChatModelOptions, ChatModelSelection, MODEL_CATEGORIES, ModelCategory, ModelChoiceLabels, ModelItem, PROJECT_EVERMIND_MODEL_PREFIX, activeModelKey, buildModelItems, byoVendorLabel, filterModelItems, modelCategoryLabel, modelInUse, perMillionUsd, premiumCostLabel } from '@seanhogg/builderforce-brain-embedded';
 
 interface BrainTimelineLabels {
     /** Shown on the live thinking node while a turn streams. */
@@ -384,60 +384,18 @@ declare function PromptPanel({ input, actions, status, overlay, active, dragging
  * the composer had two different affordances for "what runs this turn" and the
  * editor's list could not even be read without leaving the panel. One control,
  * one contract, both hosts.
+ *
+ * The MODEL half of that contract (which models exist, their order, and who pays
+ * for each) lives in brain-embedded's `modelChoice` — the VS Code extension HOST
+ * shares it too, and it cannot import React.
  */
-/** What the user picked. `auto` lets the gateway route; `byo_pool` walks the
- *  tenant's connected accounts in their configured priority order; `model` is a
- *  strict pin. */
-type ChatModelSelection = {
-    mode: 'auto';
-} | {
-    mode: 'byo_pool';
-} | {
-    mode: 'model';
-    model: string;
-};
-/** The selectable model surface, grouped by WHO PAYS (see {@link ModelCategory}). */
-interface ChatModelOptions {
-    /** Tenant-defined named LLM configs (`tenant_model:<slug>`). */
-    configured?: Array<{
-        id: string;
-        label: string;
-    }>;
-    /** Models the tenant's own connected provider accounts can serve. */
-    byo: Array<{
-        id: string;
-        vendor: string;
-        cost?: string;
-    }>;
-    free: Array<string | {
-        id: string;
-        cost?: string;
-    }>;
-    plan: Array<string | {
-        id: string;
-        cost?: string;
-    }>;
-    paid: Array<string | {
-        id: string;
-        cost?: string;
-    }>;
-}
-/** Funding tier of a model row — the axis the list is grouped and filtered by. */
-type ModelCategory = 'auto' | 'byo' | 'free' | 'plan' | 'paid' | 'configured';
-/** One row in the model list. `detail` is the funding sentence for that row. */
-interface ModelItem {
-    key: string;
-    label: string;
-    detail: string;
-    category: ModelCategory;
-    selection: ChatModelSelection;
-}
+
 /**
  * Every user-facing string in the menu. Hosts pass their own localized bundle
  * (the web app via next-intl, the VS Code webview via the host's `vscode.l10n`
  * bundle); the English defaults below keep the component usable unmapped.
  */
-interface PromptOptionsLabels {
+interface PromptOptionsLabels extends ModelChoiceLabels {
     /** Trigger title/aria — the menu as a whole. */
     options: string;
     effort: string;
@@ -456,29 +414,6 @@ interface PromptOptionsLabels {
     chooseModel: string;
     noModels: string;
     all: string;
-    categoryAuto: string;
-    categoryByo: string;
-    categoryFree: string;
-    categoryPlan: string;
-    categoryPaid: string;
-    categoryConfigured: string;
-    autoLabel: string;
-    autoDetail: string;
-    poolLabel: string;
-    poolDetail: string;
-    freeDetail: string;
-    planDetail: string;
-    paidDetail: string;
-    /** Per-model premium price line. `{input}` / `{output}` are the formatted
-     *  per-1M-token rates (see `premiumCostLabel`). */
-    paidCostDetail: string;
-    /** `{vendor}` is substituted with the connected provider's name. */
-    byoDetail: string;
-    configuredDetail: string;
-    /** Display name for a `project_evermind:<id>` pin (the raw pin is not a model name). */
-    evermindLabel: string;
-    /** Funding line for a `project_evermind:<id>` pin (a plan feature, not a catalog model). */
-    evermindDetail: string;
     /** Shown instead of the list when the tenant may not pin a model at all. */
     modelLocked: string;
     accountSettings: string;
@@ -526,48 +461,6 @@ interface PromptOptionsMenuProps {
  * Self-gating: renders nothing until a host wires at least one section.
  */
 declare function PromptOptionsMenu({ labels: labelOverrides, disabled, effort, onEffortChange, describeEffort, thinking, onThinkingChange, describeThinking, model, onAccountSettings, className, }: PromptOptionsMenuProps): React.JSX.Element | null;
-
-/**
- * The model list behind the composer's `/` menu — pure, so both hosts (and the
- * tests) build the SAME rows in the SAME order from the same surface.
- */
-
-/** A gateway per-token rate as the per-1M-token price every surface quotes. */
-declare function perMillionUsd(rate: number): string;
-/**
- * What a premium (metered) model costs, formatted from the gateway's per-token
- * rates against the host's localized `paidCostDetail` line. For a host with an
- * ICU formatter (the web app) prefer interpolating {@link perMillionUsd} through
- * it; this is the plain-substitution path for hosts without one.
- */
-declare function premiumCostLabel(pricing: {
-    prompt: number;
-    completion: number;
-}, template: string): string;
-/** The filter chips, in display order. Only the populated ones are offered. */
-declare const MODEL_CATEGORIES: ModelCategory[];
-declare function modelCategoryLabel(category: ModelCategory, labels: PromptOptionsLabels): string;
-/**
- * Every selectable route, ordered by what it COSTS the user: BuilderForce
- * collections (free → plan → paid) lead, then the tenant's own connected
- * accounts (BYO pool + its models, in the server-supplied provider priority
- * order), then saved workspace LLM configs. A model already listed in a cheaper
- * group is never repeated.
- */
-declare function buildModelItems(options: ChatModelOptions, labels: PromptOptionsLabels): ModelItem[];
-/** The key identifying the active row (matches {@link ModelItem.key}). */
-declare function activeModelKey(selection: ChatModelSelection): string;
-/** Search + category narrowing. Matches label, funding detail, and category name. */
-declare function filterModelItems(items: ModelItem[], labels: PromptOptionsLabels, query: string, category: 'all' | ModelCategory): ModelItem[];
-/**
- * What is ACTUALLY running the next turn, said in one line: the pinned model, the
- * BYO pool, or — under `auto` — whatever the host resolved (a configured default
- * or a project-Evermind pin), which is the thing the user came to the menu to read.
- */
-declare function modelInUse(selection: ChatModelSelection, items: ModelItem[], labels: PromptOptionsLabels, effective?: string): {
-    name: string;
-    detail: string;
-};
 
 /**
  * Participant avatars — the shared way a chat renders WHO a participant is.
@@ -1923,4 +1816,4 @@ interface ProjectListViewProps {
 }
 declare function ProjectListView({ title, subtitle, data, loading, error, labels, onAction, onRefresh }: ProjectListViewProps): React.JSX.Element;
 
-export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatModelOptions, type ChatModelSelection, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, ConsolidateForkControl, type ConsolidateForkControlProps, type ConsolidateForkLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_CONSOLIDATE_FORK_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, MODEL_CATEGORIES, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, type ModelCategory, type ModelItem, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsLabels, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsModel, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type ThinkSegment, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, activeModelKey, askUserAnchorId, attachmentsOf, avatarColor, buildModelItems, buildSettledTimeline, buildTimeline, evermindLearnedStatus, evermindNextAction, filterModelItems, formatDuration, formatPayload, healthRingColor, initialsOf, modelCategoryLabel, modelInUse, parseAskUser, perMillionUsd, premiumCostLabel, promptOptionsLabels, selectPendingAskUser, serializeAskUser, splitThinkSegments, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };
+export { type AgentOptionVM, type AskUserLabels, type AskUserOption, type AskUserPayload, Avatar, type AvatarProps, BrainTimeline, type BrainTimelineLabels, type BrainTimelineProps, type BuildTimelineInput, type ChatAgentVM, ChatErrorBanner, type ChatErrorBannerLabels, type ChatErrorBannerProps, type ChatOptionVM, type ChatTicketsAdapter, type ChatTicketsLabels, ChatTicketsPanel, type ChatTicketsPanelProps, ConsolidateForkControl, type ConsolidateForkControlProps, type ConsolidateForkLabels, DEFAULT_ASK_USER_LABELS, DEFAULT_CHAT_ERROR_LABELS, DEFAULT_CHAT_TICKETS_LABELS, DEFAULT_CONSOLIDATE_FORK_LABELS, DEFAULT_EVERMIND_LABELS, DEFAULT_PROJECT360_LABELS, DEFAULT_PROJECT_LIST_LABELS, DEFAULT_PROMPT_OPTIONS_LABELS, DEFAULT_TIMELINE_LABELS, type EvermindActionGuideInput, type EvermindActionId, type EvermindCleanupResult, EvermindConsole, type EvermindConsoleAdapter, type EvermindConsoleData, type EvermindConsoleLabels, type EvermindConsoleProps, type EvermindKnowledgeAnalysis, type EvermindKnowledgeFinding, type EvermindKnowledgeRepair, type EvermindKnowledgeVerdict, type EvermindLearnedStatus, type EvermindMode, type EvermindNextAction, type EvermindProbeResult, type EvermindProbeSample, type EvermindRecentEntry, type EvermindReindexResult, type EvermindSeedModel, type EvermindTarget, type EvermindTeacherOptions, type EvermindTeacherSkipReason, type EvermindValidateMatch, type EvermindValidateResult, HealthRing, type HealthRingProps, type HealthTier, type LearnedStatusInput, type LineageVM, type LinkType, Markdown, type MarkdownLabels, type MarkdownProps, type MentionAutocomplete, type MentionLabels, ParticipantBadge, type PendingAskUser, PendingQuestionBanner, type Project360, type Project360Action, type Project360Dimension, type Project360Gap, type Project360Labels, type Project360Member, type Project360Pillar, Project360View, type Project360ViewProps, type ProjectListAction, type ProjectListBadge, type ProjectListGroup, type ProjectListItem, type ProjectListLabels, type ProjectListModel, type ProjectListTicketRef, type ProjectListTone, ProjectListView, type ProjectListViewProps, type PromptOptionsLabels, PromptOptionsMenu, type PromptOptionsMenuProps, type PromptOptionsModel, PromptPanel, type PromptPanelProps, QuestionCard, RUNNABLE_KINDS, Sunburst, type SunburstProps, TICKET_KINDS, type ThinkSegment, type TicketKind, type TicketLinkVM, type TicketOptionVM, type TimelineImage, type TimelineNode, type UseMentionAutocompleteOptions, askUserAnchorId, attachmentsOf, avatarColor, buildSettledTimeline, buildTimeline, evermindLearnedStatus, evermindNextAction, formatDuration, formatPayload, healthRingColor, initialsOf, parseAskUser, promptOptionsLabels, selectPendingAskUser, serializeAskUser, splitThinkSegments, streamingNode, stripAskUser, useChatParticipants, useMentionAutocomplete };

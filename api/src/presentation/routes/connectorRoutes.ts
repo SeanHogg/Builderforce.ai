@@ -21,8 +21,7 @@ import { Hono, type Context } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import type { HonoEnv, Env } from '../../env';
-import type { Db } from '../../infrastructure/database/connection';
-import { assertSafeUrl, resolveAndAssertPublic } from '../../infrastructure/net/ssrfGuard';
+import type { DbHandle as Db } from '../../application/shared/dbHandle';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 import {
   listConnectorsForTenant,
@@ -43,14 +42,13 @@ import {
   ConnectorServiceError,
 } from '../../application/connectors/connectorService';
 import { executeConnectorAction, ConnectorCallError } from '../../application/connectors/connectorRuntime';
-import { manifestFromOpenApi } from '../../application/connectors/openapiImport';
+import { manifestFromOpenApi, fetchOpenApiSpec, SpecFetchError } from '../../application/connectors/openapiImport';
 import { CONNECTOR_CATEGORIES } from '../../application/connectors/connectorManifest';
 
-/** Largest OpenAPI document accepted by the importer. Big specs exist; unbounded
- *  ones are a memory-exhaustion vector on a Worker isolate. */
-const MAX_SPEC_BYTES = 5 * 1024 * 1024;
-
 function fail(c: Context<HonoEnv>, e: unknown) {
+  if (e instanceof SpecFetchError) {
+    return c.json({ error: e.message }, e.status as 400);
+  }
   if (e instanceof ConnectorServiceError) {
     return c.json({ error: e.message, ...(e.details ? { details: e.details } : {}) }, e.status as 400);
   }
@@ -159,32 +157,14 @@ export function createConnectorRoutes(db: Db): Hono<HonoEnv> {
     if (!spec) {
       const specUrl = (body.specUrl ?? '').trim();
       if (!specUrl) return c.json({ error: 'Provide either specUrl or spec' }, 400);
-      // The spec URL is tenant-supplied and fetched SERVER-SIDE, so it gets the same
-      // guard a connector call does: literal check, DNS re-resolution, no redirects.
-      let safe: URL;
+      // The spec URL is tenant-supplied and fetched SERVER-SIDE, so the fetch lives
+      // in the application layer beside the connector runtime's — same SSRF guard,
+      // written once.
       try {
-        safe = assertSafeUrl(specUrl, { allowHttp: false });
-        await resolveAndAssertPublic(safe.hostname);
-      } catch (e) {
-        return c.json({ error: e instanceof Error ? e.message : 'Blocked spec URL' }, 400);
-      }
-      try {
-        const res = await fetch(safe.toString(), {
-          headers: { Accept: 'application/json' },
-          redirect: 'manual',
-          signal: AbortSignal.timeout(15_000),
-        });
-        if (!res.ok) return c.json({ error: `Could not fetch the spec (${res.status})` }, 400);
-        const text = await res.text();
-        if (text.length > MAX_SPEC_BYTES) {
-          return c.json({ error: `The spec is larger than ${MAX_SPEC_BYTES / 1024 / 1024}MB` }, 413);
-        }
-        spec = JSON.parse(text);
-        fallbackBaseUrl = safe.origin;
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : 'Could not read the spec';
-        return c.json({ error: msg.includes('JSON') ? 'The spec URL did not return JSON (YAML is not supported — paste the JSON form)' : msg }, 400);
-      }
+        const fetched = await fetchOpenApiSpec(specUrl);
+        spec = fetched.spec;
+        fallbackBaseUrl = fetched.baseUrl;
+      } catch (e) { return fail(c, e); }
     }
 
     try {

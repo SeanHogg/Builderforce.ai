@@ -6,6 +6,7 @@ import { attentionFor, sessionTabIcon, sessionTabPrefix } from "./attention";
 import { getGroundingSummary } from "./grounding";
 import { getEditorContext, getEditorContextLive, watchEditorContext } from "./editorContext";
 import { resolveEffectiveModelChoice, setSelectedModel, setSelectedModelPool } from "./modelState";
+import { modelChoiceLabels } from "./modelChoiceLabels";
 import { getSelectedProject } from "./projectState";
 import { getProjectNames } from "./projectNames";
 import { WebviewPanelBase, type WebviewInbound } from "./webviewShared";
@@ -170,34 +171,18 @@ function buildLabels(): Record<string, string> {
     // Thinking toggle description — `{budget}` is the current effort's thinking budget.
     "app.thinkingOnDesc": t("The model reasons before answering, with a {budget}-token thinking budget at this effort. Slower, better on hard problems."),
     "app.thinkingOffDesc": t("Off — the model answers directly. Turn on for a reasoning pass before the answer."),
-    // The `/` menu's MODEL block: which model is in force, which purse funds it, and
-    // the list the user picks from (the panel offers the same models the QuickPick
-    // does). `{provider}` in the BYO line is the connected vendor (e.g. Anthropic);
-    // `{input}`/`{output}` in the cost line are the formatted per-1M-token rates.
+    // The `/` menu's own chrome. The model ROWS' copy (categories, funding lines,
+    // Auto/Pool/Evermind naming) is not here: it is shared with the host's
+    // `Change model` QuickPick and travels as `init.modelLabels`
+    // (see `modelChoiceLabels.ts`), so the two pickers cannot word the same row
+    // differently.
     "app.model": t("Model"),
     "app.modelInUse": t("Model in use"),
-    "app.modelAutoShort": t("Auto"),
-    "app.modelPoolShort": t("Pool"),
     "app.searchModels": t("Search models…"),
     "app.filterModels": t("Filter models"),
     "app.noModels": t("No matching models"),
     "app.all": t("All"),
-    "app.categoryByo": t("BYO"),
-    "app.categoryFree": t("Free"),
-    "app.categoryPlan": t("Plan"),
-    "app.categoryPaid": t("Paid"),
-    "app.categoryConfigured": t("Configured"),
-    "app.modelEvermind": t("Project Evermind"),
     "app.modelLocked": t("Model choice needs a paid plan or a connected provider account."),
-    "app.modelCost": t("{input} input / {output} output per 1M tokens + $0.01 per request"),
-    "app.modelFundingPool": t("Tries your connected accounts in the order configured in Account settings."),
-    "app.modelFundingAuto": t("Routed per turn: your connected accounts first, then your plan."),
-    "app.modelFundingByo": t("Billed to your own {provider} account — no plan credit used."),
-    "app.modelFundingFree": t("Free — included with BuilderForce."),
-    "app.modelFundingPlan": t("Included in your plan."),
-    "app.modelFundingPremium": t("Premium — metered at cost + 1¢ per request."),
-    "app.modelFundingConfigured": t("Saved workspace LLM configuration"),
-    "app.modelFundingEvermind": t("Your project's own learned Evermind model."),
     "app.accountSettings": t("Account settings"),
     "app.autoMode": t("Auto mode"),
     "app.autoModeHint": t("Auto-approve tool actions without asking"),
@@ -664,6 +649,8 @@ export class BrainWebview extends WebviewPanelBase<BrainInbound> {
         mutating: d.mutating,
       })),
       labels: buildLabels(),
+      // The model rows' copy, shared verbatim with the host's `Change model` QuickPick.
+      modelLabels: modelChoiceLabels(),
     });
   }
 

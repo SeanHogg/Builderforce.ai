@@ -14,6 +14,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { connectors, connectorConnections, connectorCallLogs } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { credentialSecret, encryptCredentials, decryptCredentials } from '../integrations/credentialCrypto';
 import {
   authFieldsFor,
@@ -162,7 +163,7 @@ export async function updateConnector(
   const [existing] = await db
     .select()
     .from(connectors)
-    .where(and(eq(connectors.id, args.id), eq(connectors.tenantId, args.tenantId)))
+    .where(scopedToTenant(connectors, args.tenantId, eq(connectors.id, args.id)))
     .limit(1);
   if (!existing) throw new ConnectorServiceError('Connector not found', 404);
 
@@ -187,7 +188,7 @@ export async function updateConnector(
   }
   if (args.status) patch.status = args.status;
 
-  await db.update(connectors).set(patch).where(eq(connectors.id, args.id));
+  await db.update(connectors).set(patch).where(scopedToTenant(connectors, args.tenantId, eq(connectors.id, args.id)));
   await invalidateAll(env, args.tenantId);
   return { manifest, status: args.status ?? (existing.status === 'published' ? 'published' : 'draft') };
 }
@@ -200,7 +201,7 @@ export async function deleteConnector(
   const [existing] = await db
     .select({ key: connectors.connectorKey })
     .from(connectors)
-    .where(and(eq(connectors.id, args.id), eq(connectors.tenantId, args.tenantId)))
+    .where(scopedToTenant(connectors, args.tenantId, eq(connectors.id, args.id)))
     .limit(1);
   if (!existing) throw new ConnectorServiceError('Connector not found', 404);
 
@@ -208,9 +209,9 @@ export async function deleteConnector(
   // them here or the tenant is left with credentials pointing at nothing.
   const removed = await db
     .delete(connectorConnections)
-    .where(and(eq(connectorConnections.tenantId, args.tenantId), eq(connectorConnections.connectorKey, existing.key)))
+    .where(scopedToTenant(connectorConnections, args.tenantId, eq(connectorConnections.connectorKey, existing.key)))
     .returning({ id: connectorConnections.id });
-  await db.delete(connectors).where(eq(connectors.id, args.id));
+  await db.delete(connectors).where(scopedToTenant(connectors, args.tenantId, eq(connectors.id, args.id)));
   await invalidateAll(env, args.tenantId);
   return { deletedConnections: removed.length };
 }
@@ -271,10 +272,17 @@ export async function listConnections(
   env: Env,
   args: { tenantId: number; connectorKey?: string },
 ): Promise<ConnectionView[]> {
-  const where = args.connectorKey
-    ? and(eq(connectorConnections.tenantId, args.tenantId), eq(connectorConnections.connectorKey, args.connectorKey))
-    : eq(connectorConnections.tenantId, args.tenantId);
-  const rows = await db.select().from(connectorConnections).where(where).orderBy(connectorConnections.createdAt);
+  const rows = await db
+    .select()
+    .from(connectorConnections)
+    .where(
+      scopedToTenant(
+        connectorConnections,
+        args.tenantId,
+        args.connectorKey ? eq(connectorConnections.connectorKey, args.connectorKey) : undefined,
+      ),
+    )
+    .orderBy(connectorConnections.createdAt);
 
   // Resolve each distinct connector ONCE — built-ins short-circuit without a query,
   // and a tenant with six Slack connections must not cost six lookups.
@@ -358,7 +366,7 @@ export async function updateConnection(
   const [existing] = await db
     .select()
     .from(connectorConnections)
-    .where(and(eq(connectorConnections.id, args.id), eq(connectorConnections.tenantId, args.tenantId)))
+    .where(scopedToTenant(connectorConnections, args.tenantId, eq(connectorConnections.id, args.id)))
     .limit(1);
   if (!existing) throw new ConnectorServiceError('Connection not found', 404);
 
@@ -382,7 +390,7 @@ export async function updateConnection(
   const [row] = await db
     .update(connectorConnections)
     .set(patch)
-    .where(eq(connectorConnections.id, args.id))
+    .where(scopedToTenant(connectorConnections, args.tenantId, eq(connectorConnections.id, args.id)))
     .returning();
   if (!row) throw new ConnectorServiceError('Failed to update connection', 500);
   await invalidateAll(env, args.tenantId);
@@ -396,7 +404,7 @@ export async function deleteConnection(
 ): Promise<void> {
   const rows = await db
     .delete(connectorConnections)
-    .where(and(eq(connectorConnections.id, args.id), eq(connectorConnections.tenantId, args.tenantId)))
+    .where(scopedToTenant(connectorConnections, args.tenantId, eq(connectorConnections.id, args.id)))
     .returning({ id: connectorConnections.id });
   if (rows.length === 0) throw new ConnectorServiceError('Connection not found', 404);
   await invalidateAll(env, args.tenantId);
@@ -417,7 +425,7 @@ export async function testConnection(
   const [row] = await db
     .select()
     .from(connectorConnections)
-    .where(and(eq(connectorConnections.id, args.id), eq(connectorConnections.tenantId, args.tenantId)))
+    .where(scopedToTenant(connectorConnections, args.tenantId, eq(connectorConnections.id, args.id)))
     .limit(1);
   if (!row) throw new ConnectorServiceError('Connection not found', 404);
 
@@ -450,7 +458,7 @@ export async function testConnection(
     await db
       .update(connectorConnections)
       .set({ lastTestedAt: new Date(), lastTestOk: false })
-      .where(eq(connectorConnections.id, row.id));
+      .where(scopedToTenant(connectorConnections, args.tenantId, eq(connectorConnections.id, row.id)));
     await invalidateAll(env, args.tenantId);
     return { ok: false, message: failure };
   }
@@ -458,7 +466,7 @@ export async function testConnection(
   await db
     .update(connectorConnections)
     .set({ lastTestedAt: new Date(), lastTestOk: result.ok })
-    .where(eq(connectorConnections.id, row.id));
+    .where(scopedToTenant(connectorConnections, args.tenantId, eq(connectorConnections.id, row.id)));
   await invalidateAll(env, args.tenantId);
   return { ok: result.ok, message, result };
 }
@@ -469,13 +477,16 @@ export async function listCallLogs(
   args: { tenantId: number; connectionId?: string; limit?: number },
 ) {
   const limit = Math.min(Math.max(args.limit ?? 25, 1), 100);
-  const where = args.connectionId
-    ? and(eq(connectorCallLogs.tenantId, args.tenantId), eq(connectorCallLogs.connectionId, args.connectionId))
-    : eq(connectorCallLogs.tenantId, args.tenantId);
   return db
     .select()
     .from(connectorCallLogs)
-    .where(where)
+    .where(
+      scopedToTenant(
+        connectorCallLogs,
+        args.tenantId,
+        args.connectionId ? eq(connectorCallLogs.connectionId, args.connectionId) : undefined,
+      ),
+    )
     .orderBy(desc(connectorCallLogs.createdAt))
     .limit(limit);
 }

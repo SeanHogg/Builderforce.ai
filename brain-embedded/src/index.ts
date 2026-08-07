@@ -256,7 +256,31 @@ export type { BrainChat, BrainMessage, BrainModality, ChatInputAttachment, Everm
 export { STEP_MESSAGE_ROLE, isStepMessage, attachEvermindLearn, formatEvermindLearnStep } from './types';
 
 // "Copy diagnostics" — pure serializer for the chat's identity + Evermind wiring state
-export { formatChatDiagnostics, classifyModelFunding, allowanceState, PROJECT_EVERMIND_MODEL_PREFIX } from './chatDiagnostics';
+export { formatChatDiagnostics, classifyModelFunding, allowanceState } from './chatDiagnostics';
+
+// Model choice — WHICH models a surface offers, in what order, and who pays. Shared
+// by the composer `/` menu (web + webview) AND the VS Code host's QuickPick, which
+// runs in Node and cannot import the React UI package.
+export {
+  buildModelItems,
+  filterModelItems,
+  activeModelKey,
+  modelCategoryLabel,
+  modelInUse,
+  perMillionUsd,
+  premiumCostLabel,
+  byoVendorLabel,
+  MODEL_CATEGORIES,
+  DEFAULT_MODEL_CHOICE_LABELS,
+  PROJECT_EVERMIND_MODEL_PREFIX,
+} from './modelChoice';
+export type {
+  ChatModelOptions,
+  ChatModelSelection,
+  ModelCategory,
+  ModelChoiceLabels,
+  ModelItem,
+} from './modelChoice';
 export { getMcpToolStatus, setMcpToolStatus, type McpToolStatus } from './mcpToolStatus';
 export { selectToolsForTurn, DEFAULT_TOOL_LIMIT, type ToolSelection } from './selectTools';
 // The tool ROUTER — three fixed tools that keep the whole catalog reachable even when

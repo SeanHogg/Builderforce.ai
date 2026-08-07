@@ -5480,7 +5480,7 @@
   "home": {
     "heroBadge": "Canvas · Humans + AI agents",
     "heroTitle": "Any idea into <em>real.</em>",
-    "heroSub": "One visual workspace where your team and AI agents design, build, review, and deliver websites, workflows, models, data stories, and products—without the tool sprawl.",
+    "heroSub": "One canvas where your team and AI agents design, build, review, and deliver — without the tool sprawl.",
     "heroPromptPlaceholder": "What do you want to create?",
     "heroPromptAria": "Describe what you want to create",
     "heroGetStarted": "Start creating",
@@ -5489,6 +5489,46 @@
       "Turn customer feedback into data stories and product concepts",
       "Design, evaluate, and deliver an AI-powered service"
     ],
+    "canvas": {
+      "boardAria": "Example Creation Canvas — connected objects you can start from",
+      "objectAction": "Start from this object: {title}",
+      "agentInitials": "RA",
+      "agentPresence": "Live · assignable",
+      "guestNote": "A real canvas. Nothing leaves this device until you sign in.",
+      "narrowNote": "Open on a larger screen for the full board.",
+      "objects": [
+        {
+          "kind": "Dataset",
+          "title": "Q3 pipeline.csv",
+          "detail": "1,284 rows · 9 columns",
+          "prefill": "Chart the win rate by channel from this dataset"
+        },
+        {
+          "kind": "Chart",
+          "title": "Win rate by channel",
+          "detail": "Computed from the dataset, not retyped",
+          "prefill": "Turn this chart into a one-page board update"
+        },
+        {
+          "kind": "Agent",
+          "title": "Revenue analyst",
+          "detail": "Reads the data, writes the brief",
+          "prefill": "Have the revenue analyst review this quarter's pipeline"
+        },
+        {
+          "kind": "Workflow",
+          "title": "Renewal outreach",
+          "detail": "4 steps · 2 approvals",
+          "prefill": "Build a renewal outreach workflow with two approvals"
+        },
+        {
+          "kind": "Document",
+          "title": "Board one-pager",
+          "detail": "Drafted from the chart above",
+          "prefill": "Draft a board one-pager from this analysis"
+        }
+      ]
+    },
     "createCanvas": {
       "eyebrow": "Meet Create",
       "heading": "One canvas. Anything you can imagine.",
@@ -13441,7 +13481,13 @@
     "noticeSaveFailed": "Save failed",
     "noticeStandupFramePrepared": "Stand-up frame prepared",
     "noticeObjectLocked": "This object is being edited by another collaborator",
-    "noticeLensAlreadyExpanded": "This project lens is already expanded"
+    "noticeLensAlreadyExpanded": "This project lens is already expanded",
+    "noticeGuestAiUnavailable": "AI is unavailable right now. Your canvas stays editable on this device — try that prompt again in a moment.",
+    "noticeAgentTestFailed": "Agent test failed",
+    "noticeAgentGroupFailed": "The agent turn could not be completed",
+    "noticeAgentTestStatusError": "Error · {reason}",
+    "noticeAgentGroupTurnFailed": "The agent group could not complete its turn: {reason}",
+    "noticeClaimFailed": "Could not save this session yet"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
