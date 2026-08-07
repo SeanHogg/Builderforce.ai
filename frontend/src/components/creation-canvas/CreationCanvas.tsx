@@ -47,7 +47,7 @@ import '@seanhogg/builderforce-brain-ui/styles.css';
 import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
 import { EvermindValidationProvider } from '@/components/ide/EvermindValidationContext';
 import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
-import { isAwaitingApprovalExecution } from '@/lib/builderforceApi';
+import { isAwaitingApprovalExecution, type LlmError } from '@/lib/builderforceApi';
 import { evaluateModel, fetchProjects, publishSite } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
 import { createCloudAgent, updateAgent } from '@/lib/api';
@@ -385,6 +385,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   const describeTurnError = useCallback((error: unknown, fallbackKey: 'noticeBrainFailed' | 'noticeAgentTestFailed' | 'noticeAgentGroupFailed') => {
     if (error instanceof GuestAiUnavailableError) return t('noticeGuestAiUnavailable');
+    // A guest who has spent their free turns: the gateway sends `guest_limit_reached`
+    // with the cap on the body (GUEST_CHAT_LIMITS), and its own English prose. Say it
+    // in the visitor's language and point at the way forward instead of the wall.
+    const code = (error as LlmError | undefined)?.code;
+    if (code === 'guest_limit_reached') {
+      const limit = Number((error as LlmError).body?.limit);
+      return (error as LlmError).body?.reason === 'ip'
+        ? t('noticeGuestLimitDevice')
+        : t('noticeGuestLimitReached', { limit: Number.isFinite(limit) ? limit : 0 });
+    }
     return error instanceof Error && error.message ? error.message : t(fallbackKey);
   }, [t]);
   const confirm = useConfirm();

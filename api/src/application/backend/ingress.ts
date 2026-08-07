@@ -144,7 +144,10 @@ async function verifyRequest(
   secrets: Record<string, string>,
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
   const header = (name: string) => request.headers.get(name);
-  const secretFor = (kind: Exclude<typeof handler.verify, 'none'>) => secrets[VERIFY_SECRET_NAME[kind]] ?? '';
+  // A handler may name its OWN secret — Stripe issues one per endpoint, so the
+  // kind's single default name can only ever verify one of several endpoints.
+  const secretFor = (kind: Exclude<typeof handler.verify, 'none'>) =>
+    secrets[handler.verifySecret ?? VERIFY_SECRET_NAME[kind]] ?? '';
 
   switch (handler.verify) {
     case 'none':

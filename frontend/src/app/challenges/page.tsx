@@ -250,6 +250,11 @@ function ReadinessView({
         <div style={{ display: 'grid', gap: 8, fontSize: 14, color: 'var(--text-primary)' }}>
           <div>{t('builtFiles', { files: result.filesWritten.length, handlers: result.handlersWritten.length })}</div>
           <div>{t('builtTickets', { created: result.tasksCreated, skipped: result.tasksSkipped })}</div>
+          {result.tasksDispatched > 0 && (
+            <div style={{ color: 'var(--success, #167a4a)' }}>
+              {t('builtDispatched', { count: result.tasksDispatched })}
+            </div>
+          )}
           <div style={{ display: 'grid', gap: 4 }}>
             <span style={{ color: 'var(--text-secondary)' }}>{t('ingressLabel')}</span>
             <span style={codeCell}>{result.ingressUrl}</span>

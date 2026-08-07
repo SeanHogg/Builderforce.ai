@@ -145,3 +145,74 @@ describe('handlerNameFromPath', () => {
     expect(handlerNameFromPath('voice.json')).toBe('voice');
   });
 });
+
+describe('data steps', () => {
+  const withStep = (step: unknown) =>
+    parseHandlerSpec({ route: '/x', method: 'GET', verify: 'none', steps: [step] }, 'x');
+
+  it('accepts a bare collection read', () => {
+    const result = withStep({ kind: 'data', id: 'rows', collection: 'signups' });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.spec.steps[0]).toMatchObject({ kind: 'data', collection: 'signups' });
+  });
+
+  it('carries a templated filter through both halves', () => {
+    const result = withStep({
+      kind: 'data', id: 'rows', collection: 'signups', limit: 5,
+      matchField: 'plan', matchValue: '{{query.plan}}',
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.spec.steps[0]).toMatchObject({ limit: 5, matchField: 'plan', matchValue: '{{query.plan}}' });
+  });
+
+  it('refuses half a filter — one side alone would silently return everything', () => {
+    const result = withStep({ kind: 'data', id: 'rows', collection: 'signups', matchField: 'plan' });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain('matchField and matchValue together');
+  });
+
+  it('requires a collection name', () => {
+    expect(withStep({ kind: 'data', id: 'rows' }).ok).toBe(false);
+  });
+
+  it('names data in the unknown-kind error, so the vocabulary is discoverable', () => {
+    const result = withStep({ kind: 'nope', id: 'rows' });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain('data');
+  });
+});
+
+describe('verifySecret', () => {
+  const base = { route: '/stripe/a', method: 'POST', verify: 'stripe', steps: [], respond: { kind: 'empty' } };
+
+  it('carries a per-handler secret name, so one provider can have several endpoints', () => {
+    // Stripe issues a DIFFERENT whsec_ per endpoint; a single shared name could
+    // only ever verify one of them and would fail the rest closed forever.
+    const parsed = parseHandlerSpec({ ...base, verifySecret: 'STRIPE_WEBHOOK_SECRET_A' }, 'a');
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) expect(parsed.spec.verifySecret).toBe('STRIPE_WEBHOOK_SECRET_A');
+  });
+
+  it('defaults to no override, which the resolver reads as the kind default', () => {
+    const parsed = parseHandlerSpec(base, 'a');
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) expect(parsed.spec.verifySecret).toBeUndefined();
+  });
+
+  it('REJECTS a malformed name instead of ignoring it', () => {
+    // Ignoring it would silently fall back to the default secret and pass review
+    // looking correct — the worst possible outcome for a verification setting.
+    expect(parseHandlerSpec({ ...base, verifySecret: 'lower_case' }, 'a').ok).toBe(false);
+    expect(parseHandlerSpec({ ...base, verifySecret: '9_LEADING_DIGIT' }, 'a').ok).toBe(false);
+    expect(parseHandlerSpec({ ...base, verifySecret: 42 }, 'a').ok).toBe(false);
+  });
+
+  it('refuses a secret on an unverified handler rather than pretending it does something', () => {
+    const parsed = parseHandlerSpec({ ...base, verify: 'none', verifySecret: 'SOMETHING' }, 'a');
+    expect(parsed.ok).toBe(false);
+  });
+});

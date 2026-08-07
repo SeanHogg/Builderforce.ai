@@ -40,8 +40,8 @@ const OBJECT_LAYOUT: { style: React.CSSProperties }[] = [
   { style: { left: '3%', top: '12%' } },
   { style: { left: '30%', top: '6%' } },
   { style: { right: '4%', top: '14%' } },
-  { style: { left: '4%', top: '52%' } },
-  { style: { right: '5%', top: '48%' } },
+  { style: { left: '4%', top: '55%' } },
+  { style: { right: '5%', top: '60%' } },
 ];
 
 /** Index of the object that renders a chart preview, and of the live agent. */
@@ -84,6 +84,17 @@ export function LandingCanvasHero() {
     setFocusToken((token) => token + 1);
   }
 
+  // One composer, declared once and placed in whichever layout renders — so the
+  // wide and narrow heroes can never drift in what the composer can do.
+  const composer = (
+    <Composer
+      value={prompt}
+      onChange={setPrompt}
+      onSubmit={() => startCreating(prompt)}
+      focusToken={focusToken}
+    />
+  );
+
   return (
     <section className={styles.hero}>
       <span className={styles.badge}>
@@ -99,62 +110,52 @@ export function LandingCanvasHero() {
       <div className={`${styles.stage} ${showBoard ? '' : styles.stageNarrow}`}>
         {showBoard && (
           <div className={styles.board} role="group" aria-label={t('canvas.boardAria')}>
-            <svg
-              className={styles.wires}
-              viewBox="0 0 1240 500"
-              preserveAspectRatio="none"
-              aria-hidden="true"
-            >
-              <path className="solid" d="M227 100 C 300 100, 300 88, 372 88" />
-              <path d="M568 130 C 720 130, 840 250, 988 268" />
-              <path d="M240 296 C 500 296, 780 180, 1000 140" />
-            </svg>
-
-            {objects.map((object, index) => (
-              <button
-                key={object.title}
-                type="button"
-                className={styles.node}
-                style={OBJECT_LAYOUT[index]?.style}
-                onClick={() => seedPrompt(object.prefill)}
-                aria-label={t('canvas.objectAction', { title: object.title })}
+            <div className={styles.field}>
+              <svg
+                className={styles.wires}
+                viewBox="0 0 1240 500"
+                preserveAspectRatio="none"
+                aria-hidden="true"
               >
-                <span className={styles.nodeKind}>{object.kind}</span>
-                <span className={styles.nodeTitle}>{object.title}</span>
-                <span className={styles.nodeDetail}>{object.detail}</span>
+                <path className="solid" d="M227 100 C 300 100, 300 85, 372 85" />
+                <path d="M568 140 C 720 140, 840 300, 988 330" />
+                <path d="M240 313 C 500 313, 780 180, 1000 130" />
+              </svg>
 
-                {index === CHART_INDEX && (
-                  <span className={styles.spark} aria-hidden="true">
-                    {SPARK_BARS.map((height) => <i key={height} style={{ height }} />)}
-                  </span>
-                )}
+              {objects.map((object, index) => (
+                <button
+                  key={object.title}
+                  type="button"
+                  className={styles.node}
+                  style={OBJECT_LAYOUT[index]?.style}
+                  onClick={() => seedPrompt(object.prefill)}
+                  aria-label={t('canvas.objectAction', { title: object.title })}
+                >
+                  <span className={styles.nodeKind}>{object.kind}</span>
+                  <span className={styles.nodeTitle}>{object.title}</span>
+                  <span className={styles.nodeDetail}>{object.detail}</span>
 
-                {index === AGENT_INDEX && (
-                  <span className={styles.who}>
-                    <em className={styles.whoAvatar} aria-hidden="true">{t('canvas.agentInitials')}</em>
-                    <span className={styles.whoLabel}>{t('canvas.agentPresence')}</span>
-                  </span>
-                )}
-              </button>
-            ))}
+                  {index === CHART_INDEX && (
+                    <span className={styles.spark} aria-hidden="true">
+                      {SPARK_BARS.map((height) => <i key={height} style={{ height }} />)}
+                    </span>
+                  )}
 
-            <Composer
-              value={prompt}
-              onChange={setPrompt}
-              onSubmit={() => startCreating(prompt)}
-              focusToken={focusToken}
-            />
+                  {index === AGENT_INDEX && (
+                    <span className={styles.who}>
+                      <em className={styles.whoAvatar} aria-hidden="true">{t('canvas.agentInitials')}</em>
+                      <span className={styles.whoLabel}>{t('canvas.agentPresence')}</span>
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {composer}
           </div>
         )}
 
-        {!showBoard && (
-          <Composer
-            value={prompt}
-            onChange={setPrompt}
-            onSubmit={() => startCreating(prompt)}
-            focusToken={focusToken}
-          />
-        )}
+        {!showBoard && composer}
       </div>
 
       <p className={styles.footRow}>

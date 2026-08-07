@@ -42,7 +42,9 @@ import {
   listProjectSecrets,
   setProjectSecret,
 } from '../../application/secrets/projectSecrets';
-import { VERIFY_SECRET_NAME } from '../../application/backend/webhookVerification';
+import { verifySecretNameFor } from '../../application/backend/webhookVerification';
+import { HOSTING_APEX } from '../../application/ide/siteHosting';
+import { siteForProject } from '../../application/ide/siteTraffic';
 
 /** Resolve + authorise the project in the path. A miss is reported as 404 rather
  *  than 403 — the existence of another tenant's project is itself information. */
@@ -57,7 +59,10 @@ const assertProject = (db: Db, tenantId: number, raw: string) =>
  */
 function requiredSecretsFor(handlers: Awaited<ReturnType<typeof loadHandlers>>['specs']): string[] {
   const names = new Set<string>();
-  for (const h of handlers) if (h.verify !== 'none') names.add(VERIFY_SECRET_NAME[h.verify]);
+  for (const h of handlers) {
+    const secret = verifySecretNameFor(h);
+    if (secret) names.add(secret);
+  }
   return [...names];
 }
 
@@ -124,6 +129,15 @@ export function createProjectBackendRoutes(db: Db): Hono<HonoEnv> {
       backend.strategy === 'github-worker' ? await probeWorkerHealth(env, backend.deployedUrl) : null;
 
     const ingressUrl = ingressUrlFor(env, backend.ingressToken);
+
+    // The site-origin address, when the project has published one. This is the
+    // URL a person actually wants: their own domain, a path they can type, and
+    // the one a page on that site can `fetch()` without embedding a token.
+    const site = await siteForProject(db, tenantId, project.id);
+    const siteBase = site
+      ? `https://${site.customDomain ?? `${site.subdomain}.${HOSTING_APEX}`}/api`
+      : null;
+
     return c.json({
       workerHealth: health,
       backend: {
@@ -131,6 +145,7 @@ export function createProjectBackendRoutes(db: Db): Hono<HonoEnv> {
         status: backend.status,
         ingressUrl,
         deployedUrl: backend.deployedUrl,
+        siteUrl: siteBase,
         lastDeployedAt: backend.lastDeployedAt,
         handlerCount: specs.length,
       },
@@ -142,6 +157,9 @@ export function createProjectBackendRoutes(db: Db): Hono<HonoEnv> {
         verify: s.verify,
         description: s.description ?? null,
         url: `${ingressUrl}${s.route === '/' ? '' : s.route}`,
+        // Both addresses, because they are not interchangeable in use: one goes
+        // in a provider console, the other into the site's own JavaScript.
+        siteUrl: siteBase ? `${siteBase}${s.route === '/' ? '' : s.route}` : null,
         stepCount: s.steps.length,
         // The parsed spec rides along: a project has a handful of handlers, and
         // the editor needing one round-trip PER handler to open a form would be

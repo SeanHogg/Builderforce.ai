@@ -14,7 +14,7 @@ import { BLUEPRINTS, matchBlueprint, twilioOmnichannelBlueprint, genericBlueprin
 import { BUILTIN_CONNECTORS } from '../connectors/defaults';
 import { planChallenge } from './planChallenge';
 import { parseHandlerSpec } from '../backend/handlerSpec';
-import { VERIFY_SECRET_NAME } from '../backend/webhookVerification';
+import { verifySecretNameFor } from '../backend/webhookVerification';
 
 const TWILIO_BRIEF = `Hi there,
 
@@ -209,13 +209,35 @@ describe('every blueprint in the catalog', () => {
         }
       });
 
-      it('declares a secret for every verification kind its handlers use', () => {
+      it('declares the exact secret every handler verifies against', () => {
+        // Against `verifySecretNameFor`, not the kind's default: a handler that
+        // names its own secret (Stripe issues one per endpoint) must have THAT
+        // one in the plan, or the panel asks for a secret the runtime never reads.
         const declared = new Set(blueprint.requiredSecrets.map((s) => s.name));
         for (const [name, raw] of Object.entries(blueprint.handlers)) {
           const parsed = parseHandlerSpec(raw, name);
-          if (!parsed.ok || parsed.spec.verify === 'none') continue;
-          expect(declared, `${blueprint.key}/${name} verifies ${parsed.spec.verify}`)
-            .toContain(VERIFY_SECRET_NAME[parsed.spec.verify]);
+          if (!parsed.ok) continue;
+          const secret = verifySecretNameFor(parsed.spec);
+          if (!secret) continue;
+          expect(declared, `${blueprint.key}/${name} verifies ${parsed.spec.verify} against ${secret}`)
+            .toContain(secret);
+        }
+      });
+
+      it('never declares a secret no handler reads', () => {
+        // The mirror check. A leftover requiredSecret is a setup step that asks a
+        // customer for a value nothing consumes — which reads as "I did the setup
+        // and it still 403s".
+        const used = new Set<string>();
+        for (const [name, raw] of Object.entries(blueprint.handlers)) {
+          const parsed = parseHandlerSpec(raw, name);
+          if (!parsed.ok) continue;
+          const secret = verifySecretNameFor(parsed.spec);
+          if (secret) used.add(secret);
+        }
+        for (const declared of blueprint.requiredSecrets) {
+          expect(used, `${blueprint.key} requires ${declared.name} but no handler verifies against it`)
+            .toContain(declared.name);
         }
       });
 

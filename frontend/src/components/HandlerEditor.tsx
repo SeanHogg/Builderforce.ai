@@ -109,6 +109,7 @@ export default function HandlerEditor({ projectId, name, spec, onSaved, onCancel
   const [route, setRoute] = useState(source.route);
   const [method, setMethod] = useState<HandlerMethod>(source.method);
   const [verify, setVerify] = useState<HandlerVerifyKind>(source.verify);
+  const [verifySecret, setVerifySecret] = useState(source.verifySecret ?? '');
   const [description, setDescription] = useState(source.description ?? '');
   const [stepsText, setStepsText] = useState(JSON.stringify(source.steps ?? [], null, 2));
   const [respondText, setRespondText] = useState(JSON.stringify(source.respond ?? {}, null, 2));
@@ -142,6 +143,10 @@ export default function HandlerEditor({ projectId, name, spec, onSaved, onCancel
         route,
         method,
         verify,
+        // Carried explicitly. The editor rebuilds the whole document from these
+        // fields, so a value it does not render is a value it silently deletes —
+        // and deleting this one repoints a Stripe endpoint at the wrong secret.
+        ...(verify !== 'none' && verifySecret.trim() ? { verifySecret: verifySecret.trim().toUpperCase() } : {}),
         ...(description.trim() ? { description: description.trim() } : {}),
         steps,
         respond,
@@ -215,6 +220,25 @@ export default function HandlerEditor({ projectId, name, spec, onSaved, onCancel
           </select>
         </div>
       </div>
+
+      {/* Providers that issue a signing secret PER ENDPOINT (Stripe) need each
+          handler to name its own; leaving it blank uses the kind's default, which
+          is right for the per-account providers. */}
+      {verify !== 'none' && (
+        <div>
+          <div style={label}>{t('handlerVerifySecret')}</div>
+          <input
+            value={verifySecret}
+            onChange={(e) => setVerifySecret(e.target.value)}
+            placeholder={t('handlerVerifySecretPlaceholder')}
+            aria-label={t('handlerVerifySecret')}
+            style={field}
+          />
+          <div style={{ fontSize: 12.5, color: 'var(--text-secondary)', marginTop: 6, lineHeight: 1.5 }}>
+            {t('verifySecretHelp')}
+          </div>
+        </div>
+      )}
 
       {/* The one warning worth interrupting for: this endpoint is about to be
           callable by anyone who learns the URL. */}

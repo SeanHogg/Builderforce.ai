@@ -126,10 +126,27 @@ export interface HandlerSpec {
   route: string;
   method: HandlerMethod;
   verify: VerifyKind;
+  /**
+   * Project secret this handler verifies against, overriding the kind's default.
+   *
+   * Needed because "one secret per provider" is not how every provider works:
+   * Stripe issues a DIFFERENT signing secret per webhook ENDPOINT, so a system
+   * with three Stripe endpoints has three `whsec_…` values and a single
+   * `STRIPE_WEBHOOK_SECRET` can only ever verify one of them. Without this the
+   * other two fail closed forever, with an error that reads exactly like a wrong
+   * secret.
+   *
+   * Absent means the kind's default name — which is right for Twilio and Shopify,
+   * where the secret is per-ACCOUNT.
+   */
+  verifySecret?: string;
   description?: string;
   steps: HandlerStep[];
   respond: HandlerResponse;
 }
+
+/** Same shape the vault enforces, so a spec cannot name a secret that cannot exist. */
+const VERIFY_SECRET_NAME_RE = /^[A-Z][A-Z0-9_]{0,127}$/;
 
 export type ParseResult =
   | { ok: true; spec: HandlerSpec }
@@ -292,6 +309,19 @@ export function parseHandlerSpec(raw: unknown, fallbackName: string): ParseResul
   const respond = parseResponse(raw.respond ?? { kind: 'empty' });
   if ('error' in respond) return { ok: false, reason: respond.error };
 
+  // Rejected rather than ignored: a spec that names a secret we silently drop
+  // would verify against the DEFAULT one and pass review looking correct.
+  let verifySecret: string | undefined;
+  if (raw.verifySecret !== undefined) {
+    if (typeof raw.verifySecret !== 'string' || !VERIFY_SECRET_NAME_RE.test(raw.verifySecret)) {
+      return { ok: false, reason: 'verifySecret must be an UPPER_SNAKE secret name' };
+    }
+    if (raw.verify === 'none') {
+      return { ok: false, reason: 'verifySecret has no meaning when verify is "none"' };
+    }
+    verifySecret = raw.verifySecret;
+  }
+
   return {
     ok: true,
     spec: {
@@ -299,6 +329,7 @@ export function parseHandlerSpec(raw: unknown, fallbackName: string): ParseResul
       route,
       method: method as HandlerMethod,
       verify: raw.verify as VerifyKind,
+      ...(verifySecret ? { verifySecret } : {}),
       ...(typeof raw.description === 'string' ? { description: raw.description } : {}),
       steps,
       respond,

@@ -8172,6 +8172,8 @@ export interface ChallengeBuildResult {
   handlersWritten: string[];
   tasksCreated: number;
   tasksSkipped: number;
+  /** Seeded BUILD tickets autonomy actually started a run for. */
+  tasksDispatched: number;
   readiness: ChallengeSetupStep[];
   warnings: string[];
 }
@@ -8245,6 +8247,8 @@ export interface HandlerSpecDocument {
   route: string;
   method: HandlerMethod;
   verify: HandlerVerifyKind;
+  /** Overrides the kind's default secret name — Stripe issues one per endpoint. */
+  verifySecret?: string;
   description?: string;
   steps: unknown[];
   respond: Record<string, unknown>;
@@ -8257,6 +8261,8 @@ export interface ProjectBackendHandler {
   verify: HandlerVerifyKind;
   description: string | null;
   url: string;
+  /** The same handler on the published site's own origin, when there is one. */
+  siteUrl: string | null;
   stepCount: number;
   /** The parsed spec, so the editor opens without a second round trip. */
   spec: HandlerSpecDocument;
@@ -8285,6 +8291,8 @@ export interface ProjectBackendView {
     status: string;
     ingressUrl: string;
     deployedUrl: string | null;
+    /** `https://<site>/api` once the project has published a site. */
+    siteUrl: string | null;
     lastDeployedAt: string | null;
     handlerCount: number;
   };

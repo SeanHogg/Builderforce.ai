@@ -46,6 +46,9 @@ const handlers: Record<string, unknown> = {
     route: '/stripe/payment-failed',
     method: 'POST',
     verify: 'stripe',
+    // Stripe issues a DIFFERENT signing secret per ENDPOINT, so each route names
+    // its own. One shared name could only ever verify one of the three.
+    verifySecret: 'STRIPE_WEBHOOK_SECRET_PAYMENT_FAILED',
     description: 'invoice.payment_failed → dunning email to the customer, alert to the team.',
     steps: [
       {
@@ -105,6 +108,7 @@ const handlers: Record<string, unknown> = {
     route: '/stripe/payment-recovered',
     method: 'POST',
     verify: 'stripe',
+    verifySecret: 'STRIPE_WEBHOOK_SECRET_PAYMENT_RECOVERED',
     description: 'invoice.payment_succeeded → confirm to the customer, close the alert.',
     steps: [
       {
@@ -143,6 +147,7 @@ const handlers: Record<string, unknown> = {
     route: '/stripe/subscription-canceled',
     method: 'POST',
     verify: 'stripe',
+    verifySecret: 'STRIPE_WEBHOOK_SECRET_SUBSCRIPTION_CANCELED',
     description: 'customer.subscription.deleted → churn alert with a drafted win-back.',
     steps: [
       {
@@ -206,11 +211,17 @@ churns. Three endpoints, one per Stripe event.
    Add endpoint. Create **three** endpoints, one per URL above, and subscribe each
    to only its own event. One endpoint subscribed to everything would deliver every
    event to every handler.
-3. **Store \`STRIPE_WEBHOOK_SECRET\`** as a project secret. Stripe shows a
-   *different* signing secret (\`whsec_…\`) per endpoint — if you create three
-   endpoints you get three secrets. Either reuse one endpoint's secret for all
-   three by creating them from the same signing secret, or run one endpoint at a
-   time. Until this is stored, every delivery is rejected with a 403; that is
+3. **Store one signing secret per endpoint.** Stripe shows a *different*
+   \`whsec_…\` per endpoint, so each handler names its own project secret:
+
+   | Endpoint | Project secret |
+   | --- | --- |
+   | payment-failed | \`STRIPE_WEBHOOK_SECRET_PAYMENT_FAILED\` |
+   | payment-recovered | \`STRIPE_WEBHOOK_SECRET_PAYMENT_RECOVERED\` |
+   | subscription-canceled | \`STRIPE_WEBHOOK_SECRET_SUBSCRIPTION_CANCELED\` |
+
+   The Backend panel lists exactly these three as missing until they are stored.
+   Until each is stored its endpoint rejects every delivery with a 403; that is
    fail-closed, not an outage.
 4. **Connect SendGrid** and verify a sender, then replace
    \`billing@example.com\` in the handlers with it — SendGrid rejects a send from
@@ -258,12 +269,25 @@ export const stripeDunningBlueprint: Blueprint = {
     { key: 'sendgrid', label: 'SendGrid', why: 'Sends the dunning and recovery email.' },
     { key: 'slack', label: 'Slack', why: 'Where the team sees a failed payment or a cancellation in time to act.' },
   ],
+  // Three, not one: Stripe's signing secret is per ENDPOINT, and this system has
+  // three endpoints. A single shared name would verify exactly one of them and
+  // fail the other two closed forever, with an error that reads like a bad secret.
   requiredSecrets: [
     {
-      name: 'STRIPE_WEBHOOK_SECRET',
-      label: 'Stripe webhook signing secret',
+      name: 'STRIPE_WEBHOOK_SECRET_PAYMENT_FAILED',
+      label: 'Signing secret — invoice.payment_failed endpoint',
       where:
-        'Stripe Dashboard → Developers → Webhooks → your endpoint → Signing secret (whsec_…). Note this is per-endpoint and is NOT your API key.',
+        'Stripe Dashboard → Developers → Webhooks → the payment-failed endpoint → Signing secret (whsec_…). This is NOT your API key, and each endpoint has its own.',
+    },
+    {
+      name: 'STRIPE_WEBHOOK_SECRET_PAYMENT_RECOVERED',
+      label: 'Signing secret — invoice.payment_succeeded endpoint',
+      where: 'Stripe Dashboard → Developers → Webhooks → the payment-recovered endpoint → Signing secret (whsec_…).',
+    },
+    {
+      name: 'STRIPE_WEBHOOK_SECRET_SUBSCRIPTION_CANCELED',
+      label: 'Signing secret — customer.subscription.deleted endpoint',
+      where: 'Stripe Dashboard → Developers → Webhooks → the subscription-canceled endpoint → Signing secret (whsec_…).',
     },
   ],
   strategy: 'declarative',
@@ -278,9 +302,9 @@ export const stripeDunningBlueprint: Blueprint = {
     },
     {
       order: 2,
-      title: 'Store STRIPE_WEBHOOK_SECRET',
+      title: 'Store one signing secret per endpoint',
       description:
-        'Copy the signing secret (whsec_…) from the endpoint and store it as the project secret STRIPE_WEBHOOK_SECRET. It is not the API key, and it is per-endpoint. Deliveries are rejected with a 403 until it is set.',
+        'Each Stripe endpoint has its OWN whsec_… signing secret, so store three: STRIPE_WEBHOOK_SECRET_PAYMENT_FAILED, STRIPE_WEBHOOK_SECRET_PAYMENT_RECOVERED and STRIPE_WEBHOOK_SECRET_SUBSCRIPTION_CANCELED. None of them is the API key. Each endpoint rejects every delivery with a 403 until its own secret is stored.',
     },
     {
       order: 3,
@@ -303,7 +327,7 @@ export const stripeDunningBlueprint: Blueprint = {
       order: 6,
       title: 'Prove the signature check is real',
       description:
-        'Temporarily corrupt STRIPE_WEBHOOK_SECRET and confirm deliveries start failing with a 403 in the delivery log, then restore it. An unverified billing webhook lets anyone send mail from your verified domain.',
+        'Temporarily corrupt one of the signing secrets and confirm that endpoint starts failing with a 403 in the delivery log while the other two keep working, then restore it. An unverified billing webhook lets anyone send mail from your verified domain.',
     },
   ],
   successCriteria: [

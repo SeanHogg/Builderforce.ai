@@ -13490,7 +13490,9 @@
     "noticeApplyingBrainChanges": "{count, plural, one {# Brain-Änderung wird} other {# Brain-Änderungen werden}} angewendet…",
     "noticeBrainChangesAwaitReview": "{count, plural, one {# Brain-Änderung wartet} other {# Brain-Änderungen warten}} auf Prüfung",
     "noticeConversationSaveFailedReason": "Konversation konnte nicht gespeichert werden: {reason}",
-    "noticePrdNotSavedReason": "Projekt-PRD wurde nicht gespeichert: {reason}"
+    "noticePrdNotSavedReason": "Projekt-PRD wurde nicht gespeichert: {reason}",
+    "noticeGuestLimitReached": "Sie haben Ihre {limit} kostenlosen Gastnachrichten für heute aufgebraucht. Melden Sie sich kostenlos an, um weiterzumachen – Ihre Leinwand kommt mit.",
+    "noticeGuestLimitDevice": "Dieses Gerät hat sein kostenloses Gastlimit für heute erreicht. Melden Sie sich kostenlos an, um weiterzumachen – Ihre Leinwand kommt mit."
   },
   "canvasCommands": {
     "cleanLayout": "Leinwand-Layout aufräumen",
@@ -13703,6 +13705,8 @@
       "loadFailed": "Das Backend konnte nicht geladen werden.",
       "saveFailed": "Speichern nicht möglich.",
       "addressLabel": "Richten Sie die Webhooks Ihres Anbieters hierauf",
+      "siteAddressLabel": "Auf Ihrer Website",
+      "siteAddressNote": "Ihre veröffentlichte Website stellt diese Handler unter der eigenen Domain bereit, sodass eine Seite fetch('/api/…') ohne Token aufrufen kann. Die Adresse oben gilt weiterhin für Provider-Webhooks.",
       "deployedNote": "Dieses Projekt wird in Ihrem eigenen Cloudflare-Konto bereitgestellt – das ist also die Adresse Ihres Workers, nicht die von Builderforce.",
       "strategyLabel": "Wo es läuft",
       "endpointsLabel": "Aktuell aktive Endpunkte",
@@ -13722,8 +13726,47 @@
       "colRoute": "Route",
       "colStatus": "Status",
       "colVerdict": "Ergebnis",
-      "refresh": "Aktualisieren"
-    }
+      "refresh": "Aktualisieren",
+      "pauseIngress": "Eingang pausieren",
+      "resumeIngress": "Eingang fortsetzen",
+      "pauseHint": "Pausieren lässt jede eingehende Zustellung binnen Sekunden mit 404 antworten – der Not-Aus für einen kompromittierten oder fehlerhaften Endpunkt.",
+      "pausedNote": "Pausiert. Alle eingehenden Zustellungen werden abgewiesen; Anbieter versuchen es erneut oder markieren den Webhook als fehlgeschlagen.",
+      "workerHealthLabel": "Bereitgestellter Worker",
+      "workerUnreachable": "Der bereitgestellte Worker war nicht erreichbar: {reason}",
+      "workerMissingSecrets": "Bereitgestellt, aber diese Secrets sind im Worker nicht gesetzt: {names}. Anfragen werden abgelehnt, bis Sie sie als Repository-Secrets hinterlegen und erneut bereitstellen.",
+      "workerReady": "Erreichbar, alle {count} erwarteten Secrets sind gesetzt.",
+      "addHandler": "Endpunkt hinzufügen",
+      "noHandlers": "Noch keine Endpunkte. Fügen Sie einen hinzu oder bauen Sie eine Challenge, die welche erzeugt.",
+      "edit": "Bearbeiten",
+      "newHandler": "Neuer Endpunkt",
+      "editHandler": "{name} wird bearbeitet",
+      "handlerName": "Name",
+      "handlerRoute": "Route",
+      "handlerMethod": "Methode",
+      "handlerVerify": "Verifizierung",
+      "handlerDescription": "Beschreibung",
+      "handlerSteps": "Schritte",
+      "handlerRespond": "Antwort",
+      "stepsHelp": "Ein JSON-Array. Jeder Schritt ist llm, connector, set oder data mit einer eindeutigen id. Ein data-Schritt liest eine der Sammlungen Ihrer Website. Templates lesen body, query, headers, project und steps — niemals Secrets.",
+      "respondHelp": "Ein JSON-Objekt, dessen kind twiml, json, text oder empty ist.",
+      "verifyNoneWarning": "Nicht verifiziert: Wer diese URL kennt, kann sie aufrufen. Wählen Sie das nur für einen Endpunkt, der anonym gefahrlos aufrufbar ist.",
+      "invalidJson": "Das ist kein gültiges JSON.",
+      "stepsMustBeArray": "Schritte müssen ein JSON-Array sein.",
+      "saveHandler": "Endpunkt speichern",
+      "saving": "Wird gespeichert…",
+      "cancel": "Abbrechen",
+      "verdict": {
+        "ok": "ok",
+        "unverified": "nicht verifiziert",
+        "no-handler": "kein Handler",
+        "rate-limited": "Rate begrenzt",
+        "error": "Fehler"
+      },
+      "handlerVerifySecret": "Secret-Name (optional)",
+      "handlerVerifySecretPlaceholder": "STRIPE_WEBHOOK_SECRET_PAYMENT_FAILED",
+      "verifySecretHelp": "Leer lassen, um das Standard-Secret des Anbieters zu verwenden. Setzen Sie es, wenn der Anbieter je Endpunkt ein eigenes Signatur-Secret ausstellt — Stripe tut das, also braucht jede Stripe-Route ihr eigenes."
+    },
+    "builtDispatched": "An {count} Build-Tickets arbeitet bereits ein Agent."
   },
   "site": {
     "domain": {

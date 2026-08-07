@@ -4,6 +4,211 @@
 
 ---
 
+## ✅ RESOLVED 2026-08-06 — A published site can now run its own server code
+
+The hosting residuals logged when 0412 shipped. The data half was closed then —
+a site could store a submission and nothing else. This is the execution half,
+plus the two things that made a live site look broken.
+
+### One executor, two addresses
+
+The project's handlers were reachable at exactly one URL: `/hooks/<token>/<route>`,
+an opaque address built for pasting into a provider console. A published page
+could not call its own backend without embedding that token in client-side
+JavaScript — so in practice a site could accept a form post and do nothing with
+it. Handlers now also answer on the **site's own origin** at
+`https://<site>/api/<route>`, custom domain included.
+
+The whole dispatch moved out of the route into `application/backend/ingress.ts`:
+rate limit, 128 KB body cap, declared signature verification, header allow-list,
+step budget, request log. Both addresses call it, so the friendlier URL cannot
+become a weaker one — asserted directly, including that a `verify: twilio`
+handler still 403s on the site address. `hooksRoutes.ts` went 347 → 85 lines.
+`/api/*` is *not* reserved: an unmatched route falls back to a real file, so a
+site already shipping a static `/api/config.json` is unaffected, and an unmatched
+API path answers JSON rather than handing a `fetch()` the SPA document.
+
+### The datastore reads back
+
+`siteData` was write-only on purpose — a signup form anyone can enumerate is a
+leak — which also meant server code could collect data and never use it. New
+`data` step (`handlerSpec` / `handlerRuntime` / `listSiteRecordsForHandler`)
+reads a collection **server-side**, scoped to the handler's own tenant AND
+project so a spec can only name a collection, never a project. Payloads are
+flattened for templating; a missing collection renders the empty state and logs
+why rather than 500ing a page. With `respond: { kind: 'text', contentType:
+'text/html' }` that is a server-rendered page built from live submissions.
+
+### Handlers are cached, and the canvas still wins
+
+The handler read is an R2 list plus a GET each, and it now runs on visitor
+traffic. `loadHandlersCached` serves it read-through; `onCanvasWrite` invalidates
+from **every** write path — the IDE editor, the challenge materializer, the
+handler API — so the "no publish step" contract is preserved by the
+invalidation, not by the TTL. `backendByProject` caches the site-side backend
+lookup including the negative; `invalidateIngress` now clears both keys, so a
+kill-switch pause cannot keep serving on one address.
+
+### Deep links render
+
+A Vite/CRA build emits relative asset URLs. Served as the SPA fallback for
+`/docs/getting-started`, the browser resolved them against `/docs/`, 404'd, and
+showed a blank page — precisely when someone shares an inner page. The fallback
+document now gets `<base href="/">` injected (`withRootBase`), only on the
+fallback, only for a nested path, and never over a document that declares its
+own base.
+
+### Deleting a project reclaims its storage
+
+Deleting a project left every byte it had written in R2 — the whole canvas and
+the built site — with nothing left referencing the keys. `ProjectStoragePurge` is
+a plan/run port on `ProjectService` (plan first: the site prefix lives on a row
+the delete cascades away), implemented by `r2ProjectStoragePurge`, wired at both
+construction sites so the REST route and the `projects.delete` MCP tool behave
+identically. Paged, bounded at 200 pages, non-fatal, and it drops the cached
+host→site lookups so a deleted subdomain stops resolving.
+
+### Also
+
+Publishing now ensures a backend row, so a handler written in the IDE is
+addressable without a dashboard visit. `application/shared/dbPort.ts` was a
+duplicate of the pre-existing `dbHandle.ts` — deleted, its two consumers
+migrated. Backend panel shows both addresses (one goes in a provider console,
+the other into the site's own JavaScript), localized in all five catalogs.
+
+**Files:** `api/src/application/backend/{ingress,index,handlerSpec,handlerRuntime}.ts`,
+`api/src/application/ide/{siteServer,siteData,projectStorage,publishStaticSite}.ts`,
+`api/src/application/project/ProjectService.ts`,
+`api/src/presentation/routes/{hooksRoutes,ideRoutes,projectBackendRoutes}.ts`,
+`frontend/src/components/ProjectBackendPanel.tsx`. No migration.
+**Verified:** api typecheck clean; 440 files / 4919 tests passed; 11 api guards
+PASS; frontend typecheck clean; i18n parity 0 missing across zh/es/fr/de.
+
+**Still open** (see ROADMAP §13): customer-authored JavaScript / framework SSR
+needs a container or Workers-for-Platforms; a published site has no per-visitor
+identity; custom-domain certificates remain blocked on the Cloudflare for SaaS
+entitlement plus two secrets.
+
+---
+
+## ✅ RESOLVED 2026-08-06 — Challenge-pipeline residuals closed, and the guards back to green
+
+Everything logged as a residual when the challenge pipeline shipped, fixed in one
+pass. The register is a ledger of work in flight; these are no longer in flight.
+
+### The endpoints are now authorable from the browser
+
+`handlers/*.json` was a validated contract with no authoring surface — a new
+endpoint meant hand-writing JSON or re-running the challenge. Added
+`GET/PUT/DELETE /api/projects/:id/backend/handlers/:name` over `saveHandler` /
+`removeHandler` / `readHandlerDocument`, plus `HandlerEditor.tsx`: real controls
+for route, method and **verification kind** (the field whose default decides
+whether a public endpoint is forgeable), a JSON body for the step graph, and the
+api's own parser errors rendered inline. Nothing is validated twice — the
+document is parsed by the SAME parser the ingress uses, so "it saved" and "it will
+serve" are one condition. A save that would shadow another handler's route+method
+is rejected with a 409 rather than letting R2 listing order decide who answers,
+and every write re-runs the hosting strategy so the generated Worker can never
+ship a stale handler set. The parsed spec now rides along on the panel's first
+load, so opening an editor is not one round trip per handler.
+
+### Three more blueprints — and the two signature schemes they need
+
+`stripe-dunning`, `support-triage` and `shopify-orders` join `twilio-omnichannel`.
+Each pins the facts a model gets wrong:
+
+- **Stripe does not sign the body.** `Stripe-Signature` is `t=<unix>,v1=<hex>` over
+  `"<t>.<rawBody>"`, with the timestamp INSIDE the MAC so a captured event cannot
+  be replayed forever. HMACing the body — the obvious guess, and what the generic
+  `shared-secret` kind does — rejects 100% of real Stripe traffic and looks exactly
+  like a wrong secret. New `verify: "stripe"` kind, with the tolerance window and
+  multi-`v1` rotation support, mirrored into the generated Worker.
+- **Shopify sends base64, not hex.** Same algorithm as the generic shared secret,
+  different encoding; a hex comparison never matches. New `verify: "shopify"` kind.
+- Shopify also DELETES a webhook subscription after 19 consecutive failures, which
+  is why the runtime's "a failing step still returns a well-formed 200" posture
+  matters more here than anywhere else.
+
+Writing the Stripe blueprint surfaced a limitation in the spec itself and it was
+fixed rather than documented as a constraint: `VERIFY_SECRET_NAME` mapped a
+verification KIND to one secret name, but Stripe issues a signing secret per
+webhook ENDPOINT — so a system with three Stripe routes has three `whsec_…`
+values and a single `STRIPE_WEBHOOK_SECRET` could only ever verify one of them,
+failing the other two closed forever with an error that reads exactly like a wrong
+secret. Handlers now carry an optional `verifySecret`, resolved through one shared
+`verifySecretNameFor()` used by all three callers that need the answer (the
+ingress, the panel's missing-secret list, the Worker generator) so they cannot
+disagree; a malformed or meaningless override is REJECTED rather than ignored,
+because silently falling back to the default is the failure that passes review.
+The editor renders the field too — it rebuilds the whole document from its
+controls, so a field it did not show would be a field it silently deleted.
+
+The catalog growing exposed a real matcher flaw: capability overlap alone tops out
+at 0.65, which clears the 0.5 threshold — so a brief wanting nothing but "payments
+and email" would have landed on Stripe dunning with no mention of Stripe anywhere
+in it. `requiresSignal` now demands the brief NAME the blueprint, not merely be
+shaped like it, and the new blueprints' signals were tightened to vendor words
+("stripe", "shopify", "zendesk") rather than ordinary English ("payment", "order",
+"support") that appears in briefs about something else entirely. That failure mode
+gets worse with every blueprint added; the gate is what makes the catalog safe to
+grow. Tests now run over the WHOLE catalog — every handler parses, every
+verification kind has a declared secret, every connector action exists and is
+declared, no two handlers shadow each other, every route appears in its own
+console — so a fifth blueprint cannot be added broken.
+
+The three consoles would have been near-identical copies of the Twilio one, so
+`renderOpsConsole` was extracted and the Twilio blueprint migrated onto it.
+
+### A built challenge starts working
+
+`materializeChallenge` seeded the board and stopped. `BlueprintTask` gained
+`kind: 'setup' | 'build'` (absent means setup — dispatching a coding agent at "go
+and connect your Twilio account" burns a run to produce nothing), the designer
+prompt asks for it, and freshly-seeded BUILD tickets are offered to
+`maybeAutoRunOnLaneEntry` — the canonical gate a drag onto a lane uses. Offered,
+not started: an unstaffed board declines every candidate, which is correct rather
+than a failure. Only tickets seeded THIS run are offered, so rebuilding a challenge
+never reaches into work that already has its own history.
+
+### The public ingress can be stopped, and capped
+
+- **Kill switch.** `project_backends.status` was read on every ingress resolution
+  and written by nothing — the only way to stop a compromised endpoint was a DBA.
+  `setBackendStatus` + a panel toggle, invalidating the ingress cache on write
+  (the load-bearing half: a pause that skipped it would keep serving for five more
+  minutes, exactly the window in which someone is trying to stop it).
+- **Rate cap.** Extracted `checkSlidingWindow` as the ONE counter over
+  `TenantRateLimiterDO`, migrated `rateLimitMiddleware` onto it, and keyed a
+  300/minute cap on the ingress token. Checked BEFORE the R2 reads, so an
+  over-rate request costs nothing; answered with 429 + `Retry-After`, which
+  Twilio backs off on rather than treating as permanently failed. New
+  `rate-limited` verdict in the delivery log.
+
+### A deployed Worker now says whether it is credentialled
+
+The deploy workflow skips a secret absent from the repository rather than pushing
+it empty — right posture, but it left "deployed" and "will 403 everything" looking
+identical from our side. The generated Worker answers `/__builderforce/health` with
+which expected secrets are BOUND (names and booleans only, never a value), the api
+probes it through the SSRF guard behind a 30s cache, and the panel says so before
+Twilio does.
+
+### Guards back to green on a clean tree
+
+- **`check:silent-catches`** — the four comment-only catch blocks were fixed by the
+  workstream that owned those files; the blocker named in the entry (a concurrent
+  session mid-rewrite) cleared.
+- **`check:layering` / `check:tenant-scope` on the connector platform** — fixed
+  here. Eight statements moved onto `scopedToTenant` (including two whose predicate
+  was hidden behind a local, which the ratchet correctly reads as unscoped), and
+  the OpenAPI spec fetch moved out of the route into `fetchOpenApiSpec` in the
+  application layer, beside the connector runtime's identical SSRF-guarded fetch,
+  so `connectorRoutes.ts` no longer imports infrastructure at all.
+
+Also fixed in passing: `parseHandlerSpec`'s "verify must be one of…" message was a
+hardcoded copy of the kind list and went stale the moment a kind was added — it
+told authors a supported kind was invalid. It is derived from `VERIFY_KINDS` now.
+
 ## 2026-08-06 — RESOLVED: one model list, three surfaces — the editor's QuickPick now shares it
 
 Closes the register residual left by the `/`-menu work earlier the same day: the composer menu built its rows from the shared builder while `pickModel` in `clients/vscode/src/extension.ts` kept a second, independently-written `showQuickPick` for the Sessions-view overflow and the command palette. Both read the same endpoints, so they could not disagree about WHICH models exist — but they grouped them differently (BYO-first vs cheapest-first), named the same connected provider differently (`byoProviderLabel` was a private copy of the vendor map), and worded "who pays" differently on the row a user reads before spending their own key.
@@ -19,6 +224,26 @@ A `buildModelItems` test pins the invariant the QuickPick's separator walk depen
 **Also closed (by the canvas work landed alongside):** the trimmed canvas catalogs are now derived from the real import closure rather than a hand-written list — see the entry above.
 
 Files: `brain-embedded/src/modelChoice.ts` (+ test, 2026.7.62), `packages/brain-ui/src/promptOptions/types.ts` + `PromptOptionsMenu.tsx` (2026.7.41), `clients/vscode/src/{extension.ts,modelChoiceLabels.ts,brainWebview.ts}`, `clients/vscode/webview/src/{App.tsx,vscodeBridge.ts}`, the five l10n bundles (VSIX 2026.7.117, packaged).
+
+---
+
+## 2026-08-06 — ✅ SHIPPED: the homepage IS the canvas — a seeded board above the fold, marketing below it
+
+The landing hero described the Creation Canvas in prose and put a prompt under it. It now **shows the board**: `<LandingCanvasHero>` renders a seeded canvas — dataset → chart → agent → workflow → document, wired with real connectors — with the composer riding **bottom-centre on the board** per [[canvas-prompt-center-bottom]]. Clicking any object seeds the composer rather than navigating, so the board is an invitation instead of a screenshot. Submitting takes the same path it always did: `createLocalCreationSession()` → `/create/{id}`, no account, claimed on sign-in by `CreationSessionClient`. Everything below the fold — MeetCarousel, QuickStart, stats, workflow proof, compare, pricing, blog, FAQ, JSON-LD — is untouched, so the page stays indexable.
+
+**Two constraints are deliberate, and both are the reason this shipped instead of the full-bleed version.** (1) The hero is a seeded *preview*, not a mounted `CreationCanvas` — the real board is ~4,400 lines plus a flow engine, and putting it above the fold would trade the homepage's first paint for the one surface whose test suite cannot currently give a verdict. (2) The board is **not rendered at all** below 900px, and is skipped on the server and first client paint, so the headline and composer paint before any of it lays out. One `<Composer>` instance serves both layouts — same state, same submit — so the start-creating path cannot drift between them.
+
+**The guest failure states are now designed rather than accidental**, which matters far more once this is the front door. `runCreationCanvasAi` threw a bare English string when no guest token could be minted; it now throws a typed `GuestAiUnavailableError`, and a single `describeTurnError()` in the canvas is the one place a failed AI turn becomes words. It also closes a wall that **did not exist**: `llmRoutes.ts` returns `code: 'guest_limit_reached'` and its comment claims the UI shows a sign-up wall keyed off it — that code was handled in **zero** places repo-wide, so a guest spending their 10 free turns got the gateway's raw English. The canvas now says it in the visitor's language, distinguishing the per-visitor and per-IP caps. (Guest inference was already metered — `GUEST_CHAT_LIMITS`, 10/visitor/day and 50/IP/day, enforced at `llmRoutes.ts:1116`; no new cap was needed.)
+
+**Residual `setNotice` English, which the 2026-08-06 i18n sweep had missed.** That pass reported the item closed, but five strings survived because they were nested inside ternaries and template literals rather than sitting directly in `setNotice('…')`: the Brain-changes applying/awaiting pair (now real ICU plurals), the conversation-save and PRD-save `reason` prefixes, and the agent-test/agent-group failure fallbacks. Verified 0 remaining. The French plural caught a genuine ICU trap the catalog test found — `d'#` starts a quoted literal, so the message silently fell back to its key; reworded to keep the apostrophe away from the placeholder.
+
+**Also fixed:** the guest→sign-in claim-error toast used hardcoded hexes (`#fff1f0`/`#a61d24`) and an English literal, on the exact path this change promotes — now theme tokens plus `noticeClaimFailed` in five catalogs. **Deleted:** ~300 lines of dead CSS in `page.tsx` — the whole `.lp-create*` and `.lp-evermind*` blocks (already unreferenced before this work) and the hero rules this replaced, including a `.lp-hero-title` that hardcoded near-white text and would have gone invisible in light mode the moment the dark `BrainBackdrop` came out from under it.
+
+**Verified:** `tsgo --noEmit` clean on the final state; eslint clean on every changed file (one pre-existing `<img>` warning, untouched); `next build` exit 0 on a clean `.next` — and `/` still builds as **`○ (Static)`** at 18.8 kB / 398 kB first load, which is the SEO check that matters: the page is still statically prerendered with its JSON-LD, FAQ and blog grid, because the board mounts client-side after paint rather than being part of the prerender. 5 new `LandingCanvasHero` tests, 24 i18n catalog tests, and the home/`creationCanvasAi`/`creationSessions` suites all green. Zero hardcoded colours in the hero CSS — every value is a theme token, checked by grep. `CreationCanvas.test.tsx` was deliberately not run: the documented pre-existing 3D-group hang. *Build note for anyone repeating this:* two concurrent `next build` runs share `.next/types/`, and the loser dies with a bogus `File '.next/types/app/…/page.ts' not found` type error — that is contention, not a code defect.
+
+**Open follow-ups in the roadmap:** canvas touch input (why the board is desktop-only here), and the guest-limit wall in the shared Brain chat panel (blocked on a `@seanhogg/builderforce-brain-ui` release).
+
+**Files:** `frontend/src/components/home/LandingCanvasHero.{tsx,module.css,test.tsx}`, `frontend/src/app/page.tsx`, `frontend/src/app/create/[sessionId]/CreationSessionClient.tsx`, `frontend/src/lib/creationCanvasAi.ts`, `frontend/src/components/creation-canvas/CreationCanvas.tsx`, `frontend/src/i18n/messages/{en,zh,es,fr,de}.json`.
 
 ---
 

@@ -191,3 +191,58 @@ describe('executeHandler', () => {
     expect(result.body).toBe('[]');
   });
 });
+
+describe('data step', () => {
+  const dataSpec = (over: Record<string, unknown> = {}): HandlerSpec => handler({
+    steps: [{ kind: 'data', id: 'rows', collection: 'signups', ...over } as never],
+    respond: { kind: 'json', body: { count: '{{steps.rows.count}}', first: '{{steps.rows.records[0].name}}' } },
+  });
+
+  it('binds the read so a later template can render the collected data', async () => {
+    const d = deps({
+      readCollection: vi.fn(async () => ({
+        collection: 'signups',
+        count: 2,
+        records: [
+          { id: 2, email: 'a@b.c', createdAt: '2026-08-01T00:00:00.000Z', name: 'Ada' },
+          { id: 1, email: 'd@e.f', createdAt: '2026-07-01T00:00:00.000Z', name: 'Bo' },
+        ],
+      })),
+    });
+    const out = await executeHandler(dataSpec(), ctx(), d);
+    // `count` survives as a NUMBER: a whole-string template keeps the underlying
+    // type, so a page can compare it rather than parse it back.
+    expect(JSON.parse(out.body)).toEqual({ count: 2, first: 'Ada' });
+  });
+
+  it('renders the filter before reading, so matchValue can come from the request', async () => {
+    const readCollection = vi.fn(async () => ({ collection: 'signups', count: 0, records: [] }));
+    await executeHandler(
+      dataSpec({ matchField: 'plan', matchValue: '{{body.plan}}' }),
+      ctx({ plan: 'pro' }),
+      deps({ readCollection }),
+    );
+    expect(readCollection).toHaveBeenCalledWith(
+      expect.objectContaining({ match: { field: 'plan', value: 'pro' } }),
+    );
+  });
+
+  it('omits the filter entirely when the spec declares none', async () => {
+    const readCollection = vi.fn(async () => ({ collection: 'signups', count: 0, records: [] }));
+    await executeHandler(dataSpec(), ctx(), deps({ readCollection }));
+    expect(readCollection).toHaveBeenCalledWith(expect.objectContaining({ match: undefined }));
+  });
+
+  it('renders the empty state rather than failing when the collection is unknown', async () => {
+    // A page that 500s because a collection was renamed is worse than a page
+    // that shows nothing and logs why.
+    const out = await executeHandler(
+      dataSpec(),
+      ctx(),
+      deps({ readCollection: vi.fn(async () => ({ collection: 'gone', count: 0, records: [], error: 'No collection named "gone".' })) }),
+    );
+    expect(out.status).toBe(200);
+    expect(JSON.parse(out.body)).toEqual({ count: 0, first: '' });
+    expect(out.steps[0]).toMatchObject({ id: 'rows', ok: false, error: 'No collection named "gone".' });
+  });
+});

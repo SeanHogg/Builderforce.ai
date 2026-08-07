@@ -13491,7 +13491,9 @@
     "noticeApplyingBrainChanges": "Applying {count, plural, one {# Brain change} other {# Brain changes}}…",
     "noticeBrainChangesAwaitReview": "{count, plural, one {# Brain change awaits} other {# Brain changes await}} review",
     "noticeConversationSaveFailedReason": "Conversation save failed: {reason}",
-    "noticePrdNotSavedReason": "Project PRD was not saved: {reason}"
+    "noticePrdNotSavedReason": "Project PRD was not saved: {reason}",
+    "noticeGuestLimitReached": "You've used your {limit} free guest messages for today. Sign up free to keep going — your canvas comes with you.",
+    "noticeGuestLimitDevice": "This device has reached its free guest limit for today. Sign up free to keep going — your canvas comes with you."
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -13704,6 +13706,8 @@
       "loadFailed": "The backend could not be loaded.",
       "saveFailed": "That could not be saved.",
       "addressLabel": "Point your provider webhooks here",
+      "siteAddressLabel": "On your site",
+      "siteAddressNote": "Your published site serves these handlers on its own domain, so a page can call fetch('/api/…') with no token. The address above still works for provider webhooks.",
       "deployedNote": "This project deploys to your own Cloudflare account, so this is your Worker's address — not the Builderforce ingress.",
       "strategyLabel": "Where it runs",
       "endpointsLabel": "Endpoints serving now",
@@ -13723,8 +13727,47 @@
       "colRoute": "Route",
       "colStatus": "Status",
       "colVerdict": "Verdict",
-      "refresh": "Refresh"
-    }
+      "refresh": "Refresh",
+      "pauseIngress": "Pause ingress",
+      "resumeIngress": "Resume ingress",
+      "pauseHint": "Pausing makes every inbound delivery 404 within seconds — the kill switch for a misbehaving or compromised endpoint.",
+      "pausedNote": "Paused. Every inbound delivery is being refused; providers will retry or mark the webhook failed.",
+      "workerHealthLabel": "Deployed Worker",
+      "workerUnreachable": "Could not reach the deployed Worker: {reason}",
+      "workerMissingSecrets": "Deployed, but these secrets are not bound in the Worker: {names}. Requests will be rejected until you add them as repository secrets and redeploy.",
+      "workerReady": "Reachable, with all {count} expected secrets bound.",
+      "addHandler": "Add endpoint",
+      "noHandlers": "No endpoints yet. Add one, or build a challenge to generate them.",
+      "edit": "Edit",
+      "newHandler": "New endpoint",
+      "editHandler": "Editing {name}",
+      "handlerName": "Name",
+      "handlerRoute": "Route",
+      "handlerMethod": "Method",
+      "handlerVerify": "Verification",
+      "handlerDescription": "Description",
+      "handlerSteps": "Steps",
+      "handlerRespond": "Response",
+      "stepsHelp": "A JSON array. Each step is one of llm, connector, set or data, with a unique id. A data step reads one of your site's collections. Templates read body, query, headers, project and steps — never secrets.",
+      "respondHelp": "A JSON object whose kind is twiml, json, text or empty.",
+      "verifyNoneWarning": "Unverified: anyone who learns this URL can call it. Only choose this for an endpoint that is safe to call anonymously.",
+      "invalidJson": "That is not valid JSON.",
+      "stepsMustBeArray": "Steps must be a JSON array.",
+      "saveHandler": "Save endpoint",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "verdict": {
+        "ok": "ok",
+        "unverified": "unverified",
+        "no-handler": "no handler",
+        "rate-limited": "rate limited",
+        "error": "error"
+      },
+      "handlerVerifySecret": "Secret name (optional)",
+      "handlerVerifySecretPlaceholder": "STRIPE_WEBHOOK_SECRET_PAYMENT_FAILED",
+      "verifySecretHelp": "Leave blank to use this provider's default secret. Set it when the provider issues a different signing secret per endpoint — Stripe does, so each Stripe route needs its own."
+    },
+    "builtDispatched": "{count} build tickets already have an agent working on them."
   },
   "site": {
     "domain": {

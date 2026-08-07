@@ -92,6 +92,8 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
   const [secretValue, setSecretValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** `null` = closed; `{ name: null }` = creating; otherwise editing that handler. */
+  const [editing, setEditing] = useState<{ name: string | null; spec: HandlerSpecDocument | null } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -143,6 +145,34 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
     }
   };
 
+  const togglePaused = async (paused: boolean) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await projectBackendApi.setStatus(projectId, paused ? 'paused' : 'active');
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('saveFailed'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeHandler = async (name: string) => {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await projectBackendApi.deleteHandler(projectId, name);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('saveFailed'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!view) {
     return (
       <div style={{ ...card, fontSize: 14, color: 'var(--text-secondary)' }}>
@@ -152,6 +182,9 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
   }
 
   const target = view.backend.deployedUrl ?? view.backend.ingressUrl;
+  const paused = view.backend.status !== 'active';
+  const health = view.workerHealth;
+  const unboundSecrets = health ? Object.entries(health.secrets).filter(([, bound]) => !bound).map(([n]) => n) : [];
 
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -165,6 +198,19 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
             <span style={{ fontSize: 12.5, color: 'var(--text-secondary)' }}>{t('deployedNote')}</span>
           )}
         </div>
+
+        {/* The address a person actually types. Shown as its own row rather than
+            replacing the ingress URL: the two are for different callers, and a
+            provider console still needs the token address. */}
+        {view.backend.siteUrl && (
+          <div style={{ display: 'grid', gap: 6 }}>
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{t('siteAddressLabel')}</span>
+            <span style={code}>{view.backend.siteUrl}</span>
+            <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              {t('siteAddressNote')}
+            </span>
+          </div>
+        )}
 
         <div style={{ display: 'grid', gap: 8 }}>
           <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{t('strategyLabel')}</span>
@@ -192,20 +238,111 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
             })}
           </div>
         </div>
+
+        {/* The kill switch. A public URL that can be created from the product but
+            only stopped from the database is not a finished feature. */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+          <button
+            type="button"
+            onClick={() => void togglePaused(!paused)}
+            disabled={busy}
+            style={{
+              ...button,
+              borderColor: paused ? 'var(--warning, #9a6200)' : 'var(--border-subtle)',
+              color: paused ? 'var(--warning, #9a6200)' : 'var(--text-primary)',
+              opacity: busy ? 0.6 : 1,
+            }}
+          >
+            {paused ? t('resumeIngress') : t('pauseIngress')}
+          </button>
+          <span style={{ fontSize: 12.5, color: 'var(--text-secondary)', lineHeight: 1.5, flex: '1 1 240px' }}>
+            {paused ? t('pausedNote') : t('pauseHint')}
+          </span>
+        </div>
       </div>
 
-      {view.handlers.length > 0 && (
-        <div style={{ ...card, display: 'grid', gap: 10 }}>
-          <div style={label}>{t('endpointsLabel')}</div>
-          {view.handlers.map((h) => (
-            <div key={h.name} style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'baseline' }}>
-              <span style={code}>{h.method} {h.url}</span>
-              <span style={{ fontSize: 12.5, color: h.verify === 'none' ? 'var(--warning, #9a6200)' : 'var(--text-secondary)' }}>
-                {h.verify === 'none' ? t('unverified') : h.verify}
-              </span>
+      {/* Deployed-Worker readiness. "Deployed" and "will 403 every request" look
+          identical from outside without this. */}
+      {health && (
+        <div
+          style={{
+            ...card,
+            display: 'grid',
+            gap: 8,
+            borderColor: health.reachable && unboundSecrets.length === 0 ? 'var(--border-subtle)' : 'var(--warning, #9a6200)',
+          }}
+        >
+          <div style={label}>{t('workerHealthLabel')}</div>
+          {!health.reachable ? (
+            <div style={{ fontSize: 13, color: 'var(--warning, #9a6200)', lineHeight: 1.5 }}>
+              {t('workerUnreachable', { reason: health.reason ?? '' })}
             </div>
-          ))}
+          ) : unboundSecrets.length > 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--warning, #9a6200)', lineHeight: 1.5 }}>
+              {t('workerMissingSecrets', { names: unboundSecrets.join(', ') })}
+            </div>
+          ) : (
+            <div style={{ fontSize: 13, color: 'var(--success, #167a4a)', lineHeight: 1.5 }}>
+              {t('workerReady', { count: Object.keys(health.secrets).length })}
+            </div>
+          )}
         </div>
+      )}
+
+      <div style={{ ...card, display: 'grid', gap: 10 }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ ...label, marginBottom: 0 }}>{t('endpointsLabel')}</div>
+          <button
+            type="button"
+            onClick={() => setEditing({ name: null, spec: null })}
+            disabled={busy}
+            style={{ ...button, padding: '4px 10px', fontSize: 13 }}
+          >
+            {t('addHandler')}
+          </button>
+        </div>
+
+        {view.handlers.length === 0 && !editing && (
+          <div style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.5 }}>{t('noHandlers')}</div>
+        )}
+
+        {view.handlers.map((h) => (
+          <div key={h.name} style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'baseline' }}>
+            <span style={code}>{h.method} {h.siteUrl ?? h.url}</span>
+            <span style={{ fontSize: 12.5, color: h.verify === 'none' ? 'var(--warning, #9a6200)' : 'var(--text-secondary)' }}>
+              {h.verify === 'none' ? t('unverified') : h.verify}
+            </span>
+            <button
+              type="button"
+              onClick={() => setEditing({ name: h.name, spec: h.spec })}
+              disabled={busy}
+              style={{ ...button, padding: '2px 10px', fontSize: 13 }}
+            >
+              {t('edit')}
+            </button>
+            <button
+              type="button"
+              onClick={() => void removeHandler(h.name)}
+              disabled={busy}
+              style={{ ...button, padding: '2px 10px', fontSize: 13 }}
+            >
+              {t('remove')}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {editing && (
+        <HandlerEditor
+          projectId={projectId}
+          name={editing.name}
+          spec={editing.spec}
+          onSaved={async () => {
+            setEditing(null);
+            await load();
+          }}
+          onCancel={() => setEditing(null)}
+        />
       )}
 
       {view.handlerErrors.length > 0 && (
@@ -322,7 +459,7 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
                       {r.statusCode}
                     </td>
                     <td style={{ padding: '6px 8px', borderBottom: '1px solid var(--border-subtle)', color: VERDICT_COLOR[r.verdict] ?? 'var(--text-primary)' }}>
-                      {r.verdict}
+                      {t(`verdict.${r.verdict}`)}
                       {r.error && (
                         <div style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{r.error}</div>
                       )}

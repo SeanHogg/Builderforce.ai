@@ -13490,7 +13490,9 @@
     "noticeApplyingBrainChanges": "正在应用 {count} 项 Brain 更改…",
     "noticeBrainChangesAwaitReview": "{count} 项 Brain 更改待审核",
     "noticeConversationSaveFailedReason": "对话保存失败：{reason}",
-    "noticePrdNotSavedReason": "项目 PRD 未保存：{reason}"
+    "noticePrdNotSavedReason": "项目 PRD 未保存：{reason}",
+    "noticeGuestLimitReached": "你今天的 {limit} 条免费访客消息已用完。免费注册即可继续——你的画布会一并保留。",
+    "noticeGuestLimitDevice": "本设备今天的免费访客额度已用完。免费注册即可继续——你的画布会一并保留。"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -13703,6 +13705,8 @@
       "loadFailed": "无法加载后端。",
       "saveFailed": "保存失败。",
       "addressLabel": "将服务商的 Webhook 指向这里",
+      "siteAddressLabel": "在您的网站上",
+      "siteAddressNote": "您已发布的网站会在自有域名上提供这些处理程序，因此页面可直接调用 fetch('/api/…')，无需令牌。上面的地址仍可用于服务商 Webhook。",
       "deployedNote": "本项目部署在你自己的 Cloudflare 账号上，因此这是你的 Worker 地址，而非 Builderforce 入口。",
       "strategyLabel": "运行位置",
       "endpointsLabel": "当前已上线的接口",
@@ -13722,8 +13726,47 @@
       "colRoute": "路径",
       "colStatus": "状态码",
       "colVerdict": "结果",
-      "refresh": "刷新"
-    }
+      "refresh": "刷新",
+      "pauseIngress": "暂停入口",
+      "resumeIngress": "恢复入口",
+      "pauseHint": "暂停后，所有入站请求会在几秒内返回 404 —— 这是针对异常或已泄露接口的紧急开关。",
+      "pausedNote": "已暂停。所有入站请求均被拒绝；服务商会重试或将 Webhook 标记为失败。",
+      "workerHealthLabel": "已部署的 Worker",
+      "workerUnreachable": "无法连接已部署的 Worker：{reason}",
+      "workerMissingSecrets": "已部署，但以下密钥尚未在 Worker 中绑定：{names}。在你将它们添加为仓库密钥并重新部署之前，请求会被拒绝。",
+      "workerReady": "可达，预期的 {count} 个密钥均已绑定。",
+      "addHandler": "添加接口",
+      "noHandlers": "还没有接口。自己添加一个，或构建一个挑战来生成。",
+      "edit": "编辑",
+      "newHandler": "新建接口",
+      "editHandler": "正在编辑 {name}",
+      "handlerName": "名称",
+      "handlerRoute": "路径",
+      "handlerMethod": "方法",
+      "handlerVerify": "验签方式",
+      "handlerDescription": "描述",
+      "handlerSteps": "步骤",
+      "handlerRespond": "响应",
+      "stepsHelp": "一个 JSON 数组。每个步骤为 llm、connector、set 或 data 之一，并具有唯一 id。data 步骤会读取您网站的某个集合。模板可读取 body、query、headers、project 和 steps——绝不包括密钥。",
+      "respondHelp": "一个 JSON 对象，kind 为 twiml、json、text 或 empty。",
+      "verifyNoneWarning": "未验签：任何知道此 URL 的人都可以调用它。仅当该接口可安全地匿名调用时才选择此项。",
+      "invalidJson": "这不是有效的 JSON。",
+      "stepsMustBeArray": "步骤必须是一个 JSON 数组。",
+      "saveHandler": "保存接口",
+      "saving": "正在保存…",
+      "cancel": "取消",
+      "verdict": {
+        "ok": "正常",
+        "unverified": "未验签",
+        "no-handler": "无 handler",
+        "rate-limited": "限流",
+        "error": "错误"
+      },
+      "handlerVerifySecret": "密钥名称（可选）",
+      "handlerVerifySecretPlaceholder": "STRIPE_WEBHOOK_SECRET_PAYMENT_FAILED",
+      "verifySecretHelp": "留空则使用该服务商的默认密钥。当服务商为每个端点签发不同的签名密钥时才需要填写 —— Stripe 就是如此，因此每条 Stripe 路由都需要各自的密钥。"
+    },
+    "builtDispatched": "已有智能体在处理 {count} 个构建工单。"
   },
   "site": {
     "domain": {

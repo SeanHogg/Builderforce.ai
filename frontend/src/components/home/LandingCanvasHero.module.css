@@ -98,6 +98,17 @@
   box-shadow: 0 24px 60px var(--shadow-coral-soft), inset 0 1px 0 var(--surface-inset-highlight);
 }
 
+/*
+ * The objects live in a field that stops short of the bottom, so the composer
+ * owns an exclusive lane. Positioning the nodes as a percentage of the FIELD
+ * (rather than the board) is what makes that hold at every board height — at the
+ * 390px floor, board-relative percentages put the lower nodes under the composer.
+ */
+.field {
+  position: absolute;
+  inset: 0 0 152px;
+}
+
 .wires {
   position: absolute;
   inset: 0;
@@ -127,7 +138,10 @@
   padding: 11px 13px;
   border: 1px solid var(--border-subtle);
   border-radius: 13px;
-  background: var(--surface-card-strong);
+  /* --bg-elevated, not --surface-card-strong: the board ground is --bg-surface,
+     which is pure white in light mode, so a translucent white card would wash
+     out against it. This reads as a distinct card in BOTH themes. */
+  background: var(--bg-elevated);
   box-shadow: 0 14px 32px var(--shadow-coral-soft);
   color: var(--text-primary);
   font-family: inherit;
@@ -241,7 +255,7 @@
   padding: 6px 13px;
   border: 1px solid var(--border-subtle);
   border-radius: 999px;
-  background: var(--surface-card-strong);
+  background: var(--bg-elevated);
   color: var(--text-secondary);
   font-size: 0.78rem;
   cursor: pointer;

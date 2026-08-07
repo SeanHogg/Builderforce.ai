@@ -31,6 +31,7 @@ import { authFieldsFor } from '../../connectors/connectorManifest';
 import { BUILDERFORCE_OIDC_AUDIENCE } from '../../ide/githubOidc';
 import {
   STRIPE_TIMESTAMP_TOLERANCE_SECONDS,
+  verifySecretNameFor,
   VERIFY_SECRET_NAME,
   VERIFY_SIGNATURE_HEADER,
 } from '../webhookVerification';
@@ -73,7 +74,8 @@ export function requiredWorkerSecrets(ctx: MaterializeContext): string[] {
     }
   }
   for (const handler of ctx.handlers) {
-    if (handler.verify !== 'none') names.add(VERIFY_SECRET_NAME[handler.verify]);
+    const secret = verifySecretNameFor(handler);
+    if (secret) names.add(secret);
     if (handler.steps.some((s) => s.kind === 'llm')) names.add('BUILDERFORCE_API_KEY');
   }
   return [...names].sort();
@@ -593,6 +595,9 @@ async function callLlm(env: Env, args: { system?: string; prompt: string; maxTok
  */
 const EXPECTED_SECRETS = ${json(requiredWorkerSecrets(ctx))} as string[];
 
+/** Default secret name per verification kind. A handler's own \`verifySecret\` wins. */
+const VERIFY_SECRET_DEFAULT: Record<string, string> = ${json(VERIFY_SECRET_NAME)};
+
 // ── Request handling ────────────────────────────────────────────────────────
 
 export default {
@@ -627,18 +632,22 @@ export default {
       try { body = JSON.parse(rawBody); } catch { body = { raw: rawBody }; }
     }
 
+    // A handler may name its OWN secret — Stripe issues one per ENDPOINT, so a
+    // single default name could only ever verify one of several Stripe routes.
+    const verifySecret = handler.verify === 'none' ? undefined : env[handler.verifySecret ?? VERIFY_SECRET_DEFAULT[handler.verify]];
+
     if (handler.verify === 'twilio') {
-      const failure = await verifyTwilio(request.url, formParams, request.headers.get('${VERIFY_SIGNATURE_HEADER.twilio}'), env.${VERIFY_SECRET_NAME.twilio});
+      const failure = await verifyTwilio(request.url, formParams, request.headers.get('${VERIFY_SIGNATURE_HEADER.twilio}'), verifySecret);
       if (failure) return new Response(failure, { status: 403 });
     } else if (handler.verify === 'stripe') {
-      const failure = await verifyStripe(rawBody, request.headers.get('${VERIFY_SIGNATURE_HEADER.stripe}'), env.${VERIFY_SECRET_NAME.stripe});
+      const failure = await verifyStripe(rawBody, request.headers.get('${VERIFY_SIGNATURE_HEADER.stripe}'), verifySecret);
       if (failure) return new Response(failure, { status: 403 });
     } else if (handler.verify === 'shopify') {
-      const failure = await verifyShopify(rawBody, request.headers.get('${VERIFY_SIGNATURE_HEADER.shopify}'), env.${VERIFY_SECRET_NAME.shopify});
+      const failure = await verifyShopify(rawBody, request.headers.get('${VERIFY_SIGNATURE_HEADER.shopify}'), verifySecret);
       if (failure) return new Response(failure, { status: 403 });
     } else if (handler.verify === 'shared-secret') {
       const signature = request.headers.get('${VERIFY_SIGNATURE_HEADER['shared-secret']}') ?? request.headers.get('x-hub-signature-256');
-      const failure = await verifySharedSecret(rawBody, signature, env.${VERIFY_SECRET_NAME['shared-secret']});
+      const failure = await verifySharedSecret(rawBody, signature, verifySecret);
       if (failure) return new Response(failure, { status: 403 });
     }
 

@@ -47,6 +47,23 @@ export const VERIFY_SIGNATURE_HEADER: Record<Exclude<VerifyKind, 'none'>, string
 };
 
 /**
+ * The project secret a handler verifies against: its own override if it declares
+ * one, else the kind's default.
+ *
+ * Written once because three callers need the same answer — the ingress, the
+ * panel's "which secrets are still missing" list, and the Worker generator. If
+ * they disagreed, the panel would ask for a secret the runtime never reads, or
+ * the generated Worker would ship without one it does.
+ */
+export function verifySecretNameFor(handler: {
+  verify: VerifyKind;
+  verifySecret?: string;
+}): string | null {
+  if (handler.verify === 'none') return null;
+  return handler.verifySecret ?? VERIFY_SECRET_NAME[handler.verify];
+}
+
+/**
  * How far a Stripe signature's timestamp may be from now.
  *
  * Stripe includes the signing timestamp INSIDE the signed payload precisely so a
