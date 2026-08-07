@@ -6107,8 +6107,9 @@ export const rfpApi = {
 export type IntegrationProvider =
   | 'github' | 'gitlab' | 'bitbucket' | 'jira' | 'confluence' | 'freshservice' | 'freshdesk'
   | 'servicenow' | 'linear' | 'sentry' | 'pagerduty' | 'monday' | 'asana' | 'clickup'
-  // BYO web-search vendor key — unlocks the cloud agent's `web_search` tool.
-  | 'brave_search'
+  // BYO web-search vendor keys — widen `web_search` from the keyless encyclopedic
+  // floor to a full open-web index. Optional: search works without any of them.
+  | 'tavily' | 'exa' | 'linkup'
   // Google connectors (OAuth offline credentials): Gmail powers the email
   // workflow node; Google Drive can back a project's file storage.
   | 'gmail' | 'google_drive';

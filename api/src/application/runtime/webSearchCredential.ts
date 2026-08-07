@@ -8,13 +8,17 @@
  * — while `geo.geocode`, the step AFTER it, worked keylessly for everyone. So this is
  * now a PRECEDENCE, and it always resolves:
  *
- *   1. the tenant's own key (`integration_credentials` — the SAME per-tenant vault every
- *      other non-LLM vendor uses: per-tenant PBKDF2 derivation, `is_enabled` health
- *      flag, one CRUD surface at /api/integrations),
- *   2. an OPERATOR-wide key (`BRAVE_SEARCH_API_KEY`, unset by default — this exists so a
- *      self-hoster CAN fund wide search for everyone, not because the platform does),
- *   3. the KEYLESS vendor — no account, no meter, attribution-only licence. Narrower
- *      coverage, stated as such in the result, but real citable sources.
+ *   1. the tenant's own key for a keyed vendor — Tavily, then Exa, then Linkup — from
+ *      `integration_credentials`, the SAME per-tenant vault every other non-LLM vendor
+ *      uses (per-tenant PBKDF2 derivation, `is_enabled` health flag, one CRUD surface at
+ *      /api/integrations),
+ *   2. the OPERATOR's own SearXNG instance (`SEARXNG_URL`, unset by default). Open-web
+ *      coverage with no vendor account, no per-query meter, and no third party learning
+ *      what a tenant researches — the right shape for a self-hosted product, which is
+ *      why it sits above the keyless floor and below a tenant's deliberate choice,
+ *   3. the KEYLESS vendor — no account, no meter, no infrastructure, attribution-only
+ *      licence. Narrower coverage, stated as such in the result, but real citable
+ *      sources.
  *
  * (The LLM BYO table, `tenant_llm_provider_keys`, is deliberately NOT reused: its
  * `provider` union means "vendor that serves models", and widening it would leak a
@@ -32,16 +36,17 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { decryptCredentials } from '../integrations/credentialCrypto';
 import {
-  CREDENTIALED_WEB_SEARCH_VENDOR_IDS, braveSearchVendor, webSearchVendor, wikipediaSearchVendor,
-  type WebSearchVendor,
+  CREDENTIALED_WEB_SEARCH_VENDOR_IDS, searxngSearchVendor, webSearchVendor, wikipediaSearchVendor,
+  type WebSearchAuth, type WebSearchVendor,
 } from './webSearchVendors';
 
 export interface ResolvedWebSearchBacking {
   vendor: WebSearchVendor;
-  /** null for a keyless vendor — the adapter ignores it. */
-  apiKey: string | null;
+  /** How the chosen vendor is addressed/authenticated. Both fields are absent-or-null
+   *  for the keyless floor — see {@link WebSearchAuth}. */
+  auth: WebSearchAuth;
   /** Where the backing came from — surfaced in the run log so an operator can tell a
-   *  tenant's own key from the operator-wide floor from the keyless fallback. */
+   *  tenant's own key from the operator's own instance from the keyless fallback. */
   source: 'tenant' | 'operator' | 'keyless';
 }
 
@@ -61,15 +66,15 @@ function pickApiKey(creds: Record<string, unknown>): string | null {
 }
 
 /**
- * The backing available to a surface with NO tenant in scope — the operator key if the
- * deployment funds one, else the keyless vendor. This is what the logged-out guest
- * canvas searches with, and it is also the floor beneath every tenant lookup, so the
- * "what does search fall back to" answer exists in exactly one place.
+ * The backing available to a surface with NO tenant in scope — the operator's own
+ * SearXNG instance if the deployment runs one, else the keyless vendor. This is what the
+ * logged-out guest canvas searches with, and it is also the floor beneath every tenant
+ * lookup, so the "what does search fall back to" answer exists in exactly one place.
  */
 export function platformWebSearchBacking(env: Env | undefined): ResolvedWebSearchBacking {
-  const operatorKey = env?.BRAVE_SEARCH_API_KEY?.trim();
-  if (operatorKey) return { vendor: braveSearchVendor, apiKey: operatorKey, source: 'operator' };
-  return { vendor: wikipediaSearchVendor, apiKey: null, source: 'keyless' };
+  const searxngUrl = env?.SEARXNG_URL?.trim();
+  if (searxngUrl) return { vendor: searxngSearchVendor, auth: { apiKey: null, baseUrl: searxngUrl }, source: 'operator' };
+  return { vendor: wikipediaSearchVendor, auth: { apiKey: null }, source: 'keyless' };
 }
 
 /**
@@ -103,13 +108,17 @@ export async function resolveWebSearchBacking(
           inArray(integrationCredentials.provider, [...CREDENTIALED_WEB_SEARCH_VENDOR_IDS]),
         ));
 
-      for (const row of rows) {
-        const vendor = webSearchVendor(row.provider);
-        if (!vendor || vendor.keyless) continue;
+      // Walk the port's id list in ITS order, not the rows' — a tenant with two keys
+      // connected gets the documented precedence rather than whichever row the planner
+      // happened to return first.
+      for (const id of CREDENTIALED_WEB_SEARCH_VENDOR_IDS) {
+        const row = rows.find((candidate) => candidate.provider === id);
+        const vendor = row ? webSearchVendor(row.provider) : null;
+        if (!row || !vendor || vendor.keyless) continue;
         const creds = await decryptCredentials(row.credentialsEnc, row.iv, secret, tenantId);
         if (!creds) continue;
         const apiKey = pickApiKey(creds);
-        if (apiKey) return { vendor, apiKey, source: 'tenant' };
+        if (apiKey) return { vendor, auth: { apiKey }, source: 'tenant' };
       }
     }
   } catch (error) {

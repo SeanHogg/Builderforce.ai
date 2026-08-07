@@ -1717,13 +1717,14 @@ function buildCloudProvider(args: {
     coordination: buildCoordinationCapability({ env, db, holder: leaseHolder }),
     // Read a public URL (docs / an API spec / a linked issue) so the agent isn't
     // limited to what the repo already contains — and discover that URL in the first
-    // place. The search backing always resolves (tenant BYO key → operator key →
-    // keyless encyclopedic floor), so both halves are always wired; what a key buys is
-    // WIDER coverage, which the result states. SSRF egress policy + byte cap + timeout
-    // + the read-through cache + per-query metering all live in cloudWeb.
+    // place. The search backing always resolves (tenant BYO key → the operator's own
+    // SearXNG → keyless encyclopedic floor), so both halves are always wired; what a key
+    // or an instance buys is WIDER coverage, which the result states. SSRF egress policy
+    // + byte cap + timeout + the read-through cache + per-query metering all live in
+    // cloudWeb.
     web: buildCloudWebCapability({
       env,
-      search: { vendor: args.webSearch.vendor, apiKey: args.webSearch.apiKey, meter: { db, tenantId } },
+      search: { vendor: args.webSearch.vendor, auth: args.webSearch.auth, meter: { db, tenantId } },
     }),
   };
 }

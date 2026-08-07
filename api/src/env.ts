@@ -170,15 +170,23 @@ export interface Env {
    *  Set via `wrangler secret put VOYAGE_API_KEY` (or api/.env + `npm run secrets:from-env`). */
   VOYAGE_API_KEY?: string;
 
-  /** OPTIONAL operator-wide Brave Search API key — the MIDDLE tier of the search-backing
-   *  precedence in `webSearchCredential.ts`: a tenant's own BYO key in
-   *  `integration_credentials` (provider `brave_search`) always wins over it, and beneath
-   *  it sits the keyless encyclopedic vendor that needs no account at all. Set this only
-   *  if you are self-hosting and want to fund WIDE (general web index) search for every
-   *  tenant and for logged-out visitors; search works without it, just against a
+  /** OPTIONAL origin of a SearXNG instance YOU run, e.g. `https://search.internal` or
+   *  `http://searxng:8080` — the MIDDLE tier of the search-backing precedence in
+   *  `webSearchCredential.ts`. A tenant's own BYO key (Tavily/Exa/Linkup, in
+   *  `integration_credentials`) wins over it; beneath it sits the keyless encyclopedic
+   *  vendor that needs nothing at all.
+   *
+   *  This is the recommended way to give every tenant and every logged-out visitor real
+   *  OPEN-WEB search: no vendor account, no per-query meter, and no third party learning
+   *  what your users research. The instance must enable `formats: [json]` in its
+   *  settings.yml, or it will answer API requests with a 403.
+   *
+   *  A PRIVATE address is expected and allowed here — this is operator configuration,
+   *  not an untrusted URL, so it is deliberately exempt from the egress policy that
+   *  guards model- and index-supplied URLs. Search works without it, just against a
    *  narrower index, and the tool result says which it used.
-   *  Set via `wrangler secret put BRAVE_SEARCH_API_KEY`. */
-  BRAVE_SEARCH_API_KEY?: string;
+   *  Set via `wrangler secret put SEARXNG_URL` (or api/.env + `npm run secrets:from-env`). */
+  SEARXNG_URL?: string;
 
   /** R2 bucket for file uploads. */
   UPLOADS?: R2Bucket;

@@ -25,9 +25,10 @@ import { reportCaughtError } from '../observability/caughtErrorReporter';
  * invalidated immediately after (a transient 502 must not be pinned for the TTL).
  *
  * `search` is the second half, and it is ALWAYS present — but its BACKING varies. A
- * tenant BYO key buys a general web index, an operator key funds one for everybody, and
- * beneath both sits a keyless encyclopedic vendor so a fresh workspace (or a logged-out
- * visitor) can still research something. Precedence lives in one place
+ * tenant BYO key (Tavily/Exa/Linkup) buys a general web index, an operator's own SearXNG
+ * instance gives one to everybody with no vendor account at all, and beneath both sits a
+ * keyless encyclopedic vendor so a fresh workspace (or a logged-out visitor) can still
+ * research something. Precedence lives in one place
  * (`webSearchCredential.resolveWebSearchBacking`); the vendor itself is behind a port
  * (`webSearchVendors.ts`); and {@link searchWeb} is the ONE cached, metered execution
  * path every surface — cloud agent, Brain MCP tool, guest canvas — calls.
@@ -38,7 +39,7 @@ import type { Env } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 import { getOrSetCached, invalidateCached } from '../../infrastructure/cache/readThroughCache';
 import { enforceOutboundFetchCap, recordOutboundFetch } from '../web/outboundFetchLedger';
-import type { WebSearchVendor } from './webSearchVendors';
+import type { WebSearchAuth, WebSearchVendor } from './webSearchVendors';
 
 /** Hard ceiling on bytes read off one response. Beyond this the content is truncated
  *  (and flagged) rather than the fetch failing — a truncated doc is still useful. */
@@ -365,12 +366,12 @@ export async function fetchVendorJson(url: string, opts: {
   }
 }
 
-/** Everything the `search` half needs: which vendor adapter to call, the resolved key
- *  (null for a keyless vendor), and — when a tenant is in scope — who to meter the
- *  query against. Assembled from {@link resolveWebSearchBacking}. */
+/** Everything the `search` half needs: which vendor adapter to call, how it is addressed
+ *  and authenticated, and — when a tenant is in scope — who to meter the query against.
+ *  Assembled from {@link resolveWebSearchBacking}. */
 export interface CloudWebSearchBacking {
   vendor: WebSearchVendor;
-  apiKey: string | null;
+  auth: WebSearchAuth;
   /** Consumption metering. Search bills per QUERY, so a real (uncached) query is one
    *  outbound fetch on the tenant's meter — same unit, same ledger as the Brain's
    *  `/fetch-url` proxy. Omitted where no tenant DB is in scope: the logged-out guest
@@ -396,7 +397,7 @@ export function normalizeSearchQuery(raw: string): string {
  * so an authed Brain research turn re-paid for every repeated query).
  */
 export async function searchWeb(env: Env, backing: CloudWebSearchBacking, rawQuery: string): Promise<WebSearchResult> {
-  const { vendor, apiKey, meter } = backing;
+  const { vendor, auth, meter } = backing;
   const query = (rawQuery ?? '').trim();
   if (!query) return { ok: false, query, error: 'query is required' };
 
@@ -419,7 +420,7 @@ export async function searchWeb(env: Env, backing: CloudWebSearchBacking, rawQue
         };
       }
     }
-    const r = await vendor.search(query, apiKey);
+    const r = await vendor.search(query, auth);
     if (r.ok && meter) {
       await recordOutboundFetch(meter.db, meter.tenantId, vendor.endpoint)
         .catch((error) => reportCaughtError(error, { source: "application/runtime/cloudWeb.ts", operation: "searchWeb", context: { logMessage: '[cloud-web] search usage ledger write failed', details: { tenantId: meter.tenantId, vendor: vendor.id, error } } }));

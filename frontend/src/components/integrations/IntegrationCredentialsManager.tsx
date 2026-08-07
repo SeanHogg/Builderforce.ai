@@ -69,7 +69,9 @@ export const PROVIDER_META: Record<IntegrationProvider, ProviderMeta> = {
   // The label is the BRAND NAME only: it is substituted into localized sentences
   // ("Add {provider} key", "Edit {provider} key"), so an English parenthetical here
   // both breaks those sentences and ships untranslatable copy through the catalog.
-  brave_search: { label: 'Brave Search', baseUrl: false, secrets: [{ key: 'apiKey', label: 'Subscription token', placeholder: 'BSA…' }] },
+  tavily: { label: 'Tavily', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key', placeholder: 'tvly-…' }] },
+  exa: { label: 'Exa', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key', placeholder: 'exa_…' }] },
+  linkup: { label: 'Linkup', baseUrl: false, secrets: [{ key: 'apiKey', label: 'API key', placeholder: 'lp_…' }] },
   // Google connectors — OAuth offline credentials (client id/secret + a refresh
   // token from Google's OAuth playground or your own consent flow). Gmail backs
   // the email workflow node; Drive can back a project's file storage.

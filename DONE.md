@@ -4,6 +4,74 @@
 
 ---
 
+## ✅ RESOLVED 2026-08-07 — The document on the canvas is now a document you can write and take away
+
+Asking the canvas for a document produced a document you could only read. Fixing
+one sentence meant finding the object in the inspector and editing markdown in a
+side-panel textarea; getting a file out of it meant finding a different button on
+that same panel. Three surfaces for one document, and one of them required
+knowing markdown. The card now carries both: a word-processor editor and the
+download.
+
+**A `contenteditable` surface over markdown, not a second storage format.**
+`frontend/src/lib/richText.ts` is the one conversion — `markdownToHtml` opens the
+stored body for editing and for printing, `htmlToMarkdown` reads it back. The
+pair is round-trip stable for everything it emits (24 tests in `richText.test.ts`,
+including a stability assertion on a second pass), which is what makes editing
+lossless: opening a document and closing it without typing does not rewrite it.
+Markdown stays the only stored form, so the card, the Files library, Brain's
+context, and the `/api/exports` .docx writer all keep reading the document they
+always did. Browser editing commands are normalised on the way back —
+`<span style="font-weight:bold">`, `<font>`, a `<div>` per line — so what a given
+engine happens to emit never reaches storage.
+
+**Page breaks survive the editor.** A document imported from Word or PDF carries
+`<!--page-break-->` markers, and the card's paginated read strips them. Feeding
+that flattened read back would have collapsed a twenty-page file to one page, so
+the editor works on the RAW authored body and the converter round-trips HTML
+comments as real comment nodes.
+
+**`DocumentEditor.tsx`** — undo/redo, a block-style select (paragraph, H1–H3,
+quote, code block), bold/italic/strikethrough/inline code, bulleted and numbered
+lists, links, horizontal rule, clear formatting. Toolbar state reflects the caret
+(`selectionchange`), presses do not steal the selection, and the body commits on
+blur, on `Ctrl/⌘+S`, and 1.2s after the last keystroke. Underline is deliberately
+absent: markdown has no underline, so the button would have produced a style that
+vanished on save. React never owns the surface's children — it writes them once
+and the browser mutates them under the caret.
+
+**Word and PDF from the card.** `frontend/src/lib/printDocument.ts` renders the
+same HTML into a hidden print frame, where "Save as PDF" lives on every platform
+— no PDF library, no bundle weight, and it is the one export a GUEST session can
+finish, since `/api/exports` is authenticated. `'pdf'` joined the export
+taxonomy, which moved out of the 12k-line board component into
+`frontend/src/lib/canvasExports.ts` (`CanvasExportAction`, `EXPORT_MIME`,
+`OFFICE_DOCUMENT_KINDS`, `defaultExportAction`) so the card, the inspector, and
+the Files library read one list instead of the card importing the board that
+renders it.
+
+**Two DRY fixes carried in the same pass.** `cardsEditable` (`canEdit &&
+!lockBlocked`) is now one gate read by both the writer and the cards, so a viewer
+or a lock-blocked editor gets no Edit control rather than an inert one — which
+also removed the dead editing UI the spreadsheet card had been showing. And the
+Word button's inline four-kind list became `OFFICE_DOCUMENT_KINDS`, so the card
+and the inspector cannot offer different formats for the same object.
+
+Files: `frontend/src/lib/richText.ts` (+ `richText.test.ts`),
+`frontend/src/lib/printDocument.ts`, `frontend/src/lib/canvasExports.ts`,
+`frontend/src/components/creation-canvas/DocumentEditor.tsx`,
+`CreationNode.tsx` (`DocumentBody`), `CreationCanvas.tsx`,
+`CreationCanvas.module.css`, all five i18n catalogs (`creationCanvas.editor.*`
++ `creationCanvas.node.document*` + `downloadPdf`/`printOpened`/
+`printUnavailable`; the now-unused `markdownDownloaded` was renamed in place to
+`markdownDownloadedUsePdf` and its copy points a guest at the PDF export).
+
+Open follow-ups in the roadmap: a guest still cannot produce .docx (blocked on a
+packaging-or-auth decision), and the capability contract still advertises PDF for
+four kinds that cannot produce one.
+
+---
+
 ## ✅ RESOLVED 2026-08-07 — Research works with no key and no account, including logged out
 
 Anonymous visitors and free workspaces were asking the canvas to research things

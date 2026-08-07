@@ -2497,7 +2497,7 @@ const CATALOG: BuiltinTool[] = [
   //       per-query metering, failed-query invalidation) is the shared `searchWeb`. ----
   {
     tool: 'web.search', mutates: false,
-    description: 'Search the public web and return ranked results ({ title, url, snippet }) plus `coverage` and `attribution`. Use this FIRST when the user asks you to research a subject, find sources, or collect facts you do not already hold — then read the promising results with web.fetch and build the artifact from what you actually read. Do not answer a research request from memory. When `coverage` is "encyclopedic" the index is narrower than a full web engine: still cite what you found, and note that connecting a Brave Search key under Settings → Integrations widens it.',
+    description: 'Search the public web and return ranked results ({ title, url, snippet }) plus `coverage` and `attribution`. Use this FIRST when the user asks you to research a subject, find sources, or collect facts you do not already hold — then read the promising results with web.fetch and build the artifact from what you actually read. Do not answer a research request from memory. When `coverage` is "encyclopedic" the index is narrower than a full web engine: still cite what you found, and note that connecting a Tavily, Exa, or Linkup key under Settings → Integrations (or pointing the deployment at a self-hosted SearXNG instance) widens it to the open web.',
     parameters: obj({ query: { ...S, description: 'What to search for, phrased as a search engine query.' } }, ['query']),
     run: async (ctx, a) => {
       const query = normalizeSearchQuery(str(a.query));

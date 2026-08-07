@@ -19,7 +19,7 @@
  */
 
 import { githubStatusMessage } from './githubTestError';
-import { braveSearchVendor } from '../runtime/webSearchVendors';
+import { exaSearchVendor, linkupSearchVendor, tavilySearchVendor, type WebSearchVendor } from '../runtime/webSearchVendors';
 import { testGmail, testGoogleDrive } from './googleOAuth';
 import {
   CATALOG_PROVIDER_IDS,
@@ -62,15 +62,20 @@ async function testGitHub(creds: Record<string, unknown>): Promise<TestResult> {
 
 /** Connectivity test for a BYO web-search key: run one real query through the SAME
  *  vendor adapter the agent uses, so "Test" proves exactly what `web_search` will do
- *  (right key, right endpoint, right parse) rather than a look-alike request. */
-async function testBraveSearch(creds: Record<string, unknown>): Promise<TestResult> {
-  const raw = creds.apiKey ?? creds.apiToken ?? creds.token;
-  const key = typeof raw === 'string' ? raw.trim() : '';
-  if (!key) return { ok: false, message: 'apiKey is required' };
-  const r = await braveSearchVendor.search('builderforce connectivity check', key);
-  return r.ok
-    ? { ok: true, message: `Connected — ${r.results?.length ?? 0} result(s). Research now searches the full web index instead of the keyless encyclopedic one.` }
-    : { ok: false, message: r.error ?? 'Search request failed' };
+ *  (right key, right endpoint, right parse) rather than a look-alike request.
+ *
+ *  One factory for every keyed search vendor — the adapters already differ where they
+ *  need to, and a per-vendor copy of this would only differ in the noun. */
+function testWebSearchVendor(vendor: WebSearchVendor) {
+  return async (creds: Record<string, unknown>): Promise<TestResult> => {
+    const raw = creds.apiKey ?? creds.apiToken ?? creds.token;
+    const key = typeof raw === 'string' ? raw.trim() : '';
+    if (!key) return { ok: false, message: 'apiKey is required' };
+    const r = await vendor.search('builderforce connectivity check', { apiKey: key });
+    return r.ok
+      ? { ok: true, message: `Connected — ${r.results?.length ?? 0} result(s). Research now searches ${vendor.label}'s full web index instead of the keyless encyclopedic one.` }
+      : { ok: false, message: r.error ?? 'Search request failed' };
+  };
 }
 
 async function testJira(creds: Record<string, unknown>, baseUrl: string | null): Promise<TestResult> {
@@ -232,7 +237,9 @@ const LEGACY_TESTS: Record<string, ProviderTest> = {
   monday: testMonday,
   asana: testAsana,
   clickup: testClickUp,
-  brave_search: testBraveSearch,
+  tavily: testWebSearchVendor(tavilySearchVendor),
+  exa: testWebSearchVendor(exaSearchVendor),
+  linkup: testWebSearchVendor(linkupSearchVendor),
   gmail: (creds) => testGmail(creds),
   google_drive: (creds) => testGoogleDrive(creds),
 };

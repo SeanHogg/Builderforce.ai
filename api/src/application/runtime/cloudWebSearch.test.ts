@@ -34,7 +34,7 @@ const db = {} as Db;
 function fakeVendor(result: WebSearchResult = { ok: true, query: 'q', results: [{ url: 'https://example.com' }] }) {
   const search = vi.fn(async (query: string): Promise<WebSearchResult> => ({ ...result, query }));
   const vendor: WebSearchVendor = {
-    id: 'brave_search', label: 'Fake', endpoint: 'https://vendor.example/search',
+    id: 'tavily', label: 'Fake', endpoint: 'https://vendor.example/search',
     coverage: 'web', attribution: 'Fake', keyless: false, credentialField: 'apiKey', search,
   };
   return { vendor, search };
@@ -55,7 +55,7 @@ describe('always backed', () => {
   });
 
   it('runs a KEYLESS backing without an apiKey', async () => {
-    const search = vi.fn(async (query: string, apiKey: string | null): Promise<WebSearchResult> => {
+    const search = vi.fn(async (query: string): Promise<WebSearchResult> => {
       expect(apiKey).toBeNull();
       return { ok: true, query, results: [], coverage: 'encyclopedic' };
     });
@@ -130,7 +130,7 @@ describe('search execution + cache', () => {
 describe('consumption metering', () => {
   it('records one outbound fetch per REAL query', async () => {
     const { vendor } = fakeVendor();
-    const web = buildCloudWebCapability({ env, search: { vendor, apiKey: 'k', meter: { db, tenantId: 7 } } });
+    const web = buildCloudWebCapability({ env, search: { vendor, auth: { apiKey: 'k' }, meter: { db, tenantId: 7 } } });
     await web.search!('metered query');
     expect(recordOutboundFetch).toHaveBeenCalledTimes(1);
     expect(recordOutboundFetch).toHaveBeenCalledWith(db, 7, vendor.endpoint);
@@ -138,7 +138,7 @@ describe('consumption metering', () => {
 
   it('does NOT meter or gate a cache hit', async () => {
     const { vendor } = fakeVendor();
-    const web = buildCloudWebCapability({ env, search: { vendor, apiKey: 'k', meter: { db, tenantId: 7 } } });
+    const web = buildCloudWebCapability({ env, search: { vendor, auth: { apiKey: 'k' }, meter: { db, tenantId: 7 } } });
     await web.search!('cached query');
     await web.search!('cached query');
     expect(recordOutboundFetch).toHaveBeenCalledTimes(1);
@@ -148,7 +148,7 @@ describe('consumption metering', () => {
   it('refuses a query once the tenant is over its monthly allowance', async () => {
     enforceOutboundFetchCap.mockResolvedValue({ allowed: false, effectivePlan: 'free', used: 500, limit: 500 } as never);
     const { vendor, search } = fakeVendor();
-    const web = buildCloudWebCapability({ env, search: { vendor, apiKey: 'k', meter: { db, tenantId: 7 } } });
+    const web = buildCloudWebCapability({ env, search: { vendor, auth: { apiKey: 'k' }, meter: { db, tenantId: 7 } } });
     const r = await web.search!('over cap');
     expect(r.ok).toBe(false);
     expect(r.error).toMatch(/allowance exhausted/);
