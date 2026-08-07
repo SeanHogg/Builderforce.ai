@@ -2,6 +2,10 @@ import type { CreationObjectKind } from './types';
 
 export interface CreationTemplate {
   id: string;
+  /** English source text for the pack's name and blurb. The menu renders
+   * `creationCanvas.template.<id>.name` / `.description` from the message
+   * catalogs and falls back to these, so a pack is never nameless while a
+   * translation is being added — but a shipped pack IS translated. */
   name: string;
   description: string;
   category: 'Marketplace template' | 'Object pack';
@@ -111,6 +115,25 @@ export const CREATION_TEMPLATES: readonly CreationTemplate[] = [
       { kind: 'file', title: 'Exported files', x: 430, y: 330 },
     ],
     connections: [{ source: 0, target: 1, label: 'supports' }, { source: 0, target: 2, label: 'presents' }, { source: 1, target: 3, label: 'exports' }, { source: 2, target: 3, label: 'exports' }],
+  },
+  {
+    id: 'pitch-competition', name: 'Pitch competition war room', category: 'Marketplace template',
+    description: 'Enter a pitch competition and win it: the written entry, the timed pitch, the judging scorecard, the judge Q&A drill, and the deck — scored against the competition’s own rules.',
+    objects: [
+      { kind: 'pitchApplication', title: 'Competition entry', x: 0, y: 0 },
+      { kind: 'pitch', title: 'Three-minute pitch', x: 520, y: 0 },
+      { kind: 'pitchScorecard', title: 'Judging scorecard', x: 1040, y: 0 },
+      { kind: 'pitchQa', title: 'Judge Q&A drill', x: 0, y: 380 },
+      { kind: 'slides', title: 'Pitch deck', x: 520, y: 380 },
+      { kind: 'agent', title: 'Pitch coach', x: 1040, y: 380 },
+    ],
+    connections: [
+      { source: 0, target: 1, label: 'qualifies' },
+      { source: 1, target: 2, label: 'is scored by' },
+      { source: 1, target: 4, label: 'presents' },
+      { source: 2, target: 3, label: 'anticipates' },
+      { source: 5, target: 2, label: 'coaches' },
+    ],
   },
   {
     id: 'interactive-3d', name: 'Games & 3D studio', category: 'Marketplace template',

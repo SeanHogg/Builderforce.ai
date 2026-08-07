@@ -572,6 +572,65 @@
 .standupRoster span { display:grid; grid-template-columns:24px 1fr; column-gap:6px; align-items:center; min-width:115px; padding:6px; border:1px solid #eadfce; border-radius:8px; background:#fff; }
 .standupRoster i { grid-row:1/3; display:grid; place-items:center; width:24px; height:24px; border-radius:50%; background:#f5a94c; color:#fff; font-style:normal; font-weight:700; }.standupRoster b { font-size:9px; }.standupRoster small { color:#8a7c69; font-size:7px; }
 .standupSummary { padding:8px; border-left:3px solid #f5a94c; border-radius:5px; background:#fff6e8; }.standupSummary b { color:#a85e08; font-size:8px; }.standupSummary p { margin:3px 0 0; font-size:9px; }
+/* Pitch objects — the timed story, its rubric, its judge Q&A, and the written
+   entry. Every colour is a canvas token or a tone mixed into one, so the same
+   markup reads in light and dark; every grid is auto-fit so a card that is
+   resized narrow reflows instead of overflowing the board. */
+.node_pitch,.node_pitchScorecard,.node_pitchQa,.node_pitchApplication { width:455px; }
+/* Tone is the board's own success/warning/danger palette, which is already
+   declared for BOTH themes — a pitch card never invents a colour of its own. */
+.pitchBody { display:grid; gap:9px; --pitch-mark:var(--tone-info-mark); --pitch-ink:var(--tone-info-ink); --pitch-bg:var(--tone-info-bg); }
+.pitchBody [data-tone='good'] { --pitch-mark:var(--tone-success-mark); --pitch-ink:var(--tone-success-ink); --pitch-bg:var(--tone-success-bg); }
+.pitchBody [data-tone='watch'] { --pitch-mark:var(--tone-warning-mark); --pitch-ink:var(--tone-warning-ink); --pitch-bg:var(--tone-warning-bg); }
+.pitchBody [data-tone='risk'] { --pitch-mark:var(--tone-danger-mark); --pitch-ink:var(--tone-danger-ink); --pitch-bg:var(--tone-danger-bg); }
+.pitchClock,.pitchReadiness { display:grid; grid-template-columns:repeat(auto-fit,minmax(96px,1fr)); gap:8px; align-items:center; padding:9px 10px; border:1px solid color-mix(in srgb,var(--pitch-mark) 38%,var(--canvas-line)); border-radius:9px; background:var(--pitch-bg); }
+.pitchClock > div,.pitchReadiness > div { min-width:0; display:grid; gap:1px; }
+.pitchClock small,.pitchReadiness small { color:var(--canvas-muted); font-size:6px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
+.pitchClock strong { color:var(--pitch-ink); font-size:19px; line-height:1.1; }
+.pitchClock b,.pitchReadiness b { color:var(--canvas-ink); font-size:11px; }
+.pitchClock span,.pitchReadiness p { overflow:hidden; margin:0; color:var(--canvas-muted); font-size:7px; text-overflow:ellipsis; white-space:nowrap; }
+.pitchReadiness > span { display:grid; justify-items:center; align-content:center; padding-left:8px; border-left:1px solid var(--canvas-line); }
+.pitchGauge { display:grid; place-items:center; align-content:center; width:52px; height:52px; border-radius:50%; background:radial-gradient(circle at center,var(--canvas-panel) 58%,transparent 60%),conic-gradient(var(--pitch-mark) calc(var(--pitch-readiness,0) * 1%),color-mix(in srgb,var(--pitch-mark) 18%,var(--canvas-panel)) 0); }
+.pitchGauge strong { color:var(--canvas-ink); font-size:13px; }
+.pitchGauge small { margin-top:-2px; color:var(--canvas-muted); font-size:5px; }
+.pitchBeats { display:grid; gap:5px; margin:0; padding:0; list-style:none; }
+.pitchBeats li { display:grid; grid-template-columns:3px minmax(0,1fr) auto; gap:2px 8px; padding:6px 8px; border:1px solid var(--canvas-line); border-radius:8px; background:var(--canvas-panel); }
+.pitchBeats i { grid-row:1/3; align-self:stretch; min-height:calc(var(--pitch-beat-share,10%) + 12px); border-radius:3px; background:color-mix(in srgb,var(--canvas-blue) 30%,var(--canvas-line)); }
+.pitchBeats li[data-written='true'] i { background:var(--canvas-blue); }
+.pitchBeats b { color:var(--canvas-ink); font-size:9px; }
+.pitchBeats small { color:var(--canvas-muted); font-size:8px; font-variant-numeric:tabular-nums; }
+.pitchBeats p { display:-webkit-box; overflow:hidden; grid-column:2/4; margin:0; color:var(--canvas-muted); font-size:7px; line-height:1.4; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+.pitchBeats li[data-written='true'] p { color:var(--canvas-ink-soft); }
+.pitchCriteria,.pitchQaList,.pitchAnswers { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:6px; }
+.pitchCriteria > div,.pitchQaList > div,.pitchAnswers > div { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:2px 6px; min-width:0; padding:7px 8px; border:1px solid var(--canvas-line); border-radius:8px; background:var(--canvas-panel); }
+.pitchCriteria b,.pitchQaList b,.pitchAnswers b { min-width:0; overflow:hidden; color:var(--canvas-ink); font-size:8px; text-overflow:ellipsis; }
+.pitchCriteria p,.pitchQaList p,.pitchAnswers p { display:-webkit-box; overflow:hidden; grid-column:1/3; margin:0; color:var(--canvas-muted); font-size:7px; line-height:1.4; -webkit-box-orient:vertical; -webkit-line-clamp:3; }
+.pitchCriteria small { grid-column:1/3; color:var(--tone-warning-ink); font-size:6px; }
+.pitchAnswers small,.pitchQaList small { color:var(--canvas-muted); font-size:6px; font-variant-numeric:tabular-nums; }
+.pitchQaList > div[data-answered='false'],.pitchAnswers > div[data-answered='false'] { border-style:dashed; }
+.pitchAnswers > div[data-over='true'] { border-color:var(--tone-danger-mark); }
+.pitchAnswers > div[data-over='true'] small { color:var(--tone-danger-ink); font-weight:800; }
+.pitchScore { display:inline-flex; gap:2px; align-items:center; }
+.pitchScore i { width:5px; height:5px; border-radius:50%; background:var(--canvas-line); }
+.pitchScore i[data-filled='true'] { background:var(--tone-info-mark); }
+.pitchEligibility { display:flex; flex-wrap:wrap; gap:4px; }
+.pitchEligibility span { padding:4px 6px; border:1px solid var(--canvas-line); border-radius:5px; background:var(--canvas-panel-muted); color:var(--canvas-muted); font-size:7px; }
+.pitchEligibility span[data-met='true'] { border-color:color-mix(in srgb,var(--tone-success-mark) 45%,var(--canvas-line)); background:var(--tone-success-bg); color:var(--tone-success-ink); }
+.pitchNextUp { display:flex; flex-wrap:wrap; gap:4px; align-items:center; margin:0; }
+.pitchNextUp b { color:var(--canvas-muted); font-size:6px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
+.pitchNextUp span { padding:3px 6px; border-radius:5px; background:var(--tone-warning-bg); color:var(--tone-warning-ink); font-size:7px; }
+.pitchInspectorRow { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; }
+.pitchInspectorItem { display:grid; gap:5px; padding:9px; border:1px solid var(--canvas-line); border-radius:9px; background:var(--canvas-panel-muted); }
+.pitchInspectorItem > strong { color:var(--canvas-ink); font-size:11px; }
+.pitchInspectorItem > span { color:var(--canvas-muted); font-size:9px; line-height:1.45; }
+.pitchInspectorItem[data-over='true'] { border-color:var(--tone-danger-mark); }
+.pitchInspectorItem[data-over='true'] > span { color:var(--tone-danger-ink); }
+/* Tap-friendly: five score buttons that stay above the 26px floor and reflow
+   rather than shrinking to slivers in a narrow inspector. */
+.pitchScoreInput { display:flex; flex-wrap:wrap; gap:4px; }
+.pitchScoreInput button { flex:1 1 34px; min-height:30px; padding:3px; border:1px solid var(--canvas-line); border-radius:6px; background:var(--canvas-panel); color:var(--canvas-muted); font:inherit; font-size:10px; cursor:pointer; }
+.pitchScoreInput button[aria-pressed='true'] { border-color:var(--tone-info-mark); background:color-mix(in srgb,var(--tone-info-mark) 16%,var(--canvas-panel)); color:var(--tone-info-ink); font-weight:800; }
+
 .node_drawing { width:280px; background:transparent; border-color:transparent; box-shadow:none; }
 .node_drawing .nodeHeader { background:rgba(255,255,255,.88); border:1px solid #d8e1ed; border-radius:9px; }
 .node_drawing .nodeBody { padding:2px; }

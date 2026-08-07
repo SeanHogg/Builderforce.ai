@@ -16,6 +16,7 @@ const WIDE_KINDS = new Set<CreationObjectKind>([
   'workflow', 'website', 'prototype', 'dashboard', 'chart', 'report', 'roadmap',
   'slides', 'document', 'diagram', 'prd', 'code', 'table', 'spreadsheet', 'featureSummary',
   'mockupSet', 'evermind', 'projectComparison', 'frame',
+  'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication',
 ]);
 
 /** The breathing room between two objects that must not touch. */

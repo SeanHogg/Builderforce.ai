@@ -6,6 +6,7 @@ export const CREATION_OBJECT_KINDS = [
   'document', 'slides', 'diagram', 'knowledge', 'file', 'url', 'note', 'drawing', 'frame', 'comment', 'timer',
   'roadmap', 'prd', 'release', 'task', 'mockup', 'mockupSet', 'featureSummary', 'team', 'role', 'mcp',
   'evermind', 'projectComparison', 'standup',
+  'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication',
   'repository', 'selection', 'diagnostics', 'terminal', 'service',
   'salesPipeline', 'salesContact', 'salesCampaign', 'targetMarket', 'salesGoal', 'salesMeeting',
 ] as const;

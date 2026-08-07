@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { Handle, NodeResizer, Position, useStore, type Node, type NodeProps } from '@xyflow/react';
 import { useTranslations } from 'next-intl';
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
@@ -17,6 +17,12 @@ import { highlightToneFor, profileTabular, tabularFromObject, workbookSheets, ty
 import { outlinePaths, projectMap, sanitizeGeoBounds, sanitizeMapPoints } from '@/lib/canvasGeo';
 import { creativePreviewImageUrl } from '@/lib/creationDeliverables';
 import { canvasBuildBinding } from '@/lib/canvasBuild';
+import {
+  PITCH_MAX_SCORE, formatPitchDuration, pitchApplicationAnswers, pitchApplicationReadiness, pitchBeats,
+  pitchCompetitionFor, pitchCriteria, pitchEligibility, pitchQaCoverage, pitchQaItems, pitchReadiness,
+  pitchReadinessTone, pitchRuntimeSeconds, pitchSpokenSeconds, pitchTimingTone, pitchWeakestCriteria,
+  type PitchLabelled,
+} from '@/lib/pitchCompetition';
 import { useModalityCopy } from '@/lib/useModalityCopy';
 import { authoredMarkdown, canvasDiagram, canvasDocument, canvasSlides } from '@/lib/canvasDocuments';
 import type { CanvasExportAction } from '@/lib/canvasExports';
@@ -1049,6 +1055,122 @@ function ProjectComparisonBody({ data }: { data: CreationNodeData }) {
   </div>;
 }
 
+/**
+ * The pitch cards.
+ *
+ * Every one of them answers the only question that matters before the room:
+ * "am I ready, and what is the next thing that would cost me the win". The
+ * verdict leads — runtime against the limit, weighted readiness, rehearsal
+ * coverage, whether the entry can actually be submitted — and the detail follows
+ * it. Nothing here decides a rule; `pitchCompetition.ts` does, and these read it.
+ */
+function PitchLabel({ item }: { item: PitchLabelled }) {
+  const t = useTranslations('creationCanvas.pitch');
+  return <>{item.labelKey && t.has(item.labelKey) ? t(item.labelKey) : item.label}</>;
+}
+
+function PitchBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.pitch');
+  const competition = pitchCompetitionFor(data);
+  const beats = pitchBeats(data);
+  const budget = pitchRuntimeSeconds(beats);
+  const spoken = pitchSpokenSeconds(beats);
+  const written = beats.filter((beat) => beat.written).length;
+  return <div className={styles.pitchBody}>
+    <div className={styles.pitchClock} data-tone={pitchTimingTone(spoken || budget, competition.pitchSeconds)}>
+      <div><small>{t('runtime')}</small><strong>{formatPitchDuration(spoken || budget)}</strong><span>{t('ofLimit', { limit: formatPitchDuration(competition.pitchSeconds) })}</span></div>
+      <div><small>{t('budget')}</small><b>{formatPitchDuration(budget)}</b><span>{t('beatsWritten', { written, total: beats.length })}</span></div>
+      <div><small>{t('judgeQa')}</small><b>{formatPitchDuration(competition.qaSeconds)}</b><span>{competition.name}</span></div>
+    </div>
+    <ol className={styles.pitchBeats}>
+      {beats.map((beat) => <li key={beat.id} data-written={beat.written ? 'true' : 'false'}>
+        <i style={{ '--pitch-beat-share': `${competition.pitchSeconds ? Math.round((beat.seconds / competition.pitchSeconds) * 100) : 0}%` } as CSSProperties} />
+        <b><PitchLabel item={beat} /></b>
+        <small>{formatPitchDuration(beat.seconds)}</small>
+        <p>{beat.script || beat.prompt || t('beatEmpty')}</p>
+      </li>)}
+    </ol>
+  </div>;
+}
+
+function PitchScoreRow({ score }: { score: number }) {
+  return <span className={styles.pitchScore} aria-hidden>
+    {Array.from({ length: PITCH_MAX_SCORE }, (_, index) => <i key={index} data-filled={index < score ? 'true' : 'false'} />)}
+  </span>;
+}
+
+function PitchScorecardBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.pitch');
+  const competition = pitchCompetitionFor(data);
+  const criteria = pitchCriteria(data);
+  const readiness = pitchReadiness(criteria);
+  const weakest = pitchWeakestCriteria(criteria);
+  return <div className={styles.pitchBody}>
+    <div className={styles.pitchReadiness} data-tone={pitchReadinessTone(readiness)} style={{ '--pitch-readiness': readiness } as CSSProperties}>
+      <div className={styles.pitchGauge}><strong>{readiness}%</strong><small>{t('ready')}</small></div>
+      <div><small>{t('scoredAgainst')}</small><b>{competition.name}</b><p>{t('criteriaCount', { count: criteria.length })}</p></div>
+      <span><b>{criteria.filter((criterion) => criterion.score > 0).length}/{criteria.length}</b><small>{t('scored')}</small></span>
+    </div>
+    <div className={styles.pitchCriteria}>
+      {criteria.map((criterion) => <div key={criterion.id}>
+        <b><PitchLabel item={criterion} /></b>
+        <PitchScoreRow score={criterion.score} />
+        <p>{criterion.evidence || criterion.prompt}</p>
+        {criterion.gap && <small>{t('gapPrefix', { gap: criterion.gap })}</small>}
+      </div>)}
+    </div>
+    {weakest.length > 0 && <p className={styles.pitchNextUp}>
+      <b>{t('marksLostHere')}</b>
+      {weakest.map((criterion) => <span key={criterion.id}><PitchLabel item={criterion} /></span>)}
+    </p>}
+  </div>;
+}
+
+function PitchQaBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.pitch');
+  const competition = pitchCompetitionFor(data);
+  const items = pitchQaItems(data);
+  const coverage = pitchQaCoverage(items);
+  return <div className={styles.pitchBody}>
+    <div className={styles.pitchReadiness} data-tone={pitchReadinessTone(coverage.percent)} style={{ '--pitch-readiness': coverage.percent } as CSSProperties}>
+      <div className={styles.pitchGauge}><strong>{coverage.percent}%</strong><small>{t('rehearsed')}</small></div>
+      <div><small>{t('qaWindow')}</small><b>{formatPitchDuration(competition.qaSeconds)}</b><p>{t('answeredCount', { answered: coverage.answered, total: coverage.total })}</p></div>
+    </div>
+    <div className={styles.pitchQaList}>
+      {items.map((item) => <div key={item.id} data-answered={item.answered ? 'true' : 'false'}>
+        <b>{item.question}</b>
+        <PitchScoreRow score={item.strength} />
+        <p>{item.answer || t('answerEmpty')}</p>
+      </div>)}
+    </div>
+  </div>;
+}
+
+function PitchApplicationBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.pitch');
+  const competition = pitchCompetitionFor(data);
+  const answers = pitchApplicationAnswers(data);
+  const eligibility = pitchEligibility(data);
+  const readiness = pitchApplicationReadiness(answers, eligibility);
+  const tone = readiness.submittable ? 'good' : readiness.unmetRules.length || readiness.overLimit.length ? 'risk' : 'watch';
+  return <div className={styles.pitchBody}>
+    <div className={styles.pitchReadiness} data-tone={tone} style={{ '--pitch-readiness': readiness.percent } as CSSProperties}>
+      <div className={styles.pitchGauge}><strong>{readiness.percent}%</strong><small>{t('complete')}</small></div>
+      <div><small>{t('entryFor')}</small><b>{competition.name}</b><p>{readiness.submittable ? t('readyToSubmit') : t('blockedCount', { count: readiness.unmetRules.length + readiness.overLimit.length })}</p></div>
+    </div>
+    {eligibility.length > 0 && <div className={styles.pitchEligibility}>
+      {eligibility.map((rule) => <span key={rule.id} data-met={rule.met ? 'true' : 'false'}>{rule.met ? '✓' : '○'} <PitchLabel item={rule} /></span>)}
+    </div>}
+    <div className={styles.pitchAnswers}>
+      {answers.map((answer) => <div key={answer.id} data-over={answer.over ? 'true' : 'false'} data-answered={answer.answered ? 'true' : 'false'}>
+        <b><PitchLabel item={answer} /></b>
+        {answer.maxChars > 0 && <small>{t('charCount', { chars: answer.chars, max: answer.maxChars })}</small>}
+        <p>{answer.answer || t('answerEmpty')}</p>
+      </div>)}
+    </div>
+  </div>;
+}
+
 function StandupBody({ data }: { data: CreationNodeData }) {
   const t = useTranslations('creationCanvas.node');
   const participants = Array.isArray(data.participants) ? data.participants as Array<Record<string, unknown>> : [];
@@ -1290,8 +1412,8 @@ function useAuthoredNodeSize(id: string): { width?: number; height?: number } {
 
 export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onEditData, onExport }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
-  const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame'].includes(data.kind);
-  const specialized = new Set(['workflow','website','build','prototype','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram']);
+  const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication'].includes(data.kind);
+  const specialized = new Set(['workflow','website','build','prototype','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication']);
   const authoredSize = useAuthoredNodeSize(id);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || '#f8f6ff'), borderColor: String(data.frameBorder || '#9d8bea') } : undefined;
   const cardStyle = { ...frameStyle, ...authoredSize };
@@ -1345,6 +1467,10 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'featureSummary' && <div className={styles.featureGrid}>{(Array.isArray(data.items) && data.items.length ? data.items.map((item) => typeof item === 'string' ? item : String((item as Record<string, unknown>)?.title || (item as Record<string, unknown>)?.name || t('feature'))).slice(0, 20) : ['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration']).map((feature, index) => <span key={`${feature}-${index}`}><b>{index + 1}</b>{feature}</span>)}</div>}
         {data.kind === 'evermind' && <EvermindBody data={data} />}
         {data.kind === 'projectComparison' && <ProjectComparisonBody data={data} />}
+        {data.kind === 'pitch' && <PitchBody data={data} />}
+        {data.kind === 'pitchScorecard' && <PitchScorecardBody data={data} />}
+        {data.kind === 'pitchQa' && <PitchQaBody data={data} />}
+        {data.kind === 'pitchApplication' && <PitchApplicationBody data={data} />}
         {data.kind === 'standup' && <StandupBody data={data} />}
         {data.kind === 'drawing' && <DrawingBody data={data} />}
         {data.kind === 'frame' && <div className={styles.frameBody}><strong>{String(data.framePurpose || t('arrangeObjects'))}</strong><p>{data.subtitle || t('frameFallback')}</p></div>}

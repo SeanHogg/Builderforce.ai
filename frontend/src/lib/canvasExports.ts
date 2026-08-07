@@ -66,6 +66,13 @@ const EXPORT_ACTIONS: Partial<Record<CreationObjectKind, readonly CanvasExportAc
   evaluation: ['json'],
   featureSummary: ['json'],
   projectComparison: ['json'],
+  // A pitch, its rubric, its Q&A drill, and its written entry are all documents
+  // a person hands to someone else — a run sheet, a readiness review, a prep
+  // pack, a submission. They export as documents, not as JSON.
+  pitch: ['docx', 'pdf', 'markdown', 'copy'],
+  pitchScorecard: ['docx', 'pdf', 'markdown', 'copy'],
+  pitchQa: ['docx', 'pdf', 'markdown', 'copy'],
+  pitchApplication: ['docx', 'pdf', 'markdown', 'copy'],
 };
 
 const NO_ACTIONS: readonly CanvasExportAction[] = [];

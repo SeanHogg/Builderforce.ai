@@ -11,6 +11,7 @@
 import { creationDeliverables } from './creationDeliverables';
 import { tabularFromObject } from './canvasTabularData';
 import { PAGE_BREAK_MARKER } from './officeFormats';
+import { pitchObjectMarkdown } from './pitchCompetition';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
 
 const WORDS_PER_PAGE = 450;
@@ -46,7 +47,10 @@ function chatTranscript(data: CreationNodeData): string | null {
  * have no authored body yet. Every export and copy path reads this, so a
  * download can never disagree with what the card renders. */
 export function canvasObjectMarkdown(data: CreationNodeData): string {
-  const body = chatTranscript(data) ?? authoredMarkdown(data);
+  // A pitch object keeps its substance in arrays — beats, criteria, questions,
+  // answers — so it is serialized before the authored-prose path, which would
+  // otherwise export a side note and drop the pitch itself.
+  const body = pitchObjectMarkdown(data) ?? chatTranscript(data) ?? authoredMarkdown(data);
   // Page breaks are canvas structure. An exported .docx or .md must not carry
   // the marker through into the file a person opens.
   if (body) return body.split(PAGE_BREAK_MARKER).map((page) => page.trim()).filter(Boolean).join('\n\n');
@@ -123,7 +127,7 @@ export function plainText(value: string): string {
 
 /** The rendered document an object carries, or `null` when nothing is authored. */
 export function canvasDocument(data: CreationNodeData): CanvasDocument | null {
-  const source = chatTranscript(data) ?? authoredMarkdown(data);
+  const source = pitchObjectMarkdown(data) ?? chatTranscript(data) ?? authoredMarkdown(data);
   if (!source?.trim()) return null;
   const pages = paginateDocument(source);
   // The break marker is structure, not content: it drives pagination and never
@@ -260,7 +264,7 @@ export interface CanvasFile {
   source: 'object' | 'export';
 }
 
-const DOCUMENT_KINDS = new Set(['document', 'prd', 'knowledge', 'note', 'report', 'resume']);
+const DOCUMENT_KINDS = new Set(['document', 'prd', 'knowledge', 'note', 'report', 'resume', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication']);
 const TABULAR_KINDS = new Set(['spreadsheet', 'table', 'dataset']);
 const MEDIA_KINDS = new Set(['image', 'comic', 'animation', 'game', 'cad', 'model3d', 'video', 'podcast', 'voice']);
 

@@ -9,21 +9,12 @@ import type { ProjectEvermindContributions, ProjectEvermindHead } from '@/lib/pr
 import { createLocalCreationSession } from '@/lib/creationSessions';
 import { buildBrowserCreativeArtifact } from '@/lib/creationDeliverables';
 
-vi.mock('next-intl', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('next-intl')>();
-  const messages = (await import('@/i18n/messages/en.json')).default as Record<string, unknown>;
-  return {
-    ...actual,
-    useTranslations: (namespace?: string) => (key: string, values?: Record<string, unknown>) => {
-      const path = (namespace ? `${namespace}.${key}` : key).split('.');
-      const value = path.reduce<unknown>((current, segment) => current && typeof current === 'object'
-        ? (current as Record<string, unknown>)[segment]
-        : undefined, messages);
-      const copy = typeof value === 'string' ? value : namespace ? `${namespace}.${key}` : key;
-      return Object.entries(values ?? {}).reduce((result, [name, replacement]) => result.replace(`{${name}}`, String(replacement)), copy);
-    },
-  };
-});
+vi.mock('next-intl', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('next-intl')>()),
+  useTranslations: (await import('@/test/realCatalogTranslations')).realCatalogTranslator(
+    (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
+  ),
+}));
 
 vi.mock('@/components/ConfirmProvider', () => ({ useConfirm: () => vi.fn(async () => true) }));
 

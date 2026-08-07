@@ -14,26 +14,12 @@ import type { CreationNodeData } from './types';
 /** The real catalogs, resolved the way next-intl resolves them — including the
  * `plural` forms the file-count and slide-count labels are written in, so these
  * assert the string a person actually reads. */
-vi.mock('next-intl', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('next-intl')>();
-  const messages = (await import('@/i18n/messages/en.json')).default as Record<string, unknown>;
-  const PLURAL = /\{(\w+),\s*plural,\s*one \{([^}]*)\} other \{([^}]*)\}\}/g;
-  return {
-    ...actual,
-    useTranslations: (namespace?: string) => (key: string, values?: Record<string, unknown>) => {
-      const path = (namespace ? `${namespace}.${key}` : key).split('.');
-      const value = path.reduce<unknown>((current, segment) => current && typeof current === 'object'
-        ? (current as Record<string, unknown>)[segment]
-        : undefined, messages);
-      const copy = typeof value === 'string' ? value : namespace ? `${namespace}.${key}` : key;
-      const pluralized = copy.replace(PLURAL, (_match, name: string, one: string, other: string) => {
-        const count = Number(values?.[name]);
-        return (count === 1 ? one : other).replace('#', String(count));
-      });
-      return Object.entries(values ?? {}).reduce((result, [name, replacement]) => result.replaceAll(`{${name}}`, String(replacement)), pluralized);
-    },
-  };
-});
+vi.mock('next-intl', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('next-intl')>()),
+  useTranslations: (await import('@/test/realCatalogTranslations')).realCatalogTranslator(
+    (await import('@/i18n/messages/en.json')).default as Record<string, unknown>,
+  ),
+}));
 
 vi.mock('@xyflow/react', async () => {
   const inert = () => null;

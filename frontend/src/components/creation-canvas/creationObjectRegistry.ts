@@ -2,8 +2,9 @@ import type { CreationNodeData, CreationObjectKind } from './types';
 import { CREATION_CONNECTION_KINDS, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
 import { MAX_TABULAR_COLUMNS } from '@/lib/canvasTabularData';
 import { DEFAULT_MODALITY } from '@/lib/modality';
+import { DEFAULT_PITCH_COMPETITION_ID } from '@/lib/pitchCompetition';
 
-export type CreationObjectGroup = 'Build' | 'Data' | 'Knowledge' | 'Insights' | 'Work' | 'People' | 'Agents' | 'Models' | 'Collaborate' | 'Integrations';
+export type CreationObjectGroup = 'Build' | 'Data' | 'Knowledge' | 'Insights' | 'Work' | 'Pitch' | 'People' | 'Agents' | 'Models' | 'Collaborate' | 'Integrations';
 
 export interface CreationObjectDefinition {
   kind: CreationObjectKind;
@@ -63,6 +64,15 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'mockup', label: 'Mockup', icon: '▣', group: 'Work', createData: () => ({ kind: 'mockup', title: 'Interactive feature mockup', status: 'Draft' }) },
   { kind: 'mockupSet', label: 'Mockup set', icon: '▦', group: 'Work', createData: () => ({ kind: 'mockupSet', title: 'Feature mockup set', status: 'Expandable', items: [] }) },
   { kind: 'featureSummary', label: 'Feature summary', icon: '★', group: 'Work', createData: () => ({ kind: 'featureSummary', title: 'Top 10 requested features', status: 'Synthesized' }) },
+  // A pitch competition is four artifacts, not one deck: the timed story, the
+  // published rubric you are scored against, the judge Q&A that follows it, and
+  // the written entry that decides whether you get on stage at all. Each opens
+  // pre-loaded from the competition preset in `pitchCompetition.ts`, so a blank
+  // card already knows the rules it has to satisfy.
+  { kind: 'pitch', label: 'Pitch', icon: '◈', group: 'Pitch', createData: () => ({ kind: 'pitch', title: 'Competition pitch', status: 'Draft', competitionId: DEFAULT_PITCH_COMPETITION_ID }) },
+  { kind: 'pitchScorecard', label: 'Pitch scorecard', icon: '★', group: 'Pitch', createData: () => ({ kind: 'pitchScorecard', title: 'Judging scorecard', status: 'Not scored', competitionId: DEFAULT_PITCH_COMPETITION_ID }) },
+  { kind: 'pitchQa', label: 'Judge Q&A', icon: '◷', group: 'Pitch', createData: () => ({ kind: 'pitchQa', title: 'Judge Q&A drill', status: 'Not rehearsed', competitionId: DEFAULT_PITCH_COMPETITION_ID }) },
+  { kind: 'pitchApplication', label: 'Competition entry', icon: '▤', group: 'Pitch', createData: () => ({ kind: 'pitchApplication', title: 'Competition entry', status: 'Draft', competitionId: DEFAULT_PITCH_COMPETITION_ID }) },
   { kind: 'staff', label: 'Staff member', icon: '●', group: 'People', createData: () => ({ kind: 'staff', title: 'Teammate', role: 'Contributor', focus: 'Add a current focus from the inspector.', accent: '#3978f6' }) },
   { kind: 'team', label: 'Team', icon: '◉', group: 'People', createData: () => ({ kind: 'team', title: 'Team', status: 'Gathering' }) },
   { kind: 'role', label: 'Role', icon: '◇', group: 'People', createData: () => ({ kind: 'role', title: 'Role', status: 'Unassigned' }) },
@@ -109,6 +119,7 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   comic: ['generate', 'preview', 'export'], game: ['generate', 'preview', 'export'], cad: ['generate', 'preview', 'export'], model3d: ['generate', 'preview', 'export'],
   resume: ['generate', 'preview', 'export'], template: ['browse', 'apply'],
   mockup: ['preview', 'deliver'], mockupSet: ['expand', 'deliver'], standup: ['start'],
+  pitch: ['rehearse', 'export'], pitchScorecard: ['score', 'export'], pitchQa: ['drill', 'export'], pitchApplication: ['review', 'export'],
   document: ['export'], slides: ['present', 'export'], diagram: ['export'], spreadsheet: ['export'],
   salesPipeline: ['refresh', 'review'], salesContact: ['qualify', 'advance'], salesCampaign: ['draft', 'schedule', 'execute'],
   targetMarket: ['research', 'segment'], salesGoal: ['review', 'update'], salesMeeting: ['schedule', 'invite'],
@@ -157,6 +168,10 @@ const MUTABLE_FIELDS = {
   mockup: ['content', 'items', 'viewport', 'sources', 'deliveryProjectRef', 'deliveryProjectName', 'mockupAgentRef', 'mockupAgentName'],
   mockupSet: ['content', 'items', 'sources'],
   featureSummary: ['content', 'items', 'sources'],
+  pitch: ['content', 'competitionId', 'beats', 'sources', 'summary'],
+  pitchScorecard: ['content', 'competitionId', 'criteria', 'recommendations', 'sources', 'summary'],
+  pitchQa: ['content', 'competitionId', 'questions', 'sources', 'summary'],
+  pitchApplication: ['content', 'competitionId', 'answers', 'eligibility', 'category', 'sources', 'summary'],
   staff: ['content', 'role', 'focus', 'accent'],
   team: ['content', 'participants', 'summary'],
   role: ['content', 'role', 'responsibilities'],
@@ -250,6 +265,9 @@ const CONTEXT_FIELDS = [
   'pipelineCounts', 'subject', 'sent', 'replies', 'scheduledAt', 'segments', 'channels',
   'outreachTarget', 'contactsTarget', 'meetingsTarget', 'progress', 'durationMinutes', 'attendees', 'meetingUrl',
   'revenueGoalCents', 'referralLink', 'salesLink',
+  // A pitch object's substance IS its arrays — Brain cannot strengthen a weak
+  // criterion or tighten an over-length answer it was never shown.
+  'competitionId', 'beats', 'questions', 'answers', 'eligibility', 'category',
 ] as const;
 const SENSITIVE_CONTEXT_KEY = /(?:secret|token|password|credential|authorization|api.?key|cookie)/i;
 const DEFAULT_CONTEXT_ARRAY_LIMIT = 25;
@@ -319,5 +337,5 @@ export function availableCreationObjects(capabilities: ReadonlySet<string>): rea
   return CREATION_OBJECT_REGISTRY.filter((definition) => !definition.capability || capabilities.has(definition.capability));
 }
 
-export const CREATION_PALETTE_GROUPS = (['Build', 'Data', 'Knowledge', 'Insights', 'Work', 'People', 'Agents', 'Models', 'Collaborate', 'Integrations'] as const)
+export const CREATION_PALETTE_GROUPS = (['Build', 'Data', 'Knowledge', 'Insights', 'Work', 'Pitch', 'People', 'Agents', 'Models', 'Collaborate', 'Integrations'] as const)
   .map((group) => ({ group, items: CREATION_OBJECT_REGISTRY.filter((definition) => definition.group === group) }));

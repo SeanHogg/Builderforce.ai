@@ -4,6 +4,87 @@
 
 ---
 
+## ✅ SHIPPED 2026-08-07 — Pitch competitions are canvas objects, and the rules are data
+
+We want to enter [SXSW Pitch](https://sxsw.com/pitch/). The interesting question
+was not "what do we write in the form" but "what would a product have to give a
+founder for them to win", and the answer generalized: every pitch competition is
+the same four artifacts scored by a published rubric against a stopwatch.
+
+### What a competition actually is
+
+Six criteria at equal weighting (innovation, viability, marketability, growth
+potential, capacity for impact, team), a three-minute pitch, a three-minute judge
+Q&A, and an eligibility gate that rejects an entry — funding cap, launch window,
+one product per company — before a judge reads a word of it. Those are rules, and
+rules are data.
+
+### What shipped
+
+**One rulebook.** `frontend/src/lib/pitchCompetition.ts` holds the competition
+presets (SXSW Pitch with its real rubric, format, categories and eligibility;
+plus a demo day and an accelerator application) and every pure rule the board
+obeys: weighted readiness, spoken-runtime estimation at 130 wpm, timing verdicts,
+rehearsal coverage, over-length detection, submittability, and the structured
+markdown each object exports as. Competitions are rows, never branches — a tenant
+entering a competition we have never heard of edits the criteria in the inspector
+and gets the same scoring, verdicts and exports.
+
+**Four canvas objects**, in their own `Pitch` palette group, available to every
+user: `pitch` (the timed run sheet — budget vs. limit, and the spoken length of
+the script under it), `pitchScorecard` (weighted readiness against the published
+rubric, leading with where marks are being lost), `pitchQa` (the judge drill,
+seeded from the rubric because every criterion is a question waiting to be
+asked), and `pitchApplication` (the written entry with its eligibility gate and
+per-answer character limits).
+
+**Wired end to end**, not a dead seam: contract kinds, registry (groups, actions,
+mutable fields, Brain context fields so Brain can strengthen a weak criterion),
+node bodies, one shared inspector, layout footprints, DOCX/PDF/Markdown exports
+through `canvasObjectMarkdown`, the Files library, and a `Pitch competition war
+room` marketplace pack. The VS Code canvas is the web canvas, so it all appears
+in the extension on the next build.
+
+**Localized and themed.** 48 chrome strings plus ~50 seeded row labels across
+en/zh/es/fr/de. Seeded labels translate; a beat a founder renames stays in their
+words — the row carries a catalog key only while its label still matches the
+preset's.
+
+### Fixed on the way past
+
+The template catalog was shipping hardcoded English names and blurbs for all ten
+existing packs, and the category chip (`Marketplace template` / `Object pack`)
+with them. All eleven packs now render from the catalogs in five languages
+(`creationCanvas.template.<id>`), with the source English as the fallback.
+
+**The canvas test mocks were quietly weaker than the real translator.** Five test
+files had each grown their own hand-rolled copy of "resolve the real catalogs the
+way next-intl does". They had drifted — only one handled `plural` forms, and none
+carried `t.has`, so a component that probes for an optional key (which the seeded
+labels do) crashed under test while working in the app; the global mock in
+`setup.ts` has always had `t.has`, and these per-file mocks were overriding it
+with something less capable. Replaced by one `src/test/realCatalogTranslations.ts`
+that all five now use.
+
+Files: `frontend/src/lib/pitchCompetition.ts` (+ tests), `creationObjectRegistry.ts`,
+`creationTemplates.ts`, `creationCanvasLayout.ts`, `CreationNode.tsx`,
+`CreationCanvas.tsx`, `CreationCanvas.module.css`, `canvasExports.ts`,
+`canvasDocuments.ts`, `packages/creation-canvas-contract`,
+`i18n/messages/{en,zh,es,fr,de}.json`, `marketing/sxsw-pitch/SUBMISSION.md`,
+`pitchObjects.test.tsx`, `src/test/realCatalogTranslations.ts`.
+
+**Verified:** `tsgo --noEmit` clean; eslint clean on every changed file (two
+pre-existing `<img>` warnings, untouched). Green: 24 `pitchCompetition` unit
+tests, 14 `pitchObjects` render tests, 24 i18n catalog-parity tests, 71
+canvas-lib tests, 54 tests across the five migrated canvas test files, 26 VSIX
+tests. The canvas bundle rebuilds with all four kinds and all five locales
+(frontend 2026.7.192, VSIX 2026.7.120). `CreationCanvas.test.tsx` still gives no
+whole-file verdict — the documented pre-existing 3D-group event-loop block — so
+the two tests in it that this change actually touches (the template menu and
+applying a marketplace pack) were run individually and pass.
+
+---
+
 ## ✅ SHIPPED 2026-08-07 — Every connector is a workflow step, and the whole Twilio platform is reachable
 
 The question was "can a user create a workflow and add all of the Twilio
