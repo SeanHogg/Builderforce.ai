@@ -1,125 +1,104 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #626
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Cross-Project Health Dashboard PRD
 
 ## Problem & Goal
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+### Problem
+- **Lack of visibility**: Project managers and stakeholders lack a unified view of the health and status of multiple projects.
+- **Inefficient monitoring**: Current tools require manual aggregation of data from different sources, leading to inefficiencies and potential errors.
+- **Delayed decision-making**: Without real-time insights, decision-making is delayed, impacting project timelines and resource allocation.
 
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+### Goal
+- Develop a Cross-Project Health Dashboard that provides a comprehensive, real-time view of the status and health of multiple projects.
+- Enable users to monitor key metrics, identify potential issues early, and make informed decisions to improve project outcomes.
 
 ## Target Users / ICP Roles
 
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Project Managers**: To oversee and manage the health of multiple projects.
+- **Program Managers**: To monitor the status of programs comprising several projects.
+- **Executives/Stakeholders**: To gain a high-level overview of project performance and make strategic decisions.
+- **Team Leads**: To track the progress and health of their respective project teams.
 
 ## Scope
 
-### In Scope
+### In-Scope
+- **Dashboard Interface**: A user-friendly interface displaying key metrics and indicators for multiple projects.
+- **Data Aggregation**: Integration with existing project management tools to aggregate data automatically.
+- **Real-time Updates**: Real-time data refresh to ensure up-to-date information.
+- **Customizable Views**: Ability for users to customize the dashboard based on their preferences and roles.
+- **Alerts and Notifications**: Automated alerts for critical issues or changes in project health.
+- **Reporting**: Exportable reports for stakeholders and team members.
+- **Security**: Role-based access control to ensure data security and privacy.
 
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+### Out-of-Scope
+- **Integration with non-supported project management tools**: Support for tools not currently in use by the organization.
+- **Advanced Analytics**: Predictive analytics or machine learning features for forecasting project outcomes.
+- **Mobile App**: A dedicated mobile application for the dashboard.
+- **Third-party API development**: Building new APIs for tools that do not have existing integration points.
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+1. **Data Integration**
+   - Connect with existing project management tools (e.g., Jira, Trello, Asana) via APIs.
+   - Automatically ingest data related to project status, milestones, deadlines, and resource allocation.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+2. **Dashboard Features**
+   - **Project Overview**: Display a summary of all projects, including status, progress, and key milestones.
+   - **Key Metrics**: Show critical metrics such as budget vs. actuals, resource utilization, and risk levels.
+   - **Visualization**: Use charts, graphs, and color-coding to represent data visually.
+   - **Filter and Search**: Allow users to filter projects by status, team, or other relevant criteria and search for specific projects.
 
----
+3. **Customization**
+   - Enable users to select which metrics and projects to display.
+   - Provide options to save and share customized views with team members.
 
-### FR-2 — Guided (Interactive) Mode
+4. **Alerts and Notifications**
+   - Set up customizable alerts for specific events or thresholds (e.g., missed deadlines, budget overruns).
+   - Send notifications via email or in-app messages.
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+5. **Reporting**
+   - Generate and export reports in PDF or Excel formats.
+   - Schedule automated report generation and distribution.
 
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+6. **Security**
+   - Implement role-based access control (RBAC) to restrict access to sensitive information.
+   - Ensure data is encrypted both in transit and at rest.
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
-
----
+- The dashboard successfully integrates with at least three major project management tools.
+- Users can view real-time data with a latency of no more than 5 minutes.
+- The dashboard is responsive and accessible on desktop and tablet devices.
+- Customizable views can be saved and shared with other users.
+- Alerts and notifications are triggered accurately based on user-defined criteria.
+- Reports can be generated and exported without errors.
+- Role-based access control is implemented and tested for different user roles.
 
 ## Out of Scope
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+- Integration with unsupported project management tools.
+- Development of a mobile application for the dashboard.
+- Advanced analytics or predictive features.
+- Building new APIs for tools without existing integration points.
+
+## Requirements
+
+_Owned by the business-analyst — to be authored._
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
