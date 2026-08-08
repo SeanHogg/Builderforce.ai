@@ -159,7 +159,7 @@
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "fake-indexeddb": "*",
-    "file-type": "^21.3.0",
+    "file-type": "^21.3.2",
     "grammy": "^1.40.0",
     "https-proxy-agent": "^7.0.6",
     "jiti": "^2.6.1",
