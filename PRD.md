@@ -1,125 +1,148 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #630
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document (PRD)
 
 ## Problem & Goal
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+### Problem
+Currently, non-coding tasks such as analysis, provisioning, and decision-making tasks (e.g., task 481) are often tracked and managed in the same way as coding tasks. This leads to confusion and inefficiency because:
+- The completion of these tasks is not always clearly indicated by a green pull request (PR).
+- There is no explicit way to distinguish tasks that are completed through a written decision rather than code changes.
+- This lack of distinction can lead to delays in task closure and difficulty in tracking the status of non-coding tasks.
 
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+### Goal
+Create a system to explicitly distinguish non-coding tasks that are completed through written decisions from those that require code changes. This system should allow for the clear identification and tracking of tasks that are completed without code, ensuring they can be closed promptly and accurately.
 
 ## Target Users / ICP Roles
 
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Project Managers**: Need to track the status of tasks and ensure timely completion.
+- **Technical Writers / Analysts**: Often complete tasks through written reports or decisions rather than code.
+- **Decision Makers**: Require a clear process for documenting and closing tasks that are completed through decisions.
+- **Developers**: Need to understand which tasks require code changes and which do not.
 
 ## Scope
 
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- Develop a mechanism to tag or label tasks as "Non-Coding: Written Decision" or similar.
+- Ensure that these tasks can be tracked and managed separately from coding tasks.
+- Provide a clear workflow for completing and closing non-coding tasks through written decisions.
+- Integrate with existing project management tools and workflows.
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+1. **Task Tagging/Labeling**
+   - Ability to tag tasks as "Non-Coding: Written Decision" at task creation or at any point during task progression.
+   - Tags should be searchable and filterable in the task management system.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+2. **Workflow for Non-Coding Tasks**
+   - Define workflow for non-coding tasks that includes:
+     - Assignment of task to appropriate team member.
+     - Submission of written decision or analysis.
+     - Review and approval process for the written decision.
+     - Mechanism to mark the task as completed without the need for a PR.
 
----
+3. **Integration with Project Management Tools**
+   - Ensure that the tagging and workflow system integrates seamlessly with existing project management tools (e.g., Jira, Trello, Asana).
+   - Provide visibility into the status of non-coding tasks within the project management dashboard.
 
-### FR-2 — Guided (Interactive) Mode
+4. **Reporting and Analytics**
+   - Generate reports on the number and status of non-coding tasks.
+   - Provide analytics on the time taken to complete non-coding tasks compared to coding tasks.
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
-
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+5. **Notification System**
+   - Notify relevant stakeholders when a non-coding task is created, updated, or completed.
+   - Provide reminders for pending approvals or reviews of written decisions.
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
-
----
+- All non-coding tasks can be clearly identified through a specific tag or label.
+- Non-coding tasks can be completed and closed without the need for a pull request.
+- The workflow for non-coding tasks is clearly defined and documented.
+- Project managers and team members can easily track the status of non-coding tasks.
+- Reports and analytics on non-coding tasks are available and accessible.
+- The system is integrated with existing project management tools and workflows.
 
 ## Out of Scope
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+- Changes to the underlying project management tools or platforms.
+- Modification of existing coding task workflows.
+- Development of a separate tool for managing non-coding tasks (unless deemed necessary).
+- Handling of tasks that are partially coding and partially non-coding (this may be addressed in a future iteration).
+- Automated assignment of non-coding tasks to specific team members (manual assignment will be used).
+
+## Requirements
+
+### Business Requirements (Implemented)
+
+1. **Task Type Distinction**: A new `decision` task type allows explicit tagging of non-coding tasks completed through written decisions.
+
+2. **No PR Requirement**: Decision-type tasks complete without requiring a pull request — the written decision/document serves as the deliverable.
+
+3. **Filterable/Searchable**: The `taskType` field enables filtering decision tasks in the task management system for reporting.
+
+4. **Integration**: The solution integrates with existing kanban board workflows — decision tasks flow through lanes but complete without code.
+
+### Technical Requirements (Implemented)
+
+- TaskType enum extended with `decision` value
+- Database migration for task_type enum (handled via schema)
+- `expectsCodeDeliverable()` updated to recognize decision tasks
+- Role capability system updated to not assign code-producing roles to decision tasks
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+### Implemented Solution
+
+The solution introduces a new **TaskType** called `decision` to explicitly distinguish non-coding tasks completed through written decisions from coding tasks.
+
+#### Changes Made
+
+1. **TaskType Enum** (`api/src/domain/shared/types.ts`)
+   - Added `TaskType.DECISION = 'decision'` to the TaskType enum
+   - Documented as: "Non-coding task completed through a written decision — e.g. analysis, provisioning, or architectural decisions. These tasks complete without a PR and are tracked by their written deliverable."
+
+2. **Database Schema** (`api/src/infrastructure/database/schema/common.ts`)
+   - Added `'decision'` to the `taskTypeEnum` PostgreSQL enum
+   - This enables the new task type to be persisted in the database
+
+3. **Code Deliverable Detection** (`api/src/application/manager/evaluateTicketReadiness.ts`)
+   - Updated `expectsCodeDeliverable()` function to return `false` for `taskType === 'decision'`
+   - Decision-type tasks are recognized as not expecting a code deliverable
+   - The manager will complete these tasks without requiring a PR
+
+4. **Role Capability** (`api/src/application/kanban/roleCapability.ts`)
+   - Added `'decision'` case to `producerRoleForActionType()` returning `undefined`
+   - Decision tasks have no code-producing role, reinforcing they don't expect code
+
+#### How It Works
+
+- When a task is created with `taskType = 'decision'`, the system recognizes it as a non-coding task
+- The manager's `expectsCodeDeliverable()` check returns `false` for decision tasks
+- These tasks can complete in the Done lane without a PR — the "written decision" is the deliverable
+- Tasks can be filtered/searched by `taskType = 'decision'` for reporting and analytics
+
+#### Usage
+
+To create a non-coding decision task:
+```
+POST /api/tasks
+{
+  "title": "Decision: Choose database provider",
+  "taskType": "decision",
+  ...
+}
+```
+
+The task will complete without requiring a PR, and the completion will be recorded as `completion: 'no_deliverable'`.
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._

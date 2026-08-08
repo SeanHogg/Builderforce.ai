@@ -91,6 +91,11 @@ export enum TaskType {
    *  incident's severity, status and affected system, bridged to a prodIncidents
    *  record (task.incidentId) that owns the MTTR/escalation lifecycle. */
   INCIDENT = 'incident',
+  /** Non-coding task completed through a written decision — e.g. analysis,
+   *  provisioning, or architectural decisions. These tasks complete without a PR
+   *  and are tracked by their written deliverable (document, decision record, etc.)
+   *  rather than code changes. */
+  DECISION = 'decision',
 }
 
 export enum AgentType {
