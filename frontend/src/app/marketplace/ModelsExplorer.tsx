@@ -21,6 +21,7 @@ import {
 import { appendModelComparison, MAX_MODEL_COMPARISON } from '@/lib/modelComparisonRequest';
 
 const MAX_COMPARE = MAX_MODEL_COMPARISON;
+const MODELS_PER_PAGE = 24;
 
 type TierFilter = 'all' | 'free' | 'paid' | 'builderforce';
 type PriceLimit = 'any' | '1' | '5' | '10' | '25' | '50';
@@ -392,6 +393,7 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
   const [routableOnly, setRoutableOnly] = useState(false);
   const [maxInputPrice, setMaxInputPrice] = useState<PriceLimit>('any');
   const [maxOutputPrice, setMaxOutputPrice] = useState<PriceLimit>('any');
+  const [page, setPage] = useState(1);
 
   const [detail, setDetail] = useState<ModelRecord | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -450,6 +452,17 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
     const rest = filtered.filter((m) => !m.isBuilderforce);
     return [...bf, ...rest];
   }, [filtered]);
+
+  const totalPages = Math.max(1, Math.ceil(ordered.length / MODELS_PER_PAGE));
+  const currentPage = Math.min(page, totalPages);
+  const visibleModels = useMemo(
+    () => ordered.slice((currentPage - 1) * MODELS_PER_PAGE, currentPage * MODELS_PER_PAGE),
+    [currentPage, ordered],
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, tierFilter, routableOnly, maxInputPrice, maxOutputPrice]);
 
   // Preserve selection order (matches checkbox order) for the tray + table.
   const selectedModels = useMemo(
@@ -537,69 +550,103 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
 
           {ordered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-muted)' }}>{t('empty')}</div>
-          ) : viewMode === 'table' ? (
-            <div style={tableWrapStyle}>
-              <table style={tableStyle}>
-                <thead>
-                  <tr style={theadRowStyle}>
-                    <th style={{ ...thStyle, width: 40 }} aria-label={t('table.compareAria')} />
-                    <th style={thStyle}>{t('table.model')}</th>
-                    <th style={thStyle}>{t('table.provider')}</th>
-                    <th style={thStyle}>{t('table.context')}</th>
-                    <th style={thStyle}>{t('table.input')}</th>
-                    <th style={thStyle}>{t('table.output')}</th>
-                    <th style={{ ...thStyle, textAlign: 'right' }}>{t('table.actions')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ordered.map((m) => {
+          ) : (
+            <>
+              {viewMode === 'table' ? (
+                <div style={tableWrapStyle}>
+                  <table style={tableStyle}>
+                    <thead>
+                      <tr style={theadRowStyle}>
+                        <th style={{ ...thStyle, width: 40 }} aria-label={t('table.compareAria')} />
+                        <th style={thStyle}>{t('table.model')}</th>
+                        <th style={thStyle}>{t('table.provider')}</th>
+                        <th style={thStyle}>{t('table.context')}</th>
+                        <th style={thStyle}>{t('table.input')}</th>
+                        <th style={thStyle}>{t('table.output')}</th>
+                        <th style={{ ...thStyle, textAlign: 'right' }}>{t('table.actions')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleModels.map((m) => {
+                        const checked = selectedIds.includes(m.id);
+                        return (
+                          <tr key={m.id} style={trStyle}>
+                            <td style={tdStyle}>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                disabled={!checked && maxedOut}
+                                onChange={() => toggleCheck(m.id)}
+                                aria-label={t('compare.compareAria', { name: m.name })}
+                                style={{ width: 16, height: 16, accentColor: tierColor(m) }}
+                              />
+                            </td>
+                            <td style={tdStyle}>
+                              <strong style={{ color: 'var(--text-primary)' }}>{m.name}</strong> <Badge record={m} />
+                            </td>
+                            <td style={tdMutedStyle}>{m.provider}</td>
+                            <td style={tdMutedStyle}>{formatContext(m)}</td>
+                            <td style={tdMutedStyle}>{formatPricePerMillion(m.pricing.prompt)}</td>
+                            <td style={tdMutedStyle}>{formatPricePerMillion(m.pricing.completion)}</td>
+                            <td style={{ ...tdStyle, textAlign: 'right' }}>
+                              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setDetail(m)}>
+                                {t('table.details')}
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+                  {visibleModels.map((m) => {
                     const checked = selectedIds.includes(m.id);
                     return (
-                      <tr key={m.id} style={trStyle}>
-                        <td style={tdStyle}>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={!checked && maxedOut}
-                            onChange={() => toggleCheck(m.id)}
-                            aria-label={t('compare.compareAria', { name: m.name })}
-                            style={{ width: 16, height: 16, accentColor: tierColor(m) }}
-                          />
-                        </td>
-                        <td style={tdStyle}>
-                          <strong style={{ color: 'var(--text-primary)' }}>{m.name}</strong> <Badge record={m} />
-                        </td>
-                        <td style={tdMutedStyle}>{m.provider}</td>
-                        <td style={tdMutedStyle}>{formatContext(m)}</td>
-                        <td style={tdMutedStyle}>{formatPricePerMillion(m.pricing.prompt)}</td>
-                        <td style={tdMutedStyle}>{formatPricePerMillion(m.pricing.completion)}</td>
-                        <td style={{ ...tdStyle, textAlign: 'right' }}>
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => setDetail(m)}>
-                            {t('table.details')}
-                          </button>
-                        </td>
-                      </tr>
+                      <ModelCard
+                        key={m.id}
+                        record={m}
+                        checked={checked}
+                        checkboxDisabled={!checked && maxedOut}
+                        onToggleCheck={() => toggleCheck(m.id)}
+                        onSelect={() => setDetail(m)}
+                      />
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-              {ordered.map((m) => {
-                const checked = selectedIds.includes(m.id);
-                return (
-                  <ModelCard
-                    key={m.id}
-                    record={m}
-                    checked={checked}
-                    checkboxDisabled={!checked && maxedOut}
-                    onToggleCheck={() => toggleCheck(m.id)}
-                    onSelect={() => setDetail(m)}
-                  />
-                );
-              })}
-            </div>
+                </div>
+              )}
+              {totalPages > 1 && (
+                <nav
+                  aria-label={t('pagination.label')}
+                  style={{ display: 'flex', gap: 12, justifyContent: 'center', alignItems: 'center', marginTop: 24 }}
+                >
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={currentPage <= 1}
+                    onClick={() => setPage(currentPage - 1)}
+                    aria-label={t('pagination.previous')}
+                    style={{ padding: '8px 14px' }}
+                  >
+                    ←
+                  </button>
+                  <span aria-live="polite" style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                    {t('pagination.pageOf', { page: currentPage, pages: totalPages })}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-secondary"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => setPage(currentPage + 1)}
+                    aria-label={t('pagination.next')}
+                    style={{ padding: '8px 14px' }}
+                  >
+                    →
+                  </button>
+                </nav>
+              )}
+            </>
           )}
         </>
       )}

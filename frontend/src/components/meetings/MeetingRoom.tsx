@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { meetingsApi, type MeetingDetail, type MeetingTranscript } from '@/lib/builderforceApi';
-import { useMediaRoom } from '@/lib/useMediaRoom';
+import { useLiveSession } from '@/lib/live/LiveSessionContext';
 import { useSpeechCaptions, isSpeechCaptionsSupported } from '@/lib/useSpeechCaptions';
 import { VideoGrid, type AgentTile } from '@/components/video/VideoGrid';
 import { MediaControls } from '@/components/video/MediaControls';
@@ -31,7 +31,8 @@ function readTileSize(): 'small' | 'large' {
  */
 export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose: () => void }) {
   const t = useTranslations('meetings');
-  const { user } = useAuth();
+  const { user, tenant } = useAuth();
+  const media = useLiveSession();
   const [detail, setDetail] = useState<MeetingDetail | null>(null);
   const [roomKey, setRoomKey] = useState<string | null>(null);
   const [videoEnabled, setVideoEnabled] = useState(true);
@@ -54,6 +55,11 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
 
   useEffect(() => { setTileSize(readTileSize()); }, []);
 
+  const closeRoom = useCallback(() => {
+    void meetingsApi.leave(meetingId).catch(() => { /* best-effort attendance stamp */ });
+    onClose();
+  }, [meetingId, onClose]);
+
   useEffect(() => {
     let cancelled = false;
     meetingsApi.join(meetingId, { name: me.name, email: user?.email ?? undefined })
@@ -68,7 +74,19 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetingId]);
 
-  const media = useMediaRoom(roomKey, me, { enabled: !!roomKey, audioOnly: !videoEnabled, privacyMode: directOnly ? 'direct-only' : 'relay-fallback' });
+  useEffect(() => {
+    if (!roomKey) return;
+    media.start({
+      roomKey,
+      label: detail?.meeting.title ?? t('joining'),
+      tenantId: tenant?.id ?? null,
+      href: `/workforce?tab=meetings&join=${encodeURIComponent(meetingId)}`,
+      participant: me,
+      audioOnly: !videoEnabled,
+      privacyMode: directOnly ? 'direct-only' : 'relay-fallback',
+      onLeave: closeRoom,
+    });
+  }, [closeRoom, detail?.meeting.title, directOnly, me, media.start, meetingId, roomKey, t, tenant?.id, videoEnabled]);
 
   // Live captions from the local mic (browser STT): interim shows on my tile; final
   // lines are persisted + broadcast to peers as captions.
@@ -154,15 +172,12 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
     }
   }, [meetingId, loadTranscript, t]);
 
-  const leave = useCallback(async () => {
-    try { await meetingsApi.leave(meetingId); } catch { /* ignore */ }
-    onClose();
-  }, [meetingId, onClose]);
+  const leave = useCallback(() => media.leave(), [media]);
 
   const endForAll = useCallback(async () => {
     try { await meetingsApi.end(meetingId); } catch { /* ignore */ }
-    onClose();
-  }, [meetingId, onClose]);
+    media.leave();
+  }, [media, meetingId]);
 
   const headerBtn = (active: boolean): React.CSSProperties => ({
     display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer',

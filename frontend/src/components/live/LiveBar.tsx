@@ -110,6 +110,18 @@ export function LiveBar() {
             <span aria-hidden="true">🖥</span>{live.sharing ? t('stopPresenting') : t('presentScreen')}
           </button>
         )}
+        {live.canRecord && (
+          <button
+            type="button"
+            className={styles.ctl}
+            data-on={live.recording ? '1' : '0'}
+            onClick={live.toggleRecording}
+            aria-pressed={live.recording}
+            disabled={live.recordingSaving}
+          >
+            <span aria-hidden="true">●</span>{live.recording ? t('stopRecording') : live.recordingSaving ? t('savingRecording') : t('record')}
+          </button>
+        )}
         <button
           type="button"
           className={styles.ctl}
@@ -125,6 +137,7 @@ export function LiveBar() {
         {following > 0 && <span className={styles.followPill}>{t('following', { count: following })}</span>}
         {live.shareError && <span className={styles.error} role="status">{t(`shareError.${live.shareError}`)}</span>}
         {live.mediaError && !live.shareError && <span className={styles.error} role="status">{t('mediaUnavailable')}</span>}
+        {live.recordingError && <span className={styles.error} role="status">{t('recordingFailed')}</span>}
         {!live.connected && <span className={styles.error} role="status">{t('connecting')}</span>}
 
         <button type="button" className={`${styles.ctl} ${styles.leave}`} onClick={live.leave}>

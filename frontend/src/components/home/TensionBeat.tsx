@@ -55,12 +55,10 @@ export function TensionBeat() {
           </div>
         </div>
 
-        <p className={styles.resolve}>{t.rich('home.tension.resolve', { em: (chunks) => <em>{chunks}</em> })}</p>
-
         <div className={styles.workflow} id="how-it-works">
           <header className={styles.workflowHeader}>
             <span className={styles.eyebrow}>{t('home.beat.howItWorks')}</span>
-            <h2>{t('home.stepsHeading')}</h2>
+            <h2>{t.rich('home.stepsHeading', { em: (chunks) => <em>{chunks}</em> })}</h2>
           </header>
           <ol className={styles.steps}>
             {steps.map((step, index) => (

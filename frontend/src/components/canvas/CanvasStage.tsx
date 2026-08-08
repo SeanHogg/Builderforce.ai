@@ -20,14 +20,10 @@ import styles from './CanvasStage.module.css';
  * would have to re-measure and re-fit the viewport on every return — the person
  * would come back to a board that had quietly moved.
  *
- * ONE DELIBERATE DEVIATION from the design doc. Switching to a DIFFERENT canvas
- * remounts the board (the stage keys on the session id). The doc says the board
- * should swap inside the mounted stage with no remount; in this codebase the
- * canvas holds ~50 pieces of per-board state whose only reset path is a mount, so
- * a keyless swap would carry board A's revision counter, save baseline and room
- * hydration flag into board B — and the first debounce would push A's graph over
- * B. The remount is confined to an explicit canvas SWITCH; the thing the design
- * is actually buying — a board that survives navigation — is fully delivered.
+ * Switching boards also keeps both instances mounted. This is intentionally a
+ * small board-instance cache rather than a keyless prop swap: CreationCanvas has
+ * substantial board-local state, and preserving an instance per identity keeps
+ * that state isolated without copying board A's save baseline into board B.
  */
 export function CanvasStage() {
   const t = useTranslations('canvasStage');
@@ -69,15 +65,27 @@ export function CanvasStage() {
       {outOfScope && onStage && (
         <p className={styles.outOfScope} role="status">{t('outsideCurrentProject')}</p>
       )}
-      <CreationCanvas
-        key={`${active.persistence}:${active.sessionId}`}
-        sessionId={active.sessionId}
-        persistence={active.persistence}
-        initialFocusId={active.focusId}
-        initialShareOpen={active.shareOpen}
-        initialPresent={active.present}
-        initialModelComparisonIds={active.modelComparisonIds}
-      />
+      {(canvas?.opened ?? [active]).map((board) => {
+        const selected = board.sessionId === active.sessionId && board.persistence === active.persistence;
+        return (
+          <div
+            key={`${board.persistence}:${board.sessionId}`}
+            className={styles.board}
+            data-active={selected ? 'true' : 'false'}
+            aria-hidden={selected ? undefined : 'true'}
+            inert={selected ? undefined : true}
+          >
+            <CreationCanvas
+              sessionId={board.sessionId}
+              persistence={board.persistence}
+              initialFocusId={board.focusId}
+              initialShareOpen={board.shareOpen}
+              initialPresent={board.present}
+              initialModelComparisonIds={board.modelComparisonIds}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

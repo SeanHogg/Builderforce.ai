@@ -1336,8 +1336,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     [nodes],
   );
   useEffect(() => {
-    publishProjectIds?.(boardProjectIds);
-  }, [boardProjectIds, publishProjectIds]);
+    publishProjectIds?.(sessionId, boardProjectIds);
+  }, [boardProjectIds, publishProjectIds, sessionId]);
   const scopedEdges = useMemo(() => edges.filter((edge) => scopedNodeIds.has(edge.source) && scopedNodeIds.has(edge.target)), [edges, scopedNodeIds]);
   const evermindProjectId = useMemo(() => {
     const candidates = [...scopedNodes, ...nodes.filter((node) => !scopedNodeIds.has(node.id))];
@@ -1803,6 +1803,26 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNotice(t('objectAdded', { title: node.data.title }));
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
   }, [canEdit, sessionId, setNodes, t, timeline]);
+
+  // The shell recorder writes through the canonical IDE workspace store, then
+  // announces the durable artifact to the board that started it. Hidden cached
+  // boards hear the same event but ignore a different session id.
+  useEffect(() => {
+    const onSaved = (event: Event) => {
+      const detail = (event as CustomEvent<{ sessionId: string; projectId: number; path: string; mimeType: string }>).detail;
+      if (!detail || detail.sessionId !== sessionId) return;
+      addAtCenter('video', {
+        title: t('recordingTitle'),
+        status: t('recordingStatus'),
+        projectId: detail.projectId,
+        resourceId: `workspace:${detail.projectId}:${detail.path}`,
+        outputFileName: detail.path.split('/').pop(),
+        outputMimeType: detail.mimeType,
+      });
+    };
+    window.addEventListener('builderforce:media-recording-saved', onSaved);
+    return () => window.removeEventListener('builderforce:media-recording-saved', onSaved);
+  }, [addAtCenter, sessionId, t]);
 
   /** Place an object the EDITOR captured (active file, selection, problems, …). */
   const addHostCapture = useCallback((capture: CanvasHostCapture) => {

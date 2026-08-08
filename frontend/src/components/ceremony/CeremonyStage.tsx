@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { useIsMobile } from '@/lib/useIsMobile';
-import { useMediaRoom } from '@/lib/useMediaRoom';
+import { useLiveSession } from '@/lib/live/LiveSessionContext';
 import { VideoGrid } from '@/components/video/VideoGrid';
 import { MediaControls } from '@/components/video/MediaControls';
 import {
@@ -74,7 +74,7 @@ export function CeremonyStage({
   onModeChange: (mode: CeremonyMode) => void;
   onClose?: () => void;
 }) {
-  const { user } = useAuth();
+  const { user, tenant } = useAuth();
   const tMeet = useTranslations('meetings');
   const t = useTranslations('ceremony');
   // Narrow viewports can't fit the two 240px rails + the absolute round table side
@@ -152,11 +152,25 @@ export function CeremonyStage({
   // standup on a board reused one room. The project-scoped key survives only as the
   // fallback for an informal huddle with no session open.
   const mediaRoomKey = session?.meetingRoomKey ?? `ceremony-${projectId}`;
-  const media = useMediaRoom(
-    camerasOn ? mediaRoomKey : null,
-    { name: me.name, ref: me.ref },
-    { enabled: camerasOn, privacyMode: 'direct-only' },
-  );
+  const media = useLiveSession();
+  const onMediaLeft = useCallback(() => setCamerasOn(false), []);
+  useEffect(() => {
+    if (!camerasOn) return;
+    media.start({
+      roomKey: mediaRoomKey,
+      label: t(mode === 'standup' ? 'standup' : 'planning'),
+      tenantId: tenant?.id ?? null,
+      href: '/projects?tab=ceremonies',
+      participant: { name: me.name, ref: me.ref },
+      privacyMode: 'direct-only',
+      onLeave: onMediaLeft,
+    });
+  }, [camerasOn, me.name, me.ref, media.start, mediaRoomKey, mode, onMediaLeft, t, tenant?.id]);
+
+  const leaveMedia = useCallback(() => {
+    if (media.room?.roomKey === mediaRoomKey) media.leave();
+    setCamerasOn(false);
+  }, [media, mediaRoomKey]);
 
   // Seats that are "live": connected peers matched by identity, plus myself.
   const presentKeys = useMemo(() => {
@@ -393,7 +407,7 @@ export function CeremonyStage({
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <button
             type="button"
-            onClick={() => setCamerasOn((v) => !v)}
+            onClick={() => { if (camerasOn) leaveMedia(); else setCamerasOn(true); }}
             aria-pressed={camerasOn}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -463,7 +477,7 @@ export function CeremonyStage({
               micOn={media.micOn}
               onToggleCam={media.toggleCam}
               onToggleMic={media.toggleMic}
-              onLeave={() => setCamerasOn(false)}
+              onLeave={leaveMedia}
             />
           </div>
           <div title={media.mediaPaths.map((path) => `${path.localCandidateType} ↔ ${path.remoteCandidateType}`).join('\n')} style={{ textAlign: 'center', fontSize: 11, color: 'var(--text-muted)' }}>{media.mediaPaths.length ? `Direct ICE path verified · ${media.mediaPaths.length}` : 'Direct-only media · TURN disabled'}</div>

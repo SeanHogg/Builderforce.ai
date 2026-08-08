@@ -1413,6 +1413,7 @@
     "sessionsTab": "Sitzungen",
     "subnavLabel": "Einstellungsbereiche",
     "emailTab": "E-Mail",
+    "logsTab": "Protokolle",
     "emailPrefs": {
       "title": "E-Mail-Einstellungen",
       "whatWeSend": "Was wir senden",
@@ -5750,7 +5751,7 @@
       "Kontrollierter Weg in die Lieferung",
       "Optionale VS-Code-Oberfläche für Engineering"
     ],
-    "stepsHeading": "Von IDEE zu REAL in drei Schritten",
+    "stepsHeading": "Von <em>IDEE zu REAL</em> in drei Schritten",
     "steps": [
       {
         "title": "Die Idee einbringen",
@@ -5917,7 +5918,7 @@
     "featuresLead": "Websites, Workflows, Datensätze, Modelle, Dokumente, Menschen und Agents – alles echte, verbundene Objekte auf einem Board statt Anhänge in einem Chat.",
     "tension": {
       "eyebrow": "Das Problem",
-      "heading": "Ideen sollten real werden – nicht zwischen Tools verloren gehen",
+      "heading": "Ideen werden real",
       "body": "Jeder Wechsel zwischen Dokumenten, Chat, Boards, Editoren und Tabellen kostet Zeit und zwingt Menschen, den Kontext zu wiederholen. Builderforce hält den gesamten Weg verbunden – von der ersten Idee bis zu etwas, das live und sofort nutzbar ist.",
       "fragments": [
         "Dokument",
@@ -5932,8 +5933,7 @@
       "switchCost": "Zeit verloren · Kontext wiederholt",
       "canvasLabel": "Ein durchgehender Kontext",
       "realLabel": "REAL",
-      "realDefinition": "Live in Produktion. Sofort nutzbar.",
-      "resolve": "Builderforce hält Idee, Entscheidungen, Arbeit und Auslieferung zusammen – von <em>IDEE zu REAL</em>, ohne bei jedem Schritt neu anzufangen."
+      "realDefinition": "Live in Produktion. Sofort nutzbar."
     }
   },
   "pricing": {
@@ -7906,6 +7906,12 @@
       "output": "Ausgabe / 1M",
       "actions": "Aktionen",
       "details": "Details"
+    },
+    "pagination": {
+      "label": "Seitennavigation des Modellkatalogs",
+      "previous": "Vorherige Seite",
+      "next": "Nächste Seite",
+      "pageOf": "Seite {page} von {pages}"
     },
     "compare": {
       "dialogLabel": "Modelle vergleichen",
@@ -13680,6 +13686,8 @@
     "editorActions": "Editor-Aktionen",
     "openInEditor": "Im Editor öffnen",
     "objectAdded": "{title} hinzugefügt",
+    "recordingTitle": "Aufzeichnung der Live-Sitzung",
+    "recordingStatus": "Aufgezeichnet",
     "build": {
       "typeLabel": "Was möchten Sie bauen",
       "typeLockedHint": "Der Projekttyp wird beim Anlegen des Arbeitsbereichs festgelegt und kann danach nicht mehr geändert werden.",
@@ -14795,6 +14803,10 @@
     "cameraOff": "Kamera aus",
     "presentScreen": "Bildschirm teilen",
     "stopPresenting": "Teilen beenden",
+    "record": "Aufzeichnen",
+    "stopRecording": "Aufzeichnung beenden",
+    "savingRecording": "Aufzeichnung wird gespeichert…",
+    "recordingFailed": "Die Aufzeichnung konnte nicht gespeichert werden",
     "present": "Präsentieren",
     "exitPresentation": "Präsentation beenden",
     "leave": "Verlassen",

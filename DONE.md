@@ -7,16 +7,15 @@ canvas; it registers it (`lib/canvas/ActiveCanvasContext.tsx`) and the shell mou
 `components/canvas/CanvasStage.tsx`. Opening a page no longer tears down the board, its
 in-flight Brain turn, or the presence poll. Hidden with `visibility` rather than
 `display` so React Flow keeps its measured viewport and a return does not silently move
-the board. **One deliberate deviation from the design doc:** switching to a DIFFERENT
-canvas still remounts (the stage keys on the session id) — the canvas holds ~50 pieces of
-per-board state whose only reset path is a mount, so a keyless swap would carry board A's
-revision counter and save baseline into board B and the first debounce would push A's
-graph over B.
+the board. Switching to a different canvas now keeps a mounted instance per board and
+changes which instance is visible. That isolates each board's revision counter, save
+baseline and hydration state without either remounting or pushing board A's graph over B.
 
 **Pages open beside the board.** `lib/workbenchPolicy.ts` classifies every route
 `stage | workbench | standalone` (pure, table-tested); `components/workspace/Workbench.tsx`
 is the resizable dock (pointer + keyboard resize, persisted width, full-screen under
-900px). Costs nothing for anyone who has not opened a canvas — with no board there is
+900px). A destination's shared `SectionTabs` now render in the dock header rather than
+inside its scrolling route body. Costs nothing for anyone who has not opened a canvas — with no board there is
 nothing to keep, so the page takes the screen exactly as before.
 
 **The call outlives the navigation.** `lib/live/LiveSessionContext.tsx` is a shell-level
@@ -26,12 +25,21 @@ provider owning the room, members, follow, present-mode, camera and screen; `Liv
 only axis that drops a room, enforced as an invariant in the provider rather than only at
 the switcher.
 
+`MeetingRoom`, `CeremonyStage`, and `GuestRoomMeeting` now join that provider instead of
+calling `useMediaRoom` themselves. An architecture test pins the provider as the only
+media-room owner, so every surface has one camera, one microphone and one peer roster.
+
 **One capture layer, many sinks.** `lib/mediaCapture.ts` (+ `useDisplayCapture`,
 `useCameraCapture`) owns acquisition, permission classification and track-stop cleanup.
 `getDisplayMedia` now exists at all — screen share publishes over the existing mesh via
 `replaceTrack` (no renegotiation) with an `m-share` frame so peers know they are watching
 a screen. Both prior `getUserMedia` call sites (`useMediaRoom`, `captureAudio`) migrated;
 no second acquisition remains.
+
+The second sink is live too: `useMediaRecorderSink` records the already-acquired camera
+or display stream, the authenticated IDE file route delegates binary writes to
+`workspaceStore.writeWorkspaceBinary`, and the originating canvas receives a durable
+Video object pointing at the saved workspace artifact.
 
 **Scope rules are written down.** `lib/canvasScopePolicy.ts` states all four axes in one
 pure function — tenant = identity (close the board, leave the room after a confirm),

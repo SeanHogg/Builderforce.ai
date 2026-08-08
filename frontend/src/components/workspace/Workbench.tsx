@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import SectionTabs from '@/components/SectionTabs';
 import styles from './Workbench.module.css';
 
 /** Bounds keep the dock useful: never a sliver, never the whole screen. */
@@ -104,6 +105,7 @@ export function Workbench({ children, title }: { children: React.ReactNode; titl
       />
       <div className={styles.head}>
         <strong className={styles.title}>{title || t('title')}</strong>
+        <div className={styles.tabs}><SectionTabs /></div>
         <button type="button" className={styles.close} onClick={close} aria-label={t('close')}>×</button>
       </div>
       <div className={styles.body}>{children}</div>

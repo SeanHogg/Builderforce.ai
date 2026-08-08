@@ -86,7 +86,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <CanvasStage />
                 {dockedPage ? (
                   <Workbench>
-                    {!isFullScreenRoute(pathname) && <SectionTabs />}
                     {children}
                   </Workbench>
                 ) : (

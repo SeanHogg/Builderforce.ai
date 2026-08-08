@@ -45,7 +45,7 @@
 }
 
 .title {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   font-size: 0.85rem;
   font-weight: 600;
@@ -53,6 +53,22 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tabs :global(.section-tabs) {
+  border: 0;
+  background: transparent;
+}
+
+.tabs :global(.section-tabs__inner) {
+  padding: 0;
+  overflow-x: auto;
 }
 
 .close {

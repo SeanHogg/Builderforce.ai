@@ -2,8 +2,11 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
-import { useMediaRoom, type RemoteTile } from '@/lib/useMediaRoom';
+import { useMediaRoom, type MediaPathEvidence, type MediaRoomTransport, type RemoteTile } from '@/lib/useMediaRoom';
 import { useDisplayCapture } from '@/lib/useDisplayCapture';
+import { useMediaRecorderSink, type SavedMediaRecording } from '@/lib/useMediaRecorder';
+import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
+import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 
 /**
  * The live session — hoisted OUT of the canvas so a call outlives a navigation.
@@ -60,6 +63,13 @@ export interface LiveRoomTarget {
   tenantId: string | null;
   /** Deep link back into the surface the room is anchored to. */
   href?: string;
+  /** Surface-specific media configuration; transport is only different for guests. */
+  participant?: { name: string; ref: string };
+  audioOnly?: boolean;
+  privacyMode?: 'direct-only' | 'relay-fallback';
+  transport?: MediaRoomTransport;
+  /** Surface bookkeeping (attendance/UI), invoked by every leave affordance. */
+  onLeave?: () => void | Promise<void>;
 }
 
 export interface LiveSessionValue {
@@ -80,6 +90,13 @@ export interface LiveSessionValue {
   /** The last capture failure, for a human-readable notice. Null when fine. */
   shareError: string | null;
   mediaError: string | null;
+  captions: Record<string, string>;
+  speaking: Set<string>;
+  mediaPaths: MediaPathEvidence[];
+  canRecord: boolean;
+  recording: boolean;
+  recordingSaving: boolean;
+  recordingError: string | null;
   /**
    * Presentation mode: the shell chrome recedes and everyone following sees this
    * surface. Shell state so it survives leaving the board.
@@ -94,6 +111,7 @@ export interface LiveSessionValue {
   toggleCam: () => void;
   /** Open the screen picker and publish; stops if already sharing. */
   toggleShare: () => Promise<void>;
+  toggleRecording: () => void;
   setPresentMode: (on: boolean) => void;
   setFollowing: (userId: string | null) => void;
   /**
@@ -147,6 +165,8 @@ export function mergeRoster(
 
 export function LiveSessionProvider({ children }: { children: React.ReactNode }) {
   const { user, tenant } = useAuth();
+  const canvas = useOptionalActiveCanvas();
+  const scope = useOptionalProjectScope();
   const [room, setRoom] = useState<LiveRoomTarget | null>(null);
   const [presentMode, setPresentModeState] = useState(false);
   const [followingUserId, setFollowingUserId] = useState<string | null>(null);
@@ -154,31 +174,50 @@ export function LiveSessionProvider({ children }: { children: React.ReactNode })
   const [boardMembers, setBoardMembers] = useState<Array<{ userId: string; displayName: string | null }>>([]);
   const [boardUserId, setBoardUserId] = useState<string | null>(null);
 
-  const me = useMemo(
+  const authenticatedMe = useMemo(
     () => ({ name: user?.name || user?.email || 'You', ref: user?.id != null ? String(user.id) : 'me' }),
     [user?.name, user?.email, user?.id],
   );
 
-  const media = useMediaRoom(room?.roomKey ?? null, me, { enabled: room != null });
+  const me = room?.participant ?? authenticatedMe;
+  const media = useMediaRoom(room?.roomKey ?? null, me, {
+    enabled: room != null,
+    audioOnly: room?.audioOnly,
+    privacyMode: room?.privacyMode,
+    transport: room?.transport,
+  });
   const { publishDisplay, unpublishDisplay } = media;
 
   // The browser's own "Stop sharing" bar must take the room with it, or the live
   // bar keeps claiming a presentation nobody is receiving.
   const onCaptureStopped = useCallback(() => { unpublishDisplay(); }, [unpublishDisplay]);
   const display = useDisplayCapture(onCaptureStopped);
+  const recordingProjectId = scope?.currentProjectId ?? (canvas?.projectIds.length === 1 ? canvas.projectIds[0] : null);
+  const onRecordingSaved = useCallback((recording: SavedMediaRecording) => {
+    if (!canvas?.active) return;
+    window.dispatchEvent(new CustomEvent('builderforce:media-recording-saved', {
+      detail: { ...recording, sessionId: canvas.active.sessionId },
+    }));
+  }, [canvas?.active]);
+  const recorder = useMediaRecorderSink(display.stream ?? media.localStream, recordingProjectId, onRecordingSaved);
 
   const leave = useCallback(() => {
+    if (recorder.recording) recorder.stop();
     display.stop();
     unpublishDisplay();
+    void room?.onLeave?.();
     setRoom(null);
     setPresentModeState(false);
     setFollowingUserId(null);
     setShareError(null);
-  }, [display, unpublishDisplay]);
+  }, [display, recorder, room, unpublishDisplay]);
 
   const start = useCallback((target: LiveRoomTarget) => {
     setShareError(null);
-    setRoom(target);
+    setRoom((current) => {
+      if (current && current.roomKey !== target.roomKey) void current.onLeave?.();
+      return target;
+    });
   }, []);
 
   // A room belongs to the workspace that made it. Switching tenant is the ONE
@@ -209,6 +248,10 @@ export function LiveSessionProvider({ children }: { children: React.ReactNode })
     setShareError(null);
     publishDisplay(stream);
   }, [display, publishDisplay, unpublishDisplay]);
+
+  const toggleRecording = useCallback(() => {
+    if (recorder.recording) recorder.stop(); else recorder.start();
+  }, [recorder]);
 
   const publishPresence = useCallback(
     (members: Array<{ userId: string; displayName: string | null }>, currentUserId: string | null) => {
@@ -254,6 +297,13 @@ export function LiveSessionProvider({ children }: { children: React.ReactNode })
     canShare: display.supported,
     shareError,
     mediaError: media.mediaError,
+    captions: media.captions,
+    speaking: media.speaking,
+    mediaPaths: media.mediaPaths,
+    canRecord: recorder.supported,
+    recording: recorder.recording,
+    recordingSaving: recorder.saving,
+    recordingError: recorder.error,
     presentMode,
     followingUserId,
     start,
@@ -261,13 +311,15 @@ export function LiveSessionProvider({ children }: { children: React.ReactNode })
     toggleMic: media.toggleMic,
     toggleCam: media.toggleCam,
     toggleShare,
+    toggleRecording,
     setPresentMode,
     setFollowing,
     publishPresence,
   }), [
     display.active, display.supported, followingUserId, leave, media.camOn, media.connected, media.localStream,
-    media.mediaError, media.micOn, media.tiles, media.toggleCam, media.toggleMic, members, presentMode,
-    publishPresence, room, setFollowing, setPresentMode, shareError, start, toggleShare,
+    media.captions, media.mediaError, media.mediaPaths, media.micOn, media.speaking, media.tiles, media.toggleCam, media.toggleMic, members, presentMode,
+    recorder.error, recorder.recording, recorder.saving, recorder.supported,
+    publishPresence, room, setFollowing, setPresentMode, shareError, start, toggleRecording, toggleShare,
   ]);
 
   return <LiveSessionContext.Provider value={value}>{children}</LiveSessionContext.Provider>;

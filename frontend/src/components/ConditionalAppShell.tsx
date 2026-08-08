@@ -309,8 +309,8 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
         outlive a navigation, so they are mounted ABOVE the shell switch — a
         provider inside AppShell would be torn down the moment a route moved
         between the app shell and the public one, taking the call with it. */}
-    <LiveSessionProvider>
     <ActiveCanvasProvider stageHosted={stageHosted}>
+    <LiveSessionProvider>
     <BrainProvider config={hasTenant ? brainConfig : guestBrainConfig}>
       {/* App-wide pin state: any widget anywhere can show a pin control that
           reflects/updates the user's personal /insights home dashboard. */}
@@ -388,8 +388,8 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
       </AiInsightPanelProvider>
       </PinsProvider>
     </BrainProvider>
-    </ActiveCanvasProvider>
     </LiveSessionProvider>
+    </ActiveCanvasProvider>
     </ProjectScopeProvider>
   );
 }

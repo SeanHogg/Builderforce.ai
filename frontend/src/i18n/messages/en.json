@@ -1413,6 +1413,7 @@
     "sessionsTab": "Sessions",
     "subnavLabel": "Settings sections",
     "emailTab": "Email",
+    "logsTab": "Logs",
     "emailPrefs": {
       "title": "Email preferences",
       "whatWeSend": "What we send",
@@ -5751,7 +5752,7 @@
       "Governed path into delivery",
       "Optional VS Code engineering surface"
     ],
-    "stepsHeading": "From IDEA to REAL in three steps",
+    "stepsHeading": "From <em>IDEA to REAL</em> in three steps",
     "steps": [
       {
         "title": "Bring the idea",
@@ -5918,7 +5919,7 @@
     "featuresLead": "Websites, workflows, datasets, models, documents, people and agents — all real, connected objects on one board, not attachments in a chat.",
     "tension": {
       "eyebrow": "The problem",
-      "heading": "Ideas should become real—not get lost between tools",
+      "heading": "Ideas become real",
       "body": "Every switch between docs, chat, boards, editors, and spreadsheets costs time and forces people to repeat the context. Builderforce keeps the whole journey connected—from the first idea to something live in production and ready to use.",
       "fragments": [
         "Doc",
@@ -5933,8 +5934,7 @@
       "switchCost": "Time lost · context repeated",
       "canvasLabel": "One continuous context",
       "realLabel": "REAL",
-      "realDefinition": "Live in production. Ready to use.",
-      "resolve": "Builderforce keeps the idea, decisions, work, and delivery together—so you can go from <em>IDEA to REAL</em> without starting over at every step."
+      "realDefinition": "Live in production. Ready to use."
     }
   },
   "pricing": {
@@ -7907,6 +7907,12 @@
       "output": "Output / 1M",
       "actions": "Actions",
       "details": "Details"
+    },
+    "pagination": {
+      "label": "Model catalog pagination",
+      "previous": "Previous page",
+      "next": "Next page",
+      "pageOf": "Page {page} of {pages}"
     },
     "compare": {
       "dialogLabel": "Compare models",
@@ -13691,6 +13697,8 @@
     "editorActions": "Editor actions",
     "openInEditor": "Open in editor",
     "objectAdded": "{title} added",
+    "recordingTitle": "Live session recording",
+    "recordingStatus": "Recorded",
     "build": {
       "typeLabel": "What are you building",
       "typeLockedHint": "The build type is set when the workspace is created and cannot be changed afterwards.",
@@ -14806,6 +14814,10 @@
     "cameraOff": "Camera off",
     "presentScreen": "Present screen",
     "stopPresenting": "Stop presenting",
+    "record": "Record",
+    "stopRecording": "Stop recording",
+    "savingRecording": "Saving recording…",
+    "recordingFailed": "Recording could not be saved",
     "present": "Present",
     "exitPresentation": "Exit presentation",
     "leave": "Leave",

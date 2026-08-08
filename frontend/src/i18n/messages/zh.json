@@ -1413,6 +1413,7 @@
     "sessionsTab": "会话",
     "subnavLabel": "设置分区",
     "emailTab": "邮件",
+    "logsTab": "日志",
     "emailPrefs": {
       "title": "邮件偏好设置",
       "whatWeSend": "我们会发送什么",
@@ -5750,7 +5751,7 @@
       "受治理的交付路径",
       "面向工程的可选 VS Code 界面"
     ],
-    "stepsHeading": "三步从 IDEA 走向 REAL",
+    "stepsHeading": "三步从 <em>IDEA 走向 REAL</em>",
     "steps": [
       {
         "title": "带来想法",
@@ -5917,7 +5918,7 @@
     "featuresLead": "网站、工作流、数据集、模型、文档、人员与智能体——全部作为真实且互联的对象置于同一画布，而不是聊天中的附件。",
     "tension": {
       "eyebrow": "问题所在",
-      "heading": "想法应该成为现实，而不是迷失在工具之间",
+      "heading": "让想法成为现实",
       "body": "每次在文档、聊天、看板、编辑器和表格之间切换，都会浪费时间，并迫使人们重复上下文。Builderforce 让整个过程保持连接——从最初的想法，到已上线且立即可用的成果。",
       "fragments": [
         "文档",
@@ -5932,8 +5933,7 @@
       "switchCost": "时间流失 · 上下文重复",
       "canvasLabel": "一个连续的上下文",
       "realLabel": "REAL",
-      "realDefinition": "已上线。立即可用。",
-      "resolve": "Builderforce 将想法、决策、工作与交付保持在一起，让你从 <em>IDEA 走到 REAL</em>，无需在每一步重新开始。"
+      "realDefinition": "已上线。立即可用。"
     }
   },
   "pricing": {
@@ -7906,6 +7906,12 @@
       "output": "输出 / 1M",
       "actions": "操作",
       "details": "详情"
+    },
+    "pagination": {
+      "label": "模型目录分页",
+      "previous": "上一页",
+      "next": "下一页",
+      "pageOf": "第 {page} 页，共 {pages} 页"
     },
     "compare": {
       "dialogLabel": "比较模型",
@@ -13680,6 +13686,8 @@
     "editorActions": "编辑器操作",
     "openInEditor": "在编辑器中打开",
     "objectAdded": "已添加 {title}",
+    "recordingTitle": "实时会话录制",
+    "recordingStatus": "已录制",
     "build": {
       "typeLabel": "你要构建什么",
       "typeLockedHint": "构建类型在创建工作区时确定，之后无法更改。",
@@ -14795,6 +14803,10 @@
     "cameraOff": "摄像头已关",
     "presentScreen": "共享屏幕",
     "stopPresenting": "停止共享",
+    "record": "录制",
+    "stopRecording": "停止录制",
+    "savingRecording": "正在保存录制…",
+    "recordingFailed": "无法保存录制",
     "present": "演示",
     "exitPresentation": "退出演示",
     "leave": "离开",

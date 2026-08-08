@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
-import { useMediaRoom } from '@/lib/useMediaRoom';
+import { useLiveSession } from '@/lib/live/LiveSessionContext';
 import { VideoGrid } from '@/components/video/VideoGrid';
 import { guestMediaTransport } from '@/lib/guestRoomApi';
 
@@ -21,11 +21,23 @@ import { guestMediaTransport } from '@/lib/guestRoomApi';
 export function GuestRoomMeeting({ code, name, onLeave }: { code: string; name: string; onLeave: () => void }) {
   const t = useTranslations('guestRoom');
   const [focusedId, setFocusedId] = useState<string | null>(null);
+  const onLeaveRef = useRef(onLeave);
+  useEffect(() => { onLeaveRef.current = onLeave; }, [onLeave]);
+  const onRoomLeft = useCallback(() => onLeaveRef.current(), []);
 
-  const media = useMediaRoom(code, { name, ref: 'self' }, {
-    enabled: true,
-    transport: guestMediaTransport,
-  });
+  const media = useLiveSession();
+  useEffect(() => {
+    media.start({
+      roomKey: code,
+      label: t('meetingTitle'),
+      tenantId: null,
+      participant: { name, ref: 'self' },
+      transport: guestMediaTransport,
+      onLeave: onRoomLeft,
+    });
+  }, [code, media.start, name, onRoomLeft, t]);
+
+  const leave = () => media.leave();
 
   return (
     <div className="gr-meeting">
@@ -51,7 +63,7 @@ export function GuestRoomMeeting({ code, name, onLeave }: { code: string; name: 
           >
             {media.camOn ? t('camOn') : t('camOff')}
           </button>
-          <button type="button" onClick={onLeave} className="gr-media-btn gr-media-leave">{t('endMeeting')}</button>
+          <button type="button" onClick={leave} className="gr-media-btn gr-media-leave">{t('endMeeting')}</button>
         </div>
       </div>
 

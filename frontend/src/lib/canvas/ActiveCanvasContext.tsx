@@ -32,6 +32,8 @@ export interface ActiveCanvas {
 
 export interface ActiveCanvasValue {
   active: ActiveCanvas | null;
+  /** Every board opened in this shell session. Each owns one mounted canvas. */
+  opened: ActiveCanvas[];
   /**
    * True when THIS shell renders the stage. The logged-out marketing shell does
    * not, so the anonymous-canvas route falls back to rendering the board itself
@@ -42,7 +44,7 @@ export interface ActiveCanvasValue {
   projectIds: number[];
   open: (canvas: ActiveCanvas) => void;
   close: () => void;
-  publishProjectIds: (ids: number[]) => void;
+  publishProjectIds: (sessionId: string, ids: number[]) => void;
 }
 
 const ActiveCanvasContext = createContext<ActiveCanvasValue | null>(null);
@@ -66,7 +68,8 @@ export function ActiveCanvasProvider({
   stageHosted: boolean;
 }) {
   const [active, setActive] = useState<ActiveCanvas | null>(null);
-  const [projectIds, setProjectIds] = useState<number[]>([]);
+  const [opened, setOpened] = useState<ActiveCanvas[]>([]);
+  const [projectIdsBySession, setProjectIdsBySession] = useState<Record<string, number[]>>({});
 
   const open = useCallback((canvas: ActiveCanvas) => {
     setActive((current) => {
@@ -85,23 +88,36 @@ export function ActiveCanvasProvider({
       ) return current;
       return canvas;
     });
-    setProjectIds((current) => (current.length === 0 ? current : []));
+    setOpened((current) => {
+      const index = current.findIndex((item) => item.sessionId === canvas.sessionId && item.persistence === canvas.persistence);
+      if (index < 0) return [...current, canvas];
+      const existing = current[index];
+      if (existing === canvas) return current;
+      const next = current.slice();
+      next[index] = canvas;
+      return next;
+    });
   }, []);
 
   const close = useCallback(() => {
     setActive(null);
-    setProjectIds([]);
+    setOpened([]);
+    setProjectIdsBySession({});
   }, []);
 
-  const publishProjectIds = useCallback((ids: number[]) => {
-    setProjectIds((current) => (
-      current.length === ids.length && current.every((id, index) => id === ids[index]) ? current : ids
-    ));
+  const publishProjectIds = useCallback((sessionId: string, ids: number[]) => {
+    setProjectIdsBySession((current) => {
+      const prior = current[sessionId] ?? [];
+      if (prior.length === ids.length && prior.every((id, index) => id === ids[index])) return current;
+      return { ...current, [sessionId]: ids };
+    });
   }, []);
+
+  const projectIds = active ? (projectIdsBySession[active.sessionId] ?? []) : [];
 
   const value = useMemo<ActiveCanvasValue>(
-    () => ({ active, stageHosted, projectIds, open, close, publishProjectIds }),
-    [active, close, open, projectIds, publishProjectIds, stageHosted],
+    () => ({ active, opened, stageHosted, projectIds, open, close, publishProjectIds }),
+    [active, close, open, opened, projectIds, publishProjectIds, stageHosted],
   );
 
   return <ActiveCanvasContext.Provider value={value}>{children}</ActiveCanvasContext.Provider>;

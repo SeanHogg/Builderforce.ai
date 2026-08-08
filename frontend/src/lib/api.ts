@@ -572,6 +572,19 @@ export async function uploadArtifact(
   });
 }
 
+/** Persist a binary artifact through the same authenticated workspace route. */
+export async function saveBinaryFile(
+  projectId: number | string,
+  filePath: string,
+  content: Blob,
+): Promise<void> {
+  await projectsRequest(`${filesBase(projectId)}/${filePath.split('/').map(encodeURIComponent).join('/')}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': content.type || 'application/octet-stream' },
+    body: content,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // IDE: Workforce agents
 // ---------------------------------------------------------------------------

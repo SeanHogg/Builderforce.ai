@@ -19,6 +19,7 @@ import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import PageContainer from '@/components/PageContainer';
 import PillTabs, { type PillTab } from '@/components/PillTabs';
+import { Button } from '@/components/ui';
 import { RoleGate } from '@/components/RoleGate';
 import {
   getStoredUser,
@@ -174,7 +175,7 @@ export default function SettingsClient() {
       // project inherits (0363). Role-gated inside the panel, not hidden from the bar.
       { id: 'manager', label: t('managerDefaults'), icon: '🧭', href: '/settings?sub=manager' },
       { id: 'spend', label: t('spendLimits'), icon: '💳', href: '/settings?sub=spend' },
-      { id: 'logs', label: 'Logs', icon: '📜', href: '/settings?sub=logs' },
+      { id: 'logs', label: t('logsTab'), icon: '📜', href: '/settings?sub=logs' },
     ] : []),
   ];
 
@@ -304,17 +305,9 @@ export default function SettingsClient() {
         <PsychometricEditor value={personality} onChange={setPersonality} forceUnlocked />
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           {personalityNotice && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{personalityNotice}</span>}
-          <button
-            type="button"
-            onClick={savePersonality}
-            disabled={personalitySaving}
-            style={{
-              padding: '8px 16px', fontSize: 13, fontWeight: 600, borderRadius: 8, cursor: 'pointer',
-              background: 'var(--accent, #6366f1)', color: '#fff', border: 'none', opacity: personalitySaving ? 0.6 : 1,
-            }}
-          >
+          <Button variant="primary" onClick={savePersonality} loading={personalitySaving}>
             {personalitySaving ? t('personalitySaving') : t('personalitySave')}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

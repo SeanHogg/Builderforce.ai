@@ -7,22 +7,6 @@
 
 .beat { display: grid; gap: clamp(28px, 4vw, 44px); }
 
-.resolve {
-  max-width: 920px;
-  margin: 0 auto;
-  color: var(--text-primary);
-  font-size: clamp(1rem, 1.6vw, 1.16rem);
-  font-weight: 650;
-  line-height: 1.5;
-  text-align: center;
-  text-wrap: balance;
-}
-
-.resolve em {
-  color: var(--coral-bright);
-  font-style: normal;
-}
-
 /* ── The diagram ── */
 
 .diagram {
@@ -187,6 +171,11 @@
   font: 680 clamp(1.8rem, 3.8vw, 3.15rem)/1.04 var(--font-display);
   letter-spacing: -.045em;
   text-wrap: balance;
+}
+
+.workflowHeader h2 em {
+  color: var(--coral-bright);
+  font-style: normal;
 }
 
 .steps {

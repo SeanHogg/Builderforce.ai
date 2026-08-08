@@ -53,6 +53,7 @@ import {
   listWorkspaceFiles,
   readWorkspaceFile,
   writeWorkspaceFile,
+  writeWorkspaceBinary,
   deleteWorkspaceFile,
 } from '../../application/ide/workspaceStore';
 import { onCanvasWrite } from '../../application/backend';
@@ -300,7 +301,11 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     // The store enforces the path + structural-content contracts, so no caller
     // (editor, agent, script) can persist a traversal path or another file's
     // content (JSON into .js, source into .html) — 400/422 with the reason.
-    const result = await writeWorkspaceFile(bucket, projectId, path, await c.req.text());
+    const contentType = c.req.header('content-type')?.split(';', 1)[0]?.trim().toLowerCase() ?? 'text/plain';
+    const binary = /^(?:video|audio|image|font)\//.test(contentType) || contentType === 'application/octet-stream';
+    const result = binary
+      ? await writeWorkspaceBinary(bucket, projectId, path, new Uint8Array(await c.req.arrayBuffer()), contentType)
+      : await writeWorkspaceFile(bucket, projectId, path, await c.req.text());
     if (!result.ok) return c.json({ error: result.reason }, result.status);
     // Editing a handler in the editor must change what the live ingress serves on
     // the very next request — the canvas is the source of truth, and the ingress
