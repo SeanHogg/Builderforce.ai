@@ -1,125 +1,214 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #558
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document: Credential Rotation without Service Restart
+
+**Feature ID:** FR-4.3  
+**Status:** Draft  
+**Version:** 1.0  
+
+---
 
 ## Problem & Goal
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+### Problem
+Currently, the service loads all secrets (database passwords, API keys, TLS certificates, etc.) at startup. When credentials are rotated in the external secret store (e.g., Vault, Kubernetes secrets, mounted files), a full process restart is required to pick up the new values. This causes:
+- Unnecessary downtime or rolling restart overhead, breaking long-lived connections.
+- Increased operational toil, as SREs must coordinate restarts with rotation schedules.
+- Risk of authentication failures and service disruption if restarts are not perfectly timed.
 
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
+### Goal
+Provide a live credential reload mechanism so that updated secrets are automatically picked up by running service instances without any process restart, ensuring continuous availability and compliance with security rotation policies.
 
 ---
 
 ## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
+- **Site Reliability Engineers (SREs)** responsible for secret rotation automation and service uptime.
+- **DevOps & Platform Engineers** who deploy and configure the service across environments.
+- **Security Engineers** enforcing credential rotation policies and auditing access.
 
 ---
 
 ## Scope
 
 ### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
+- Detect changes to secrets from the configured backend(s) while the service is running.
+- Reload secrets into memory and refresh all dependent components (connection pools, clients, internal caches) without dropping in-flight requests.
+- Support at least the following secret backends: local file system (e.g., Kubernetes secrets volume), HashiCorp Vault (KV v2), environment variables (for static reload scenarios of env-sourced secrets).
+- Provide an optional grace period during which both old and new credentials are valid to avoid authentication failures during rotation.
+- Expose observability: reload success/failure metrics, structured logs, a health check endpoint indicating whether the latest secrets are loaded.
+- Preserve compatibility: existing startup-time secret loading must continue to work; the live reload feature is additive and can be enabled/disabled.
 
 ### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
+- Rotating or generating new secrets in the external secret store (out-of-band operation remains the responsibility of the operator or a separate rotation tool).
+- Reloading non-secret configuration parameters (e.g., feature flags, application config not related to credentials).
+- Implementing a new secret store; only supported backends are in scope.
+- Handling rotation of secrets that require custom client re-initialization beyond connection refresh (e.g., full SDK re-creation for a third-party API if the SDK does not support key refresh). The service will notify via logs/health when such a manual step is required.
+- Automatic re-encryption of secrets at rest within the service.
 
 ---
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+### FR-4.3.1 Secret Change Detection
+- The service shall watch the configured secret source for changes using the most efficient mechanism available (inotify for files, Vault agent’s `vault exec` template rendering, or a comparable watch API).
+- If native watch is not possible (e.g., environment variables), periodic polling (configurable interval, default 60 seconds) shall be supported as a fallback.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+### FR-4.3.2 Reload Triggering
+- Automatic mode: a secret change shall trigger an immediate reload without human intervention.
+- Manual mode: a dedicated admin API endpoint (e.g., `POST /admin/credentials/reload`) shall allow on-demand reload.
+- In automatic mode, reload shall be triggered only after the secret value has stabilized (debounce window, default 5 seconds) to avoid partial updates.
 
----
+### FR-4.3.3 Graceful Credential Update
+- During the reload process, the service shall temporarily accept both old and new credentials for a configurable grace period (default 30 seconds) to cover the propagation window.
+- All existing connection pools (database, message brokers, HTTP clients using client certs) shall be instructed to rotate credentials: new connections use the new secret, existing connections remain valid until natural termination or a connection refresh timeout.
+- The service must not terminate active requests; new requests after the reload should seamlessly use the updated credentials.
 
-### FR-2 — Guided (Interactive) Mode
+### FR-4.3.4 Multi-Backend Support
+- The reload logic must abstract the backend: detection and retrieval shall work consistently whether secrets come from files, Vault, or environment variables (for env-var based secrets, only polling is supported).
+- Backend selection is done via configuration; at least one reload-capable backend must be configured to enable the feature.
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+### FR-4.3.5 Error Handling & Fallback
+- If a new secret cannot be loaded (e.g., parse error, backend unreachable), the service shall keep using the last-known-good credentials and report the failure via logs and a health check.
+- After a configurable number of consecutive failures, an alert-worthy metric shall be emitted but the service should never crash due to a reload failure.
 
----
+### FR-4.3.6 Observability
+- Emit a structured log entry for every reload attempt, including backend, timestamp, success/failure, and duration.
+- Expose Prometheus metrics:
+  - `credential_reload_total` (counter) with status label.
+  - `credential_reload_duration_seconds` (histogram).
+  - `credential_current_age_seconds` (gauge) indicating time since last successful reload.
+- Health check endpoint `/health/credentials` shall return 200 only if the last reload was successful and credentials are within a configurable maximum age (e.g., 90% of rotation interval).
 
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
+### FR-4.3.7 Security & Auditing
+- Reload events must be auditable, with the identity of the requestor (for manual reload) or system event logged.
+- Secrets must never be written to stdout/stderr or clear-text logs; redaction must apply.
 
 ---
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+1. **Live Reload Test:** When a secret (e.g., database password) is updated in the backend, the service automatically picks up the new value within 15 seconds (polling mode) or near-real-time (watch mode) without any process restart.
+2. **Zero-Downtime Rotation:** During the grace period (30 seconds), authentication requests using either the old or new secret succeed with no errors in the service logs.
+3. **Connection Pool Refresh:** After a database password rotation, new connections are established using the new password, and existing query in progress is not interrupted; no dropped queries or connection errors occur due to rotation.
+4. **Health Endpoint:** `/health/credentials` returns HTTP 200 within 1 second after a successful reload and returns 503 if no reload has succeeded in the last configured `max_age`.
+5. **Manual Reload:** A `POST /admin/credentials/reload` triggers an immediate reload and returns 200 with a JSON response containing reload status and timestamp.
+6. **Fallback Behavior:** If a secret value is corrupted (e.g., malformed certificate), the service retains the prior valid credentials, logs a clear error, and does not crash; metric `credential_reload_total{status="failure"}` increments.
+7. **Multi-Backend:** The feature works with file-based secrets (Kubernetes secret volume), Vault dynamic secrets, and env-var sourced credentials (via polling) without code changes.
+8. **No Regressions:** Existing startup-only secret loading continues to work when live reload is disabled or when the backend does not support watching.
 
 ---
 
 ## Out of Scope
+- Built-in secret rotation orchestration (e.g., triggering a password change in the database). The service only reloads what has already been rotated externally.
+- Integration with custom secret backends not listed; extensibility points for future backends are allowed but not part of this PRD.
+- Reloading of non-credential runtime configuration that affects business logic (separate feature).
+- Automatic scaling of connection pools based on new credentials (current pool sizes remain unchanged).
+- Support for rotating secrets in embedded/clustered state where multiple nodes must coordinate reload order; this design assumes independent per-instance reload.
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+## Requirements
+
+> _Authored by the Business Analyst — traceable to FR-4.3.1 through FR-4.3.7._
+
+### REQ-1: Backend Abstraction Layer
+| ID | Requirement | Maps To | Priority |
+|----|------------|---------|----------|
+| REQ-1.1 | The system SHALL define a `SecretBackend` interface abstracting secret retrieval and change detection, with a `fetch()` method returning a `Map<string, string>` of credential name → value pairs and a `watch(onChange)` method subscribing to change notifications. | FR-4.3.1, FR-4.3.4 | P0 |
+| REQ-1.2 | Implementations SHALL be provided for: **FileBackend** (reads secret files from a directory; uses `fs.watch` / inotify), **VaultBackend** (reads from HashiCorp Vault KV v2; uses polling + optional Vault Agent template), and **EnvBackend** (reads from `process.env` at configurable keys; polling-only, no watch). | FR-4.3.4 | P0 |
+| REQ-1.3 | Backend selection SHALL be driven by configuration (e.g., `SECRET_BACKEND=file|vault|env`). When none is configured, live reload is disabled and startup-only loading applies with no change detection. | FR-4.3.4, AC #8 | P0 |
+| REQ-1.4 | The backend interface SHALL be extensible so new backends (e.g., AWS Secrets Manager, Azure Key Vault) can be added by implementing the interface without changes to reload orchestration. | FR-4.3.4 (future-proofing) | P2 |
+
+### REQ-2: Change Detection & Reload Triggering
+| ID | Requirement | Maps To | Priority |
+|----|------------|---------|----------|
+| REQ-2.1 | In **watch mode** (FileBackend), the system SHALL use OS-level file watchers (`fs.watch` / `inotify`) to detect secret file modifications and trigger reload within 2 seconds of a stable write. | FR-4.3.1, AC #1 | P0 |
+| REQ-2.2 | In **polling mode** (EnvBackend, VaultBackend, or fallback), the system SHALL poll the backend at a configurable interval (`CREDENTIAL_POLL_INTERVAL_SECONDS`, default 60). Polling SHALL be the fallback when native watch is unavailable. | FR-4.3.1, AC #1 | P0 |
+| REQ-2.3 | A **debounce window** (`CREDENTIAL_DEBOUNCE_SECONDS`, default 5) SHALL suppress reloads triggered within the window of a prior event, ensuring the secret value has stabilized before reload. | FR-4.3.2 | P1 |
+| REQ-2.4 | A **manual reload endpoint** `POST /admin/credentials/reload` SHALL trigger an immediate reload regardless of watch/polling state. The endpoint SHALL return `200 OK` with JSON `{ "status": "success" | "failure", "timestamp": "<ISO8601>", "backend": "<backend>", "duration_ms": <number> }`. | FR-4.3.2, AC #5 | P1 |
+| REQ-2.5 | The manual reload endpoint SHALL be protected by an admin authorization check (existing admin middleware) and SHALL log the identity of the requestor. | FR-4.3.7 | P0 |
+
+### REQ-3: Graceful Credential Rotation
+| ID | Requirement | Maps To | Priority |
+|----|------------|---------|----------|
+| REQ-3.1 | During reload, the system SHALL atomically swap the in-memory credential store (old → new) so that readers always see a consistent set of credentials, never a partially-updated map. | FR-4.3.3 | P0 |
+| REQ-3.2 | A **grace period** (`CREDENTIAL_GRACE_PERIOD_SECONDS`, default 30) SHALL be observed: for the duration of the grace period after a successful reload, both old and new credentials SHALL be accepted for authentication. After the grace period expires, only the new credentials are valid. | FR-4.3.3, AC #2 | P0 |
+| REQ-3.3 | The system SHALL maintain a **credential version counter** incremented on each successful reload, and expose it via the health endpoint so operators can confirm which version is active. | FR-4.3.6 | P2 |
+| REQ-3.4 | Database connection pools (via the existing `buildDatabase` / Drizzle infrastructure) SHALL be notified on reload: a new pool using new credentials SHALL be warmed up before the old pool is drained. In-flight queries on the old pool SHALL complete naturally; new queries SHALL route to the new pool. No connections SHALL be forcibly terminated. | FR-4.3.3, AC #3 | P0 |
+| REQ-3.5 | HTTP client instances using client TLS certificates SHALL re-read their certificate/key material on reload. Existing keep-alive connections using old certs SHALL complete; new connections SHALL use the new material. | FR-4.3.3 | P1 |
+| REQ-3.6 | Active HTTP requests SHALL NOT be aborted or retried due to a reload; the reload SHALL be invisible to in-flight request handlers. | FR-4.3.3 | P0 |
+
+### REQ-4: Error Handling & Fallback
+| ID | Requirement | Maps To | Priority |
+|----|------------|---------|----------|
+| REQ-4.1 | If a reload attempt fails (backend unreachable, secret parse error, malformed value), the system SHALL retain the last-known-good credentials and continue operating without interruption. | FR-4.3.5, AC #6 | P0 |
+| REQ-4.2 | A **consecutive failure counter** SHALL track how many successive reload attempts have failed. When the counter exceeds `CREDENTIAL_MAX_CONSECUTIVE_FAILURES` (default 3), the `credential_reload_total{status="alert"}` metric SHALL be emitted. | FR-4.3.5 | P1 |
+| REQ-4.3 | The system SHALL NEVER crash, panic, or exit due to a reload failure. All reload errors SHALL be caught and handled gracefully. | FR-4.3.5, AC #6 | P0 |
+| REQ-4.4 | On the first successful reload after one or more failures, the consecutive failure counter SHALL reset to zero and a recovery log entry SHALL be emitted. | FR-4.3.5 | P1 |
+
+### REQ-5: Observability
+| ID | Requirement | Maps To | Priority |
+|----|------------|---------|----------|
+| REQ-5.1 | Every reload attempt SHALL emit a **structured log entry** (JSON) containing: `{ "event": "credential_reload", "backend": "<backend>", "status": "success"|"failure", "duration_ms": <number>, "timestamp": "<ISO8601>" }`. On failure, an `error` field with a sanitized message (no secret values) SHALL be included. | FR-4.3.6 | P0 |
+| REQ-5.2 | The system SHALL expose a Prometheus **Counter** `credential_reload_total` with labels `{backend, status}` where `status` is `success`, `failure`, or `alert`. | FR-4.3.6, AC #6 | P0 |
+| REQ-5.3 | The system SHALL expose a Prometheus **Histogram** `credential_reload_duration_seconds` with label `{backend}` and buckets `[0.01, 0.05, 0.1, 0.5, 1, 5, 10, 30]`. | FR-4.3.6 | P0 |
+| REQ-5.4 | The system SHALL expose a Prometheus **Gauge** `credential_current_age_seconds` indicating the time in seconds since the last successful reload. | FR-4.3.6 | P0 |
+| REQ-5.5 | A **health check endpoint** `GET /health/credentials` SHALL return `200 OK` with body `{ "status": "healthy", "last_reload": "<ISO8601>", "version": <number>, "backend": "<backend>", "age_seconds": <number> }` when the last reload succeeded AND `age_seconds` < `CREDENTIAL_MAX_AGE_SECONDS`. | FR-4.3.6, AC #4 | P0 |
+| REQ-5.6 | The health check SHALL return `503 Service Unavailable` with body `{ "status": "unhealthy", "reason": "<stale|failed|never_reloaded>", ... }` when credentials are stale (exceeded max age) or a reload has never succeeded. | FR-4.3.6, AC #4 | P0 |
+| REQ-5.7 | The existing application-level `/health` endpoint SHALL include a `credentials` subsection with the same status so aggregated monitoring tools see credential health alongside other health signals. | FR-4.3.6 | P2 |
+
+### REQ-6: Security & Audit
+| ID | Requirement | Maps To | Priority |
+|----|------------|---------|----------|
+| REQ-6.1 | Secrets SHALL NEVER appear in log output, error messages, response bodies, or metric labels. All secret values SHALL be redacted (replaced with `[REDACTED]`) before any logging or serialization. | FR-4.3.7 | P0 |
+| REQ-6.2 | Reload events SHALL be written to an **audit log** (structured, separate from application logs) containing: `{ "event": "credential_reload", "trigger": "automatic"|"manual", "requestor": "<user_id|system>", "backend": "<backend>", "status": "success"|"failure", "timestamp": "<ISO8601>" }`. | FR-4.3.7 | P1 |
+| REQ-6.3 | The in-memory credential store SHALL be stored in a variable that is NOT enumerable or serializable, preventing accidental exposure via `console.log`, debug endpoints, or error stack traces. | FR-4.3.7 | P0 |
+| REQ-6.4 | The manual reload endpoint SHALL require admin-level authentication. Unauthenticated requests SHALL receive `401 Unauthorized`; authenticated non-admin requests SHALL receive `403 Forbidden`. | FR-4.3.7, REQ-2.5 | P0 |
+
+### REQ-7: Configuration & Startup Compatibility
+| ID | Requirement | Maps To | Priority |
+|----|------------|---------|----------|
+| REQ-7.1 | Live credential reload SHALL be controlled by a feature flag `CREDENTIAL_LIVE_RELOAD_ENABLED` (default `false`). When disabled, the system SHALL load secrets once at startup and run no watchers, pollers, or health checks. | AC #8 | P0 |
+| REQ-7.2 | When live reload is enabled, secrets SHALL still be loaded at startup via the same backend abstraction. The initial load SHALL use the same `fetch()` path as reload, ensuring consistency. | AC #8 | P0 |
+| REQ-7.3 | The following environment variables / config keys SHALL be recognized, each with sensible defaults: | FR-4.3.1–FR-4.3.7 | P0 |
+| | — `CREDENTIAL_LIVE_RELOAD_ENABLED` (bool, default `false`) | | |
+| | — `CREDENTIAL_BACKEND` (`file` | `vault` | `env`, required when enabled) | | |
+| | — `CREDENTIAL_FILE_DIR` (string, for FileBackend; default `/etc/secrets`) | | |
+| | — `CREDENTIAL_VAULT_ADDR` (string, for VaultBackend; required) | | |
+| | — `CREDENTIAL_VAULT_TOKEN` (string, for VaultBackend; required) | | |
+| | — `CREDENTIAL_VAULT_PATH` (string, for VaultBackend; required) | | |
+| | — `CREDENTIAL_ENV_PREFIX` (string, for EnvBackend; default `SECRET_`) | | |
+| | — `CREDENTIAL_POLL_INTERVAL_SECONDS` (int, default 60) | | |
+| | — `CREDENTIAL_DEBOUNCE_SECONDS` (int, default 5) | | |
+| | — `CREDENTIAL_GRACE_PERIOD_SECONDS` (int, default 30) | | |
+| | — `CREDENTIAL_MAX_CONSECUTIVE_FAILURES` (int, default 3) | | |
+| | — `CREDENTIAL_MAX_AGE_SECONDS` (int, default 0 = disabled) | | |
+| REQ-7.4 | All configuration SHALL be validated at startup; invalid or contradictory combinations (e.g., live reload enabled but no backend configured) SHALL cause a clear startup error with a descriptive message — NOT a silent fallback to startup-only mode. | — | P1 |
+
+### Traceability Matrix
+
+| Acceptance Criterion | Functional Reqs | Requirements |
+|---------------------|----------------|--------------|
+| AC #1 — Live Reload within 15s | FR-4.3.1 | REQ-2.1, REQ-2.2 |
+| AC #2 — Zero-Downtime Rotation | FR-4.3.3 | REQ-3.2, REQ-3.6 |
+| AC #3 — Connection Pool Refresh | FR-4.3.3 | REQ-3.4 |
+| AC #4 — Health Endpoint | FR-4.3.6 | REQ-5.5, REQ-5.6 |
+| AC #5 — Manual Reload | FR-4.3.2 | REQ-2.4, REQ-2.5 |
+| AC #6 — Fallback Behavior | FR-4.3.5 | REQ-4.1, REQ-4.3, REQ-5.2 |
+| AC #7 — Multi-Backend | FR-4.3.4 | REQ-1.1, REQ-1.2, REQ-1.3 |
+| AC #8 — No Regressions | FR-4.3.4 | REQ-7.1, REQ-7.2 |
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
