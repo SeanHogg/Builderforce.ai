@@ -1,125 +1,166 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #693
 > _Each agent that updates this PRD signs its change below._
+> - **Business Analyst** (Requirements §) — 2026-08-03 — authored the Requirements section with 6 stakeholder requirements (RQ-1 through RQ-6), 4 assumptions, dependency map, 3 NFRs, and full traceability matrix to #687 test cases.
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document: Reactive Engine Repo Binding for Task #687
 
 ## Problem & Goal
-
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+Task #687 ("Confirm the auto-run side effect fires once per assignment, not twice") requires a custom reactive execution engine (signals, `autorun`, batch/transaction blocks, computed/derived propagation, and a scheduler with diamond‑dependency de-duplication).  
+The currently bound branch (`builderforce/task-687` of `seanhogg/builderforce.ai`) contains **no such engine** – only `agent-runtime/`, root PRD markdown, and a single unrelated frontend file.  
+**Goal:** Bind (or pull into this repo) the repository that actually holds the reactive engine code so that downstream development and testing for #687 can proceed without fabricating a stand‑in.
 
 ## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Agent process / automated tester** that will run acceptance tests for #687.
+- **Human reviewers** verifying that the correct codebase is in scope before #687 execution.
 
 ## Scope
-
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- **In-scope:** Identification and binding (or integration) of the repository containing the reactive/auto‑run engine.  
+  The engine must satisfy the needs of #687: signals, `autorun` side effect on assignment, batch/transaction blocks, computed/derived propagation, and a diamond‑dependency–aware scheduler.
 
 ## Functional Requirements
+1. **FR‑1 – Engine module presence:** The bound repository must include a module or package that exports the following core primitives:  
+   - `signal(initialValue)` (or equivalent mutable observable)  
+   - `autorun(fn)` (side‑effect that re‑runs on dependency change)  
+   - `batch(fn)` or `transaction(fn)` (executes updates atomically, deferring notifications)  
+   - `computed(fn)` / `derived(fn)` (read‑only derived value with automatic dependency tracking)  
+   - A scheduler that guarantees at most one execution per autorun for any given “tick” even with diamond dependencies.
 
-### FR-1 — Mode Selection
+2. **FR‑2 – Identifiability:** The engine must be locatable via file‑system paths (e.g., `src/reactive/` or `packages/autorun/`) or package manifests. References to `autorun`, `signal`, `computed`, and `scheduler` must appear in source code.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+3. **FR‑3 – Binding action:** The repository must be accessible and bound to the task branch or project workspace such that dependency analysis, test frameworks, and human inspection can directly reference its code. If the engine lives in a separate repo, a dependency link (submodule, monorepo reference, or fetched artifact) must be established; if integration is needed, the code must be committed to the current repo.
 
----
-
-### FR-2 — Guided (Interactive) Mode
-
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
-
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+4. **FR‑4 – File‑tree verification:** After binding, a file‑tree scan or glob (`**/*autorun*`, `**/*signal*`, `**/*reactiv*`, `**/*scheduler*`) must return non‑zero matches corresponding to the engine’s source files.
 
 ## Acceptance Criteria
-
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
-
----
+- After executing the binding step, the repository root (or bound sub‑repo) contains source files that export or implement:  
+  - A function/class named `signal` (or `observable` with equivalent behavior)  
+  - A function named `autorun`  
+  - A function named `batch` or `transaction`  
+  - A function named `computed` or `derived`  
+  - A scheduler mechanism that de‑duplicates notifications for diamond dependencies  
+- A glob/search for `**/*autorun*` returns at least one result whose content includes the implementation of an `autorun` that triggers on assignment.
+- No other code beyond the engine itself needs to be present; the bound repo is sufficient to resume #687 without fabricating missing pieces.
 
 ## Out of Scope
+- Writing or executing the acceptance tests for #687 (`FR‑1` through `FR‑6` of that PRD).
+- Fixing bugs, modifying API signatures, or enhancing the engine.
+- Integrating the engine with the wider application; this PRD only covers making the correct engine source available.
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+## Requirements
+
+_Owned by the business-analyst._
+
+### Business Context
+
+Task #687 ("Confirm the auto-run side effect fires once per assignment, not twice") is currently **blocked** because its branch (`builderforce/task-687` of `seanhogg/builderforce.ai`) contains no reactive/auto-run engine code. The branch holds only `agent-runtime/`, root PRD markdown, and a single unrelated frontend visualization file (`Builderforce.ai/frontend/src/components/ide/EvermindBrainMap.tsx`). Writing acceptance tests against code that does not exist is not acceptable — the engine source must be physically present before #687 can proceed.
+
+### Stakeholder Requirements
+
+#### RQ-1 — Engine Source Availability (BLOCKING)
+The reactive/auto-run engine source code must be physically present on the task branch or in a bound dependency such that any agent executing #687 can `import`/`require` the engine primitives (`signal`, `autorun`, `batch`/`transaction`, `computed`/`derived`, and the scheduler).
+
+- **Priority:** Must-have. #687 cannot proceed without this.
+- **Rationale:** FR-1 through FR-6 of the #687 PRD all reference engine primitives. A stand-in or mocked engine would invalidate the acceptance tests.
+
+#### RQ-2 — API Contract Fidelity
+The bound engine must implement the semantics described in FR-1 of this PRD and #687's PRD:
+
+| Primitive | Required behavior |
+|-----------|-------------------|
+| `signal(initialValue)` | Mutable observable with `.get()` / `.set(val)` accessors; setting a value marks the signal dirty and schedules dependent `autorun`s and `computed`s for re-evaluation. |
+| `autorun(fn)` | Registers `fn` as a reactive side-effect. On invocation, `fn`'s reads of signals/computeds are tracked as dependencies. Any subsequent assignment to a dependency re-runs `fn` exactly once per scheduler tick, even across diamond dependency graphs. |
+| `batch(fn)` / `transaction(fn)` | Defers all notifications until `fn` completes. Intermediate signal writes inside the batch do not trigger `autorun` or `computed` re-evaluation. Supports nesting (only the outermost batch flushes). |
+| `computed(fn)` / `derived(fn)` | Read-only derived value. Lazy — re-evaluates only when read and a dependency is dirty. Caches result until dirtied. |
+| Scheduler | Guarantees at most one execution per `autorun` per tick. De-duplicates: if an `autorun` depends on two signals that both change in the same tick (diamond), it runs exactly once. |
+
+- **Priority:** Must-have.
+- **Rationale:** The #687 acceptance tests will assert these exact behaviors. A partial or incompatible engine wastes testing effort.
+
+#### RQ-3 — Binding Decision
+One of the following binding paths must be selected and executed:
+
+| Path | Description | When to use |
+|------|-------------|------------|
+| **A — Submodule** | `git submodule add <engine-repo-url> packages/reactive-engine/` | The engine lives in its own public/private repo and is versioned independently. |
+| **B — In-repo commit** | Copy the engine source tree directly into this repo (e.g., `packages/reactive-engine/src/`). | The engine is small, or the upstream repo cannot be submoduled (access, licensing, size). |
+| **C — Package dependency** | Add a `package.json` dependency (`"reactive-engine": "file:../reactive-engine"` or a published npm package name + version) plus a resolution that makes the source inspectable (not a bundled/minified blob). | The engine is a published npm/Node.js package with source-distributable artifacts. |
+| **D — Monorepo workspace reference** | Add the engine package to the monorepo workspace config and reference it via workspace protocol. | The engine already lives in a sibling directory of the same monorepo. |
+
+- **Priority:** Must-have — exactly one path must be chosen and documented.
+- **Rationale:** Without a binding path decision, execution is ambiguous and the task cannot be handed off to the developer.
+
+#### RQ-4 — Verifiability
+After binding, a human or agent must be able to confirm presence with a single glob invocation:
+
+```bash
+# Expected: ≥ 1 result per glob, with matching source content
+ls **/*autorun* **/*signal* **/*reactiv* **/*scheduler* **/*computed* **/*batch*
+```
+
+- **Priority:** Must-have.
+- **Rationale:** FR-4 and the acceptance criteria depend on verifiable file-tree evidence. The agent executing #687 will run these globs as a precondition check.
+
+#### RQ-5 — Isolation
+Only the engine source code itself must be bound. The following must NOT be pulled in:
+- Unrelated application code from the engine's host repository.
+- Build artifacts, `node_modules/`, or compiled output (unless the engine is a pre-built artifact by design — see Path C).
+- Duplicate copies of the `agent-runtime/` tree already present in this repo.
+
+- **Priority:** Should-have.
+- **Rationale:** Minimizes PR noise and avoids confusion about which code is under test. The #687 PR should contain only the engine + the test file, not an entire auxiliary application.
+
+#### RQ-6 — Language / Runtime Compatibility
+The engine must be consumable by the Node.js/TypeScript test environment used by #687. If the engine is in another language (e.g., Swift in `agent-runtime/Swabble/`), it is **not** acceptable — a TypeScript/JavaScript implementation is required.
+
+- **Priority:** Must-have.
+- **Rationale:** The existing `agent-runtime/` tree is TypeScript; #687 tests will be written in TypeScript/Node.js. A Swift or Python engine would require bridging infrastructure that is out of scope.
+
+### Assumptions
+
+1. **The engine exists somewhere.** It is assumed that the reactive engine described in the #687 PRD exists in a separate repository or package, and was not fabricated for the PRD alone. If it does not exist, #687 must be re-scoped to include engine creation as a prerequisite.
+
+2. **The engine is open-source or internally accessible.** The repo is assumed to be accessible to the agents working on this project. Private repos may require credential setup.
+
+3. **The engine is TypeScript/JavaScript.** Based on the `agent-runtime/` codebase conventions (TypeScript, Node.js, `.ts` extensions, Vitest test files).
+
+4. **Binding Path A (submodule) or B (in-repo commit) is preferred.** Path C (package dependency) is acceptable but requires the package to ship source, not just `.d.ts` + minified `.js`. Path D is unlikely given there is no monorepo workspace config present.
+
+### Dependencies
+
+- **Upstream:** None — this task only requires locating and binding an existing codebase.
+- **Downstream:** Task #687 depends on this task's completion. The #687 agent should check for the engine's presence (via glob) as its first step and abort with a clear message if it is absent.
+- **Infrastructure:** If Path A (submodule) is chosen, Git must have network access to the engine's remote. If Path C, npm must be able to resolve and install the package.
+
+### Non-Functional Requirements
+
+- **NFR-1 — Inspectability:** Engine source must be human-readable and un-minified on the branch. Minified/bundled blobs are not acceptable (they defeat the purpose of binding for review and testing).
+- **NFR-2 — Reproducibility:** The binding must be reproducible: another checkout of the same branch must produce the identical engine source tree without manual steps beyond `git clone --recurse-submodules` (if submodule) or `npm install` (if package).
+- **NFR-3 — Branch size:** The binding should not add more than 500 files to the branch. If the engine repo is larger, bring only the engine's source subdirectory, not its entire history and auxiliary packages.
+
+### Traceability to #687
+
+| #687 Test Case | Engine Primitive Required | This PRD's Requirement |
+|----------------|--------------------------|------------------------|
+| FR-1: Basic signal create + get + set | `signal` | RQ-2 |
+| FR-2: autorun fires on assignment | `autorun`, `signal` | RQ-2 |
+| FR-3: batch defers autorun until flush | `batch`/`transaction`, `autorun`, `signal` | RQ-2 |
+| FR-4: computed lazy evaluation + caching | `computed`/`derived`, `signal` | RQ-2 |
+| FR-5: Diamond dependency de-duplication | `autorun`, `signal`, scheduler | RQ-2 |
+| FR-6: autorun fires exactly once per tick | `autorun`, `signal`, scheduler | RQ-2 |
+| Precondition: engine present | All | RQ-1, RQ-4 |
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
