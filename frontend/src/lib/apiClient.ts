@@ -141,6 +141,28 @@ function isSelfTypedBody(body: BodyInit | null | undefined): boolean {
   );
 }
 
+/**
+ * A failed request, carrying what the server said ALONGSIDE the message.
+ *
+ * A bare `Error` forced every caller that needed the machine-readable half of an
+ * error body — a code to branch on, a `details` payload listing exactly which
+ * inputs were rejected — to either re-fetch or hand-roll its own transport. The
+ * fields are on the error so a caller can `catch` and read them; message-only
+ * callers are unaffected because this is still an `Error`.
+ */
+export class ApiRequestError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  readonly details?: unknown;
+  constructor(message: string, status: number, code?: string, details?: unknown) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+    if (code !== undefined) this.code = code;
+    if (details !== undefined) this.details = details;
+  }
+}
+
 /** The one place a non-ok response becomes a thrown Error + a global toast. */
 async function reportAndThrow(
   res: Response,
@@ -169,7 +191,7 @@ async function reportAndThrow(
       requestId: res.headers.get('x-request-id') ?? undefined,
     });
   }
-  throw new Error(message);
+  throw new ApiRequestError(message, res.status, body.code, body.details);
 }
 
 /**

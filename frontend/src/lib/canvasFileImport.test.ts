@@ -62,6 +62,12 @@ function makeZip(entries: Record<string, string>): Uint8Array {
 }
 
 describe('importCanvasFile', () => {
+  it('opens a draw.io file as an editable Diagram object', async () => {
+    const xml = '<mxfile><diagram><mxGraphModel><root><mxCell id="0"/></root></mxGraphModel></diagram></mxfile>';
+    const imported = await importCanvasFile(file('system.drawio', xml, 'application/vnd.jgraph.mxfile'), t);
+    expect(imported.objects[0]).toMatchObject({ kind: 'diagram', data: { fileName: 'system.drawio', diagramFormat: 'drawio', diagram: xml } });
+  });
+
   it('reads a CSV as a queryable Dataset, not an opaque attachment', async () => {
     const imported = await importCanvasFile(file('pipeline.csv', 'Region,Deals\nEMEA,12\nAPAC,7\n', 'text/csv'), t);
     const [object] = imported.objects;

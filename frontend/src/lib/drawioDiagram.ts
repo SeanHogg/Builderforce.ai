@@ -28,6 +28,9 @@ export interface DrawioVertex {
   fontColor?: string;
   fontSize: number;
   dashed: boolean;
+  /** Embedded artwork carried by an image cell. Only data:image URLs are
+   * rendered; remote URLs never become an implicit network request. */
+  imageUrl?: string;
 }
 
 export interface DrawioEdge {
@@ -64,15 +67,32 @@ function safeColor(value: string | undefined): string | undefined {
   return trimmed && SAFE_COLOR.test(trimmed) ? trimmed : undefined;
 }
 
+function safeImageUrl(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed && /^data:image\/(?:png|jpeg|jpg|gif|webp|svg\+xml|avif);/i.test(trimmed) ? trimmed : undefined;
+}
+
 /** `rounded=1;fillColor=#dae8fc;ellipse` → a flat lookup, keyless tokens included. */
 export function parseDrawioStyle(style: string): Record<string, string> {
   const entries: Record<string, string> = {};
-  for (const token of style.split(';')) {
+  const tokens = style.split(';');
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index]!;
     const trimmed = token.trim();
     if (!trimmed) continue;
     const separator = trimmed.indexOf('=');
     if (separator < 0) entries[trimmed.toLowerCase()] = '1';
-    else entries[trimmed.slice(0, separator).trim().toLowerCase()] = trimmed.slice(separator + 1).trim();
+    else {
+      const key = trimmed.slice(0, separator).trim().toLowerCase();
+      let value = trimmed.slice(separator + 1).trim();
+      // A data URL's media-type separator is also a semicolon. It belongs to
+      // the image value, not to mxGraph's surrounding style list.
+      if (key === 'image' && /^data:image\//i.test(value) && !value.includes(',') && tokens[index + 1]?.includes(',')) {
+        value += `;${tokens[index + 1]!.trim()}`;
+        index += 1;
+      }
+      entries[key] = value;
+    }
   }
   return entries;
 }
@@ -195,6 +215,7 @@ export function parseDrawioXml(xml: string): DrawioGraph | null {
       ...(safeColor(style.fontcolor) ? { fontColor: safeColor(style.fontcolor) } : {}),
       fontSize: Math.min(Math.max(numeric(style.fontsize, DEFAULT_FONT_SIZE), 6), 48),
       dashed: style.dashed === '1',
+      ...(safeImageUrl(style.image) ? { imageUrl: safeImageUrl(style.image) } : {}),
     });
   }
 

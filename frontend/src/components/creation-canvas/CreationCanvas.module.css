@@ -332,11 +332,24 @@
 .authoredContent { max-height:210px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; }
 .handle { width: 8px !important; height: 8px !important; background: #6e8099 !important; border: 2px solid #fff !important; }
 
-.workflowSteps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+/* auto-fit, not a fixed 4 columns: a workflow has as many steps as it has, and
+   a hardcoded 4-track grid stretched 1 step across the card and clipped the 5th. */
+.workflowSteps { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
 .workflowStep { min-height: 72px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 9px; border: 1px solid #dce4ef; border-radius: 9px; background: #fbfdff; }
-.workflowStep strong { font-size: 10px; }
-.workflowStep small { color: #8390a2; font-size: 8px; }
-.doneDot,.liveDot,.idleDot,.presence { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }.doneDot,.presence { background: #2bb879; }.liveDot { background: #3978f6; }.idleDot { background: #c5cfdd; }
+.workflowStep strong { font-size: 10px; overflow-wrap: anywhere; }
+.workflowStep small { color: #8390a2; font-size: 8px; overflow-wrap: anywhere; }
+.workflowStep code { max-width: 100%; overflow: hidden; color: #4a5a70; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.doneDot,.liveDot,.idleDot,.failDot,.presence { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }.doneDot,.presence { background: #2bb879; }.liveDot { background: #3978f6; }.idleDot { background: #c5cfdd; }
+/* A step that failed reads as a failure. Uses the shared tone marks, which are
+   already restated for dark at the end of this file. */
+.failDot { background: var(--tone-danger-mark); }
+/* Empty + blocked states. An unconfigured workflow says so here instead of
+   rendering placeholder stages that read as real configuration. */
+.workflowEmpty { display: grid; gap: 4px; padding: 10px; border: 1px dashed var(--canvas-line); border-radius: 9px; background: var(--canvas-panel-muted); }
+.workflowEmpty strong { color: var(--canvas-ink); font-size: 10px; }
+.workflowEmpty small { color: var(--canvas-ink-soft); font-size: 8px; overflow-wrap: anywhere; }
+.workflowIssues { display: grid; gap: 3px; padding: 8px; border: 1px solid var(--tone-danger-mark); border-radius: 9px; background: var(--tone-danger-bg); }
+.workflowIssues small { color: var(--tone-danger-ink); font-size: 8px; overflow-wrap: anywhere; }
 .pipelineStepBadge { display:grid; place-items:center; width:18px; height:18px; flex:none; border-radius:50%; background:#7657df; color:#fff; font-size:8px; font-weight:800; }
 .pipelineNodeGuide { display:grid; grid-template-columns:auto 1fr; gap:3px 7px; align-items:center; padding:7px 8px; border:1px solid color-mix(in srgb,#7657df 38%,var(--canvas-line)); border-radius:8px; background:color-mix(in srgb,#7657df 9%,var(--canvas-panel)); }.pipelineNodeGuide b { color:#7657df; font-size:8px; text-transform:uppercase; }.pipelineNodeGuide span { grid-column:1 / -1; color:var(--canvas-muted); font-size:7px; line-height:1.4; }.pipelineNodeGuide[data-start="true"] { border-color:#26a879; background:color-mix(in srgb,#26a879 11%,var(--canvas-panel)); box-shadow:0 0 0 2px color-mix(in srgb,#26a879 12%,transparent); }.pipelineNodeGuide[data-start="true"] b { color:#16835e; }
 .pipelineInspectorGuide,.evermindStartGuide { display:grid; gap:6px; padding:12px; border:1px solid color-mix(in srgb,#7657df 40%,var(--canvas-line)); border-radius:10px; background:color-mix(in srgb,#7657df 9%,var(--canvas-panel)); }.pipelineInspectorGuide > span,.evermindStartGuide > span { color:#8f79e8; font-size:9px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }.pipelineInspectorGuide strong,.evermindStartGuide strong { color:var(--canvas-ink); font-size:14px; }.pipelineInspectorGuide p,.evermindStartGuide p { margin:0; color:var(--canvas-muted); font-size:11px; line-height:1.5; }.pipelineInspectorGuide small { color:#22a475; font-size:10px; font-weight:700; }
@@ -1301,6 +1314,7 @@
 .sourceList { border-color:var(--canvas-line); }
 .nodeBody p,
 .workflowStep small,
+.workflowStep code,
 .kpis small,
 .charts small,
 .projectHealth small,

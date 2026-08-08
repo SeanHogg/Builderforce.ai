@@ -1071,6 +1071,16 @@ export const workflowDefinitions = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  /**
+   * Compile a Creation Canvas workflow object's authored `steps` into a real,
+   * runnable definition. All-or-nothing: on 400 the thrown `ApiRequestError`
+   * carries `details.issues` naming each step that is not runnable and why.
+   */
+  fromCanvas: (body: { name: string; description?: string; steps: unknown; triggerType?: string } & WorkflowProjectBinding & Partial<WorkflowRunTargetFields>) =>
+    request<WorkflowDefinitionDetail & { compiledCount: number }>('/api/workflow-definitions/from-canvas', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   update: (id: string, body: { name?: string; description?: string; definition?: WorkflowDefinitionGraph } & WorkflowProjectBinding & Partial<WorkflowRunTargetFields>) =>
     request<WorkflowDefinitionDetail>(`/api/workflow-definitions/${id}`, {
       method: 'PATCH',

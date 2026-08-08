@@ -97,6 +97,14 @@ const ALLOWED_SQL_FILES = new Set([
   'worker/schema.sql',
 ]);
 
+/** Fragments INLINED into a generated migration rather than applied on their own.
+ *  `gen-consolidation-migration.mjs` derives the consolidation DDL from the Drizzle
+ *  module (PRD 20 §5 step 2) and appends the matching file from here — the
+ *  statements it cannot derive lexically, such as a self-referencing foreign key.
+ *  They carry no migration number and cannot have one reissued, because they are
+ *  not files the runner ever sees; the numbered file that embeds them is. */
+const INLINED_FRAGMENT_DIR = 'api/scripts/migration-extras';
+
 function collectSql(dir, out = []) {
   let entries;
   try {
@@ -121,6 +129,7 @@ const strays = [];
 for (const file of collectSql(repoRoot)) {
   const rel = relative(repoRoot, file).split('\\').join('/');
   if (ALLOWED_SQL_FILES.has(rel)) continue;
+  if (rel.startsWith(INLINED_FRAGMENT_DIR + '/')) continue;
   if (SANCTIONED_DIRS.some((d) => rel.startsWith(d + '/'))) continue;
   strays.push(rel);
 }

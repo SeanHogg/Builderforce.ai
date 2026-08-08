@@ -1,20 +1,23 @@
 /**
- * Schema — collaboration context.
+ * Schema — Canvas & ideas, owned by the **Brain** (PRD 20 §3).
  *
- * Split out of the single 7,500-line `schema.ts`, which held all 322 tables
- * in one file and was the largest source file in the repo by a factor of three.
- * `schema.ts` is now a barrel that re-exports every context, so nothing that
- * imports from it had to change.
+ * Root entity `creation_session`. 57 source tables in → 8 out, 46 of them absorbed
+ * by the kernel — which is the proof, not a gap: the canvas IS `artifact` +
+ * `thread` + `message` + `share_link`, so a domain whose tables nearly all became
+ * kernel primitives was generalised correctly (§3).
  *
- * Imports between context modules are circular by nature — a task references a
- * project, a project references a tenant, and ownership runs in both directions
- * across contexts. That is safe here because EVERY table→table reference sits
- * inside a lazy callback (`references(() => other.id)`, and the index /
- * primaryKey builders), so no cross-module value is dereferenced while the
- * modules are still evaluating. `schema.tables.test.ts` renders SQL for every
- * exported table to keep that guarantee honest.
+ * Merged from `brain.ts` and `collaboration.ts`, which imported each other in
+ * both directions. §2.1's session test is why they were always one domain: if a
+ * thing is authored content, that people can be present in, and can be shared, it
+ * is not a feature — it is the canvas. Authoring lived in one file and presence in
+ * the other, and every feature that needed both had to import across the seam.
+ *
+ * Merged from `brain.ts` + `collaboration.ts` by
+ * scripts/merge-schema-modules.mjs (PRD 20 §5 step 2).
  */
+
 import {
+  AnyPgColumn,
   bigint,
   bigserial,
   boolean,
@@ -33,15 +36,461 @@ import {
   uuid,
   varchar,
 } from 'drizzle-orm/pg-core';
-import type { AnyPgColumn } from 'drizzle-orm/pg-core';
-import { sql } from 'drizzle-orm';
-import { brainChats } from './brain';
-import { activityEventTypeEnum, integrationProviderEnum, newsletterEventTypeEnum, newsletterSubscriptionStatusEnum, teamMemberKindEnum } from './common';
+import { desc, sql } from 'drizzle-orm';
+import { activityEventTypeEnum, integrationProviderEnum, newsletterEventTypeEnum, newsletterSubscriptionStatusEnum, objects, teamMemberKindEnum } from './kernel';
 import { errorCollectors, prodIncidents, qaSchedules } from './delivery';
-import { ceremonySessions, pokerSessions, segments, tenants, users } from './identity';
+import {
+  ceremonySessions,
+  chatSessions,
+  pokerSessions,
+  segments,
+  tenants,
+  users,
+} from './identity';
+import { marketplacePersonas } from './agents';
 import { integrationCredentials } from './platform';
-import { agentHosts, agents, executions, workflowTriggers } from './runtime';
-import { projects, tasks } from './work';
+import {
+  agentHosts,
+  agents,
+  executions,
+  jobPostings,
+  jobProposals,
+  workflowTriggers,
+} from './agents';
+import { projects, tasks } from './delivery';
+
+// ═══ from brain.ts ═══
+/**
+ * Schema — brain context.
+ *
+ * Split out of the single 7,500-line `schema.ts`, which held all 322 tables
+ * in one file and was the largest source file in the repo by a factor of three.
+ * `schema.ts` is now a barrel that re-exports every context, so nothing that
+ * imports from it had to change.
+ *
+ * Imports between context modules are circular by nature — a task references a
+ * project, a project references a tenant, and ownership runs in both directions
+ * across contexts. That is safe here because EVERY table→table reference sits
+ * inside a lazy callback (`references(() => other.id)`, and the index /
+ * primaryKey builders), so no cross-module value is dereferenced while the
+ * modules are still evaluating. `schema.tables.test.ts` renders SQL for every
+ * exported table to keep that guarantee honest.
+ */
+
+
+export const chatMessages = pgTable('chat_messages', {
+  id:        serial('id').primaryKey(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
+  agentHostId:    integer('agent_host_id').notNull().references(() => agentHosts.id, { onDelete: 'cascade' }),
+  sessionId: integer('session_id').notNull().references(() => chatSessions.id, { onDelete: 'cascade' }),
+  role:      varchar('role', { length: 16 }).notNull(),
+  content:   text('content').notNull().default(''),
+  metadata:  text('metadata'),
+  seq:       integer('seq').notNull().default(0),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+
+// ---------------------------------------------------------------------------
+// Chat memories — compressed summaries of individual chats
+// ---------------------------------------------------------------------------
+// (The legacy Brain-only `brain_chats`/`brain_messages` tables — superseded by the
+// unified chats table in 0026 and orphaned — were dropped in migration 0271; the
+// unified table itself was renamed brain_chats there. See `brainChats` below.)
+
+export const chatMemories = pgTable('chat_memories', {
+  id:             serial('id').primaryKey(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
+  // Vestigial link to the old legacy brain_chats (dropped 0272) — chat memories
+  // are keyed on agent_host_session_id in practice; no FK (plain nullable id).
+  chatId:         integer('chat_id').unique(),
+  agentHostSessionId:  integer('agent_host_session_id').references(() => chatSessions.id, { onDelete: 'cascade' }).unique(),
+  projectId:      integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
+  summary:        text('summary').notNull().default(''),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+  updatedAt:      timestamp('updated_at').notNull().defaultNow(),
+});
+
+
+// ---------------------------------------------------------------------------
+// Brain chats (unified, all-modality) — Brain Storm, IDE, and project-level chat
+// in ONE table (this is the store the live Brain reads/writes on every surface —
+// web, VS Code, on-prem). origin = 'brainstorm' | 'ide' | 'project' | 'team' tells
+// the page which tools/actions to load. origin='team' is the canonical, always-there
+// GROUP chat for a whole team — ONE per (tenant, projectId), projectId NULL for the
+// tenant-wide team chat (see migration 0294's uq_team_chat_scope). Named
+// `ide_project_chats` until migration 0272
+// renamed it `brain_chats` (the `ide_` prefix was a historical artifact — it
+// started IDE-only, then 0026 generalized it via the origin column).
+// ---------------------------------------------------------------------------
+
+export const brainChats = pgTable('brain_chats', {
+  id:        serial('id').primaryKey(),
+  projectId: integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
+  userId:    varchar('user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  origin:     varchar('origin', { length: 32 }).notNull().default('ide'),
+  title:      varchar('title', { length: 500 }).notNull().default('New chat'),
+  summary:    text('summary'),
+  isArchived: boolean('is_archived').notNull().default(false),
+  /** LOCK primitive (0288): 'shared' = visible/joinable by any tenant teammate
+   *  (chats are global to project+tenant); 'locked' = private to owner + members. */
+  visibility: varchar('visibility', { length: 16 }).notNull().default('shared'),
+  /** What this chat is MAKING (0345) — a capability id from the client-side
+   *  registry (document / slides / dataviz / spreadsheet / website / design /
+   *  mobile / animation / game3d). Shapes the system prompt and the export format.
+   *  NULL = no capability ("anything"). Free-form: an unknown id reads as NULL. */
+  capability: varchar('capability', { length: 64 }),
+  /** What this chat is FOR (0409) — 'chat' (a CONVERSATION: read, reason, answer)
+   *  or 'work' (an EXECUTION: create + staff + link the ticket, then dispatch an
+   *  agent to run it). Gates the chat⇄work linking directive at runtime and is the
+   *  dimension the mode usage rollup buckets on. Free-form varchar for the same
+   *  reason `capability` is: the vocabulary lives in brain-embedded/src/chatMode.ts
+   *  and an unknown value resolves to the default on read. */
+  mode: varchar('mode', { length: 16 }).notNull().default('chat'),
+  /** Consolidation pointer (0266): when this chat was merged into another, the
+   *  surviving chat's id. Set with isArchived=true so the source drops out of the
+   *  list but any ticket still resolves to the one surviving conversation. */
+  mergedIntoChatId: integer('merged_into_chat_id').references((): AnyPgColumn => brainChats.id, { onDelete: 'set null' }),
+  /** TEAM CHAT scope (0294): when origin='team', which workforce team this chat is
+   *  the group channel for. NULL (with projectId also NULL) = the tenant-wide
+   *  "broader team" chat; projectId set = the project team chat. */
+  teamId:     integer('team_id').references(() => teams.id, { onDelete: 'cascade' }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  /** Serves listChats (0417): equality on tenant+origin, then ORDER BY updated_at
+   *  DESC LIMIT n. Every other index on this table is equality-only, so without
+   *  this one the list sorts every non-archived chat in the tenant per page. The
+   *  partial predicate matches the query — archived chats are never listed. */
+  index('idx_brain_chats_tenant_origin_recent')
+    .on(t.tenantId, t.origin, desc(t.updatedAt))
+    .where(sql`is_archived = false`),
+]);
+
+
+// ---------------------------------------------------------------------------
+// Chat read state (0361) — per-user read high-water mark for a Brain chat, so the
+// web can show an "unread" badge when execution milestones (or a teammate/agent
+// message) land in a chat the user is not viewing. Keyed by (chat_id, user_id) so
+// it covers BOTH the chat owner (no chat_members row) and shared participants.
+// last_read_seq is compared against brain_chat_messages.seq (= the message PK):
+// unread when max(seq) > last_read_seq. A row exists only once the user has OPENED
+// the chat — so unread accrues only on conversations the user has actually read.
+// ---------------------------------------------------------------------------
+
+export const chatReadState = pgTable('chat_read_state', {
+  chatId:      integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
+  userId:      varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  lastReadSeq: integer('last_read_seq').notNull().default(0),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  primaryKey({ columns: [t.chatId, t.userId] }),
+  index('idx_chat_read_state_user').on(t.tenantId, t.userId),
+]);
+
+
+// ---------------------------------------------------------------------------
+// Chat <-> ticket links (0266) — a many-to-many, lineage-aware edge between a
+// Brain chat and a work item of ANY tier (portfolio | objective | initiative |
+// epic | task). MANY chats can reference one ticket; ONE chat can reference MANY
+// tickets (a brainstorm that spawned several). ticketRef is the target id AS TEXT
+// (tasks.id is int; the strategy-tier ids are UUIDs) so one column addresses
+// every tier — resolved against the right table by ticketKind at read time.
+// ---------------------------------------------------------------------------
+
+export const chatTicketLinks = pgTable('chat_ticket_links', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:  uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  chatId:     integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
+  /** 'portfolio'|'objective'|'initiative'|'roadmap'|'spec'|'epic'|'gap'|'task' (spine + roadmap + spec + gap). */
+  ticketKind: varchar('ticket_kind', { length: 12 }).notNull(),
+  /** Target id as text — tasks.id (epic/gap/task) or a UUID (portfolio/objective/initiative/roadmap/spec). */
+  ticketRef:  varchar('ticket_ref', { length: 64 }).notNull(),
+  /** Lineage: 'created' (ticket spawned from this chat) | 'linked' (attached later). */
+  linkType:   varchar('link_type', { length: 16 }).notNull().default('linked'),
+  /** User id or agent ref that made the link (provenance). */
+  createdBy:  varchar('created_by', { length: 64 }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_chat_ticket_links').on(t.chatId, t.ticketKind, t.ticketRef),
+  index('idx_chat_ticket_links_chat').on(t.tenantId, t.chatId),
+  index('idx_chat_ticket_links_ticket').on(t.tenantId, t.ticketKind, t.ticketRef),
+]);
+
+
+export const brainChatMessages = pgTable('brain_chat_messages', {
+  id:        serial('id').primaryKey(),
+  chatId:    integer('chat_id').notNull().references(() => brainChats.id, { onDelete: 'cascade' }),
+  role:      varchar('role', { length: 16 }).notNull(),
+  content:   text('content').notNull().default(''),
+  metadata:  text('metadata'),
+  /** Optional producer idempotency key (for example executionId:phase). */
+  eventKey:  varchar('event_key', { length: 160 }),
+  seq:       integer('seq').notNull().default(0),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_brain_chat_messages_event').on(t.chatId, t.eventKey),
+]);
+
+
+// ---------------------------------------------------------------------------
+// Team memory — cross-agentHost memory sharing mesh (P4-5)
+// ---------------------------------------------------------------------------
+
+export const teamMemory = pgTable('team_memory', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  tenantId:  integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId: uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),  // DB NOT NULL via trigger (0056); optional in TS so single-mode writes need no change
+  /** Numeric agentHost ID stored as string for flexibility. */
+  agentHostId:    varchar('agent_host_id', { length: 64 }).notNull(),
+  runId:     varchar('run_id', { length: 64 }).notNull(),
+  summary:   text('summary').notNull(),
+  /** JSON array of tag strings, stored as text. */
+  tags:      text('tags').notNull().default('[]'),
+  /** ISO-8601 timestamp provided by the agentHost. */
+  timestamp: varchar('timestamp', { length: 32 }).notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
+
+/**
+ * Marketplace listings for KNOWLEDGE documents (migration 0252). Lets a tenant
+ * publish a SOP/process/doc/canvas for sale; the listing carries a content
+ * snapshot so installing copies it into the buyer's tenant as a new document.
+ * Mirrors marketplacePersonas. Charging/checkout (price_cents) is a separate
+ * Stripe integration — install currently grants a copy.
+ */
+export const marketplaceKnowledge = pgTable('marketplace_knowledge', {
+  id:               uuid('id').primaryKey().defaultRandom(),
+  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  createdBy:        varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  /** The document this listing was published from (SET NULL if it is deleted). */
+  sourceDocumentId: uuid('source_document_id').references(() => knowledgeDocuments.id, { onDelete: 'set null' }),
+  title:            varchar('title', { length: 255 }).notNull(),
+  summary:          text('summary'),
+  docType:          varchar('doc_type', { length: 16 }).notNull().default('doc'),
+  /** Content snapshot used to recreate the document on install. */
+  content:          text('content').notNull().default(''),
+  category:         varchar('category', { length: 100 }),
+  /** JSON array of tag strings. */
+  tags:             text('tags').notNull().default('[]'),
+  /** Sale price in cents (0 = free). */
+  priceCents:       integer('price_cents').notNull().default(0),
+  /** 'private' | 'tenant' | 'public' */
+  visibility:       varchar('visibility', { length: 16 }).notNull().default('public'),
+  authorName:       varchar('author_name', { length: 255 }),
+  installCount:     integer('install_count').notNull().default(0),
+  likeCount:        integer('like_count').notNull().default(0),
+  createdAt:        timestamp('created_at').notNull().defaultNow(),
+  updatedAt:        timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant:   index('idx_marketplace_knowledge_tenant').on(t.tenantId),
+}));
+
+
+/**
+ * knowledge_listing_purchases (migration 0320) — proof a tenant bought a PAID
+ * knowledge listing, which unlocks install for the whole workspace. Free listings
+ * need no row. One purchase per (listing, tenant).
+ */
+export const knowledgeListingPurchases = pgTable('knowledge_listing_purchases', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  listingId:    uuid('listing_id').notNull().references(() => marketplaceKnowledge.id, { onDelete: 'cascade' }),
+  tenantId:     integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  purchasedBy:  varchar('purchased_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  priceCents:   integer('price_cents').notNull().default(0),
+  provider:     varchar('provider', { length: 24 }).notNull().default('manual'),
+  externalRef:  varchar('external_ref', { length: 255 }),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uniq: uniqueIndex('knowledge_listing_purchase_unique').on(t.listingId, t.tenantId),
+}));
+
+
+// ---------------------------------------------------------------------------
+// Knowledge Management — SOPs, processes & documents (migration 0227)
+//
+// Team-authored knowledge with versioning, tagging, read-acknowledgement
+// (audit evidence for SOX/TISAX/ISO) and training assignments with due dates.
+// Tenant + segment scoped; optionally project scoped (null = workspace-wide).
+// ---------------------------------------------------------------------------
+
+/** A knowledge document: an SOP, process flow, or general doc. */
+export const knowledgeDocuments = pgTable('knowledge_documents', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  segmentId:     uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
+  projectId:     integer('project_id').references(() => projects.id, { onDelete: 'set null' }), // null = workspace-wide
+  docType:       varchar('doc_type', { length: 16 }).notNull().default('sop'),   // 'sop' | 'process' | 'doc' | 'postmortem' | 'known_error'
+  title:         varchar('title', { length: 255 }).notNull(),
+  summary:       varchar('summary', { length: 500 }),
+  content:       text('content').notNull().default(''),
+  status:        varchar('status', { length: 16 }).notNull().default('draft'),   // 'draft' | 'published' | 'archived'
+  versionNumber: integer('version_number').notNull().default(0),                 // monotonic published version
+  requiresAck:   boolean('requires_ack').notNull().default(false),
+  /** For an incident RCA / post-mortem (docType 'postmortem'), the prod_incidents
+   *  record it reviews (migration 0328) — the Knowledge → incident back-link. Null on
+   *  ordinary docs. */
+  sourceIncidentId: uuid('source_incident_id'),
+  createdBy:     varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  updatedBy:     varchar('updated_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  publishedAt:   timestamp('published_at'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+});
+
+
+/** Immutable snapshot of a document at the moment it was published. */
+export const knowledgeDocumentVersions = pgTable('knowledge_document_versions', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  documentId:    uuid('document_id').notNull().references(() => knowledgeDocuments.id, { onDelete: 'cascade' }),
+  versionNumber: integer('version_number').notNull(),
+  title:         varchar('title', { length: 255 }).notNull(),
+  content:       text('content').notNull(),
+  changeNote:    varchar('change_note', { length: 500 }),
+  publishedBy:   varchar('published_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uqVersion: uniqueIndex('uq_knowledge_versions').on(t.documentId, t.versionNumber),
+}));
+
+
+/** Free-form tags for filtering/organising knowledge. */
+export const knowledgeDocumentTags = pgTable('knowledge_document_tags', {
+  id:            uuid('id').primaryKey().defaultRandom(),
+  tenantId:      integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  documentId:    uuid('document_id').notNull().references(() => knowledgeDocuments.id, { onDelete: 'cascade' }),
+  tag:           varchar('tag', { length: 64 }).notNull(),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uqTag: uniqueIndex('uq_knowledge_tags').on(t.documentId, t.tag),
+}));
+
+
+/** Audit evidence: a user read & acknowledged a specific published version. */
+export const knowledgeAcknowledgements = pgTable('knowledge_acknowledgements', {
+  id:             uuid('id').primaryKey().defaultRandom(),
+  tenantId:       integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  documentId:     uuid('document_id').notNull().references(() => knowledgeDocuments.id, { onDelete: 'cascade' }),
+  userId:         varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  versionNumber:  integer('version_number').notNull(),
+  acknowledgedAt: timestamp('acknowledged_at').notNull().defaultNow(),
+}, (t) => ({
+  uqAck: uniqueIndex('uq_knowledge_acks').on(t.documentId, t.userId),
+}));
+
+
+/** Per-document collaborators: users explicitly invited to a page (editor|viewer). */
+export const knowledgeDocumentCollaborators = pgTable('knowledge_document_collaborators', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  documentId:  uuid('document_id').notNull().references(() => knowledgeDocuments.id, { onDelete: 'cascade' }),
+  userId:      varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  role:        varchar('role', { length: 16 }).notNull().default('editor'), // 'editor' | 'viewer'
+  invitedBy:   varchar('invited_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  uqCollab: uniqueIndex('uq_knowledge_collab').on(t.documentId, t.userId),
+}));
+
+
+// ---------------------------------------------------------------------------
+// FACTS library — structured (subject, predicate, object) triples with
+// provenance. Powers /api/facts + the /facts page; recallable by agent tooling.
+// Migration 0300. project_id NULL → tenant-global fact; set → project-scoped.
+// ---------------------------------------------------------------------------
+export const facts = pgTable('facts', {
+  id:         uuid('id').primaryKey().defaultRandom(),
+  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  projectId:  integer('project_id').references(() => projects.id, { onDelete: 'cascade' }),
+  subject:    varchar('subject', { length: 255 }).notNull(),
+  predicate:  varchar('predicate', { length: 255 }).notNull(),
+  object:     text('object').notNull(),
+  source:     varchar('source', { length: 255 }),
+  confidence: real('confidence'),
+  createdBy:  varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  createdAt:  timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_facts_tenant_updated').on(t.tenantId, t.updatedAt),
+  index('idx_facts_tenant_subject').on(t.tenantId, t.subject),
+  index('idx_facts_tenant_predicate').on(t.tenantId, t.predicate),
+  index('idx_facts_tenant_project').on(t.tenantId, t.projectId),
+]);
+
+
+/**
+ * Two-party employer<->freelancer thread (0298). Read state is tracked per SIDE
+ * via the two watermark columns, not per message, so a thread with many managers
+ * on the employer side stays correct.
+ */
+export const freelancerConversations = pgTable('freelancer_conversations', {
+  id:                   varchar('id', { length: 36 }).primaryKey(),
+  tenantId:             integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  freelancerUserId:     varchar('freelancer_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  /** The manager who opened the thread (employer-side default notify target). */
+  employerUserId:       varchar('employer_user_id', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
+  /** What the thread hangs off: engagement | job | proposal | direct. */
+  subjectType:          varchar('subject_type', { length: 20 }).notNull().default('direct'),
+  engagementId:         varchar('engagement_id', { length: 36 }).references(() => freelancerEngagements.id, { onDelete: 'set null' }),
+  jobId:                varchar('job_id', { length: 36 }).references(() => jobPostings.id, { onDelete: 'set null' }),
+  proposalId:           varchar('proposal_id', { length: 36 }).references(() => jobProposals.id, { onDelete: 'set null' }),
+  projectId:            integer('project_id'),
+  title:                varchar('title', { length: 200 }),
+  /** Denormalized last-message cache so the list view renders without a per-row scan. */
+  lastMessageAt:        timestamp('last_message_at'),
+  lastMessagePreview:   varchar('last_message_preview', { length: 280 }),
+  lastSenderUserId:     varchar('last_sender_user_id', { length: 36 }),
+  employerLastReadAt:   timestamp('employer_last_read_at'),
+  freelancerLastReadAt: timestamp('freelancer_last_read_at'),
+  createdAt:            timestamp('created_at').notNull().defaultNow(),
+  updatedAt:            timestamp('updated_at').notNull().defaultNow(),
+}, (t) => ({
+  byTenant:     index('idx_fl_conv_tenant').on(t.tenantId, t.lastMessageAt),
+  byFreelancer: index('idx_fl_conv_freelancer').on(t.freelancerUserId, t.lastMessageAt),
+}));
+
+
+/** A single message in a {@link freelancerConversations} thread (0298). */
+export const freelancerMessages = pgTable('freelancer_messages', {
+  id:             varchar('id', { length: 36 }).primaryKey(),
+  conversationId: varchar('conversation_id', { length: 36 }).notNull().references(() => freelancerConversations.id, { onDelete: 'cascade' }),
+  senderUserId:   varchar('sender_user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  body:           text('body').notNull(),
+  /** Optional attachment (R2 object) — a signed/served link the recipient can open. */
+  attachmentKey:  varchar('attachment_key', { length: 255 }),
+  attachmentName: varchar('attachment_name', { length: 255 }),
+  attachmentType: varchar('attachment_type', { length: 120 }),
+  createdAt:      timestamp('created_at').notNull().defaultNow(),
+}, (t) => ({
+  byConversation: index('idx_fl_msg_conversation').on(t.conversationId, t.createdAt),
+}));
+
+
+// ═══ from collaboration.ts ═══
+/**
+ * Schema — collaboration context.
+ *
+ * Split out of the single 7,500-line `schema.ts`, which held all 322 tables
+ * in one file and was the largest source file in the repo by a factor of three.
+ * `schema.ts` is now a barrel that re-exports every context, so nothing that
+ * imports from it had to change.
+ *
+ * Imports between context modules are circular by nature — a task references a
+ * project, a project references a tenant, and ownership runs in both directions
+ * across contexts. That is safe here because EVERY table→table reference sits
+ * inside a lazy callback (`references(() => other.id)`, and the index /
+ * primaryKey builders), so no cross-module value is dereferenced while the
+ * modules are still evaluating. `schema.tables.test.ts` renders SQL for every
+ * exported table to keep that guarantee honest.
+ */
 
 
 /**
@@ -136,52 +585,15 @@ export const timeEntries = pgTable('time_entries', {
 
 
 /**
- * Unified activity / audit log (migration 0287) — the ONE canonical, append-only
- * stream of "who did what, to what, when" across the whole workforce: team
- * members, external talent / hires, and AI agents alike. Replaces the fragmented
- * per-domain event tables as the single trace surface; written through the
- * `recordActivity()` emitter (application/activity/activityLog.ts).
+ * Unified activity / audit log — MOVED to the kernel (PRD 20 §2).
  *
- * Actor is polymorphic via (actorType, actorRef) — see the migration header for
- * the per-type ref mapping. actorName is denormalised so the timeline renders
- * without a heterogeneous fan-join. `verb` is free-form so new event kinds need
- * no migration.
+ * It was always the primitive the other 24 are modelled on: migration 0295
+ * dropped `audit_events` and made this the single audit store, which is the
+ * in-repo precedent the whole kernel argument rests on. It now lives in
+ * `schema/kernel.ts`, re-exported here so the ~40 modules importing
+ * `activityLog` from this context keep working.
  */
-export const activityLog = pgTable('activity_log', {
-  id:           bigserial('id', { mode: 'number' }).primaryKey(),
-  /** Stable producer key for retried projections (for example an execution
-   * lifecycle outbox event). Null for legacy/direct activity emitters. */
-  eventKey:     varchar('event_key', { length: 160 }),
-  /** Nullable ONLY for platform-global events (pre-tenant login/registration),
-   *  absorbed from the retired audit_events table (mig 0295). Tenant-scoped reads
-   *  filter on tenantId, so a global row is simply invisible to any one tenant. */
-  tenantId:     integer('tenant_id').references(() => tenants.id, { onDelete: 'cascade' }),
-  segmentId:    uuid('segment_id').references(() => segments.id, { onDelete: 'cascade' }),
-  projectId:    integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
-  /** human | hire | cloud_agent | host_agent | system */
-  actorType:    varchar('actor_type', { length: 16 }).notNull(),
-  /** Id into the per-type table (users.id / ide_agents.id / agent_hosts.id); null for system. */
-  actorRef:     varchar('actor_ref', { length: 64 }),
-  /** Denormalised display label — avoids a per-row fan-join across actor tables. */
-  actorName:    varchar('actor_name', { length: 255 }),
-  /** freelancer_engagements.id — binds a cross-tenant hire action; nullable. */
-  engagementId: varchar('engagement_id', { length: 36 }),
-  /** Free-form action verb: 'task.created', 'comment.added', 'deploy.recorded', … */
-  verb:         varchar('verb', { length: 64 }).notNull(),
-  targetType:   varchar('target_type', { length: 32 }),
-  targetId:     varchar('target_id', { length: 64 }),
-  targetLabel:  varchar('target_label', { length: 300 }),
-  summary:      text('summary'),
-  metadata:     jsonb('metadata'),
-  occurredAt:   timestamp('occurred_at').notNull().defaultNow(),
-  createdAt:    timestamp('created_at').notNull().defaultNow(),
-}, (t) => [
-  uniqueIndex('idx_activity_log_event_key').on(t.eventKey),
-  index('idx_activity_log_tenant_time').on(t.tenantId, t.occurredAt),
-  index('idx_activity_log_actor').on(t.tenantId, t.actorType, t.actorRef, t.occurredAt),
-  index('idx_activity_log_target').on(t.tenantId, t.targetType, t.targetId),
-  index('idx_activity_log_project').on(t.tenantId, t.projectId, t.occurredAt),
-]);
+export { activityLog } from './kernel';
 
 
 /** One-time 6-digit email-ownership codes issued at password signup (and re-issued when
@@ -1219,3 +1631,101 @@ export const creationSessionClaims = pgTable('creation_session_claims', {
   serverSessionId: uuid('server_session_id').notNull().unique().references(() => creationSessions.id, { onDelete: 'cascade' }),
   claimedAt:       timestamp('claimed_at').notNull().defaultNow(),
 }, (t) => ({ pk: primaryKey({ columns: [t.userId, t.clientSessionId] }) }));
+
+// ═══ PRD 20 §5 step 2 — target-schema tables ═══
+//
+// Canvas & ideas — the Brain's two remaining targets (PRD 20 §3.2).
+//
+// 57 source tables in → 8 out, 46 absorbed by the kernel. **That is the proof,
+// not a gap** (§3): the canvas IS `artifact` + `thread` + `message` +
+// `share_link`, so a domain whose tables nearly all became kernel primitives was
+// generalised correctly.
+//
+// §2.1's session test is what did it. 75 tables across the three schemas sat in
+// exactly one shape — authored content, that people can be present in, that can
+// be shared — and needed zero new tables: 13 authoring containers, 15 per-feature
+// meeting tables, 8 attendee tables, 6 transcript/recording tables, 16
+// share-and-view tables (six independently reinvented view-duration tracking) and
+// 18 thread/message tables. `scratch_pad_meetings` existed only because the pad
+// owned its own meeting; hoisting presence into the shell is what deleted it.
+//
+// The two that survive are the two the session test does NOT cover: a licensed
+// asset the tenant does not own, and an interview conducted with nobody present.
+
+/**
+ * A licensed stock asset available to compose with.
+ *
+ * Not an `artifacts` row, and the distinction is a licensing one rather than a
+ * modelling one: an artifact is something the tenant MADE and owns. A stock
+ * asset is something a provider licensed under terms, and the terms — attribution,
+ * territory, expiry, per-seat usage caps — are the whole reason the row exists.
+ * Using one COPIES it into `artifacts`; the usage is recorded against this row.
+ */
+export const stockMediaAssets = pgTable('stock_media_assets', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id'),
+  provider:     varchar('provider', { length: 48 }).notNull(),
+  providerRef:  varchar('provider_ref', { length: 160 }).notNull(),
+  /** 'image' | 'video' | 'audio' | 'icon' | 'font' | 'model3d'. */
+  kind:         varchar('kind', { length: 24 }).notNull(),
+  title:        varchar('title', { length: 300 }),
+  previewUrl:   text('preview_url'),
+  width:        integer('width'),
+  height:       integer('height'),
+  durationMs:   integer('duration_ms'),
+  keywords:     jsonb('keywords'),
+  /** The terms. `attributionRequired` is a column and not a JSON key because a
+   *  render pipeline has to filter on it before it composes, not after. */
+  licenseKind:  varchar('license_kind', { length: 32 }).notNull().default('royalty_free'),
+  attributionRequired: boolean('attribution_required').notNull().default(false),
+  attributionText: varchar('attribution_text', { length: 500 }),
+  licenseExpiresAt: timestamp('license_expires_at'),
+  costCents:    integer('cost_cents').notNull().default(0),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_stock_media_assets_provider').on(t.provider, t.providerRef),
+  index('idx_stock_media_assets_kind').on(t.kind, t.licenseKind),
+]);
+
+/**
+ * An asynchronous interview — a recorded session with nobody else present.
+ *
+ * The session test says authored content plus PRESENCE plus shareable is the
+ * canvas. This is the case that fails the middle clause on purpose: an async
+ * interview is a prompt, a timer and a recording, with no room and no
+ * participants, and modelling it as a meeting with zero attendees is how the
+ * question "who was in this" starts returning a lie.
+ *
+ * The questions are a `question_sets` row, the takes are `artifacts` derived
+ * from one another, and the reviewer's scores are `responses`.
+ */
+export const studioAsyncInterviews = pgTable('studio_async_interviews', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').notNull(),
+  objectId:      uuid('object_id').references(() => objects.id, { onDelete: 'cascade' }),
+  questionSetId: uuid('question_set_id'),
+  subjectRef:    varchar('subject_ref', { length: 64 }),
+  subjectEmail:  varchar('subject_email', { length: 320 }),
+  /** How the subject is let in. A `share_links` token, so there is one
+   *  revocation path rather than a second one invented here. */
+  shareLinkId:   uuid('share_link_id'),
+  /** Seconds allowed per question, and how many attempts. Config, not columns
+   *  per question — the per-question overrides live on the question set. */
+  thinkSeconds:  integer('think_seconds').notNull().default(30),
+  answerSeconds: integer('answer_seconds').notNull().default(120),
+  maxTakes:      integer('max_takes').notNull().default(2),
+  /** 'draft' | 'sent' | 'started' | 'submitted' | 'reviewed' | 'expired'. */
+  status:        varchar('status', { length: 16 }).notNull().default('draft'),
+  invitedAt:     timestamp('invited_at'),
+  startedAt:     timestamp('started_at'),
+  submittedAt:   timestamp('submitted_at'),
+  expiresAt:     timestamp('expires_at'),
+  reviewerRef:   varchar('reviewer_ref', { length: 64 }),
+  reviewedAt:    timestamp('reviewed_at'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_studio_async_interviews_status').on(t.tenantId, t.status, t.expiresAt),
+  index('idx_studio_async_interviews_subject').on(t.tenantId, t.subjectRef),
+]);

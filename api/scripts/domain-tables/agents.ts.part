@@ -1,0 +1,234 @@
+//
+// Agents & runtime — the platform's ten remaining targets (PRD 20 §3.2).
+//
+// 75 source tables in → 40 out, 28 absorbed by the kernel: every execution,
+// attempt and step is a `runs` row in one self-referencing tree, every dispatch
+// is a `deliveries` row, every model-usage number is a `metric_fact`.
+//
+// One flattening move ran here (§3.2): `agent_host_projects` was ≤3 payload
+// columns — the thin move — so it is a JSONB key on the host rather than a table.
+//
+// THE FOUR CACHES ARE FOUR TABLES ON PURPOSE. `answer_cache`, `enrichment_cache`,
+// `geocoder_cache` and `model_locks` look like one shape and are not: they differ
+// in key derivation, eviction rule and correctness consequence, and a shared
+// cache table would need every one of those as a nullable column — the
+// null-padded union §2.2 forbids. They are also NOT `getOrSetCached` L1+L2
+// replacements: that primitive is the read-through for tenant-scoped reads, and
+// these are cross-tenant, provider-priced, long-lived stores whose whole value is
+// that they survive an isolate.
+
+/** A cached answer to a semantically-identical question, keyed by prompt hash.
+ *  Cross-tenant by design and therefore explicitly scoped: the cache key includes
+ *  the tenant unless the answer is provably tenant-independent. */
+export const answerCache = pgTable('answer_cache', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id'),
+  /** SHA-256 of (normalised prompt + model + tool set). */
+  keyHash:     varchar('key_hash', { length: 64 }).notNull(),
+  model:       varchar('model', { length: 96 }),
+  answer:      text('answer'),
+  payload:     jsonb('payload'),
+  tokensSaved: integer('tokens_saved').notNull().default(0),
+  hitCount:    integer('hit_count').notNull().default(0),
+  lastHitAt:   timestamp('last_hit_at'),
+  expiresAt:   timestamp('expires_at'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_answer_cache_key').on(t.tenantId, t.keyHash),
+  index('idx_answer_cache_expiry').on(t.expiresAt),
+]);
+
+/** A cached enrichment result. Keyed by the provider request, because the SPEND
+ *  is what is being avoided — a miss costs money, not just latency. */
+export const enrichmentCache = pgTable('enrichment_cache', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id'),
+  provider:    varchar('provider', { length: 64 }).notNull(),
+  requestHash: varchar('request_hash', { length: 64 }).notNull(),
+  payload:     jsonb('payload'),
+  /** What the call would have cost, so the saving is reportable rather than
+   *  asserted. */
+  costCentsAvoided: integer('cost_cents_avoided').notNull().default(0),
+  hitCount:    integer('hit_count').notNull().default(0),
+  expiresAt:   timestamp('expires_at'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_enrichment_cache_request').on(t.provider, t.requestHash),
+  index('idx_enrichment_cache_expiry').on(t.expiresAt),
+]);
+
+/** A cached geocode. Genuinely global — an address resolves to the same point
+ *  for every tenant — and long-lived, which is why it outlives any isolate cache. */
+export const geocoderCache = pgTable('geocoder_cache', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id'),
+  queryHash:  varchar('query_hash', { length: 64 }).notNull(),
+  query:      varchar('query', { length: 500 }),
+  latitude:   numeric('latitude', { precision: 9, scale: 6 }),
+  longitude:  numeric('longitude', { precision: 9, scale: 6 }),
+  country:    varchar('country', { length: 2 }),
+  region:     varchar('region', { length: 120 }),
+  locality:   varchar('locality', { length: 160 }),
+  provider:   varchar('provider', { length: 48 }),
+  hitCount:   integer('hit_count').notNull().default(0),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_geocoder_cache_query').on(t.queryHash),
+]);
+
+/** A lock held on a model, so two runs do not contend for a rate-limited pool.
+ *  Not a cache at all — the row's VALUE is its existence, and its correctness
+ *  consequence is a 429 rather than a slower response. */
+export const modelLocks = pgTable('model_locks', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id'),
+  model:      varchar('model', { length: 96 }).notNull(),
+  poolKey:    varchar('pool_key', { length: 96 }).notNull().default('default'),
+  holderRef:  varchar('holder_ref', { length: 64 }).notNull(),
+  acquiredAt: timestamp('acquired_at').notNull().defaultNow(),
+  /** A lock with no expiry is a deadlock waiting for a crash. */
+  expiresAt:  timestamp('expires_at').notNull(),
+  releasedAt: timestamp('released_at'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_model_locks_pool').on(t.model, t.poolKey),
+  index('idx_model_locks_expiry').on(t.expiresAt),
+]);
+
+/** One tool call an agent made inside a run. Distinct from the `runs` tree: a
+ *  tool call is not an execution, it is an interaction WITHIN one, and it is the
+ *  grain a cost or a refusal investigation actually needs. */
+export const aiToolCalls = pgTable('ai_tool_calls', {
+  id:         bigserial('id', { mode: 'number' }).primaryKey(),
+  tenantId:   integer('tenant_id').notNull(),
+  runRef:     varchar('run_ref', { length: 64 }),
+  messageRef: varchar('message_ref', { length: 64 }),
+  /** The ADVERTISED tool name, which is what the prompt contract asserts on. */
+  toolName:   varchar('tool_name', { length: 96 }).notNull(),
+  arguments:  jsonb('arguments'),
+  result:     jsonb('result'),
+  /** 'ok' | 'error' | 'refused' | 'timeout'. */
+  outcome:    varchar('outcome', { length: 16 }).notNull().default('ok'),
+  error:      text('error'),
+  latencyMs:  integer('latency_ms'),
+  calledAt:   timestamp('called_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_ai_tool_calls_run').on(t.tenantId, t.runRef, t.calledAt),
+  index('idx_ai_tool_calls_tool').on(t.tenantId, t.toolName, t.outcome),
+]);
+
+/** A usage record, at the grain the vendor bills at. Rolled up into
+ *  `metric_facts` for charts and into `ledger_entries` for spend — this is the
+ *  underlying evidence both are derived from, which is what makes a bill
+ *  reconcilable rather than merely reported. */
+export const aiUsageRecords = pgTable('ai_usage_records', {
+  id:           bigserial('id', { mode: 'number' }).primaryKey(),
+  tenantId:     integer('tenant_id').notNull(),
+  runRef:       varchar('run_ref', { length: 64 }),
+  vendor:       varchar('vendor', { length: 48 }).notNull(),
+  model:        varchar('model', { length: 96 }).notNull(),
+  /** Whether the tenant's own key paid for it — a BYO row costs the platform 0,
+   *  which is why ranking BYO usage by cost reports nothing and ranking it by
+   *  tokens reports the truth. */
+  isByo:        boolean('is_byo').notNull().default(false),
+  inputTokens:  integer('input_tokens').notNull().default(0),
+  outputTokens: integer('output_tokens').notNull().default(0),
+  cachedTokens: integer('cached_tokens').notNull().default(0),
+  costCents:    numeric('cost_cents', { precision: 14, scale: 4 }).notNull().default('0'),
+  latencyMs:    integer('latency_ms'),
+  occurredAt:   timestamp('occurred_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_ai_usage_records_tenant').on(t.tenantId, t.occurredAt),
+  index('idx_ai_usage_records_model').on(t.tenantId, t.vendor, t.model, t.occurredAt),
+]);
+
+/** A classification of one inbound email. The message is a kernel `messages`
+ *  row; this is what the classifier decided and on which model, so a
+ *  re-classification is comparable rather than an unexplained change of mind. */
+export const aiEmailClassifications = pgTable('ai_email_classifications', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull(),
+  messageRef: varchar('message_ref', { length: 64 }).notNull(),
+  /** 'lead' | 'support' | 'billing' | 'spam' | 'internal' | 'other'. */
+  label:      varchar('label', { length: 32 }).notNull(),
+  confidence: numeric('confidence', { precision: 4, scale: 2 }),
+  intent:     varchar('intent', { length: 96 }),
+  entities:   jsonb('entities'),
+  model:      varchar('model', { length: 96 }),
+  /** Set when a human overruled it — the only signal a routing classifier can
+   *  learn from. */
+  correctedLabel: varchar('corrected_label', { length: 32 }),
+  correctedBy: varchar('corrected_by', { length: 64 }),
+  classifiedAt: timestamp('classified_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_ai_email_classifications_message').on(t.tenantId, t.messageRef, t.model),
+  index('idx_ai_email_classifications_label').on(t.tenantId, t.label, t.classifiedAt),
+]);
+
+/** A call handled by a voice agent. The recording and transcript are `artifacts`
+ *  derived from one another; this is the call's own shape. */
+export const aiVoiceAgentCalls = pgTable('ai_voice_agent_calls', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  objectId:    uuid('object_id').references(() => objects.id, { onDelete: 'cascade' }),
+  agentRef:    varchar('agent_ref', { length: 64 }),
+  phoneNumberRef: varchar('phone_number_ref', { length: 64 }),
+  direction:   varchar('direction', { length: 12 }).notNull().default('inbound'),
+  counterparty: varchar('counterparty', { length: 40 }),
+  startedAt:   timestamp('started_at'),
+  endedAt:     timestamp('ended_at'),
+  durationSec: integer('duration_sec'),
+  /** 'completed' | 'no_answer' | 'busy' | 'failed' | 'transferred'. */
+  outcome:     varchar('outcome', { length: 16 }),
+  transferredTo: varchar('transferred_to', { length: 64 }),
+  recordingArtifactId: uuid('recording_artifact_id'),
+  costCents:   numeric('cost_cents', { precision: 12, scale: 4 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_ai_voice_agent_calls_tenant').on(t.tenantId, t.startedAt),
+]);
+
+/** A competitor the platform's own agents track. */
+export const aiCompetitors = pgTable('ai_competitors', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  name:        varchar('name', { length: 200 }).notNull(),
+  website:     varchar('website', { length: 255 }),
+  category:    varchar('category', { length: 96 }),
+  positioning: text('positioning'),
+  strengths:   jsonb('strengths'),
+  weaknesses:  jsonb('weaknesses'),
+  pricingSummary: text('pricing_summary'),
+  lastReviewedAt: timestamp('last_reviewed_at'),
+  watchEnabled: boolean('watch_enabled').notNull().default(true),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_ai_competitors_name').on(t.tenantId, t.name),
+]);
+
+/** One action a workflow node performs. The workflow's EXECUTION is a `runs`
+ *  tree; this is the authored definition of what the node does, which is edited
+ *  and versioned rather than emitted. */
+export const workflowActions = pgTable('workflow_actions', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull(),
+  workflowRef:  varchar('workflow_ref', { length: 64 }).notNull(),
+  nodeId:       varchar('node_id', { length: 96 }).notNull(),
+  /** Mirrors WorkflowNodeKind — trigger | agent | llm | mcp | connector | memory
+   *  | knowledge | train | transform | filter | branch | output. */
+  kind:         varchar('kind', { length: 32 }).notNull(),
+  label:        varchar('label', { length: 200 }),
+  config:       jsonb('config'),
+  /** Set for a `connector` node: the manifest action it invokes on a
+   *  `connections` row, which is what stops a vendor needing DDL (0410). */
+  connectionId: integer('connection_id'),
+  actionKey:    varchar('action_key', { length: 96 }),
+  position:     integer('position').notNull().default(0),
+  enabled:      boolean('enabled').notNull().default(true),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_workflow_actions_node').on(t.tenantId, t.workflowRef, t.nodeId),
+]);

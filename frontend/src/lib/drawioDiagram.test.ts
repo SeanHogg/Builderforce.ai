@@ -50,6 +50,11 @@ describe('parseDrawioXml', () => {
     const graph = parseDrawioXml(`<mxGraphModel><root><mxCell id="0"/><object id="w" label="Wrapped"><mxCell vertex="1" parent="0" style="ellipse"><mxGeometry x="0" y="0" width="80" height="40" as="geometry"/></mxCell></object></root></mxGraphModel>`);
     expect(graph?.vertices[0]).toMatchObject({ id: 'w', label: 'Wrapped', shape: 'ellipse' });
   });
+
+  it('keeps an embedded image data URL on an image cell', () => {
+    const graph = parseDrawioXml('<mxGraphModel><root><mxCell id="0"/><mxCell id="pic" vertex="1" parent="0" style="shape=image;image=data:image/png;base64,AAAA;"><mxGeometry x="0" y="0" width="80" height="40" as="geometry"/></mxCell></root></mxGraphModel>');
+    expect(graph?.vertices[0]?.imageUrl).toBe('data:image/png;base64,AAAA');
+  });
 });
 
 describe('resolveDrawioXml', () => {

@@ -26,7 +26,10 @@ export interface CreationObjectDefinition {
 type BaseCreationObjectDefinition = Pick<CreationObjectDefinition, 'kind' | 'label' | 'icon' | 'group' | 'createData'>;
 
 const BASE_CREATION_OBJECT_REGISTRY = [
-  { kind: 'workflow', label: 'Workflow', icon: '⌘', group: 'Build', createData: () => ({ kind: 'workflow', title: 'Untitled workflow', status: 'Ready' }) },
+  // A new workflow has no steps, so it is NOT 'Ready' — it is a draft that
+  // cannot run yet. Saying 'Ready' here is how an empty card came to look like a
+  // configured one; the body's empty state and this status now agree.
+  { kind: 'workflow', label: 'Workflow', icon: '⌘', group: 'Build', createData: () => ({ kind: 'workflow', title: 'Untitled workflow', status: 'Draft' }) },
   { kind: 'website', label: 'Website', icon: '◎', group: 'Build', createData: () => ({ kind: 'website', title: 'Website concept', status: 'Draft' }) },
   { kind: 'build', label: 'Builder', icon: '▶', group: 'Build', createData: () => ({ kind: 'build', title: 'New build', status: 'Choose a type', modality: DEFAULT_MODALITY }) },
   { kind: 'chat', label: 'Chat', icon: '●', group: 'Build', createData: () => ({ kind: 'chat', title: 'Brain' }) },
@@ -121,7 +124,7 @@ const CAPABILITIES: Partial<Record<CreationObjectKind, string>> = {
   evermind: 'evermind', mcp: 'integrations', agent: 'agents', llm: 'models', voice: 'voice', video: 'video',
 };
 const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
-  workflow: ['edit', 'run'], website: ['edit', 'preview', 'publish'], prototype: ['edit', 'preview'],
+  workflow: ['edit', 'build', 'run'], website: ['edit', 'preview', 'publish'], prototype: ['edit', 'preview'],
   // Opening the Builder IS the adapter: run, checks, terminal and publish all
   // happen inside the IDE surface it mounts, so they are not advertised here as
   // separate canvas-side actions that nothing implements.
@@ -129,12 +132,12 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   dataset: ['import', 'profile', 'visualize', 'plot'], chart: ['refresh', 'drill'], dashboard: ['refresh', 'drill'], map: ['refresh', 'drill'],
   project: ['expand', 'compare'], task: ['assign', 'deliver'], agent: ['inspect', 'configure', 'assign'],
   evermind: ['teach', 'train', 'evaluate', 'publish'], voice: ['record', 'play'], video: ['generate', 'preview'], mcp: ['authenticate', 'execute'],
-  image: ['generate', 'preview', 'export'], animation: ['generate', 'preview', 'export'], podcast: ['generate', 'preview', 'export'],
+  image: ['generate', 'preview', 'export', 'convert-to-drawio'], animation: ['generate', 'preview', 'export'], podcast: ['generate', 'preview', 'export'],
   comic: ['generate', 'preview', 'export'], game: ['generate', 'preview', 'export'], cad: ['generate', 'preview', 'export'], model3d: ['generate', 'preview', 'export'],
   resume: ['generate', 'preview', 'export'], template: ['browse', 'apply'],
   mockup: ['preview', 'deliver'], mockupSet: ['expand', 'deliver'], standup: ['start'],
   pitch: ['rehearse', 'export'], pitchScorecard: ['score', 'export'], pitchQa: ['drill', 'export'], pitchApplication: ['review', 'export'],
-  document: ['export'], slides: ['present', 'export'], diagram: ['export'], spreadsheet: ['export'],
+  document: ['export'], slides: ['present', 'export'], diagram: ['export'], spreadsheet: ['export'], drawing: ['convert-to-drawio'],
   salesPipeline: ['refresh', 'review'], salesContact: ['qualify', 'advance'], salesCampaign: ['draft', 'schedule', 'execute'],
   targetMarket: ['research', 'segment'], salesGoal: ['review', 'update'], salesMeeting: ['schedule', 'invite'],
   // `refresh` re-reads the mailbox; `pin` lifts one message out as its own
@@ -144,6 +147,12 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
 };
 
 const MUTABLE_FIELDS = {
+  // `steps` is the authored spec the compiler lowers into a real definition —
+  // each step may carry connector/action/input, a prompt, or an agent role. See
+  // api/src/domain/canvasWorkflowSpec.ts for the shape it compiles to. Brain
+  // still cannot set `resourceId` or `workflowExecutable`: linking a canvas
+  // object to a real, runnable tenant resource is the compile endpoint's job,
+  // not something an LLM patch may assert.
   workflow: ['content', 'steps', 'approvalMode', 'runTarget'],
   website: ['content', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteAccent', 'viewport', 'pages', 'subdomain', 'url', 'siteUrl', 'pathUrl'],
   // A Builder object owns a real IDE project: the workspace scaffold lives in R2
@@ -215,7 +224,7 @@ const MUTABLE_FIELDS = {
   template: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'templateCategory', 'outputFormat', 'thumbnailUrl', 'mcpServer', 'mcpTool', 'mcpArguments'],
   document: ['content', 'markdown', 'sources'],
   slides: ['content', 'markdown', 'items', 'sources'],
-  diagram: ['content', 'markdown', 'diagram', 'diagramXml', 'diagramFormat', 'sources'],
+  diagram: ['content', 'markdown', 'diagram', 'diagramXml', 'diagramFormat', 'sources', 'sourceImageIds', 'fileName', 'mimeType'],
   knowledge: ['content', 'markdown', 'sources'],
   file: ['content', 'fileName', 'mimeType', 'url', 'fileSize', 'summary'],
   url: ['content', 'url', 'sources', 'viewport', 'pageTitle'],

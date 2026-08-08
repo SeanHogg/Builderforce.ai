@@ -49,6 +49,7 @@ import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
 import { EvermindValidationProvider } from '@/components/ide/EvermindValidationContext';
 import { getProjectEvermindContributions, getProjectEvermindHead, recallProjectEvermind, teachProjectEvermindFromText, type ProjectEvermindContributions, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
 import { isAwaitingApprovalExecution, type LlmError } from '@/lib/builderforceApi';
+import { ApiRequestError } from '@/lib/apiClient';
 import { evaluateModel, fetchProjects, publishSite } from '@/lib/api';
 import { computeProjectHealth } from '@/lib/projectHealth';
 import { createCloudAgent, updateAgent } from '@/lib/api';
@@ -70,6 +71,7 @@ import { detectGeoColumns, mapObjectFields, mapPointsFromRows } from '@/lib/canv
 import { useCoarsePointer } from '@/lib/useCoarsePointer';
 import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode';
 import { importCanvasFile, type ImportTranslator } from '@/lib/canvasFileImport';
+import { appendImageToDrawioCanvas, createDrawioImageCanvas, drawingDataUrl, type DrawioImageAsset } from '@/lib/drawioImageCanvas';
 import { WorkflowBuilder } from '@/components/workflow-builder/WorkflowBuilder';
 import { VoiceConfigPanel } from '@/components/ide/VoiceConfigPanel';
 import { VoiceOutput } from '@/components/ide/VoiceOutput';
@@ -116,13 +118,15 @@ const INSPECTOR_DEFAULT_WIDTH = 270;
 const INSPECTOR_MIN_WIDTH = 270;
 const INSPECTOR_WIDE_WIDTH = 520;
 const INSPECTOR_MAX_WIDTH = 720;
-const ACCOUNT_REQUIRED_OBJECT_ACTIONS = new Set(['publish', 'deliver', 'assign', 'authenticate', 'execute', 'record', 'train', 'start', 'compare']);
+const ACCOUNT_REQUIRED_OBJECT_ACTIONS = new Set(['publish', 'deliver', 'assign', 'authenticate', 'execute', 'record', 'train', 'start', 'compare', 'build']);
 const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   website: ['publish'], video: ['generate'], build: ['open'],
-  workflow: ['run'], dataset: ['visualize', 'plot', 'profile'], project: ['expand', 'compare'],
+  // `build` compiles the authored steps into a real workflow definition; `run`
+  // executes one. Run builds first when needed, so Brain can call either.
+  workflow: ['build', 'run'], dataset: ['visualize', 'plot', 'profile'], project: ['expand', 'compare'],
   mockup: ['deliver'], mockupSet: ['expand', 'deliver'], standup: ['start'],
   evermind: ['train', 'evaluate', 'publish'],
-  image: ['generate', 'preview', 'export'], animation: ['generate', 'preview', 'export'], podcast: ['generate', 'preview', 'export'],
+  image: ['generate', 'preview', 'export', 'convert-to-drawio'], drawing: ['convert-to-drawio'], animation: ['generate', 'preview', 'export'], podcast: ['generate', 'preview', 'export'],
   comic: ['generate', 'preview', 'export'], game: ['generate', 'preview', 'export'], cad: ['generate', 'preview', 'export'], model3d: ['generate', 'preview', 'export'],
   resume: ['generate', 'preview', 'export'], template: ['browse', 'apply'],
 };
@@ -294,6 +298,29 @@ const MAX_DROPPED_FILES = 12;
  * object being dragged off the palette. */
 function dragCarriesFiles(event: React.DragEvent): boolean {
   return Array.from(event.dataTransfer?.types ?? []).includes('Files');
+}
+
+function drawioAssetFromNode(node: CreationFlowNode): DrawioImageAsset | null {
+  const data = node.data;
+  const direct = [data.outputUrl, data.thumbnailUrl].find((value) => typeof value === 'string' && value.startsWith('data:image/'));
+  if (typeof direct === 'string') {
+    return {
+      name: typeof data.fileName === 'string' ? data.fileName : data.title,
+      dataUrl: direct,
+      ...(typeof data.imageWidth === 'number' ? { width: data.imageWidth } : {}),
+      ...(typeof data.imageHeight === 'number' ? { height: data.imageHeight } : {}),
+    };
+  }
+  if (data.kind !== 'drawing' || !Array.isArray(data.points)) return null;
+  const points = data.points.flatMap((point) => {
+    if (!point || typeof point !== 'object') return [];
+    const { x, y } = point as { x?: unknown; y?: unknown };
+    return typeof x === 'number' && typeof y === 'number' ? [{ x, y }] : [];
+  });
+  const width = typeof data.drawingWidth === 'number' ? data.drawingWidth : 640;
+  const height = typeof data.drawingHeight === 'number' ? data.drawingHeight : 420;
+  const url = drawingDataUrl(points, width, height, typeof data.stroke === 'string' ? data.stroke : '#5b5ce2', typeof data.strokeWidth === 'number' ? data.strokeWidth : 3);
+  return url ? { name: `${data.title}.svg`, dataUrl: url, width, height } : null;
 }
 
 const SEED = {
@@ -2251,6 +2278,46 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setSelectedId(node.id); setSelectedIds([node.id]);
   }, [addFilesToCanvas, canEdit, setNodes, t]);
 
+  /** Convert an uploaded image/freehand drawing into a real, portable draw.io
+   * file, or append it as a new editable cell to an existing one. The diagram
+   * remains a normal canvas object, so the existing session graph persistence,
+   * history, Files panel, collaboration, and account ownership all apply. */
+  const convertObjectToDrawio = useCallback((sourceId: string, requestedDiagramId?: string): { ok: boolean; diagramId?: string; error?: string } => {
+    if (!canEdit) return { ok: false, error: t('roleCannotEdit') };
+    const source = nodes.find((node) => node.id === sourceId);
+    if (!source) return { ok: false, error: t('drawioSourceMissing') };
+    const asset = drawioAssetFromNode(source);
+    if (!asset) return { ok: false, error: t('drawioPreviewRequired') };
+    const drawioDiagrams = nodes.filter((node) => node.data.kind === 'diagram' && canvasDiagram(node.data)?.format === 'drawio');
+    const target = requestedDiagramId && requestedDiagramId !== '__new__'
+      ? drawioDiagrams.find((node) => node.id === requestedDiagramId)
+      : requestedDiagramId === '__new__' ? undefined : drawioDiagrams.length === 1 ? drawioDiagrams[0] : undefined;
+    if (target) {
+      const current = canvasDiagram(target.data)?.source ?? '';
+      const updated = appendImageToDrawioCanvas(current, asset);
+      if (!updated) return { ok: false, error: t('drawioAppendFailed') };
+      setNodes((items) => items.map((node) => node.id === target.id ? { ...node, data: {
+        ...node.data, diagram: updated, diagramXml: updated, content: updated,
+        status: t('drawioUpdatedStatus'),
+        sourceImageIds: [...new Set([...(Array.isArray(node.data.sourceImageIds) ? node.data.sourceImageIds.map(String) : []), source.id])],
+      } } : node));
+      setEdges((items) => items.some((edge) => edge.source === source.id && edge.target === target.id) ? items : [...items, { id: crypto.randomUUID(), source: source.id, target: target.id, type: 'smoothstep', label: t('drawioAddedToEdge'), data: { connectionKind: 'reference' } }]);
+      setSelectedId(target.id); setSelectedIds([target.id]); setNotice(t('drawioImageAdded', { name: source.data.title, diagram: target.data.title }));
+      return { ok: true, diagramId: target.id };
+    }
+    const diagram = newNode('diagram', { x: source.position.x + 430, y: source.position.y });
+    const xml = createDrawioImageCanvas(asset);
+    diagram.data = {
+      ...diagram.data, title: t('drawioTitle', { name: source.data.title }), status: t('drawioCreatedStatus'),
+      fileName: `${safeDownloadName(source.data.title)}.drawio`, mimeType: 'application/vnd.jgraph.mxfile',
+      diagramFormat: 'drawio', diagram: xml, diagramXml: xml, content: xml, sourceImageIds: [source.id],
+    };
+    setNodes((items) => [...items, diagram]);
+    setEdges((items) => [...items, { id: crypto.randomUUID(), source: source.id, target: diagram.id, type: 'smoothstep', label: t('drawioConvertedEdge'), data: { connectionKind: 'reference' } }]);
+    setSelectedId(diagram.id); setSelectedIds([diagram.id]); setNotice(t('drawioCreated', { name: diagram.data.title }));
+    return { ok: true, diagramId: diagram.id };
+  }, [canEdit, nodes, setEdges, setNodes, t]);
+
   /** Drag events fire again for every child element the pointer crosses, so the
    * overlay is held by a depth count rather than by the last event seen. */
   const onCanvasDragEnter = useCallback((event: React.DragEvent) => {
@@ -2790,6 +2857,20 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return { ok: true, proposed: true, objectId: args.objectId };
     },
   }, {
+    name: 'canvas_convert_to_drawio',
+    description: 'Convert an uploaded Image or freehand Drawing into a portable draw.io canvas file. To add another image to the same draw.io file, pass that existing Diagram object as diagramObjectId.',
+    parameters: { type: 'object', required: ['sourceObjectId'], additionalProperties: false, properties: {
+      sourceObjectId: { type: 'string', description: 'Image or Drawing object to embed.' },
+      diagramObjectId: { type: 'string', description: 'Existing draw.io Diagram to append to. Omit to create a new file; when exactly one draw.io Diagram exists it is reused.' },
+    } },
+    mutates: true,
+    run: (raw: unknown) => {
+      const args = raw as { sourceObjectId?: string; diagramObjectId?: string };
+      if (!args.sourceObjectId) return { error: 'sourceObjectId is required' };
+      const result = convertObjectToDrawio(args.sourceObjectId, args.diagramObjectId);
+      return result.ok ? { ok: true, diagramObjectId: result.diagramId, savedWithSession: persistence === 'server' } : { error: result.error };
+    },
+  }, {
     name: 'canvas_invoke_object_action',
     description: 'Invoke a native capability declared by a canvas object. Inspect and edit return guidance immediately; operational actions are proposed for user review before execution.',
     parameters: { type: 'object', required: ['objectId', 'action'], additionalProperties: false, properties: { objectId: { type: 'string' }, action: { type: 'string' } } },
@@ -2855,7 +2936,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.delete', label: `Delete connection ${connectionId}`, connectionId });
       return { ok: true, proposed: true, connectionId };
     },
-  }], [canEdit, edges, effectiveSelectedIds, nodes, persistence, prompt, requireAccount, resolvedScopeMode, scopedEdges, scopedNodes, sessionId]);
+  }], [canEdit, convertObjectToDrawio, edges, effectiveSelectedIds, nodes, persistence, prompt, requireAccount, resolvedScopeMode, scopedEdges, scopedNodes, sessionId]);
 
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
@@ -3212,24 +3293,97 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setNotice(t('noticeChangesRejected'));
   }, []);
 
+  /** Merge a patch into one node's data. Run/compile state is written by the
+   *  app, not the user, so this deliberately skips the `cardsEditable` gate that
+   *  `updateNodeData` applies to inspector edits. */
+  const patchWorkflowNode = useCallback((targetId: string, patch: Partial<CreationNodeData>) => {
+    setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, ...patch } } : node));
+  }, [setNodes]);
+
+  /** Resolve which workflow node an action applies to: the one named, else the
+   *  selection, else the only one on the board. Shared by build and run. */
+  const resolveWorkflowNode = useCallback((workflowId?: string) => {
+    const requested = typeof workflowId === 'string' ? nodes.find((node) => node.id === workflowId && node.data.kind === 'workflow') : null;
+    return requested ?? (selectedNode?.data.kind === 'workflow' ? selectedNode : nodes.find((node) => node.data.kind === 'workflow')) ?? null;
+  }, [nodes, selectedNode]);
+
+  /**
+   * Turn an authored canvas workflow into a REAL definition and link it.
+   *
+   * This is the step that used to be missing entirely: `steps` were rendered and
+   * never compiled, so a canvas workflow could not run no matter what it said on
+   * the card. Resolves the new definition id, or null when the steps are not
+   * runnable — in which case the per-step reasons are written onto the node and
+   * shown on the card.
+   */
+  const compileWorkflow = useCallback(async (workflowId?: string): Promise<string | null> => {
+    const target = resolveWorkflowNode(workflowId);
+    if (!target) { setNotice(t('noticeNeedWorkflow')); return null; }
+    // Compiling creates a tenant-owned, runnable resource, so a local draft has
+    // to become an account first — the same gate saving a collaborator uses.
+    if (persistence !== 'server') {
+      requireAccount('workflow', t('buildWorkflowGateTitle'), t('buildWorkflowGate'));
+      return null;
+    }
+    const targetId = target.id;
+    setNotice(t('noticeWorkflowBuilding'));
+    patchWorkflowNode(targetId, { status: 'Building', workflowIssues: [] });
+    try {
+      // Bind the definition to the canvas's project when there is one, so the
+      // compiled workflow lands in the same scope as the rest of this board's work.
+      const projectId = canvasProjectNodes(nodes).map((node) => canvasProjectId(node.data))[0] ?? null;
+      const definition = await workflowDefinitions.fromCanvas({
+        name: target.data.title || 'Canvas workflow',
+        steps: target.data.steps,
+        ...(typeof target.data.content === 'string' && target.data.content ? { description: target.data.content } : {}),
+        ...(projectId != null ? { projectId } : {}),
+      });
+      patchWorkflowNode(targetId, {
+        resourceId: `workflow:${definition.id}`,
+        resourceSubtype: 'definition',
+        workflowExecutable: true,
+        workflowIssues: [],
+        workflowStepCount: definition.compiledCount,
+        status: 'Built',
+      });
+      setNotice(t('noticeWorkflowBuilt', { count: definition.compiledCount }));
+      return definition.id;
+    } catch (error) {
+      // `details.issues` is the per-step explanation the compile endpoint
+      // returns; without it the card can only say "failed", which is what made
+      // the previous behaviour impossible to act on.
+      const details = error instanceof ApiRequestError ? error.details as { issues?: unknown } | undefined : undefined;
+      const issues = Array.isArray(details?.issues) ? details.issues : [];
+      const message = error instanceof Error ? error.message : t('noticeWorkflowNotRunnable');
+      patchWorkflowNode(targetId, { status: 'Needs setup', workflowIssues: issues });
+      setNotice(message);
+      return null;
+    }
+  }, [nodes, patchWorkflowNode, persistence, requireAccount, resolveWorkflowNode, t]);
+
   const runWorkflow = useCallback((workflowId?: string) => {
     if (!canRun) { setNotice(t('noticeNeedRunnerAccess')); return; }
-    const requestedTarget = typeof workflowId === 'string' ? nodes.find((node) => node.id === workflowId && node.data.kind === 'workflow') : null;
-    const target = requestedTarget ?? (selectedNode?.data.kind === 'workflow' ? selectedNode : nodes.find((node) => node.data.kind === 'workflow'));
+    const target = resolveWorkflowNode(workflowId);
     if (!target) { setNotice(t('noticeNeedWorkflow')); return; }
     const targetId = target.id;
-    const deliveryId = crypto.randomUUID();
-    const started: CreationDeliverable = { id: deliveryId, action: 'run', artifactKind: 'workflow-run', status: 'running', createdAt: new Date().toISOString(), provider: 'builderforce-workflows' };
-    setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Running', deliverables: withCreationDeliverable(node.data, started) } } : node));
-    const definitionId = target.data.resourceId?.startsWith('workflow:') ? target.data.resourceId.slice('workflow:'.length) : '';
+    // A run record is a past execution, not something that can be run again.
     if (persistence === 'server' && target.data.workflowExecutable === false) {
-      setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: target.data.status } } : node));
       setNotice(t('noticeWorkflowRunRecord'));
       return;
     }
-    if (persistence === 'server' && definitionId) {
+    // A draft that has never been built has nothing to run. It is BUILT first —
+    // and if it cannot be built, the run stops here with the reasons on the card.
+    // The old code instead waited 1400ms and wrote a `delivered` deliverable with
+    // `validation: passed`, so a workflow that had never executed anything
+    // reported "Complete". Nothing here may report success it did not observe.
+    const linkedId = target.data.resourceId?.startsWith('workflow:') ? target.data.resourceId.slice('workflow:'.length) : '';
+    void (async () => {
+      const definitionId = linkedId || await compileWorkflow(targetId);
+      if (!definitionId) return;
+      const started: CreationDeliverable = { id: crypto.randomUUID(), action: 'run', artifactKind: 'workflow-run', status: 'running', createdAt: new Date().toISOString(), provider: 'builderforce-workflows' };
+      setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Running', deliverables: withCreationDeliverable(node.data, started) } } : node));
       setNotice(t('noticeStartingWorkflow'));
-      void workflowDefinitions.get(definitionId).then((definition) => {
+      await workflowDefinitions.get(definitionId).then((definition) => {
         if (!definition.runTargetRuntime) throw new Error('Choose a run target in the Workflow inspector before running it');
         return workflowDefinitions.run(definitionId, {
           runtime: definition.runTargetRuntime,
@@ -3265,19 +3419,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Run failed', deliverables: withCreationDeliverable(node.data, failed) } } : node));
         setNotice(message);
       });
-      return;
-    }
-    setNotice(persistence === 'local' ? 'Draft workflow running locally…' : t('noticeLinkWorkflowFirst'));
-    if (persistence !== 'local') {
-      setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Draft' } } : node));
-      return;
-    }
-    window.setTimeout(() => {
-      const completed: CreationDeliverable = { ...started, status: 'delivered', completedAt: new Date().toISOString(), provider: 'browser-draft', validation: { status: 'passed', detail: 'Local draft workflow completed' } };
-      setNodes((current) => current.map((node) => node.id === targetId ? { ...node, data: { ...node.data, status: 'Complete', deliverables: withCreationDeliverable(node.data, completed) } } : node));
-      setNotice(t('noticeWorkflowCompleted'));
-    }, 1400);
-  }, [canRun, nodes, persistence, selectedNode, setNodes]);
+    })();
+  }, [canRun, compileWorkflow, persistence, resolveWorkflowNode, setNodes, t]);
 
   const saveAgent = useCallback(() => {
     if (!selectedNode || selectedNode.data.kind !== 'agent') return;
@@ -3683,7 +3826,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       return;
     }
     const finish = () => setPendingBrainActions((current) => current.slice(1));
-    if (target.data.kind === 'workflow' && pending.action === 'run') runWorkflow();
+    if (target.data.kind === 'workflow' && pending.action === 'build') void compileWorkflow(target.id);
+    else if (target.data.kind === 'workflow' && pending.action === 'run') runWorkflow(target.id);
     else if (target.data.kind === 'website' && pending.action === 'publish') publishWebsite(target.id);
     else if (target.data.kind === 'build' && pending.action === 'open') openBuild(target.id);
     else if (target.data.kind === 'video' && pending.action === 'generate') generateVideo(target.id);
@@ -3708,7 +3852,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       setNotice(t('noticeNoDeliveryAdapter', { action: pending.action, kind: creationObjectDefinition(target.data.kind).label }));
     }
     finish();
-  }, [compareProjects, deliverMockup, evaluateEvermind, expandMockupSet, expandProject, exportArtifact, generateVideo, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, plotDataset, profileDataset, publishWebsite, runCreativeAction, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
+  }, [compareProjects, compileWorkflow, deliverMockup, evaluateEvermind, expandMockupSet, expandProject, exportArtifact, generateVideo, nodes, openBuild, openEvermindTraining, pendingBrainActions, persistence, plotDataset, profileDataset, publishWebsite, runCreativeAction, runWorkflow, selectedId, setEdges, setNodes, startStandup, visualizeDataset]);
 
   const openHistory = useCallback(() => {
     setHistoryOpen(true);
@@ -4318,7 +4462,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           })}</div>
         </aside>}
 
-        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onShipGame={() => openGamePanel(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} />}
+        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onShipGame={() => openGamePanel(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onBuildWorkflow={() => { void compileWorkflow(selectedNode.id); }} onSaveAgent={saveAgent} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onConvertDrawio={(diagramId) => { const result = convertObjectToDrawio(selectedNode.id, diagramId); return result.ok ? t(diagramId && diagramId !== '__new__' ? 'drawioAddedStatus' : 'drawioCreatedStatus') : result.error || t('drawioAppendFailed'); }} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} />}
 
         {buildFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('build.focusLabel')}>
           <header><div><strong>{t('build.focusTitle')}</strong><small>{t('build.focusHint')}</small></div><button type="button" onClick={() => setBuildFocus(null)} aria-label={t('build.closeBuilder')}>×</button></header>
@@ -4433,7 +4577,7 @@ function RemoteCursors({ members, currentUserId, instance, container }: { member
   })}</div>;
 }
 
-function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onEditWorkflow, onSaveAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onExportArtifact }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onEditWorkflow: () => void; onSaveAgent: () => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onExportArtifact: (action: CanvasExportAction) => Promise<string> }) {
+function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onEditWorkflow, onBuildWorkflow, onSaveAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDrawio, onExportArtifact }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onEditWorkflow: () => void; onBuildWorkflow: () => void; onSaveAgent: () => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onConvertDrawio: (diagramId?: string) => string; onExportArtifact: (action: CanvasExportAction) => Promise<string> }) {
   const t = useTranslations('creationCanvas');
   const kind = node.data.kind;
   const [tab, setTab] = useState<'details' | 'activity'>('details');
@@ -4491,6 +4635,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
   const deliverables = creationDeliverables(node.data);
   const taskId = kind === 'task' && /^task:\d+$/.test(node.data.resourceId || '') ? Number(node.data.resourceId!.slice(5)) : null;
   const taskAgents = nodes.filter((candidate) => candidate.data.kind === 'agent');
+  const drawioTargets = nodes.filter((candidate) => candidate.id !== node.id && candidate.data.kind === 'diagram' && canvasDiagram(candidate.data)?.format === 'drawio');
   const agentTools = Array.isArray(node.data.tools) ? node.data.tools.map(String) : ['Audience Analyzer', 'Copy Optimizer'];
   const isExistingAgent = kind === 'agent' && typeof node.data.resourceId === 'string' && node.data.resourceId.startsWith('agent:');
   const connectedAgentKnowledge = kind === 'agent' ? nodes.filter((candidate) => ['knowledge', 'document', 'dataset', 'file', 'url'].includes(candidate.data.kind) && edges.some((edge) => (edge.source === node.id && edge.target === candidate.id) || (edge.target === node.id && edge.source === candidate.id))) : [];
@@ -4613,7 +4758,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
       {(kind === 'website' || kind === 'prototype') && <><label>{t('headline')}<input value={typeof node.data.websiteHeadline === 'string' ? node.data.websiteHeadline : 'Fall in love with every look'} onChange={(event) => onChange({ websiteHeadline: event.target.value })} /></label><label>{t('supportingCopy')}<textarea rows={3} value={typeof node.data.websiteBody === 'string' ? node.data.websiteBody : 'New arrivals for the season ahead.'} onChange={(event) => onChange({ websiteBody: event.target.value })} /></label><label>{t('callToAction')}<input value={typeof node.data.websiteCta === 'string' ? node.data.websiteCta : 'Shop the collection'} onChange={(event) => onChange({ websiteCta: event.target.value })} /></label><label>{t('accentColor')}<input type="color" value={typeof node.data.websiteAccent === 'string' ? node.data.websiteAccent : '#3978f6'} onChange={(event) => onChange({ websiteAccent: event.target.value })} /></label><label>{t('viewport')}<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onWebsiteViewportChange(event.target.value as 'desktop' | 'tablet' | 'mobile')}><option value="desktop">{t('viewportDesktop')}</option><option value="tablet">{t('viewportTablet')}</option><option value="mobile">{t('viewportMobile')}</option></select></label>{kind === 'website' && <><label>{t('subdomain')}<input value={typeof node.data.subdomain === 'string' ? node.data.subdomain : ''} placeholder={t('subdomainPlaceholder')} onChange={(event) => onChange({ subdomain: event.target.value })} /></label><button type="button" className={styles.fullButton} onClick={onPublishWebsite}>{t('publishWebsite')}</button>{typeof node.data.siteUrl === 'string' && <a href={node.data.siteUrl} target="_blank" rel="noreferrer">{t('openPublishedSite')}</a>}<button type="button" className={styles.secondaryFullButton} onClick={onBuildWebsiteWithCode}>{t('build.websiteWithCode')}</button><p className={styles.inspectorHint}>{t('build.websiteWithCodeHint')}</p></>}<p className={styles.inspectorHint}>{t('websiteLiveHint')}</p></>}
       {kind === 'build' && <BuildInspectorSection node={node} editable={editable} creating={creatingBuild} persistence={persistence} onChange={onChange} onOpenBuild={onOpenBuild} onAttachBuild={onAttachBuild} onDeleteBuildWorkspace={onDeleteBuildWorkspace} />}
       {kind === 'video' && <><label>{t('prompt')}<textarea rows={5} value={typeof node.data.prompt === 'string' ? node.data.prompt : ''} onChange={(event) => onChange({ prompt: event.target.value })} placeholder={t('videoPromptPlaceholder')} /></label><label>{t('publishedEvermindModel')}<input value={typeof node.data.modelSlug === 'string' ? node.data.modelSlug : ''} onChange={(event) => onChange({ modelSlug: event.target.value })} placeholder={t('mediaModelPlaceholder')} /></label><label>{t('frames')}<input type="number" min="1" max="64" value={typeof node.data.maxFrames === 'number' ? node.data.maxFrames : 16} onChange={(event) => onChange({ maxFrames: Math.max(1, Math.min(64, Number(event.target.value) || 16)) })} /></label><button type="button" className={styles.fullButton} onClick={onGenerateVideo}>{t('generateVideo')}</button>{typeof node.data.videoUrl === 'string' && <img src={node.data.videoUrl} alt={t('videoFirstFrame')} style={{ width: '100%', borderRadius: 10 }} />}</>}
-      {kind === 'workflow' && <><label>{t('executionTarget')}<select value={typeof node.data.runTarget === 'string' ? node.data.runTarget : 'builderforce'} onChange={(event) => onChange({ runTarget: event.target.value })}><option value="builderforce">BuilderForce.AI</option><option value="campaign-strategist">Campaign Strategist</option></select></label><label>{t('approvalMode')}<select value={typeof node.data.approvalMode === 'string' ? node.data.approvalMode : 'required'} onChange={(event) => onChange({ approvalMode: event.target.value })}><option value="required">{t('approvalRequiredBeforePublish')}</option><option value="autonomous">{t('fullyAutonomous')}</option></select></label><button type="button" className={styles.fullButton} onClick={onEditWorkflow}>{t('editWorkflowOnCanvas')}</button><button className={styles.fullButton} onClick={onRun}>{`▶ ${t('runWorkflow')}`}</button></>}
+      {kind === 'workflow' && <><label>{t('executionTarget')}<select value={typeof node.data.runTarget === 'string' ? node.data.runTarget : 'builderforce'} onChange={(event) => onChange({ runTarget: event.target.value })}><option value="builderforce">BuilderForce.AI</option><option value="campaign-strategist">Campaign Strategist</option></select></label><label>{t('approvalMode')}<select value={typeof node.data.approvalMode === 'string' ? node.data.approvalMode : 'required'} onChange={(event) => onChange({ approvalMode: event.target.value })}><option value="required">{t('approvalRequiredBeforePublish')}</option><option value="autonomous">{t('fullyAutonomous')}</option></select></label><button type="button" className={styles.fullButton} onClick={onEditWorkflow}>{t('editWorkflowOnCanvas')}</button><button type="button" className={styles.fullButton} onClick={onBuildWorkflow}>{t('buildWorkflow')}</button><button className={styles.fullButton} onClick={onRun}>{`▶ ${t('runWorkflow')}`}</button></>}
       {kind === 'dashboard' && <><label>{t('dateRange')}<select value={typeof node.data.dateRange === 'string' ? node.data.dateRange : '30d'} onChange={(event) => onChange({ dateRange: event.target.value })}><option value="30d">{t('last30Days')}</option><option value="7d">{t('last7Days')}</option><option value="qtd">{t('quarterToDate')}</option></select></label><button type="button" className={styles.fullButton} onClick={() => onChange({ fetchedAt: new Date().toISOString(), status: 'Live' })}>{t('refreshLiveData')}</button></>}
       {kind === 'dataset' && <>
         <label>{t('datasetImportLabel')}<input type="file" accept=".csv,.tsv,.tab,.json,.jsonl,.xlsx,.xlsm,text/csv,text/tab-separated-values,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={(event) => { const file = event.target.files?.[0]; if (file) void onImportDataset(file); }} /></label>
@@ -4679,6 +4824,13 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
       {kind === 'evermind' && <EvermindInspector node={node} persistence={persistence} onAttach={onAttachEvermindProject} onExpand={onExpandEvermindPipeline} onTrain={onTrainEvermind} />}
       {isPitchObjectKind(kind) && <PitchInspector node={node} editable={editable} onChange={onChange} />}
       {kind === 'standup' && <><p className={styles.inspectorHint}>{t('standupHint')}</p><button className={styles.fullButton} onClick={onStartStandup}>{t('gatherStandup')}</button></>}
+      {(kind === 'image' || kind === 'drawing') && <section className={styles.taskPrdSummary} aria-label={t('drawioSectionTitle')}>
+        <div><span>{t('drawioSectionTitle')}</span><small>.drawio</small></div>
+        <p>{t('drawioSectionHint')}</p>
+        <button type="button" className={styles.fullButton} onClick={() => setActionStatus(onConvertDrawio('__new__'))}>{t('drawioCreateAction')}</button>
+        {drawioTargets.map((diagram) => <button type="button" key={diagram.id} className={styles.secondaryFullButton} onClick={() => setActionStatus(onConvertDrawio(diagram.id))}>{t('drawioAddAction', { name: diagram.data.title })}</button>)}
+        {actionStatus && <small role="status" className={styles.inspectorHint}>{actionStatus}</small>}
+      </section>}
       {CREATIVE_GENERATOR_KINDS.has(kind) && <>
         <label>{t('creativeBrief')}<textarea rows={5} value={typeof node.data.prompt === 'string' ? node.data.prompt : typeof node.data.content === 'string' ? node.data.content : ''} onChange={(event) => onChange({ prompt: event.target.value, content: event.target.value })} placeholder={t('creativeBriefPlaceholder', { label: creationObjectDefinition(kind).label.toLowerCase() })} /></label>
         <label>{t('templateId')}<input value={typeof node.data.templateId === 'string' ? node.data.templateId : ''} onChange={(event) => onChange({ templateId: event.target.value })} placeholder={kind === 'template' ? t('browseWithBrain') : t('optionalTemplate')} /></label>

@@ -61,6 +61,50 @@ const KERNEL_TABLES = new Set([
   'deliveries', 'ledger_entries', 'connections', 'runs', 'objects',
 ]);
 
+/**
+ * Names that match a shape but are a genuinely different noun — the second branch
+ * of this guard's own fix hint, taken.
+ *
+ * These live here rather than in the baseline on purpose. A baseline entry says
+ * "somebody looked at this once"; it carries no reason, and `--update` rewrites
+ * the file and drops any comment explaining it. An adjudication is a decision
+ * with an argument attached, and it survives a regeneration. The baseline is for
+ * work still to do; this is for work that was done and came out the other way.
+ */
+const ADJUDICATED = new Map([
+  [
+    'placement_documents',
+    'the DOCUMENT is an `artifacts` row; this is the obligation to hold one — a ' +
+      'compliance requirement with a status, an expiry and a verifier. Deleting the ' +
+      'file must not delete the requirement, which is the test that they are two nouns.',
+  ],
+  [
+    'lrs_documents',
+    'xAPI Learning Record Store state, addressed exactly as the specification ' +
+      'addresses it — (scope, activityId, agentKey, registration, documentId). It is a ' +
+      'key/value store an external standard defines the shape of, not a made object with ' +
+      'a kind; an `artifacts` row could not be looked up the way the spec requires.',
+  ],
+  [
+    'due_diligence_documents',
+    'the same two-nouns test as `placement_documents`: this is the REQUEST for a ' +
+      'document, with a reviewer and an accept/reject decision. It exists before any file ' +
+      'does, which an `artifacts` row cannot.',
+  ],
+  [
+    'scratch_pad_attachments',
+    'not the file — the file is an `artifacts` row. This is its PLACEMENT on a canvas ' +
+      'board: a coordinate, a label and who pinned it. The same artifact can be pinned to ' +
+      'two pads at two positions, which is an edge, not a property of the artifact.',
+  ],
+  [
+    'stock_media_assets',
+    'an `artifacts` row is something the tenant MADE and owns. This is something a ' +
+      'provider LICENSED, and the terms — attribution, territory, expiry, per-seat caps — ' +
+      'are the reason the row exists. Using one copies it into `artifacts`.',
+  ],
+]);
+
 const tables = parseDrizzleTables(srcDir);
 if (tables.size === 0) {
   console.error('❌  Parsed zero tables. The schema moved or the parser broke — failing rather than passing vacuously.');
@@ -69,7 +113,7 @@ if (tables.size === 0) {
 
 const findings = [];
 for (const name of [...tables.keys()].sort()) {
-  if (KERNEL_TABLES.has(name)) continue;
+  if (KERNEL_TABLES.has(name) || ADJUDICATED.has(name)) continue;
   for (const [primitive, re] of SHAPES) {
     if (re.test(name)) {
       findings.push({ key: name, detail: `matches the \`${primitive}\` shape — should this be a row in \`${primitive}\` with a kind, rather than a table?` });

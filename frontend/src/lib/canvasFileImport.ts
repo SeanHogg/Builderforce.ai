@@ -231,6 +231,20 @@ async function deriveObjects(file: File, t: ImportTranslator): Promise<ImportedC
     })];
   }
 
+  if (extension === 'drawio') {
+    const source = await file.text();
+    if (/<(?:mxfile|mxGraphModel)\b/i.test(source)) {
+      return [{ kind: 'diagram', data: {
+        title: file.name,
+        fileName: file.name,
+        mimeType: file.type || 'application/vnd.jgraph.mxfile',
+        fileSize: file.size,
+        diagramFormat: 'drawio', diagram: source, diagramXml: source, content: source,
+        status: t('statusImported'),
+      } }];
+    }
+  }
+
   if (file.type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif'].includes(extension)) {
     const url = await dataUrl(file);
     return [{

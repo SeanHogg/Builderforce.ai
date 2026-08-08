@@ -15,12 +15,13 @@
  * exported table to keep that guarantee honest.
  */
 import {
-  bigserial,
   bigint,
+  bigserial,
   boolean,
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   primaryKey,
   real,
@@ -33,12 +34,12 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { creationSessions, freelancerEngagements, timecards } from './collaboration';
-import { artifactTypeEnum, pricingModelEnum } from './common';
+import { creationSessions, freelancerEngagements, timecards } from './canvas';
+import { artifactTypeEnum, objects, pricingModelEnum } from './kernel';
 import { segments, tenants, users } from './identity';
-import { proposalEvaluations } from './llm';
-import { jobPostings, skills } from './runtime';
-import { projects, tasks } from './work';
+import { proposalEvaluations } from './agents';
+import { jobPostings, skills } from './agents';
+import { projects, tasks } from './delivery';
 
 
 /**
@@ -483,4 +484,429 @@ export const salesReferrals = pgTable('sales_referrals', {
   index('idx_sales_referrals_associate').on(t.associateUserId, t.signedUpAt),
   index('idx_sales_referrals_conversion').on(t.referredUserId, t.convertedAt),
   uniqueIndex('uq_sales_referrals_tenant_attribution').on(t.tenantId).where(sql`${t.tenantId} IS NOT NULL`),
+]);
+
+// ═══ PRD 20 §5 step 2 — target-schema tables ═══
+//
+// Commerce — the platform's twenty remaining targets (PRD 20 §3.2).
+//
+// 58 source tables in → 24 out, 32 of them absorbed by the kernel. Every
+// marketplace listing, template, pack and offering is a `catalog_items` row with
+// a kind; every licence key, seat grant and entitlement is a `settings` row;
+// every payout and commission is a `ledger_entries` row with a denomination.
+// What survives is the transaction and the counterparty — the two things a
+// catalogue row genuinely is not.
+//
+// `is_template` (§3.1) is why there is no `X_templates` beside any `X` here: an
+// `X_template` sitting next to an `X` with the same columns is one table and a
+// boolean, and keeping them apart is how the two drift until the template stops
+// producing a valid instance.
+
+/** A cart in flight. Deliberately not an order: an abandoned cart is a marketing
+ *  fact with its own retention policy, and merging the two is how "revenue"
+ *  starts counting things nobody paid for. */
+export const carts = pgTable('carts', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id').notNull(),
+  buyerRef:    varchar('buyer_ref', { length: 64 }),
+  /** Set for a signed-out cart, so the canvas's no-account path reaches checkout. */
+  guestToken:  varchar('guest_token', { length: 64 }),
+  currency:    varchar('currency', { length: 8 }).notNull().default('USD'),
+  subtotalCents: integer('subtotal_cents').notNull().default(0),
+  discountCents: integer('discount_cents').notNull().default(0),
+  totalCents:  integer('total_cents').notNull().default(0),
+  discountCode: varchar('discount_code', { length: 64 }),
+  /** 'open' | 'converted' | 'abandoned' | 'expired'. */
+  status:      varchar('status', { length: 16 }).notNull().default('open'),
+  convertedOrderId: integer('converted_order_id'),
+  expiresAt:   timestamp('expires_at'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_carts_buyer').on(t.tenantId, t.buyerRef, t.status),
+  index('idx_carts_guest').on(t.guestToken),
+]);
+
+/** An order. The money movement is `ledger_entries`; this is the agreement. */
+export const orders = pgTable('orders', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  objectId:    uuid('object_id').references(() => objects.id, { onDelete: 'cascade' }),
+  orderNumber: varchar('order_number', { length: 48 }).notNull(),
+  buyerRef:    varchar('buyer_ref', { length: 64 }),
+  buyerEmail:  varchar('buyer_email', { length: 320 }),
+  currency:    varchar('currency', { length: 8 }).notNull().default('USD'),
+  subtotalCents: integer('subtotal_cents').notNull().default(0),
+  taxCents:    integer('tax_cents').notNull().default(0),
+  totalCents:  integer('total_cents').notNull().default(0),
+  /** 'pending' | 'paid' | 'fulfilled' | 'refunded' | 'cancelled'. */
+  status:      varchar('status', { length: 16 }).notNull().default('pending'),
+  provider:    varchar('provider', { length: 48 }),
+  providerRef: varchar('provider_ref', { length: 160 }),
+  placedAt:    timestamp('placed_at').notNull().defaultNow(),
+  fulfilledAt: timestamp('fulfilled_at'),
+  refundedAt:  timestamp('refunded_at'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_orders_number').on(t.tenantId, t.orderNumber),
+  index('idx_orders_status').on(t.tenantId, t.status, t.placedAt),
+]);
+
+/** A line on an order, pointing at the `catalog_items` row that was bought. */
+export const orderLineItems = pgTable('order_line_items', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').notNull(),
+  orderId:       integer('order_id').references(() => orders.id, { onDelete: 'cascade' }),
+  catalogItemId: uuid('catalog_item_id'),
+  description:   varchar('description', { length: 500 }).notNull(),
+  quantity:      integer('quantity').notNull().default(1),
+  unitCents:     integer('unit_cents').notNull().default(0),
+  amountCents:   integer('amount_cents').notNull().default(0),
+  /** Who gets paid for this line — the seller, when the platform is the
+   *  marketplace rather than the merchant. */
+  sellerRef:     varchar('seller_ref', { length: 64 }),
+  commissionCents: integer('commission_cents').notNull().default(0),
+  position:      integer('position').notNull().default(0),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_order_line_items_order').on(t.orderId, t.position),
+]);
+
+/** A licence granted over a template. The entitlement CHECK reads kernel
+ *  `settings`; this is the licence's own terms, which outlive any one grant. */
+export const templateLicenses = pgTable('template_licenses', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').notNull(),
+  catalogItemId: uuid('catalog_item_id'),
+  licenseeRef:   varchar('licensee_ref', { length: 64 }).notNull(),
+  /** 'single' | 'team' | 'unlimited' | 'trial'. */
+  scope:         varchar('scope', { length: 16 }).notNull().default('single'),
+  seatLimit:     integer('seat_limit'),
+  seatsUsed:     integer('seats_used').notNull().default(0),
+  orderId:       integer('order_id'),
+  startsAt:      timestamp('starts_at').notNull().defaultNow(),
+  expiresAt:     timestamp('expires_at'),
+  revokedAt:     timestamp('revoked_at'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_template_licenses_licensee').on(t.tenantId, t.catalogItemId, t.licenseeRef),
+]);
+
+/** A white-labelled tenant reselling the platform. */
+export const whitelabelTenants = pgTable('whitelabel_tenants', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  resellerRef: varchar('reseller_ref', { length: 64 }).notNull(),
+  domain:      varchar('domain', { length: 255 }),
+  brandName:   varchar('brand_name', { length: 200 }),
+  /** Theme TOKENS, never literal colours — the reseller's palette has to work in
+   *  both themes exactly as the platform's does. */
+  theme:       jsonb('theme'),
+  supportEmail: varchar('support_email', { length: 320 }),
+  revenueSharePercent: numeric('revenue_share_percent', { precision: 5, scale: 2 }),
+  status:      varchar('status', { length: 16 }).notNull().default('active'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_whitelabel_tenants_domain').on(t.domain),
+]);
+
+/** An agency's brand presentation on the platform. */
+export const agencyBrandings = pgTable('agency_brandings', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull(),
+  agencyRef:  varchar('agency_ref', { length: 64 }).notNull(),
+  name:       varchar('name', { length: 200 }).notNull(),
+  logoArtifactId: uuid('logo_artifact_id'),
+  theme:      jsonb('theme'),
+  tagline:    varchar('tagline', { length: 300 }),
+  website:    varchar('website', { length: 255 }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_agency_brandings_agency').on(t.tenantId, t.agencyRef),
+]);
+
+/** A client an agency works for. The people are `memberships`; this is the
+ *  commercial relationship. */
+export const agencyClients = pgTable('agency_clients', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull(),
+  agencyRef:  varchar('agency_ref', { length: 64 }).notNull(),
+  clientName: varchar('client_name', { length: 255 }).notNull(),
+  companyRef: varchar('company_ref', { length: 64 }),
+  retainerCents: integer('retainer_cents'),
+  currency:   varchar('currency', { length: 8 }).notNull().default('USD'),
+  status:     varchar('status', { length: 16 }).notNull().default('active'),
+  startedAt:  timestamp('started_at'),
+  endedAt:    timestamp('ended_at'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_agency_clients_name').on(t.tenantId, t.agencyRef, t.clientName),
+]);
+
+/** A bookable service. */
+export const bookingServices = pgTable('booking_services', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  slug:        varchar('slug', { length: 160 }).notNull(),
+  name:        varchar('name', { length: 200 }).notNull(),
+  description: text('description'),
+  durationMin: integer('duration_min').notNull().default(30),
+  bufferMin:   integer('buffer_min').notNull().default(0),
+  priceCents:  integer('price_cents').notNull().default(0),
+  currency:    varchar('currency', { length: 8 }).notNull().default('USD'),
+  /** 'one_to_one' | 'group' | 'round_robin'. */
+  mode:        varchar('mode', { length: 16 }).notNull().default('one_to_one'),
+  capacity:    integer('capacity').notNull().default(1),
+  isActive:    boolean('is_active').notNull().default(true),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_booking_services_slug').on(t.tenantId, t.slug),
+]);
+
+/** Somebody who can be booked. Their availability is `availability_slots`
+ *  (Identity) and their calendar is a `connections` row. */
+export const bookingHosts = pgTable('booking_hosts', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull(),
+  serviceId:  integer('service_id').references(() => bookingServices.id, { onDelete: 'cascade' }),
+  hostRef:    varchar('host_ref', { length: 64 }).notNull(),
+  connectionId: integer('connection_id'),
+  timezone:   varchar('timezone', { length: 64 }).notNull().default('UTC'),
+  priority:   integer('priority').notNull().default(0),
+  isActive:   boolean('is_active').notNull().default(true),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_booking_hosts_host').on(t.serviceId, t.hostRef),
+]);
+
+/** A booking. */
+export const bookingReservations = pgTable('booking_reservations', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  objectId:    uuid('object_id').references(() => objects.id, { onDelete: 'cascade' }),
+  serviceId:   integer('service_id').references(() => bookingServices.id, { onDelete: 'set null' }),
+  hostRef:     varchar('host_ref', { length: 64 }),
+  bookerRef:   varchar('booker_ref', { length: 64 }),
+  bookerEmail: varchar('booker_email', { length: 320 }),
+  startsAt:    timestamp('starts_at').notNull(),
+  endsAt:      timestamp('ends_at').notNull(),
+  timezone:    varchar('timezone', { length: 64 }).notNull().default('UTC'),
+  /** 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show'. */
+  status:      varchar('status', { length: 16 }).notNull().default('confirmed'),
+  meetingUrl:  text('meeting_url'),
+  orderId:     integer('order_id'),
+  cancelReason: varchar('cancel_reason', { length: 200 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_booking_reservations_host').on(t.tenantId, t.hostRef, t.startsAt),
+  index('idx_booking_reservations_status').on(t.tenantId, t.status, t.startsAt),
+]);
+
+/** A posted gig. */
+export const gigProjects = pgTable('gig_projects', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  objectId:    uuid('object_id').references(() => objects.id, { onDelete: 'cascade' }),
+  clientRef:   varchar('client_ref', { length: 64 }).notNull(),
+  title:       varchar('title', { length: 300 }).notNull(),
+  brief:       text('brief'),
+  skills:      jsonb('skills'),
+  budgetMinCents: integer('budget_min_cents'),
+  budgetMaxCents: integer('budget_max_cents'),
+  currency:    varchar('currency', { length: 8 }).notNull().default('USD'),
+  /** 'fixed' | 'hourly'. */
+  pricing:     varchar('pricing', { length: 16 }).notNull().default('fixed'),
+  /** 'draft' | 'open' | 'awarded' | 'in_progress' | 'delivered' | 'closed'. */
+  status:      varchar('status', { length: 16 }).notNull().default('draft'),
+  awardedBidId: integer('awarded_bid_id'),
+  dueAt:       timestamp('due_at'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_gig_projects_status').on(t.tenantId, t.status, t.createdAt),
+]);
+
+/** A bid on a gig. */
+export const gigBids = pgTable('gig_bids', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  gigProjectId: integer('gig_project_id').references(() => gigProjects.id, { onDelete: 'cascade' }),
+  bidderRef:   varchar('bidder_ref', { length: 64 }).notNull(),
+  amountCents: integer('amount_cents').notNull(),
+  currency:    varchar('currency', { length: 8 }).notNull().default('USD'),
+  deliveryDays: integer('delivery_days'),
+  pitch:       text('pitch'),
+  /** 'submitted' | 'shortlisted' | 'awarded' | 'declined' | 'withdrawn'. */
+  status:      varchar('status', { length: 16 }).notNull().default('submitted'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_gig_bids_bidder').on(t.gigProjectId, t.bidderRef),
+]);
+
+/** A dispute on a gig. Its conversation is a `threads` + `messages` pair and its
+ *  evidence is `artifacts`; what is here is the claim and the ruling. */
+export const gigDisputes = pgTable('gig_disputes', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull(),
+  gigProjectId: integer('gig_project_id').references(() => gigProjects.id, { onDelete: 'cascade' }),
+  raisedByRef:  varchar('raised_by_ref', { length: 64 }).notNull(),
+  reason:       varchar('reason', { length: 200 }).notNull(),
+  detail:       text('detail'),
+  amountDisputedCents: integer('amount_disputed_cents'),
+  /** 'open' | 'mediating' | 'resolved' | 'withdrawn'. */
+  status:       varchar('status', { length: 16 }).notNull().default('open'),
+  resolution:   text('resolution'),
+  resolvedBy:   varchar('resolved_by', { length: 64 }),
+  resolvedAt:   timestamp('resolved_at'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_gig_disputes_status').on(t.tenantId, t.status, t.createdAt),
+]);
+
+/** A consultation booked with a consultant. */
+export const consultantConsultations = pgTable('consultant_consultations', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').notNull(),
+  consultantRef: varchar('consultant_ref', { length: 64 }).notNull(),
+  clientRef:     varchar('client_ref', { length: 64 }),
+  reservationId: integer('reservation_id'),
+  topic:         varchar('topic', { length: 300 }),
+  durationMin:   integer('duration_min'),
+  rateCents:     integer('rate_cents'),
+  currency:      varchar('currency', { length: 8 }).notNull().default('USD'),
+  status:        varchar('status', { length: 16 }).notNull().default('scheduled'),
+  /** The recording and its transcript are `artifacts`, one derived from the other. */
+  recordingArtifactId: uuid('recording_artifact_id'),
+  heldAt:        timestamp('held_at'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_consultant_consultations_consultant').on(t.tenantId, t.consultantRef, t.heldAt),
+]);
+
+/** A knowledge document a consultant sells or shares. The FILE is an `artifacts`
+ *  row; this is the offering's own commercial identity. */
+export const consultantKnowledgeDocs = pgTable('consultant_knowledge_docs', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').notNull(),
+  consultantRef: varchar('consultant_ref', { length: 64 }).notNull(),
+  artifactId:    uuid('artifact_id'),
+  title:         varchar('title', { length: 300 }).notNull(),
+  summary:       text('summary'),
+  priceCents:    integer('price_cents').notNull().default(0),
+  currency:      varchar('currency', { length: 8 }).notNull().default('USD'),
+  visibility:    varchar('visibility', { length: 16 }).notNull().default('private'),
+  downloadCount: integer('download_count').notNull().default(0),
+  publishedAt:   timestamp('published_at'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_consultant_knowledge_docs_consultant').on(t.tenantId, t.consultantRef, t.publishedAt),
+]);
+
+/** A deck of cards sold or shared as a product — the smallest packaged artifact
+ *  kind, kept because its ORDERING and reveal rules are commerce, not content. */
+export const cardDecks = pgTable('card_decks', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull(),
+  objectId:   uuid('object_id').references(() => objects.id, { onDelete: 'cascade' }),
+  slug:       varchar('slug', { length: 160 }).notNull(),
+  name:       varchar('name', { length: 200 }).notNull(),
+  description: text('description'),
+  cards:      jsonb('cards').notNull().default('[]'),
+  cardCount:  integer('card_count').notNull().default(0),
+  priceCents: integer('price_cents').notNull().default(0),
+  currency:   varchar('currency', { length: 8 }).notNull().default('USD'),
+  visibility: varchar('visibility', { length: 16 }).notNull().default('private'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_card_decks_slug').on(t.tenantId, t.slug),
+]);
+
+/** A board only some people can reach. The people are `memberships` and the
+ *  invite is an `invitations` row; this is the exclusivity RULE. */
+export const exclusiveBoards = pgTable('exclusive_boards', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  objectId:    uuid('object_id').references(() => objects.id, { onDelete: 'cascade' }),
+  name:        varchar('name', { length: 200 }).notNull(),
+  description: text('description'),
+  /** What earns entry: a plan, a badge, a rung, an invitation only. */
+  entryRule:   jsonb('entry_rule'),
+  memberCap:   integer('member_cap'),
+  memberCount: integer('member_count').notNull().default(0),
+  status:      varchar('status', { length: 16 }).notNull().default('active'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_exclusive_boards_name').on(t.tenantId, t.name),
+]);
+
+/** A shared resource posted to the community. */
+export const communityResources = pgTable('community_resources', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id'),
+  objectId:   uuid('object_id').references(() => objects.id, { onDelete: 'cascade' }),
+  title:      varchar('title', { length: 300 }).notNull(),
+  url:        text('url'),
+  artifactId: uuid('artifact_id'),
+  category:   varchar('category', { length: 96 }),
+  summary:    text('summary'),
+  authorRef:  varchar('author_ref', { length: 64 }),
+  /** Upvotes and saves are `annotations` rows; this is the denormalised count so
+   *  a listing does not fan out one aggregate per row. */
+  upvoteCount: integer('upvote_count').notNull().default(0),
+  status:     varchar('status', { length: 16 }).notNull().default('published'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_community_resources_category').on(t.category, t.upvoteCount),
+]);
+
+/** A partner's opt-in to a programme. */
+export const partnerProgramOptIns = pgTable('partner_program_opt_ins', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  partnerRef:  varchar('partner_ref', { length: 64 }).notNull(),
+  programKey:  varchar('program_key', { length: 96 }).notNull(),
+  /** 'pending' | 'active' | 'suspended' | 'left'. */
+  status:      varchar('status', { length: 16 }).notNull().default('pending'),
+  commissionPercent: numeric('commission_percent', { precision: 5, scale: 2 }),
+  terms:       jsonb('terms'),
+  acceptedAt:  timestamp('accepted_at'),
+  leftAt:      timestamp('left_at'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_partner_program_opt_ins_program').on(t.tenantId, t.partnerRef, t.programKey),
+]);
+
+/** Extra inbox seats bought on top of a plan. A quantity purchase, which is why
+ *  it is not a `plan_features` limit: the limit is what the plan grants, this is
+ *  what was bought beyond it. */
+export const inboxSeatAddons = pgTable('inbox_seat_addons', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  orderId:     integer('order_id'),
+  seats:       integer('seats').notNull().default(1),
+  unitCents:   integer('unit_cents').notNull().default(0),
+  currency:    varchar('currency', { length: 8 }).notNull().default('USD'),
+  startsAt:    timestamp('starts_at').notNull().defaultNow(),
+  endsAt:      timestamp('ends_at'),
+  status:      varchar('status', { length: 16 }).notNull().default('active'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_inbox_seat_addons_tenant').on(t.tenantId, t.status, t.endsAt),
 ]);

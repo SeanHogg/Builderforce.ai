@@ -1,0 +1,65 @@
+//
+// Governance & security — the Security seat's two remaining targets
+// (PRD 20 §3.2).
+//
+// 27 source tables in → 15 out. The smallest absorption in the model, and that
+// is the right answer: a control, an evidence item and a finding are distinct
+// nouns with their own columns, and collapsing them would make an audit
+// unauditable. What DID absorb is the surrounding noise — every compliance
+// event is an `activity_log` row, every policy pack a `catalog_items` row, every
+// attestation a `responses` row against a `question_sets` scorecard.
+
+/** A record that somebody accepted a legal document.
+ *
+ *  Deliberately not an `annotations` row and not a kernel `settings` flag: an
+ *  acceptance must record WHICH VERSION was accepted, from which IP, at which
+ *  moment, and must be immutable afterwards. A settings row is last-write-wins,
+ *  which is the one property a consent record may not have. */
+export const legalDocumentAcceptances = pgTable('legal_document_acceptances', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id'),
+  /** 'terms' | 'privacy' | 'dpa' | 'aup' | 'nda' | 'cookie'. */
+  documentKind: varchar('document_kind', { length: 32 }).notNull(),
+  documentVersion: varchar('document_version', { length: 32 }).notNull(),
+  /** The published text as it stood — a hash, not the body, so the acceptance is
+   *  verifiable without storing the document once per acceptance. */
+  documentHash: varchar('document_hash', { length: 64 }),
+  partyKind:    varchar('party_kind', { length: 16 }).notNull().default('user'),
+  partyRef:     varchar('party_ref', { length: 64 }).notNull(),
+  email:        varchar('email', { length: 320 }),
+  acceptedAt:   timestamp('accepted_at').notNull().defaultNow(),
+  ipAddress:    varchar('ip_address', { length: 45 }),
+  userAgent:    varchar('user_agent', { length: 500 }),
+  /** Set only when a later version supersedes this acceptance. The row itself is
+   *  never updated in place. */
+  supersededAt: timestamp('superseded_at'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_legal_document_acceptances_party').on(t.partyKind, t.partyRef, t.documentKind, t.documentVersion),
+  index('idx_legal_document_acceptances_tenant').on(t.tenantId, t.documentKind, t.acceptedAt),
+]);
+
+/** A one-time WebAuthn challenge.
+ *
+ *  Short-lived, single-use and never readable twice — which is why it is a table
+ *  rather than a cache entry: a replayed challenge is an authentication bypass,
+ *  so consumption has to be a transactional UPDATE, not a best-effort delete
+ *  from a store that may or may not have evicted it. */
+export const webauthnChallenges = pgTable('webauthn_challenges', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id'),
+  userRef:     varchar('user_ref', { length: 64 }),
+  /** 'registration' | 'authentication'. */
+  purpose:     varchar('purpose', { length: 16 }).notNull(),
+  /** Base64url. Unique so a replay collides at the database rather than in code. */
+  challenge:   varchar('challenge', { length: 255 }).notNull(),
+  rpId:        varchar('rp_id', { length: 255 }),
+  /** Set the moment it is used. A non-null value is a terminal state. */
+  consumedAt:  timestamp('consumed_at'),
+  expiresAt:   timestamp('expires_at').notNull(),
+  ipAddress:   varchar('ip_address', { length: 45 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_webauthn_challenges_challenge').on(t.challenge),
+  index('idx_webauthn_challenges_expiry').on(t.expiresAt),
+]);

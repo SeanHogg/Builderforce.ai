@@ -35,14 +35,14 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { budgets } from './billing';
-import { brainChats } from './brain';
-import { contributors, devTeams, meetings, teamVelocity, teams } from './collaboration';
-import { authTokenTypeEnum, legalDocumentTypeEnum, memberAvailabilityStatusEnum, memberExperienceLevelEnum, memberProfileSyncSourceEnum, segmentStatusEnum, teamMemberKindEnum, tenantIsolationModeEnum, tenantKindEnum, tenantRoleEnum, tenantStatusEnum } from './common';
+import { budgets } from './finance';
+import { brainChats } from './canvas';
+import { contributors, devTeams, meetings, teamVelocity, teams } from './canvas';
+import { authTokenTypeEnum, legalDocumentTypeEnum, memberAvailabilityStatusEnum, memberExperienceLevelEnum, memberProfileSyncSourceEnum, segmentStatusEnum, teamMemberKindEnum, tenantIsolationModeEnum, tenantKindEnum, tenantRoleEnum, tenantStatusEnum } from './kernel';
 import { errorGroups, onCallRotations } from './delivery';
-import { marketplacePersonas } from './llm';
-import { agentHosts, agents, importRuns, skills, toolRuns } from './runtime';
-import { projects } from './work';
+import { marketplacePersonas } from './agents';
+import { agentHosts, agents, importRuns, skills, toolRuns } from './agents';
+import { projects } from './delivery';
 
 
 // ---------------------------------------------------------------------------

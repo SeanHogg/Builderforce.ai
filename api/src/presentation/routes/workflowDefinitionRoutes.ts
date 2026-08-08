@@ -33,6 +33,8 @@ import {
   type WorkflowRuntime,
 } from '../../application/workflow/instantiateRun';
 import { syncDefinitionTriggers } from '../../application/workflow/triggerSync';
+import { compileCanvasWorkflowSteps, connectorActionIndex } from '../../domain/canvasWorkflowSpec';
+import { connectorActionCatalog } from '../../application/connectors/connectorActionCatalog';
 import type { Env, HonoEnv } from '../../env';
 import type { Db } from '../../infrastructure/database/connection';
 
@@ -301,6 +303,73 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
     await invalidateCached(c.env as Env, listCacheKey(tenantId));
     const [row] = await db.select().from(workflowDefinitions).where(eq(workflowDefinitions.id, id));
     return c.json(row, 201);
+  });
+
+  // POST /from-canvas — compile a Creation Canvas workflow object's authored
+  // `steps` into a real, runnable definition and return it, so a canvas workflow
+  // stops being a drawing. Registered before /:id; `/from-canvas` is a distinct
+  // path so there is no collision.
+  //
+  // It is deliberately ALL-OR-NOTHING. Compiling the steps that happen to resolve
+  // and dropping the rest would hand back a definition that runs green while
+  // silently omitting what the author asked for — the same false-completeness
+  // this endpoint exists to end. Every unresolved step comes back as an `issue`
+  // naming the step and what it needs, which is what the canvas shows the user.
+  router.post('/from-canvas', async (c) => {
+    const tenantId = c.get('tenantId') as number;
+    const segmentId = c.get('segmentId') ?? null;
+    const body = await c.req.json<{
+      name?: string;
+      description?: string;
+      steps?: unknown;
+      triggerType?: string;
+    } & RunTargetInput>();
+    if (!body.name || !body.name.trim()) return c.json({ error: 'name is required' }, 400);
+
+    // Validated against the tenant's LIVE catalog — an authored "twilio/send_sms"
+    // is checked against the connectors they can actually call, so a typo or an
+    // unconnected integration fails here with a fixable message instead of at
+    // run time with a stack trace.
+    const catalog = await connectorActionCatalog(db, c.env as Env, tenantId);
+    const compiled = compileCanvasWorkflowSteps(body.steps, {
+      catalog: connectorActionIndex(catalog),
+      ...(body.triggerType ? { triggerType: body.triggerType } : {}),
+    });
+    if (compiled.issues.length > 0) {
+      return c.json({
+        error: 'This workflow is not runnable yet.',
+        code: 'workflow_not_runnable',
+        details: { issues: compiled.issues },
+      }, 400);
+    }
+    const invalid = validateDefinition(compiled.definition);
+    if (invalid) return c.json({ error: invalid, code: 'workflow_invalid_graph', details: { issues: [] } }, 400);
+
+    const id = crypto.randomUUID();
+    const now = new Date();
+    // Canvas workflows default to the builderforce-hosted cloud runtime: the
+    // canvas offers no host picker, and a `host` default would compile a
+    // definition whose very first run fails on a missing agentHost.
+    const target = coerceRunTarget({ ...body, runTargetRuntime: body.runTargetRuntime ?? 'cloud' });
+    await db.insert(workflowDefinitions).values({
+      id,
+      tenantId,
+      segmentId,
+      name: body.name.trim(),
+      description: body.description ?? null,
+      projectId: body.projectId ?? null,
+      definition: JSON.stringify(compiled.definition),
+      ...target,
+      executionScope: scopeFromProject(body.projectId, body.executionScope),
+      createdAt: now,
+      updatedAt: now,
+    });
+    await syncDefinitionTriggers(db, {
+      definitionId: id, tenantId, segmentId, definition: compiled.definition, target: runTargetFromDefinition(target),
+    });
+    await invalidateCached(c.env as Env, listCacheKey(tenantId));
+    const [row] = await db.select().from(workflowDefinitions).where(eq(workflowDefinitions.id, id));
+    return c.json({ ...row, definition: compiled.definition, compiledCount: compiled.compiledCount, issues: [] }, 201);
   });
 
   // GET /:id — full definition (graph included)

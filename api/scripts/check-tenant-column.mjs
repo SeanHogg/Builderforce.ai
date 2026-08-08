@@ -32,6 +32,22 @@ const srcDir = resolve(here, '..', 'src');
  *  a parent this platform treats as tenant-owned. */
 const SCOPING_COLUMNS = ['tenant_id', 'segment_id', 'account_id'];
 
+/**
+ * Tables that are genuinely tenant-independent, with the reason recorded.
+ *
+ * The baseline is for tables that still need a decision; this is for tables the
+ * decision was made about. Keeping them apart matters because `--update`
+ * rewrites the baseline and would drop any comment explaining an entry, and a
+ * global catalogue with no argument attached is indistinguishable from a
+ * customer-data table somebody forgot to scope — which is the exact failure this
+ * guard exists to catch.
+ */
+const GLOBAL_CATALOGUES = new Map([
+  ['cities', 'a geographic catalogue — the same city for every tenant, and the join key for territory and search-by-place.'],
+  ['countries', 'ISO country list. Global by definition.'],
+  ['stage_lookup', 'the platform-wide company-stage vocabulary a tenant selects FROM; a tenant-owned stage is a `pipeline_stages` row.'],
+]);
+
 const tables = parseDrizzleTables(srcDir);
 if (tables.size === 0) {
   console.error('❌  Parsed zero tables. The schema moved or the parser broke — failing rather than passing vacuously.');
@@ -40,7 +56,7 @@ if (tables.size === 0) {
 
 const findings = [];
 for (const [name, cols] of [...tables].sort((a, b) => a[0].localeCompare(b[0]))) {
-  if (SCOPING_COLUMNS.some((c) => cols.has(c))) continue;
+  if (SCOPING_COLUMNS.some((c) => cols.has(c)) || GLOBAL_CATALOGUES.has(name)) continue;
   findings.push({
     key: name,
     detail: 'no tenant_id / segment_id / account_id — if this holds customer data, every query against it is unscoped by construction.',

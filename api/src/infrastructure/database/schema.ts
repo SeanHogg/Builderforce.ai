@@ -9,19 +9,19 @@
  * Add a NEW table to the context file it belongs to, not here.
  */
 
-export * from './schema/common';
+export * from './schema/kernel';
 export * from './schema/identity';
-export * from './schema/billing';
-export * from './schema/work';
-export * from './schema/pmo';
-export * from './schema/runtime';
-export * from './schema/llm';
-export * from './schema/brain';
+export * from './schema/finance';
 export * from './schema/delivery';
-export * from './schema/collaboration';
+export * from './schema/agents';
+export * from './schema/canvas';
 export * from './schema/commerce';
 export * from './schema/governance';
 export * from './schema/platform';
-export * from './schema/mailbox';
-export * from './schema/drive';
+export * from './schema/integrations';
 export * from './schema/growth';
+export * from './schema/hiring';
+export * from './schema/people';
+export * from './schema/investor';
+export * from './schema/revenue';
+export * from './schema/support';

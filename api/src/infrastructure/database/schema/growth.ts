@@ -38,11 +38,11 @@ import {
   varchar,
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
-import { creationSessions } from './collaboration';
+import { creationSessions } from './canvas';
 import { tenants } from './identity';
-import { mailboxConnections } from './mailbox';
+import { mailboxConnections } from './integrations';
 import { connectorConnections } from './platform';
-import { projects, projectSites } from './work';
+import { projects, projectSites } from './delivery';
 
 // ---------------------------------------------------------------------------
 // Traffic

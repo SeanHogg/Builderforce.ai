@@ -8,14 +8,17 @@
  * can be reviewed on its own, which means cross-domain reads go through the kernel
  * or a named view — never a direct import of another domain's tables.
  *
- * The 16 schema modules under `database/schema/` are already most of that map, and
- * they currently import each other 82 times, including cycles (`brain` ↔
- * `collaboration`, `work` ↔ `runtime`, `identity` ↔ `billing`). Every one of those
- * edges is a reason two domains cannot be reasoned about separately.
+ * The 16 schema modules under `database/schema/` ARE that map now. They imported
+ * each other 82 times when this guard landed, including cycles (`brain` ↔
+ * `collaboration`, `work` ↔ `runtime`, `identity` ↔ `billing`). Step 2 merged the
+ * modules onto the domains and every one of those cycles went with it: an import
+ * between two files that became one file is not a boundary being crossed, it is a
+ * boundary that stopped existing. **82 → 38.**
  *
- * WHY EDGES AND NOT A BAN. Some of the 82 are legitimate today and will stay so
- * until the kernel exists to route them through — a foreign key to `tenants` is
- * not a boundary violation, it is tenancy. So the unit is the EDGE
+ * WHY EDGES AND NOT A BAN. The two categories that are not violations are exempt
+ * by rule rather than by baseline — a read of the kernel, and a foreign key to
+ * `tenants`, which is tenancy. What is left is the real number. So the unit is
+ * the EDGE
  * (`from.ts -> to.ts`), baselined, shrinking as PRD 20 §5 step 2 merges modules
  * into domains. A new edge between two modules that did not previously touch is
  * the thing worth failing on, because that is a boundary being crossed for the
@@ -38,17 +41,50 @@ if (files.length === 0) {
 /** `import … from './identity'` / `'./identity.js'` — sibling modules only. A
  *  deeper path is not a domain edge, it is a layering question `check-layering.mjs`
  *  already owns. */
-const SIBLING_IMPORT = /^\s*import\s+[\s\S]*?from\s+'\.\/([a-zA-Z0-9_]+)(?:\.js)?'/gm;
+const SIBLING_IMPORT = /^\s*import\s+(?:type\s+)?\{([\s\S]*?)\}\s+from\s+'\.\/([a-zA-Z0-9_]+)(?:\.js)?'/gm;
+
+/**
+ * Tenancy anchors. This guard's original note said it plainly: "a foreign key to
+ * `tenants` is not a boundary violation, it is tenancy" — and that the edge would
+ * stay counted only until the kernel existed to route it through. The kernel
+ * exists now, and it deliberately does NOT own tenancy: `tenants` and `segments`
+ * carry the plan, the billing relationship and the segment tree, which is
+ * Identity's bounded context and not a primitive fifteen domains share.
+ *
+ * So the reference is exempt rather than moved. An import that brings in ONLY
+ * these is a scoping reference; an import that brings in anything else alongside
+ * them is a real read into Identity's tables and is still counted.
+ */
+const TENANCY_ANCHORS = new Set(['tenants', 'segments']);
+
+/**
+ * The kernel is the sanctioned route, so an edge INTO it is not a violation —
+ * it is the rule being followed. PRD 20 §3: "cross-domain reads go through the
+ * kernel or a named view, never a direct join into another domain's tables."
+ * A domain referencing `objects`, `work_items` or `ledger_entries` is doing
+ * exactly what the kernel exists for.
+ *
+ * The exemption is one-directional and that direction matters: `kernel.ts ->
+ * anything` IS counted, and is the edge that would matter most, because the
+ * moment the kernel depends on a domain the fifteen modules stop being
+ * independently reviewable in the one place it is fatal (§6.2, interface
+ * segregation). The kernel currently imports nothing, by construction.
+ */
+const KERNEL_MODULE = 'kernel.ts';
 
 const findings = [];
 for (const file of files.sort()) {
   const text = readFileSync(resolve(schemaDir, file), 'utf8');
-  const seen = new Set();
+  const real = new Set();
   for (const m of text.matchAll(SIBLING_IMPORT)) {
-    const to = `${m[1]}.ts`;
-    if (to === file || seen.has(to)) continue;
-    seen.add(to);
-    findings.push({ key: `${file} -> ${m[1]}.ts`, detail: `${file} reads ${m[1]}.ts directly; a cross-domain read belongs in the kernel or a named view.` });
+    const to = `${m[2]}.ts`;
+    if (to === file || to === KERNEL_MODULE) continue;
+    const names = m[1].split(',').map((s) => s.trim()).filter(Boolean);
+    if (names.length && names.every((n) => TENANCY_ANCHORS.has(n))) continue;
+    real.add(m[2]);
+  }
+  for (const mod of [...real].sort()) {
+    findings.push({ key: `${file} -> ${mod}.ts`, detail: `${file} reads ${mod}.ts directly; a cross-domain read belongs in the kernel or a named view.` });
   }
 }
 

@@ -1,6 +1,6 @@
-# PRD 20 — The Consolidated Data Model
+# PRD 20 — The Consolidated Data Model, the API on it, and the Experience on that
 
-> **Status:** §5 **Step 0 is built and green**; §§1–6 await the operator decisions in §6.
+> **Status:** §5 Step 0 is built and green; everything after it awaits the operator decisions in §8.
 > The six validation checks run in CI today as ratchets against the current schema — they were
 > written before the data moves, which is the only time a check can be written honestly.
 > **Governs:** the B0 schema conversion in [PRD 19](./19-prd-burnrateos-consolidation.md) and the
@@ -366,7 +366,7 @@ The four are `marketing_leads` ~ `sales_leads` (already merged in pass B),
 **A clean signature test is not proof of a clean model, and that is the finding.** The same run
 that returned zero pairs above 0.55 also found **56 head nouns living in two or more domains**.
 The signature test finds tables that *look* alike; it is blind to tables that *mean* alike —
-`boards` and `kanban_boards` share not one payload column. That is the ceiling stated in §7,
+`boards` and `kanban_boards` share not one payload column. That is the ceiling stated in §9,
 measured: the machine gets to 405 and the last 18 need a person who knows the domain.
 
 ---
@@ -393,7 +393,7 @@ stops the 24th.
 
 ## 5 · Sequence — what to do, in order, starting now
 
-Two of these steps are **not blocked** on §6. Do those first; they are what makes the blocked
+Two of these steps are **not blocked** on §8. Do those first; they are what makes the blocked
 steps safe.
 
 ### Step 0 · Six checks landed as ratchets against today's schema — ✅ **DONE 2026-08-08**
@@ -438,7 +438,7 @@ of the target schema exists (**140 / 362 today**) and becomes a hard gate at 100
 
 ### Step 1 · Settle the model — the only genuinely blocked step
 
-The five decisions in §6. Everything below waits on decisions 1, 2 and 5; nothing below waits on
+The five decisions in §8. Everything below waits on decisions 1, 2 and 5; nothing below waits on
 3 or 4, which can be answered at any point before step 4.
 
 ### Step 2 · Write the target schema, kernel first, then domains ascending
@@ -495,27 +495,194 @@ Migrations land in `api/migrations/` — next free prefix is **0418** — and
 3. **Events and connectors** — migrations 0295 and 0410 are the in-repo precedent to copy.
 4. **The nine contested capability areas** — last, because they are operator decisions.
 
-### Step 6 · Build the application, domain by domain, each behind its seat
+### Step 6 · Collapse the middle layers onto the same fifteen modules (§6)
 
-Steps 0–5 are the data model. Step 6 is the product. **Nothing in step 6 starts before step 3
-passes at zero**, because every shortcut taken in the schema is paid for in every feature built
-on it.
+Not "build the API" — the API exists. What does not exist is the module boundary: 101 application
+folders and 197 route files sitting on 16 schema modules. Per domain, in the same ascending order
+as step 2: **one application service, one route group, one domain folder**, and the kernel exposed
+once (§6.3) instead of the six-to-forty times each of its routes exists today.
+
+Every domain moved this way also pays down `check-layering.mjs` — baseline 144 presentation files
+still importing infrastructure — because a route that calls one application service has no reason
+to import a table.
+
+**Exit criteria:** application folders 101 → 16, route groups 197 → 16, layering baseline at 0.
+
+### Step 7 · Build the experience on the kernel components (§7)
+
+Fifteen domain surfaces plus the canvas, composed from the kernel components in §7.1 — one
+timeline, one conversation, one viewer, one comment thread, one share sheet, one form runner, one
+chart primitive. Not 134 rewritten pages.
+
+Each surface ships to the §7.2 standards in the same pass: both themes, fluid to 360px, localised
+in all five catalogs, shared components deciding their own visibility.
+
+**Nothing in steps 6 or 7 starts before step 3 passes at zero**, because every shortcut taken in
+the schema is paid for in every feature built on it — and, per §7.1, in every component too.
 
 ### Who is waiting on whom
 
 | Step | Blocked by | Can start |
 |---|---|---|
 | 0 · checks as ratchets | — | ✅ **done 2026-08-08** |
-| 1 · settle the model | operator (§6) | **now** |
-| 2 · target schema | step 1 | after §6 decisions 1, 2, 5 |
+| 1 · settle the model | operator (§8) | **now** |
+| 2 · target schema | step 1 | after §8 decisions 1, 2, 5 |
 | 3 · gates at zero | step 2 (step 0 done) | — |
 | 4 · convert | step 3 | — |
 | 5 · migrate families | step 4 | — |
-| 6 · build | step 3 at zero | — |
+| 6 · collapse API layers (§6) | step 3 at zero | — |
+| 7 · build the experience (§7) | step 6 | — |
 
 ---
 
-## 6 · Open — operator decisions
+## 6 · The stack — one domain, four layers, one seat
+
+The data model is the bottom of a stack, not the whole of it. The api already **declares** the
+layering — presentation → application → domain, with infrastructure behind the domain's repository
+interfaces — and `check-layering.mjs` already enforces the rule that matters most
+(`src/presentation/` may not import `src/infrastructure/`). What has drifted is not the layer
+contract. It is the **module boundary inside each layer**.
+
+| Layer | Unit today | Count today | Target |
+|---|---|---|---|
+| Infrastructure · schema | module file | **16** | 16 — 15 domains + kernel |
+| Domain | folder | **16** | 16 |
+| Application | folder | **101** | 16 |
+| Presentation | route file | **197** | 16 route groups |
+| Frontend | `page.tsx` | **134** | 15 seats + the canvas |
+
+Sixteen at the bottom, 101 in the middle, 197 above it. That spread is the same disease as the
+1,206 tables, one layer up: a feature arrives and, rather than joining a module, brings its own.
+
+**The rule that makes N-layer real here: a domain is a vertical slice; a layer is a horizontal
+cut; a module is where they intersect.** Fifteen domains × four layers = sixty modules, each
+reviewable on its own, each traceable to one seat on the roster.
+
+### 6.1 · What each layer owns
+
+| Layer | Owns | Must not know |
+|---|---|---|
+| **Infrastructure** | The 387 tables (§2, §3), migrations, the `getOrSetCached` L1+L2 read-through, R2/KV access | HTTP. What a route is. What a user sees. |
+| **Domain** | Invariants, value types, the `kind` taxonomies, state machines | Drizzle. Hono. Any vendor. |
+| **Application** | Use cases, ports, tenancy enforcement, cache keys and invalidation | Request and response shapes. |
+| **Presentation** | HTTP: parse, authorise, call one application service, serialise | SQL. Table names. |
+
+**The domain layer is the one this consolidation actually fixes.** It holds 40 files against the
+application layer's 643 — an anemic domain, because when a concept is spread across 25 tables
+there is nothing coherent to put invariants *on*. A single `work_item` with a `kind` has real
+invariants (a key result cannot be its own parent; a milestone has no assignee) that twenty-five
+separate tables could only express twenty-five times, or not at all. **Collapsing the schema is
+what gives the domain layer something to be.**
+
+### 6.2 · SOLID, as decisions already made in this document
+
+Not the textbook version — each of these is a specific line in §2 or §3, and each has a guard.
+
+- **Single responsibility.** One seat owns one domain (§3). This is why `scratch_pad_meetings` was
+  wrong: the pad had two responsibilities, authoring and presence, so it grew a second table for
+  the second one.
+- **Open/closed.** The kernel *is* the open/closed test, and the platform has passed it three
+  times already: adding a connector vendor adds a manifest row, not DDL (0410); adding an artifact
+  kind adds a value to `CREATION_OBJECT_KINDS`, already at 74; adding an audit source adds an
+  `activity_log` row, not a table (0295). **Extension without modification, proven in-repo before
+  it was proposed here.**
+- **Liskov.** This is the constraint behind §2.2's 0.55 rule, and it is worth naming as such: a
+  kind-split subtype must be substitutable for the base in every query written against the base.
+  That is precisely why the union must never be null-padded and why subtype payload goes in a
+  typed `attrs` — a base query that silently returns rows full of meaningless nulls is an LSP
+  violation wearing a schema.
+- **Interface segregation.** The `object` registry is deliberately the narrowest possible
+  interface: identity and kind, nothing else, so `annotation`, `membership` and `share_link`
+  depend on almost nothing. The counter-example has a number: **144 presentation files still
+  import infrastructure directly**, each depending on the entire schema to read three columns.
+- **Dependency inversion.** Already the house pattern — `DriveProvider`, `MailboxProvider`,
+  `BoardProvider`, `PolicyGate` are ports with swappable adapters. The rule to hold: the domain
+  layer depends on the interface, the application layer chooses the adapter, infrastructure
+  implements it.
+
+### 6.3 · The API surface falls out of the roster
+
+One route group per domain, one application service per domain, and the kernel exposed once
+rather than fifteen times:
+
+```
+/api/<domain>/…                    15 groups, each owned by one seat
+/api/objects/:id                   the registry — resolves any addressable thing
+/api/objects/:id/activity          one timeline endpoint, not one per subsystem
+/api/objects/:id/annotations
+/api/objects/:id/members
+/api/objects/:id/shares
+/api/objects/:id/revisions
+```
+
+Every one of those kernel routes exists today between six and forty times under different names.
+**A new read endpoint must either be served through `getOrSetCached` or state why it cannot** —
+enforceable per-domain only because the cache key can finally be derived from
+`(tenant, domain, object)` instead of from whichever table the feature happened to invent.
+
+---
+
+## 7 · The experience — the roster is the navigation
+
+The navigation design argues that the team panel *is* the navigation, because ownership already
+exists in the data. §3 is that claim in schema form. This section closes the loop: **the fifteen
+domains and the fifteen seats are the same list, and neither may drift from the other.**
+
+- **The canvas is the front door.** Not a feature behind a nav item — §2.1's session test says
+  authored content plus presence plus shareable *is* the canvas, so the schema has no scratch pad
+  to route to. The UI matches: there is one canvas, and everything else is a lens on it.
+- **Progressive disclosure gates state, never capability.** The team roster is always listed; only
+  the scope chips are earned, through one `earned(rung)` helper. A dimmed CFO is an invitation; a
+  missing CFO is a secret. Schema equivalent: a domain's tables exist whether or not the tenant
+  has reached the rung that lights them up.
+- **Recents is derived, never a stored list.** Only possible because `object` + `activity_log`
+  exist: one query answers "what did I touch", where today it would need a union across thirty
+  tables and would silently miss the thirty-first.
+- **The collapse seam.** Compress what is identity (initials stay legible at 21px → the rail), fly
+  out what is text (titles → the flyout). One overlay serves both tooltip and list; a
+  `ResizeObserver` sets the same state the toggle sets, through one `rail()` helper.
+- **The public shell is a classification, not a copy.** `classifyShell()` returns one of four
+  shell kinds from a deny-list default, so a new marketing page cannot accidentally render
+  logged-in chrome.
+
+### 7.1 · The UI dedupe is downstream of the schema dedupe
+
+This is what justifies doing the data model first. Every kernel primitive collapses a family of
+components, not just a family of tables:
+
+| Kernel primitive | Component it makes singular |
+|---|---|
+| `object` | One detail route. One breadcrumb. One "open in canvas". |
+| `activity_log` | **One** timeline component, instead of a per-subsystem feed. |
+| `thread` + `message` | One conversation surface — chat, comments, support, ceremony notes. |
+| `artifact` + `rendition` | One viewer with kind-specific renderers, instead of ~30 per-media pages. |
+| `annotation` | One comment thread, mountable anywhere. |
+| `share_link` | One share sheet with one revocation path — there are three API-key revocation paths alone today. |
+| `question_set` + `response` | One form runner for surveys, pulses, check-ins, scorecards and screening. |
+| `metric_fact` | One chart primitive fed by one shape, which is what makes "insights everywhere" affordable. |
+
+134 `page.tsx` routes exist today. The target is not 134 rewritten pages — it is **15 domain
+surfaces plus the canvas**, each composed from the kernel components above. Building the UI first
+would mean building those components against thirty different shapes and then rebuilding them.
+
+### 7.2 · Non-negotiables for every surface built on this
+
+Existing platform standards, restated because §5 step 6 is where they get honoured or quietly
+skipped:
+
+- **Both themes, every surface.** All colour through theme tokens — never a literal that reads in
+  only one theme — with contrast verified in both.
+- **Mobile-first fluid layout.** No fixed pixel widths that overflow near 360px; horizontal scroll
+  only where intended, such as a wide table inside its own `overflow-x` container.
+- **Localised in the same pass.** Every visible string through `next-intl`, with real translations
+  in all five catalogs (`en`, `zh`, `es`, `fr`, `de`) — not English copies.
+- **Shared components decide their own visibility.** No prop-drilled `canX` booleans a consumer
+  could compute; an unentitled component returns null on its own authority. The same DRY rule §0
+  states for tables, one layer up.
+
+---
+
+## 8 · Open — operator decisions
 
 1. **Which of the 25 kernel primitives are accepted.** Each is independently rejectable; the
    published analysis lets you toggle any of them and see the resulting count.
@@ -531,7 +698,7 @@ on it.
 
 ---
 
-## 7 · Method and its limits
+## 9 · Method and its limits
 
 - **Exact:** the 1,206 / 1,130 counts, the 79 name collisions, the column distribution, and the
   coverage map. All parsed from source, brace-matched. An earlier pass under-counted hired.video at

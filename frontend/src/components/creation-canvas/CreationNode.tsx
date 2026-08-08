@@ -341,22 +341,74 @@ function AgentBody({ data, onOpen }: { data: CreationNodeData; onOpen?: (focus: 
   </>;
 }
 
+/**
+ * What one authored step actually CALLS, in one line — "twilio → send_sms".
+ * A step with no call to make returns null, and the body says so rather than
+ * letting a bare title imply the step is configured.
+ */
+function stepCall(step: Record<string, unknown>): string | null {
+  const str = (value: unknown): string => (typeof value === 'string' ? value.trim() : '');
+  const connector = str(step.connector);
+  if (connector) return `${connector} → ${str(step.action) || str(step.actionKey) || '?'}`;
+  const model = str(step.model) || str(step.provider);
+  if (model || str(step.prompt)) return model ? `LLM · ${model}` : 'LLM';
+  const role = str(step.role);
+  if (role) return `agent · ${role}`;
+  return null;
+}
+
 function WorkflowBody({ data }: { data: CreationNodeData }) {
   const t = useTranslations('creationCanvas.node');
-  const authoredSteps = Array.isArray(data.steps) ? data.steps.slice(0, 12).map((step, index) => asRecord(step, { title: typeof step === 'string' ? step : t('stepIndex', { index: index + 1 }) })) : [];
-  const steps: Record<string, unknown>[] = authoredSteps.length ? authoredSteps : ['Audience', 'Create campaign', 'Approve', 'Publish'].map((title) => ({ title }));
+  const steps = Array.isArray(data.steps)
+    ? data.steps.slice(0, 12).map((step, index) => asRecord(step, { title: typeof step === 'string' ? step : t('stepIndex', { index: index + 1 }) }))
+    : [];
   const target = optionLabel(data.runTarget, { builderforce: 'BuilderForce.AI', 'campaign-strategist': 'Campaign Strategist' }, 'BuilderForce.AI');
   const approval = optionLabel(data.approvalMode, { required: t('approvalRequired'), autonomous: t('fullyAutonomous') }, t('approvalRequired'));
+  // Compile issues from the last build attempt, surfaced on the card itself so
+  // "why will this not run" is answered where the Run button is.
+  const issues = Array.isArray(data.workflowIssues) ? data.workflowIssues.slice(0, 4) : [];
+  const linked = typeof data.resourceId === 'string' && data.resourceId.startsWith('workflow:');
   return (
     <div className={styles.configurableBody}>
       <div className={styles.widgetSettings}><span><small>{t('executionTarget')}</small><b>{target}</b></span><span><small>{t('approvalMode')}</small><b>{approval}</b></span></div>
-      <div className={styles.workflowSteps}>{steps.map((step, index) => (
-          <div className={styles.workflowStep} key={`${String(step.title || 'step')}-${index}`}>
-            <span className={index === 0 ? styles.doneDot : index === 1 ? styles.liveDot : styles.idleDot} />
-            <strong>{String(step.title || step.name || t('stepIndex', { index: index + 1 }))}</strong>
-            <small>{String(step.status || (data.status === 'Running' && index === 1 ? t('stepRunning') : index === 0 ? t('stepDefined') : index === 1 ? t('stepInProgress') : t('stepPending')))}</small>
-          </div>
-        ))}</div>
+      {steps.length === 0 ? (
+        // No invented stages. An empty workflow states that it is empty and what
+        // it needs — the placeholder list that used to render here read as real
+        // configuration and was the reason a Twilio request showed campaign steps.
+        <div className={styles.workflowEmpty}>
+          <strong>{t('workflowNoSteps')}</strong>
+          <small>{t('workflowNoStepsHint')}</small>
+        </div>
+      ) : (
+        <div className={styles.workflowSteps}>{steps.map((step, index) => {
+          const call = stepCall(step);
+          const status = typeof step.status === 'string' && step.status ? step.status : '';
+          const normalized = status.toLowerCase();
+          // Status comes from the step, never from its POSITION. The old body
+          // drew step 1 green and step 2 blue on every workflow, so a card that
+          // had never run looked half-complete.
+          const dot = normalized.startsWith('fail') || normalized.startsWith('error') ? styles.failDot
+            : normalized.startsWith('complete') || normalized.startsWith('done') || normalized === 'delivered' ? styles.doneDot
+            : normalized.startsWith('run') || normalized.startsWith('progress') ? styles.liveDot
+            : styles.idleDot;
+          return (
+            <div className={styles.workflowStep} key={`${String(step.title || 'step')}-${index}`}>
+              <span className={dot} />
+              <strong>{String(step.title || step.name || t('stepIndex', { index: index + 1 }))}</strong>
+              {call ? <code>{call}</code> : <small>{t('stepNotConfigured')}</small>}
+              <small>{status || (linked ? t('stepPending') : t('stepNotBuilt'))}</small>
+            </div>
+          );
+        })}</div>
+      )}
+      {issues.length > 0 && (
+        <div className={styles.workflowIssues} role="status">
+          {issues.map((issue, index) => {
+            const record = asRecord(issue, {});
+            return <small key={index}>{`${record.title ? `${String(record.title)}: ` : ''}${String(record.message ?? issue)}`}</small>;
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -823,14 +875,16 @@ function DrawioCanvas({ graph, title }: { graph: DrawioGraph; title: string }) {
       const lines = drawioLabelLines(vertex.label, vertex.width, vertex.fontSize);
       const shapeProps = { fill: vertex.shape === 'text' ? 'none' : fill, stroke: vertex.shape === 'text' ? 'none' : stroke, strokeWidth: 1.4, ...(vertex.dashed ? { strokeDasharray: '6 4' } : {}) };
       return <g key={vertex.id}>
-        {polygon
+        {vertex.imageUrl
+          ? <image href={vertex.imageUrl} x={vertex.x} y={vertex.y} width={vertex.width} height={vertex.height} preserveAspectRatio="xMidYMid meet" />
+          : polygon
           ? <polygon points={polygon} {...shapeProps} />
           : vertex.shape === 'ellipse'
             ? <ellipse cx={vertex.x + vertex.width / 2} cy={vertex.y + vertex.height / 2} rx={vertex.width / 2} ry={vertex.height / 2} {...shapeProps} />
             : vertex.shape === 'cylinder'
               ? <g {...shapeProps}><rect x={vertex.x} y={vertex.y + 8} width={vertex.width} height={Math.max(vertex.height - 16, 1)} /><ellipse cx={vertex.x + vertex.width / 2} cy={vertex.y + 8} rx={vertex.width / 2} ry={8} /><ellipse cx={vertex.x + vertex.width / 2} cy={vertex.y + vertex.height - 8} rx={vertex.width / 2} ry={8} /></g>
               : <rect x={vertex.x} y={vertex.y} width={vertex.width} height={vertex.height} rx={vertex.shape === 'rounded' ? 10 : 0} {...shapeProps} />}
-        {lines.map((line, index) => <text
+        {!vertex.imageUrl && lines.map((line, index) => <text
           key={`${vertex.id}-${index}`}
           x={vertex.x + vertex.width / 2}
           y={vertex.y + vertex.height / 2 + (index - (lines.length - 1) / 2) * (vertex.fontSize * 1.25) + vertex.fontSize * 0.35}

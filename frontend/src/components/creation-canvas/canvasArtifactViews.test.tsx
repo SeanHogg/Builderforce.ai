@@ -84,6 +84,15 @@ describe('diagram objects render the drawing', () => {
     expect(drawing.querySelector('polyline')).toBeTruthy();
     expect(drawing.querySelector('ellipse')).toBeTruthy();
   });
+
+  it('previews an image embedded by the draw.io conversion', async () => {
+    renderNode({
+      kind: 'diagram', title: 'Imported sketch',
+      diagram: '<mxGraphModel><root><mxCell id="0"/><mxCell id="pic" style="shape=image;image=data:image/png;base64,AAAA;" vertex="1" parent="0"><mxGeometry x="0" y="0" width="320" height="180" as="geometry"/></mxCell></root></mxGraphModel>',
+    });
+    const drawing = await screen.findByRole('img', { name: 'Imported sketch' });
+    expect(drawing.querySelector('image')?.getAttribute('href')).toBe('data:image/png;base64,AAAA');
+  });
 });
 
 describe('spreadsheet objects are editable on the card', () => {

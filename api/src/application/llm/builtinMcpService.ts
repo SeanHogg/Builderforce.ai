@@ -3115,6 +3115,12 @@ const CATALOG: BuiltinTool[] = [
     run: (ctx, a) => replayRoute(ctx, 'GET', `/api/tasks/${num(a.taskId)}/lifecycle`),
   },
 
+  // ---- Connector catalog: what an integration step can actually CALL ----
+  // A workflow step names a connector and an action by key. Without a way to
+  // read the real keys, an author guesses them and the build fails on a typo,
+  // so this is the lookup that makes a first-attempt integration step correct.
+  { tool: 'connectors.actions', mutates: false, description: 'Every connected integration this tenant can call, with each action key and its parameters — the connector/action keys a workflow integration step must use (e.g. connector "twilio", action "send_sms").', parameters: obj({}), run: (ctx) => replayRoute(ctx, 'GET', '/api/connectors/actions') },
+
   // ---- Workflow DEFINITIONS: write/run/import + computed reads not backed by a plain table op ----
   { tool: 'workflows.create', mutates: true, description: 'Create a workflow definition.', parameters: obj({ name: S, description: S, projectId: N }, ['name']), run: (ctx, a) => replayRoute(ctx, 'POST', '/api/workflow-definitions', { name: str(a.name), description: a.description != null ? str(a.description) : undefined, projectId: a.projectId != null ? num(a.projectId) : undefined }) },
   { tool: 'workflows.update', mutates: true, description: 'Update a workflow definition (name/description/project).', parameters: obj({ id: S, name: S, description: S, projectId: N }, ['id']), run: (ctx, a) => { const body: Json = {}; if (a.name != null) body.name = str(a.name); if (a.description != null) body.description = str(a.description); if (a.projectId != null) body.projectId = num(a.projectId); return replayRoute(ctx, 'PATCH', `/api/workflow-definitions/${encodeURIComponent(str(a.id))}`, body); } },
