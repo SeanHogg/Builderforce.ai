@@ -125,6 +125,28 @@ export function readUnattestedRuns(evidence: unknown, contract: string = SIGNOFF
   return typeof n === 'number' && Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
 
+/**
+ * Compute the state to assign when staffing a participant slot.
+ *
+ * This is the authoritative rule: "what happens to the participant's state when a
+ * concrete assignee is provided?" It lives here (pure) so it can be tested independently.
+ *
+ * - `unstaffed` → `assigned` (the primary case: a gap is filled)
+ * - `pending` → `assigned` (a new slot with no resolved assignee gets one)
+ * - `assigned` → `assigned` (re-assigning the same or different person is a no-op)
+ * - `in_progress` → stays in_progress (work is already happening)
+ * - Terminal states (`completed`/`waived`/`skipped`/`changes_requested`) → no change
+ */
+export function stateForAssignedParticipant(
+  currentState: ParticipantState | string | null | undefined,
+): ParticipantState {
+  const s = currentState as ParticipantState | undefined;
+  if (!s || s === 'unstaffed' || s === 'pending') return 'assigned';
+  // Terminal or in-flight states are preserved.
+  if (s === 'in_progress' || s === 'completed' || s === 'waived' || s === 'skipped' || s === 'changes_requested') return s;
+  return 'assigned';
+}
+
 /** True once the slot's agent has ignored the CURRENT ask its full budget of times. */
 export function isAttestationExhausted(
   evidence: unknown,
