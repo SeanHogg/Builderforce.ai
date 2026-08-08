@@ -1,125 +1,117 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #559
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Incident Fields, Query & Export API PRD
 
 ## Problem & Goal
+Incident records currently lack essential operational metadata and structured access. Operations teams, SREs, and incident commanders cannot efficiently search, filter, or export incident data enriched with PagerDuty context, hindering post-incident reviews, trend analysis, and compliance reporting.
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+**Goal:** Provide a complete, queryable, and exportable incident data store with a 90-day retention window. Ensure every incident record is automatically populated with PagerDuty severity/urgency, assigned responders, service name, and timestamps (created/updated/resolved). Expose a filterable query API and support JSON/CSV export.
 
 ## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- Incident Commanders & SREs: need fast lookup of active/past incidents with operational context.
+- Operations Analysts: require batch export for trend analysis and reporting.
+- Compliance & Audit personnel: rely on complete, timestamped records for review.
 
 ## Scope
+Covers functional requirements FR-3.1 through FR-3.5 and acceptance criteria AC-INC-1, AC-INC-2, AC-INC-3.
 
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- **In Scope:**
+  - Automated enrichment of incident records with PagerDuty fields.
+  - Structured incident record schema with all required fields.
+  - Query API with filtering capabilities.
+  - Export endpoint supporting JSON and CSV formats.
+  - 90-day data retention policy with automated pruning.
+- **Out of Scope:**
+  - Real-time streaming or webhook delivery of incident data.
+  - Customizable retention periods beyond 90 days.
+  - UI dashboard or visualization layer.
+  - Historical backfill of incidents created before this feature launch.
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+### FR-3.1 Incident Field Population
+- Upon incident creation, the system MUST fetch and store the following fields from the associated PagerDuty incident:
+  - Severity
+  - Urgency
+  - Assigned responder(s) (user(s) or escalation policy)
+  - Service name
+  - Created timestamp
+  - Updated timestamp (initially equal to created timestamp)
+  - Resolved timestamp (null until incident resolves)
+- Field population SHALL be atomic per incident; all fields must be populated or the record creation must fail.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+### FR-3.2 Incident Record Schema
+- Every incident record SHALL include, at minimum:
+  - Incident ID (internal)
+  - PagerDuty incident ID
+  - Severity
+  - Urgency
+  - Assigned responder(s)
+  - Service name
+  - Status (triggered, acknowledged, resolved)
+  - `created_at` (ISO 8601)
+  - `updated_at` (ISO 8601)
+  - `resolved_at` (ISO 8601, nullable)
 
----
+### FR-3.3 Query API
+- Expose a `GET /incidents` endpoint that supports case-insensitive filtering on:
+  - Status
+  - Severity
+  - Urgency
+  - Service name
+  - Assigned responder
+  - Date range (created/updated/resolved)
+- API MUST support pagination via `limit` and `offset` (or `page_token`).
+- API responses SHALL be JSON.
 
-### FR-2 — Guided (Interactive) Mode
+### FR-3.4 Export API
+- Expose `POST /incidents/export` accepting the same filter parameters as the query API.
+- Support `Accept` header or query parameter (`format`) for:
+  - `application/json` → JSON array of incident objects.
+  - `text/csv` → CSV with column headers matching record schema.
+- Export MUST apply the same retention window.
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
-
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+### FR-3.5 90-Day Retention
+- Incidents with `created_at` older than 90 days from the current date MUST be automatically removed from the operational data store.
+- The pruning process SHALL run at least daily and log the count of deleted records.
+- Query and export endpoints MUST only return incidents within the 90-day window.
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+### AC-INC-1: Full Field Population
+- **Given** a new PagerDuty incident is created, **when** the incident record is ingested, **then** all required fields (severity, urgency, responder(s), service name, created/updated timestamp) are populated and resolvable via the Query API within 60 seconds.
 
----
+### AC-INC-2: Filterable Query API
+- **Given** multiple incident records with varying severities and services, **when** a user queries with `?service=payment-api&severity=critical`, **then** only matching incidents are returned.
+- **When** a user queries with an invalid filter key or unsupported date format, **then** the API responds with `400 Bad Request` and an actionable error message.
+
+### AC-INC-3: JSON/CSV Export
+- **Given** a set of incidents matching a filter, **when** an export request is made with `format=csv`, **then** the response is a valid CSV with headers and data corresponding to the incident schema.
+- **When** an export request is made without an explicit format, **then** the default response is JSON.
 
 ## Out of Scope
+- Real-time notifications (e.g., webhooks) for incident updates.
+- Configurable data retention; only 90 days is supported.
+- End-user UI for query or export beyond API.
+- Data residency or multi-region replication configurations.
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+## Requirements
+
+_Owned by the business-analyst — to be authored._
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
