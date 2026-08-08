@@ -709,6 +709,7 @@
     }
   },
   "scripts": {
+    "postinstall": "node ../../scripts/ensure-linked-deps.mjs",
     "vscode:prepublish": "node esbuild.mjs --production && tsc -p ./ && pnpm run build:webview",
     "compile": "node esbuild.mjs && tsc -p ./ && pnpm run build:webview",
     "build:webview": "vite build --config webview/vite.config.ts && pnpm run build:canvas",

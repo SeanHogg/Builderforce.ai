@@ -209,14 +209,54 @@ jobs:
         run: |
           # A registry listing pointing at a dead endpoint is worse than no
           # listing: every client that discovers it fails on first connect.
-          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST https://api.builderforce.ai/mcp \
-            -H 'content-type: application/json' \
-            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')
-          # 401 is the correct unauthenticated answer — it proves the route is mounted.
-          if [ "$code" != "401" ]; then
-            echo "::error::https://api.builderforce.ai/mcp answered $code, expected 401. Not publishing."
+          #
+          # The probe is the shape a real client uses — an unauthenticated
+          # JSON-RPC POST — and 401 is the correct answer to it: it proves the
+          # route is mounted AND that the challenge a client must satisfy is the
+          # one server.json documents. Retried because the API deploy this job
+          # waits on has only just propagated.
+          code=000
+          : >body.txt; : >headers.txt; : >curl-error.txt
+          for attempt in 1 2 3; do
+            code=$(curl -sS -o body.txt -D headers.txt -w '%{http_code}' --max-time 30 \
+              -X POST https://api.builderforce.ai/mcp \
+              -H 'content-type: application/json' \
+              -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' 2>curl-error.txt || true)
+            if [ "$code" = "401" ]; then break; fi
+            if [ "$attempt" -lt 3 ]; then sleep 15; fi
+          done
+
+          if [ "$code" = "401" ]; then
+            echo "POST /mcp answered 401 — the route is mounted and challenges as server.json documents."
+            exit 0
+          fi
+
+          # Whatever went wrong, say what the endpoint ACTUALLY answered. A bare
+          # status code cannot distinguish an unmounted route from an edge that
+          # never let the request reach the worker, and that distinction is the
+          # whole diagnosis.
+          echo "::group::What https://api.builderforce.ai/mcp answered"
+          echo "status: $code"
+          cat curl-error.txt || true
+          cat headers.txt || true
+          head -c 2000 body.txt || true
+          echo
+          echo "::endgroup::"
+
+          # Cloudflare mitigating the probe at the EDGE is a different failure
+          # from a broken deploy, and a more serious one to find here: the
+          # challenge is served to any caller whose IP scores as automated, which
+          # is precisely the audience of this listing — Anthropic connectors, AWS,
+          # hosted agents, every server-side MCP client. Publishing under that
+          # condition advertises a URL that answers interactive-challenge HTML to
+          # everyone who discovers it.
+          if grep -qi '^cf-mitigated:' headers.txt; then
+            echo "::error::Cloudflare served a $code managed challenge for https://api.builderforce.ai/mcp, so the endpoint is unreachable to non-browser clients — including every remote MCP client this listing would send here. The fix is the ZONE, not this check: turn off Bot Fight Mode for builderforce.ai, or add a WAF rule that SKIPS bot mitigation for api.builderforce.ai and builderforce.ai/gateway/*. Not publishing."
             exit 1
           fi
+
+          echo "::error::https://api.builderforce.ai/mcp answered $code, expected 401. Not publishing."
+          exit 1
 
       - name: Publish server.json
         run: |
@@ -287,14 +327,13 @@ jobs:
       - name: Install Wrangler
         run: npm install --global wrangler
 
-      - name: Build frontend dependencies
-        run: |
-          for package_dir in sdk studio studio-embedded brain-embedded packages/brain-ui; do
-            pushd "$package_dir"
-            pnpm install --frozen-lockfile || pnpm install
-            popd
-          done
-
+      # The linked local packages (`link:../studio`, …) install themselves: each
+      # consumer's `postinstall` runs scripts/ensure-linked-deps.mjs, which walks
+      # its link targets and installs any whose dependencies are missing. This
+      # step used to be a hand-maintained list here, which only this job had —
+      # the VS Code job did not, so brain-ui's shipped `.d.ts` type-checked
+      # against an unresolved brain-embedded and the publish failed on members
+      # that plainly exist.
       - name: Build and deploy frontend
         working-directory: frontend
         env:

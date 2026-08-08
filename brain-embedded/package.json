@@ -47,6 +47,7 @@
     "access": "public"
   },
   "scripts": {
+    "postinstall": "node ../scripts/ensure-linked-deps.mjs",
     "build": "tsup --config tsup.config.ts",
     "type-check": "tsgo --noEmit && tsc --noEmit",
     "test": "vitest run --passWithNoTests",

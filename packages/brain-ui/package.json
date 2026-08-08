@@ -21,6 +21,7 @@
     "styles.css"
   ],
   "scripts": {
+    "postinstall": "node ../../scripts/ensure-linked-deps.mjs",
     "build": "tsup --config tsup.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",

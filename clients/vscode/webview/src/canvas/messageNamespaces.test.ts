@@ -18,6 +18,15 @@ import { canvasImportClosure, canvasPaths, collectCanvasNamespaces } from './mes
 const WEBVIEW_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const LOCALES = ['en', 'zh', 'es', 'fr', 'de'] as const;
 
+/**
+ * Each of these reads ~120 first-party modules off disk. Warm, that is a second;
+ * on the COLD filesystem of a fresh CI checkout the first walk measured 8.4s —
+ * past vitest's 5s default, which would fail the VSIX job on a timeout that says
+ * nothing about the canvas. The budget is generous on purpose: this asserts a
+ * derivation, and its runtime is the filesystem's, not ours.
+ */
+const CLOSURE_WALK_TIMEOUT_MS = 60_000;
+
 describe('canvas message namespaces', () => {
   it('walks a real import closure from the canvas entry', () => {
     const { entry, frontendSrc } = canvasPaths(WEBVIEW_DIR);
@@ -27,7 +36,7 @@ describe('canvas message namespaces', () => {
     // a handful would mean resolution broke and the trim silently under-ships.
     const closure = canvasImportClosure(entry, frontendSrc);
     expect(closure.length).toBeGreaterThan(80);
-  });
+  }, CLOSURE_WALK_TIMEOUT_MS);
 
   it('derives the namespaces the canvas translates, including lazy surfaces', () => {
     const { entry, frontendSrc } = canvasPaths(WEBVIEW_DIR);
@@ -38,7 +47,7 @@ describe('canvas message namespaces', () => {
     // And the dynamically-imported surfaces — the ones a static-only walk misses,
     // which would render raw keys the moment a user opened them.
     expect(namespaces).toEqual(expect.arrayContaining(['aiTraining', 'ide', 'evermindStudio']));
-  });
+  }, CLOSURE_WALK_TIMEOUT_MS);
 
   it('ships every derived namespace in every locale catalog', () => {
     const { entry, frontendSrc } = canvasPaths(WEBVIEW_DIR);
@@ -51,5 +60,5 @@ describe('canvas message namespaces', () => {
       const missing = namespaces.filter((namespace) => catalog[namespace] === undefined);
       expect(missing, `${locale}.json is missing: ${missing.join(', ')}`).toEqual([]);
     }
-  });
+  }, CLOSURE_WALK_TIMEOUT_MS);
 });
