@@ -1,125 +1,199 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #586
+> **Requirements** — authored by Business Analyst · task #586
+> **Product Manager Sign-off** — approved by Ada (Sr. Product Mgr) · task #586
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document: GAP-G2 Sanity-of-Life Compliance Closure
 
-## Problem & Goal
-
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
-
-## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
+**Document Owner:** Product Architecture
+**Status:** Approved
+**Task Reference:** #144
+**Conclusion:** Sanity-of-Life Compliance Determined
 
 ---
 
-## Scope
+## 1. Problem & Goal
 
-### In Scope
+### Problem
+Workstream GAP-G2 represented an open compliance risk and operational debt. The lack of a definitive determination regarding its sanity-of-life compliance status caused ambiguity for downstream teams, preventing architectural alignment and potentially impacting audit readiness.
 
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
+### Goal
+Formally close GAP-G2 by recording the determined sanity-of-life compliance conclusion within the workstream tracker. Ensure the closure status, rationale, and any resulting compliance guardrails are clear and accessible to all stakeholders, eliminating the identified gap.
 
 ---
 
-## Functional Requirements
-
-### FR-1 — Mode Selection
-
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+## 2. Target Users / ICP Roles
+- **Compliance Officers:** Require evidence of gap resolution for audit trails.
+- **Product Architects:** Need a definitive state to inform system design and dependencies.
+- **Engineering Leads:** Must understand compliance boundaries to prevent regressions during implementation.
 
 ---
 
-### FR-2 — Guided (Interactive) Mode
+## 3. Scope
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+- Update the workstream tracker item for GAP-G2 to reflect `Closed` status.
+- Attach or link the final sanity-of-life compliance determination rationale.
+- Propagate the compliance outcome to the central compliance register (if automatically linked).
+- Ensure no functional code changes are implemented solely to satisfy this closure, unless explicitly identified as remediation in the determination.
 
 ---
 
-### FR-3 — Bulk (Import) Mode
+## 4. Functional Requirements
 
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| FR1 | Workstream tracker must display GAP-G2 status as `Closed` with an immutable timestamp. | P0 |
+| FR2 | The `Conclusion` field must contain the determined outcome ("Sanity-of-Life Compliance") and a summary of the rationale. | P0 |
+| FR3 | System must prevent re-opening GAP-G2 without a documented waiver or exception process. | P1 |
+| FR4 | Downstream compliance dashboards must ingest the closure event and reflect a clean state for the GAP-G2 identifier. | P1 |
 
 ---
 
-### FR-4 — Shared / Cross-Mode Requirements
+## 5. Acceptance Criteria
 
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
-
-## Acceptance Criteria
-
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+- **AC1:** Task #144 in the workstream tracker shows `Closed` status and is read-only for all roles except admins.
+- **AC2:** The resolution comment includes the exact phrase "Sanity-of-Life Compliance" along with a link to the signed-off determination artfact.
+- **AC3:** A query of the compliance register for GAP-G2 returns `Resolved` status within 1 hour of the tracker update.
+- **AC4:** No open sub-tasks or dependents are blocked by the GAP-G2 closure.
 
 ---
 
-## Out of Scope
+## 6. Out of Scope
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+- Remediation work required to *achieve* sanity-of-life compliance (already completed or waived prior to this determination).
+- Broad retrospective changes to other GAP items not directly related to GAP-G2.
+- User-facing product changes, unless those changes were explicitly part of a pre-existing remediation plan executed before closure.
+
+---
+
+## Requirements
+
+### BR-1: GAP-G2 Workstream Closure — Data Integrity
+
+**Priority:** P0 (Critical)
+
+The closure of GAP-G2 task #144 in the workstream tracker must be performed as a single atomic operation that transitions the task status to `done` (or an equivalent terminal `Closed` state) and simultaneously records:
+
+| Field | Value / Constraint |
+|-------|--------------------|
+| `status` | `done` (terminal; maps to "Closed" in the workstream tracker display) |
+| `updatedAt` | Server-issued timestamp at the moment of closure (immutable once written) |
+| `conclusion` | Literal string: `"Sanity-of-Life Compliance — determined via GAP-G2 Secret Lifecycle Validation (task #575). All lifecycle checks (creation, rotation, revocation, plaintext scans, expiry enforcement) returned a pass or waived verdict. No blocking P1 findings remain. See signed determination artefact: builderforce/task-575 / PR #306."` |
+| `closedBy` | Reference to the agent or user identity executing the closure |
+
+**Rationale:** FR1 and FR2 require the tracker to display `Closed` status with an immutable timestamp and a `Conclusion` field containing the determined outcome. A single atomic write prevents incomplete states.
+
+### BR-2: Immutable Closure Guard
+
+**Priority:** P1 (High)
+
+Once GAP-G2 task #144 reaches its terminal `done` status:
+- The `status` field must be read-only for all non-admin roles (including agents).
+- Any attempt to transition the task from `done` back to an active status (`ready`, `in_progress`, `backlog`) must be rejected unless the caller presents a documented waiver or exception reference. The rejection response must include a message indicating the waiver requirement.
+- Admin-role users may override this guard by providing a `waiverId` or `exceptionRef` that links to a documented exception process.
+
+**Rationale:** FR3 requires that GAP-G2 cannot be re-opened without a waiver or exception process. This BR formalises the guard as both a role-based access control and a required reference check.
+
+### BR-3: Compliance Register Propagation
+
+**Priority:** P1 (High)
+
+Upon successful closure of task #144:
+- A closure event must be emitted to the compliance register, keyed by the GAP-G2 identifier.
+- The compliance register entry for GAP-G2 must transition to `Resolved` status within a **1-hour SLA** from the tracker closure event timestamp.
+- If the compliance register is unreachable, the system must retry with exponential backoff (initial: 30 seconds, maximum: 15 minutes) and log each attempt. After 1 hour of failed attempts, the closure must remain valid in the tracker and an alert must be raised to the platform operations channel.
+- Downstream dashboards that source from the compliance register must reflect the `Resolved` state on their next refresh cycle (no additional action required beyond the register update).
+
+**Rationale:** FR4 and AC3 require the compliance register to ingest the closure and reflect `Resolved` status within 1 hour. This BR specifies the propagation mechanism, retry policy, and failure mode.
+
+### BR-4: Dependency Integrity Check (Pre-Closure)
+
+**Priority:** P0 (Critical)
+
+Before task #144 can be closed, a dependency integrity check must execute:
+
+1. Query all child tasks of Epic #144.
+2. Verify that **every child task** has a status of `done` (terminal) — no child may be `in_progress`, `ready`, `backlog`, or any non-terminal state.
+3. If any child task is non-terminal, the closure must be **blocked** and the caller must receive a response listing each blocking child by ID, title, and current status.
+4. The check must execute within the same transaction as the closure so that a child completing concurrently does not produce a race condition.
+
+**Rationale:** AC4 requires no open sub-tasks or dependents are blocked by the GAP-G2 closure. Task #575 (GAP-G2 validation) is currently `done`, satisfying this check for the immediate child. This BR ensures any future children are also accounted for before closure.
+
+### BR-5: Closure Event Audit Trail
+
+**Priority:** P2 (Medium)
+
+Every GAP-G2 closure event (including the initial closure and any subsequent admin re-open/re-close with a waiver) must produce an immutable audit log entry containing:
+
+| Field | Description |
+|-------|-------------|
+| `eventType` | `gap_closure` |
+| `gapId` | `GAP-G2` |
+| `taskId` | `144` |
+| `action` | `closed` or `reopened` |
+| `actorRef` | Identity of the agent or user who performed the action |
+| `timestamp` | Server-issued timestamp |
+| `waiverId` | Present only if the action was performed with a waiver/exception |
+| `rationale` | Summary of the reason for the action |
+
+This log must be queryable by compliance officers through the existing audit interface and preserved for the duration of the workspace retention policy.
+
+**Rationale:** While not explicitly stated in the FR table, an audit trail is a baseline compliance expectation for any gap closure, particularly one designated "sanity-of-life." This BR ensures the closure is auditable.
+
+### BR-6: No Functional Side-Effects
+
+**Priority:** P0 (Critical)
+
+The closure of GAP-G2 must **not** trigger any of the following side-effects:
+- No repository code changes, schema migrations, or configuration modifications.
+- No automated agent dispatch, deployment, or infrastructure provisioning.
+- No changes to the state of non-GAP-G2 tasks, projects, or resources.
+- No modification to the secret lifecycle validation results recorded by task #575.
+The closure is a **declarative status change only**. The validation work (task #575) and its evidence (PR #306) are already complete and recorded.
+
+**Rationale:** The PRD explicitly states that no functional code changes are implemented solely to satisfy this closure. This BR makes that constraint operational and testable.
+
+---
+
+## Non-Functional Requirements
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| NFR-1 | The closure operation must complete in under 2 seconds (p95) under normal load. | P2 |
+| NFR-2 | The audit log for GAP-G2 must be preserved for a minimum of 7 years to satisfy SOC 2 retention requirements. | P1 |
+| NFR-3 | The compliance register propagation must succeed with 99.9% reliability over a rolling 30-day window. | P1 |
+
+---
+
+## Traceability Matrix
+
+| Business Req | Functional Req | Acceptance Criteria |
+|-------------|---------------|---------------------|
+| BR-1 | FR1, FR2 | AC1, AC2 |
+| BR-2 | FR3 | AC1 |
+| BR-3 | FR4 | AC3 |
+| BR-4 | — (derived) | AC4 |
+| BR-5 | — (derived) | — (compliance baseline) |
+| BR-6 | — (scope guard) | — (out-of-scope enforcement) |
+
+---
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
+
+## Acceptance
+
+_Owned by the validator — to be authored._
