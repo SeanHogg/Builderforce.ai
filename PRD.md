@@ -1,125 +1,119 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #834
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document (PRD)
 
 ## Problem & Goal
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+### Problem
+Currently, when an epic has no assignee, the system does not clearly indicate that the epic is unstaffed. This lack of visibility can lead to confusion and inefficiency in project management, as stakeholders may not immediately recognize that an epic requires attention or resources.
 
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+### Goal
+To enhance project management transparency and efficiency by clearly indicating when an epic is unstaffed. The system should automatically set the Owner field to `unstaffed` when an epic has no assignee.
 
 ## Target Users / ICP Roles
 
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Project Managers**: Need to quickly identify unstaffed epics to allocate resources effectively.
+- **Team Leads**: Require visibility into unstaffed epics to assign team members and manage workloads.
+- **Executives**: Benefit from clear indicators of project status to make informed decisions.
 
 ## Scope
 
-### In Scope
+- **In Scope**:
+  - Automatically update the Owner field to `unstaffed` when an epic has no assignee.
+  - Provide a clear visual indicator in the UI for unstaffed epics.
+  - Allow manual override of the Owner field if necessary.
 
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- **Out of Scope**:
+  - Automatic assignment of epics to team members.
+  - Notification system for unstaffed epics.
+  - Historical tracking of Owner field changes.
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+1. **Automatic Owner Field Update**:
+   - When an epic is created without an assignee, the Owner field should default to `unstaffed`.
+   - If an epic has an assignee and the assignee is removed, the Owner field should automatically update to `unstaffed`.
+   - The Owner field should only be editable to `unstaffed` or a valid user.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+2. **User Interface (UI) Indicator**:
+   - Unstaffed epics should be visually distinguished in the epic list view (e.g., via a specific color or icon).
+   - The Owner field should display `unstaffed` in a prominent manner within the epic details view.
 
----
+3. **Manual Override Capability**:
+   - Users with appropriate permissions should be able to manually set the Owner field to `unstaffed` or assign an owner.
+   - A confirmation dialog should be implemented when overriding the Owner field to prevent accidental changes.
 
-### FR-2 — Guided (Interactive) Mode
-
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
-
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+4. **API Support**:
+   - The API should support setting the Owner field to `unstaffed` and reflect this status in responses.
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+- **Scenario 1: Epic Created Without Assignee**
+  - Given: An epic is created without an assignee.
+  - When: The epic is saved.
+  - Then: The Owner field is set to `unstaffed`.
+  - And: The epic is visually indicated as unstaffed in the list view.
 
----
+- **Scenario 2: Assignee Removed from Epic**
+  - Given: An epic has an assignee.
+  - When: The assignee is removed.
+  - Then: The Owner field is updated to `unstaffed`.
+  - And: The epic is visually indicated as unstaffed in the list view.
+
+- **Scenario 3: Manual Override of Owner Field**
+  - Given: An epic is unstaffed.
+  - When: A user with permissions sets the Owner field to a valid user.
+  - Then: The Owner field is updated to the selected user.
+  - And: The epic is no longer visually indicated as unstaffed.
+
+- **Scenario 4: API Interaction**
+  - Given: An epic is unstaffed.
+  - When: The API is queried for the epic.
+  - Then: The response includes the Owner field as `unstaffed`.
 
 ## Out of Scope
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+- **Automatic Assignment**: The system will not automatically assign unstaffed epics to team members.
+- **Notification System**: There will be no notifications for unstaffed epics.
+- **Historical Tracking**: Changes to the Owner field will not be tracked historically.
+- **Advanced Filtering**: The system will not include advanced filtering options for unstaffed epics.
+
+## Requirements
+
+### R1: Owner Slot Resolution Source
+The Owner role slot in the participation manifest MUST resolve from the epic's direct assignee (`tasks.assignedUserId`, `tasks.assignedAgentRef`, or `tasks.assignedAgentHostId`), NOT from project-level role pins or the roster fallback used by `resolveAssignee`. If the epic has an assignee, the Owner slot's `assigneeKind`, `assigneeRef`, and `assigneeName` fields MUST reflect that assignee. If the epic has no assignee, the Owner slot's `assigneeRef` MUST be null.
+
+### R2: Unstaffed State for Unassigned Epics
+When an epic has no assignee (all three of `assignedUserId`, `assignedAgentRef`, and `assignedAgentHostId` are null), the Owner slot's `state` MUST be `unstaffed`. The system MUST NOT fall back to the first role-capable agent in the tenant, the first explicit project pin, or any auto-hired agent.
+
+### R3: State Recomputation on Assignee Removal
+When an epic's assignee is removed (any of the three assignee fields becomes null), the `syncStates` method MUST recompute the Owner slot's state to `unstaffed` if it was `assigned`, regardless of prior `in_progress` state (unless a sign-off verdict exists). This ensures the Owner slot reflects the epic's current staffing.
+
+### R4: Manager Auto-Staff Exclusion
+The AI Manager's auto-staff sweep (`staffUnfilledRole` in `api/src/application/manager/staffUnfilledRole.ts`) MUST NOT attempt to fill the Owner slot for a ticket whose epic assignee is null. The Owner slot is resolved from the ticket, not from project-level staffing, and auto-staffing it would violate R2. The manager may staff other roles (reviewer, contributor, etc.) but must leave the Owner slot as `unstaffed` when the epic itself is unassigned.
+
+### R5: UI Indicator for Unstaffed Owner
+The frontend Accountability Tab (`frontend/src/components/task/AccountabilityTab.tsx`) MUST display the Owner slot with the existing unstaffed styling (red/danger chip) when its state is `unstaffed`. The board card and ticket header SHOULD display an unstaffed badge or count, matching the pattern used for other unstaffed role gaps in the system.
+
+### R6: API Response
+The API endpoints `GET /api/kanban/tasks/:taskId/participants` and `GET /api/kanban/tasks/:taskId/accountability` MUST include the Owner participant row with `state: "unstaffed"` and `assigneeRef: null` when the epic has no assignee.
+
+### R7: Idempotent Derivation
+Calling `deriveManifest` or `listParticipants` multiple times on an unassigned epic MUST produce the same Owner slot state (`unstaffed`) each time. The derivation is idempotent and does not create duplicate Owner slots.
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
