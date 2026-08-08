@@ -4,7 +4,7 @@ import type { Env, HonoEnv } from '../../env';
 import { isValidVisitorId, type MarketingTouch } from '../../application/marketing/MarketingService';
 import { GuestChatService } from '../../application/guest/GuestChatService';
 import {
-  signGuestToken, verifyGuestToken, guestBrainEnabled, isValidRoomCode, newRoomCode,
+  signGuestToken, guestIdentityFromRequest, guestBrainEnabled, isValidRoomCode, newRoomCode,
 } from '../../application/guest/guestToken';
 import {
   guestRoomsEnabled, openGuestRoom, joinGuestRoom, guestRoomState, guestRoomMessages,
@@ -50,19 +50,12 @@ interface RoomEntryBody {
   touch?: MarketingTouch;
 }
 
-/** Bearer header first, `?token=` second (WebSocket upgrades cannot set headers). */
-function readGuestToken(c: Context<HonoEnv>): string {
-  const header = c.req.header('Authorization') ?? '';
-  if (header.startsWith('Bearer ')) return header.slice(7);
-  return c.req.query('token') ?? '';
-}
-
 export function createGuestRoutes(guest: GuestChatService): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
   /** Resolve the caller's guest identity, requiring membership of `code` when given. */
   async function authenticate(c: Context<HonoEnv>, code?: string): Promise<GuestAuth | null> {
-    const identity = await verifyGuestToken(readGuestToken(c), c.env.JWT_SECRET);
+    const identity = await guestIdentityFromRequest(c.req.raw, c.env.JWT_SECRET);
     if (!identity) return null;
     if (code && identity.roomCode !== code) return null;
     return identity;

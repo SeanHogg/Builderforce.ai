@@ -23,6 +23,7 @@ import type { CreationNodeData } from './types';
 import { exportActionsFor, type CanvasExportAction } from '@/lib/canvasExports';
 import { canvasDiagram, canvasSlides } from '@/lib/canvasDocuments';
 import { canPrintCanvasObject } from '@/lib/printDocument';
+import { hasCanvasDrawing } from '@/lib/renderedSvg';
 import { tabularFromObject } from '@/lib/canvasTabularData';
 
 /**
@@ -37,7 +38,7 @@ const AVAILABILITY: Partial<Record<CanvasExportAction, (data: CreationNodeData) 
   csv: (data) => tabularFromObject(data as Record<string, unknown>).columns.length > 0,
   xlsx: (data) => tabularFromObject(data as Record<string, unknown>).columns.length > 0,
   diagram: (data) => !!canvasDiagram(data),
-  svg: (data) => !!canvasDiagram(data),
+  svg: hasCanvasDrawing,
   pptx: (data) => canvasSlides(data).length > 0,
   pdf: canPrintCanvasObject,
 };

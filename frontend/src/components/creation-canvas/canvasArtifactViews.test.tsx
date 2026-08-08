@@ -281,3 +281,74 @@ describe('every artifact leaves the board in its own native format', () => {
     expect(onExport).toHaveBeenCalledWith('object-1', 'xlsx');
   });
 });
+
+/**
+ * The regression these cover: the capability contract advertised formats the
+ * board could not produce — a PDF for a drawn artifact, HTML for a resume — so a
+ * person was promised a file that did not exist.
+ */
+describe('drawn and written artifacts fill the formats the contract promises', () => {
+  const drawing = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40"><rect width="80" height="40"/></svg>');
+
+  const formats = (data: CreationNodeData) => {
+    const { unmount } = renderNode(data, { onExport: vi.fn() });
+    const group = screen.queryByRole('group', { name: 'Download' });
+    const labels = group ? within(group).getAllByRole('button').map((button) => button.textContent) : [];
+    unmount();
+    return labels;
+  };
+
+  it('offers a resume as Word, PDF and HTML — every form a recruiter asks for', () => {
+    expect(formats({ kind: 'resume', title: 'CV', markdown: '# Jane\n\n## Experience' }))
+      .toEqual(['Word', 'PDF', 'HTML', 'Markdown', 'Copy']);
+  });
+
+  it('offers a drawn CAD profile as SVG and PDF', () => {
+    expect(formats({ kind: 'cad', title: 'Bracket', thumbnailUrl: drawing })).toEqual(['SVG', 'PDF']);
+  });
+
+  it('offers a rendered comic as PDF', () => {
+    expect(formats({ kind: 'comic', title: 'Strip', thumbnailUrl: 'https://example.com/strip.png' })).toEqual(['PDF']);
+  });
+
+  it('offers nothing for a drawn kind that has not been generated yet', () => {
+    // Promising a PDF of a picture that does not exist is the defect these close.
+    expect(formats({ kind: 'cad', title: 'Bracket' })).toEqual([]);
+    expect(formats({ kind: 'comic', title: 'Strip' })).toEqual([]);
+  });
+});
+
+/**
+ * The regression this covers: reading a dropped file is synchronous CPU that can
+ * hold the main thread for seconds, and the node was only created AFTER the
+ * parse — so the drop overlay vanished on release and the canvas showed nothing
+ * at all until the last file finished. The card is the receipt for the drop.
+ */
+describe('a dropped file gets a card before it has been read', () => {
+  const pending: CreationNodeData = {
+    kind: 'file', title: 'Market analysis.pdf', fileName: 'Market analysis.pdf',
+    fileSize: 2_400_000, importPending: true,
+  };
+
+  it('says it is reading, and names the file it is standing in for', () => {
+    renderNode(pending);
+    const status = screen.getByRole('status');
+    expect(within(status).getByText('Reading the file…')).toBeTruthy();
+    expect(status.textContent).toContain('Market analysis.pdf');
+    expect(status.textContent).toContain('2.3 MB');
+  });
+
+  it('offers no downloads while there is nothing yet to take away', () => {
+    renderNode(pending, { onExport: vi.fn() });
+    expect(screen.queryByRole('group', { name: 'Download' })).toBeNull();
+  });
+
+  it('becomes the real artifact in place once the read finishes', () => {
+    // The stub keeps its node id and position; only `data` is replaced, which is
+    // why the card a person is looking at fills in rather than being swapped for
+    // a second one somewhere else on the board.
+    renderNode({ kind: 'document', title: 'Market analysis', markdown: '# Market analysis\n\nDemand is strong.' });
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Market analysis' })).toBeTruthy();
+  });
+});

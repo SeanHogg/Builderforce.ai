@@ -19,9 +19,12 @@
  * invalidation surface (unlike /api/decks, which stores generated decks in R2).
  */
 
-import { Hono } from 'hono';
+import { Hono, type Context, type Next } from 'hono';
 import { authMiddleware } from '../middleware/authMiddleware';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
+import { consumeGuestAllowance } from '../../application/guest/guestDailyCounter';
+import { guestIdentityFromRequest } from '../../application/guest/guestToken';
+import { GUEST_EXPORT_LIMITS } from '../../domain/tenant/PlanLimits';
 import { markdownToDocx } from '../../application/office/docxWriter';
 import { markdownToPptx } from '../../application/office/slidesRenderer';
 import { MAX_XLSX_COLUMNS, MAX_XLSX_ROWS, rowsToXlsx, type XlsxCell } from '../../application/office/xlsxWriter';
@@ -76,9 +79,48 @@ function fileResponse(bytes: Uint8Array, filename: string, contentType: string):
   });
 }
 
+/**
+ * A tenant OR a signed guest — either may render a file here.
+ *
+ * These renders read nothing and persist nothing: the markdown or the rows come
+ * in on the request and the bytes go straight back out. The credential therefore
+ * exists to BOUND an open compute endpoint, not to scope data — and the person
+ * who most needs the file is the logged-out visitor who just filled a board and
+ * has nowhere to put it. Requiring a tenant meant a guest's "Download Word"
+ * silently produced markdown instead.
+ *
+ * A guest is charged against its own UTC-day allowance (visitor + IP), the same
+ * mechanic guest research uses. No guest token at all falls through to the
+ * tenant check, so an authenticated request is unaffected.
+ */
+async function exportAccess(c: Context<HonoEnv>, next: Next): Promise<Response | void> {
+  const guest = await guestIdentityFromRequest(c.req.raw, c.env.JWT_SECRET);
+  if (!guest) return authMiddleware(c, next);
+  const ip = c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null;
+  const allowance = await consumeGuestAllowance(c.env as Env, 'guestexport', guest.visitorId, ip, {
+    visitorDailyLimit: GUEST_EXPORT_LIMITS.exportsDailyLimit,
+    ipDailyLimit: GUEST_EXPORT_LIMITS.ipExportsDailyLimit,
+  });
+  if (!allowance.allowed) {
+    // 429, not 402: a guest has no plan to upgrade, so the next step is signing
+    // up. `terminal` so the client falls back to its own format rather than
+    // retrying a ceiling that will not move until tomorrow.
+    return c.json({
+      error: allowance.reason === 'ip'
+        ? 'This device has reached its free download limit for today. Sign up free to keep going.'
+        : `You've used your ${allowance.limit} free downloads for today. Sign up free to keep going.`,
+      code: 'guest_export_limit_reached',
+      reason: allowance.reason,
+      limit: allowance.limit,
+      terminal: true,
+    }, 429);
+  }
+  return next();
+}
+
 export function createExportRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
-  router.use('*', authMiddleware);
+  router.use('*', exportAccess);
 
   router.post('/docx', async (c) => {
     const parsed = readBody(await c.req.json<ExportBody>());

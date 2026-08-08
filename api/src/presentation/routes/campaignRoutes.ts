@@ -16,7 +16,7 @@
 import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import type { DbHandle as Db } from '../../application/shared/dbHandle';
 import {
   addAudienceMembers,
@@ -37,6 +37,22 @@ import {
   verifySender,
   TRACKING_PIXEL,
 } from '../../application/marketing/campaignEngine';
+import { isCampaignTransport } from '../../application/marketing/campaignTransports';
+import {
+  createAsset,
+  createTemplate,
+  deleteAsset,
+  deleteTemplate,
+  listAssets,
+  listTemplates,
+  logoPrompt,
+  fetchGeneratedImage,
+  readAssetByToken,
+  resolveAssetOrigin,
+  updateTemplate,
+  MAX_ASSET_BYTES,
+} from '../../application/marketing/templateLibrary';
+import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 
 export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
@@ -112,15 +128,28 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
     const body = await c.req.json<{
       name?: string; audienceId?: number; subject?: string; bodyHtml?: string;
       senderIdentityId?: number; projectId?: number; sessionId?: string;
+      transport?: string; mailboxConnectionId?: number; connectorConnectionId?: string;
+      templateId?: number; fromName?: string;
     }>().catch(() => ({}) as never);
     if (!body.name?.trim()) return c.json({ error: 'Name the campaign.' }, 400);
     if (!Number.isInteger(body.audienceId)) return c.json({ error: 'Pick an audience.' }, 400);
+    // An unrecognised transport is rejected rather than silently defaulted: the
+    // caller asked to send through something specific, and quietly using the
+    // platform sender instead would deliver from the wrong identity.
+    if (body.transport !== undefined && !isCampaignTransport(body.transport)) {
+      return c.json({ error: 'Unknown transport.' }, 400);
+    }
     const result = await createCampaign(db, c.get('tenantId') as number, {
       name: body.name,
       audienceId: Number(body.audienceId),
       subject: body.subject,
       bodyHtml: body.bodyHtml,
       senderIdentityId: body.senderIdentityId ?? null,
+      transport: body.transport,
+      mailboxConnectionId: body.mailboxConnectionId ?? null,
+      connectorConnectionId: body.connectorConnectionId ?? null,
+      templateId: body.templateId ?? null,
+      fromName: body.fromName,
       projectId: body.projectId ?? null,
       sessionId: body.sessionId ?? null,
     });
@@ -132,9 +161,162 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
     const campaignId = Number(c.req.param('id'));
     if (!Number.isInteger(campaignId)) return c.json({ error: 'Invalid campaign id.' }, 400);
     const body = await c.req.json<Record<string, never>>().catch(() => ({}) as never);
+    const transport = (body as { transport?: unknown }).transport;
+    if (transport !== undefined && !isCampaignTransport(transport)) {
+      return c.json({ error: 'Unknown transport.' }, 400);
+    }
     const result = await updateCampaign(db, c.get('tenantId') as number, campaignId, body);
     if (!result.ok) return c.json({ error: result.error }, result.status);
     return c.json(result.campaign);
+  });
+
+  // ---- templates -------------------------------------------------------
+
+  router.get('/templates', async (c) =>
+    c.json({ templates: await listTemplates(db, c.get('tenantId') as number) }));
+
+  /**
+   * Create or IMPORT a template. One endpoint for both: an import is a create
+   * whose body came from outside, and the sanitizer runs on either path — a
+   * separate `/import` route would be a second place to forget it.
+   */
+  router.post('/templates', manager, async (c) => {
+    const body = await c.req.json<{
+      name?: string; subject?: string; bodyHtml?: string; description?: string;
+      source?: string; assetId?: number;
+    }>().catch(() => ({}) as never);
+    if (!body.name?.trim()) return c.json({ error: 'Name the template.' }, 400);
+    const result = await createTemplate(db, c.get('tenantId') as number, {
+      name: body.name,
+      subject: body.subject,
+      bodyHtml: body.bodyHtml,
+      description: body.description,
+      source: body.source === 'imported' || body.source === 'generated' ? body.source : 'custom',
+      assetId: body.assetId ?? null,
+      createdBy: c.get('userId') as string,
+    });
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json(result.template, 201);
+  });
+
+  router.patch('/templates/:id', manager, async (c) => {
+    const templateId = Number(c.req.param('id'));
+    if (!Number.isInteger(templateId)) return c.json({ error: 'Invalid template id.' }, 400);
+    const body = await c.req.json<Record<string, never>>().catch(() => ({}) as never);
+    const result = await updateTemplate(db, c.get('tenantId') as number, templateId, body);
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json(result.template);
+  });
+
+  router.delete('/templates/:id', manager, async (c) => {
+    const templateId = Number(c.req.param('id'));
+    if (!Number.isInteger(templateId)) return c.json({ error: 'Invalid template id.' }, 400);
+    await deleteTemplate(db, c.get('tenantId') as number, templateId);
+    return c.body(null, 204);
+  });
+
+  // ---- assets (logos + images) -----------------------------------------
+
+  router.get('/assets', async (c) => {
+    const kind = c.req.query('kind');
+    return c.json({
+      assets: await listAssets(
+        db,
+        c.get('tenantId') as number,
+        resolveAssetOrigin(c.env as Env),
+        kind === 'logo' || kind === 'image' ? kind : undefined,
+      ),
+    });
+  });
+
+  /** Upload an image. multipart/form-data because the payload is binary — a
+   *  base64 JSON body would inflate a 2 MB logo to 2.7 MB on the wire. */
+  router.post('/assets', manager, async (c) => {
+    const form = await c.req.formData().catch(() => null);
+    const file = form?.get('file') as File | null;
+    if (!file || typeof file.arrayBuffer !== 'function') {
+      return c.json({ error: 'Attach an image file.' }, 400);
+    }
+    // Checked before the body is read into memory — the ArrayBuffer below is the
+    // whole file, and a size check after it would have already paid the cost.
+    if (file.size > MAX_ASSET_BYTES) return c.json({ error: 'Images must be 2 MB or smaller.' }, 413);
+
+    const kindRaw = String(form?.get('kind') ?? 'image');
+    const result = await createAsset(db, c.env as Env, c.get('tenantId') as number, {
+      name: String(form?.get('name') ?? file.name ?? 'Image'),
+      bytes: await file.arrayBuffer(),
+      mimeType: file.type || 'application/octet-stream',
+      kind: kindRaw === 'logo' ? 'logo' : 'image',
+      source: 'uploaded',
+      createdBy: c.get('userId') as string,
+    });
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json(result.asset, 201);
+  });
+
+  /**
+   * Generate a logo and store it.
+   *
+   * Generation REPLAYS the app's own `/llm/v1/images/generations` route rather
+   * than calling the image proxy directly, so the tenant's image-credit budget,
+   * plan tier and paid-overflow ceiling are enforced by the one implementation
+   * that owns them. Calling the service here would be a second, ungated door to
+   * the same vendors.
+   */
+  router.post('/assets/generate', manager, async (c) => {
+    const body = await c.req.json<{ description?: string; style?: string; name?: string }>()
+      .catch(() => ({}) as never);
+    const description = (body.description ?? '').trim();
+    if (!description) return c.json({ error: 'Describe the brand or product.' }, 400);
+
+    const prompt = logoPrompt(description, body.style);
+    const auth = c.req.header('authorization');
+    if (!auth) return c.json({ error: 'Not authorized.' }, 401);
+
+    let image: { url?: string; b64_json?: string } | undefined;
+    try {
+      const res = await fetch(new URL('/llm/v1/images/generations', new URL(c.req.url).origin), {
+        method: 'POST',
+        headers: { authorization: auth, 'content-type': 'application/json' },
+        body: JSON.stringify({ prompt, n: 1, size: '1024x1024', useCase: 'marketing-logo' }),
+      });
+      const payload = await res.json().catch(() => ({})) as {
+        data?: Array<{ url?: string; b64_json?: string }>;
+        error?: { message?: string };
+      };
+      // Pass the generator's own refusal through — "you are out of image credits"
+      // is actionable; "logo generation failed" is not.
+      if (!res.ok) {
+        return c.json({ error: payload.error?.message ?? 'Image generation is unavailable.' }, 502);
+      }
+      image = payload.data?.[0];
+    } catch (error) {
+      reportCaughtError(error, { source: 'presentation/routes/campaignRoutes.ts', operation: 'generateLogo' });
+      return c.json({ error: 'Image generation is unavailable.' }, 502);
+    }
+    if (!image) return c.json({ error: 'The generator returned no image. Try a simpler description.' }, 502);
+
+    const fetched = await fetchGeneratedImage(image);
+    if (!fetched) return c.json({ error: 'The generated image could not be stored.' }, 502);
+
+    const result = await createAsset(db, c.env as Env, c.get('tenantId') as number, {
+      name: (body.name ?? description).slice(0, 255),
+      bytes: fetched.bytes,
+      mimeType: fetched.mimeType,
+      kind: 'logo',
+      source: 'generated',
+      prompt,
+      createdBy: c.get('userId') as string,
+    });
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json(result.asset, 201);
+  });
+
+  router.delete('/assets/:id', manager, async (c) => {
+    const assetId = Number(c.req.param('id'));
+    if (!Number.isInteger(assetId)) return c.json({ error: 'Invalid asset id.' }, 400);
+    await deleteAsset(db, c.env as Env, c.get('tenantId') as number, assetId);
+    return c.body(null, 204);
   });
 
   /**
@@ -146,7 +328,7 @@ export function createGrowthRoutes(db: Db): Hono<HonoEnv> {
     const campaignId = Number(c.req.param('id'));
     if (!Number.isInteger(campaignId)) return c.json({ error: 'Invalid campaign id.' }, 400);
     const tenantId = c.get('tenantId') as number;
-    const started = await startCampaign(db, tenantId, campaignId);
+    const started = await startCampaign(c.env as Env, db, tenantId, campaignId);
     if (!started.ok) return c.json({ error: started.error }, started.status);
     const batch = await runCampaignBatch(c.env, db, tenantId, campaignId, {
       trackingOrigin: resolveTrackingOrigin(c.env),
@@ -193,6 +375,42 @@ export function createCampaignTrackRoutes(db: Db): Hono<HonoEnv> {
       ? `${escapeHtml(email)} has been unsubscribed. You will not receive further emails.`
       : 'This unsubscribe link is no longer valid.';
     return c.html(unsubscribePage(message));
+  });
+
+  return router;
+}
+
+/**
+ * Campaign logos and images. No auth, no tenant context — a recipient's MAIL
+ * CLIENT is the caller, and it has no session to authenticate with, so an asset
+ * behind `authMiddleware` renders as a broken image in every inbox.
+ *
+ * The unguessable per-asset token is the whole access model, which is why the
+ * route takes a token and nothing else: there is no id to enumerate and no
+ * tenant parameter to confuse.
+ */
+export function createMarketingAssetRoutes(db: Db): Hono<HonoEnv> {
+  const router = new Hono<HonoEnv>();
+
+  router.get('/:token', async (c) => {
+    const token = c.req.param('token');
+    const asset = await readAssetByToken(db, c.env as Env, token).catch(() => null);
+    if (!asset) return c.notFound();
+    return new Response(asset.body, {
+      headers: {
+        'content-type': asset.mimeType,
+        // Immutable: the token is minted per asset and never reassigned, so a
+        // cached copy can never be the wrong image. A logo re-fetched on every
+        // open of every campaign would be a lot of pointless egress.
+        'cache-control': 'public, max-age=31536000, immutable',
+        // An SVG is a DOCUMENT and can carry script. These two headers are what
+        // stop one from executing against our origin if a tenant uploads a
+        // hostile one — the CSP neutralises the script, and nosniff stops a
+        // mislabelled type being re-interpreted as HTML.
+        'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+        'x-content-type-options': 'nosniff',
+      },
+    });
   });
 
   return router;

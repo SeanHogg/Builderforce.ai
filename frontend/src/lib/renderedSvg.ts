@@ -18,6 +18,9 @@
 /** The properties that carry a diagram's appearance. A whole computed style is
  * ~340 declarations per node, which would balloon the file and drag inherited
  * document defaults into a standalone drawing. */
+import { creativePreviewImageUrl } from './creationDeliverables';
+import type { CreationNodeData } from '@/components/creation-canvas/types';
+
 const PRESENTATION_PROPERTIES = [
   'fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width', 'stroke-opacity',
   'stroke-dasharray', 'stroke-linecap', 'stroke-linejoin',
@@ -84,4 +87,41 @@ export function renderedNodeSvg(nodeId: string): SVGSVGElement | null {
   if (typeof document === 'undefined') return null;
   const wrapper = document.querySelector(`.react-flow__node[data-id="${CSS.escape(nodeId)}"]`);
   return wrapper?.querySelector('svg') ?? null;
+}
+
+/** The SVG a creative artifact was DRAWN as, decoded from the preview data URL
+ * the generator recorded. A CAD profile is a DXF file plus a drawing of it; the
+ * drawing is the thing a person wants as a picture or on a page. */
+function creativePreviewSvg(data: CreationNodeData): string | null {
+  const url = creativePreviewImageUrl(data);
+  if (!url?.startsWith('data:image/svg+xml')) return null;
+  const comma = url.indexOf(',');
+  if (comma < 0) return null;
+  const payload = url.slice(comma + 1);
+  try {
+    return url.slice(0, comma).includes(';base64') ? atob(payload) : decodeURIComponent(payload);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The vector drawing this object currently has, whichever way it got one.
+ *
+ * A diagram is rendered live in the card, so it is read off the DOM; a CAD
+ * profile was drawn once by the generator and stored as a preview data URL. One
+ * question, one answer, so the SVG download and the PDF print agree about what
+ * the picture is.
+ */
+export function canvasObjectSvg(data: CreationNodeData, nodeId: string): string | null {
+  if (data.kind === 'diagram') return serializeRenderedSvg(renderedNodeSvg(nodeId));
+  return creativePreviewSvg(data);
+}
+
+/** Whether this object HAS a drawing to take away, asked before the button is
+ * offered rather than after it fails. Deliberately does not touch the DOM: a
+ * diagram that has resolved its source will render one. */
+export function hasCanvasDrawing(data: CreationNodeData): boolean {
+  if (data.kind === 'diagram') return true;
+  return !!creativePreviewImageUrl(data)?.startsWith('data:image/svg+xml');
 }

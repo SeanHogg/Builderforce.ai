@@ -13,7 +13,7 @@ import { isValidVisitorId } from '../../application/marketing/MarketingService';
 import { claimGuestRoom } from '../../application/guest/guestRoomClient';
 import { rateLimitMiddleware } from '../middleware/rateLimitMiddleware';
 import { signUpload } from '../../infrastructure/auth/uploadSign';
-import { fetchWebDocument } from '../../application/web/webFetch';
+import { fetchWebDocumentCached } from '../../application/web/webFetch';
 import { recordOutboundFetch, enforceOutboundFetchCap } from '../../application/web/outboundFetchLedger';
 import { agentHosts, users, chatTicketLinks } from '../../infrastructure/database/schema';
 import { recordActivity, resolveActorFromContext } from '../../application/activity/activityLog';
@@ -649,7 +649,10 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
 
     let result;
     try {
-      result = await fetchWebDocument(url);
+      // Cached (L1 Map + L2 KV) like every other read of this document: the canvas
+      // Web page panel probes the SAME url on every board that frames it, and a
+      // research turn re-reads its sources. Failures throw and are never cached.
+      result = await fetchWebDocumentCached(c.env as Env, url);
     } catch (e) {
       // SSRF rejection or unreachable origin — a 400 the model can relay.
       return c.json({ error: e instanceof Error ? e.message : 'Could not fetch the URL' }, 400);

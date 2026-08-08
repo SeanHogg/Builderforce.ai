@@ -463,7 +463,8 @@
       "reliability": "Reliability",
       "agentOps": "Agent Ops",
       "sales": "Sales Hub",
-      "challenges": "Challenges"
+      "challenges": "Challenges",
+      "growth": "Growth"
     },
     "tab": {
       "projects": "Projects",
@@ -548,7 +549,8 @@
       "memory": "Memory",
       "rehearsal": "Rehearsal"
     },
-    "primaryAria": "Primary"
+    "primaryAria": "Primary",
+    "group.growth": "Growth"
   },
   "alerts": {
     "title": "Alerts",
@@ -12321,6 +12323,9 @@
     "dropFilesHint": "A Word file opens as pages, a spreadsheet as sheets, a deck as slides — then ask Brain about it.",
     "import": {
       "statusImported": "Imported",
+      "statusImporting": "Reading",
+      "statusTooLarge": "Too large to read",
+      "tooLargeShape": "Attached — files over {limit} MB are not read on the canvas",
       "statusAttached": "Attached",
       "statusUnreadable": "Could not be read",
       "statusTextUnavailable": "Text not extractable",
@@ -12404,6 +12409,7 @@
       "tone_danger": "Failure",
       "tone_info": "Info",
       "fileGeneric": "File",
+      "importReading": "Reading the file…",
       "fileType": "Type",
       "fileSize": "Size",
       "filePreviewAlt": "Preview of {name}",
@@ -12658,7 +12664,38 @@
       "mapRegion": "Region",
       "mapSizedBy": "Sized by",
       "mapAria": "Map of {count} plotted places: {places}",
-      "mapExtent": "{south}° to {north}° N · {west}° to {east}° E"
+      "mapExtent": "{south}° to {north}° N · {west}° to {east}° E",
+      "inboxNotConnected": "Connect a mailbox in Growth to fill this inbox.",
+      "inboxUnread": "{count} unread",
+      "inboxReadAt": "read {time}",
+      "inboxEmpty": "Nothing matches this filter.",
+      "inboxUnknownSender": "Unknown sender",
+      "inboxNoSubject": "(no subject)",
+      "inboxMore": "{count} more",
+      "emailFrom": "From",
+      "emailTo": "To",
+      "emailBody": "Message",
+      "emailNoBody": "This message has no readable text.",
+      "emailOpenInProvider": "Open in mail app",
+      "campaignSent": "Sent",
+      "campaignOpened": "Opened",
+      "campaignClicked": "Clicked",
+      "campaignAudience": "Audience",
+      "campaignVia": "Sent via",
+      "campaignSubject": "Subject",
+      "campaignBlocked": "Not ready",
+      "templateSubject": "Subject",
+      "templateNoSubject": "No subject yet",
+      "templateMergeFields": "Merge fields",
+      "templateNoMergeFields": "Uses only name, email and logo.",
+      "gameNotGenerated": "No game yet. Describe the game you want, then generate it.",
+      "gameGenerateFirst": "Generate to play",
+      "gamePlay": "Play the game",
+      "gameStop": "Stop",
+      "gameReady": "Ready to play",
+      "gameControlKeys": "keyboard",
+      "gameControlTouch": "touch",
+      "gamePlayingAlt": "Playing {title}"
     },
     "editor": {
       "toolbar": "Formatting",
@@ -12690,6 +12727,7 @@
       "group": "Download",
       "copy": "Copy",
       "markdown": "Markdown",
+      "html": "HTML",
       "csv": "CSV",
       "xlsx": "Excel",
       "docx": "Word",
@@ -12853,7 +12891,11 @@
       "pitch": "Pitch",
       "pitchScorecard": "Pitch scorecard",
       "pitchQa": "Judge Q&A",
-      "pitchApplication": "Competition entry"
+      "pitchApplication": "Competition entry",
+      "inbox": "Inbox",
+      "email": "Email",
+      "emailCampaign": "Email campaign",
+      "emailTemplate": "Email template"
     },
     "canvasOutline": "Accessible canvas outline",
     "canvasGestureToggle": "Drag to select",
@@ -13245,11 +13287,11 @@
     "copiedToClipboard": "Copied to clipboard",
     "clipboardUnavailable": "Clipboard access was unavailable",
     "noTabularRows": "This object does not contain tabular rows yet",
-    "markdownDownloadedUsePdf": "Markdown downloaded — save the Session for Word, or export PDF",
+    "markdownDownloadedUsePdf": "Free downloads used up for today — Markdown saved instead; sign up free to keep going",
     "printOpened": "Print view opened — choose “Save as PDF”",
     "printUnavailable": "This browser could not open a print view",
     "noRenderedDrawing": "This diagram has not finished drawing yet",
-    "csvDownloadedSignInForExcel": "CSV downloaded — save the Session for Excel",
+    "csvDownloadedSignInForExcel": "Free downloads used up for today — CSV saved instead; sign up free to keep going",
     "downloadReady": "Download ready",
     "exportFailed": "Export failed",
     "deliverables": "Deliverables",
@@ -13369,6 +13411,26 @@
       "category_code": "Code",
       "category_web": "Site",
       "category_other": "Other"
+    },
+    "drive": {
+      "title": "Cloud files",
+      "close": "Close",
+      "accounts": "Connected accounts",
+      "connect": "Connect {provider}",
+      "notConfigured": "{provider} is not set up on this deployment",
+      "connectPrompt": "Connect a drive to browse your files here.",
+      "noAccounts": "No cloud storage is available on this deployment.",
+      "reconnectNeeded": "This drive needs to be reconnected before its files can be read.",
+      "breadcrumb": "Folder path",
+      "root": "All files",
+      "folder": "Folder",
+      "loading": "Loading…",
+      "opening": "Opening…",
+      "emptyFolder": "This folder is empty.",
+      "loadMore": "Load more",
+      "loadFailed": "Could not read that drive.",
+      "connectFailed": "Could not start the {provider} connection.",
+      "openFailed": "Could not open {name}."
     },
     "creativeSelectFirst": "Select a creative object first",
     "creativePreviewOpened": "Preview opened",
@@ -13719,6 +13781,61 @@
           "founders": "Founder background"
         }
       }
+    },
+    "webPage": {
+      "address": "Address",
+      "addressPlaceholder": "Type a web address and press Enter",
+      "reload": "Reload page",
+      "openInNewTab": "Open in a new tab",
+      "emptyTitle": "No page loaded",
+      "emptyHint": "Enter a web address above, or drop a link onto the board.",
+      "loading": "Loading {host}…",
+      "checking": "Checking whether this page can be embedded…",
+      "blockedTitle": "{host} does not allow being embedded",
+      "blockedHint": "The page is shown as readable text instead. Open it in a new tab to use it live.",
+      "readerEmpty": "No readable text was returned for this page.",
+      "probeFailed": "This page could not be read from the server.",
+      "invalidUrl": "Enter a valid http:// or https:// address.",
+      "statusLive": "Live",
+      "addressLabel": "Web address",
+      "reread": "Reload and re-read page",
+      "inspectorHint": "The page is loaded live on the board. Its text is also read into the canvas so Brain can answer questions about it.",
+      "mixedTitle": "{host} is served over http://",
+      "mixedHint": "A secure page cannot embed an insecure one. The page text is shown instead — open it in a new tab, or view it from the VS Code extension."
+    },
+    "expandPaletteGroup": "Expand {group} section",
+    "collapsePaletteGroup": "Collapse {group} section",
+    "game": {
+      "title": "Play it somewhere real",
+      "shipAction": "Play on a device",
+      "selectFirst": "Select a game object first.",
+      "accountTitle": "Create an account to ship this game",
+      "accountBody": "Save this session to publish the game to a phone, build an app from it, or send it to Roblox.",
+      "needProject": "Connect this game to a Project object to publish it or build an app from it.",
+      "needGame": "Generate the game first — there is nothing to ship yet.",
+      "phoneTitle": "On a phone",
+      "phoneIntro": "Publish the game to its own address, then install it to the home screen on Android or iPhone. Fullscreen, offline, touch controls.",
+      "phoneScan": "Scan this with a phone camera to play it right now.",
+      "qrAlt": "QR code for the published game",
+      "publish": "Publish",
+      "republish": "Publish update",
+      "publishing": "Publishing…",
+      "published": "Game published at {url}",
+      "installIos": "iPhone: open the link in Safari, then Share → Add to Home Screen.",
+      "installAndroid": "Android: open the link in Chrome and tap Install when it offers.",
+      "zeroSetup": "no setup",
+      "build": "Build it",
+      "rebuild": "Rebuild",
+      "building": "Building…",
+      "openIt": "Open",
+      "openLink": "Open",
+      "materialized": "{label}: wrote {count} files",
+      "wroteFiles": "{count} files in {directory}",
+      "universeId": "Roblox Universe ID",
+      "placeId": "Roblox Place ID",
+      "robloxIdsHint": "Both numbers are in the Creator Dashboard URL for an experience you have already published from Studio.",
+      "publishRoblox": "Publish to Roblox",
+      "robloxPublished": "Published to Roblox as version {version}"
     }
   },
   "canvasCommands": {
@@ -14050,7 +14167,7 @@
   },
   "growth": {
     "title": "Growth",
-    "description": "Reach the people who signed up on the site you built.",
+    "description": "Read the mailbox you already use, and reach the people who signed up on the site you built.",
     "genericError": "Something went wrong. Try again.",
     "audiences": {
       "title": "Audiences",
@@ -14079,7 +14196,7 @@
     },
     "campaigns": {
       "title": "Campaigns",
-      "description": "A campaign needs a subject, a verified From address and an audience with members.",
+      "description": "A campaign needs a subject, an audience with members, and something to send from.",
       "empty": "No campaigns yet.",
       "namePlaceholder": "Launch announcement",
       "nameLabel": "Campaign name",
@@ -14103,8 +14220,99 @@
         "status": "Already sent",
         "subject": "Add a subject",
         "sender": "Verify a From address",
-        "audience": "Audience is empty"
+        "audience": "Audience is empty",
+        "mailbox": "Choose a connected mailbox",
+        "connection": "Choose a SendGrid connection"
+      },
+      "compose": "New campaign",
+      "confirmSendTitle": "Send this campaign?",
+      "confirmSend": "Send “{name}” to everyone in its audience? This reaches real people and cannot be undone.",
+      "transport": {
+        "platform": "Sent by Builderforce",
+        "mailbox": "Sent from your mailbox",
+        "sendgrid": "Sent via Twilio SendGrid"
       }
+    },
+    "mailboxes": {
+      "title": "Mailboxes",
+      "description": "Connect Microsoft 365 or Gmail to read your inbox on a canvas and send campaigns as yourself.",
+      "empty": "No mailbox connected yet.",
+      "connect": "Connect {provider}",
+      "connected": "Mailbox connected.",
+      "disconnect": "Disconnect",
+      "disconnected": "Mailbox disconnected.",
+      "confirmDisconnect": "Disconnect {email}? Campaigns that send from it will stop.",
+      "allowSending": "Allow campaigns to send from this mailbox",
+      "sendingUpdated": "Sending permission updated.",
+      "notConfigured": "This provider is not configured on this deployment.",
+      "status": {
+        "connected": "Connected",
+        "reconnect": "Reconnect needed"
+      },
+      "provider": {
+        "microsoft": "Microsoft 365",
+        "google": "Gmail"
+      },
+      "error": {
+        "declined": "You declined access, so no mailbox was connected.",
+        "failed": "That mailbox could not be connected. Try again."
+      }
+    },
+    "brand": {
+      "title": "Logos and images",
+      "description": "Images an email can load. Templates using '{{logo}}' pick up your most recent logo.",
+      "empty": "No images yet.",
+      "upload": "Upload a logo",
+      "uploaded": "Image uploaded.",
+      "generate": "Generate",
+      "generated": "Logo generated.",
+      "generatePlaceholder": "A boutique coffee roaster in Melbourne",
+      "generateLabel": "Describe the business",
+      "delete": "Delete",
+      "deleted": "Image deleted.",
+      "confirmDelete": "Delete {name}? Templates using it will show a broken image."
+    },
+    "templates": {
+      "title": "Templates",
+      "description": "Reusable subject and body. Imported HTML is cleaned before it is stored.",
+      "empty": "No templates yet.",
+      "use": "Use",
+      "delete": "Delete",
+      "deleted": "Template deleted.",
+      "import": "Import HTML",
+      "imported": "Template imported.",
+      "confirmDelete": "Delete the template {name}?",
+      "mergeFields": "Needs: {fields}",
+      "source": {
+        "builtin": "Starter",
+        "custom": "Custom",
+        "imported": "Imported",
+        "generated": "AI"
+      }
+    },
+    "composer": {
+      "title": "New campaign",
+      "audience": "Audience",
+      "audienceOption": "{name} ({count} members)",
+      "template": "Start from a template",
+      "noTemplate": "Write from scratch",
+      "transport": "Send it through",
+      "transportHint": {
+        "platform": "From an address whose domain you verified with a TXT record.",
+        "mailbox": "From your connected Microsoft 365 or Gmail account, as yourself.",
+        "sendgrid": "Through your own Twilio SendGrid key, from a verified address."
+      },
+      "mailbox": "Mailbox",
+      "noMailboxes": "No mailbox is connected and enabled for sending.",
+      "sender": "From address",
+      "noSenders": "No verified From address yet.",
+      "fromName": "Display name",
+      "fromNamePlaceholder": "Acme Team",
+      "choose": "Choose…",
+      "mergeHelp": "Use '{{name}}', '{{email}}', '{{logo}}' and '{{unsubscribe}}', or any '{{field}}' from your audience.",
+      "cancel": "Cancel",
+      "connection": "SendGrid connection",
+      "noConnections": "No enabled SendGrid connection. Add one in Settings → Integrations → Connectors."
     }
   },
   "cookieConsent": {

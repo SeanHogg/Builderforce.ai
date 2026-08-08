@@ -154,6 +154,14 @@ export const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    // Growth was built in 0412 and never linked from anywhere — the page existed
+    // but no route in the app reached it, so the whole marketing surface was
+    // dead. It is a destination in its own right now that it also owns connected
+    // mailboxes and the campaign studio (0414).
+    id: 'growth', labelKey: 'group.growth', icon: '📣', href: '/growth',
+    match: ['/growth'],
+  },
+  {
     id: 'quality', labelKey: 'group.quality', icon: '🐞', href: '/quality',
     match: ['/quality'],
     tabKind: 'query', basePath: '/quality',

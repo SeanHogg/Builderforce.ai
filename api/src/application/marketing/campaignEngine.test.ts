@@ -205,59 +205,83 @@ describe('verifySender', () => {
   });
 });
 
+/**
+ * The campaign row as `loadTransportBinding` reads it — the campaign LEFT-joined
+ * to its sender identity, which is why the sender columns are flattened in here
+ * rather than arriving as a second query.
+ */
+const draftRow = {
+  id: 1, status: 'draft', subject: 'Hello', bodyHtml: '<p>Hi</p>', audienceId: 11,
+  transport: 'platform', mailboxConnectionId: null, connectorConnectionId: null,
+  fromName: '', senderIdentityId: 5,
+  senderFromEmail: 'hi@acme.com', senderFromName: 'Acme', senderStatus: 'verified',
+};
+
 describe('startCampaign — the gates that protect real people', () => {
-  const draft = {
-    id: 1, status: 'draft', subject: 'Hello', audienceId: 11, senderIdentityId: 5,
-  };
+  const env = {} as Env;
 
   it('404s an unknown campaign', async () => {
-    await expect(startCampaign(fakeDb([[]]) as unknown as Db, 7, 1))
+    await expect(startCampaign(env, fakeDb([[]]) as unknown as Db, 7, 1))
       .resolves.toMatchObject({ ok: false, status: 404 });
   });
 
   it('refuses to restart a campaign that is already sending', async () => {
-    const db = fakeDb([[{ ...draft, status: 'sending' }]]);
-    await expect(startCampaign(db as unknown as Db, 7, 1)).resolves.toMatchObject({ ok: false, status: 409 });
+    const db = fakeDb([[{ ...draftRow, status: 'sending' }]]);
+    await expect(startCampaign(env, db as unknown as Db, 7, 1)).resolves.toMatchObject({ ok: false, status: 409 });
   });
 
   it('refuses an empty subject', async () => {
-    const db = fakeDb([[{ ...draft, subject: '  ' }]]);
-    await expect(startCampaign(db as unknown as Db, 7, 1)).resolves.toMatchObject({ ok: false, status: 400 });
+    const db = fakeDb([[{ ...draftRow, subject: '  ' }]]);
+    await expect(startCampaign(env, db as unknown as Db, 7, 1)).resolves.toMatchObject({ ok: false, status: 400 });
   });
 
   it('refuses when no From address is chosen', async () => {
-    const db = fakeDb([[{ ...draft, senderIdentityId: null }]]);
-    const result = await startCampaign(db as unknown as Db, 7, 1);
+    const db = fakeDb([[{ ...draftRow, senderIdentityId: null, senderFromEmail: null, senderStatus: null }]]);
+    const result = await startCampaign(env, db as unknown as Db, 7, 1);
     expect(result).toMatchObject({ ok: false, status: 400 });
     expect((result as { error: string }).error).toContain('verified From address');
   });
 
   it('REFUSES an unverified sender — a tenant cannot send as a domain they do not own', async () => {
-    const db = fakeDb([[draft], [{ status: 'pending' }]]);
-    const result = await startCampaign(db as unknown as Db, 7, 1);
+    const db = fakeDb([[{ ...draftRow, senderStatus: 'pending' }]]);
+    const result = await startCampaign(env, db as unknown as Db, 7, 1);
     expect(result).toMatchObject({ ok: false, status: 400 });
     expect((result as { error: string }).error).toContain('not verified');
   });
 
+  it('refuses a mailbox campaign with no mailbox chosen', async () => {
+    const db = fakeDb([[{ ...draftRow, transport: 'mailbox', senderIdentityId: null, senderFromEmail: null }]]);
+    const result = await startCampaign(env, db as unknown as Db, 7, 1);
+    expect(result).toMatchObject({ ok: false, status: 400 });
+    expect((result as { error: string }).error).toContain('connected mailbox');
+  });
+
+  it('refuses a SendGrid campaign with no connection chosen', async () => {
+    const db = fakeDb([[{ ...draftRow, transport: 'sendgrid' }]]);
+    const result = await startCampaign(env, db as unknown as Db, 7, 1);
+    expect(result).toMatchObject({ ok: false, status: 400 });
+    expect((result as { error: string }).error).toContain('SendGrid');
+  });
+
   it('refuses an audience with no subscribed members', async () => {
-    const db = fakeDb([[draft], [{ status: 'verified' }], []]);
-    await expect(startCampaign(db as unknown as Db, 7, 1)).resolves.toMatchObject({ ok: false, status: 400 });
+    const db = fakeDb([[draftRow], []]);
+    await expect(startCampaign(env, db as unknown as Db, 7, 1)).resolves.toMatchObject({ ok: false, status: 400 });
   });
 
   it('refuses when every member has unsubscribed', async () => {
     const db = fakeDb([
-      [draft], [{ status: 'verified' }],
+      [draftRow],
       [{ email: 'a@x.com' }],
       [{ email: 'a@x.com' }],   // …and they are suppressed
     ]);
-    const result = await startCampaign(db as unknown as Db, 7, 1);
+    const result = await startCampaign(env, db as unknown as Db, 7, 1);
     expect(result).toMatchObject({ ok: false, status: 400 });
     expect((result as { error: string }).error).toContain('unsubscribed');
   });
 
   it('queues only the deliverable recipients and counts the suppressed ones', async () => {
     const db = fakeDb([
-      [draft], [{ status: 'verified' }],
+      [draftRow],
       [{ email: 'a@x.com' }, { email: 'b@x.com' }, { email: 'c@x.com' }],
       [{ email: 'b@x.com' }],
       [],
@@ -265,7 +289,7 @@ describe('startCampaign — the gates that protect real people', () => {
          recipients: 2, sent: 0, failed: 0, suppressed: 1, opened: 0, clicked: 0,
          startedAt: null, completedAt: null, updatedAt: new Date() }],
     ]);
-    const result = await startCampaign(db as unknown as Db, 7, 1);
+    const result = await startCampaign(env, db as unknown as Db, 7, 1);
     expect(result).toMatchObject({ ok: true, queued: 2, suppressed: 1 });
 
     const sends = db.calls.find((c) => c.kind === 'insert')!;
@@ -288,28 +312,44 @@ describe('updateCampaign', () => {
 
 describe('runCampaignBatch', () => {
   const env = {} as Env;
-  const campaign = { id: 1, status: 'sending', subject: 'Hi', bodyHtml: '<p>Hi</p>', senderIdentityId: 5 };
-  const sender = { fromEmail: 'hi@acme.com', fromName: 'Acme', status: 'verified' };
+  const sending = { ...draftRow, status: 'sending' };
+  /** No logo asset configured — `defaultLogoUrl`'s query returns nothing. */
+  const noLogo: unknown[] = [];
 
   it('does nothing for a campaign that is not sending', async () => {
-    const db = fakeDb([[{ ...campaign, status: 'draft' }]]);
+    const db = fakeDb([[{ ...sending, status: 'draft' }]]);
     await expect(runCampaignBatch(env, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN }))
       .resolves.toMatchObject({ sent: 0, status: 'draft' });
   });
 
   it('fails the campaign if the sender lost verification mid-send', async () => {
-    const db = fakeDb([[campaign], [{ ...sender, status: 'pending' }], []]);
+    const db = fakeDb([[{ ...sending, senderStatus: 'pending' }], [], []]);
     const result = await runCampaignBatch(env, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
     expect(result.status).toBe('failed');
     expect(sendMock).not.toHaveBeenCalled();
   });
 
+  it('marks the still-queued rows failed when the transport breaks mid-campaign', async () => {
+    // Otherwise the campaign reads as `failed` while every recipient sits at
+    // `queued` forever, and nothing explains why they were never contacted.
+    const db = fakeDb([[{ ...sending, senderStatus: 'pending' }], [], []]);
+    await runCampaignBatch(env, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
+    const sendWrite = db.calls.find(
+      (c) => c.kind === 'update' && (c.payload as { status?: string })?.status === 'failed'
+        && (c.payload as { error?: string })?.error,
+    );
+    expect((sendWrite!.payload as { error: string }).error).toContain('not verified');
+  });
+
   it('sends each claimed recipient once and completes the campaign when the queue drains', async () => {
     sendMock.mockClear();
     const db = fakeDb([
-      [campaign],
-      [sender],
-      [{ id: 1, email: 'a@x.com', trackToken: 't1' }, { id: 2, email: 'b@x.com', trackToken: 't2' }],
+      [sending],
+      noLogo,
+      [
+        { id: 1, email: 'a@x.com', trackToken: 't1', attempts: 0, name: 'Ada', attributes: {} },
+        { id: 2, email: 'b@x.com', trackToken: 't2', attempts: 0, name: '', attributes: {} },
+      ],
       [{ id: 1 }], [],   // claim + mark sent, recipient 1
       [{ id: 2 }], [],   // claim + mark sent, recipient 2
       [{ remaining: 0 }],
@@ -324,11 +364,24 @@ describe('runCampaignBatch', () => {
     expect(first.html).toContain('unsubscribe/t1');
   });
 
+  it('counts the attempt AT CLAIM, so a runner that dies cannot retry forever', async () => {
+    sendMock.mockClear();
+    const db = fakeDb([
+      [sending], noLogo,
+      [{ id: 1, email: 'a@x.com', trackToken: 't1', attempts: 0, name: '', attributes: {} }],
+      [{ id: 1 }], [],
+      [{ remaining: 0 }], [],
+    ]);
+    await runCampaignBatch(env, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
+    const claim = db.calls.find((c) => c.kind === 'update' && (c.payload as { status?: string })?.status === 'sending');
+    expect(claim!.payload).toHaveProperty('attempts');
+  });
+
   it('SKIPS a recipient another runner already claimed', async () => {
     sendMock.mockClear();
     const db = fakeDb([
-      [campaign], [sender],
-      [{ id: 1, email: 'a@x.com', trackToken: 't1' }],
+      [sending], noLogo,
+      [{ id: 1, email: 'a@x.com', trackToken: 't1', attempts: 0, name: '', attributes: {} }],
       [],                  // the conditional claim matched zero rows → someone else has it
       [{ remaining: 1 }],
       [],
@@ -342,8 +395,13 @@ describe('runCampaignBatch', () => {
     sendMock.mockClear();
     sendMock.mockRejectedValueOnce(new Error('mailbox full'));
     const db = fakeDb([
-      [campaign], [sender],
-      [{ id: 1, email: 'a@x.com', trackToken: 't1' }, { id: 2, email: 'b@x.com', trackToken: 't2' }],
+      [sending], noLogo,
+      [
+        // Already at the attempt ceiling, so the platform transport's retryable
+        // classification cannot requeue it — it must land as `failed`.
+        { id: 1, email: 'a@x.com', trackToken: 't1', attempts: 2, name: '', attributes: {} },
+        { id: 2, email: 'b@x.com', trackToken: 't2', attempts: 0, name: '', attributes: {} },
+      ],
       [{ id: 1 }], [],
       [{ id: 2 }], [],
       [{ remaining: 0 }],
@@ -353,6 +411,22 @@ describe('runCampaignBatch', () => {
     expect(result).toMatchObject({ sent: 1, failed: 1 });
     const failedWrite = db.calls.find((c) => c.kind === 'update' && (c.payload as { error?: string })?.error);
     expect((failedWrite!.payload as { error: string }).error).toContain('mailbox full');
+  });
+
+  it('REQUEUES a retryable failure below the ceiling instead of burning the recipient', async () => {
+    sendMock.mockClear();
+    sendMock.mockRejectedValueOnce(new Error('429 slow down'));
+    const db = fakeDb([
+      [sending], noLogo,
+      [{ id: 1, email: 'a@x.com', trackToken: 't1', attempts: 0, name: '', attributes: {} }],
+      [{ id: 1 }], [],
+      [{ remaining: 1 }], [],
+    ]);
+    const result = await runCampaignBatch(env, db as unknown as Db, 7, 1, { trackingOrigin: ORIGIN });
+    // Not counted as failed — the next sweep will try again.
+    expect(result.failed).toBe(0);
+    const write = db.calls.find((c) => c.kind === 'update' && (c.payload as { error?: string })?.error);
+    expect((write!.payload as { status: string }).status).toBe('queued');
   });
 });
 

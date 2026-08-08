@@ -2381,6 +2381,200 @@ const CATALOG: BuiltinTool[] = [
   },
   { tool: 'swimlane_agents.remove', mutates: true, description: 'Unassign an agent from a swimlane.', parameters: obj({ boardId: S, laneId: S, id: S }, ['boardId', 'laneId', 'id']), run: async (ctx, a) => { const seg = await resolveSegment(ctx.db, ctx.tenantId); const [lane] = await ctx.db.select({ id: swimlanes.id }).from(swimlanes).innerJoin(boards, eq(swimlanes.boardId, boards.id)).where(and(eq(swimlanes.id, str(a.laneId)), eq(boards.id, str(a.boardId)), eq(swimlanes.tenantId, ctx.tenantId), eq(swimlanes.segmentId, seg))).limit(1); if (!lane) return { deleted: null }; const rows = await ctx.db.delete(swimlaneAgentAssignments).where(and(eq(swimlaneAgentAssignments.id, str(a.id)), eq(swimlaneAgentAssignments.swimlaneId, lane.id), eq(swimlaneAgentAssignments.tenantId, ctx.tenantId), eq(swimlaneAgentAssignments.segmentId, seg))).returning({ id: swimlaneAgentAssignments.id }); return { deleted: rows.length > 0 ? str(a.id) : null }; } },
 
+  // ---- CONNECTED MAILBOXES + EMAIL MARKETING -------------------------------
+  //
+  // What "show me my inbox and email that list" needs the model to be able to do.
+  // Five reads and three writes, split along the line that matters: reading a
+  // mailbox and drafting a campaign are safe to do speculatively, whereas
+  // `campaign.send` reaches thousands of real strangers and is the one call here
+  // that cannot be taken back.
+  //
+  // Two design notes that are load-bearing rather than stylistic:
+  //
+  //  • `mailbox.list_messages` returns the TRIAGE projection, not full messages.
+  //    The Brain re-sends its whole transcript every turn, so 25 full marketing
+  //    emails is tens of thousands of tokens that evict the actual conversation.
+  //    A model that needs one message in full asks for it by id.
+  //  • Every mailbox tool takes `accountEmail` as an alternative to a numeric id.
+  //    A user says "send it from hello@acme.com"; an agent has no id to hand, and
+  //    forcing one would cost a disambiguation round-trip on every single call.
+  {
+    tool: 'mailbox.list_connections', mutates: false,
+    description: 'List the Microsoft 365 and Gmail mailboxes connected to this workspace, with the account address, whether the grant is still live (`status`), and whether campaigns are allowed to send from it (`allowSending`). Call this FIRST when asked to read an inbox or send from "my email" — it is what tells you which mailbox the user means and whether you need to ask.',
+    parameters: obj({}),
+    run: async (ctx) => {
+      const { listMailboxConnections } = await import('../mailbox/mailboxService');
+      return { connections: await listMailboxConnections(ctx.db, ctx.tenantId) };
+    },
+  },
+  {
+    tool: 'mailbox.list_messages', mutates: false,
+    description: 'READ AND FILTER a connected mailbox. Returns a COMPACT projection of each message (sender, subject, received time, unread flag, and a ~600-character excerpt) — enough to triage, rank, summarise or answer "which of these need a reply?" without pulling whole emails into context. Filters combine: `q` free-text search, `from` sender substring, `subject` substring, `unread`, `hasAttachments`, and `after`/`before` ISO instants. Identify the mailbox by `accountEmail` or `connectionId`; with exactly one mailbox connected you may omit both. When a message needs reading in full, call mailbox.get_message with its id.',
+    parameters: obj({
+      connectionId: N, accountEmail: S, q: S, from: S, subject: S,
+      unread: B, hasAttachments: B, after: S, before: S, limit: N,
+    }, []),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('reading a mailbox needs the platform environment');
+      const { resolveMailbox, readMailbox, toTriageMessages } = await import('../mailbox/mailboxService');
+      const resolved = await resolveMailbox(ctx.db, ctx.tenantId, {
+        connectionId: a.connectionId != null ? num(a.connectionId) : null,
+        accountEmail: a.accountEmail != null ? str(a.accountEmail) : null,
+      });
+      if (!resolved.ok) throw new Error(resolved.error);
+      const result = await readMailbox(ctx.db, ctx.env, ctx.tenantId, resolved.connection.id, {
+        search: a.q != null ? str(a.q) : undefined,
+        from: a.from != null ? str(a.from) : undefined,
+        subject: a.subject != null ? str(a.subject) : undefined,
+        unreadOnly: a.unread === true,
+        hasAttachments: a.hasAttachments === true,
+        afterISO: a.after != null ? str(a.after) : undefined,
+        beforeISO: a.before != null ? str(a.before) : undefined,
+        limit: a.limit != null ? num(a.limit) : undefined,
+      });
+      if (!result.ok) throw new Error(result.error);
+      return {
+        accountEmail: result.accountEmail,
+        provider: result.provider,
+        total: result.messages.length,
+        messages: toTriageMessages(result.messages),
+      };
+    },
+  },
+  {
+    tool: 'mailbox.get_message', mutates: false,
+    description: 'Read ONE message from a connected mailbox in full — the complete plain-text body, every recipient, and a link into the provider\'s web client. Use after mailbox.list_messages has narrowed things down; reading many messages this way will exhaust your context.',
+    parameters: obj({ messageId: S, connectionId: N, accountEmail: S }, ['messageId']),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('reading a mailbox needs the platform environment');
+      const { resolveMailbox, readMailboxMessage } = await import('../mailbox/mailboxService');
+      const resolved = await resolveMailbox(ctx.db, ctx.tenantId, {
+        connectionId: a.connectionId != null ? num(a.connectionId) : null,
+        accountEmail: a.accountEmail != null ? str(a.accountEmail) : null,
+      });
+      if (!resolved.ok) throw new Error(resolved.error);
+      const result = await readMailboxMessage(
+        ctx.db, ctx.env, ctx.tenantId, resolved.connection.id, str(a.messageId),
+      );
+      if (!result.ok) throw new Error(result.error);
+      return result.message;
+    },
+  },
+  {
+    tool: 'mailbox.send', mutates: true,
+    description: 'Send ONE email from a connected mailbox — a reply, an introduction, a single follow-up. This is for individual correspondence; to email a LIST, build a campaign (campaign.create then campaign.send) so that suppression, one-click unsubscribe and the per-recipient delivery ledger all apply. The From address is always the connected mailbox and cannot be forged.',
+    parameters: obj({ to: S, subject: S, html: S, connectionId: N, accountEmail: S, replyTo: S }, ['to', 'subject', 'html']),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('sending from a mailbox needs the platform environment');
+      const { resolveMailbox, sendFromMailbox } = await import('../mailbox/mailboxService');
+      const resolved = await resolveMailbox(ctx.db, ctx.tenantId, {
+        connectionId: a.connectionId != null ? num(a.connectionId) : null,
+        accountEmail: a.accountEmail != null ? str(a.accountEmail) : null,
+      }, { forSending: true });
+      if (!resolved.ok) throw new Error(resolved.error);
+      const result = await sendFromMailbox(ctx.db, ctx.env, ctx.tenantId, resolved.connection.id, {
+        to: str(a.to),
+        subject: str(a.subject),
+        html: str(a.html),
+        replyTo: a.replyTo != null ? str(a.replyTo) : undefined,
+      });
+      if (!result.ok) throw new Error(result.error);
+      return { sent: true, from: result.accountEmail, id: result.id };
+    },
+  },
+  {
+    tool: 'marketing.list_templates', mutates: false,
+    description: 'List this workspace\'s reusable email templates — name, subject, and `mergeFields` (the placeholders each body references beyond the always-available name/email/logo). Use `mergeFields` to check the audience actually carries those attributes BEFORE building a campaign from a template; a missing one renders as an empty gap in a real person\'s inbox.',
+    parameters: obj({}),
+    run: async (ctx) => {
+      const { listTemplates } = await import('../marketing/templateLibrary');
+      const templates = await listTemplates(ctx.db, ctx.tenantId);
+      // Bodies are omitted: a template is several KB of table markup and the
+      // model needs the CONTRACT (subject + merge fields), not the HTML.
+      return {
+        templates: templates.map(({ bodyHtml: _body, ...rest }) => ({ ...rest, bytes: _body.length })),
+      };
+    },
+  },
+  {
+    tool: 'marketing.create_template', mutates: true,
+    description: 'Save an email template for reuse. `bodyHtml` is sanitized on write (script/iframe/event handlers stripped). Use `{{name}}`, `{{email}}`, `{{logo}}` and `{{unsubscribe}}` for the always-available fields, and any other `{{field}}` to pull from an audience member\'s attributes. Write table-based HTML with inline styles and state both text and background colours explicitly — mail clients strip stylesheets, and a body that inherits its colours renders black-on-black in a dark-mode inbox.',
+    parameters: obj({ name: S, subject: S, bodyHtml: S, description: S }, ['name', 'bodyHtml']),
+    run: async (ctx, a) => {
+      const { createTemplate } = await import('../marketing/templateLibrary');
+      const result = await createTemplate(ctx.db, ctx.tenantId, {
+        name: str(a.name),
+        subject: a.subject != null ? str(a.subject) : '',
+        bodyHtml: str(a.bodyHtml),
+        description: a.description != null ? str(a.description) : '',
+        source: 'generated',
+        createdBy: ctx.userId ?? null,
+      });
+      if (!result.ok) throw new Error(result.error);
+      return result.template;
+    },
+  },
+  {
+    tool: 'marketing.list_assets', mutates: false,
+    description: 'List the workspace\'s campaign logos and images with their public URLs — the URLs a template\'s <img src> must point at, because a recipient\'s mail client has no session and cannot load an authenticated one. A template using `{{logo}}` resolves the most recent asset of kind "logo" automatically.',
+    parameters: obj({ kind: S }, []),
+    run: async (ctx, a) => {
+      if (!ctx.env) throw new Error('listing assets needs the platform environment');
+      const { listAssets, resolveAssetOrigin } = await import('../marketing/templateLibrary');
+      const kind = str(a.kind);
+      return {
+        assets: await listAssets(
+          ctx.db, ctx.tenantId, resolveAssetOrigin(ctx.env),
+          kind === 'logo' || kind === 'image' ? kind : undefined,
+        ),
+      };
+    },
+  },
+  {
+    tool: 'marketing.generate_logo', mutates: true,
+    description: 'Generate a logo from a description of the brand and store it as a reusable campaign asset, returning its public URL. Describe the BUSINESS, not the picture ("a boutique coffee roaster in Melbourne") — the prompt is shaped for you into a flat, text-free mark that stays legible at 40 pixels tall in an email header. Counts against the workspace\'s image-generation credits.',
+    parameters: obj({ description: S, style: S, name: S }, ['description']),
+    run: (ctx, a) => replayRoute(ctx, 'POST', '/api/growth/assets/generate', {
+      description: str(a.description),
+      ...(a.style != null ? { style: str(a.style) } : {}),
+      ...(a.name != null ? { name: str(a.name) } : {}),
+    }),
+  },
+  {
+    tool: 'campaign.create', mutates: true,
+    description: 'Draft a marketing campaign against an audience. Creating it does NOT send it — the draft is reviewable and editable until campaign.send. Choose `transport`: "platform" (default) sends from a DNS-verified sender identity through Builderforce; "mailbox" sends from a connected Microsoft 365 / Gmail account (pass `mailboxConnectionId`); "sendgrid" sends through the workspace\'s Twilio SendGrid connection (pass `connectorConnectionId` AND a verified `senderIdentityId`, because SendGrid enforces its own sender verification). Pass `templateId` to inherit that template\'s subject and body, which are COPIED in — editing the template afterwards will not change this campaign.',
+    parameters: obj({
+      name: S, audienceId: N, subject: S, bodyHtml: S, templateId: N,
+      transport: S, senderIdentityId: N, mailboxConnectionId: N, connectorConnectionId: S,
+      fromName: S, projectId: N,
+    }, ['name', 'audienceId']),
+    run: (ctx, a) => replayRoute(ctx, 'POST', '/api/growth/campaigns', {
+      name: str(a.name),
+      audienceId: num(a.audienceId),
+      ...(a.subject != null ? { subject: str(a.subject) } : {}),
+      ...(a.bodyHtml != null ? { bodyHtml: str(a.bodyHtml) } : {}),
+      ...(a.templateId != null ? { templateId: num(a.templateId) } : {}),
+      ...(a.transport != null ? { transport: str(a.transport) } : {}),
+      ...(a.senderIdentityId != null ? { senderIdentityId: num(a.senderIdentityId) } : {}),
+      ...(a.mailboxConnectionId != null ? { mailboxConnectionId: num(a.mailboxConnectionId) } : {}),
+      ...(a.connectorConnectionId != null ? { connectorConnectionId: str(a.connectorConnectionId) } : {}),
+      ...(a.fromName != null ? { fromName: str(a.fromName) } : {}),
+      ...(a.projectId != null ? { projectId: num(a.projectId) } : {}),
+    }),
+  },
+  {
+    tool: 'campaign.send', mutates: true,
+    description: 'SEND a draft campaign to its whole audience. THIS REACHES REAL PEOPLE AND CANNOT BE UNDONE — confirm with the user before calling it, and never call it speculatively or to "test" a campaign. Suppressed addresses are excluded and every message carries a working one-click unsubscribe. Returns what was queued, what was suppressed, and the first batch\'s result; a large audience finishes on the background sweep.',
+    parameters: obj({ campaignId: N }, ['campaignId']),
+    run: (ctx, a) => replayRoute(ctx, 'POST', `/api/growth/campaigns/${num(a.campaignId)}/send`),
+  },
+  {
+    tool: 'campaign.list', mutates: false,
+    description: 'List this workspace\'s marketing campaigns with their status and delivery counters (recipients, sent, failed, suppressed, opened, clicked). The counters are maintained by the send engine, so they are what actually happened rather than what was intended.',
+    parameters: obj({}),
+    run: (ctx) => replayRoute(ctx, 'GET', '/api/growth/campaigns'),
+  },
+
   // ---- Integrations + Platform migration (Jira/Monday/Rally/GitLab/Bitbucket/GitHub → BuilderForce) ----
   // The Brain can drive the whole "connect → test → migrate" flow: create a
   // credential, validate it, then discover→map→stage→commit a migration run.
@@ -3309,6 +3503,17 @@ export const CLOUD_AGENT_PLATFORM_TOOLS: readonly string[] = [
   'work_items.convert_type', 'pmo.tree', 'pmo.rollup', 'pmo.link_project', 'pmo.add_dependency',
   // Team chat — a PM/manager agent asks the team for status or shares a burndown.
   'team_chat.read', 'team_chat.post',
+  // Mailboxes and campaigns — READ AND DRAFT ONLY.
+  //
+  // An autonomous run may read an inbox, triage it, look at the template and
+  // asset library, and draft a campaign, because none of that reaches anyone.
+  // `mailbox.send`, `campaign.send` and `marketing.generate_logo` are all
+  // deliberately absent: the first two contact real strangers with no human in
+  // the loop to stop them, and the third spends the tenant's image credits. Same
+  // restraint as excluding executions.submit — a run proposes, a person sends.
+  'mailbox.list_connections', 'mailbox.list_messages', 'mailbox.get_message',
+  'marketing.list_templates', 'marketing.create_template', 'marketing.list_assets',
+  'campaign.list', 'campaign.create',
   // Project knowledge, files, review
   'project_facts.recall', 'project_facts.remember',
   'project_files.list', 'project_files.read', 'project_files.save',

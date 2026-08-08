@@ -138,7 +138,12 @@ const nextConfig = {
               "media-src 'self' blob: data: https:",
               "worker-src 'self' blob:",
               "child-src 'self' blob:",
-              "frame-src 'self' blob: https://www.googletagmanager.com https://*.webcontainer-api.io https://*.staticblitz.com",
+              // `https:` is what lets the Creation Canvas frame an arbitrary web
+              // page in a Web page panel — the feature IS "load any page onto the
+              // board", so no allowlist can express it. Each frame is sandboxed
+              // and cross-origin, so it reads nothing of ours; our own
+              // clickjacking protection is `frame-ancestors`, which is unchanged.
+              "frame-src 'self' blob: https: https://www.googletagmanager.com https://*.webcontainer-api.io https://*.staticblitz.com",
               "connect-src 'self' https: wss:",
               "manifest-src 'self'",
             ].join('; '),

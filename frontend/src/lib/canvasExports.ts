@@ -17,10 +17,10 @@
 
 import type { CreationObjectKind } from '@builderforce/creation-canvas-contract';
 
-export type CanvasExportAction = 'copy' | 'markdown' | 'csv' | 'xlsx' | 'docx' | 'pdf' | 'pptx' | 'svg' | 'json' | 'diagram';
+export type CanvasExportAction = 'copy' | 'markdown' | 'html' | 'csv' | 'xlsx' | 'docx' | 'pdf' | 'pptx' | 'svg' | 'json' | 'diagram';
 
 export const EXPORT_MIME: Readonly<Record<CanvasExportAction, string>> = {
-  copy: 'text/plain', markdown: 'text/markdown', csv: 'text/csv', json: 'application/json',
+  copy: 'text/plain', markdown: 'text/markdown', html: 'text/html', csv: 'text/csv', json: 'application/json',
   diagram: 'application/vnd.jgraph.mxfile',
   svg: 'image/svg+xml',
   pdf: 'application/pdf',
@@ -31,7 +31,7 @@ export const EXPORT_MIME: Readonly<Record<CanvasExportAction, string>> = {
 
 /** The file extension each action produces. `copy` writes no file. */
 export const EXPORT_EXTENSION: Readonly<Record<Exclude<CanvasExportAction, 'copy' | 'diagram'>, string>> = {
-  markdown: 'md', csv: 'csv', xlsx: 'xlsx', docx: 'docx', pdf: 'pdf', pptx: 'pptx', svg: 'svg', json: 'json',
+  markdown: 'md', html: 'html', csv: 'csv', xlsx: 'xlsx', docx: 'docx', pdf: 'pdf', pptx: 'pptx', svg: 'svg', json: 'json',
 };
 
 /** Exports that are rendered by `/api/exports` rather than written in the
@@ -53,9 +53,15 @@ const EXPORT_ACTIONS: Partial<Record<CreationObjectKind, readonly CanvasExportAc
   knowledge: ['docx', 'pdf', 'markdown', 'copy'],
   report: ['docx', 'pdf', 'markdown', 'copy'],
   note: ['docx', 'pdf', 'markdown', 'copy'],
-  resume: ['docx', 'pdf', 'markdown', 'copy'],
+  // A resume is sent as a file AND pasted into an application form, so HTML sits
+  // alongside the two containers a recruiter asks for.
+  resume: ['docx', 'pdf', 'html', 'markdown', 'copy'],
   slides: ['pptx', 'pdf', 'markdown', 'copy'],
   diagram: ['diagram', 'svg', 'pdf', 'copy'],
+  // Drawn artifacts: the generator produced a picture, so the picture is what
+  // leaves — as vector where it drew vector, and on a page either way.
+  cad: ['svg', 'pdf'],
+  comic: ['pdf'],
   spreadsheet: ['xlsx', 'csv'],
   table: ['xlsx', 'csv'],
   dataset: ['xlsx', 'csv'],

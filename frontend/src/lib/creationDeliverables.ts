@@ -1,5 +1,6 @@
 import { apiRequest } from './apiClient';
 import { dxfPreviewSvg, meshFormatFromHint, stlPreviewSvg, svgDataUrl, type MeshFormat } from './creativeGeometry';
+import { gamePosterDataUrl } from './gamePoster';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
 
 export type CreationDeliverableStatus = 'running' | 'delivered' | 'failed';
@@ -187,8 +188,45 @@ export function buildBrowserCreativeArtifact(data: CreationNodeData): BrowserCre
     return { artifactKind: kind, fileName: `${stem}.html`, mimeType: 'text/html', url: textDataUrl('text/html', content), outputFormat: 'HTML', validationDetail: 'Self-contained animated HTML generated in the browser' };
   }
   if (kind === 'game') {
-    const content = `<!doctype html><meta charset="utf-8"><title>${escapedTitle}</title><style>body{font:20px system-ui;background:#151a35;color:white;text-align:center;padding:8vh}button{font:inherit;padding:16px 24px}#score{font-size:64px}</style><h1>${escapedTitle}</h1><p>${escapedBrief}</p><div id="score">0</div><button onclick="score.textContent=+score.textContent+1">Play</button>`;
-    return { artifactKind: kind, fileName: `${stem}.html`, mimeType: 'text/html', url: textDataUrl('text/html', content), outputFormat: 'HTML', validationDetail: 'Self-contained interactive HTML game generated in the browser' };
+    // The offline baseline. It is a real, playable game rather than a mock-up —
+    // a tap target that moves and has to be caught — because this is what a
+    // guest session or a failed generator ends up with, and every game target
+    // (the phone install, the APK) ships whatever document is here. It handles
+    // BOTH keyboard and touch for the same reason.
+    const content = `<!doctype html><html><head><meta charset="utf-8"><title>${escapedTitle}</title>`
+      + '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">'
+      + '<style>html,body{height:100%;margin:0;overflow:hidden;background:#0b0e1a;color:#fff;'
+      + 'font:16px/1.4 system-ui,sans-serif;-webkit-user-select:none;user-select:none;touch-action:manipulation}'
+      + '#hud{position:fixed;top:max(12px,env(safe-area-inset-top));left:0;right:0;text-align:center;'
+      + 'font-size:clamp(18px,4vw,28px);font-weight:700;pointer-events:none}'
+      + '#brief{position:fixed;bottom:max(16px,env(safe-area-inset-bottom));left:0;right:0;text-align:center;'
+      + 'opacity:.6;font-size:clamp(12px,3vw,16px);padding:0 8vw;pointer-events:none}'
+      + '#t{position:absolute;width:clamp(56px,16vmin,120px);aspect-ratio:1;border-radius:50%;'
+      + 'background:radial-gradient(circle at 35% 30%,#ffd98a,#f5a623);box-shadow:0 6px 24px #f5a62366;'
+      + 'display:grid;place-items:center;font-size:clamp(24px,7vmin,48px);cursor:pointer}</style></head>'
+      + `<body><div id="hud">Score <span id="s">0</span> &middot; <span id="c">20</span>s</div>`
+      + `<div id="t">&#9733;</div><div id="brief">${escapedBrief}</div>`
+      + '<script>(function(){var s=0,left=20,t=document.getElementById("t"),'
+      + 'sc=document.getElementById("s"),cd=document.getElementById("c");'
+      + 'function move(){var w=t.offsetWidth||80;'
+      + 't.style.left=Math.random()*(innerWidth-w)+"px";t.style.top=(60+Math.random()*(innerHeight-w-140))+"px";}'
+      + 'function hit(e){e.preventDefault();if(left<=0)return;s++;sc.textContent=s;move();}'
+      + 't.addEventListener("pointerdown",hit);'
+      + 'addEventListener("keydown",function(e){if(e.key===" "||e.key==="Enter")hit(e);});'
+      + 'move();addEventListener("resize",move);'
+      + 'var tick=setInterval(function(){left--;cd.textContent=left;if(left<=0){clearInterval(tick);'
+      + 't.textContent="\\u21BB";t.onpointerdown=function(){location.reload()};'
+      + 'document.getElementById("hud").textContent="Final score "+s+" \\u2014 tap to play again";}},1000);'
+      + '})();</script></body></html>';
+    return {
+      artifactKind: kind,
+      fileName: `${stem}.html`,
+      mimeType: 'text/html',
+      url: textDataUrl('text/html', content),
+      outputFormat: 'HTML',
+      validationDetail: 'Self-contained playable HTML game generated in the browser; keyboard and touch',
+      previewImageUrl: gamePosterDataUrl({ title, brief, html: content }),
+    };
   }
   if (kind === 'cad') {
     const dxf = dxfPlate([100, 60], 14);
@@ -290,6 +328,17 @@ export async function generateServerCreativeArtifact(data: CreationNodeData): Pr
   const preview = generated.artifactKind === 'cad'
     ? dxfPreviewSvg(generated.content)
     : generated.artifactKind === 'model3d' ? stlPreviewSvg(generated.content) : null;
+  // A game is a program, and the frame that runs it is origin-isolated, so its
+  // pixels genuinely cannot be read from here. The poster is built from what the
+  // document declares about itself instead — including which inputs it actually
+  // binds, which is the thing worth knowing before shipping it to a phone.
+  const poster = generated.artifactKind === 'game'
+    ? gamePosterDataUrl({
+      title: String(data.title ?? 'Game'),
+      brief: creativeBrief(data),
+      html: generated.content,
+    })
+    : null;
   return {
     artifactKind: generated.artifactKind,
     fileName: generated.fileName,
@@ -299,7 +348,7 @@ export async function generateServerCreativeArtifact(data: CreationNodeData): Pr
     validationDetail: generated.validationDetail,
     provider: generated.provider,
     model: generated.model,
-    ...(preview ? { previewImageUrl: svgDataUrl(preview) } : {}),
+    ...(preview ? { previewImageUrl: svgDataUrl(preview) } : poster ? { previewImageUrl: poster } : {}),
     ...(generated.summary ? { summary: generated.summary } : {}),
   };
 }

@@ -18,12 +18,13 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasFilesIcon, CanvasRailToggle, CleanLayoutIcon, DepthIcon, DropToLayersIcon, ExitFullscreenIcon, FitViewIcon, FullscreenIcon, LayerGuidesIcon, MarqueeSelectIcon, ResetViewIcon, ThreeDIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
+import { AccessibleOutlineIcon, CANVAS_FIT_MIN_ZOOM, CanvasCommands, CanvasDriveIcon, CanvasFilesIcon, CanvasRailToggle, CleanLayoutIcon, DepthIcon, DropToLayersIcon, ExitFullscreenIcon, FitViewIcon, FullscreenIcon, LayerGuidesIcon, MarqueeSelectIcon, ResetViewIcon, ThreeDIcon, useCanvasCleanLayout, ZoomInIcon, ZoomOutIcon } from '@/components/canvas/CanvasCommands';
 import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvas3DControls, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
 import { CanvasOutlinePanel } from './CanvasOutlinePanel';
 import { CanvasFilesPanel } from './CanvasFilesPanel';
+import { CanvasDrivePanel } from './CanvasDrivePanel';
 import { CanvasHostActions } from './CanvasHostActions';
 import { canvasNavigate, canvasSurface, canvasWebOrigin, type CanvasHostCapture } from '@/lib/canvasHost';
 import { BrainDock } from './BrainDock';
@@ -53,11 +54,12 @@ import { computeProjectHealth } from '@/lib/projectHealth';
 import { createCloudAgent, updateAgent } from '@/lib/api';
 import { CREATION_OBJECT_REGISTRY, CREATION_PALETTE_GROUPS, createDefaultCreationData, creationObjectDefinition, sanitizeCreationObjectPatch, type CreationObjectGroup } from './creationObjectRegistry';
 import { CREATION_TEMPLATES, type CreationTemplate } from './creationTemplates';
+import { describeMailboxFilter, mailboxApi, resolveMailboxConnection, type MailboxFilter } from '@/lib/mailboxApi';
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
 import { CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
 import { downloadJson, downloadText, toCsv } from '@/lib/download';
-import { exportCsv, exportDocx, exportPptx, exportXlsx } from '@/lib/exportApi';
+import { OfficeExportUnavailableError, exportCsv, exportDocx, exportPptx, exportXlsx } from '@/lib/exportApi';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 import {
   MAX_MATERIALIZED_ROWS, MAX_TABULAR_COLUMNS, TABULAR_AGGREGATE_OPERATORS, TABULAR_FILTER_OPERATORS,
@@ -90,16 +92,19 @@ import {
   pitchApplicationReadiness, pitchBeats, pitchCompetitionFor, pitchCriteria, pitchEligibility, pitchQaCoverage,
   pitchQaItems, pitchReadiness, pitchRuntimeSeconds, pitchSpokenSeconds, pitchTimingTone, type PitchLabelled,
 } from '@/lib/pitchCompetition';
-import { printCanvasObject } from '@/lib/printDocument';
-import { renderedNodeSvg, serializeRenderedSvg } from '@/lib/renderedSvg';
+import { markdownHtmlDocument, printCanvasObject } from '@/lib/printDocument';
+import { canvasObjectSvg } from '@/lib/renderedSvg';
 import { CanvasExportActions, canvasExportActionsFor } from './CanvasExportActions';
 import { listEvermindModels } from '@/lib/studioModelsApi';
 import { AITrainingPanel } from '@/components/AITrainingPanel';
 import { canvasProjectId, canvasProjectNodes, connectedCanvasProjectNode } from '@/lib/canvasProjectRef';
 import { canvasBuildBinding, canvasBuildModality, canvasBuildPatch, createCanvasBuild } from '@/lib/canvasBuild';
+import { canvasWebPageUrl, isWebPageKind, normalizeWebPageUrl, webPageHost, webPageViewport } from '@/lib/canvasWebPage';
 import { deleteIdeProject, listIdeProjects } from '@/lib/api';
 import type { IdeProject } from '@/lib/types';
 import { CanvasBuildPanel } from './CanvasBuildPanel';
+import { CanvasGamePanel } from './CanvasGamePanel';
+import { gamePayloadFrom } from '@/lib/gameTargets';
 import { useLocalizedModalities, useModalityCopy } from '@/lib/useModalityCopy';
 import type { ProjectModality } from '@/lib/modality';
 
@@ -262,6 +267,24 @@ function artifactSheet(data: CreationNodeData): { columns: string[]; rows: Array
 /** Horizontal gap between objects created by one multi-file drop, so a folder
  * dropped at once lands as a readable row rather than a single stack. */
 const IMPORT_COLUMN_GAP = 360;
+/** Vertical gap for the EXTRA objects one file yields — a workbook's second and
+ * third sheets stack under the card that stood in for the file. */
+const IMPORT_ROW_GAP = 300;
+
+/**
+ * Let the browser paint before the next parse takes the main thread back.
+ *
+ * `officeFormats`' readers are synchronous CPU inside an async signature, so
+ * committing a node to React state and immediately starting the next read means
+ * the commit never reaches the screen. One frame, then a macrotask, is the pair
+ * that reliably gets a paint out of both engines.
+ */
+function nextPaint(): Promise<void> {
+  return new Promise((resolve) => {
+    if (typeof requestAnimationFrame === 'undefined') { setTimeout(resolve, 0); return; }
+    requestAnimationFrame(() => setTimeout(resolve, 0));
+  });
+}
 /** Files read from a single drop. Past this the board stops being legible and
  * the parse cost stops being worth it, so the rest are reported, not silently
  * discarded. */
@@ -381,6 +404,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   /** Chrome shared with every other spatial canvas lives in its own namespace. */
   const tCommands = useTranslations('canvasCommands');
   const tFiles = useTranslations('creationCanvas.files');
+  const tDrive = useTranslations('creationCanvas.drive');
   const tImport = useTranslations('creationCanvas.import');
   /** The import engine is a plain module, so it is handed the catalog rather
    * than reaching for one — every string it produces stays translated. */
@@ -460,6 +484,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [trainingFocus, setTrainingFocus] = useState<{ nodeId: string; projectId: number | string; localOnly: boolean } | null>(null);
   // The Builder object whose IDE workspace is open on top of the board.
   const [buildFocus, setBuildFocus] = useState<{ nodeId: string; storageProjectId: number } | null>(null);
+  /** The game object whose ship-to-device panel is open, by node id. */
+  const [gameFocus, setGameFocus] = useState<string | null>(null);
   const [creatingBuild, setCreatingBuild] = useState(false);
   const [framePresets, setFramePresets] = useState<FramePreset[]>([]);
   const [serverTemplates, setServerTemplates] = useState<ServerCreationTemplate[]>([]);
@@ -556,6 +582,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
   const [outlineOpen, setOutlineOpen] = useState(false);
   const [filesOpen, setFilesOpen] = useState(false);
+  const [driveOpen, setDriveOpen] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
   /** True while the BROWSER is what put us full screen, false for the CSS fallback. */
   const nativeFullscreenRef = useRef(false);
@@ -1271,7 +1298,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!columns.length) throw new Error(t('datasetNoColumns'));
       if (rows.length > datasetRowLimit) throw new Error(t('datasetRowLimit', { limit: datasetRowLimit.toLocaleString() }));
       const { title: _title, ...fields } = imported!.data;
-      setNodes((current) => current.map((node) => node.id === selectedId ? { ...node, data: { ...node.data, ...fields } } : node));
+      // Adopt the imported file's name, but only over the palette's placeholder.
+      // A card the user has already named is theirs and survives the import;
+      // one that still says "Imported dataset.csv" after importing revenue.csv is
+      // simply wrong, and every artifact derived from it — "… visualization",
+      // the map, the chart — inherits that wrong name.
+      const placeholder = createDefaultCreationData('dataset').title;
+      setNodes((current) => current.map((node) => (node.id === selectedId
+        ? { ...node, data: { ...node.data, ...fields, ...(node.data.title === placeholder ? { title: file.name } : {}) } }
+        : node)));
       setNotice(t('datasetImported', { name: file.name, rows: rows.length.toLocaleString(), columns: columns.length }));
     } catch (error) {
       setNotice(error instanceof Error ? error.message : t('datasetImportFailed'));
@@ -1637,33 +1672,78 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
     if (!files.length) return;
     const start = origin ?? flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 300 };
-    const created: CreationFlowNode[] = [];
+    const accepted = files.slice(0, MAX_DROPPED_FILES);
+
+    /**
+     * Every dropped file gets a card BEFORE anything is read.
+     *
+     * The readers are synchronous CPU wearing an async signature, so a 40MB PDF
+     * seizes the main thread for seconds. Creating the nodes only after the parse
+     * meant the drop overlay vanished on release and the canvas then showed
+     * nothing at all until the last of twelve files finished — indistinguishable
+     * from a drop that failed. The card is the receipt.
+     */
+    const stubs = accepted.map((file, index) => {
+      const node = newNode('file', { x: start.x + index * IMPORT_COLUMN_GAP, y: start.y });
+      node.data = {
+        ...node.data,
+        title: file.name,
+        fileName: file.name,
+        fileSize: file.size,
+        status: importLabel('statusImporting'),
+        importPending: true,
+      } as CreationNodeData;
+      return node;
+    });
+    setNodes((current) => [...current, ...stubs]);
+    setSelectedId(stubs[0]!.id);
+    setSelectedIds(stubs.map((node) => node.id));
+    openBrainDock();
+    await nextPaint();
+
     const notices: string[] = [];
+    const objectKinds: string[] = [];
     let suggestion = '';
-    for (const file of files.slice(0, MAX_DROPPED_FILES)) {
+    for (const [index, file] of accepted.entries()) {
+      const stub = stubs[index]!;
       try {
         const imported = await importCanvasFile(file, importLabel);
-        for (const object of imported.objects) {
-          const node = newNode(object.kind, { x: start.x + created.length * IMPORT_COLUMN_GAP, y: start.y });
+        const [first, ...rest] = imported.objects;
+        if (!first) throw new Error('The file produced no object');
+        // The stub BECOMES the artifact — same id, same position — so the card a
+        // person is already looking at fills in rather than being replaced by a
+        // second one somewhere else on the board.
+        const resolved = newNode(first.kind, stub.position);
+        // A workbook yields one object per sheet; the extras stack under the
+        // card that stood in for the file.
+        const extras = rest.map((object, offset) => {
+          const node = newNode(object.kind, { x: stub.position.x, y: stub.position.y + (offset + 1) * IMPORT_ROW_GAP });
           node.data = { ...node.data, ...object.data } as CreationNodeData;
-          created.push(node);
-        }
+          return node;
+        });
+        setNodes((current) => [
+          ...current.map((node) => node.id === stub.id
+            ? { ...node, data: { ...resolved.data, ...first.data, importPending: false } as CreationNodeData }
+            : node),
+          ...extras,
+        ]);
+        objectKinds.push(first.kind, ...rest.map((object) => object.kind));
         notices.push(imported.notice);
         if (!suggestion) suggestion = imported.suggestedPrompt;
       } catch {
+        setNodes((current) => current.map((node) => node.id === stub.id
+          ? { ...node, data: { ...node.data, status: importLabel('statusUnreadable'), importPending: false } as CreationNodeData }
+          : node));
         notices.push(importLabel('failed', { name: file.name }));
       }
+      // Each file's result paints before the next one takes the thread back.
+      await nextPaint();
     }
     if (files.length > MAX_DROPPED_FILES) notices.push(importLabel('tooManyFiles', { limit: MAX_DROPPED_FILES }));
-    if (!created.length) { setNotice(notices.join(' · ')); return; }
-    setNodes((current) => [...current, ...created]);
-    setSelectedId(created[0]!.id);
-    setSelectedIds(created.map((node) => node.id));
     setNotice(notices.join(' · '));
     // Never overwrite something the person is part-way through typing.
     if (suggestion) setPrompt((current) => current.trim() ? current : suggestion);
-    openBrainDock();
-    trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: created.map((node) => node.data.kind), source } });
+    trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds, source } });
   }, [canEdit, importLabel, openBrainDock, sessionId, setNodes, t]);
 
   const attachCanvasArtifact = useCallback(
@@ -2153,6 +2233,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const files = Array.from(event.dataTransfer.files ?? []);
     if (files.length) { void addFilesToCanvas(files, point); return; }
     const kind = event.dataTransfer.getData(DND_MIME) as CreationObjectKind;
+    // A link dragged from a browser tab or another app carries no object kind —
+    // it lands as a live Web page panel, which is what a dropped URL means.
+    if (!kind && point) {
+      const dropped = normalizeWebPageUrl(event.dataTransfer.getData('text/uri-list').split('\n')[0] || event.dataTransfer.getData('text/plain'));
+      if (dropped) {
+        const page = newNode('browser', point);
+        page.data = { ...page.data, title: webPageHost(dropped), url: dropped, status: '' };
+        setNodes((current) => [...current, page]);
+        setSelectedId(page.id); setSelectedIds([page.id]);
+        return;
+      }
+    }
     if (!kind || !point) return;
     const node = newNode(kind, point);
     setNodes((current) => [...current, node]);
@@ -2416,6 +2508,184 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add ${kind} “${title}”`, node });
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Connect ${target.data.title} to ${title}`, edge: { id: crypto.randomUUID(), source: target.id, target: node.id, type: 'smoothstep', animated: true, label: 'computed from', data: { connectionKind: 'data' } } });
       return { ...payload, proposed: true, materialized: { id: node.id, kind, title, created: true } };
+    },
+  }, {
+    /**
+     * The whole point of "show me my inbox on the canvas".
+     *
+     * A dedicated action rather than `canvas_add_object` with hand-authored
+     * fields, because a model cannot invent someone's real mail: this READS the
+     * connected mailbox and puts what is actually there on the board. It also
+     * stores the `filter` alongside the messages, which is what makes the tile a
+     * live, reproducible view rather than a one-off screenshot — `canvas_refresh_inbox`
+     * re-runs exactly the same query later.
+     */
+    name: 'canvas_add_inbox',
+    description: 'Put a LIVE INBOX from a connected Microsoft 365 or Gmail mailbox onto the canvas, optionally filtered. Use this whenever the user asks to see, show, display, review or triage their email or inbox — it reads their real mailbox rather than inventing messages. Filters combine: query (free text), from, subject, unreadOnly, hasAttachments, after/before (ISO dates). The filter is saved with the tile, so it can be refreshed later and still mean the same thing. Name the mailbox with accountEmail when the workspace has more than one connected.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        accountEmail: { type: 'string', description: 'Which connected mailbox. Omit when exactly one is connected.' },
+        title: { type: 'string', description: 'Tile title, e.g. "Unread from Acme". Defaults to a description of the filter.' },
+        query: { type: 'string', description: 'Free-text search across subject, body and participants.' },
+        from: { type: 'string', description: 'Match the sender address.' },
+        subject: { type: 'string', description: 'Match the subject line.' },
+        unreadOnly: { type: 'boolean' },
+        hasAttachments: { type: 'boolean' },
+        after: { type: 'string', description: 'ISO instant — only mail received at or after this.' },
+        before: { type: 'string', description: 'ISO instant — only mail received before this.' },
+        limit: { type: 'number', description: 'Up to 100. Defaults to 25.' },
+        x: { type: 'number' }, y: { type: 'number' },
+      },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as {
+        accountEmail?: string; title?: string; query?: string; from?: string; subject?: string;
+        unreadOnly?: boolean; hasAttachments?: boolean; after?: string; before?: string;
+        limit?: number; x?: number; y?: number;
+      };
+      const { connections } = await mailboxApi.listConnections().catch(() => ({ connections: [] }));
+      const resolved = resolveMailboxConnection(connections, { accountEmail: args.accountEmail ?? null });
+      if (!resolved.ok) {
+        // Actionable rather than a bare failure: the user has to leave the
+        // canvas to fix this, so say where to go.
+        return { error: `${resolved.error} Connect one in Growth → Mailboxes.` };
+      }
+
+      const filter = {
+        q: args.query, from: args.from, subject: args.subject,
+        unread: args.unreadOnly, hasAttachments: args.hasAttachments,
+        after: args.after, before: args.before, limit: args.limit,
+      };
+      let read: Awaited<ReturnType<typeof mailboxApi.listMessages>>;
+      try {
+        read = await mailboxApi.listMessages(resolved.connection.id, filter);
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'That mailbox could not be read.' };
+      }
+
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
+      const node = newNode('inbox', nextCanvasObjectPosition([...nodes, ...stagedNodes], args, narrowViewport, 'inbox'));
+      const unreadCount = read.triage.filter((m) => m.unread).length;
+      node.data = {
+        ...node.data,
+        title: args.title?.trim().slice(0, 160) || read.accountEmail,
+        subtitle: describeMailboxFilter(filter),
+        status: `${read.triage.length} message${read.triage.length === 1 ? '' : 's'}`,
+        connectionId: resolved.connection.id,
+        accountEmail: read.accountEmail,
+        provider: read.provider,
+        filter,
+        // The TRIAGE projection, not the full messages: a canvas node's data is
+        // persisted with the session AND fed to Brain's snapshot, and 25 full
+        // emails would bloat both.
+        messages: read.triage,
+        unreadCount,
+        fetchedAt: new Date().toISOString(),
+      };
+      node.style = { width: 460, height: 520 };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Add inbox “${node.data.title}”`, node });
+      return {
+        ok: true, proposed: true,
+        object: { id: node.id, kind: 'inbox', title: node.data.title },
+        accountEmail: read.accountEmail,
+        total: read.triage.length,
+        unread: unreadCount,
+        messages: read.triage,
+      };
+    },
+  }, {
+    name: 'canvas_refresh_inbox',
+    description: 'Re-read a mailbox already on the canvas, using the filter that tile was created with, and return what is there now. Use this when asked to refresh, re-check or "look again at" an inbox on the board — it updates the tile in place rather than adding a second one.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: { objectId: { type: 'string', description: 'The inbox object. Omit when the canvas holds exactly one.' } },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const objectId = (raw as { objectId?: string }).objectId;
+      const inboxes = nodes.filter((node) => node.data.kind === 'inbox');
+      const target = objectId ? inboxes.find((node) => node.id === objectId) : inboxes.length === 1 ? inboxes[0] : undefined;
+      if (!target) {
+        return { error: inboxes.length ? 'Say which inbox to refresh.' : 'There is no inbox on this canvas yet.' };
+      }
+      const connectionId = Number(target.data.connectionId);
+      if (!Number.isInteger(connectionId)) return { error: 'That inbox is not bound to a connected mailbox.' };
+
+      let read: Awaited<ReturnType<typeof mailboxApi.listMessages>>;
+      try {
+        read = await mailboxApi.listMessages(connectionId, (target.data.filter as MailboxFilter) ?? {});
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'That mailbox could not be read.' };
+      }
+      const unreadCount = read.triage.filter((m) => m.unread).length;
+      const patch = {
+        messages: read.triage,
+        unreadCount,
+        fetchedAt: new Date().toISOString(),
+        status: `${read.triage.length} message${read.triage.length === 1 ? '' : 's'}`,
+      };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Refresh inbox ${target.id}`, objectId: target.id, patch });
+      return { ok: true, proposed: true, objectId: target.id, total: read.triage.length, unread: unreadCount, messages: read.triage };
+    },
+  }, {
+    /** Lifting one message out of a live view is what makes it durable: an
+     *  `email` object stops changing, so it can be annotated and connected to a
+     *  task and will still be there after the inbox has moved on. */
+    name: 'canvas_pin_email',
+    description: 'Pin ONE message from an inbox on the canvas as its own object, and read it in full while doing so. Use this when a specific email needs to be discussed, annotated, or connected to a task — unlike the live inbox tile, a pinned email does not change when the mailbox does.',
+    parameters: {
+      type: 'object', required: ['messageId'], additionalProperties: false,
+      properties: {
+        messageId: { type: 'string', description: 'The message id, as listed by the inbox tile.' },
+        objectId: { type: 'string', description: 'Which inbox it came from. Omit when the canvas holds exactly one.' },
+      },
+    },
+    mutates: true,
+    run: async (raw: unknown) => {
+      if (!canEdit) return { error: 'The current session role cannot edit this canvas' };
+      const args = raw as { messageId?: string; objectId?: string };
+      const inboxes = nodes.filter((node) => node.data.kind === 'inbox');
+      const source = args.objectId ? inboxes.find((node) => node.id === args.objectId) : inboxes.length === 1 ? inboxes[0] : undefined;
+      if (!source) return { error: inboxes.length ? 'Say which inbox the message is in.' : 'There is no inbox on this canvas yet.' };
+      const connectionId = Number(source.data.connectionId);
+      if (!Number.isInteger(connectionId) || !args.messageId) return { error: 'That inbox is not bound to a connected mailbox.' };
+
+      let message: Awaited<ReturnType<typeof mailboxApi.getMessage>>;
+      try {
+        message = await mailboxApi.getMessage(connectionId, args.messageId);
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : 'That message could not be read.' };
+      }
+
+      const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
+      const node = newNode('email', nextCanvasObjectPosition(
+        [...nodes, ...stagedNodes],
+        { x: source.position.x + 500, y: source.position.y },
+        typeof window !== 'undefined' && window.innerWidth <= 760,
+        'email',
+      ));
+      node.data = {
+        ...node.data,
+        title: message.subject,
+        subtitle: message.fromName ? `${message.fromName} <${message.from}>` : message.from,
+        status: new Date(message.receivedAtISO).toLocaleString(),
+        messageId: message.id,
+        connectionId,
+        accountEmail: source.data.accountEmail,
+        from: message.from, fromName: message.fromName, to: message.to,
+        subject: message.subject, receivedAt: message.receivedAtISO,
+        bodyText: message.bodyText, unread: message.unread,
+        hasAttachments: message.hasAttachments, webUrl: message.webUrl,
+      };
+      node.style = { width: 460, height: 420 };
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.add', label: `Pin email “${message.subject}”`, node });
+      proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.add', label: `Connect ${source.data.title} to ${message.subject}`, edge: { id: crypto.randomUUID(), source: source.id, target: node.id, type: 'smoothstep', animated: false, label: 'pinned from', data: { connectionKind: 'reference' } } });
+      return { ok: true, proposed: true, object: { id: node.id, kind: 'email', title: message.subject }, message };
     },
   }, {
     name: 'canvas_add_object',
@@ -3027,6 +3297,35 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       .catch((error) => setNotice(error instanceof Error ? error.message : t('agentSettingsSaveFailed')));
   }, [persistence, requireAccount, selectedNode, setNodes, t]);
 
+  /**
+   * Open the ship-to-device panel for a game object.
+   *
+   * Guarded here rather than inside the panel so the two things that make it
+   * impossible are said in the canvas's own voice: a guest session has no
+   * project to write files into, and a game with no connected project has
+   * nowhere to publish to. The panel itself stays a pure view of a project.
+   */
+  const openGamePanel = useCallback((gameId: string) => {
+    const target = nodes.find((node) => node.id === gameId && node.data.kind === 'game');
+    if (!target) { setNotice(t('game.selectFirst')); return; }
+    if (persistence !== 'server') {
+      requireAccount('publish', t('game.accountTitle'), t('game.accountBody'));
+      return;
+    }
+    setGameFocus(gameId);
+  }, [nodes, persistence, requireAccount, t]);
+
+  /** The project a game ships into, and the game as it stands right now. */
+  const gamePanelTarget = useMemo(() => {
+    const target = gameFocus ? nodes.find((node) => node.id === gameFocus) : null;
+    if (!target) return null;
+    const connectedProject = connectedCanvasProjectNode(nodes, edges, target.id);
+    return {
+      projectId: connectedProject ? canvasProjectId(connectedProject.data) : null,
+      game: gamePayloadFrom(target.data),
+    };
+  }, [edges, gameFocus, nodes]);
+
   const publishWebsite = useCallback((websiteId?: string) => {
     const target = nodes.find((node) => node.id === websiteId && node.data.kind === 'website')
       ?? (selectedNode?.data.kind === 'website' ? selectedNode : nodes.find((node) => node.data.kind === 'website'));
@@ -3280,19 +3579,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const base = safeDownloadName(target.data.title);
     try {
       if (action === 'copy') return await copyTextToClipboard(markdown) ? t('copiedToClipboard') : t('clipboardUnavailable');
-      // The Office containers are zips of XML parts, so their writers live on the
-      // API and a guest session — which has no tenant to authenticate as — cannot
-      // reach them. Only THOSE degrade, and each degrades to its own nearest
-      // browser-writable format rather than everything collapsing to markdown.
-      const degraded = SERVER_RENDERED_ACTIONS.has(action) && persistence !== 'server';
       const diagram = canvasDiagram(target.data);
       let fileName = `${base}.${EXPORT_EXTENSION[action as Exclude<CanvasExportAction, 'copy' | 'diagram'>] ?? 'md'}`;
+      // Set only when the renderer refuses THIS caller — a guest out of daily
+      // downloads. Decided by the attempt, not guessed from the session, because
+      // a guest CAN render: the export surface takes a guest token.
+      let degraded = false;
 
       if (action === 'markdown') downloadText(markdown, fileName, 'text/markdown');
-      if (action === 'csv' || (action === 'xlsx' && degraded)) {
+      if (action === 'html') downloadText(markdownHtmlDocument(target.data.title, markdown), fileName, 'text/html');
+      if (action === 'csv') {
         const sheet = artifactSheet(target.data);
         if (!sheet) throw new Error(t('noTabularRows'));
-        fileName = `${base}.csv`;
         exportCsv(toCsv(sheet.columns, sheet.rows), fileName);
       }
       if (action === 'diagram') {
@@ -3302,29 +3600,32 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       }
       if (action === 'svg') {
         // The drawing that is ON the board, not a second rendering of its source.
-        const svg = serializeRenderedSvg(renderedNodeSvg(nodeId));
+        const svg = canvasObjectSvg(target.data, nodeId);
         if (!svg) throw new Error(t('noRenderedDrawing'));
         downloadText(svg, fileName, 'image/svg+xml');
       }
-      if ((action === 'docx' || action === 'pptx') && degraded) {
-        fileName = `${base}.md`;
-        downloadText(markdown, fileName, 'text/markdown');
-      }
-      if (SERVER_RENDERED_ACTIONS.has(action) && !degraded) {
-        if (action === 'docx') await exportDocx(markdown, target.data.title);
-        if (action === 'pptx') await exportPptx(markdown, target.data.title);
-        if (action === 'xlsx') {
-          const sheet = artifactSheet(target.data);
-          if (!sheet) throw new Error(t('noTabularRows'));
-          await exportXlsx(sheet.columns, sheet.rows, target.data.title);
+      if (SERVER_RENDERED_ACTIONS.has(action)) {
+        const sheet = action === 'xlsx' ? artifactSheet(target.data) : null;
+        if (action === 'xlsx' && !sheet) throw new Error(t('noTabularRows'));
+        try {
+          if (action === 'docx') await exportDocx(markdown, target.data.title);
+          if (action === 'pptx') await exportPptx(markdown, target.data.title);
+          if (action === 'xlsx') await exportXlsx(sheet!.columns, sheet!.rows, target.data.title);
+        } catch (error) {
+          // Only a credential/allowance refusal degrades. A malformed payload or
+          // a render fault is a real failure and must surface as one.
+          if (!(error instanceof OfficeExportUnavailableError)) throw error;
+          degraded = true;
+          fileName = `${base}.${action === 'xlsx' ? 'csv' : 'md'}`;
+          if (action === 'xlsx') exportCsv(toCsv(sheet!.columns, sheet!.rows), fileName);
+          else downloadText(markdown, fileName, 'text/markdown');
         }
       }
       if (action === 'pdf') {
         // The browser's own print pipeline, where "Save as PDF" lives. It needs
-        // no server, so it is the one export a GUEST session can also finish —
-        // and it prints each kind AS that kind: pages for a document, a slide per
-        // page for a deck, a scaled drawing for a diagram.
-        if (!printCanvasObject(target.data, action === 'pdf' && target.data.kind === 'diagram' ? serializeRenderedSvg(renderedNodeSvg(nodeId)) : null)) throw new Error(t('printUnavailable'));
+        // no server at all, and it prints each kind AS that kind: pages for a
+        // document, a slide per page for a deck, the drawing for anything drawn.
+        if (!printCanvasObject(target.data, canvasObjectSvg(target.data, nodeId))) throw new Error(t('printUnavailable'));
       }
       if (action === 'json') downloadJson({ kind: target.data.kind, title: target.data.title, data: target.data }, fileName);
 
@@ -3347,7 +3648,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     } catch (error) {
       return error instanceof Error ? error.message : t('exportFailed');
     }
-  }, [nodes, persistence, setNodes, t]);
+  }, [nodes, setNodes, t]);
 
   /** Every file this session holds, derived from the objects themselves so a new
    * document, deck, diagram, or sheet appears in the library the moment Brain
@@ -3956,6 +4257,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           {threeDControls && <button type="button" onClick={threeDControls.toggleLayers} aria-pressed={threeDControls.layersVisible} aria-label={tCommands('threeD.layerGuides')}><LayerGuidesIcon /></button>}
           {threeDControls?.dropToLayers && <button type="button" onClick={threeDControls.dropToLayers} aria-label={tCommands('threeD.dropToLayers')}><DropToLayersIcon /></button>}
           <button type="button" onClick={() => setFilesOpen((value) => !value)} aria-pressed={filesOpen} aria-label={tFiles('title')}><CanvasFilesIcon /></button>
+          <button type="button" onClick={() => setDriveOpen((value) => !value)} aria-pressed={driveOpen} aria-label={tDrive('title')}><CanvasDriveIcon /></button>
           <button type="button" onClick={() => setOutlineOpen((value) => !value)} aria-pressed={outlineOpen} aria-label={t('canvasOutline')}><AccessibleOutlineIcon /></button>
         </div>
 
@@ -3977,6 +4279,18 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onDownload={downloadCanvasFile}
           onClose={() => setFilesOpen(false)}
         />}
+        {gameFocus && gamePanelTarget && <CanvasGamePanel
+          open
+          onClose={() => setGameFocus(null)}
+          projectId={gamePanelTarget.projectId}
+          game={gamePanelTarget.game}
+          onNotice={setNotice}
+        />}
+        {driveOpen && <CanvasDrivePanel
+          onImport={(file) => addFilesToCanvas([file], undefined, 'drive_import')}
+          onClose={() => setDriveOpen(false)}
+          returnTo={`/create/${sessionId}`}
+        />}
         {outlineOpen && <CanvasOutlinePanel
           nodes={nodes}
           edges={edges}
@@ -3992,7 +4306,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             const collapsed = !paletteSearch.trim() && collapsedPaletteGroups.has(group.group);
             const regionId = `canvas-palette-${group.group.toLowerCase()}`;
             return <section key={group.group} className={styles.paletteSection}>
-              <button type="button" className={styles.paletteSectionToggle} aria-expanded={!collapsed} aria-controls={regionId} onClick={() => setCollapsedPaletteGroups((current) => { const next = new Set(current); if (next.has(group.group)) next.delete(group.group); else next.add(group.group); return next; })}>
+              {/* Named explicitly: without it the control's accessible name is
+                  its own contents — "Build 22 ⌄" — which tells a screen-reader
+                  user nothing about what pressing it does, and silently changes
+                  every time an object is added to the group. */}
+              <button type="button" className={styles.paletteSectionToggle} aria-expanded={!collapsed} aria-controls={regionId} aria-label={t(collapsed ? 'expandPaletteGroup' : 'collapsePaletteGroup', { group: t(`group.${group.group}`) })} onClick={() => setCollapsedPaletteGroups((current) => { const next = new Set(current); if (next.has(group.group)) next.delete(group.group); else next.add(group.group); return next; })}>
                 <span className={styles.paletteGroupIcon} aria-hidden>{PALETTE_GROUP_ICONS[group.group]}</span><strong>{t(`group.${group.group}`)}</strong><small>{group.items.length}</small><span className={styles.paletteChevron} aria-hidden>{collapsed ? '›' : '⌄'}</span>
               </button>
               {!collapsed && <div id={regionId} className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} aria-label={t(`object.${item.kind}`)} disabled={!canEdit} draggable={canEdit} onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addAtCenter(item.kind)}><span>{item.icon}</span>{t(`object.${item.kind}`)}</button>)}</div>}
@@ -4000,7 +4318,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           })}</div>
         </aside>}
 
-        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} />}
+        {!presentMode && selectedNode && selectedNode.data.kind !== 'chat' && <Inspector node={selectedNode} nodes={nodes} edges={edges} focus={inspectorFocus} timeline={timeline} brainTrace={brainTrace} sessionId={sessionId} persistence={persistence} role={sessionRole} editable={canEdit && !lockBlocked} members={members} onChange={updateSelected} onWebsiteViewportChange={updateWebsiteViewport} onClose={() => { setSelectedId(null); setInspectorFocus(null); }} onRun={runWorkflow} onPublishWebsite={() => publishWebsite(selectedNode.id)} onOpenBuild={() => openBuild(selectedNode.id)} onAttachBuild={(ide) => attachBuild(selectedNode.id, ide)} onDeleteBuildWorkspace={() => deleteBuildWorkspace(selectedNode.id)} onBuildWebsiteWithCode={() => buildWebsiteWithCode(selectedNode.id)} creatingBuild={creatingBuild} onGenerateVideo={() => generateVideo(selectedNode.id)} onRunCreativeAction={(action) => runCreativeAction(selectedNode.id, action)} onShipGame={() => openGamePanel(selectedNode.id)} onEditWorkflow={() => setWorkflowFocus({ nodeId: selectedNode.id, definitionId: selectedNode.data.resourceId?.startsWith('workflow:') ? selectedNode.data.resourceId.slice('workflow:'.length) : null })} onSaveAgent={saveAgent} onAddAgentKnowledge={(content) => addAgentKnowledge(selectedNode.id, content)} onRunAgentTest={(testPrompt, expected) => runAgentTest(selectedNode.id, testPrompt, expected)} onSaveFramePreset={saveFramePreset} onExpandProject={expandProject} onLoadProjectQuality={loadProjectQuality} onCompareProjects={compareProjects} onDeliverMockup={deliverMockup} onExpandMockupSet={expandMockupSet} onImportDataset={importDataset} onVisualizeDataset={visualizeDataset} onPlotDataset={plotDataset} onProfileDataset={profileDataset} onAttachEvermindProject={attachEvermindProject} onExpandEvermindPipeline={expandEvermindPipeline} onTrainEvermind={openEvermindTraining} onStartStandup={startStandup} onExportArtifact={(action) => exportArtifact(selectedNode.id, action)} />}
 
         {buildFocus && <section className={styles.workflowFocus} role="dialog" aria-modal="true" aria-label={t('build.focusLabel')}>
           <header><div><strong>{t('build.focusTitle')}</strong><small>{t('build.focusHint')}</small></div><button type="button" onClick={() => setBuildFocus(null)} aria-label={t('build.closeBuilder')}>×</button></header>
@@ -4115,7 +4433,7 @@ function RemoteCursors({ members, currentUserId, instance, container }: { member
   })}</div>;
 }
 
-function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onEditWorkflow, onSaveAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onExportArtifact }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onEditWorkflow: () => void; onSaveAgent: () => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onExportArtifact: (action: CanvasExportAction) => Promise<string> }) {
+function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onEditWorkflow, onSaveAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onExportArtifact }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onEditWorkflow: () => void; onSaveAgent: () => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onExportArtifact: (action: CanvasExportAction) => Promise<string> }) {
   const t = useTranslations('creationCanvas');
   const kind = node.data.kind;
   const [tab, setTab] = useState<'details' | 'activity'>('details');
@@ -4309,6 +4627,27 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
         <label>{t('fileNameLabel')}<input value={typeof node.data.fileName === 'string' ? node.data.fileName : node.data.title} onChange={(event) => onChange({ fileName: event.target.value })} /></label>
         <p className={styles.inspectorHint}>{t('fileInspectorHint')}</p>
       </>}
+      {isWebPageKind(kind) && <>
+        <label>{t('webPage.addressLabel')}<input
+          type="url"
+          inputMode="url"
+          spellCheck={false}
+          value={typeof node.data.url === 'string' ? node.data.url : ''}
+          placeholder={t('webPage.addressPlaceholder')}
+          onChange={(event) => onChange({ url: event.target.value })}
+          // Clearing the probe is what re-arms the panel: it re-reads the page
+          // and re-asks whether the new origin allows being framed.
+          onBlur={(event) => { const next = normalizeWebPageUrl(event.target.value); if (next) onChange({ url: next, frameCheckedUrl: '', frameable: true, frameBlockedBy: null }); }}
+        /></label>
+        <label>{t('viewport')}<select value={webPageViewport(node.data.viewport)} onChange={(event) => onChange({ viewport: event.target.value })}>
+          <option value="desktop">{t('viewportDesktop')}</option>
+          <option value="tablet">{t('viewportTablet')}</option>
+          <option value="mobile">{t('viewportMobile')}</option>
+        </select></label>
+        <button type="button" className={styles.fullButton} disabled={!canvasWebPageUrl(node.data)} onClick={() => onChange({ frameCheckedUrl: '' })}>{t('webPage.reread')}</button>
+        <p className={styles.inspectorHint}>{t('webPage.inspectorHint')}</p>
+        {node.data.frameable === false && <p className={styles.inspectorHint}>{t('webPage.blockedHint')}</p>}
+      </>}
       {kind === 'voice' && <CanvasVoiceInspector node={node} persistence={persistence} onChange={onChange} />}
       {kind === 'project' && <><label>{t('projectView')}<select value={typeof node.data.projectLens === 'string' ? node.data.projectLens : 'everything'} onChange={(event) => onChange({ projectLens: event.target.value })}><option value="everything">{t('lensEverything')}</option><option value="delivery">{t('lensDelivery')}</option><option value="metrics">{t('lensMetrics')}</option><option value="customer-feedback">{t('lensFeedback')}</option></select></label><p className={styles.inspectorHint}>{t('projectContextHint')}</p><button className={styles.fullButton} onClick={onLoadProjectQuality}>{t('visualizeQuality')}</button><button className={styles.fullButton} onClick={onExpandProject}>{t('addRelatedItems')}</button><button className={styles.fullButton} onClick={onCompareProjects}>{t('compareProjects')}</button></>}
       {kind === 'task' && <>
@@ -4345,7 +4684,11 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
         <label>{t('templateId')}<input value={typeof node.data.templateId === 'string' ? node.data.templateId : ''} onChange={(event) => onChange({ templateId: event.target.value })} placeholder={kind === 'template' ? t('browseWithBrain') : t('optionalTemplate')} /></label>
         <label>{t('outputFormat')}<select value={typeof node.data.outputFormat === 'string' ? node.data.outputFormat : ''} onChange={(event) => onChange({ outputFormat: event.target.value })}><option value="">{t('chooseOnExport')}</option>{(CREATIVE_OUTPUTS[kind] || []).map((format) => <option key={format} value={format}>{format}</option>)}</select></label>
         <section className={styles.taskPrdSummary} aria-label={t('nativeCreativeCapability')}><div><span>{t('creativeCapability')}</span><small>{typeof node.data.provider === 'string' ? node.data.provider : 'native'}</small></div><strong>{typeof node.data.capabilityId === 'string' ? node.data.capabilityId : `creative.${kind}`}</strong><p>{t('creativeCapabilityHint')}</p></section>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button type="button" className={styles.fullButton} onClick={() => onRunCreativeAction(kind === 'template' ? 'apply' : 'generate')}>{kind === 'template' ? t('applyTemplate') : t('generateLabel', { label: creationObjectDefinition(kind).label })}</button>{typeof node.data.outputUrl === 'string' && <><button type="button" onClick={() => onRunCreativeAction('preview')}>{t('preview')}</button><button type="button" onClick={() => onRunCreativeAction('export')}>{t('download')}</button></>}</div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}><button type="button" className={styles.fullButton} onClick={() => onRunCreativeAction(kind === 'template' ? 'apply' : 'generate')}>{kind === 'template' ? t('applyTemplate') : t('generateLabel', { label: creationObjectDefinition(kind).label })}</button>{typeof node.data.outputUrl === 'string' && <><button type="button" onClick={() => onRunCreativeAction('preview')}>{t('preview')}</button><button type="button" onClick={() => onRunCreativeAction('export')}>{t('download')}</button></>}{/* A game is the one creative artifact that can be played somewhere other
+              than here — the phone, an app store, Roblox. The panel behind this
+              is where that happens; it stays out of the inspector because it is
+              a flow with its own state, not another action button. */}
+          {kind === 'game' && typeof node.data.outputUrl === 'string' && <button type="button" onClick={onShipGame}>{t('game.shipAction')}</button>}</div>
       </>}
       {kind === 'frame' && <><label>{t('purpose')}<input value={typeof node.data.framePurpose === 'string' ? node.data.framePurpose : t('arrangeObjectsHere')} onChange={(event) => onChange({ framePurpose: event.target.value })} /></label><label>{t('fillColor')}<input type="color" value={typeof node.data.frameColor === 'string' ? node.data.frameColor : '#f8f6ff'} onChange={(event) => onChange({ frameColor: event.target.value })} /></label><label>{t('borderColor')}<input type="color" value={typeof node.data.frameBorder === 'string' ? node.data.frameBorder : '#9d8bea'} onChange={(event) => onChange({ frameBorder: event.target.value })} /></label><button className={styles.fullButton} onClick={onSaveFramePreset}>{t('saveReusableFrame')}</button></>}
       {kind === 'drawing' && <><label>{t('strokeColor')}<input type="color" value={typeof node.data.stroke === 'string' ? node.data.stroke : '#5b5ce2'} onChange={(event) => onChange({ stroke: event.target.value })} /></label><label>{t('strokeWidth')}<input type="range" min="1" max="12" value={typeof node.data.strokeWidth === 'number' ? node.data.strokeWidth : 3} onChange={(event) => onChange({ strokeWidth: Number(event.target.value) })} /></label><p className={styles.inspectorHint}>{t('drawingHint')}</p></>}

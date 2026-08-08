@@ -75,7 +75,12 @@ vi.mock('@/components/workflow-builder/WorkflowBuilder', () => ({
   </div>,
 }));
 
-describe('CreationCanvas', { timeout: 15_000 }, () => {
+// No suite-level timeout override: this file inherits the project ceiling. The
+// 15s cap that used to live here was a mitigation for the render loop in the
+// next-intl mock, and once that was fixed it became the only thing cutting off
+// the heaviest mounts (3D, mini map) when this file runs alongside the other
+// ~56 component files rather than on its own.
+describe('CreationCanvas', () => {
   it('scores explicit agent-test criteria and preserves unscored review runs', () => {
     expect(scoreAgentTestResponse('I understand the duplicate charge. Please share your order number; I will investigate before discussing a refund.', 'duplicate charge, order number, investigate')).toMatchObject({ passed: true, missing: [] });
     expect(scoreAgentTestResponse('A refund is guaranteed.', 'ask for order number, explain investigation')).toMatchObject({ passed: false, matched: [] });
@@ -684,9 +689,18 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
   it('uses the compact composer controls for models, artifacts, and memory', async () => {
     const { container } = render(<CreationCanvas sessionId="compact-composer-test" persistence="local" />);
 
-    // Model choice lives in the shared `/` control, which also states the model in use.
-    expect(screen.getByRole('button', { name: /Options · Model in use/ })).toHaveTextContent('/');
-    expect(screen.getByRole('button', { name: 'Memory' })).toBeInTheDocument();
+    // Model choice lives in the shared `/` control, which also states the armed
+    // mode and the model in use. The trigger names all three, so the assertion
+    // spans them rather than assuming they stay adjacent — the mode segment was
+    // added between them when work/chat mode shipped.
+    const options = screen.getByRole('button', { name: /^Options ·.*Model in use/ });
+    expect(options).toHaveTextContent('/');
+    // Memory is INSIDE that menu, not a button of its own: this row had grown to
+    // eight unlabelled circles, and memory was one of the two settings that
+    // actually decide what a turn does.
+    fireEvent.click(options);
+    expect(screen.getByText('Memory')).toBeInTheDocument();
+    fireEvent.click(options);
     fireEvent.click(screen.getByRole('button', { name: 'Add' }));
     expect(screen.getByRole('menuitem', { name: /Upload from computer/ })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /Add context/ })).toBeInTheDocument();
@@ -871,17 +885,23 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(screen.getByLabelText('Ask Brain about this canvas')).toBeEnabled();
 
+    // Sharing is deliberately NOT gated: a guest invites by link into a shared
+    // free session, and signing up is offered as the way to KEEP that board, not
+    // as the price of sharing it. This assertion used to expect an account gate
+    // here; guest rooms superseded that, and the gate would now break the very
+    // flow the share panel exists for.
     fireEvent.click(screen.getByRole('button', { name: /Share/ }));
-    expect(screen.getByRole('dialog', { name: 'Create an account to share this canvas' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Invite collaborators' })).toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: /Create an account/ })).not.toBeInTheDocument();
   });
 
   it('closes the invitation panel from its dedicated close control', () => {
     render(<CreationCanvas sessionId="close-invitation-panel-test" persistence="local" initialShareOpen />);
 
-    expect(screen.getByRole('dialog', { name: 'Save to invite people' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Invite collaborators' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Close invitation panel' }));
 
-    expect(screen.queryByRole('dialog', { name: 'Save to invite people' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('dialog', { name: 'Invite collaborators' })).not.toBeInTheDocument();
   });
 
   it('edits and runs a canonical workflow in an isolated Canvas focus editor', () => {
@@ -913,7 +933,7 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
 
   it('collapses palette sections, reveals search matches, and retains the state', async () => {
     const first = render(<CreationCanvas sessionId="palette-collapse-test" persistence="local" />);
-    const build = screen.getByRole('button', { name: /Build/ });
+    const build = screen.getByRole('button', { name: /Build section/ });
     fireEvent.click(build);
     expect(build).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('button', { name: 'Workflow' })).not.toBeInTheDocument();
@@ -926,7 +946,7 @@ describe('CreationCanvas', { timeout: 15_000 }, () => {
 
     first.unmount();
     render(<CreationCanvas sessionId="palette-collapse-reopen-test" persistence="local" />);
-    await waitFor(() => expect(screen.getByRole('button', { name: /Build/ })).toHaveAttribute('aria-expanded', 'false'));
+    await waitFor(() => expect(screen.getByRole('button', { name: /Build section/ })).toHaveAttribute('aria-expanded', 'false'));
     expect(screen.queryByRole('button', { name: 'Workflow' })).not.toBeInTheDocument();
   });
 

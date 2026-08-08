@@ -119,6 +119,28 @@ export async function verifyGuestToken(token: string, secret: string): Promise<G
 }
 
 /**
+ * Read a guest token off a request: `Authorization: Bearer` first, then
+ * `?token=` — a WebSocket upgrade cannot set headers.
+ */
+export function readGuestToken(request: Request): string {
+  const header = request.headers.get('Authorization') ?? '';
+  if (header.startsWith('Bearer ')) return header.slice(7);
+  return new URL(request.url).searchParams.get('token') ?? '';
+}
+
+/**
+ * The caller's guest identity, or null when they are not one.
+ *
+ * Read-and-verify in one call, because every surface a guest can reach needs the
+ * same two steps and the second is worthless without the first. Takes the raw
+ * `Request` rather than a Hono context so a middleware, a route and a Durable
+ * Object can all use it.
+ */
+export async function guestIdentityFromRequest(request: Request, secret: string): Promise<GuestIdentity | null> {
+  return verifyGuestToken(readGuestToken(request), secret);
+}
+
+/**
  * Shared guest-room code: an unguessable 12-char Crockford-ish base32 string.
  * The code IS the invite credential (anyone holding the link may join while the
  * room has space), so it must never be short enough to enumerate.

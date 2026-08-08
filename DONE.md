@@ -4,6 +4,139 @@
 
 ---
 
+## ✅ RESOLVED 2026-08-07 — Ask the canvas for a video game, then actually play it
+
+`creative.game` could author a game and nothing else. It produced one
+self-contained HTML document, stored it as a `data:` URL on the canvas object,
+and stopped: there was no way to play it without opening a browser tab, no way
+to get it onto a phone, and no relationship to Roblox — which for most people
+under fifteen *is* what "make a video game" means. "Make me a game" and "give me
+a .html" are not the same request.
+
+**Where a game is played is now a PORT** — `api/src/application/game/gameTarget.ts`,
+deliberately the same shape as `hostingStrategy.ts`, with five real adapters:
+
+- `web` — the document unchanged, played in a sandboxed frame on the canvas.
+- `pwa` — manifest + service worker + generated PNG icons + touch layer,
+  published through the existing `publishStaticSite`. Installs to the home
+  screen on Android *and* iOS; fullscreen, offline. Zero setup.
+- `android` / `ios` — ONE shared Capacitor project plus generated Actions that
+  build a real debug-signed APK on `ubuntu-latest` and an iOS simulator app (or a
+  signed `.ipa` once signing secrets exist) on `macos-latest`. No local toolchain.
+- `roblox` — the brief re-authored in Luau. The world is a bounded JSON spec the
+  model fills and code evaluates into a real `.rbxlx` (the same discipline
+  `geometryService` uses for DXF/STL, because Roblox's XML property
+  serialisation is unforgiving); the scripts are source, because Luau is a
+  language and Studio debugs it. Ships a Rojo project too, and publishes to a
+  live experience over Open Cloud.
+
+**Load-bearing decisions — do not relax:**
+- The play frame runs `allow-scripts` and **never** `allow-same-origin`, and the
+  document goes in via `srcDoc` rather than a blob URL. Either change would give
+  model-authored code from a free-text brief access to the app's session.
+  Regression-tested in `gameNode.test.tsx`.
+- Open Cloud can *replace* a place but cannot *create* an experience, so the
+  first publish is always a human in Studio. The setup steps say so rather than
+  failing with a 404 that explains nothing.
+- iOS device installs need a paid Apple membership. CI builds for the simulator
+  when signing secrets are absent and says which build you got; the free path to
+  an iPhone is the PWA.
+- One validator (`validateGameDocument`) gates every target, so a document with
+  no script or a CDN dependency is refused once — not after a 5-minute APK build.
+
+Also fixed in the same pass:
+- **Every creative kind rendered a duplicate body.** All nine were in
+  `CREATIVE_STUDIO_KINDS` but missing from `specialized` in `CreationNode.tsx`,
+  so each drew its studio tile *and* the generic catch-all block underneath.
+  `specialized` now folds in the set that already lists them.
+- **Game objects showed a broken/placeholder tile** — `creativePreviewImageUrl`
+  only trusts a real picture. Added `gamePoster.ts`, which builds a title card
+  from what the document declares, including the inputs it actually binds.
+- **The browser baseline "game" was a button that increments a counter.** It is
+  what a guest session falls back to *and* what a phone target would ship, so it
+  is now a real timed, touch-and-keyboard game.
+- **`nav.group.growth` was missing from all five catalogs**, so the Growth nav
+  group rendered its own key path. Added.
+- **Dead `gameState` field** dropped from `MUTABLE_FIELDS` (one reference: itself).
+- **`HTML5 ZIP` / `Web embed`** were advertised in `CREATIVE_CAPABILITIES` and
+  implemented nowhere; the outputs now name what the targets really produce.
+
+New: migration `0416_game_targets.sql` (`project_game_targets`),
+`api/src/application/game/**`, `presentation/routes/gameRoutes.ts`,
+`writeWorkspaceBinary` in `workspaceStore.ts` (icons are PNG; the text content
+contract is meaningless against them), `frontend/src/lib/{qrCode,gamePoster,gameTargets}.ts`,
+`CanvasGamePanel.tsx`, `GameBody` in `CreationNode.tsx`.
+
+The QR encoder is written rather than pulled in (no existing dependency, one
+narrow case) and verified three independent ways: function-pattern structure,
+Reed-Solomon codewords proven divisible by the generator polynomial using field
+arithmetic re-derived in the test, and a round trip through an independent
+decoder. 143 new tests; api + frontend typecheck clean.
+
+---
+
+## ✅ RESOLVED 2026-08-07 — Connect a mailbox; read it on the canvas; market from it
+
+A tenant could market *only* through the platform's own sender: `campaignEngine`
+called `sendRawEmail` directly, so every campaign left through Resend/SendPulse
+from a DNS-verified domain. A tenant whose whole mail life already lives in
+Microsoft 365 had to publish a TXT record and send from an unfamiliar pipe, could
+not read their own inbox at all, retyped the body on every send, and had no way
+to put a logo in it that a recipient's mail client would load.
+
+### What ships
+
+- **Migration `0414_mailbox_connections_and_campaign_studio.sql`** — `mailbox_connections`
+  (OAuth grant on a real mailbox; tokens SEALED with the shared per-tenant
+  AES-256-GCM credential crypto, unlike `calendar_connections` 0292 which stores
+  them in plaintext — that table is the outlier, not the standard),
+  `marketing_templates`, `marketing_assets`, the `transport` discriminator +
+  three pointers on `marketing_campaigns`, and `marketing_campaign_sends.attempts`.
+- **`application/mailbox/mailboxProviders.ts`** — Microsoft Graph and Gmail behind
+  ONE `MailboxProvider`. Absorbs the two APIs' disagreements (Gmail's opaque
+  RFC-822 blob + `q` search vs Graph's typed JSON + mutually-exclusive
+  `$search`/`$filter`) so nothing above forks per vendor. Scopes are read+send
+  only — `gmail.readonly` not `https://mail.google.com/`, `Mail.Read` not
+  `Mail.ReadWrite`: connecting a mailbox to run a campaign is not consent to
+  delete mail. `applyClientSideFilters` re-applies what a provider could not push
+  down, so a filter means the same thing on either.
+- **`application/mailbox/mailboxService.ts`** — a token is never returned to a
+  caller, and a refresh that fails 400/401 marks the grant `revoked` (terminal)
+  rather than retrying it once per recipient. Sealing/staleness/refresh-merge moved
+  to the shared `integrations/oauthTokenVault.ts`.
+- **`presentation/routes/mailboxRoutes.ts`** (`/api/mailbox/*`) — connect/callback
+  (public, authed by the HMAC-signed `state`, `returnTo` constrained to our own
+  paths), connections CRUD, and the filtered message read.
+- **`application/marketing/campaignTransports.ts`** — `platform | mailbox | sendgrid`
+  behind one `send()`. `TransportError.retryable` is the load-bearing part: a
+  revoked grant fails the whole campaign (every remaining recipient would fail
+  identically), a 429 requeues just that recipient — bounded by
+  `CAMPAIGN_SEND_MAX_ATTEMPTS` so a misclassified error cannot requeue forever.
+  SendGrid is the **Twilio** tie-in and reuses the existing `sendgrid` connector
+  connection; it replaces the delivery pipe, never the identity model.
+- **`application/marketing/templateLibrary.ts`** — templates sanitized on WRITE
+  (17 tests cover the obfuscations a literal match misses: unterminated `<script`,
+  `java\tscript:`, `data:text/html`, bare `onerror=`), merge fields extracted so
+  the composer can warn before the send, and assets in R2 addressed by an
+  unguessable public token (a mail client has no session; an authenticated asset
+  URL is a broken image in every inbox). Logo generation REPLAYS
+  `/llm/v1/images/generations` so the image-credit budget is enforced once.
+- **Canvas** — four kinds (`inbox`, `email`, `emailCampaign`, `emailTemplate`)
+  with real renderers, plus `canvas_add_inbox` / `canvas_refresh_inbox` /
+  `canvas_pin_email` Brain actions. The inbox tile stores its FILTER and its READ
+  TIME: a tile saying "3 messages" with neither is a screenshot claiming to be live.
+- **9 MCP tools** — `mailbox.*`, `marketing.*`, `campaign.*`. Only the read/draft
+  subset is on `CLOUD_AGENT_PLATFORM_TOOLS`; `mailbox.send`, `campaign.send` and
+  `marketing.generate_logo` are deliberately off it (an autonomous run must not
+  contact strangers or spend image credits unattended).
+- **`/growth` rebuilt** and **linked from the nav for the first time** — the page
+  shipped in 0412 and no route in the app reached it, so the whole marketing
+  surface was dead code. Localized across all five catalogs.
+- **Tests**: 44 campaign-engine (rewritten for the transports), 17 sanitizer,
+  19 provider, 18 transport, 34 frontend growth/i18n.
+
+---
+
 ## ✅ RESOLVED 2026-08-07 — A web page is a panel on the Creation Canvas
 
 `browser` (Browser preview), `url` (Web resource) and `service` (Local service)

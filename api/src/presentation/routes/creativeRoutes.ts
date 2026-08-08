@@ -41,6 +41,7 @@ import {
   readModel3dSpec,
   stlFromSolids,
 } from '../../application/creative/geometryService';
+import { normalizeGameDocument, validateGameDocument } from '../../application/game/gameDocument';
 
 /** Every kind this route can generate, and what it produces. */
 const KINDS = {
@@ -55,9 +56,21 @@ const KINDS = {
 type CreativeKind = keyof typeof KINDS;
 
 const AUTHORING_PROMPTS: Record<'game' | 'resume' | 'podcast' | 'template', string> = {
+  // The touch, viewport and offline requirements are NOT decoration: this exact
+  // document is what gets installed on a phone home screen and wrapped in an APK
+  // (see application/game/gameTarget.ts). A game written for a mouse and a fixed
+  // 800×600 canvas is unplayable on the device most people asked for.
   game: 'You write small, complete browser games. Reply with ONE self-contained HTML document — inline CSS and JS, '
-    + 'no external files, no network — that actually plays the game described in the brief: real rules, real input '
-    + 'handling, a win or lose state, and a visible score or objective. Reply with the HTML only, no commentary.',
+    + 'no external files, no network, no CDN — that actually plays the game described in the brief: real rules, '
+    + 'real input handling, a win or lose state, and a visible score or objective.\n'
+    + 'It must play on a PHONE as well as a laptop:\n'
+    + '- Handle BOTH keyboard (arrow keys or WASD, and space) AND touch (pointerdown/pointermove on the play area). '
+    + 'Never require a key that has no touch equivalent.\n'
+    + '- Size the play area to the viewport with CSS and resize with it — never a fixed pixel width. '
+    + 'If you use a canvas, set its width/height from the element size and redraw on resize.\n'
+    + '- Make text and targets big enough to read and hit with a thumb.\n'
+    + '- Start on a tap or a key, not automatically, and offer a restart when the game ends.\n'
+    + 'Reply with the HTML only, no commentary.',
   resume: 'You write resumes. Reply with a complete Markdown resume for the person and role described in the brief: '
     + 'a summary, experience with measurable achievements, skills, and education. Use only facts the brief supports '
     + 'and clearly bracketed placeholders where it gives none. Reply with the Markdown only.',
@@ -71,7 +84,7 @@ const AUTHORING_PROMPTS: Record<'game' | 'resume' | 'podcast' | 'template', stri
 
 /** Token ceilings per kind. A game is a document; a spec is a page of numbers. */
 const MAX_TOKENS: Record<CreativeKind, number> = {
-  cad: 1600, model3d: 1600, game: 6000, resume: 2400, podcast: 3200, template: 1600,
+  cad: 1600, model3d: 1600, game: 8000, resume: 2400, podcast: 3200, template: 1600,
 };
 
 function fileSafe(value: string): string {
@@ -171,7 +184,15 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
     // The file has to BE what it claims to be. A refusal, an apology or a stray
     // paragraph is not an artifact, and shipping it as one is the failure this
     // route exists to remove.
-    if (kind === 'game' && !/<[a-z!]/i.test(file)) return c.json({ error: 'The generated game was not an HTML document' }, 502);
+    //
+    // A game is checked by the SAME validator every game target uses, so a
+    // document that would produce a blank screen is refused here — once, before
+    // anyone publishes it or spends five minutes building an APK from it —
+    // rather than in each place it would eventually fail.
+    if (kind === 'game') {
+      const playable = validateGameDocument(file);
+      if (!playable.ok) return c.json({ error: playable.reason }, 502);
+    }
     if (kind === 'template') {
       try {
         JSON.parse(file);
@@ -183,8 +204,10 @@ export function createCreativeRoutes(): Hono<HonoEnv> {
 
     return c.json({
       ...common,
-      content: kind === 'game' && !/^\s*<!doctype/i.test(file) ? `<!doctype html>\n${file}` : file,
-      validationDetail: `${target.outputFormat} deliverable generated from the brief and checked for shape (${file.length} characters)`,
+      content: kind === 'game' ? normalizeGameDocument(file, title) : file,
+      validationDetail: kind === 'game'
+        ? `Self-contained playable HTML game, checked for a script and for offline independence (${file.length} characters)`
+        : `${target.outputFormat} deliverable generated from the brief and checked for shape (${file.length} characters)`,
       summary: null,
     });
   });

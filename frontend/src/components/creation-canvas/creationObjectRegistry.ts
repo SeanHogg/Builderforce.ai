@@ -44,7 +44,10 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'note', label: 'Note', icon: '◇', group: 'Insights', createData: () => ({ kind: 'note', title: 'Note', subtitle: 'Add context for your collaborators.' }) },
   { kind: 'prototype', label: 'WYSIWYG', icon: '▣', group: 'Build', createData: () => ({ kind: 'prototype', title: 'Interactive prototype', status: 'Draft' }) },
   { kind: 'code', label: 'Code', icon: '</>', group: 'Build', createData: () => ({ kind: 'code', title: 'Code workspace', status: 'Draft' }) },
-  { kind: 'browser', label: 'Browser preview', icon: '◎', group: 'Build', createData: () => ({ kind: 'browser', title: 'Live preview', status: 'Ready' }) },
+  // Browser / URL / Local service all render the SAME live page panel — they
+  // differ only in where the address comes from (typed, dropped, or forwarded
+  // from the VS Code host), not in what the object is once it has one.
+  { kind: 'browser', label: 'Browser preview', icon: '◎', group: 'Build', createData: () => ({ kind: 'browser', title: 'Live preview', status: 'Ready', url: '', viewport: 'desktop' }) },
   { kind: 'repository', label: 'Repository', icon: '⑂', group: 'Build', createData: () => ({ kind: 'repository', title: 'Source repository', status: 'Linked from VS Code' }) },
   { kind: 'selection', label: 'Editor selection', icon: '⌗', group: 'Build', createData: () => ({ kind: 'selection', title: 'Editor selection', status: 'Referenced from VS Code' }) },
   { kind: 'diagnostics', label: 'Diagnostics', icon: '⚠', group: 'Build', createData: () => ({ kind: 'diagnostics', title: 'Editor diagnostics', status: 'Ready to run', diagnostics: [], results: [], nextSteps: [] }) },
@@ -58,6 +61,17 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'targetMarket', label: 'Target market', icon: '◇', group: 'Insights', createData: () => ({ kind: 'targetMarket', title: 'Target market', status: 'Researching' }) },
   { kind: 'salesGoal', label: 'Weekly sales goal', icon: '✓', group: 'Insights', createData: () => ({ kind: 'salesGoal', title: 'Weekly goals', status: 'Active', outreachTarget: 50, contactsTarget: 20, meetingsTarget: 3 }) },
   { kind: 'salesMeeting', label: 'Sales meeting', icon: '◷', group: 'Collaborate', createData: () => ({ kind: 'salesMeeting', title: 'Sales meeting', status: 'Needs scheduling', durationMinutes: 30 }) },
+  // An `inbox` is a LIVE filtered view of a connected mailbox — it re-reads.
+  // `messages` holds the last read so the tile is not blank while it refreshes,
+  // and `filter` is what makes "show me unread mail from Acme" a persistent
+  // object on the board rather than a one-off answer in chat.
+  { kind: 'inbox', label: 'Inbox', icon: '✉', group: 'Integrations', createData: () => ({ kind: 'inbox', title: 'Inbox', status: 'Connect a mailbox', messages: [], filter: {} }) },
+  // One message, PINNED. It stops changing, which is the point: it can be
+  // annotated and connected to a task, and it is still there tomorrow after it
+  // has scrolled out of the live view.
+  { kind: 'email', label: 'Email', icon: '✉', group: 'Integrations', createData: () => ({ kind: 'email', title: 'Email', status: 'Pinned from inbox' }) },
+  { kind: 'emailCampaign', label: 'Email campaign', icon: '◎', group: 'Integrations', createData: () => ({ kind: 'emailCampaign', title: 'New campaign', status: 'Draft', transport: 'platform' }) },
+  { kind: 'emailTemplate', label: 'Email template', icon: '▤', group: 'Integrations', createData: () => ({ kind: 'emailTemplate', title: 'Email template', status: 'Draft', mergeFields: [] }) },
   { kind: 'task', label: 'Task', icon: '✓', group: 'Work', createData: () => ({ kind: 'task', title: 'Build approved mockup', status: 'Ready', role: 'Campaign Strategist' }) },
   { kind: 'prd', label: 'PRD', icon: '▤', group: 'Work', createData: () => ({ kind: 'prd', title: 'Product requirements', status: 'Draft' }) },
   { kind: 'release', label: 'Release', icon: '◆', group: 'Work', createData: () => ({ kind: 'release', title: 'Release plan', status: 'Planning' }) },
@@ -94,7 +108,7 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'diagram', label: 'Diagram', icon: '◈', group: 'Knowledge', createData: () => ({ kind: 'diagram', title: 'Untitled diagram', status: 'Draft', diagramFormat: 'drawio' }) },
   { kind: 'knowledge', label: 'Knowledge', icon: '◇', group: 'Knowledge', createData: () => ({ kind: 'knowledge', title: 'Knowledge item' }) },
   { kind: 'file', label: 'File', icon: '□', group: 'Knowledge', createData: () => ({ kind: 'file', title: 'Attached file' }) },
-  { kind: 'url', label: 'URL', icon: '↗', group: 'Knowledge', createData: () => ({ kind: 'url', title: 'Web resource' }) },
+  { kind: 'url', label: 'URL', icon: '↗', group: 'Knowledge', createData: () => ({ kind: 'url', title: 'Web resource', url: '', viewport: 'desktop' }) },
   { kind: 'frame', label: 'Frame', icon: '□', group: 'Collaborate', createData: () => ({ kind: 'frame', title: 'Presentation frame', status: 'Canvas frame' }) },
   { kind: 'drawing', label: 'Drawing', icon: '⌁', group: 'Collaborate', createData: () => ({ kind: 'drawing', title: 'Sketch', subtitle: 'Draw and annotate an idea.' }) },
   { kind: 'comment', label: 'Comment', icon: '●', group: 'Collaborate', createData: () => ({ kind: 'comment', title: 'Comment thread' }) },
@@ -123,6 +137,10 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   document: ['export'], slides: ['present', 'export'], diagram: ['export'], spreadsheet: ['export'],
   salesPipeline: ['refresh', 'review'], salesContact: ['qualify', 'advance'], salesCampaign: ['draft', 'schedule', 'execute'],
   targetMarket: ['research', 'segment'], salesGoal: ['review', 'update'], salesMeeting: ['schedule', 'invite'],
+  // `refresh` re-reads the mailbox; `pin` lifts one message out as its own
+  // `email` object so it survives the next refresh.
+  inbox: ['refresh', 'filter', 'pin'], email: ['reply', 'open'],
+  emailCampaign: ['draft', 'send'], emailTemplate: ['edit', 'apply'],
 };
 
 const MUTABLE_FIELDS = {
@@ -148,12 +166,12 @@ const MUTABLE_FIELDS = {
   note: ['content', 'markdown'],
   prototype: ['content', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteAccent', 'viewport', 'pages'],
   code: ['content', 'code', 'language', 'path'],
-  browser: ['content', 'url', 'viewport'],
+  browser: ['content', 'url', 'viewport', 'pageTitle'],
   repository: ['content', 'url', 'branch'],
   selection: ['content', 'code', 'language', 'path', 'range'],
   diagnostics: ['content', 'diagnostics', 'findings', 'checks', 'items', 'severity', 'result', 'results', 'summary', 'verdict', 'nextSteps', 'recommendations', 'actions', 'remediation', 'path', 'qualityScore', 'qualityLabel', 'qualityHeadline', 'diagnosticCount', 'gapCount'],
   terminal: ['content', 'exitCode'],
-  service: ['content', 'url', 'port'],
+  service: ['content', 'url', 'port', 'viewport', 'pageTitle'],
   llm: ['content', 'model', 'instructions', 'parameters'],
   project: ['content', 'projectLens', 'sources', 'qualityScore', 'qualityLabel', 'qualityHeadline', 'diagnosticCount', 'gapCount', 'diagnostics', 'recommendations', 'qualityUpdatedAt'],
   salesPipeline: ['content', 'ownerUserId', 'stages', 'pipelineCounts', 'recommendations', 'sources'],
@@ -162,6 +180,13 @@ const MUTABLE_FIELDS = {
   targetMarket: ['content', 'ownerUserId', 'market', 'segments', 'channels', 'recommendations', 'sources'],
   salesGoal: ['content', 'ownerUserId', 'outreachTarget', 'contactsTarget', 'meetingsTarget', 'revenueGoalCents', 'referralLink', 'salesLink', 'progress', 'recommendations'],
   salesMeeting: ['content', 'ownerUserId', 'contactId', 'scheduledAt', 'durationMinutes', 'attendees', 'meetingUrl'],
+  // `messages` is the last read, kept so the tile is not blank while it
+  // refreshes; `filter` is what makes the view reproducible on the next refresh
+  // and is the reason an inbox is an OBJECT rather than a chat answer.
+  inbox: ['content', 'connectionId', 'accountEmail', 'provider', 'filter', 'messages', 'unreadCount', 'fetchedAt', 'summary'],
+  email: ['content', 'messageId', 'connectionId', 'accountEmail', 'from', 'fromName', 'to', 'subject', 'receivedAt', 'bodyText', 'unread', 'hasAttachments', 'webUrl', 'summary'],
+  emailCampaign: ['content', 'campaignId', 'audienceId', 'audienceName', 'templateId', 'subject', 'bodyHtml', 'transport', 'senderIdentityId', 'mailboxConnectionId', 'connectorConnectionId', 'fromName', 'recipients', 'sent', 'failed', 'opened', 'clicked', 'blockers'],
+  emailTemplate: ['content', 'templateId', 'subject', 'bodyHtml', 'mergeFields', 'assetId', 'logoUrl'],
   task: ['content', 'role', 'assignee', 'agentName', 'agentRef', 'priority', 'acceptanceCriteria', 'taskKey', 'prdTitle', 'prdStatus', 'prdSummary', 'prdCount'],
   prd: ['content', 'markdown', 'requirements', 'userStories'],
   release: ['content', 'items', 'milestones', 'releaseDate'],
@@ -183,7 +208,7 @@ const MUTABLE_FIELDS = {
   animation: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'duration', 'mcpServer', 'mcpTool', 'mcpArguments'],
   podcast: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'duration', 'transcript', 'mcpServer', 'mcpTool', 'mcpArguments'],
   comic: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'pages', 'mcpServer', 'mcpTool', 'mcpArguments'],
-  game: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'gameState', 'mcpServer', 'mcpTool', 'mcpArguments'],
+  game: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'mcpServer', 'mcpTool', 'mcpArguments'],
   cad: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'cadState', 'units', 'mcpServer', 'mcpTool', 'mcpArguments'],
   model3d: ['content', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'modelState', 'units', 'mcpServer', 'mcpTool', 'mcpArguments'],
   resume: ['content', 'markdown', 'prompt', 'mediaKind', 'capabilityId', 'provider', 'templateId', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'resumeId', 'mcpServer', 'mcpTool', 'mcpArguments'],
@@ -193,7 +218,7 @@ const MUTABLE_FIELDS = {
   diagram: ['content', 'markdown', 'diagram', 'diagramXml', 'diagramFormat', 'sources'],
   knowledge: ['content', 'markdown', 'sources'],
   file: ['content', 'fileName', 'mimeType', 'url', 'fileSize', 'summary'],
-  url: ['content', 'url', 'sources'],
+  url: ['content', 'url', 'sources', 'viewport', 'pageTitle'],
   frame: ['content', 'framePurpose', 'frameColor', 'frameBorder'],
   drawing: ['content', 'points', 'drawingWidth', 'drawingHeight', 'stroke', 'strokeWidth'],
   comment: ['content', 'resolved', 'mentions'],
@@ -255,6 +280,10 @@ const CONTEXT_FIELDS = [
   'diagnostics', 'findings', 'checks', 'results', 'result', 'nextSteps', 'actions', 'remediation',
   'mediaKind', 'capabilityId', 'provider', 'templateId', 'templateCategory', 'outputFormat', 'outputUrl', 'thumbnailUrl', 'duration', 'pages', 'units', 'mcpServer', 'mcpTool',
   'diagramFormat',
+  // A framed page is opaque to everything else on the board; the title and text
+  // the panel read off it are what let Brain reason about the page a user is
+  // looking at rather than only knowing its address.
+  'pageTitle', 'frameable',
   'instructions', 'parameters', 'assignee', 'agentName', 'agentRef', 'priority', 'acceptanceCriteria', 'taskKey',
   'criteria', 'testPrompt', 'testExpected', 'testResponse', 'testStatus', 'testResults', 'passRate', 'runCount', 'lastRunAt',
   'prdTitle', 'prdStatus', 'prdSummary', 'prdCount', 'requirements',
@@ -268,6 +297,17 @@ const CONTEXT_FIELDS = [
   // A pitch object's substance IS its arrays — Brain cannot strengthen a weak
   // criterion or tighten an over-length answer it was never shown.
   'competitionId', 'beats', 'questions', 'answers', 'eligibility', 'category',
+  // A mailbox object's substance IS the messages and the filter that produced
+  // them — Brain cannot triage an inbox, or say why a message matters, from a
+  // title alone. `bodyText` is already excerpt-length by the time it gets here
+  // (the service truncates on read) and `safeContextValue` caps it again.
+  'connectionId', 'accountEmail', 'provider', 'filter', 'messages', 'unreadCount', 'fetchedAt',
+  'messageId', 'from', 'fromName', 'to', 'receivedAt', 'bodyText', 'unread', 'hasAttachments', 'webUrl',
+  // Campaign counters are what "how did that send do?" is answered from; the
+  // body is deliberately absent — it is KB of table markup, and the model edits
+  // it through the template tools rather than reading it out of the snapshot.
+  'audienceId', 'audienceName', 'transport', 'recipients', 'failed', 'opened', 'clicked', 'blockers',
+  'mergeFields', 'assetId', 'logoUrl',
 ] as const;
 const SENSITIVE_CONTEXT_KEY = /(?:secret|token|password|credential|authorization|api.?key|cookie)/i;
 const DEFAULT_CONTEXT_ARRAY_LIMIT = 25;

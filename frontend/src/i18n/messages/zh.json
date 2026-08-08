@@ -463,7 +463,8 @@
       "reliability": "可靠性",
       "agentOps": "智能体运维",
       "sales": "销售中心",
-      "challenges": "挑战"
+      "challenges": "挑战",
+      "growth": "增长"
     },
     "tab": {
       "projects": "项目",
@@ -548,7 +549,8 @@
       "memory": "记忆",
       "rehearsal": "预演"
     },
-    "primaryAria": "主导航"
+    "primaryAria": "主导航",
+    "group.growth": "增长"
   },
   "alerts": {
     "title": "告警",
@@ -12320,6 +12322,9 @@
     "dropFilesHint": "Word 文件会展开为页面，电子表格展开为工作表，演示文稿展开为幻灯片——然后就可以向 Brain 提问。",
     "import": {
       "statusImported": "已导入",
+      "statusImporting": "正在读取",
+      "statusTooLarge": "文件过大无法读取",
+      "tooLargeShape": "已附加 — 超过 {limit} MB 的文件不会在画布上读取",
       "statusAttached": "已附加",
       "statusUnreadable": "无法读取",
       "statusTextUnavailable": "无法提取文本",
@@ -12403,6 +12408,7 @@
       "tone_danger": "失败",
       "tone_info": "信息",
       "fileGeneric": "文件",
+      "importReading": "正在读取文件…",
       "fileType": "类型",
       "fileSize": "大小",
       "filePreviewAlt": "{name} 的预览",
@@ -12657,7 +12663,38 @@
       "mapRegion": "区域",
       "mapSizedBy": "大小依据",
       "mapAria": "包含 {count} 个已绘制地点的地图：{places}",
-      "mapExtent": "纬度 {south}° 至 {north}° · 经度 {west}° 至 {east}°"
+      "mapExtent": "纬度 {south}° 至 {north}° · 经度 {west}° 至 {east}°",
+      "inboxNotConnected": "请在“增长”中连接邮箱以填充此收件箱。",
+      "inboxUnread": "{count} 封未读",
+      "inboxReadAt": "{time} 读取",
+      "inboxEmpty": "没有符合此筛选条件的邮件。",
+      "inboxUnknownSender": "未知发件人",
+      "inboxNoSubject": "（无主题）",
+      "inboxMore": "还有 {count} 封",
+      "emailFrom": "发件人",
+      "emailTo": "收件人",
+      "emailBody": "正文",
+      "emailNoBody": "此邮件没有可读文本。",
+      "emailOpenInProvider": "在邮件应用中打开",
+      "campaignSent": "已发送",
+      "campaignOpened": "已打开",
+      "campaignClicked": "已点击",
+      "campaignAudience": "受众",
+      "campaignVia": "发送方式",
+      "campaignSubject": "主题",
+      "campaignBlocked": "尚未就绪",
+      "templateSubject": "主题",
+      "templateNoSubject": "尚无主题",
+      "templateMergeFields": "合并字段",
+      "templateNoMergeFields": "仅使用姓名、邮箱和徽标。",
+      "gameNotGenerated": "还没有游戏。先描述你想要的游戏，然后生成它。",
+      "gameGenerateFirst": "生成后即可游玩",
+      "gamePlay": "开始游戏",
+      "gameStop": "停止",
+      "gameReady": "可以游玩",
+      "gameControlKeys": "键盘",
+      "gameControlTouch": "触控",
+      "gamePlayingAlt": "正在游玩 {title}"
     },
     "editor": {
       "toolbar": "格式",
@@ -12689,6 +12726,7 @@
       "group": "下载",
       "copy": "复制",
       "markdown": "Markdown",
+      "html": "HTML",
       "csv": "CSV",
       "xlsx": "Excel",
       "docx": "Word",
@@ -12852,7 +12890,11 @@
       "pitch": "路演",
       "pitchScorecard": "评分表",
       "pitchQa": "评委问答",
-      "pitchApplication": "参赛申请"
+      "pitchApplication": "参赛申请",
+      "inbox": "收件箱",
+      "email": "邮件",
+      "emailCampaign": "邮件营销活动",
+      "emailTemplate": "邮件模板"
     },
     "canvasOutline": "无障碍画布大纲",
     "canvasGestureToggle": "拖动以框选",
@@ -13244,11 +13286,11 @@
     "copiedToClipboard": "已复制到剪贴板",
     "clipboardUnavailable": "剪贴板不可用",
     "noTabularRows": "此对象尚未包含表格数据行",
-    "markdownDownloadedUsePdf": "已下载 Markdown — 保存会话以导出 Word，或导出 PDF",
+    "markdownDownloadedUsePdf": "今日免费下载次数已用完 — 已改为保存 Markdown；免费注册即可继续",
     "printOpened": "已打开打印视图 — 请选择“另存为 PDF”",
     "printUnavailable": "此浏览器无法打开打印视图",
     "noRenderedDrawing": "此图尚未绘制完成",
-    "csvDownloadedSignInForExcel": "已下载 CSV — 保存会话以导出 Excel",
+    "csvDownloadedSignInForExcel": "今日免费下载次数已用完 — 已改为保存 CSV；免费注册即可继续",
     "downloadReady": "下载已就绪",
     "exportFailed": "导出失败",
     "deliverables": "交付物",
@@ -13368,6 +13410,26 @@
       "category_code": "代码",
       "category_web": "站点",
       "category_other": "其他"
+    },
+    "drive": {
+      "title": "云端文件",
+      "close": "关闭",
+      "accounts": "已连接的账户",
+      "connect": "连接 {provider}",
+      "notConfigured": "此部署未配置 {provider}",
+      "connectPrompt": "连接云盘即可在此浏览文件。",
+      "noAccounts": "此部署没有可用的云存储。",
+      "reconnectNeeded": "需要重新连接此云盘才能读取其文件。",
+      "breadcrumb": "文件夹路径",
+      "root": "全部文件",
+      "folder": "文件夹",
+      "loading": "加载中…",
+      "opening": "正在打开…",
+      "emptyFolder": "此文件夹为空。",
+      "loadMore": "加载更多",
+      "loadFailed": "无法读取该云盘。",
+      "connectFailed": "无法启动 {provider} 连接。",
+      "openFailed": "无法打开 {name}。"
     },
     "creativeSelectFirst": "请先选择一个创作对象",
     "creativePreviewOpened": "已打开预览",
@@ -13718,6 +13780,61 @@
           "founders": "创始人背景"
         }
       }
+    },
+    "webPage": {
+      "address": "网址",
+      "addressPlaceholder": "输入网址后按 Enter",
+      "reload": "重新加载页面",
+      "openInNewTab": "在新标签页中打开",
+      "emptyTitle": "尚未加载页面",
+      "emptyHint": "在上方输入网址，或将链接拖放到画布上。",
+      "loading": "正在加载 {host}…",
+      "checking": "正在检查该页面是否允许嵌入…",
+      "blockedTitle": "{host} 不允许被嵌入",
+      "blockedHint": "此处改为显示页面的可读文本。如需正常使用，请在新标签页中打开。",
+      "readerEmpty": "该页面未返回可读文本。",
+      "probeFailed": "服务器无法读取该页面。",
+      "invalidUrl": "请输入有效的 http:// 或 https:// 地址。",
+      "statusLive": "实时",
+      "addressLabel": "网址",
+      "reread": "重新加载并重新读取页面",
+      "inspectorHint": "页面在画布上实时加载，其文本也会读入画布，便于 Brain 回答与之相关的问题。",
+      "mixedTitle": "{host} 通过 http:// 提供服务",
+      "mixedHint": "安全页面无法嵌入非安全页面。此处改为显示页面文本 — 请在新标签页中打开，或在 VS Code 扩展中查看。"
+    },
+    "expandPaletteGroup": "展开「{group}」分组",
+    "collapsePaletteGroup": "收起「{group}」分组",
+    "game": {
+      "title": "在真实设备上游玩",
+      "shipAction": "在设备上游玩",
+      "selectFirst": "请先选择一个游戏对象。",
+      "accountTitle": "创建账户以发布此游戏",
+      "accountBody": "保存此会话，即可将游戏发布到手机、构建应用或发送到 Roblox。",
+      "needProject": "将此游戏连接到一个「项目」对象，才能发布它或构建应用。",
+      "needGame": "请先生成游戏 — 目前还没有可发布的内容。",
+      "phoneTitle": "在手机上",
+      "phoneIntro": "将游戏发布到专属网址，然后在 Android 或 iPhone 上添加到主屏幕。全屏、离线、触控操作。",
+      "phoneScan": "用手机相机扫描即可立即游玩。",
+      "qrAlt": "已发布游戏的二维码",
+      "publish": "发布",
+      "republish": "发布更新",
+      "publishing": "发布中…",
+      "published": "游戏已发布到 {url}",
+      "installIos": "iPhone：在 Safari 中打开链接，然后「分享」→「添加到主屏幕」。",
+      "installAndroid": "Android：在 Chrome 中打开链接，出现提示时点击「安装」。",
+      "zeroSetup": "无需设置",
+      "build": "构建",
+      "rebuild": "重新构建",
+      "building": "构建中…",
+      "openIt": "打开",
+      "openLink": "打开",
+      "materialized": "{label}：已写入 {count} 个文件",
+      "wroteFiles": "{directory} 中有 {count} 个文件",
+      "universeId": "Roblox Universe ID",
+      "placeId": "Roblox Place ID",
+      "robloxIdsHint": "这两个数字都在你已从 Studio 发布的体验的 Creator Dashboard 网址中。",
+      "publishRoblox": "发布到 Roblox",
+      "robloxPublished": "已发布到 Roblox，版本 {version}"
     }
   },
   "canvasCommands": {
@@ -14049,7 +14166,7 @@
   },
   "growth": {
     "title": "增长",
-    "description": "触达在你所建站点上注册的用户。",
+    "description": "读取你已在使用的邮箱，并触达在你所建站点上注册的用户。",
     "genericError": "出错了，请重试。",
     "audiences": {
       "title": "受众",
@@ -14078,7 +14195,7 @@
     },
     "campaigns": {
       "title": "营销活动",
-      "description": "活动需要主题、已验证的发件地址以及有成员的受众。",
+      "description": "营销活动需要主题、有成员的受众，以及一个发送来源。",
       "empty": "暂无活动。",
       "namePlaceholder": "上线公告",
       "nameLabel": "活动名称",
@@ -14102,8 +14219,99 @@
         "status": "已发送",
         "subject": "请填写主题",
         "sender": "请验证发件地址",
-        "audience": "受众为空"
+        "audience": "受众为空",
+        "mailbox": "请选择已连接的邮箱",
+        "connection": "请选择 SendGrid 连接"
+      },
+      "compose": "新建营销活动",
+      "confirmSendTitle": "要发送此营销活动吗？",
+      "confirmSend": "向“{name}”的全部受众发送？这会触达真实用户且无法撤销。",
+      "transport": {
+        "platform": "由 Builderforce 发送",
+        "mailbox": "从你的邮箱发送",
+        "sendgrid": "经 Twilio SendGrid 发送"
       }
+    },
+    "mailboxes": {
+      "title": "邮箱",
+      "description": "连接 Microsoft 365 或 Gmail，即可在画布上查看收件箱，并以本人身份发送营销邮件。",
+      "empty": "尚未连接邮箱。",
+      "connect": "连接 {provider}",
+      "connected": "邮箱已连接。",
+      "disconnect": "断开连接",
+      "disconnected": "邮箱已断开连接。",
+      "confirmDisconnect": "断开 {email}？以该邮箱发送的营销活动将会停止。",
+      "allowSending": "允许营销活动从此邮箱发送",
+      "sendingUpdated": "发送权限已更新。",
+      "notConfigured": "本部署未配置该服务商。",
+      "status": {
+        "connected": "已连接",
+        "reconnect": "需重新连接"
+      },
+      "provider": {
+        "microsoft": "Microsoft 365",
+        "google": "Gmail"
+      },
+      "error": {
+        "declined": "你拒绝了授权，因此未连接任何邮箱。",
+        "failed": "无法连接该邮箱，请重试。"
+      }
+    },
+    "brand": {
+      "title": "徽标与图片",
+      "description": "邮件可加载的图片。使用 '{{logo}}' 的模板会自动采用你最新的徽标。",
+      "empty": "尚无图片。",
+      "upload": "上传徽标",
+      "uploaded": "图片已上传。",
+      "generate": "生成",
+      "generated": "徽标已生成。",
+      "generatePlaceholder": "墨尔本的一家精品咖啡烘焙店",
+      "generateLabel": "描述该业务",
+      "delete": "删除",
+      "deleted": "图片已删除。",
+      "confirmDelete": "删除 {name}？使用它的模板将显示为损坏的图片。"
+    },
+    "templates": {
+      "title": "模板",
+      "description": "可复用的主题与正文。导入的 HTML 会先经过清理再存储。",
+      "empty": "尚无模板。",
+      "use": "使用",
+      "delete": "删除",
+      "deleted": "模板已删除。",
+      "import": "导入 HTML",
+      "imported": "模板已导入。",
+      "confirmDelete": "删除模板 {name}？",
+      "mergeFields": "需要：{fields}",
+      "source": {
+        "builtin": "入门",
+        "custom": "自定义",
+        "imported": "导入",
+        "generated": "AI"
+      }
+    },
+    "composer": {
+      "title": "新建营销活动",
+      "audience": "受众",
+      "audienceOption": "{name}（{count} 位成员）",
+      "template": "从模板开始",
+      "noTemplate": "从空白开始撰写",
+      "transport": "发送方式",
+      "transportHint": {
+        "platform": "使用你已通过 TXT 记录验证域名的地址发送。",
+        "mailbox": "以本人身份，从你连接的 Microsoft 365 或 Gmail 账户发送。",
+        "sendgrid": "使用你自己的 Twilio SendGrid 密钥，从已验证的地址发送。"
+      },
+      "mailbox": "邮箱",
+      "noMailboxes": "没有已连接且允许发送的邮箱。",
+      "sender": "发件地址",
+      "noSenders": "尚无已验证的发件地址。",
+      "fromName": "显示名称",
+      "fromNamePlaceholder": "Acme 团队",
+      "choose": "请选择…",
+      "mergeHelp": "可使用 '{{name}}'、'{{email}}'、'{{logo}}' 和 '{{unsubscribe}}'，或受众中的任意 '{{field}}'。",
+      "cancel": "取消",
+      "connection": "SendGrid 连接",
+      "noConnections": "没有已启用的 SendGrid 连接。请在“设置 → 集成 → 连接器”中添加。"
     }
   },
   "cookieConsent": {

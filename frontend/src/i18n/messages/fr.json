@@ -463,7 +463,8 @@
       "reliability": "Fiabilité",
       "agentOps": "Ops des agents",
       "sales": "Centre des ventes",
-      "challenges": "Défis"
+      "challenges": "Défis",
+      "growth": "Croissance"
     },
     "tab": {
       "projects": "Projets",
@@ -548,7 +549,8 @@
       "memory": "Mémoire",
       "rehearsal": "Répétition"
     },
-    "primaryAria": "Principale"
+    "primaryAria": "Principale",
+    "group.growth": "Croissance"
   },
   "alerts": {
     "title": "Alertes",
@@ -12320,6 +12322,9 @@
     "dropFilesHint": "Un fichier Word s'ouvre en pages, un tableur en feuilles, une présentation en diapositives — puis interrogez Brain.",
     "import": {
       "statusImported": "Importé",
+      "statusImporting": "Lecture",
+      "statusTooLarge": "Trop volumineux à lire",
+      "tooLargeShape": "Joint — les fichiers de plus de {limit} Mo ne sont pas lus sur le canevas",
       "statusAttached": "Joint",
       "statusUnreadable": "Lecture impossible",
       "statusTextUnavailable": "Texte non extractible",
@@ -12403,6 +12408,7 @@
       "tone_danger": "Échec",
       "tone_info": "Information",
       "fileGeneric": "Fichier",
+      "importReading": "Lecture du fichier…",
       "fileType": "Type",
       "fileSize": "Taille",
       "filePreviewAlt": "Aperçu de {name}",
@@ -12657,7 +12663,38 @@
       "mapRegion": "Région",
       "mapSizedBy": "Taille selon",
       "mapAria": "Carte de {count} lieux tracés : {places}",
-      "mapExtent": "{south}° à {north}° N · {west}° à {east}° E"
+      "mapExtent": "{south}° à {north}° N · {west}° à {east}° E",
+      "inboxNotConnected": "Connectez une boîte mail dans Croissance pour remplir cette boîte de réception.",
+      "inboxUnread": "{count} non lus",
+      "inboxReadAt": "lu à {time}",
+      "inboxEmpty": "Aucun message ne correspond à ce filtre.",
+      "inboxUnknownSender": "Expéditeur inconnu",
+      "inboxNoSubject": "(sans objet)",
+      "inboxMore": "{count} de plus",
+      "emailFrom": "De",
+      "emailTo": "À",
+      "emailBody": "Message",
+      "emailNoBody": "Ce message ne contient aucun texte lisible.",
+      "emailOpenInProvider": "Ouvrir dans la messagerie",
+      "campaignSent": "Envoyés",
+      "campaignOpened": "Ouverts",
+      "campaignClicked": "Clics",
+      "campaignAudience": "Audience",
+      "campaignVia": "Envoyée via",
+      "campaignSubject": "Objet",
+      "campaignBlocked": "Pas prête",
+      "templateSubject": "Objet",
+      "templateNoSubject": "Pas encore d’objet",
+      "templateMergeFields": "Champs de fusion",
+      "templateNoMergeFields": "Utilise seulement le nom, l’e-mail et le logo.",
+      "gameNotGenerated": "Pas encore de jeu. Décrivez le jeu souhaité, puis générez-le.",
+      "gameGenerateFirst": "Générer pour jouer",
+      "gamePlay": "Jouer",
+      "gameStop": "Arrêter",
+      "gameReady": "Prêt à jouer",
+      "gameControlKeys": "clavier",
+      "gameControlTouch": "tactile",
+      "gamePlayingAlt": "En train de jouer à {title}"
     },
     "editor": {
       "toolbar": "Mise en forme",
@@ -12689,6 +12726,7 @@
       "group": "Télécharger",
       "copy": "Copier",
       "markdown": "Markdown",
+      "html": "HTML",
       "csv": "CSV",
       "xlsx": "Excel",
       "docx": "Word",
@@ -12852,7 +12890,11 @@
       "pitch": "Pitch",
       "pitchScorecard": "Grille de notation",
       "pitchQa": "Questions du jury",
-      "pitchApplication": "Candidature"
+      "pitchApplication": "Candidature",
+      "inbox": "Boîte de réception",
+      "email": "E-mail",
+      "emailCampaign": "Campagne e-mail",
+      "emailTemplate": "Modèle d’e-mail"
     },
     "canvasOutline": "Plan accessible de la toile",
     "canvasGestureToggle": "Glisser pour sélectionner",
@@ -13244,11 +13286,11 @@
     "copiedToClipboard": "Copié dans le presse-papiers",
     "clipboardUnavailable": "Le presse-papiers était indisponible",
     "noTabularRows": "Cet objet ne contient pas encore de lignes tabulaires",
-    "markdownDownloadedUsePdf": "Markdown téléchargé — enregistrez la session pour Word, ou exportez en PDF",
+    "markdownDownloadedUsePdf": "Téléchargements gratuits épuisés pour aujourd’hui — Markdown enregistré à la place ; inscrivez-vous gratuitement pour continuer",
     "printOpened": "Aperçu avant impression ouvert — choisissez « Enregistrer au format PDF »",
     "printUnavailable": "Ce navigateur n’a pas pu ouvrir l’aperçu avant impression",
     "noRenderedDrawing": "Ce diagramme n’a pas fini de s’afficher",
-    "csvDownloadedSignInForExcel": "CSV téléchargé — enregistrez la session pour Excel",
+    "csvDownloadedSignInForExcel": "Téléchargements gratuits épuisés pour aujourd’hui — CSV enregistré à la place ; inscrivez-vous gratuitement pour continuer",
     "downloadReady": "Téléchargement prêt",
     "exportFailed": "Échec de l’export",
     "deliverables": "Livrables",
@@ -13368,6 +13410,26 @@
       "category_code": "Code",
       "category_web": "Site",
       "category_other": "Autre"
+    },
+    "drive": {
+      "title": "Fichiers cloud",
+      "close": "Fermer",
+      "accounts": "Comptes connectés",
+      "connect": "Connecter {provider}",
+      "notConfigured": "{provider} n’est pas configuré sur ce déploiement",
+      "connectPrompt": "Connectez un espace de stockage pour parcourir vos fichiers ici.",
+      "noAccounts": "Aucun stockage cloud n’est disponible sur ce déploiement.",
+      "reconnectNeeded": "Cet espace doit être reconnecté avant que ses fichiers puissent être lus.",
+      "breadcrumb": "Chemin du dossier",
+      "root": "Tous les fichiers",
+      "folder": "Dossier",
+      "loading": "Chargement…",
+      "opening": "Ouverture…",
+      "emptyFolder": "Ce dossier est vide.",
+      "loadMore": "Charger plus",
+      "loadFailed": "Impossible de lire cet espace.",
+      "connectFailed": "Impossible de démarrer la connexion à {provider}.",
+      "openFailed": "Impossible d’ouvrir {name}."
     },
     "creativeSelectFirst": "Sélectionnez d'abord un objet créatif",
     "creativePreviewOpened": "Aperçu ouvert",
@@ -13718,6 +13780,61 @@
           "founders": "Parcours des fondateurs"
         }
       }
+    },
+    "webPage": {
+      "address": "Adresse",
+      "addressPlaceholder": "Saisissez une adresse web puis appuyez sur Entrée",
+      "reload": "Recharger la page",
+      "openInNewTab": "Ouvrir dans un nouvel onglet",
+      "emptyTitle": "Aucune page chargée",
+      "emptyHint": "Saisissez une adresse web ci-dessus ou déposez un lien sur le tableau.",
+      "loading": "Chargement de {host}…",
+      "checking": "Vérification de la possibilité d'intégrer cette page…",
+      "blockedTitle": "{host} n'autorise pas l'intégration",
+      "blockedHint": "Le texte lisible de la page est affiché à la place. Ouvrez-la dans un nouvel onglet pour l’utiliser en direct.",
+      "readerEmpty": "Cette page n'a renvoyé aucun texte lisible.",
+      "probeFailed": "Cette page n'a pas pu être lue depuis le serveur.",
+      "invalidUrl": "Saisissez une adresse http:// ou https:// valide.",
+      "statusLive": "En direct",
+      "addressLabel": "Adresse web",
+      "reread": "Recharger et relire la page",
+      "inspectorHint": "La page est chargée en direct sur le tableau. Son texte est également lu dans le canevas afin que Brain puisse répondre aux questions à son sujet.",
+      "mixedTitle": "{host} est servi en http://",
+      "mixedHint": "Une page sécurisée ne peut pas intégrer une page non sécurisée. Le texte de la page est affiché à la place : ouvrez-la dans un nouvel onglet ou consultez-la depuis l’extension VS Code."
+    },
+    "expandPaletteGroup": "Développer la section {group}",
+    "collapsePaletteGroup": "Réduire la section {group}",
+    "game": {
+      "title": "Jouez-y pour de vrai",
+      "shipAction": "Jouer sur un appareil",
+      "selectFirst": "Sélectionnez d'abord un objet de jeu.",
+      "accountTitle": "Créez un compte pour publier ce jeu",
+      "accountBody": "Enregistrez cette session pour publier le jeu sur un téléphone, en faire une application ou l'envoyer sur Roblox.",
+      "needProject": "Connectez ce jeu à un objet Projet pour le publier ou en faire une application.",
+      "needGame": "Générez d'abord le jeu — il n'y a encore rien à publier.",
+      "phoneTitle": "Sur un téléphone",
+      "phoneIntro": "Publiez le jeu à sa propre adresse, puis installez-le sur l'écran d'accueil d'un Android ou d'un iPhone. Plein écran, hors ligne, commandes tactiles.",
+      "phoneScan": "Scannez ceci avec l'appareil photo d'un téléphone pour y jouer tout de suite.",
+      "qrAlt": "QR code du jeu publié",
+      "publish": "Publier",
+      "republish": "Publier la mise à jour",
+      "publishing": "Publication…",
+      "published": "Jeu publié sur {url}",
+      "installIos": "iPhone : ouvrez le lien dans Safari, puis Partager → Sur l'écran d'accueil.",
+      "installAndroid": "Android : ouvrez le lien dans Chrome et appuyez sur Installer quand il le propose.",
+      "zeroSetup": "sans configuration",
+      "build": "Construire",
+      "rebuild": "Reconstruire",
+      "building": "Construction…",
+      "openIt": "Ouvrir",
+      "openLink": "Ouvrir",
+      "materialized": "{label} : {count} fichiers écrits",
+      "wroteFiles": "{count} fichiers dans {directory}",
+      "universeId": "ID d'univers Roblox",
+      "placeId": "ID de place Roblox",
+      "robloxIdsHint": "Les deux nombres figurent dans l'URL du Creator Dashboard d'une expérience déjà publiée depuis Studio.",
+      "publishRoblox": "Publier sur Roblox",
+      "robloxPublished": "Publié sur Roblox en version {version}"
     }
   },
   "canvasCommands": {
@@ -14049,7 +14166,7 @@
   },
   "growth": {
     "title": "Croissance",
-    "description": "Contactez les personnes inscrites sur le site que vous avez créé.",
+    "description": "Lisez la boîte mail que vous utilisez déjà et touchez les personnes inscrites sur le site que vous avez créé.",
     "genericError": "Une erreur est survenue. Réessayez.",
     "audiences": {
       "title": "Audiences",
@@ -14078,7 +14195,7 @@
     },
     "campaigns": {
       "title": "Campagnes",
-      "description": "Une campagne exige un objet, une adresse vérifiée et une audience non vide.",
+      "description": "Une campagne exige un objet, une audience non vide et une source d’envoi.",
       "empty": "Aucune campagne pour l'instant.",
       "namePlaceholder": "Annonce de lancement",
       "nameLabel": "Nom de la campagne",
@@ -14102,8 +14219,99 @@
         "status": "Déjà envoyée",
         "subject": "Ajoutez un objet",
         "sender": "Vérifiez une adresse d'expédition",
-        "audience": "L'audience est vide"
+        "audience": "L'audience est vide",
+        "mailbox": "Choisissez une boîte mail connectée",
+        "connection": "Choisissez une connexion SendGrid"
+      },
+      "compose": "Nouvelle campagne",
+      "confirmSendTitle": "Envoyer cette campagne ?",
+      "confirmSend": "Envoyer « {name} » à toute son audience ? Cela atteint de vraies personnes et est irréversible.",
+      "transport": {
+        "platform": "Envoyée par Builderforce",
+        "mailbox": "Envoyée depuis votre boîte mail",
+        "sendgrid": "Envoyée via Twilio SendGrid"
       }
+    },
+    "mailboxes": {
+      "title": "Boîtes mail",
+      "description": "Connectez Microsoft 365 ou Gmail pour afficher votre boîte de réception sur un canevas et envoyer des campagnes en votre nom.",
+      "empty": "Aucune boîte mail connectée.",
+      "connect": "Connecter {provider}",
+      "connected": "Boîte mail connectée.",
+      "disconnect": "Déconnecter",
+      "disconnected": "Boîte mail déconnectée.",
+      "confirmDisconnect": "Déconnecter {email} ? Les campagnes qui l’utilisent s’arrêteront.",
+      "allowSending": "Autoriser les campagnes à partir de cette boîte mail",
+      "sendingUpdated": "Autorisation d’envoi mise à jour.",
+      "notConfigured": "Ce fournisseur n’est pas configuré sur ce déploiement.",
+      "status": {
+        "connected": "Connectée",
+        "reconnect": "Reconnexion requise"
+      },
+      "provider": {
+        "microsoft": "Microsoft 365",
+        "google": "Gmail"
+      },
+      "error": {
+        "declined": "Vous avez refusé l’accès, aucune boîte mail n’a donc été connectée.",
+        "failed": "Impossible de connecter cette boîte mail. Réessayez."
+      }
+    },
+    "brand": {
+      "title": "Logos et images",
+      "description": "Images qu’un e-mail peut charger. Les modèles utilisant '{{logo}}' reprennent votre logo le plus récent.",
+      "empty": "Aucune image pour l’instant.",
+      "upload": "Importer un logo",
+      "uploaded": "Image importée.",
+      "generate": "Générer",
+      "generated": "Logo généré.",
+      "generatePlaceholder": "Un torréfacteur de café artisanal à Melbourne",
+      "generateLabel": "Décrivez l’activité",
+      "delete": "Supprimer",
+      "deleted": "Image supprimée.",
+      "confirmDelete": "Supprimer {name} ? Les modèles qui l’utilisent afficheront une image cassée."
+    },
+    "templates": {
+      "title": "Modèles",
+      "description": "Objet et corps réutilisables. Le HTML importé est nettoyé avant d’être enregistré.",
+      "empty": "Aucun modèle pour l’instant.",
+      "use": "Utiliser",
+      "delete": "Supprimer",
+      "deleted": "Modèle supprimé.",
+      "import": "Importer du HTML",
+      "imported": "Modèle importé.",
+      "confirmDelete": "Supprimer le modèle {name} ?",
+      "mergeFields": "Nécessite : {fields}",
+      "source": {
+        "builtin": "Fourni",
+        "custom": "Personnalisé",
+        "imported": "Importé",
+        "generated": "IA"
+      }
+    },
+    "composer": {
+      "title": "Nouvelle campagne",
+      "audience": "Audience",
+      "audienceOption": "{name} ({count} membres)",
+      "template": "Partir d’un modèle",
+      "noTemplate": "Rédiger de zéro",
+      "transport": "Envoyer via",
+      "transportHint": {
+        "platform": "Depuis une adresse dont vous avez vérifié le domaine par un enregistrement TXT.",
+        "mailbox": "Depuis votre compte Microsoft 365 ou Gmail connecté, en votre nom.",
+        "sendgrid": "Avec votre propre clé Twilio SendGrid, depuis une adresse vérifiée."
+      },
+      "mailbox": "Boîte mail",
+      "noMailboxes": "Aucune boîte mail connectée et autorisée à envoyer.",
+      "sender": "Adresse d’expédition",
+      "noSenders": "Aucune adresse vérifiée pour l’instant.",
+      "fromName": "Nom affiché",
+      "fromNamePlaceholder": "Équipe Acme",
+      "choose": "Choisir…",
+      "mergeHelp": "Utilisez '{{name}}', '{{email}}', '{{logo}}' et '{{unsubscribe}}', ou tout '{{field}}' de votre audience.",
+      "cancel": "Annuler",
+      "connection": "Connexion SendGrid",
+      "noConnections": "Aucune connexion SendGrid active. Ajoutez-en une dans Paramètres → Intégrations → Connecteurs."
     }
   },
   "cookieConsent": {

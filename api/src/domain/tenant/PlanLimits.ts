@@ -245,6 +245,23 @@ export const GUEST_RESEARCH_LIMITS = {
 } as const;
 
 /**
+ * Office EXPORTS for a logged-out visitor.
+ *
+ * Deliberately generous, and deliberately its own ceiling rather than a share of
+ * the chat allowance: a guest who has spent their free messages has a finished
+ * document on their board and every reason to want the file. The renders are
+ * stateless CPU over markdown the client already holds, so the numbers exist to
+ * bound abuse of an open compute endpoint, not to ration the feature — a person
+ * exporting the same deck twenty times is working, not attacking.
+ */
+export const GUEST_EXPORT_LIMITS = {
+  /** Office renders per visitorId per UTC day. */
+  exportsDailyLimit: 60,
+  /** Per source IP per UTC day — the spoof backstop, same reasoning as chat. */
+  ipExportsDailyLimit: 300,
+} as const;
+
+/**
  * Shared guest ROOMS — a logged-out visitor can invite others into their free
  * session (chat + camera). The room's turn allowance is exactly
  * `GUEST_CHAT_LIMITS.messagesDailyLimit`, spent COMBINED by everyone in it: five

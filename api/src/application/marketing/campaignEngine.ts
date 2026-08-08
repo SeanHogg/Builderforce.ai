@@ -37,7 +37,6 @@ import {
   marketingSenderIdentities,
   marketingSuppressions,
 } from '../../infrastructure/database/schema';
-import { sendRawEmail } from '../../infrastructure/email/EmailService';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import {
   emailDomain,
@@ -47,10 +46,29 @@ import {
   verifyChallengeToken,
   type DnsLookupDeps,
 } from '../shared/dnsVerification';
+import {
+  isCampaignTransport,
+  resolveCampaignSender,
+  TransportError,
+  type CampaignTransport,
+} from './campaignTransports';
+import { defaultLogoUrl, getTemplate, resolveAssetOrigin } from './templateLibrary';
 
 /** How many recipients one batch attempts. Bounded by the Worker's subrequest
  *  budget, not by taste — each send is one outbound HTTP call. */
 export const SEND_BATCH_SIZE = 25;
+
+/**
+ * How many times one recipient may be attempted before it is written off.
+ *
+ * A retryable failure (a 429, a provider 5xx) returns the send row to `queued`
+ * so the next sweep picks it up — which means an error we MISCLASSIFIED as
+ * retryable would requeue forever and the campaign would never reach `sent`.
+ * This is the bound that makes the requeue safe. Three is enough to ride out a
+ * rate limit and few enough that a genuinely broken transport surfaces within a
+ * couple of sweeps.
+ */
+export const CAMPAIGN_SEND_MAX_ATTEMPTS = 3;
 
 // ---------------------------------------------------------------------------
 // Audiences
@@ -344,6 +362,12 @@ export interface RenderContext {
   /** Absolute origin serving the tracking endpoints. */
   trackingOrigin: string;
   trackToken: string;
+  /**
+   * Absolute URL for `{{logo}}`. Resolved ONCE per campaign, not per recipient:
+   * it is a tenant-level fact and a per-recipient lookup would add a query per
+   * message to the hottest loop in the product.
+   */
+  logoUrl?: string | null;
 }
 
 /**
@@ -384,10 +408,12 @@ function escapeHtml(value: string): string {
 /**
  * Render the message actually sent to one recipient.
  *
- * Three things happen here and nowhere else, so no campaign can ship without
+ * Four things happen here and nowhere else, so no campaign can ship without
  * them: outbound links are rewritten through the click tracker, an open pixel is
- * appended, and an unsubscribe footer is added. `{{name}}`/`{{email}}` merge
- * fields are substituted with escaped values.
+ * appended, an unsubscribe footer is added, and merge fields are substituted
+ * with ESCAPED values — recipient attributes are attacker-controlled in the
+ * ordinary case (anyone can type `<script>` into a signup form), so unescaped
+ * interpolation here would be a stored XSS in the campaign preview.
  *
  * Pure — no I/O — so the link rewriting (the part with real injection risk) is
  * directly unit-testable.
@@ -395,13 +421,24 @@ function escapeHtml(value: string): string {
 export function renderCampaignEmail(
   bodyHtml: string,
   ctx: RenderContext,
-  recipient: { email: string; name?: string },
+  recipient: { email: string; name?: string; attributes?: Record<string, unknown> },
 ): string {
   const urls = trackingUrls(ctx);
 
-  const merged = String(bodyHtml ?? '')
+  let merged = String(bodyHtml ?? '')
     .replace(/\{\{\s*name\s*\}\}/g, escapeHtml(recipient.name || ''))
-    .replace(/\{\{\s*email\s*\}\}/g, escapeHtml(recipient.email));
+    .replace(/\{\{\s*email\s*\}\}/g, escapeHtml(recipient.email))
+    .replace(/\{\{\s*logo\s*\}\}/g, escapeHtml(ctx.logoUrl ?? ''))
+    .replace(/\{\{\s*unsubscribe\s*\}\}/g, urls.unsubscribe);
+
+  // Audience attributes fill the template's own merge fields. An UNMATCHED field
+  // resolves to empty rather than being left as `{{company}}` — mailing 4,000
+  // people a literal placeholder is worse than mailing them a gap, and the
+  // composer already warns the author which fields their audience is missing.
+  merged = merged.replace(/\{\{\s*([a-zA-Z][a-zA-Z0-9_]{0,63})\s*\}\}/g, (_whole, field: string) => {
+    const value = recipient.attributes?.[field];
+    return value == null ? '' : escapeHtml(String(value));
+  });
 
   // Rewrite only http(s) hrefs. mailto:, tel: and anchors are left alone, and
   // the tracker's own links are skipped so a second render cannot double-wrap.
@@ -431,9 +468,15 @@ export interface CampaignView {
   id: number;
   name: string;
   subject: string;
+  bodyHtml: string;
   status: string;
   audienceId: number;
   senderIdentityId: number | null;
+  transport: string;
+  mailboxConnectionId: number | null;
+  connectorConnectionId: string | null;
+  templateId: number | null;
+  fromName: string;
   projectId: number | null;
   recipients: number;
   sent: number;
@@ -450,9 +493,15 @@ const CAMPAIGN_COLUMNS = {
   id: marketingCampaigns.id,
   name: marketingCampaigns.name,
   subject: marketingCampaigns.subject,
+  bodyHtml: marketingCampaigns.bodyHtml,
   status: marketingCampaigns.status,
   audienceId: marketingCampaigns.audienceId,
   senderIdentityId: marketingCampaigns.senderIdentityId,
+  transport: marketingCampaigns.transport,
+  mailboxConnectionId: marketingCampaigns.mailboxConnectionId,
+  connectorConnectionId: marketingCampaigns.connectorConnectionId,
+  templateId: marketingCampaigns.templateId,
+  fromName: marketingCampaigns.fromName,
   projectId: marketingCampaigns.projectId,
   recipients: marketingCampaigns.recipients,
   sent: marketingCampaigns.sent,
@@ -483,6 +532,8 @@ export async function createCampaign(
   input: {
     name: string; audienceId: number; subject?: string; bodyHtml?: string;
     senderIdentityId?: number | null; projectId?: number | null; sessionId?: string | null;
+    transport?: CampaignTransport; mailboxConnectionId?: number | null;
+    connectorConnectionId?: string | null; templateId?: number | null; fromName?: string;
   },
 ): Promise<CampaignResult> {
   const [audience] = await db
@@ -492,17 +543,34 @@ export async function createCampaign(
     .limit(1);
   if (!audience) return { ok: false, status: 400, error: 'Pick an audience that belongs to this workspace.' };
 
+  // A template supplies the subject and body the author did not type. COPIED in
+  // rather than referenced at send time: editing a template must not silently
+  // rewrite a campaign that was already reviewed and approved.
+  let subject = (input.subject ?? '').slice(0, 500);
+  let bodyHtml = input.bodyHtml ?? '';
+  if (input.templateId != null) {
+    const template = await getTemplate(db, tenantId, input.templateId);
+    if (!template) return { ok: false, status: 400, error: 'That template belongs to another workspace.' };
+    if (!subject.trim()) subject = template.subject;
+    if (!bodyHtml.trim()) bodyHtml = template.bodyHtml;
+  }
+
   const [row] = await db
     .insert(marketingCampaigns)
     .values({
       tenantId,
       audienceId: input.audienceId,
       senderIdentityId: input.senderIdentityId ?? null,
+      transport: input.transport ?? 'platform',
+      mailboxConnectionId: input.mailboxConnectionId ?? null,
+      connectorConnectionId: input.connectorConnectionId ?? null,
+      templateId: input.templateId ?? null,
+      fromName: (input.fromName ?? '').slice(0, 255),
       projectId: input.projectId ?? null,
       sessionId: input.sessionId ?? null,
       name: input.name.trim().slice(0, 255) || 'Campaign',
-      subject: (input.subject ?? '').slice(0, 500),
-      bodyHtml: input.bodyHtml ?? '',
+      subject,
+      bodyHtml,
     })
     .returning(CAMPAIGN_COLUMNS);
   return { ok: true, campaign: row! };
@@ -512,7 +580,11 @@ export async function updateCampaign(
   db: Db,
   tenantId: number,
   campaignId: number,
-  patch: { name?: string; subject?: string; bodyHtml?: string; senderIdentityId?: number | null; audienceId?: number },
+  patch: {
+    name?: string; subject?: string; bodyHtml?: string; senderIdentityId?: number | null;
+    audienceId?: number; transport?: CampaignTransport; mailboxConnectionId?: number | null;
+    connectorConnectionId?: string | null; templateId?: number | null; fromName?: string;
+  },
 ): Promise<CampaignResult> {
   const set: Record<string, unknown> = { updatedAt: sql`NOW()` };
   if (typeof patch.name === 'string') set.name = patch.name.trim().slice(0, 255);
@@ -520,6 +592,11 @@ export async function updateCampaign(
   if (typeof patch.bodyHtml === 'string') set.bodyHtml = patch.bodyHtml;
   if (patch.senderIdentityId !== undefined) set.senderIdentityId = patch.senderIdentityId;
   if (typeof patch.audienceId === 'number') set.audienceId = patch.audienceId;
+  if (isCampaignTransport(patch.transport)) set.transport = patch.transport;
+  if (patch.mailboxConnectionId !== undefined) set.mailboxConnectionId = patch.mailboxConnectionId;
+  if (patch.connectorConnectionId !== undefined) set.connectorConnectionId = patch.connectorConnectionId;
+  if (patch.templateId !== undefined) set.templateId = patch.templateId;
+  if (typeof patch.fromName === 'string') set.fromName = patch.fromName.slice(0, 255);
 
   const [row] = await db
     .update(marketingCampaigns)
@@ -542,29 +619,69 @@ export type StartResult =
   | { ok: false; status: 400 | 404 | 409; error: string };
 
 /**
- * Materialize the recipient list and move the campaign to `sending`.
+ * Load a campaign's transport binding.
  *
- * Every precondition that protects a real person is checked here rather than at
- * send time, so a campaign either cannot start or is safe to run to completion:
- * a verified sender, a subject, a non-empty audience, and suppression applied
- * before a single message exists.
+ * ONE loader, used by both `startCampaign` (to refuse an unsendable campaign
+ * before a single recipient row exists) and `runCampaignBatch` (to resolve the
+ * sender for each batch). Two readers of the same binding is how "it let me
+ * start and then failed every message" happens.
  */
-export async function startCampaign(
-  db: Db,
-  tenantId: number,
-  campaignId: number,
-): Promise<StartResult> {
-  const [campaign] = await db
+async function loadTransportBinding(db: Db, tenantId: number, campaignId: number) {
+  const [row] = await db
     .select({
       id: marketingCampaigns.id,
       status: marketingCampaigns.status,
       subject: marketingCampaigns.subject,
+      bodyHtml: marketingCampaigns.bodyHtml,
       audienceId: marketingCampaigns.audienceId,
+      transport: marketingCampaigns.transport,
+      mailboxConnectionId: marketingCampaigns.mailboxConnectionId,
+      connectorConnectionId: marketingCampaigns.connectorConnectionId,
+      fromName: marketingCampaigns.fromName,
       senderIdentityId: marketingCampaigns.senderIdentityId,
+      senderFromEmail: marketingSenderIdentities.fromEmail,
+      senderFromName: marketingSenderIdentities.fromName,
+      senderStatus: marketingSenderIdentities.status,
     })
     .from(marketingCampaigns)
+    // LEFT join: a mailbox campaign has no sender identity at all, and an inner
+    // join would make it invisible to its own send engine.
+    .leftJoin(marketingSenderIdentities, and(
+      eq(marketingSenderIdentities.id, marketingCampaigns.senderIdentityId),
+      eq(marketingSenderIdentities.tenantId, tenantId),
+    ))
     .where(and(eq(marketingCampaigns.id, campaignId), eq(marketingCampaigns.tenantId, tenantId)))
     .limit(1);
+  if (!row) return null;
+  return {
+    ...row,
+    binding: {
+      transport: row.transport,
+      senderIdentity: row.senderFromEmail
+        ? { fromEmail: row.senderFromEmail, fromName: row.senderFromName ?? '', status: row.senderStatus ?? '' }
+        : null,
+      mailboxConnectionId: row.mailboxConnectionId,
+      connectorConnectionId: row.connectorConnectionId,
+      fromName: row.fromName,
+    },
+  };
+}
+
+/**
+ * Materialize the recipient list and move the campaign to `sending`.
+ *
+ * Every precondition that protects a real person is checked here rather than at
+ * send time, so a campaign either cannot start or is safe to run to completion:
+ * a resolvable sender (whichever transport it uses), a subject, a non-empty
+ * audience, and suppression applied before a single message exists.
+ */
+export async function startCampaign(
+  env: Env,
+  db: Db,
+  tenantId: number,
+  campaignId: number,
+): Promise<StartResult> {
+  const campaign = await loadTransportBinding(db, tenantId, campaignId);
   if (!campaign) return { ok: false, status: 404, error: 'Campaign not found.' };
   if (campaign.status !== 'draft') {
     return { ok: false, status: 409, error: `This campaign is already ${campaign.status}.` };
@@ -572,21 +689,11 @@ export async function startCampaign(
   if (!campaign.subject.trim()) {
     return { ok: false, status: 400, error: 'Add a subject line before sending.' };
   }
-  if (!campaign.senderIdentityId) {
-    return { ok: false, status: 400, error: 'Choose a verified From address before sending.' };
-  }
 
-  const [sender] = await db
-    .select({ status: marketingSenderIdentities.status })
-    .from(marketingSenderIdentities)
-    .where(and(
-      eq(marketingSenderIdentities.id, campaign.senderIdentityId),
-      eq(marketingSenderIdentities.tenantId, tenantId),
-    ))
-    .limit(1);
-  if (!sender || sender.status !== 'verified') {
-    return { ok: false, status: 400, error: 'That From address is not verified yet.' };
-  }
+  // Whichever transport this campaign uses, it must resolve NOW — the whole
+  // point of the pre-flight is that a started campaign is safe to finish.
+  const resolved = await resolveCampaignSender(db, env, tenantId, campaign.binding);
+  if (!resolved.ok) return { ok: false, status: 400, error: resolved.error };
 
   const members = await db
     .select({ email: marketingAudienceMembers.email })
@@ -647,6 +754,10 @@ export interface BatchResult {
  * Each recipient is claimed with a conditional UPDATE before its email goes out,
  * so two concurrent runners (a manual "send now" racing the cron) cannot both
  * send the same message — the loser's UPDATE matches zero rows and it skips.
+ *
+ * The transport is resolved ONCE per batch, not per recipient: resolving it
+ * refreshes an OAuth token and reads a connector connection, and doing that 25
+ * times for one batch would triple the batch's wall clock for no benefit.
  */
 export async function runCampaignBatch(
   env: Env,
@@ -657,49 +768,54 @@ export async function runCampaignBatch(
 ): Promise<BatchResult> {
   const batchSize = Math.min(Math.max(1, opts.batchSize ?? SEND_BATCH_SIZE), 100);
 
-  const [campaign] = await db
-    .select({
-      id: marketingCampaigns.id,
-      status: marketingCampaigns.status,
-      subject: marketingCampaigns.subject,
-      bodyHtml: marketingCampaigns.bodyHtml,
-      senderIdentityId: marketingCampaigns.senderIdentityId,
-    })
-    .from(marketingCampaigns)
-    .where(and(eq(marketingCampaigns.id, campaignId), eq(marketingCampaigns.tenantId, tenantId)))
-    .limit(1);
+  const campaign = await loadTransportBinding(db, tenantId, campaignId);
   if (!campaign || campaign.status !== 'sending') {
     return { sent: 0, failed: 0, remaining: 0, status: campaign?.status ?? 'missing' };
   }
 
-  const [sender] = await db
-    .select({
-      fromEmail: marketingSenderIdentities.fromEmail,
-      fromName: marketingSenderIdentities.fromName,
-      status: marketingSenderIdentities.status,
-    })
-    .from(marketingSenderIdentities)
-    .where(and(
-      eq(marketingSenderIdentities.id, campaign.senderIdentityId ?? -1),
-      eq(marketingSenderIdentities.tenantId, tenantId),
-    ))
-    .limit(1);
-  if (!sender || sender.status !== 'verified') {
+  const resolved = await resolveCampaignSender(db, env, tenantId, campaign.binding);
+  if (!resolved.ok) {
+    // The transport that passed pre-flight has since broken (mailbox revoked,
+    // sender un-verified, connection deleted). Every remaining recipient would
+    // fail identically, so the campaign fails as a whole and says why — rather
+    // than grinding through the audience writing the same error N times.
     await db
       .update(marketingCampaigns)
       .set({ status: 'failed', completedAt: sql`NOW()`, updatedAt: sql`NOW()` })
       .where(and(eq(marketingCampaigns.id, campaignId), eq(marketingCampaigns.tenantId, tenantId)));
+    await db
+      .update(marketingCampaignSends)
+      .set({ status: 'failed', error: resolved.error.slice(0, 1_000) })
+      .where(and(
+        eq(marketingCampaignSends.campaignId, campaignId),
+        eq(marketingCampaignSends.tenantId, tenantId),
+        eq(marketingCampaignSends.status, 'queued'),
+      ));
     return { sent: 0, failed: 0, remaining: 0, status: 'failed' };
   }
-  const from = sender.fromName ? `${sender.fromName} <${sender.fromEmail}>` : sender.fromEmail;
+  const sender = resolved.sender;
+
+  // Resolved once per batch for the same reason as the transport — `{{logo}}` is
+  // a tenant-level fact, not a per-recipient one.
+  const logoUrl = await defaultLogoUrl(db, tenantId, resolveAssetOrigin(env));
 
   const queued = await db
     .select({
       id: marketingCampaignSends.id,
       email: marketingCampaignSends.email,
       trackToken: marketingCampaignSends.trackToken,
+      attempts: marketingCampaignSends.attempts,
+      // Joined so merge fields resolve without a query per recipient — the N+1
+      // this replaces would be one round-trip per person in the audience.
+      name: marketingAudienceMembers.name,
+      attributes: marketingAudienceMembers.attributes,
     })
     .from(marketingCampaignSends)
+    .leftJoin(marketingAudienceMembers, and(
+      eq(marketingAudienceMembers.audienceId, campaign.audienceId),
+      eq(marketingAudienceMembers.email, marketingCampaignSends.email),
+      eq(marketingAudienceMembers.tenantId, tenantId),
+    ))
     .where(and(
       eq(marketingCampaignSends.campaignId, campaignId),
       eq(marketingCampaignSends.tenantId, tenantId),
@@ -712,10 +828,13 @@ export async function runCampaignBatch(
   let failed = 0;
 
   for (const row of queued) {
-    // Claim: only the runner whose UPDATE matches gets to send this one.
+    // Claim: only the runner whose UPDATE matches gets to send this one. The
+    // attempt is counted AT CLAIM TIME, not on failure — a runner that dies
+    // mid-send (a Worker eviction) would otherwise leave the row claimable
+    // forever with its counter untouched.
     const claimed = await db
       .update(marketingCampaignSends)
-      .set({ status: 'sending' })
+      .set({ status: 'sending', attempts: sql`${marketingCampaignSends.attempts} + 1` })
       .where(and(
         eq(marketingCampaignSends.id, row.id),
         eq(marketingCampaignSends.tenantId, tenantId),
@@ -724,13 +843,23 @@ export async function runCampaignBatch(
       .returning({ id: marketingCampaignSends.id });
     if (claimed.length === 0) continue;
 
-    const html = renderCampaignEmail(
-      campaign.bodyHtml,
-      { trackingOrigin: opts.trackingOrigin, trackToken: row.trackToken },
-      { email: row.email },
-    );
+    const ctx: RenderContext = {
+      trackingOrigin: opts.trackingOrigin,
+      trackToken: row.trackToken,
+      logoUrl,
+    };
+    const html = renderCampaignEmail(campaign.bodyHtml, ctx, {
+      email: row.email,
+      name: row.name ?? undefined,
+      attributes: (row.attributes as Record<string, unknown> | null) ?? undefined,
+    });
     try {
-      await sendRawEmail(env, { to: row.email, subject: campaign.subject, html, from });
+      await sender.send({
+        to: row.email,
+        subject: campaign.subject,
+        html,
+        unsubscribeUrl: trackingUrls(ctx).unsubscribe,
+      });
       await db
         .update(marketingCampaignSends)
         .set({ status: 'sent', sentAt: sql`NOW()`, error: null })
@@ -738,12 +867,22 @@ export async function runCampaignBatch(
       sent += 1;
     } catch (error) {
       const message = error instanceof Error ? error.message : 'send failed';
+      // A retryable failure goes BACK to `queued` so the next sweep picks it up;
+      // only a terminal one becomes a `failed` row. Burning a recipient on a
+      // transient 429 is how a campaign silently under-delivers — and the
+      // attempt ceiling is what stops the opposite failure, an unsendable
+      // recipient requeued forever so the campaign never completes.
+      const exhausted = row.attempts + 1 >= CAMPAIGN_SEND_MAX_ATTEMPTS;
+      const requeue = error instanceof TransportError && error.retryable && !exhausted;
       await db
         .update(marketingCampaignSends)
-        .set({ status: 'failed', error: message.slice(0, 1_000) })
+        .set({ status: requeue ? 'queued' : 'failed', error: message.slice(0, 1_000) })
         .where(and(eq(marketingCampaignSends.id, row.id), eq(marketingCampaignSends.tenantId, tenantId)));
-      failed += 1;
+      if (!requeue) failed += 1;
       reportCaughtError(error, { source: 'application/marketing/campaignEngine.ts', operation: 'runCampaignBatch' });
+      // A terminal transport failure means every remaining recipient fails the
+      // same way; stop the batch rather than working through the audience.
+      if (error instanceof TransportError && !error.retryable) break;
     }
   }
 

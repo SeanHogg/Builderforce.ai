@@ -12,11 +12,15 @@ import { campaignBlockers, type Audience, type Campaign, type SenderIdentity } f
  */
 
 const campaign: Campaign = {
-  id: 1, name: 'Launch', subject: 'Hello', status: 'draft',
+  id: 1, name: 'Launch', subject: 'Hello', bodyHtml: '<p>Hi</p>', status: 'draft',
   audienceId: 11, senderIdentityId: 5, projectId: null,
+  transport: 'platform', mailboxConnectionId: null, connectorConnectionId: null,
+  templateId: null, fromName: '',
   recipients: 0, sent: 0, failed: 0, suppressed: 0, opened: 0, clicked: 0,
   startedAt: null, completedAt: null, updatedAt: '2026-08-06T00:00:00Z',
 };
+
+const liveMailbox = { id: 3, status: 'connected', allowSending: true };
 
 const verifiedSender: SenderIdentity = {
   id: 5, fromEmail: 'hi@acme.com', fromName: 'Acme', replyTo: null,
@@ -65,5 +69,46 @@ describe('campaignBlockers', () => {
   it('reports EVERY blocker at once, so one fix does not just reveal the next', () => {
     const blockers = campaignBlockers({ ...campaign, subject: '', senderIdentityId: null }, [], []);
     expect(blockers).toEqual(expect.arrayContaining(['subject', 'sender', 'audience']));
+  });
+
+  /**
+   * The identity check is TRANSPORT-DEPENDENT. Getting this wrong is not
+   * cosmetic: a mailbox campaign has no sender identity at all, so an
+   * unconditional "is the sender verified?" test would grey out a campaign that
+   * is perfectly ready and offer a reason that makes no sense for it.
+   */
+  describe('per transport', () => {
+    const mailboxCampaign: Campaign = {
+      ...campaign, transport: 'mailbox', senderIdentityId: null, mailboxConnectionId: 3,
+    };
+
+    it('does NOT ask a mailbox campaign for a verified sender identity', () => {
+      expect(campaignBlockers(mailboxCampaign, [], [populatedAudience], [liveMailbox])).toEqual([]);
+    });
+
+    it('blocks a mailbox campaign whose mailbox is missing, revoked or send-disabled', () => {
+      expect(campaignBlockers(mailboxCampaign, [], [populatedAudience], []))
+        .toContain('mailbox');
+      expect(campaignBlockers(mailboxCampaign, [], [populatedAudience], [{ ...liveMailbox, status: 'revoked' }]))
+        .toContain('mailbox');
+      expect(campaignBlockers(mailboxCampaign, [], [populatedAudience], [{ ...liveMailbox, allowSending: false }]))
+        .toContain('mailbox');
+    });
+
+    it('STILL requires a verified sender for SendGrid — the connector replaces the pipe, not the identity', () => {
+      const viaSendGrid: Campaign = {
+        ...campaign, transport: 'sendgrid', connectorConnectionId: 'conn-1',
+      };
+      expect(campaignBlockers(viaSendGrid, [verifiedSender], [populatedAudience])).toEqual([]);
+      expect(campaignBlockers(viaSendGrid, [{ ...verifiedSender, status: 'pending' }], [populatedAudience]))
+        .toContain('sender');
+    });
+
+    it('blocks a SendGrid campaign with no connection chosen', () => {
+      expect(campaignBlockers(
+        { ...campaign, transport: 'sendgrid', connectorConnectionId: null },
+        [verifiedSender], [populatedAudience],
+      )).toContain('connection');
+    });
   });
 });

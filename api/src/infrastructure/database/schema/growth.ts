@@ -36,9 +36,12 @@ import {
   uniqueIndex,
   uuid,
   varchar,
+  type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { creationSessions } from './collaboration';
 import { tenants } from './identity';
+import { mailboxConnections } from './mailbox';
+import { connectorConnections } from './platform';
 import { projects, projectSites } from './work';
 
 // ---------------------------------------------------------------------------
@@ -191,12 +194,92 @@ export const marketingSuppressions = pgTable('marketing_suppressions', {
   uniqueIndex('uq_marketing_suppressions_tenant_email').on(t.tenantId, t.email),
 ]);
 
+/**
+ * A reusable subject + HTML body.
+ *
+ * `source` is not decoration — it decides how the body is TREATED. An
+ * `imported` body came from outside and is sanitized on write (script/iframe/
+ * `on*` handlers stripped); a `custom` body was authored in-app against the same
+ * sanitizer. Recording provenance is what lets that stay auditable after the fact.
+ */
+export const marketingTemplates = pgTable('marketing_templates', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  name:        varchar('name', { length: 255 }).notNull(),
+  description: text('description').notNull().default(''),
+  subject:     varchar('subject', { length: 500 }).notNull().default(''),
+  bodyHtml:    text('body_html').notNull().default(''),
+  /** 'builtin' | 'custom' | 'imported' | 'generated' */
+  source:      varchar('source', { length: 16 }).notNull().default('custom'),
+  /** Logo/hero rendered through `{{logo}}`. SET NULL on asset delete so the
+   *  template degrades to "no logo" instead of disappearing with it. */
+  assetId:     integer('asset_id').references((): AnyPgColumn => marketingAssets.id, { onDelete: 'set null' }),
+  /** Merge fields the body actually references, computed on write — the composer
+   *  uses it to tell an author which attributes their audience must carry. */
+  mergeFields: jsonb('merge_fields').notNull().default([]),
+  createdBy:   varchar('created_by', { length: 64 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_marketing_templates_tenant_name').on(t.tenantId, t.name),
+  index('idx_marketing_templates_tenant').on(t.tenantId, t.updatedAt),
+]);
+
+/**
+ * A logo or image an email can actually load.
+ *
+ * The bytes live in R2 (the existing UPLOADS bucket); only the pointer is a row.
+ * `publicToken` IS the access model: a recipient's mail client has no session, so
+ * an authenticated asset URL renders as a broken image in every inbox. Rotating
+ * the token — not deleting the row — is how an asset is un-published, which keeps
+ * the campaigns that referenced it explainable.
+ */
+export const marketingAssets = pgTable('marketing_assets', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  name:        varchar('name', { length: 255 }).notNull(),
+  /** 'logo' | 'image'. A logo is singled out because templates reference it by
+   *  ROLE (`{{logo}}`), not by id — swapping the logo must not edit N templates. */
+  kind:        varchar('kind', { length: 16 }).notNull().default('image'),
+  r2Key:       varchar('r2_key', { length: 512 }).notNull(),
+  mimeType:    varchar('mime_type', { length: 128 }).notNull().default('image/png'),
+  byteSize:    integer('byte_size').notNull().default(0),
+  width:       integer('width'),
+  height:      integer('height'),
+  /** 'uploaded' | 'generated' — a generated logo keeps its prompt for re-rolls. */
+  source:      varchar('source', { length: 16 }).notNull().default('uploaded'),
+  prompt:      text('prompt'),
+  publicToken: varchar('public_token', { length: 64 }).notNull(),
+  createdBy:   varchar('created_by', { length: 64 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_marketing_assets_token').on(t.publicToken),
+  index('idx_marketing_assets_tenant').on(t.tenantId, t.kind, t.updatedAt),
+]);
+
 export const marketingCampaigns = pgTable('marketing_campaigns', {
   id:               serial('id').primaryKey(),
   tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
   projectId:        integer('project_id').references(() => projects.id, { onDelete: 'set null' }),
   audienceId:       integer('audience_id').notNull().references(() => marketingAudiences.id, { onDelete: 'cascade' }),
   senderIdentityId: integer('sender_identity_id').references(() => marketingSenderIdentities.id, { onDelete: 'set null' }),
+  /**
+   * How this campaign leaves the building — see {@link CAMPAIGN_TRANSPORTS}.
+   * A discriminator plus one nullable pointer per transport, not a polymorphic
+   * `sender_ref`: each transport has a different owning table and a different
+   * precondition, so "is this campaign sendable?" would otherwise be unwriteable.
+   */
+  transport:        varchar('transport', { length: 16 }).notNull().default('platform'),
+  /** transport='mailbox' — the tenant's own connected Microsoft 365 / Gmail account. */
+  mailboxConnectionId: integer('mailbox_connection_id').references(() => mailboxConnections.id, { onDelete: 'set null' }),
+  /** transport='sendgrid' — the tenant's Twilio SendGrid connector connection. */
+  connectorConnectionId: uuid('connector_connection_id').references(() => connectorConnections.id, { onDelete: 'set null' }),
+  templateId:       integer('template_id').references(() => marketingTemplates.id, { onDelete: 'set null' }),
+  /** The From: display name actually delivered. Denormalized because it is a
+   *  HISTORICAL fact — renaming or disconnecting the mailbox later must not
+   *  rewrite what recipients already saw. */
+  fromName:         varchar('from_name', { length: 255 }).notNull().default(''),
   name:             varchar('name', { length: 255 }).notNull(),
   subject:          varchar('subject', { length: 500 }).notNull().default(''),
   bodyHtml:         text('body_html').notNull().default(''),
@@ -231,6 +314,10 @@ export const marketingCampaignSends = pgTable('marketing_campaign_sends', {
   /** Opaque per-recipient token behind the open pixel, click links and the
    *  one-click unsubscribe. Unique so a token resolves to exactly one send. */
   trackToken: varchar('track_token', { length: 64 }).notNull(),
+  /** Delivery attempts so far. Load-bearing, not telemetry: a retryable failure
+   *  returns the row to `queued`, so without a bound an error we misclassified as
+   *  retryable would requeue forever and the campaign would never complete. */
+  attempts:   integer('attempts').notNull().default(0),
   openedAt:   timestamp('opened_at'),
   clickedAt:  timestamp('clicked_at'),
   sentAt:     timestamp('sent_at'),

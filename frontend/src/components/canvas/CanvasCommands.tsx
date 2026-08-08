@@ -119,6 +119,15 @@ export function CanvasFilesIcon() {
   </svg>;
 }
 
+/** Connected cloud storage — a cloud over a folder, so it reads as "files that
+ * are not on this machine" rather than as the session's own file library. */
+export function CanvasDriveIcon() {
+  return <svg viewBox="0 0 16 16" aria-hidden="true">
+    <path d="M2.4 12.4V5.1a.9.9 0 0 1 .9-.9h2.9l1.2 1.4h4.3a.9.9 0 0 1 .9.9v5.9a.9.9 0 0 1-.9.9H3.3a.9.9 0 0 1-.9-.9Z" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+    <path d="M6.5 10.6a1.5 1.5 0 0 1 .3-2.97 2.1 2.1 0 0 1 4 .55 1.3 1.3 0 0 1-.3 2.42Z" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" />
+  </svg>;
+}
+
 /** The universal-access glyph used by every canvas that publishes a text outline. */
 export function AccessibleOutlineIcon() {
   return <svg viewBox="0 0 16 16" aria-hidden="true">

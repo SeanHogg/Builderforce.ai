@@ -208,6 +208,37 @@ export async function writeWorkspaceFile(
   return { ok: true };
 }
 
+/**
+ * Write one BINARY file — an icon, a rendered asset, anything that is not text.
+ *
+ * Separate from {@link writeWorkspaceFile} because the content contract that
+ * function enforces is a TEXT contract: "a .json must parse", "an .html must
+ * start with `<`". Those checks are meaningless against a PNG and would reject
+ * every real one. The path contract is identical and still enforced here, so this
+ * is a narrower validator rather than an escape hatch — and it exists precisely
+ * so that generating a binary asset does not become a reason to call `bucket.put`
+ * directly and bypass path validation altogether.
+ *
+ * A caller with text should use {@link writeWorkspaceFile}; there is no reason to
+ * reach for this one and lose the content checks.
+ */
+export async function writeWorkspaceBinary(
+  bucket: R2Bucket,
+  projectId: number,
+  path: string,
+  bytes: Uint8Array,
+  contentType?: string,
+): Promise<WriteResult> {
+  const validPath = validateWorkspacePath(path);
+  if (!validPath.ok) return { ok: false, status: 400, reason: validPath.reason };
+  await withSameObjectRetry(() =>
+    bucket.put(workspacePrefix(projectId) + path, bytes as unknown as ArrayBuffer, {
+      ...(contentType ? { httpMetadata: { contentType } } : {}),
+    }),
+  );
+  return { ok: true };
+}
+
 /** Delete one file. Invalid paths are a no-op (the key can't exist). */
 export async function deleteWorkspaceFile(bucket: R2Bucket, projectId: number, path: string): Promise<void> {
   if (!validateWorkspacePath(path).ok) return;

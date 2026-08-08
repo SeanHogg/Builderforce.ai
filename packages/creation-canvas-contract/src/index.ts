@@ -9,6 +9,15 @@ export const CREATION_OBJECT_KINDS = [
   'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication',
   'repository', 'selection', 'diagnostics', 'terminal', 'service',
   'salesPipeline', 'salesContact', 'salesCampaign', 'targetMarket', 'salesGoal', 'salesMeeting',
+  // A connected mailbox and one message out of it. Two kinds rather than one
+  // because they answer different questions: an `inbox` is a LIVE, filtered view
+  // that re-reads, while an `email` is a single message pinned to the board so it
+  // can be annotated, connected to a task, and still be there tomorrow after it
+  // has scrolled out of the live view.
+  'inbox', 'email',
+  // A marketing campaign and the template it renders — the canvas half of
+  // "draft this, then send it to that list".
+  'emailCampaign', 'emailTemplate',
 ] as const;
 
 export type CreationObjectKind = typeof CREATION_OBJECT_KINDS[number];
@@ -27,7 +36,9 @@ export const CREATIVE_CAPABILITIES = [
   { kind: 'animation', capabilityId: 'creative.animation', mediaKind: 'animation', outputs: ['HTML', 'SVG', 'GIF', 'Animated WebP', 'APNG', 'MP4'] },
   { kind: 'podcast', capabilityId: 'creative.podcast', mediaKind: 'podcast', outputs: ['Markdown script', 'MP3', 'M4A', 'OGG', 'WAV', 'MP4'] },
   { kind: 'comic', capabilityId: 'creative.comic', mediaKind: 'comic', outputs: ['SVG', 'PNG strip', 'PDF', 'CBZ'] },
-  { kind: 'game', capabilityId: 'creative.game', mediaKind: 'game', outputs: ['HTML', 'HTML5 ZIP', 'Web embed'] },
+  // Named for what the game targets actually produce (api application/game/gameTarget).
+  // `HTML5 ZIP` and `Web embed` were advertised here and implemented nowhere.
+  { kind: 'game', capabilityId: 'creative.game', mediaKind: 'game', outputs: ['HTML', 'Web app', 'Android APK', 'iOS app', 'Roblox place'] },
   { kind: 'cad', capabilityId: 'creative.cad', mediaKind: 'cad', outputs: ['SVG', 'DXF', 'PDF'] },
   { kind: 'model3d', capabilityId: 'creative.model3d', mediaKind: 'model3d', outputs: ['STL', 'OBJ', 'STEP', 'GLB'] },
   { kind: 'resume', capabilityId: 'creative.resume', mediaKind: 'document', outputs: ['HTML', 'Markdown', 'PDF', 'DOCX'] },

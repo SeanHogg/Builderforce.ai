@@ -221,6 +221,15 @@ export async function importCanvasFile(file: File, t: ImportTranslator): Promise
 async function deriveObjects(file: File, t: ImportTranslator): Promise<ImportedCanvasObject[]> {
   const extension = fileExtension(file.name);
   const oversized = file.size > MAX_PARSEABLE_BYTES;
+  // A file past the parse ceiling still lands, but as an attachment — and it
+  // SAYS why. Silently downgrading a 60MB report to an icon looked identical to
+  // a reader that had failed, so nobody knew the size was the reason.
+  if (oversized) {
+    return [attachmentObject(file, t, {
+      status: t('statusTooLarge'),
+      subtitle: t('tooLargeShape', { limit: Math.round(MAX_PARSEABLE_BYTES / (1024 * 1024)) }),
+    })];
+  }
 
   if (file.type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'avif'].includes(extension)) {
     const url = await dataUrl(file);
@@ -371,15 +380,20 @@ async function deriveObjects(file: File, t: ImportTranslator): Promise<ImportedC
 
   const readable = !oversized && (READABLE_TEXT_FILE.test(file.name) || CODE_FILE.test(file.name) || file.type.startsWith('text/'));
   if (!readable) return [attachmentObject(file, t)];
-  const text = (await file.text()).slice(0, MAX_FILE_PREVIEW_CHARS);
-  if (!text.trim()) return [attachmentObject(file, t)];
+  const source = await file.text();
+  if (!source.trim()) return [attachmentObject(file, t)];
 
   if (MARKDOWN_FILE.test(file.name) || file.type === 'text/markdown') {
-    return [documentObject(file, textToMarkdown(text), t, {
+    // A dropped .md IS the document, exactly as a .docx is — so it is read whole.
+    // Truncating it at the preview ceiling silently cut long documents in half
+    // while the same content inside a Word file came through complete, and
+    // nothing said so. The parse ceiling above is the real bound.
+    return [documentObject(file, textToMarkdown(source), t, {
       sourceFormat: extension.toUpperCase() || 'TXT',
-      subtitle: t('documentShape', { words: text.split(/\s+/).length.toLocaleString() }),
+      subtitle: t('documentShape', { words: source.split(/\s+/).length.toLocaleString() }),
     })];
   }
+  const text = source.slice(0, MAX_FILE_PREVIEW_CHARS);
 
   if (CODE_FILE.test(file.name)) {
     return [{

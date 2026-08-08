@@ -143,12 +143,15 @@ import { createBrainRoutes }       from './presentation/routes/brainRoutes';
 import { createBrainFilesRoutes }  from './presentation/routes/brainFilesRoutes';
 import { createSitesRoutes, tryServeHostedSite } from './presentation/routes/sitesRoutes';
 import { createSiteManageRoutes } from './presentation/routes/siteManageRoutes';
-import { createGrowthRoutes, createCampaignTrackRoutes } from './presentation/routes/campaignRoutes';
+import { createGrowthRoutes, createCampaignTrackRoutes, createMarketingAssetRoutes } from './presentation/routes/campaignRoutes';
+import { createMailboxRoutes }      from './presentation/routes/mailboxRoutes';
+import { createDriveRoutes }        from './presentation/routes/driveRoutes';
 import { maybeHandlePreviewIngress } from './application/runtime/previewIngress';
 import { createIdeRoutes }         from './presentation/routes/ideRoutes';
 import { createCompileRoutes }     from './presentation/routes/compileRoutes';
 import { createChallengeRoutes }   from './presentation/routes/challengeRoutes';
 import { createProjectBackendRoutes } from './presentation/routes/projectBackendRoutes';
+import { createGameRoutes } from './presentation/routes/gameRoutes';
 import { createHooksRoutes }       from './presentation/routes/hooksRoutes';
 import { createIdeProjectRoutes }  from './presentation/routes/ideProjectRoutes';
 import { createIdeAiRoutes }       from './presentation/routes/ideAiRoutes';
@@ -518,6 +521,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // credential is the unguessable per-recipient token in the path.
   app.route('/api/campaign-track', createCampaignTrackRoutes(db));
 
+  // Campaign logos and images. Also hit by a recipient's mail client — an image
+  // behind authMiddleware renders as a broken box in every inbox — so it is
+  // public and addressed only by the asset's unguessable token.
+  app.route('/api/campaign-assets', createMarketingAssetRoutes(db));
+
   // Public Developer API (Bearer <developer_api_key> for read-only; tenant JWT for key management)
   app.route('/api/v1', createPublicApiRoutes(db));
 
@@ -617,6 +625,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // per-user calendar connections that back scheduling.
   app.route('/api/meetings', createMeetingRoutes(db));
   app.route('/api/calendar', createCalendarRoutes(db));
+  // Connected mailboxes (Microsoft 365 / Gmail) — the inbox the canvas renders
+  // and the identity a campaign can send from.
+  app.route('/api/mailbox',  createMailboxRoutes(db));
+  app.route('/api/drive',    createDriveRoutes(db));
   app.route('/api/roi',      createRoiRoutes(db));
   app.route('/api/pmo',      createPmoRoutes(db));
   app.route('/api/time',     createTimeRoutes(db));
@@ -700,6 +712,10 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // Operating a project's server-side half: hosting strategy, live handlers, the
   // per-project secret vault, and the inbound-delivery log.
   app.route('/api/projects',  createProjectBackendRoutes(db));
+  // Shipping a canvas-authored game to somewhere it can actually be PLAYED: a
+  // sandboxed frame, an installable web app on a phone, a real APK or iOS build,
+  // or a Roblox place. See application/game/gameTarget.ts.
+  app.route('/api/projects',  createGameRoutes(db));
   app.route('/api/ide-projects', createIdeProjectRoutes(projectService, db));
   app.route('/api/ai',        createIdeAiRoutes(projectService));
   app.route('/api/studio/models', createEvermindModelRoutes(db));

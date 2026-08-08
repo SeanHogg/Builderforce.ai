@@ -660,6 +660,10 @@ export interface WebFetchResult {
   /** Plain-text content (HTML stripped), capped server-side. */
   text: string;
   truncated: boolean;
+  /** Whether the origin lets us frame the page (read off X-Frame-Options / CSP frame-ancestors). */
+  frameable: boolean;
+  /** Which header refused the frame, else null. */
+  frameBlockedBy: 'x-frame-options' | 'frame-ancestors' | null;
 }
 
 /** Structured error from the LLM gateway, with the fields callers branch on. */

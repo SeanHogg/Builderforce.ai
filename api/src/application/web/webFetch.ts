@@ -43,6 +43,43 @@ export interface WebFetchResult {
   /** Plain-text content (HTML stripped), capped at {@link MAX_TEXT_CHARS}. */
   text: string;
   truncated: boolean;
+  /**
+   * Whether the origin permits BuilderForce framing this page in an `<iframe>`,
+   * read off `X-Frame-Options` / CSP `frame-ancestors`. The canvas Web page panel
+   * uses it to decide between the live frame and its reader view — the browser
+   * gives the embedder no event it can trust when a frame is refused, so the
+   * answer has to come from the one place that can see the response headers.
+   */
+  frameable: boolean;
+  /** Which header refused the frame (`x-frame-options` | `frame-ancestors`), else null. */
+  frameBlockedBy: 'x-frame-options' | 'frame-ancestors' | null;
+}
+
+/** Our own origins, which a `frame-ancestors` list may name explicitly. */
+const SELF_FRAME_ANCESTOR = /builderforce\.ai/i;
+
+/**
+ * Decide whether a response allows US to frame it.
+ *
+ * `X-Frame-Options` has no "allow this specific embedder" value that browsers
+ * still honour (`ALLOW-FROM` is dead), so ANY value refuses a third-party frame.
+ * CSP `frame-ancestors` does, so a list is read: a wildcard opens it, an explicit
+ * BuilderForce origin opens it, and anything else (including `'none'`/`'self'`)
+ * closes it. Absent headers mean the default — framing is allowed.
+ */
+export function framePolicy(
+  xFrameOptions: string | null,
+  contentSecurityPolicy: string | null,
+): { frameable: boolean; frameBlockedBy: WebFetchResult['frameBlockedBy'] } {
+  if (xFrameOptions && xFrameOptions.trim()) return { frameable: false, frameBlockedBy: 'x-frame-options' };
+  const directive = (contentSecurityPolicy ?? '')
+    .split(';')
+    .map((part) => part.trim())
+    .find((part) => /^frame-ancestors\b/i.test(part));
+  if (!directive) return { frameable: true, frameBlockedBy: null };
+  const sources = directive.split(/\s+/).slice(1).filter(Boolean);
+  const allowed = sources.some((source) => source === '*' || source === 'https:' || SELF_FRAME_ANCESTOR.test(source));
+  return allowed ? { frameable: true, frameBlockedBy: null } : { frameable: false, frameBlockedBy: 'frame-ancestors' };
 }
 
 /**
@@ -187,11 +224,12 @@ export async function fetchWebDocument(rawUrl: string): Promise<WebFetchResult> 
   clearTimeout(timer);
 
   const contentType = (res.headers.get('content-type') ?? '').toLowerCase();
+  const frame = framePolicy(res.headers.get('x-frame-options'), res.headers.get('content-security-policy'));
 
   if (!res.ok) {
     return {
       url: finalUrl, requestedUrl, status: res.status, contentType,
-      title: null, text: '', truncated: false,
+      title: null, text: '', truncated: false, ...frame,
     };
   }
 
@@ -207,7 +245,7 @@ export async function fetchWebDocument(rawUrl: string): Promise<WebFetchResult> 
     truncated = true;
   }
 
-  return { url: finalUrl, requestedUrl, status: res.status, contentType, title, text, truncated };
+  return { url: finalUrl, requestedUrl, status: res.status, contentType, title, text, truncated, ...frame };
 }
 
 /** How long a fetched document stays warm. Matches the cloud surface's `web_fetch`

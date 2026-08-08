@@ -402,6 +402,41 @@
 .buildBody > p { margin:0; color:var(--canvas-ink-soft); font-size:9px; line-height:1.5; }
 .buildLink { margin-top:auto; color:var(--canvas-accent-ink); font-size:9px; overflow-wrap:anywhere; }
 
+/* Web page panel — a live third-party page framed on the board, with the reader
+   view it falls back to when the origin refuses to be framed. Every colour is a
+   --canvas-* token, so the chrome around the page reads in light AND dark; the
+   page inside owns its own appearance and is deliberately left alone. */
+.webPage { display:flex; flex:1; min-height:0; flex-direction:column; gap:6px; }
+.webPageBar { display:flex; align-items:center; gap:5px; padding:3px; border:1px solid var(--canvas-widget-border); border-radius:8px; background:var(--canvas-widget-header); }
+.webPageBar button,.webPageBar a { flex:none; width:19px; height:19px; display:grid; place-items:center; border:0; border-radius:6px; background:transparent; color:var(--canvas-muted); font-size:11px; line-height:1; text-decoration:none; cursor:pointer; }
+.webPageBar button:hover:not(:disabled),.webPageBar a:hover { background:var(--canvas-hover); color:var(--canvas-accent-ink); }
+.webPageBar button:disabled { opacity:.45; cursor:default; }
+.webPageBar input { min-width:0; flex:1; padding:3px 7px; border:1px solid transparent; border-radius:6px; background:var(--canvas-widget-surface); color:var(--canvas-ink); font:500 9px/1.4 var(--font-sans); text-overflow:ellipsis; }
+.webPageBar input:focus-visible { border-color:var(--canvas-blue); outline:none; }
+.webPageBar input:read-only { background:transparent; color:var(--canvas-muted); }
+
+.webPageFrameWrap { position:relative; flex:1; min-height:110px; overflow:hidden; border:1px solid var(--canvas-widget-border); border-radius:9px; background:var(--canvas-widget-surface); }
+.webPageFrame { width:100%; height:100%; border:0; display:block; transform-origin:top left; background:#fff; }
+.webPageLoading,.webPageStatus { color:var(--canvas-muted); font:500 9px/1.4 var(--font-sans); }
+.webPageLoading { position:absolute; inset:0; display:grid; place-items:center; padding:10px; text-align:center; background:var(--canvas-widget-surface); }
+.webPageStatus { padding:0 2px; overflow-wrap:anywhere; }
+
+.webPageEmpty { flex:1; display:grid; align-content:center; gap:4px; padding:12px; border:1px dashed var(--canvas-line); border-radius:9px; text-align:center; }
+.webPageEmpty strong { color:var(--canvas-ink); font-size:10px; }
+.webPageEmpty p { margin:0; color:var(--canvas-ink-soft); font-size:9px; line-height:1.5; }
+
+.webPageReader { flex:1; min-height:0; display:flex; flex-direction:column; gap:7px; padding:9px; overflow:auto; border:1px solid var(--canvas-widget-border); border-radius:9px; background:var(--canvas-widget-surface); }
+.webPageReader p { margin:0; color:var(--canvas-ink-soft); font:400 9px/1.6 var(--font-sans); white-space:pre-wrap; overflow-wrap:anywhere; }
+.webPageMuted { color:var(--canvas-muted); font-style:italic; }
+.webPageNotice { display:grid; gap:2px; padding:6px 8px; border-radius:7px; background:var(--tone-warning-bg); }
+.webPageNotice strong { color:var(--tone-warning-ink); font-size:9px; overflow-wrap:anywhere; }
+.webPageNotice span { color:var(--tone-warning-ink); font-size:8px; line-height:1.45; opacity:.9; }
+
+@container (max-width:300px) {
+  .webPageBar a { display:none; }
+  .webPageBar input { font-size:8px; }
+}
+
 /* The IDE surface opened from a Builder object. Fills the focus overlay; the IDE
    owns its own chrome, so this only supplies the box it lives in.
    The builder is a genuinely wide surface (file tree + editor + preview + right
@@ -500,6 +535,41 @@
 .taskContext p { max-height:44px; margin:3px 0 0; overflow:hidden; color:#607188; font-size:8px; line-height:1.45; }
 .taskContext .taskEmpty { color:#8a98aa; font-style:italic; }
 .taskBody > .authoredContent { max-height:72px; margin:0; }
+
+/* --- Mailbox tiles -------------------------------------------------------
+   The inbox list scrolls INSIDE the node rather than growing it: a node's
+   height is a board-layout decision the user made by resizing it, and a
+   mailbox with 100 messages must not silently become a 4,000px tile that
+   overlaps everything beneath it. */
+.inboxBody { display:grid; gap:7px; min-height:0; grid-template-rows:auto minmax(0,1fr) auto; }
+.inboxMeta { display:flex; flex-wrap:wrap; align-items:center; gap:6px; min-width:0; }
+.inboxMeta > span { overflow:hidden; flex:1 1 6rem; min-width:0; color:var(--canvas-muted); font-size:8px; text-overflow:ellipsis; white-space:nowrap; }
+.inboxMeta small { color:var(--canvas-ink-soft); font-size:7px; white-space:nowrap; }
+.inboxUnreadBadge { padding:1px 6px; border-radius:999px; background:var(--canvas-blue); color:#ffffff; font-size:7px; font-weight:700; white-space:nowrap; }
+.inboxList { display:grid; align-content:start; gap:5px; margin:0; padding:0; overflow-y:auto; min-height:0; list-style:none; }
+.inboxList li { padding:6px 8px; border:1px solid #dfe6ef; border-left-width:3px; border-radius:7px; background:#fafcff; }
+/* Unread is carried by the accent BAR and the bold subject, not by background
+   colour alone — an unread marker that exists only as a hue is invisible to a
+   colour-blind reader and disappears in high-contrast mode. The tint rides a
+   theme token so it reads in dark mode too. */
+/* `.inboxList li.inboxUnread`, not `.inboxUnread`: the base rule is (0,1,1) and
+   the dark-theme block re-states it, so a single-class selector would lose both
+   times and unread would look identical to read. */
+.inboxList li.inboxUnread { border-left-color:var(--canvas-blue); background:var(--canvas-hover); }
+.inboxUnread .inboxSubject { font-weight:700; }
+.inboxRowTop { display:flex; align-items:baseline; justify-content:space-between; gap:6px; min-width:0; }
+.inboxRowTop b { overflow:hidden; color:var(--canvas-ink); font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
+.inboxRowTop small { color:var(--canvas-ink-soft); font-size:7px; white-space:nowrap; }
+.inboxSubject { display:block; overflow:hidden; margin-top:1px; color:var(--canvas-ink); font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
+.inboxList p { max-height:26px; margin:2px 0 0; overflow:hidden; color:var(--canvas-muted); font-size:8px; line-height:1.4; }
+.inboxMore { color:var(--canvas-ink-soft); font-size:7px; font-style:italic; }
+.inboxOpenLink { color:var(--canvas-accent-ink); font-size:8px; text-decoration:underline; }
+.emailBodyText { max-height:150px !important; overflow-y:auto !important; white-space:pre-wrap; }
+.campaignStats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }
+.campaignStats span { min-width:0; padding:6px 7px; border:1px solid #dfe6ef; border-radius:7px; background:#fafcff; text-align:center; }
+.campaignStats small { display:block; margin-bottom:2px; color:var(--canvas-ink-soft); font-size:7px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+.campaignStats b { color:var(--canvas-ink); font-size:11px; }
+.templateLogo { max-width:100%; max-height:34px; object-fit:contain; object-position:left center; }
 .pills,.inspectorPills { display:flex; flex-wrap:wrap; gap:5px; margin-top:9px; }.pills span,.inspectorPills span,.inspectorPills button { padding:4px 6px; border:1px solid #dfe6ef; border-radius:5px; background:#fafcff; color:#53647a; font-size:8px; }
 .chatHistory { box-sizing:border-box; height:100%; min-height:0; overflow:hidden; --bf-surface:var(--canvas-panel); --bf-text:var(--canvas-ink); --bf-text-muted:var(--canvas-muted); --bf-border:var(--canvas-line); --bf-accent:var(--canvas-blue); }
 .chatHistory:focus-visible { outline:2px solid var(--canvas-blue); outline-offset:2px; border-radius:8px; }
@@ -529,6 +599,55 @@
 .creativeStudioPreview i { position:absolute; width:90px; height:90px; border:1px solid rgba(255,255,255,.22); border-radius:18px; transform:rotate(28deg); }
 .creativeStudioPreview i:nth-of-type(2) { width:150px; height:150px; transform:rotate(48deg); }
 .creativeStudioPreview i:nth-of-type(3) { width:220px; height:220px; transform:rotate(68deg); }
+/* ---- game: the ship-to-device panel ---- */
+/* All colours are theme tokens with literal fallbacks, so the panel reads in
+   both themes; the layout collapses to one column well above 360px. */
+.gamePanel { display:grid; gap:16px; }
+.gamePanelNotice { margin:0; padding:10px 12px; border-radius:8px; border:1px solid var(--border,#dfe6ef); background:var(--surface-muted,#f6f8fb); color:var(--text-secondary,#53647a); font-size:13px; }
+.gamePanelError { margin:0; padding:10px 12px; border-radius:8px; border:1px solid color-mix(in srgb,#e5484d 40%,var(--border,#dfe6ef)); background:color-mix(in srgb,#e5484d 10%,var(--surface,#fff)); color:var(--text-primary,#1c2635); font-size:13px; }
+.gamePhoneLead { display:flex; flex-wrap:wrap; gap:16px; align-items:flex-start; padding:16px; border-radius:12px; border:1px solid var(--border,#dfe6ef); background:var(--surface-muted,#f6f8fb); }
+.gamePhoneLead > div:first-child { flex:1 1 260px; min-width:0; }
+.gamePhoneLead h3 { margin:0 0 4px; font-size:15px; color:var(--text-primary,#1c2635); }
+.gamePhoneLead p { margin:0 0 8px; font-size:13px; color:var(--text-secondary,#53647a); }
+.gamePhoneLead a { font-size:13px; color:var(--accent,#3978f6); word-break:break-all; }
+.gameQr { flex:0 0 auto; padding:8px; border-radius:10px; background:#fff; line-height:0; }
+.gameQr svg { display:block; width:176px; height:176px; max-width:40vw; }
+.gameInstallHints { margin:10px 0 0; padding-left:18px; display:grid; gap:4px; font-size:12px; color:var(--text-secondary,#53647a); }
+.gameTargetList { display:grid; gap:12px; }
+.gameTargetCard { padding:14px; border-radius:12px; border:1px solid var(--border,#dfe6ef); background:var(--surface,#fff); display:grid; gap:10px; }
+.gameTargetCard header { display:flex; gap:10px; align-items:flex-start; }
+.gameTargetCard header > span[aria-hidden] { font-size:18px; color:var(--accent,#3978f6); line-height:1.2; }
+.gameTargetCard header strong { display:block; font-size:14px; color:var(--text-primary,#1c2635); }
+.gameTargetCard header p { margin:2px 0 0; font-size:12px; color:var(--text-secondary,#53647a); }
+.gameZeroSetup { flex:0 0 auto; padding:3px 8px; border-radius:999px; font-size:10px; font-weight:650; color:var(--accent,#3978f6); background:color-mix(in srgb,var(--accent,#3978f6) 12%,transparent); }
+.gameTargetDetail { margin:0; font-size:12px; color:var(--text-primary,#1c2635); }
+.gameTargetFiles { margin:0; font-size:11px; color:var(--text-secondary,#53647a); word-break:break-word; }
+.gameSetupSteps { margin:0; padding-left:16px; display:grid; gap:8px; font-size:12px; }
+.gameSetupSteps strong { display:block; color:var(--text-primary,#1c2635); }
+.gameSetupSteps span { color:var(--text-secondary,#53647a); }
+.gameSetupSteps a,.gamePlayLink { color:var(--accent,#3978f6); font-size:12px; }
+.gamePanelActions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.gamePanelActions button { padding:8px 14px; min-height:36px; border-radius:8px; border:1px solid var(--border,#dfe6ef); background:var(--surface-muted,#f6f8fb); color:var(--text-primary,#1c2635); font-size:13px; font-weight:600; cursor:pointer; }
+.gamePanelActions button:disabled { opacity:.55; cursor:not-allowed; }
+.gameRoblox { display:grid; gap:8px; padding-top:10px; border-top:1px solid var(--border,#dfe6ef); }
+.gameRoblox label { display:grid; gap:4px; font-size:12px; color:var(--text-secondary,#53647a); }
+.gameRoblox input { padding:8px 10px; min-height:36px; border-radius:8px; border:1px solid var(--border,#dfe6ef); background:var(--surface,#fff); color:var(--text-primary,#1c2635); font-size:13px; }
+@media (max-width:520px) { .gamePhoneLead { flex-direction:column; } .gameQr svg { width:60vw; height:60vw; max-width:none; } }
+
+/* ---- game: the artifact is playable, so the body plays it ---- */
+/* The stage keeps a game-shaped aspect whatever the object is resized to, so a
+   canvas game does not letterbox itself into a strip. */
+.gameStage { position:relative; width:100%; aspect-ratio:16/10; min-height:150px; border-radius:8px; overflow:hidden; border:1px solid var(--canvas-line,#dfe6ef); background:#0b0e1a; }
+.gameFrame { position:absolute; inset:0; width:100%; height:100%; border:0; display:block; background:#0b0e1a; }
+.gamePoster { position:absolute; inset:0; width:100%; height:100%; padding:0; border:0; cursor:pointer; display:grid; place-items:center; background-color:#0b0e1a; background-size:cover; background-position:center; }
+.gamePlayBadge { width:52px; height:52px; border-radius:50%; display:grid; place-items:center; font-size:20px; color:#fff; background:rgba(11,14,26,.62); border:2px solid rgba(255,255,255,.85); backdrop-filter:blur(4px); transition:transform .12s ease, background .12s ease; }
+.gamePoster:hover .gamePlayBadge,.gamePoster:focus-visible .gamePlayBadge { transform:scale(1.08); background:rgba(11,14,26,.8); }
+/* The stop control sits in the same pill row as the state chips, so it inherits
+   their theming rather than declaring a second one. */
+.creativeStudioBody .pills button { padding:4px 6px; border:1px solid var(--canvas-line,#dfe6ef); border-radius:5px; background:var(--canvas-panel-muted,#fafcff); color:var(--canvas-ink,#53647a); font-size:8px; cursor:pointer; }
+.srOnly { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+@media (prefers-reduced-motion: reduce) { .gamePlayBadge { transition:none; } }
+
 .creativeStudioBody .widgetSettings { grid-template-columns:repeat(3,minmax(0,1fr)); }
 .creativeStudioBody .widgetSettings b { text-transform:capitalize; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .node_evermind { width:560px; }
@@ -785,6 +904,86 @@
 }
 .filesFilters button[aria-pressed='true'] { border-color:var(--canvas-accent-ink); background:var(--canvas-hover); color:var(--canvas-ink); }
 .filesEmpty { margin:0; padding:14px 12px; color:var(--canvas-ink-soft); font-size:11px; line-height:1.5; }
+
+/* ── Connected cloud storage ─────────────────────────────────────────────────
+   Shares the Files panel's frame deliberately: they are two views of the same
+   idea — files you can open on this board — and a second visual language for
+   the second one would read as a different feature. */
+.drivePanel {
+  position:absolute; z-index:16;
+  left:calc(62px + var(--brain-dock-left, 0px)); bottom:calc(var(--composer-space) + 8px);
+  box-sizing:border-box; width:312px; max-width:calc(100vw - 96px); max-height:56%; overflow:auto;
+  border:1px solid var(--canvas-line); border-radius:11px;
+  background:var(--canvas-panel); color:var(--canvas-muted);
+  box-shadow:0 12px 34px var(--canvas-shadow); font-size:12px;
+}
+.drivePanel header {
+  position:sticky; top:0; z-index:1; display:flex; align-items:center; gap:8px;
+  padding:9px 10px; border-bottom:1px solid var(--canvas-line); background:var(--canvas-panel);
+}
+.drivePanel header strong { flex:1; color:var(--canvas-ink); font-size:11px; }
+.drivePanel header button {
+  width:24px; height:24px; display:grid; place-items:center; padding:0;
+  border:0; border-radius:6px; background:transparent; color:var(--canvas-muted); font-size:17px; line-height:1; cursor:pointer;
+}
+.drivePanel header button:hover,.drivePanel header button:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+
+.driveAccounts { display:flex; flex-wrap:wrap; gap:4px; padding:8px 10px 0; }
+.driveAccounts button {
+  max-width:100%; overflow:hidden; padding:2px 9px;
+  border:1px solid var(--canvas-line); border-radius:999px;
+  background:transparent; color:var(--canvas-muted);
+  font-size:10px; text-overflow:ellipsis; white-space:nowrap; cursor:pointer;
+}
+.driveAccounts button[aria-pressed='true'] { border-color:var(--canvas-accent-ink); background:var(--canvas-hover); color:var(--canvas-ink); }
+
+.driveConnect { display:grid; gap:5px; padding:8px 10px; }
+.driveConnect button {
+  min-height:32px; padding:6px 11px;
+  border:1px solid var(--canvas-line); border-radius:8px;
+  background:var(--canvas-panel-muted); color:var(--canvas-ink);
+  font:650 11px inherit; font-family:inherit; cursor:pointer;
+}
+.driveConnect button:hover:not(:disabled),.driveConnect button:focus-visible:not(:disabled) { background:var(--canvas-hover); outline:none; }
+.driveConnect button:disabled { opacity:.5; cursor:not-allowed; }
+
+/* The walk, not a tree: a drive is arbitrarily deep, so a breadcrumb says where
+   you are and every step back is one tap. Scrolls sideways rather than wrapping
+   into a growing block on a narrow board. */
+.driveCrumbs { display:flex; gap:2px; overflow-x:auto; padding:8px 10px 0; }
+.driveCrumbs button {
+  padding:2px 6px; border:0; border-radius:5px;
+  background:transparent; color:var(--canvas-muted);
+  font-size:10px; white-space:nowrap; cursor:pointer;
+}
+.driveCrumbs button:hover,.driveCrumbs button:focus-visible { background:var(--canvas-hover); color:var(--canvas-ink); outline:none; }
+.driveCrumbs button[aria-current='page'] { color:var(--canvas-ink); font-weight:650; }
+
+.driveNotice {
+  margin:8px 10px 0; padding:7px 9px; border-radius:7px;
+  background:var(--tone-warning-bg); color:var(--tone-warning-ink);
+  font-size:10px; line-height:1.45;
+}
+
+.driveList { display:grid; gap:1px; padding:8px 6px; }
+.driveRow { min-width:0; }
+.driveRowMain {
+  display:flex; align-items:center; gap:8px; width:100%; min-height:32px; padding:5px 8px;
+  border:0; border-radius:7px; background:transparent; color:var(--canvas-ink);
+  font:inherit; font-size:11px; text-align:left; cursor:pointer;
+}
+.driveRowMain:hover,.driveRowMain:focus-visible { background:var(--canvas-hover); outline:none; }
+.driveRowMain:disabled { opacity:.6; cursor:default; }
+.driveRowMain > span[aria-hidden] { flex:none; color:var(--canvas-muted); }
+.driveRowName { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.driveRowMain small { flex:none; color:var(--canvas-muted); font-size:9px; font-variant-numeric:tabular-nums; }
+.driveEmpty { margin:0; padding:14px 12px; color:var(--canvas-ink-soft); font-size:11px; line-height:1.5; }
+.driveMore {
+  width:calc(100% - 20px); min-height:30px; margin:0 10px 10px;
+  border:1px solid var(--canvas-line); border-radius:8px;
+  background:var(--canvas-panel-muted); color:var(--canvas-ink); font:650 11px inherit; font-family:inherit; cursor:pointer;
+}
+.driveMore:hover,.driveMore:focus-visible { background:var(--canvas-hover); outline:none; }
 .filesList { margin:0; padding:6px; list-style:none; display:grid; gap:3px; }
 .fileRow { display:flex; align-items:center; gap:4px; border-radius:8px; }
 .fileRow:hover { background:var(--canvas-hover); }
@@ -1042,6 +1241,8 @@
 .activityEmpty,
 .taskFacts span,
 .taskContext,
+.inboxList li,
+.campaignStats span,
 .widgetSettings > span,
 .widgetContext > span,
 .projectOverview span,
@@ -1365,6 +1566,36 @@
 .documentMarkdown a { color:var(--canvas-accent-ink,#2a5fc7); text-decoration:underline; }
 .documentMarkdown hr { margin:8px 0; border:0; border-top:1px solid var(--canvas-line,#d7e1ee); }
 .documentMarkdown img { max-width:100%; height:auto; border-radius:5px; }
+
+/* ── A file that has landed but has not been read yet ────────────────────────
+   The card is the receipt for the drop. Reading a document is synchronous CPU
+   that can hold the thread for seconds, so this stands in for the artifact and
+   names the file it is waiting on. */
+.importPending { display:grid; gap:8px; align-content:start; }
+.importPending > div { display:grid; gap:2px; min-width:0; }
+.importPending b { color:var(--canvas-ink,#142234); font-size:10px; }
+.importPending small { overflow:hidden; color:var(--canvas-muted,#5c6e88); font-size:8px; text-overflow:ellipsis; white-space:nowrap; }
+.importSpinner {
+  width:15px; height:15px; border-radius:50%;
+  border:2px solid var(--canvas-line,#d7e1ee); border-top-color:var(--canvas-accent-ink,#2a5fc7);
+  animation:importSpin .8s linear infinite;
+}
+@keyframes importSpin { to { transform:rotate(360deg); } }
+.importSkeleton { display:grid; gap:5px; }
+.importSkeleton i {
+  height:6px; border-radius:3px;
+  background:var(--canvas-panel-muted,#f3f7fc);
+  animation:importPulse 1.4s ease-in-out infinite;
+}
+.importSkeleton i:nth-child(2) { width:88%; animation-delay:.16s; }
+.importSkeleton i:nth-child(3) { width:64%; animation-delay:.32s; }
+@keyframes importPulse { 0%,100% { opacity:.55; } 50% { opacity:1; } }
+/* A spinner that never stops is a problem for vestibular sensitivity, and a
+   pulse that never stops is noise. Both hold still when the viewer asks. */
+@media (prefers-reduced-motion:reduce) {
+  .importSpinner { animation:none; border-top-color:var(--canvas-accent-ink,#2a5fc7); }
+  .importSkeleton i { animation:none; opacity:.7; }
+}
 
 /* ── Working on the document, on the card ────────────────────────────────────
    Edit it here, take it away from here. Everything below draws from the canvas

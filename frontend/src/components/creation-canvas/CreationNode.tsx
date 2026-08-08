@@ -16,7 +16,11 @@ import { useBrainSurface } from './brainSurfaceContext';
 import { highlightToneFor, profileTabular, tabularFromObject, workbookSheets, type TabularCell, type TabularHighlightRule } from '@/lib/canvasTabularData';
 import { outlinePaths, projectMap, sanitizeGeoBounds, sanitizeMapPoints } from '@/lib/canvasGeo';
 import { creativePreviewImageUrl } from '@/lib/creationDeliverables';
+import { GAME_FRAME_SANDBOX, gameDocumentFrom } from '@/lib/gameTargets';
+import { controlLabels, readGameControls } from '@/lib/gamePoster';
 import { canvasBuildBinding } from '@/lib/canvasBuild';
+import { canvasWebPageUrl, WEB_PAGE_KINDS } from '@/lib/canvasWebPage';
+import { CanvasWebPage } from './CanvasWebPage';
 import {
   PITCH_MAX_SCORE, formatPitchDuration, pitchApplicationAnswers, pitchApplicationReadiness, pitchBeats,
   pitchCompetitionFor, pitchCriteria, pitchEligibility, pitchQaCoverage, pitchQaItems, pitchReadiness,
@@ -62,7 +66,10 @@ function AuthoredContent({ data, fallback }: { data: CreationNodeData; fallback:
   return <p className={styles.authoredContent}>{authoredText(data) || fallback}</p>;
 }
 
-const CREATIVE_STUDIO_KINDS = new Set(['image', 'animation', 'podcast', 'comic', 'game', 'cad', 'model3d', 'resume', 'template']);
+// `game` is deliberately absent: a game is the one creative kind whose artifact
+// can be USED in place, so it gets a body that plays it rather than a tile that
+// describes it. See GameBody.
+const CREATIVE_STUDIO_KINDS = new Set(['image', 'animation', 'podcast', 'comic', 'cad', 'model3d', 'resume', 'template']);
 
 /** Product name — never translated, so it stays out of the message catalogs. */
 const EVERMIND_BRAND = 'Evermind';
@@ -86,6 +93,119 @@ function CreativeStudioBody({ data }: { data: CreationNodeData }) {
       <span><small>{t('output')}</small><b>{output}</b></span>
     </div>
     <div className={styles.pills}><span>{textValue(data.capabilityId, `creative.${data.kind}`)}</span><span>{`MCP · ${textValue(data.mcpServer, 'builtin')}`}</span></div>
+  </div>;
+}
+
+/**
+ * A live inbox tile.
+ *
+ * Two things are non-negotiable here and both are honesty about what is on
+ * screen: the FILTER is shown (a tile reading "3 messages" with no visible
+ * filter tells the reader they have three emails, which is false), and the read
+ * TIME is shown (a live view with no freshness marker is a screenshot claiming
+ * to be live).
+ */
+function InboxBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.node');
+  const messages = Array.isArray(data.messages) ? data.messages : [];
+  const account = textValue(data.accountEmail);
+  const fetchedAt = typeof data.fetchedAt === 'string' ? new Date(data.fetchedAt) : null;
+  const unread = Number(data.unreadCount) || 0;
+
+  if (!account) {
+    return <div className={styles.taskContext}><p className={styles.taskEmpty}>{t('inboxNotConnected')}</p></div>;
+  }
+  return <div className={styles.inboxBody}>
+    <div className={styles.inboxMeta}>
+      <span title={account}>{account}</span>
+      {unread > 0 && <b className={styles.inboxUnreadBadge}>{t('inboxUnread', { count: unread })}</b>}
+      {fetchedAt && <small>{t('inboxReadAt', { time: fetchedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) })}</small>}
+    </div>
+    {messages.length === 0
+      ? <p className={styles.taskEmpty}>{t('inboxEmpty')}</p>
+      : <ul className={styles.inboxList}>
+        {messages.slice(0, 12).map((raw, index) => {
+          const message = asRecord(raw, {});
+          const isUnread = message.unread === true;
+          return <li key={String(message.id ?? index)} className={isUnread ? styles.inboxUnread : undefined}>
+            <div className={styles.inboxRowTop}>
+              <b>{String(message.fromName || message.from || t('inboxUnknownSender'))}</b>
+              <small>{message.receivedAtISO
+                ? new Date(String(message.receivedAtISO)).toLocaleDateString([], { month: 'short', day: 'numeric' })
+                : ''}</small>
+            </div>
+            <span className={styles.inboxSubject}>{String(message.subject || t('inboxNoSubject'))}</span>
+            <p>{String(message.excerpt || '')}</p>
+          </li>;
+        })}
+      </ul>}
+    {messages.length > 12 && <small className={styles.inboxMore}>{t('inboxMore', { count: messages.length - 12 })}</small>}
+  </div>;
+}
+
+/** One pinned message. Unlike the inbox tile this does NOT change — that is the
+ *  reason it exists — so it shows the full body rather than an excerpt. */
+function EmailBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.node');
+  const body = textValue(data.bodyText);
+  const to = Array.isArray(data.to) ? data.to.map(String) : [];
+  const webUrl = textValue(data.webUrl);
+  return <div className={styles.taskBody}>
+    <div className={styles.taskFacts}>
+      <span><small>{t('emailFrom')}</small><b>{textValue(data.from, t('inboxUnknownSender'))}</b></span>
+      <span><small>{t('emailTo')}</small><b>{to.join(', ') || '—'}</b></span>
+    </div>
+    <div className={styles.taskContext}>
+      <small>{t('emailBody')}</small>
+      {body ? <p className={styles.emailBodyText}>{body}</p> : <p className={styles.taskEmpty}>{t('emailNoBody')}</p>}
+    </div>
+    {webUrl && <a className={styles.inboxOpenLink} href={webUrl} target="_blank" rel="noreferrer noopener">{t('emailOpenInProvider')}</a>}
+  </div>;
+}
+
+/**
+ * A campaign tile. The counters lead, because "did it go out and did anyone
+ * read it?" is the only question a campaign object is ever asked, and
+ * `blockers` says plainly why a draft cannot send yet.
+ */
+function EmailCampaignBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.node');
+  const blockers = Array.isArray(data.blockers) ? data.blockers.map(String) : [];
+  const stat = (value: unknown) => String(Number(value) || 0);
+  return <div className={styles.taskBody}>
+    <div className={styles.campaignStats}>
+      <span><small>{t('campaignSent')}</small><b>{stat(data.sent)}/{stat(data.recipients)}</b></span>
+      <span><small>{t('campaignOpened')}</small><b>{stat(data.opened)}</b></span>
+      <span><small>{t('campaignClicked')}</small><b>{stat(data.clicked)}</b></span>
+    </div>
+    <div className={styles.taskFacts}>
+      <span><small>{t('campaignAudience')}</small><b>{textValue(data.audienceName, '—')}</b></span>
+      <span><small>{t('campaignVia')}</small><b>{textValue(data.transport, 'platform')}</b></span>
+    </div>
+    {textValue(data.subject) && <div className={styles.taskContext}><small>{t('campaignSubject')}</small><b>{String(data.subject)}</b></div>}
+    {blockers.length > 0 && <div className={styles.taskContext}><small>{t('campaignBlocked')}</small><p>{blockers.join(' · ')}</p></div>}
+  </div>;
+}
+
+/** A template tile. `mergeFields` is the load-bearing part: it is the contract
+ *  the audience has to satisfy, and seeing it here is what stops a send that
+ *  renders `{{company}}` as a gap in four thousand inboxes. */
+function EmailTemplateBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.node');
+  const fields = Array.isArray(data.mergeFields) ? data.mergeFields.map(String) : [];
+  const logoUrl = textValue(data.logoUrl);
+  return <div className={styles.taskBody}>
+    {logoUrl && <img className={styles.templateLogo} src={logoUrl} alt="" />}
+    <div className={styles.taskContext}>
+      <small>{t('templateSubject')}</small>
+      <b>{textValue(data.subject, t('templateNoSubject'))}</b>
+    </div>
+    <div className={styles.taskContext}>
+      <small>{t('templateMergeFields')}</small>
+      {fields.length
+        ? <div className={styles.pills}>{fields.slice(0, 8).map((field) => <span key={field}>{`{{${field}}}`}</span>)}</div>
+        : <p className={styles.taskEmpty}>{t('templateNoMergeFields')}</p>}
+    </div>
   </div>;
 }
 
@@ -269,7 +389,7 @@ function BuildBody({ data }: { data: CreationNodeData }) {
   const t = useTranslations('creationCanvas.build');
   const modality = useModalityCopy()(typeof data.modality === 'string' ? data.modality : null);
   const binding = canvasBuildBinding(data);
-  const siteUrl = [data.siteUrl, data.url, data.pathUrl].find((value) => typeof value === 'string' && value) as string | undefined;
+  const siteUrl = canvasWebPageUrl(data);
   return (
     <div className={styles.buildBody}>
       <div className={styles.buildType}>
@@ -774,11 +894,37 @@ function formatFileSize(bytes: number): string {
 
 /** Non-tabular attachments. Tabular uploads become Dataset objects instead, so
  * this card only has to make an opaque file legible. */
+/**
+ * The card a dropped file gets BEFORE it has been read.
+ *
+ * Reading a document is synchronous CPU that can hold the main thread for
+ * seconds, so the artifact cannot appear at the moment of the drop — but the
+ * CARD can, and it says which file it is standing in for. Rendered by
+ * {@link FileBody} because every import begins life as a `file` object and
+ * becomes its real kind in place, so the stub and the thing it turns into are
+ * one card that fills in rather than two that swap.
+ */
+function ImportPendingBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.node');
+  const size = Number(data.fileSize);
+  return <div className={styles.importPending} role="status" aria-live="polite">
+    <span className={styles.importSpinner} aria-hidden />
+    <div>
+      <b>{t('importReading')}</b>
+      <small>{textValue(data.fileName, data.title)}{Number.isFinite(size) && size > 0 ? ` · ${formatFileSize(size)}` : ''}</small>
+    </div>
+    {/* Three lines of the page that is coming, so the wait reads as a document
+        arriving rather than as a card that failed to render. */}
+    <div className={styles.importSkeleton} aria-hidden><i /><i /><i /></div>
+  </div>;
+}
+
 function FileBody({ data }: { data: CreationNodeData }) {
   const t = useTranslations('creationCanvas.node');
   const name = textValue(data.fileName, data.title);
   const mimeType = textValue(data.mimeType, t('fileGeneric'));
   const size = Number(data.fileSize);
+  if (data.importPending === true) return <ImportPendingBody data={data} />;
   const preview = textValue(data.content, textValue(data.markdown));
   const image = creativePreviewImageUrl(data);
   return <div className={styles.fileBody}>
@@ -1272,6 +1418,84 @@ function BrainObjectBody({ nodeId, data }: { nodeId: string; data: CreationNodeD
 }
 
 /**
+ * A game object: the game itself, playable on the board.
+ *
+ * Every other creative kind shows a picture of its artifact because that is the
+ * most you can do with a DXF or an MP3 on a canvas. A game is a program, and the
+ * only honest preview of a program is running it — so this body IS the game,
+ * and "does the thing the model just wrote actually work" is answered by playing
+ * it rather than by opening a tab and coming back.
+ *
+ * ── THE SANDBOX IS LOad-BEARING ─────────────────────────────────────────────
+ * The document is model-authored code from a free-text brief. It runs with
+ * `allow-scripts` and DELIBERATELY WITHOUT `allow-same-origin`: that combination
+ * gives the frame an opaque origin, so the game cannot reach this page's cookies,
+ * `localStorage`, session token or DOM. Adding `allow-same-origin` alongside
+ * `allow-scripts` would let the frame remove its own sandbox attribute and is
+ * equivalent to no sandbox at all.
+ *
+ * For the same reason the document goes in through `srcDoc` rather than a blob
+ * URL — a blob inherits the creating page's origin, which would quietly undo the
+ * isolation. `srcDoc` with no `allow-same-origin` cannot.
+ *
+ * The frame starts inert. It is mounted only once the player asks for it, so a
+ * board with a dozen games is not a dozen animation loops competing with the
+ * canvas for frames; `nodrag`/`nowheel` keep the pointer inside the game instead
+ * of panning the board underneath it.
+ */
+function GameBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.node');
+  const [playing, setPlaying] = useState(false);
+  const document = useMemo(() => gameDocumentFrom(data), [data]);
+  const poster = creativePreviewImageUrl(data);
+  const controls = useMemo(() => (document ? controlLabels(readGameControls(document)) : []), [document]);
+
+  // Regenerating replaces the document; the running frame must be torn down or
+  // the board keeps playing the previous game under the new title.
+  useEffect(() => setPlaying(false), [document]);
+
+  if (!document) {
+    return <div className={styles.creativeStudioBody}>
+      {poster
+        ? <img src={poster} alt={t('previewAlt', { title: data.title })} />
+        : <div className={styles.creativeStudioPreview} aria-hidden="true"><span>{creationObjectDefinition(data.kind).icon}</span><i /><i /><i /></div>}
+      <AuthoredContent data={data} fallback={t('gameNotGenerated')} />
+      <div className={styles.pills}><span>{t('gameGenerateFirst')}</span></div>
+    </div>;
+  }
+
+  return <div className={`${styles.creativeStudioBody} ${styles.gameBody ?? ''}`}>
+    <div className={styles.gameStage}>
+      {playing
+        ? <iframe
+          className={styles.gameFrame}
+          title={t('gamePlayingAlt', { title: String(data.title ?? '') })}
+          srcDoc={document}
+          // No `allow-same-origin`. See the note above — with `allow-scripts`
+          // it would let the frame escape the sandbox entirely.
+          sandbox={GAME_FRAME_SANDBOX}
+          loading="lazy"
+        />
+        : <button
+          type="button"
+          className={styles.gamePoster}
+          onClick={(event) => { event.stopPropagation(); setPlaying(true); }}
+          style={poster ? { backgroundImage: `url("${poster}")` } : undefined}
+        >
+          <span className={styles.gamePlayBadge} aria-hidden="true">▶</span>
+          <span className={styles.srOnly}>{t('gamePlay')}</span>
+        </button>}
+    </div>
+    <div className={styles.pills}>
+      {playing
+        ? <button type="button" onClick={(event) => { event.stopPropagation(); setPlaying(false); }}>{t('gameStop')}</button>
+        : <span>{t('gameReady')}</span>}
+      {controls.map((control) => <span key={control}>{t(control === 'keys' ? 'gameControlKeys' : 'gameControlTouch')}</span>)}
+    </div>
+  </div>;
+}
+
+/**
  * The run, read off the Object's own data. The mark and the anchor narrate the same
  * turn from the same three fields, so they derive it once and can never disagree.
  */
@@ -1412,8 +1636,15 @@ function useAuthoredNodeSize(id: string): { width?: number; height?: number } {
 
 export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onEditData, onExport }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
-  const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication'].includes(data.kind);
-  const specialized = new Set(['workflow','website','build','prototype','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication']);
+  const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication',
+    // A game is played in its own body, so it needs the width a game needs.
+    'game'].includes(data.kind) || WEB_PAGE_KINDS.has(data.kind);
+  // Every kind with a body of its own. A kind missing from here renders its own
+  // body AND the generic fallback underneath it — which is what all nine
+  // creative kinds did: a studio tile followed by a second, redundant block
+  // repeating the same authored text. They are folded in from the one set that
+  // already lists them, so a new creative kind cannot reintroduce the same bug.
+  const specialized = new Set(['workflow','website','build','prototype','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','game', ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
   const authoredSize = useAuthoredNodeSize(id);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || '#f8f6ff'), borderColor: String(data.frameBorder || '#9d8bea') } : undefined;
   const cardStyle = { ...frameStyle, ...authoredSize };
@@ -1440,6 +1671,10 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'workflow' && <WorkflowBody data={data} />}
         {(data.kind === 'website' || data.kind === 'prototype') && <WebsiteBody data={data} />}
         {data.kind === 'build' && <BuildBody data={data} />}
+        {WEB_PAGE_KINDS.has(data.kind) && <CanvasWebPage
+          data={data}
+          {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})}
+        />}
         {(data.kind === 'dashboard' || data.kind === 'chart' || data.kind === 'report') && <DashboardBody data={data} />}
         {data.kind === 'map' && <MapBody data={data} />}
         {data.kind === 'evaluation' && <EvaluationBody data={data} onOpen={() => onOpenDetails?.(id, 'evaluation')} />}
@@ -1458,9 +1693,14 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'kpi' && <KpiBody data={data} />}
         {data.kind === 'voice' && <><div className={styles.waveform}>▂▅▃▆▂▇▅▃▆▂▅▇▃▆▂▅</div><AuthoredContent data={data} fallback={t('voiceFallback')} /></>}
         {CREATIVE_STUDIO_KINDS.has(data.kind) && <CreativeStudioBody data={data} />}
+        {data.kind === 'game' && <GameBody data={data} />}
         {data.kind === 'note' && <AuthoredContent data={data} fallback={t('noteFallback')} />}
         {data.kind === 'project' && <ProjectBody data={data} />}
         {data.kind === 'roadmap' && <div className={styles.roadmap}>{(Array.isArray(data.items) && data.items.length ? data.items.slice(0, 12) : [{ title: 'Validate narrative', phase: 'Now' }, { title: 'Executive review', phase: 'Next' }, { title: 'Measure adoption', phase: 'Later' }]).map((raw, index) => { const item = asRecord(raw, { title: raw, phase: index < 2 ? 'Now' : 'Next' }); return <div key={`${String(item.title)}-${index}`}><b>{String(item.phase || item.status || t('phaseIndex', { index: index + 1 }))}</b><span>{String(item.title || item.name || t('itemIndex', { index: index + 1 }))}</span>{item.description ? <span>{String(item.description)}</span> : null}</div>; })}</div>}
+        {data.kind === 'inbox' && <InboxBody data={data} />}
+        {data.kind === 'email' && <EmailBody data={data} />}
+        {data.kind === 'emailCampaign' && <EmailCampaignBody data={data} />}
+        {data.kind === 'emailTemplate' && <EmailTemplateBody data={data} />}
         {data.kind === 'task' && <TaskBody data={data} />}
         {data.kind === 'mockup' && <MockupBody data={data} />}
         {data.kind === 'mockupSet' && <><div className={styles.mockupGrid}><i /><i /><i /></div><p>{Array.isArray(data.items) && data.items.length ? t('linkedConcepts', { count: data.items.length }) : t('mockupSetFallback')}</p><div className={styles.pills}><span>{t('expandable')}</span><span>{t('citationsRetained')}</span></div></>}

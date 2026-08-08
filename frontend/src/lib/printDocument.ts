@@ -15,6 +15,7 @@
 
 import { escapeHtml, markdownToHtml } from './richText';
 import { canvasDiagram, canvasObjectMarkdown, canvasSlides, type CanvasSlide } from './canvasDocuments';
+import { creativePreviewImageUrl } from './creationDeliverables';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
 
 /**
@@ -172,14 +173,41 @@ export function printSvgDrawing(title: string, svg: string): boolean {
  */
 export function printCanvasObject(data: CreationNodeData, svg: string | null): boolean {
   if (data.kind === 'slides') return printSlideDeck(data.title, canvasSlides(data));
-  if (data.kind === 'diagram') return svg ? printSvgDrawing(data.title, svg) : false;
+  if (svg) return printSvgDrawing(data.title, svg);
+  // A strip, a panel, a rendered frame — a picture prints as the picture, at the
+  // size the page allows, rather than as the markdown brief that produced it.
+  const picture = creativePreviewImageUrl(data);
+  if (picture) return printHtmlDocument(data.title, `<div class="drawing"><img src="${escapeHtml(picture)}" alt="${escapeHtml(data.title)}"></div>`, DRAWING_STYLES);
+  if (PICTURE_KINDS.has(data.kind)) return false;
   return printMarkdownDocument(data.title, canvasObjectMarkdown(data));
 }
+
+/** Kinds whose artifact IS a picture, so printing the markdown brief that made
+ * one would be printing the wrong thing entirely. */
+const PICTURE_KINDS = new Set(['diagram', 'comic', 'cad', 'image', 'animation', 'model3d']);
 
 /** Whether this object currently HAS something to print, asked before the button
  * is offered rather than after it fails. */
 export function canPrintCanvasObject(data: CreationNodeData): boolean {
   if (data.kind === 'slides') return canvasSlides(data).length > 0;
   if (data.kind === 'diagram') return !!canvasDiagram(data);
+  if (PICTURE_KINDS.has(data.kind)) return !!creativePreviewImageUrl(data);
   return true;
+}
+
+/**
+ * The document as a standalone, self-contained HTML file.
+ *
+ * The same markup and the SAME stylesheet the PDF is printed from, so a person
+ * who takes the HTML and a person who takes the PDF are holding the same
+ * document. Self-contained because a file that pulls a stylesheet off our origin
+ * stops rendering the moment it is emailed to someone.
+ */
+export function markdownHtmlDocument(title: string, markdown: string): string {
+  const body = markdownToHtml(markdown) || `<h1>${escapeHtml(title)}</h1>`;
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escapeHtml(title)}</title><style>${PRINT_STYLES}
+  /* On screen the page needs a margin of its own; @page only applies on paper. */
+  body { max-width: 46rem; margin: 0 auto; padding: 2.5rem 1.25rem; }
+</style></head><body>${body}</body></html>`;
 }

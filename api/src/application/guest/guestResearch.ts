@@ -31,53 +31,30 @@
 import type { Env } from '../../env';
 import type { WebSearchResult } from '@builderforce/agent-tools';
 import { GUEST_RESEARCH_LIMITS } from '../../domain/tenant/PlanLimits';
-import { bumpDailyCounter, dailyCounterKey, readDailyCounter } from './guestDailyCounter';
+import { consumeGuestAllowance, type GuestAllowance } from './guestDailyCounter';
 import { platformWebSearchBacking } from '../runtime/webSearchCredential';
 import { searchWeb } from '../runtime/cloudWeb';
 import { fetchWebDocumentCached, type WebFetchResult } from '../web/webFetch';
 import { geocodeBatch, type GeocodeBatchOptions, type GeocodeBatchResult } from '../web/geocode';
 
 /** Verdict of the per-call allowance check. */
-export interface GuestResearchCap {
-  allowed: boolean;
-  /** Calls left today on the VISITOR axis (the number worth showing a human). */
-  remaining: number;
-  limit: number;
-  reason?: 'visitor' | 'ip';
-}
-
-const visitorKey = (visitorId: string): string => dailyCounterKey('guestresearch:v', visitorId);
-const ipKey = (ip: string): string => dailyCounterKey('guestresearch:ip', ip);
+export type GuestResearchCap = GuestAllowance;
 
 /**
  * Charge one research call, or refuse it.
  *
- * Check-and-consume in ONE step, unlike the chat cap's split check/consume: a research
- * call is a single request with no streaming continuation to reconcile, so there is no
- * turn to be idempotent about — and charging before the outbound fetch means an
- * abandoned request still counts, which is the posture an abuse ceiling needs.
+ * The check-and-consume mechanic is {@link consumeGuestAllowance}, shared with
+ * every other anonymous capability; this only names the scope and the numbers.
  */
 export async function consumeGuestResearchCall(
   env: Env,
   visitorId: string,
   ip: string | null,
 ): Promise<GuestResearchCap> {
-  const limit = GUEST_RESEARCH_LIMITS.callsDailyLimit;
-  const used = await readDailyCounter(env, visitorKey(visitorId));
-  if (used >= limit) return { allowed: false, remaining: 0, limit, reason: 'visitor' };
-
-  if (ip) {
-    const ipUsed = await readDailyCounter(env, ipKey(ip));
-    if (ipUsed >= GUEST_RESEARCH_LIMITS.ipCallsDailyLimit) {
-      return { allowed: false, remaining: Math.max(limit - used, 0), limit, reason: 'ip' };
-    }
-  }
-
-  const next = await bumpDailyCounter(env, visitorKey(visitorId));
-  if (ip) await bumpDailyCounter(env, ipKey(ip));
-  // With no KV bound the counters are inert (they return 0); report the allowance as
-  // untouched rather than pretending to have charged it.
-  return { allowed: true, remaining: Math.max(limit - (next || used + 1), 0), limit };
+  return consumeGuestAllowance(env, 'guestresearch', visitorId, ip, {
+    visitorDailyLimit: GUEST_RESEARCH_LIMITS.callsDailyLimit,
+    ipDailyLimit: GUEST_RESEARCH_LIMITS.ipCallsDailyLimit,
+  });
 }
 
 /** Search the public web on the platform's backing — never a tenant's key. */

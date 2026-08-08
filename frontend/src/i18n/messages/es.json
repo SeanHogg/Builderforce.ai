@@ -463,7 +463,8 @@
       "reliability": "Fiabilidad",
       "agentOps": "Operación de agentes",
       "sales": "Centro de ventas",
-      "challenges": "Desafíos"
+      "challenges": "Desafíos",
+      "growth": "Crecimiento"
     },
     "tab": {
       "projects": "Proyectos",
@@ -548,7 +549,8 @@
       "memory": "Memoria",
       "rehearsal": "Ensayo"
     },
-    "primaryAria": "Principal"
+    "primaryAria": "Principal",
+    "group.growth": "Crecimiento"
   },
   "alerts": {
     "title": "Alertas",
@@ -12320,6 +12322,9 @@
     "dropFilesHint": "Un archivo de Word se abre como páginas, una hoja de cálculo como hojas y una presentación como diapositivas; después pregúntale a Brain.",
     "import": {
       "statusImported": "Importado",
+      "statusImporting": "Leyendo",
+      "statusTooLarge": "Demasiado grande para leer",
+      "tooLargeShape": "Adjuntado: los archivos de más de {limit} MB no se leen en el lienzo",
       "statusAttached": "Adjuntado",
       "statusUnreadable": "No se pudo leer",
       "statusTextUnavailable": "Texto no extraíble",
@@ -12403,6 +12408,7 @@
       "tone_danger": "Fallo",
       "tone_info": "Información",
       "fileGeneric": "Archivo",
+      "importReading": "Leyendo el archivo…",
       "fileType": "Tipo",
       "fileSize": "Tamaño",
       "filePreviewAlt": "Vista previa de {name}",
@@ -12657,7 +12663,38 @@
       "mapRegion": "Región",
       "mapSizedBy": "Tamaño según",
       "mapAria": "Mapa con {count} lugares trazados: {places}",
-      "mapExtent": "{south}° a {north}° N · {west}° a {east}° E"
+      "mapExtent": "{south}° a {north}° N · {west}° a {east}° E",
+      "inboxNotConnected": "Conecta un buzón en Crecimiento para llenar esta bandeja.",
+      "inboxUnread": "{count} sin leer",
+      "inboxReadAt": "leído {time}",
+      "inboxEmpty": "Nada coincide con este filtro.",
+      "inboxUnknownSender": "Remitente desconocido",
+      "inboxNoSubject": "(sin asunto)",
+      "inboxMore": "{count} más",
+      "emailFrom": "De",
+      "emailTo": "Para",
+      "emailBody": "Mensaje",
+      "emailNoBody": "Este mensaje no tiene texto legible.",
+      "emailOpenInProvider": "Abrir en el cliente de correo",
+      "campaignSent": "Enviados",
+      "campaignOpened": "Abiertos",
+      "campaignClicked": "Clics",
+      "campaignAudience": "Audiencia",
+      "campaignVia": "Enviada vía",
+      "campaignSubject": "Asunto",
+      "campaignBlocked": "No está lista",
+      "templateSubject": "Asunto",
+      "templateNoSubject": "Todavía sin asunto",
+      "templateMergeFields": "Campos de combinación",
+      "templateNoMergeFields": "Solo usa nombre, correo y logotipo.",
+      "gameNotGenerated": "Aún no hay juego. Describe el juego que quieres y luego genéralo.",
+      "gameGenerateFirst": "Genera para jugar",
+      "gamePlay": "Jugar",
+      "gameStop": "Detener",
+      "gameReady": "Listo para jugar",
+      "gameControlKeys": "teclado",
+      "gameControlTouch": "táctil",
+      "gamePlayingAlt": "Jugando a {title}"
     },
     "editor": {
       "toolbar": "Formato",
@@ -12689,6 +12726,7 @@
       "group": "Descargar",
       "copy": "Copiar",
       "markdown": "Markdown",
+      "html": "HTML",
       "csv": "CSV",
       "xlsx": "Excel",
       "docx": "Word",
@@ -12852,7 +12890,11 @@
       "pitch": "Pitch",
       "pitchScorecard": "Cuadro de puntuación",
       "pitchQa": "Preguntas del jurado",
-      "pitchApplication": "Candidatura"
+      "pitchApplication": "Candidatura",
+      "inbox": "Bandeja de entrada",
+      "email": "Correo",
+      "emailCampaign": "Campaña de correo",
+      "emailTemplate": "Plantilla de correo"
     },
     "canvasOutline": "Esquema accesible del lienzo",
     "canvasGestureToggle": "Arrastrar para seleccionar",
@@ -13244,11 +13286,11 @@
     "copiedToClipboard": "Copiado al portapapeles",
     "clipboardUnavailable": "El portapapeles no estaba disponible",
     "noTabularRows": "Este objeto todavía no contiene filas tabulares",
-    "markdownDownloadedUsePdf": "Markdown descargado: guarda la sesión para Word o exporta a PDF",
+    "markdownDownloadedUsePdf": "Descargas gratuitas agotadas por hoy: se guardó Markdown; regístrate gratis para continuar",
     "printOpened": "Vista de impresión abierta: elige «Guardar como PDF»",
     "printUnavailable": "Este navegador no pudo abrir la vista de impresión",
     "noRenderedDrawing": "Este diagrama aún no ha terminado de dibujarse",
-    "csvDownloadedSignInForExcel": "CSV descargado: guarda la sesión para Excel",
+    "csvDownloadedSignInForExcel": "Descargas gratuitas agotadas por hoy: se guardó CSV; regístrate gratis para continuar",
     "downloadReady": "Descarga lista",
     "exportFailed": "Error al exportar",
     "deliverables": "Entregables",
@@ -13368,6 +13410,26 @@
       "category_code": "Código",
       "category_web": "Sitio",
       "category_other": "Otro"
+    },
+    "drive": {
+      "title": "Archivos en la nube",
+      "close": "Cerrar",
+      "accounts": "Cuentas conectadas",
+      "connect": "Conectar {provider}",
+      "notConfigured": "{provider} no está configurado en este despliegue",
+      "connectPrompt": "Conecta una unidad para explorar tus archivos aquí.",
+      "noAccounts": "No hay almacenamiento en la nube disponible en este despliegue.",
+      "reconnectNeeded": "Hay que volver a conectar esta unidad para poder leer sus archivos.",
+      "breadcrumb": "Ruta de carpetas",
+      "root": "Todos los archivos",
+      "folder": "Carpeta",
+      "loading": "Cargando…",
+      "opening": "Abriendo…",
+      "emptyFolder": "Esta carpeta está vacía.",
+      "loadMore": "Cargar más",
+      "loadFailed": "No se pudo leer esa unidad.",
+      "connectFailed": "No se pudo iniciar la conexión con {provider}.",
+      "openFailed": "No se pudo abrir {name}."
     },
     "creativeSelectFirst": "Selecciona primero un objeto creativo",
     "creativePreviewOpened": "Vista previa abierta",
@@ -13718,6 +13780,61 @@
           "founders": "Trayectoria de los fundadores"
         }
       }
+    },
+    "webPage": {
+      "address": "Dirección",
+      "addressPlaceholder": "Escribe una dirección web y pulsa Intro",
+      "reload": "Recargar la página",
+      "openInNewTab": "Abrir en una pestaña nueva",
+      "emptyTitle": "Ninguna página cargada",
+      "emptyHint": "Introduce una dirección web arriba o suelta un enlace en el lienzo.",
+      "loading": "Cargando {host}…",
+      "checking": "Comprobando si esta página se puede incrustar…",
+      "blockedTitle": "{host} no permite ser incrustado",
+      "blockedHint": "En su lugar se muestra el texto legible de la página. Ábrela en una pestaña nueva para usarla en vivo.",
+      "readerEmpty": "Esta página no devolvió texto legible.",
+      "probeFailed": "No se pudo leer esta página desde el servidor.",
+      "invalidUrl": "Introduce una dirección http:// o https:// válida.",
+      "statusLive": "En vivo",
+      "addressLabel": "Dirección web",
+      "reread": "Recargar y volver a leer la página",
+      "inspectorHint": "La página se carga en vivo en el lienzo. Su texto también se lee en el lienzo para que Brain pueda responder preguntas sobre ella.",
+      "mixedTitle": "{host} se sirve mediante http://",
+      "mixedHint": "Una página segura no puede incrustar una insegura. Se muestra el texto de la página en su lugar: ábrela en una pestaña nueva o consúltala desde la extensión de VS Code."
+    },
+    "expandPaletteGroup": "Expandir la sección {group}",
+    "collapsePaletteGroup": "Contraer la sección {group}",
+    "game": {
+      "title": "Juégalo en un sitio real",
+      "shipAction": "Jugar en un dispositivo",
+      "selectFirst": "Selecciona primero un objeto de juego.",
+      "accountTitle": "Crea una cuenta para publicar este juego",
+      "accountBody": "Guarda esta sesión para publicar el juego en un teléfono, crear una app o enviarlo a Roblox.",
+      "needProject": "Conecta este juego a un objeto Proyecto para publicarlo o crear una app.",
+      "needGame": "Genera primero el juego: todavía no hay nada que publicar.",
+      "phoneTitle": "En un teléfono",
+      "phoneIntro": "Publica el juego en su propia dirección y añádelo a la pantalla de inicio en Android o iPhone. Pantalla completa, sin conexión y con controles táctiles.",
+      "phoneScan": "Escanéalo con la cámara del teléfono para jugar ahora mismo.",
+      "qrAlt": "Código QR del juego publicado",
+      "publish": "Publicar",
+      "republish": "Publicar actualización",
+      "publishing": "Publicando…",
+      "published": "Juego publicado en {url}",
+      "installIos": "iPhone: abre el enlace en Safari y pulsa Compartir → Añadir a pantalla de inicio.",
+      "installAndroid": "Android: abre el enlace en Chrome y toca Instalar cuando lo ofrezca.",
+      "zeroSetup": "sin configuración",
+      "build": "Construir",
+      "rebuild": "Reconstruir",
+      "building": "Construyendo…",
+      "openIt": "Abrir",
+      "openLink": "Abrir",
+      "materialized": "{label}: se escribieron {count} archivos",
+      "wroteFiles": "{count} archivos en {directory}",
+      "universeId": "ID de universo de Roblox",
+      "placeId": "ID de lugar de Roblox",
+      "robloxIdsHint": "Ambos números están en la URL del Creator Dashboard de una experiencia que ya publicaste desde Studio.",
+      "publishRoblox": "Publicar en Roblox",
+      "robloxPublished": "Publicado en Roblox como versión {version}"
     }
   },
   "canvasCommands": {
@@ -14049,7 +14166,7 @@
   },
   "growth": {
     "title": "Crecimiento",
-    "description": "Llega a quienes se registraron en el sitio que construiste.",
+    "description": "Lee el buzón que ya usas y llega a quienes se registraron en el sitio que creaste.",
     "genericError": "Algo salió mal. Inténtalo de nuevo.",
     "audiences": {
       "title": "Audiencias",
@@ -14078,7 +14195,7 @@
     },
     "campaigns": {
       "title": "Campañas",
-      "description": "Una campaña necesita asunto, una dirección verificada y una audiencia con miembros.",
+      "description": "Una campaña necesita un asunto, una audiencia con miembros y algo desde donde enviar.",
       "empty": "Aún no hay campañas.",
       "namePlaceholder": "Anuncio de lanzamiento",
       "nameLabel": "Nombre de la campaña",
@@ -14102,8 +14219,99 @@
         "status": "Ya enviada",
         "subject": "Añade un asunto",
         "sender": "Verifica una dirección de envío",
-        "audience": "La audiencia está vacía"
+        "audience": "La audiencia está vacía",
+        "mailbox": "Elige un buzón conectado",
+        "connection": "Elige una conexión de SendGrid"
+      },
+      "compose": "Nueva campaña",
+      "confirmSendTitle": "¿Enviar esta campaña?",
+      "confirmSend": "¿Enviar «{name}» a toda su audiencia? Llega a personas reales y no se puede deshacer.",
+      "transport": {
+        "platform": "Enviada por Builderforce",
+        "mailbox": "Enviada desde tu buzón",
+        "sendgrid": "Enviada vía Twilio SendGrid"
       }
+    },
+    "mailboxes": {
+      "title": "Buzones",
+      "description": "Conecta Microsoft 365 o Gmail para ver tu bandeja en un lienzo y enviar campañas como tú.",
+      "empty": "Aún no hay ningún buzón conectado.",
+      "connect": "Conectar {provider}",
+      "connected": "Buzón conectado.",
+      "disconnect": "Desconectar",
+      "disconnected": "Buzón desconectado.",
+      "confirmDisconnect": "¿Desconectar {email}? Las campañas que envían desde él se detendrán.",
+      "allowSending": "Permitir que las campañas envíen desde este buzón",
+      "sendingUpdated": "Permiso de envío actualizado.",
+      "notConfigured": "Este proveedor no está configurado en esta instalación.",
+      "status": {
+        "connected": "Conectado",
+        "reconnect": "Requiere reconexión"
+      },
+      "provider": {
+        "microsoft": "Microsoft 365",
+        "google": "Gmail"
+      },
+      "error": {
+        "declined": "Rechazaste el acceso, así que no se conectó ningún buzón.",
+        "failed": "No se pudo conectar ese buzón. Inténtalo de nuevo."
+      }
+    },
+    "brand": {
+      "title": "Logotipos e imágenes",
+      "description": "Imágenes que un correo puede cargar. Las plantillas con '{{logo}}' usan tu logotipo más reciente.",
+      "empty": "Aún no hay imágenes.",
+      "upload": "Subir logotipo",
+      "uploaded": "Imagen subida.",
+      "generate": "Generar",
+      "generated": "Logotipo generado.",
+      "generatePlaceholder": "Una tostaduría de café artesanal en Melbourne",
+      "generateLabel": "Describe el negocio",
+      "delete": "Eliminar",
+      "deleted": "Imagen eliminada.",
+      "confirmDelete": "¿Eliminar {name}? Las plantillas que lo usan mostrarán una imagen rota."
+    },
+    "templates": {
+      "title": "Plantillas",
+      "description": "Asunto y cuerpo reutilizables. El HTML importado se limpia antes de guardarse.",
+      "empty": "Aún no hay plantillas.",
+      "use": "Usar",
+      "delete": "Eliminar",
+      "deleted": "Plantilla eliminada.",
+      "import": "Importar HTML",
+      "imported": "Plantilla importada.",
+      "confirmDelete": "¿Eliminar la plantilla {name}?",
+      "mergeFields": "Necesita: {fields}",
+      "source": {
+        "builtin": "Inicial",
+        "custom": "Propia",
+        "imported": "Importada",
+        "generated": "IA"
+      }
+    },
+    "composer": {
+      "title": "Nueva campaña",
+      "audience": "Audiencia",
+      "audienceOption": "{name} ({count} miembros)",
+      "template": "Empezar desde una plantilla",
+      "noTemplate": "Escribir desde cero",
+      "transport": "Enviar mediante",
+      "transportHint": {
+        "platform": "Desde una dirección cuyo dominio verificaste con un registro TXT.",
+        "mailbox": "Desde tu cuenta conectada de Microsoft 365 o Gmail, como tú.",
+        "sendgrid": "Con tu propia clave de Twilio SendGrid, desde una dirección verificada."
+      },
+      "mailbox": "Buzón",
+      "noMailboxes": "No hay ningún buzón conectado y habilitado para enviar.",
+      "sender": "Dirección de envío",
+      "noSenders": "Aún no hay ninguna dirección verificada.",
+      "fromName": "Nombre visible",
+      "fromNamePlaceholder": "Equipo Acme",
+      "choose": "Elige…",
+      "mergeHelp": "Usa '{{name}}', '{{email}}', '{{logo}}' y '{{unsubscribe}}', o cualquier '{{field}}' de tu audiencia.",
+      "cancel": "Cancelar",
+      "connection": "Conexión de SendGrid",
+      "noConnections": "No hay ninguna conexión de SendGrid activa. Añade una en Ajustes → Integraciones → Conectores."
     }
   },
   "cookieConsent": {

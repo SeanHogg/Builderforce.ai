@@ -10,19 +10,51 @@
  */
 
 
-import { apiRequestStream } from './apiClient';
+import { apiRequestStream, getAuthHeaders } from './apiClient';
 import { downloadBlob, downloadText, filenameFromResponse } from './download';
+import { getStoredGuestToken } from './guestChatApi';
+import { ensureGuestToken } from './guestRoomApi';
 
 export type OfficeFormat = 'docx' | 'pptx' | 'xlsx';
 
+/**
+ * The renderer could not be reached FOR THIS CALLER — no credential at all, or a
+ * guest who has spent their daily downloads.
+ *
+ * Typed rather than a plain Error because it is the one failure the canvas
+ * answers by writing the nearest browser-native format instead. Everything else
+ * — a malformed payload, a render fault — is a real failure and must surface.
+ */
+export class OfficeExportUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'OfficeExportUnavailableError';
+  }
+}
+
+/** Refusals that mean "not you / not today", as opposed to "that did not work". */
+const CREDENTIAL_REFUSALS = [401, 403, 429];
+
 async function exportOffice(format: OfficeFormat, body: Record<string, unknown>): Promise<void> {
+  // A signed-out visitor still gets the real file: the export surface takes a
+  // guest token, charged against its own daily allowance. The credential is
+  // resolved HERE rather than passed in, so no caller has to know which kind of
+  // session it is in.
+  const tenant = !!getAuthHeaders({}, 'tenant').Authorization;
+  const guestToken = tenant ? null : ((await ensureGuestToken()) ?? getStoredGuestToken());
+  if (!tenant && !guestToken) throw new OfficeExportUnavailableError('No session to render this file with');
+
   const res = await apiRequestStream(`/api/exports/${format}`, {
     method: 'POST',
     body: JSON.stringify(body),
+    expectedErrors: CREDENTIAL_REFUSALS,
+    ...(guestToken ? { auth: 'none' as const, headers: { Authorization: `Bearer ${guestToken}` } } : {}),
   });
   if (!res.ok) {
     const failure = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(failure.error || `Export failed (${res.status})`);
+    const message = failure.error || `Export failed (${res.status})`;
+    if (CREDENTIAL_REFUSALS.includes(res.status)) throw new OfficeExportUnavailableError(message);
+    throw new Error(message);
   }
   downloadBlob(await res.blob(), filenameFromResponse(res, `export.${format}`));
 }

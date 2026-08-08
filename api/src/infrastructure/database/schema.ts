@@ -22,4 +22,6 @@ export * from './schema/collaboration';
 export * from './schema/commerce';
 export * from './schema/governance';
 export * from './schema/platform';
+export * from './schema/mailbox';
+export * from './schema/drive';
 export * from './schema/growth';

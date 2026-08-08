@@ -55,7 +55,13 @@ export function renderWebviewHtml(
     // audio + video deliverables, and WebGPU/WASM training in a worker.
     ...(opts.richMedia
       ? [
-          `frame-src ${webview.cspSource} blob: data:`,
+          // `https:` carries the canvas Web page panel, which frames an arbitrary
+          // address the user typed or dropped; the allowlist alternative cannot
+          // express "any page". Frames are sandboxed and cross-origin. The
+          // loopback origins are what make a `service` object — the dev server
+          // running in this very editor — previewable, which the deployed web
+          // app cannot do at all (a https page may not frame http).
+          `frame-src ${webview.cspSource} https: http://localhost:* http://127.0.0.1:* blob: data:`,
           `media-src ${webview.cspSource} https: blob: data:`,
           `worker-src ${webview.cspSource} blob:`,
         ]

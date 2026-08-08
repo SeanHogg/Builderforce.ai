@@ -1406,6 +1406,48 @@ export const projectBackends = pgTable('project_backends', {
 ]);
 
 /**
+ * Where a canvas-authored game gets played. One row per (project, game, target).
+ *
+ * `target` names a GameTarget (application/game/gameTarget.ts): `web`, `pwa`,
+ * `android`, `ios` or `roblox`. No CHECK constraint on it, deliberately — a sixth
+ * target should land as an adapter rather than as a migration.
+ *
+ * `directory` is stored rather than derived because `android` and `ios` share ONE
+ * Capacitor project directory: they are the same app built by two runners, and
+ * materialising them separately would give the author two copies to keep in sync.
+ *
+ * The Roblox ids address an experience that already EXISTS. Open Cloud can
+ * replace a place's contents but cannot create an experience, so the first
+ * publish is always a human in Studio; everything after it is one call.
+ */
+export const projectGameTargets = pgTable('project_game_targets', {
+  id:              uuid('id').primaryKey().defaultRandom(),
+  projectId:       integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+  tenantId:        integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
+  /** The game's file-safe stem; a project may hold several games. */
+  slug:            varchar('slug', { length: 64 }).notNull(),
+  title:           varchar('title', { length: 200 }).notNull().default(''),
+  target:          varchar('target', { length: 24 }).notNull(),
+  status:          varchar('status', { length: 24 }).notNull().default('materialized'),
+  directory:       varchar('directory', { length: 256 }).notNull().default(''),
+  fileCount:       integer('file_count').notNull().default(0),
+  playUrl:         text('play_url'),
+  detail:          text('detail'),
+  /** The adapter's `SetupStep[]` — what the human still has to do. */
+  setupSteps:      jsonb('setup_steps').notNull().default(sql`'[]'::jsonb`),
+  robloxUniverseId: varchar('roblox_universe_id', { length: 32 }),
+  robloxPlaceId:   varchar('roblox_place_id', { length: 32 }),
+  robloxVersion:   integer('roblox_version'),
+  lastPublishedAt: timestamp('last_published_at'),
+  createdAt:       timestamp('created_at').notNull().defaultNow(),
+  updatedAt:       timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  unique('uq_project_game_targets').on(t.projectId, t.slug, t.target),
+  index('idx_project_game_targets_project').on(t.projectId),
+  index('idx_project_game_targets_tenant').on(t.tenantId),
+]);
+
+/**
  * One row per inbound webhook delivery — the "did Twilio actually reach us, and
  * what did we say back?" trail. Bodies are NOT stored (they carry message content
  * and customer PII); the shape, verdict and timing are.
