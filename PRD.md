@@ -1,125 +1,178 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #819
 > _Each agent that updates this PRD signs its change below._
+> - 2026-08-04: business-analyst authored Requirements section (traceability correction)
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document (PRD)
 
 ## Problem & Goal
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+### Problem
+The current backend system lacks a standardized and efficient way to handle user data synchronization across multiple services. This results in inconsistent data states, increased latency, and difficulty in maintaining data integrity.
 
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+### Goal
+Develop a new backend API endpoint and internal function that provides a reliable and efficient mechanism for synchronizing user data across various services. This will ensure data consistency, reduce latency, and simplify data management.
 
 ## Target Users / ICP Roles
 
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Backend Developers**: Engineers responsible for implementing and maintaining the data synchronization mechanism.
+- **DevOps Engineers**: Individuals who will deploy and monitor the new API endpoint and function.
+- **Product Managers**: Stakeholders who need to understand the capabilities and limitations of the new feature for planning and prioritization.
 
 ## Scope
 
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- Design and implement a new RESTful API endpoint for initiating user data synchronization.
+- Develop an internal function that handles the synchronization logic, including data validation, transformation, and distribution to relevant services.
+- Ensure the solution is scalable and can handle high volumes of data synchronization requests.
+- Implement appropriate error handling and logging mechanisms.
+- Provide documentation for the API endpoint and internal function.
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+1. **API Endpoint**
+   - **Endpoint URL**: `/api/v1/user-data/sync`
+   - **HTTP Method**: POST
+   - **Request Payload**: JSON object containing user data to be synchronized.
+     - Example:
+       ```json
+       {
+         "user_id": "12345",
+         "data": {
+           "name": "John Doe",
+           "email": "john.doe@example.com",
+           "preferences": {
+             "notifications": true,
+             "theme": "dark"
+           }
+         }
+       }
+       ```
+   - **Response**: JSON object with synchronization status and any relevant metadata.
+     - Example:
+       ```json
+       {
+         "status": "success",
+         "message": "User data synchronized successfully",
+         "timestamp": "2023-10-01T12:34:56Z"
+       }
+       ```
+   - **Authentication**: Must be authenticated using JWT tokens.
+   - **Authorization**: Only users with appropriate permissions can access the endpoint.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+2. **Internal Function**
+   - **Function Name**: `synchronizeUserData`
+   - **Parameters**: 
+     - `userId` (string)
+     - `data` (object)
+   - **Behavior**:
+     - Validate input data.
+     - Transform data into the required format for each target service.
+     - Distribute data to relevant services (e.g., user service, notification service, analytics service).
+     - Handle retries and failures gracefully.
+     - Log synchronization attempts and outcomes.
 
----
+3. **Error Handling**
+   - Return appropriate HTTP status codes and error messages for different failure scenarios (e.g., validation errors, service unavailability).
+   - Implement retry logic for transient failures.
+   - Provide detailed error logs for debugging purposes.
 
-### FR-2 — Guided (Interactive) Mode
-
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
-
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+4. **Logging and Monitoring**
+   - Log all synchronization requests and responses.
+   - Implement monitoring for synchronization success rates, latency, and error rates.
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
-
----
+- The new API endpoint is accessible and functional, returning correct responses for valid and invalid requests.
+- The internal function correctly handles data validation, transformation, and distribution.
+- The system can handle high volumes of synchronization requests without performance degradation.
+- Error handling mechanisms are in place and return meaningful messages.
+- Logging and monitoring are implemented and provide sufficient insights into the synchronization process.
+- Documentation is complete and accurate, including API usage examples and internal function details.
 
 ## Out of Scope
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+- Modification of existing services to accommodate the new synchronization mechanism (unless absolutely necessary).
+- Implementation of a user interface for managing synchronization requests.
+- Support for real-time data synchronization (this will be handled by a separate feature).
+- Integration with third-party services for data synchronization.
+- Implementation of data encryption for data in transit or at rest (this is assumed to be handled by existing security mechanisms).
+
+## Requirements
+
+### Root Cause Analysis
+
+**This PRD contains a traceability defect.** The title and body were generated from a decontextualized fragment ("This is a new backend API endpoint / internal function") that was mistakenly decomposed from parent task #794's Technical Notes. The described feature — "user data synchronization" across a microservices architecture — does not exist in this codebase (BuilderForce.ai is a Hono/Cloudflare Workers monolith with no separate user/notification/analytics services).
+
+The actual requirement traces to parent task #794: **remove a participant from the participation manifest** to clean up duplicate or stale role entries.
+
+### Functional Requirements
+
+#### 1. Participant Removal (traced from parent #794)
+
+**1.1** An internal function `removeParticipant(env, tenantId, taskId, participantId)` already exists in `api/src/application/kanban/ticketParticipants.ts` — it deletes participants sourced from `'assessment'` or `'manual'` entries.
+
+**1.2** The HTTP route `DELETE /api/kanban/tasks/:taskId/participants/:participantId` exists in `api/src/presentation/routes/kanbanRoutes.ts` (line ~340), guarded by `isManager(c)`.
+
+**1.3** The implementation MUST validate that:
+- The participant exists and belongs to the given task (current WHERE clause does this implicitly).
+- Participants sourced from `'template'` cannot be removed directly (current filter enforces this).
+- **Gap**: There is no guard against removing "the only instance of that role" — parent #794's acceptance criteria requires this protection.
+
+#### 2. MCP Tool Wrapper (traced from parent #794 AC#1)
+
+**2.1** A platform tool `kanban_remove_participant` does NOT exist — agents cannot invoke the participant removal capability.
+
+**2.2** The tool MUST accept:
+- `taskId` (number, required) — the ticket whose manifest to update
+- `participantId` (string, optional) — specific participant UUID to remove  
+- `roleKey` (string, optional) — role key to remove (e.g. `"engineer"`) — **not currently supported by the HTTP layer**
+
+**2.3** When both `participantId` and `roleKey` are provided, `participantId` takes precedence.
+
+#### 3. Error Handling
+
+**3.1** Return HTTP 404 if the participant does not exist or does not belong to the task.
+
+**3.2** Return HTTP 400 if neither `participantId` nor `roleKey` is provided.
+
+**3.3** Return HTTP 409 (Conflict) if removing the participant would leave zero instances of its role AND that role is required on the ticket.
+
+#### 4. Logging
+
+**4.1** Log participant removal events to the activity ledger with verb `ticket.participant.removed`, including the removed role and assignee.
+
+### Traceability
+
+| Requirement | Parent Task | Acceptance Criteria |
+|-------------|-------------|---------------------|
+| 1.1 | #794 | Internal function exists |
+| 1.2 | #794 | HTTP endpoint exists |
+| 1.3 | #794 | "Only instance" protection missing |
+| 2.1 | #794 AC#1 | Platform tool missing |
+| 2.2 | #794 AC#1 | Tool inputs not implemented |
+| 3.x | #794 Tech Notes | Error handling incomplete |
+| 4.1 | #794 | Logging incomplete |
+
+### Verification
+
+- Verify via `DELETE /api/kanban/tasks/709/participants/0d6423f1-ff54-40fc-9e0a-082956af913f` (the duplicate Engineer on Epic #709)
+- Confirm the role is removed from the manifest via `GET /api/kanban/tasks/709/participants`
+
+---
+
+_Signed: business-analyst (task #819)_
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
