@@ -1,125 +1,152 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #700
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# PRD: Bind Application/API Tree for Progress Breakdown Object Implementation
 
-## Problem & Goal
-
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
-
-## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
+**Status:** WIP  
+**Linked Task:** #668 (Progress Breakdown Object Structure)  
+**Author:** Product Architect  
+**Date:** [Current Date]
 
 ---
 
-## Scope
+## 1. Problem & Goal
 
-### In Scope
+**Problem:**  
+Task #668 (PRD: Progress Breakdown Object Structure) cannot be implemented on the current branch (`builderforce/task-668` of `seanhogg/builderforce.ai`) because the repository lacks the foundational application and API tree. The branch contains only `agent-runtime/` (Swabble + chat extensions), root markdown/PRD files, and a single isolated frontend component (`EvermindBrainMap.tsx`). Missing entire layers make it impossible to:
 
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
+- Expose progress breakdown data via REST endpoints.
+- Persist or validate progress structures.
+- Render progress in the frontend or share date/timezone logic.
+- Contract-test the endpoints or fixtures.
 
-### Out of Scope
+A repo‑wide code search for `progressBreakdown` yields zero results — there is no existing progress tracking code. This is the same root cause that blocked prior tasks (#615, #682, #687).
 
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
+**Goal:**  
+Bring the full application and API tree into the active repository/branch so that the downstream task (#668) can be implemented in an end‑to‑end fashion rather than producing abstract, disconnected schema definitions. Once this PRD is completed, the branch will be ready for the actual progress breakdown object implementation.
 
 ---
 
-## Functional Requirements
+## 2. Target Users / ICP Roles
 
-### FR-1 — Mode Selection
+- **Internal development team** working on Builderforce.ai (backend/frontend engineers, QA).  
+- **Product architects** overseeing the progress tracking feature.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
-
----
-
-### FR-2 — Guided (Interactive) Mode
-
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+No end‑user personas are directly involved in this infrastructure setup.
 
 ---
 
-### FR-3 — Bulk (Import) Mode
+## 3. Scope
 
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
+**In Scope:**
 
----
+1. **Backend API tree** – scaffold or pull in the correct `/api` directory containing:
+   - Serializer/DTO layer.
+   - Persistence models (e.g., ORM entities).
+   - Request/data validation layer (Zod, Joi, or equivalent).
+   - REST endpoints capable of serving progress‑related data (initially stubs or placeholder routes).
+2. **Frontend application scaffold** – ensure the frontend directory has:
+   - A proper Node.js project with `package.json` and TypeScript configuration.
+   - A data‑access layer (API client, hooks, or store module).
+   - Placeholder or reusable components for rendering progress breakdowns (can be minimal but must be structured for future implementation).
+   - A shared utility module for date/timezone formatting (e.g., `formatDate`, timezone conversion helpers).
+3. **Test fixtures & contract‑test infrastructure** – introduce a `fixtures/` directory (or similar) and a test harness (e.g., Jest, Vitest) that can be used to write contract tests for progress endpoints once #668 is implemented.
+4. **Repository branch binding** – ensure that the branch `builderforce/task-668` (or its successor) is correctly bound to the repository containing the full application tree (as opposed to a stripped‑down snapshot).
 
-### FR-4 — Shared / Cross-Mode Requirements
+**Out of Scope:**
 
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
-
-## Acceptance Criteria
-
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+- Implementation of the Progress Breakdown Object type, schema, or any business logic from PRD #668.
+- Actual data population or progress calculation.
+- UI polishing or production‑ready rendering of progress breakdowns.
+- Backend performance optimization or database migration scripts.
+- Git history cleanup or branch renaming beyond what is needed to achieve a working tree.
 
 ---
 
-## Out of Scope
+## 4. Functional Requirements
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+### FR‑1: Repository Synchronisation
+The branch shall be connected to (or contain) the canonical Builderforce.ai application repository with its complete directory structure.  
+If the canonical repo lives elsewhere, the branch shall be created from or merged with that canonical repo.
+
+### FR‑2: Backend API Tree Presence
+The `/api` directory (or equivalent, per project conventions) must exist and contain at least:
+
+- A serialization/deserialization layer (e.g., `serializers/`).
+- Model definitions (e.g., `models/`, `entities/`).
+- A validation schema library integration (e.g., Zod schemas in a `validation/` folder).
+- One or more REST endpoint files (e.g., `routes/progress.ts`) with placeholder handlers that return 501 or stub responses.
+
+A search for `progressBreakdown` may still return 0 hits — that is acceptable; the infrastructure for serving such data must exist.
+
+### FR‑3: Frontend Application Scaffold
+The `/frontend` directory (or the path where `EvermindBrainMap.tsx` resides) must be a working application scaffold:
+
+- `package.json` with dependencies (React, TypeScript, etc.).
+- `tsconfig.json` (or at least a referenced config).
+- A data‑access layer directory (e.g., `src/data/`) containing an API client factory or hook under a clearly named module.
+- A dedicated component folder for progress breakdown (e.g., `src/components/progress/`) with an `index.ts` barrel file, even if components are stubs.
+- A shared date/timezone utility file (e.g., `src/utils/datetime.ts`) exporting functions like `formatTimestamp`, `toUserTimezone`.
+
+### FR‑4: Test Fixtures & Contract Test Harness
+The repository shall contain a `fixtures/` directory with at least:
+
+- A placeholder JSON fixture file representing a sample API response structure for progress breakdown (e.g., `progressBreakdownFixture.json`).
+- A test setup that can execute contract tests (e.g., `tests/contract/` with a Jest/Vitest config and a sample test that imports the fixture and hits a stub endpoint).
+
+---
+
+## 5. Acceptance Criteria
+
+1. **AC‑1: Repository Structure Check**  
+   The branch `builderforce/task-668` (or its successor) contains directories matching the canonical application tree: `api/`, `frontend/`, `fixtures/`, and at least a `tests/` or `__tests__/` folder at the root.
+
+2. **AC‑2: Backend API Endpoints Reachable**  
+   Running the backend (according to project documentation) and hitting a progress‑related endpoint (e.g., `GET /api/progress/test`) returns a `501 Not Implemented` or a controlled stub response. The endpoint is defined in a route file.
+
+3. **AC‑3: Frontend Builds Without Errors**  
+   Executing `npm install && npm run build` (or equivalent) from the `frontend/` directory completes without errors. The data‑access layer and shared utility are importable (even if they contain only placeholder exports).
+
+4. **AC‑4: Test Harness Runs**  
+   From the project root, running `npm test -- --testPathPattern=contract` (or equivalent) executes a sample contract test and reports success (e.g., a test that validates fixture structure). No real logic needed.
+
+5. **AC‑5: Zero Hidden Progress Code**  
+   A case‑insensitive repo‑wide search for `progressBreakdown` still yields 0 matches in code files (excluding PRD/ planning documents). The goal is to have the scaffolding ready, not partial progress logic.
+
+6. **AC‑6: Branch Consistency**  
+   The branch passes CI linting and basic structure checks defined by the project (if such checks exist). All directories are properly ignored by `.gitignore` so that ephemeral files (node_modules, build artifacts) are not committed.
+
+---
+
+## 6. Out of Scope (Explicitly Not Covered)
+
+- Any implementation of `ProgressBreakdownObject` type, schema, or accompanying logic from Task #668.
+- Actual frontend state management or UI rendering of progress breakdowns.
+- Database migrations, seeding, or integration with production data sources.
+- Authentication/authorisation middleware for progress endpoints.
+- Performance benchmarks or UI/UX design reviews.
+- Modifying the existing `agent-runtime/` or `EvermindBrainMap.tsx` beyond what is needed to integrate with the new tree.
+
+## Requirements
+
+_Owned by the business-analyst — to be authored._
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
+
+## Acceptance
+
+_Owned by the validator — to be authored._
