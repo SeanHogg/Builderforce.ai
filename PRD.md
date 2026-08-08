@@ -1,125 +1,101 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #1369
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document (PRD)
 
 ## Problem & Goal
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+### Problem
+The Kanban signoff API is returning a 401 error ("Token has been revoked or expired") for all agent runs, preventing accountability slots from being signed. This issue affects multiple endpoints and is systemic, not specific to individual tickets. Additionally, a separate bug has been identified where creating a task without an assignee fails due to a foreign key constraint violation.
 
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
+### Impact
+- **Stuck Tickets**: Agents can produce deliverables but cannot record verdicts, causing tickets to remain unsigned and stuck in the workflow.
+- **Repeated Work**: The platform re-dispatches the same ticket to another agent, leading to redundant work and increased resource consumption.
+- **False Verdicts**: Agents are incentivized to provide false "approved" verdicts to bypass the issue, compromising the integrity of the workflow.
+- **Lost Findings**: The inability to file gap tickets results in out-of-scope findings being lost.
 
----
+### Goal
+- **Immediate Fix**: Resolve the 401 error by rotating/renewing the agent service token and implementing a startup assertion for expired credentials.
+- **Secondary Fix**: Validate the default-assignee foreign key before inserting a new task to prevent the creation of tasks without valid assignees.
+- **Long-term Stability**: Ensure that agent sessions remain valid and that all API endpoints handle authentication gracefully to prevent similar issues in the future.
 
 ## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Developers**: Responsible for implementing and maintaining the agent workflows.
+- **Reviewers**: Responsible for verifying the work done by agents.
+- **Project Managers**: Responsible for overseeing the workflow and ensuring that tickets are processed correctly.
+- **Platform Administrators**: Responsible for managing API credentials and ensuring system stability.
 
 ## Scope
 
-### In Scope
+### In-Scope
+- **API Endpoint Authentication**: Rotate/renew the agent service token used for Kanban and lifecycle endpoints.
+- **Startup Assertion**: Implement a startup assertion that checks for expired credentials and fails loudly if an expired token is detected.
+- **Foreign Key Validation**: Validate the default-assignee foreign key before inserting a new task to ensure that the assigned user exists.
+- **Error Handling**: Improve error handling for API endpoints to provide more informative messages and prevent silent failures.
 
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+### Out-of-Scope
+- **Agent Logic Modification**: Changes to the logic of the agents themselves are not part of this fix.
+- **User Management System**: Modifications to the user management system or the `users` table are not included.
+- **Workflow Redesign**: Redesigning the workflow to accommodate different failure modes is not part of this PRD.
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+1. **Token Rotation/Renewal**
+   - Rotate the existing agent service token used for Kanban and lifecycle endpoints.
+   - Implement a mechanism to renew the token before it expires.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+2. **Startup Assertion**
+   - Implement a startup assertion that checks the validity of the agent service token.
+   - If the token is expired or invalid, the agent should fail to start and log an appropriate error message.
 
----
+3. **Foreign Key Validation**
+   - Before inserting a new task, validate that the assigned user ID exists in the `users` table.
+   - If the user ID does not exist, prevent the task from being created and return an informative error message.
 
-### FR-2 — Guided (Interactive) Mode
-
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
-
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+4. **Error Handling**
+   - Improve error handling for all relevant API endpoints to provide clear and informative error messages.
+   - Ensure that errors are logged appropriately for troubleshooting purposes.
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+1. **Token Rotation/Renewal**
+   - The agent service token is successfully rotated and renewed.
+   - The agent no longer receives 401 errors due to expired or revoked tokens.
 
----
+2. **Startup Assertion**
+   - The startup assertion is implemented and functioning correctly.
+   - If an expired or invalid token is detected, the agent fails to start and logs an appropriate error message.
+
+3. **Foreign Key Validation**
+   - The default-assignee foreign key is validated before task creation.
+   - Tasks are not created with non-existent user IDs, and an informative error message is returned.
+
+4. **Error Handling**
+   - All relevant API endpoints return clear and informative error messages.
+   - Errors are logged appropriately for troubleshooting.
 
 ## Out of Scope
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+- **Agent Logic Modification**: The logic of the agents themselves will not be modified as part of this fix.
+- **User Management System**: The user management system and the `users` table will not be altered.
+- **Workflow Redesign**: The overall workflow will not be redesigned to accommodate different failure modes.
+
+## Requirements
+
+_Owned by the business-analyst — to be authored._
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
