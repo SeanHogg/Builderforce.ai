@@ -46,7 +46,7 @@
     "mermaid": "^11.15.0",
     "monaco-editor": "^0.55.1",
     "mp4-muxer": "^5.2.2",
-    "next": "15.5.2",
+    "next": "15.5.21",
     "next-intl": "^4.13.0",
     "onnxruntime-web": "1.22.0-dev.20250409-89f8206ba4",
     "react": "^18",
