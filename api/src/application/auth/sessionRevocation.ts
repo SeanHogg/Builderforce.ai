@@ -19,7 +19,7 @@
 import { and, eq, gt, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { authTokens, authUserSessions } from '../../infrastructure/database/schema';
-import { UnauthorizedError } from '../../domain/shared/errors';
+import { UnauthorizedError, type AuthErrorCode } from '../../domain/shared/errors';
 
 /**
  * How stale a `last_seen_at` may get before it is written again.
