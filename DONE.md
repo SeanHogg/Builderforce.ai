@@ -96,9 +96,39 @@ the bare specifier at the source file. Its sibling source-only package
 that shape (`private`, `exports: ./src/index.ts`), and the new test asserts no
 `link:` dependency points at a directory with no package to install.
 
-Verified: `npm run type-check`, `npm test` (33 tests) and `vsce package` (which
-runs the full `vscode:prepublish` — esbuild + `tsc` + both vite builds) all green,
-and the broken CI shape reproduced and re-fixed on demand.
+**The fix was written but never committed, and half of it was.** The `release.yml`
+edit — deleting the frontend job's hand-maintained install loop in favour of the
+script — went in with commit `a540d8aa`; the script itself and the four
+`postinstall` hooks stayed in the working tree. CI therefore had the deletion
+without the replacement, which is the shape that failed on 2026-08-08.
+
+**Two more clean-checkout breaks in the same job, found by reproducing it
+properly** *(2026-08-08)*. The earlier verification ran on a developer machine,
+where every package is already installed — the environment in which this bug is
+by definition invisible. Re-run against a fresh `git clone` at HEAD, `vsce
+package` still failed twice more:
+
+- **The canvas bundle needs `frontend/`'s installed tree.** `vite.canvas.config.ts`
+  compiles `frontend/src` directly, so bare imports *inside that source* —
+  `react-markdown`, `@seanhogg/builderforce-brain-ui/styles.css`,
+  `@seanhogg/builderforce-studio/capabilities`, `next/dynamic` — resolve from
+  `frontend/node_modules`, which the VSIX job never creates because it installs
+  this client and nothing else. Aliasing the shared packages was tried and is not
+  sufficient: `react-markdown` is an ordinary third-party dependency of the web
+  app, and there is no alias table that ends. So `build:canvas` now declares the
+  prerequisite instead of assuming it — `ensure-linked-deps.mjs` gained an
+  explicit-directory mode ("this package must be installed before I can build")
+  and the script runs against `../../frontend` ahead of the vite build. Already
+  installed is the common case and costs one `existsSync` per dependency.
+- **`messageNamespaces.test.ts` timed out at vitest's 5s default.** Its three
+  tests each walk ~120 first-party modules off disk; cold, the first measured
+  8.4s. They now carry an explicit budget — the runtime is the filesystem's, not
+  the assertion's, and a timeout there says nothing about the canvas.
+
+Verified on a fresh clone at HEAD with the fix applied: `pnpm install` (the
+postinstall restores every linked package), `npm run type-check`, `npm test`
+(33 tests) and `vsce package` — the full `vscode:prepublish`, esbuild + `tsc` +
+both vite builds, 3,820 modules in the canvas bundle — all green.
 
 ---
 
