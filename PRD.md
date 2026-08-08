@@ -1,125 +1,145 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #880
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document (PRD) - Item Categorization for AC-5
 
 ## Problem & Goal
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+### Problem
+- **Lack of Visibility**: There is no clear, documented categorization of active items by epic, feature, component, or theme.
+- **Inefficient Tracking**: Without proper categorization, it is difficult to track progress, prioritize tasks, and understand the distribution of work across different areas.
+- **Misalignment**: Teams may struggle to align their efforts with broader project goals and initiatives.
 
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+### Goal
+- **Implement a Categorization System**: Develop a system to categorize active items by epic, feature, component, and theme.
+- **Enhance Visibility**: Provide clear visibility into the distribution of work across different categories.
+- **Improve Alignment**: Ensure that all team members and stakeholders have a shared understanding of how items are organized.
 
 ## Target Users / ICP Roles
 
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Product Managers**: Need to prioritize and plan work effectively.
+- **Project Managers**: Require clear categorization to track progress and manage resources.
+- **Developers**: Benefit from understanding how their work fits into larger themes and epics.
+- **Stakeholders**: Need to see the big picture and understand the status of various initiatives.
 
 ## Scope
 
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- **Categorization Framework**: Define a standardized categorization framework including epics, features, components, and themes.
+- **Integration with Existing Tools**: Ensure the categorization system integrates with existing project management and tracking tools (e.g., Jira, Trello, Asana).
+- **Documentation**: Provide clear documentation on how to use the categorization system.
+- **Training**: Offer training sessions for team members on the new categorization system.
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+1. **Categorization Fields**:
+   - Epic: A high-level goal or initiative.
+   - Feature: A specific functionality or capability.
+   - Component: A distinct part or module of the system.
+   - Theme: A broad area of focus or objective.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+2. **Data Entry**:
+   - Ability to add, edit, and delete categorization fields for each active item.
+   - Validation to ensure consistency and accuracy of categorization data.
 
----
+3. **Visualization**:
+   - Dashboards and reports to display the distribution of items across categories.
+   - Filter and search functionality to allow users to view items by specific categories.
 
-### FR-2 — Guided (Interactive) Mode
+4. **Integration**:
+   - API or plugin support for integration with existing project management tools.
+   - Synchronization of categorization data across different platforms.
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
-
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+5. **User Access**:
+   - Role-based access control to manage who can view and edit categorization data.
+   - Audit trail to track changes to categorization fields.
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
-
----
+- **Standardized Framework**: A clear and consistent categorization framework is established and documented.
+- **Tool Integration**: The categorization system is fully integrated with the existing project management tools.
+- **Data Accuracy**: All active items are accurately categorized according to the new framework.
+- **User Adoption**: Team members are trained and actively using the new categorization system.
+- **Visibility**: Stakeholders can access and understand the categorization data through dashboards and reports.
 
 ## Out of Scope
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+- **Custom Fields**: Addition of new custom fields beyond the defined categorization framework.
+- **Automated Categorization**: Implementation of AI or machine learning for automated categorization of items.
+- **Third-Party Tools**: Support for categorization in third-party tools not currently in use.
+- **Historical Data**: Categorization of inactive or historical items is not included in this project.
+- **Advanced Analytics**: Development of advanced analytics or predictive models based on categorization data.
+
+## Requirements
+
+_Owned by the business-analyst — authored._
+
+### Data Model Requirements
+
+| Requirement ID | Category | Description |
+|----------------|----------|-------------|
+| REQ-001 | Data Fields | The task schema MUST support a **component** field (VARCHAR, max 120 chars) to categorize items by system component or module |
+| REQ-002 | Data Fields | The task schema MUST support a **feature** field (VARCHAR, max 120 chars) to categorize items by feature or capability |
+| REQ-003 | Data Fields | The task schema MUST support a **theme** field (VARCHAR, max 120 chars) to categorize items by broad theme or objective |
+| REQ-004 | Data Fields | Existing **epic** support via `taskType = 'epic'` and `parentTaskId` MUST remain functional |
+| REQ-005 | Data Fields | The categorization fields (component, feature, theme) MUST be nullable to support gradual adoption |
+
+### API Requirements
+
+| Requirement ID | Category | Description |
+|----------------|----------|-------------|
+| REQ-010 | API | The task creation endpoint MUST accept `component`, `feature`, and `theme` as optional fields |
+| REQ-011 | API | The task update endpoint MUST allow modifying `component`, `feature`, and `theme` fields |
+| REQ-012 | API | The task read/list endpoint MUST return `component`, `feature`, and `theme` values when present |
+| REQ-013 | API | The task filtering API MUST support filtering by `component`, `feature`, and `theme` independently |
+
+### Visualization Requirements
+
+| Requirement ID | Category | Description |
+|----------------|----------|-------------|
+| REQ-020 | UI | The board view MUST display categorization badges/chips for component, feature, and theme when populated |
+| REQ-021 | UI | The board filter UI MUST include dropdowns or multi-select for filtering by component, feature, and theme |
+| REQ-022 | UI | The task detail drawer MUST show all categorization fields in a dedicated "Categorization" section |
+
+### Integration Requirements
+
+| Requirement ID | Category | Description |
+|----------------|----------|-------------|
+| REQ-030 | Sync | External board sync (Jira, GitHub) MUST map external component/feature/theme labels to the corresponding task fields when configured |
+| REQ-031 | Export | Task export (CSV/JSON) MUST include component, feature, and theme columns when populated |
+
+### Validation Requirements
+
+| Requirement ID | Category | Description |
+|----------------|----------|-------------|
+| REQ-040 | Validation | The system SHOULD support a predefined list of allowed values per project for component, feature, and theme |
+| REQ-041 | Validation | New categorization values not in the predefined list MAY be allowed (open vocabulary) with a warning |
+
+### Non-Functional Requirements
+
+| Requirement ID | Category | Description |
+|----------------|----------|-------------|
+| REQ-050 | Performance | Filtering by categorization fields MUST complete within 2 seconds for projects with up to 10,000 active tasks |
+| REQ-051 | Migration | Existing tasks without categorization values MUST NOT be affected by the new fields (backward compatible) |
+
+### Documentation Requirements
+
+| Requirement ID | Category | Description |
+|----------------|----------|-------------|
+| REQ-060 | Docs | The team MUST document the categorization taxonomy (what constitutes a component vs feature vs theme) |
+| REQ-061 | Docs | A usage guide MUST be created explaining how to assign and manage categorizations on the board |
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
