@@ -46,6 +46,12 @@ export interface CreateTaskDto {
   startDate?: string | null;
   dueDate?: string | null;
   persona?: string | null;
+  /**
+   * Opt-in flag for creation: when true, parentTaskId: null explicitly creates a
+   * top-level task. When false/undefined (default), parentTaskId: null is treated
+   * as a no-op (since a new task starts without a parent anyway).
+   */
+  explicitDetach?: boolean;
 }
 
 export interface UpdateTaskDto {
@@ -58,6 +64,12 @@ export interface UpdateTaskDto {
   taskType?: TaskType;
   /** Re-parent under an Epic (planning "drag into Epic"), or null to detach. */
   parentTaskId?: number | null;
+  /**
+   * Opt-in flag: when true, passing parentTaskId: null explicitly detaches the task
+   * from its parent. When false/undefined (default), parentTaskId: null is ignored
+   * and the existing parent is preserved. This prevents accidental detachment.
+   */
+  explicitDetach?: boolean;
   /** Schedule into / out of a sprint (planning "drag onto sprint"). null = unscheduled. */
   sprintId?: string | null;
   /** Link to / unlink from a product release (the delivery deliverable). null = unlinked. */
@@ -178,6 +190,21 @@ export class TaskService {
     if (!project) throw new NotFoundError('Project', dto.projectId);
     if (project.tenantId !== callerTenantId) throw new ForbiddenError('Project belongs to a different workspace');
 
+    // For creation, explicitDetach only matters when parentTaskId is null:
+    // - If parentTaskId is a number, set it as parent
+    // - If parentTaskId is null and explicitDetach is true, explicitly set as top-level (no parent)
+    // - If parentTaskId is null and explicitDetach is false/undefined, same as above (default)
+    // The explicitDetach flag provides API consistency but new tasks start without parents anyway.
+    let parentTaskIdValue: number | null = null;
+    if (dto.parentTaskId !== undefined) {
+      if (dto.parentTaskId !== null) {
+        parentTaskIdValue = asTaskId(dto.parentTaskId);
+      } else if (dto.explicitDetach === true) {
+        parentTaskIdValue = null;
+      }
+      // else: default to null (top-level)
+    }
+
     const saved = await this.withKeyAllocation(asProjectId(dto.projectId), (lastKeySeq) =>
       this.tasks.save(Task.create({
         projectId: asProjectId(dto.projectId),
@@ -190,7 +217,7 @@ export class TaskService {
         assignedAgentRef: dto.assignedAgentRef ?? null,
         assignedUserId: dto.assignedUserId ?? null,
         taskType: dto.taskType,
-        parentTaskId: dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null,
+        parentTaskId: parentTaskIdValue,
         gapOriginTaskId: dto.gapOriginTaskId != null ? asTaskId(dto.gapOriginTaskId) : null,
         startDate: dto.startDate ? new Date(dto.startDate) : null,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
@@ -210,14 +237,23 @@ export class TaskService {
   async updateTask(id: number, dto: UpdateTaskDto): Promise<Task> {
     const task = await this.getTask(id);
     const wasAssignedToAgent = task.isAssignedToAgent;
+
+    // Determine if parentTaskId should be applied:
+    // - If explicitDetach is true, always apply parentTaskId (including null to detach)
+    // - If explicitDetach is false/undefined, only apply parentTaskId when it's NOT null
+    //   (i.e., re-parenting to a different task, but not detaching)
+    const shouldApplyParent = dto.explicitDetach === true || dto.parentTaskId !== null;
+    const parentTaskId = dto.parentTaskId !== undefined
+      ? (dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : (shouldApplyParent ? null : undefined))
+      : undefined;
+
     const updated = task.update({
       ...dto,
+      explicitDetach: undefined, // Not a domain field, consumed above
       assignedAgentHostId: dto.assignedAgentHostId !== undefined
         ? (dto.assignedAgentHostId != null ? asAgentHostId(dto.assignedAgentHostId) : null)
         : undefined,
-      parentTaskId: dto.parentTaskId !== undefined
-        ? (dto.parentTaskId != null ? asTaskId(dto.parentTaskId) : null)
-        : undefined,
+      parentTaskId,
       startDate: dto.startDate !== undefined ? (dto.startDate ? new Date(dto.startDate) : null) : undefined,
       dueDate: dto.dueDate !== undefined ? (dto.dueDate ? new Date(dto.dueDate) : null) : undefined,
     });

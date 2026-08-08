@@ -608,6 +608,7 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       startDate?: string | null;
       dueDate?: string | null;
       persona?: string | null;
+      explicitDetach?: boolean;
     }>();
     const task = await taskService.createTask(body, c.get('tenantId'));
     const created = task.toPlain();
@@ -641,6 +642,8 @@ export function createTaskRoutes(taskService: TaskService, db: Db, runtimeServic
       priority?: TaskPriority;
       taskType?: TaskType;
       parentTaskId?: number | null;
+      /** Opt-in flag: when true, parentTaskId: null explicitly detaches the task. */
+      explicitDetach?: boolean;
       sprintId?: string | null;
       releaseId?: string | null;
       storyPoints?: number | null;
