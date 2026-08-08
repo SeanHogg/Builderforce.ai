@@ -62,13 +62,7 @@ import {
   getCachedBuilderInsightsSnapshot,
 } from '../../application/insights/builderInsights';
 import { originAllowed, deserializeScopes } from '../../application/llm/tenantApiKeyService';
-import { listToolsForTenant, callMcpTool } from '../../application/llm/mcpExtensionService';
-import { listBuiltinTools, callBuiltinTool, BUILTIN_EXTENSION_ID } from '../../application/llm/builtinMcpService';
-import {
-  listConnectorTools,
-  callConnectorTool,
-  CONNECTOR_EXTENSION_ID,
-} from '../../application/connectors/connectorTools';
+import { callGatewayMcpTool, listGatewayMcpTools } from '../../application/llm/mcpGateway';
 import {
   setTenantProviderKey,
   setTenantProviderOAuth,
@@ -302,7 +296,7 @@ export function respondToAccessError(c: Context<HonoEnv>, err: unknown) {
   return c.json({ error: (err as Error).message || 'Unauthorized' }, 401);
 }
 
-type TenantAccess = {
+export type TenantAccess = {
   userId: string | null;
   tenantId: number;
   /** Numeric agentHost ID, set when request authenticates via agentHost API key. */
@@ -2007,16 +2001,14 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       return respondToAccessError(c, err);
     }
     const db = buildDatabase(c.env);
-    // THREE sources, one list: first-party platform tools (in-process), the
-    // tenant's CONNECTED connectors (declarative manifests, executed by
-    // connectorRuntime), and the tenant's external MCP servers. The two
-    // network-bound sources are fetched concurrently — the MCP leg calls every
-    // customer server, and serialising a cached DB read behind it is free latency.
-    const [connectorTools, extensionTools] = await Promise.all([
-      listConnectorTools(db, access.tenantId, c.env as Env),
-      listToolsForTenant(db, access.tenantId, c.env.JWT_SECRET, fetch, c.env as Env),
-    ]);
-    const tools = [...listBuiltinTools(), ...connectorTools, ...extensionTools];
+    // THREE sources, one list — built by the shared gateway module so this REST
+    // transport and the spec JSON-RPC transport (`POST /mcp`) can never drift.
+    const tools = await listGatewayMcpTools({
+      db,
+      env: c.env as Env,
+      tenantId: access.tenantId,
+      keyMaterial: c.env.JWT_SECRET,
+    });
     return c.json({ tools });
   });
 
@@ -2038,29 +2030,17 @@ export function createLlmRoutes(): Hono<HonoEnv> {
     }
     const db = buildDatabase(c.env);
     try {
-      // First-party platform tools run in-process; connector actions go through the
-      // shared connector runtime (SSRF-guarded, audited); everything else relays to
-      // the tenant's external MCP server.
-      const result = body.extensionId === CONNECTOR_EXTENSION_ID
-        ? await callConnectorTool({
-            db, env: c.env as Env, tenantId: access.tenantId,
-            tool: body.tool, arguments: body.arguments,
-          })
-        : body.extensionId === BUILTIN_EXTENSION_ID
-        ? await callBuiltinTool(db, {
-            tenantId: access.tenantId, tool: body.tool, arguments: body.arguments,
-            env: c.env as Env, userId: access.userId, role: access.role,
-            // Forwarded so route-replay tools run as the caller (JWT) or mint for gateway keys.
-            authToken: (c.req.header('Authorization') ?? '').replace(/^Bearer\s+/i, '') || null,
-            executionCtx: c.executionCtx,
-          })
-        : await callMcpTool(db, {
-            tenantId: access.tenantId,
-            extensionId: body.extensionId,
-            tool: body.tool,
-            arguments: body.arguments,
-            keyMaterial: c.env.JWT_SECRET,
-          });
+      const result = await callGatewayMcpTool(
+        { db, env: c.env as Env, tenantId: access.tenantId, keyMaterial: c.env.JWT_SECRET },
+        { extensionId: body.extensionId, tool: body.tool, arguments: body.arguments },
+        {
+          userId: access.userId,
+          role: access.role,
+          // Forwarded so route-replay tools run as the caller (JWT) or mint for gateway keys.
+          authToken: (c.req.header('Authorization') ?? '').replace(/^Bearer\s+/i, '') || null,
+          executionCtx: c.executionCtx,
+        },
+      );
       return c.json({ result });
     } catch (e) {
       // Recoverable: hand the model a tool-error result, don't 500 the loop.

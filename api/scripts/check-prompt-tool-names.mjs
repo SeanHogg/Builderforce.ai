@@ -296,6 +296,36 @@ for (const filePath of sqlFiles) {
   }
 }
 
+// ── External MCP clients we ship ─────────────────────────────────────────────
+// The same defect runs in the other direction for a client OUTSIDE this package.
+// `actions/dispatch-agent/dispatch.mjs` is a GitHub Action in its own runtime: it
+// cannot import `advertisedName`, so it hard-codes the advertised strings. A name
+// that no catalog tool advertises fails the same silent way — the server answers
+// "Unknown tool" and the CI job reports a Builderforce error nobody can trace
+// back to a rename here. So: every `builtin_*` literal in a shipped client must
+// be the advertised name of a real catalog tool.
+const CLIENT_FILES = [path.resolve('..', 'actions', 'dispatch-agent', 'dispatch.mjs')].filter((f) => fs.existsSync(f));
+
+for (const filePath of CLIENT_FILES) {
+  const rel = path.relative(path.resolve('..'), filePath).replace(/\\/g, '/');
+  const text = fs.readFileSync(filePath, 'utf8');
+  const seen = new Set();
+  for (const m of text.matchAll(/'(builtin_[a-z0-9_]+)'/g)) {
+    const name = m[1];
+    if (seen.has(name)) continue;
+    seen.add(name);
+    if (ADVERTISED.has(name)) continue;
+    violations.push(
+      `${rel} calls the tool '${name}', which no catalog tool advertises. `
+      + 'A shipped client that names a nonexistent tool fails at the server with '
+      + '"Unknown tool" and the caller cannot tell a rename from an outage.',
+    );
+  }
+  if (seen.size === 0) {
+    violations.push(`${rel}: no builtin_* tool literals found — this guard's parse is stale, not the client.`);
+  }
+}
+
 if (violations.length > 0) {
   console.error('Prompts naming a tool the model was never given:\n');
   for (const v of violations) console.error(`  ${v}`);

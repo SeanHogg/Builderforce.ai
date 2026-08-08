@@ -73,6 +73,103 @@ jobs:
           publish_package studio-embedded @seanhogg/builderforce-studio-embedded
           publish_package voice @seanhogg/builderforce-voice
 
+  # ── VS Code extension → BOTH extension registries ────────────────────────
+  # Microsoft's marketplace licence restricts consumption to Microsoft products,
+  # so Open VSX is not a duplicate listing — it is the only way the same VSIX
+  # reaches Cursor, Windsurf, VSCodium and Gitpod. One package, two publishes.
+  publish-extension:
+    name: Publish VS Code extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build and package the VSIX
+        working-directory: clients/vscode
+        run: |
+          pnpm install --frozen-lockfile || pnpm install
+          npm run type-check
+          npm test
+          npx --yes @vscode/vsce package --no-dependencies --out builderforce.vsix
+
+      # Publishing is version-gated: re-running the workflow on an unbumped
+      # version must be a no-op, not a hard failure, because this job shares a
+      # trigger with the deploys below.
+      - name: Publish to the Visual Studio Marketplace
+        working-directory: clients/vscode
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          if [ -z "$VSCE_PAT" ]; then
+            echo "::warning::VSCE_PAT is not set — skipping Visual Studio Marketplace publish."
+            exit 0
+          fi
+          version=$(node -p "require('./package.json').version")
+          published=$(npx --yes @vscode/vsce show builderforce.builderforce-ai --json 2>/dev/null | node -p "try{JSON.parse(require('fs').readFileSync(0,'utf8')).versions[0].version}catch(e){''}" || echo "")
+          if [ "$published" = "$version" ]; then
+            echo "builderforce-ai@$version already on the Visual Studio Marketplace; skipping."
+            exit 0
+          fi
+          npx --yes @vscode/vsce publish --no-dependencies --packagePath builderforce.vsix
+
+      - name: Publish to Open VSX
+        working-directory: clients/vscode
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          if [ -z "$OVSX_PAT" ]; then
+            echo "::warning::OVSX_PAT is not set — skipping Open VSX publish."
+            exit 0
+          fi
+          # ovsx exits non-zero when the version already exists; that is the
+          # expected outcome of a re-run, not a release failure.
+          npx --yes ovsx publish builderforce.vsix -p "$OVSX_PAT" \
+            || echo "::warning::Open VSX publish did not apply (most likely this version is already published)."
+
+  # ── Builderforce as a listed remote MCP server ───────────────────────────
+  # `server.json` describes the public /mcp endpoint the API serves. It is
+  # published AFTER the API deploy so the registry never advertises an endpoint
+  # that isn't live yet. OIDC proves the io.github.SeanHogg/* namespace, so
+  # there is no long-lived registry token to hold.
+  publish-mcp-registry:
+    name: Publish MCP Registry listing
+    runs-on: ubuntu-latest
+    needs: deploy-api
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Verify the endpoint is live before advertising it
+        run: |
+          # A registry listing pointing at a dead endpoint is worse than no
+          # listing: every client that discovers it fails on first connect.
+          code=$(curl -s -o /dev/null -w '%{http_code}' -X POST https://api.builderforce.ai/mcp \
+            -H 'content-type: application/json' \
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}')
+          # 401 is the correct unauthenticated answer — it proves the route is mounted.
+          if [ "$code" != "401" ]; then
+            echo "::error::https://api.builderforce.ai/mcp answered $code, expected 401. Not publishing."
+            exit 1
+          fi
+
+      - name: Publish server.json
+        run: |
+          ./mcp-publisher login github-oidc
+          ./mcp-publisher publish
+
   deploy-api:
     name: Deploy API
     runs-on: ubuntu-latest

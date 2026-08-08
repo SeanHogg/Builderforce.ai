@@ -113,6 +113,7 @@ import { createLimbicRoutes }           from './presentation/routes/limbicRoutes
 import { createPersonaRoutes }          from './presentation/routes/personaRoutes';
 import { createPersonalityRoutes }      from './presentation/routes/personalityRoutes';
 import { createLlmRoutes }          from './presentation/routes/llmRoutes';
+import { createMcpServerRoutes }    from './presentation/routes/mcpServerRoutes';
 import { createTenantModelRoutes }  from './presentation/routes/tenantModelRoutes';
 import { createSemanticCacheRoutes } from './presentation/routes/semanticCacheRoutes';
 import { createAdminRoutes }        from './presentation/routes/adminRoutes';
@@ -371,6 +372,9 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // through for anonymous callers, so intentionally-public paths stay unlimited.
   app.use('/llm/*', rateLimitMiddleware as Parameters<typeof app.use>[1]);
   app.use('/v1/*',  rateLimitMiddleware as Parameters<typeof app.use>[1]);
+  // The remote MCP server runs the same billable tools as /v1/mcp/call, and is
+  // reachable by any third-party MCP client, so it takes the same limit.
+  app.use('/mcp',   rateLimitMiddleware as Parameters<typeof app.use>[1]);
   // Emulation token interception — runs before authMiddleware in each router.
   // When X-Emulation-Token is present, validates the emulation JWT, enforces
   // read-only mode, and sets userId/tenantId/role from the emulation identity.
@@ -650,6 +654,11 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/bi',       createBiRoutes(db));
   // Cross-domain (channel-3) seams — server-to-server, scoped tenant API keys.
   app.route('/v1',           createSeamRoutes(db));
+  // Builderforce as a standard remote MCP server (JSON-RPC 2.0 / Streamable HTTP,
+  // stateless). This is the endpoint third-party MCP clients and marketplaces
+  // (Anthropic Connectors, AWS AI Agents & Tools, Gemini Enterprise) consume; it
+  // shares its catalog and dispatch with /v1/mcp/* via `mcpGateway`.
+  app.route('/mcp',          createMcpServerRoutes());
   app.route('/api/tenants/:tenantId/api-keys', createTenantApiKeyRoutes(db));
   app.route('/api/tenants/:tenantId/mcp-extensions', createMcpExtensionRoutes(db));
   app.route('/api/agents',   createAgentRoutes(agentService));
