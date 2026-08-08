@@ -1,125 +1,374 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #580
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# PRD: Test Cases Execution Module
 
 ## Problem & Goal
+QA teams lack a single interface to execute test cases, capture real-time results, and monitor progress. This leads to scattered status updates and delayed release decisions.
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+**Goal**: Provide a test execution workspace where testers can run assigned tests step-by-step, log outcomes with evidence, and enable managers to track execution metrics and readiness via dashboards and reports.
 
 ## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **QA Testers**: Execute test cases, record step results, attach evidence.
+- **QA Leads / Managers**: Plan test runs, assign work, monitor execution progress, export reports.
+- **Developers**: View failed test details for debugging (read-only access to execution logs).
 
 ## Scope
-
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- Create test runs from existing test suites.
+- Assign runs to testers.
+- Step-by-step execution interface with real-time status updates.
+- Capture pass/fail/blocked per step, with optional comments and file attachments.
+- Auto-derive test case result from step outcomes (override permitted).
+- Execution progress dashboard (percent complete, pass/fail/blocked counts).
+- Summary report generation (PDF export).
+- REST API to programmatically submit results (for automated tests).
 
 ## Functional Requirements
+1. **Test Run Creation**  
+   - User can select test cases from one or more suites to form a new test run.  
+   - Support a maximum of 500 test cases per run.  
+   - Assign one or more testers to the run.
 
-### FR-1 — Mode Selection
+2. **Execution Workspace**  
+   - Tester sees assigned test runs and can open an execution view.  
+   - Each test case displays its steps one at a time.  
+   - For each step, tester logs result: Pass, Fail, or Blocked.  
+   - Add free-text comment per step.  
+   - Upload attachments (screenshots, logs) per step (max 10 MB per file).  
+   - Step result updates instantly in the UI; any change recalculates the test case result in real time.  
+   - Overall test case result auto-calculated:  
+     - Fail if any step fails.  
+     - Blocked if any step is blocked and no step fails.  
+     - Pass if all steps are pass or none are fail/blocked.  
+   - Tester can manually override the final test case result with a reason.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+3. **Progress & Monitoring**  
+   - Dashboard per test run showing:  
+     - % executed  
+     - Pass/Fail/Blocked counts  
+     - Testers' individual progress  
+   - Refresh on demand.
 
----
+4. **Reporting**  
+   - Generate a PDF summary report including run metadata, execution statistics, and per-case details (results, comments, attachments).  
+   - Report generation must complete within 10 seconds for runs with 500 test cases.
 
-### FR-2 — Guided (Interactive) Mode
-
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
-
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+5. **API**  
+   - REST endpoint to accept a test run result payload (test case ID, step results) from external automated frameworks.  
+   - Response must return within 2 seconds.
 
 ## Acceptance Criteria
-
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
-
----
+- Create a test run with 500 test cases without error.  
+- Tester loads an assigned test case; step data and controls render in under 3 seconds.  
+- Changing a step result immediately updates the per-case result indicator without page reload.  
+- Attachment upload of a 10 MB file succeeds and is viewable in the execution log.  
+- Dashboard metrics update when a tester completes a test case.  
+- PDF summary report for a 500-case run is generated and downloadable within 10 seconds.  
+- API can ingest 100 test results per second without data loss.
 
 ## Out of Scope
+- Creation, editing, or versioning of test cases (managed in existing Test Case module).  
+- Built-in integration with bug trackers (Jira, etc.) – planned for future phase.  
+- Real-time collaboration features (simultaneous execution by multiple testers on the same run).  
+- Automated test execution triggers or CI orchestration; the API only accepts results.  
+- Performance/load testing capabilities.
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+## Requirements
+
+> **Author**: Business Analyst · task #580
+
+### REQ-1: Core Domain Model
+
+#### REQ-1.1: Test Run Entity
+A **Test Run** represents a single execution cycle — a planned session where one or more testers execute a curated set of test cases.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | UUID | Yes | Unique identifier. |
+| `title` | String (255) | Yes | Human-readable name, e.g. "Sprint 14 Regression — iOS". |
+| `description` | Text | No | Optional context for the run (goal, environment, build version). |
+| `status` | Enum | Yes | `draft`, `in_progress`, `completed`, `archived`. Runs start as `draft` until the first result is logged, then transition to `in_progress`. |
+| `sourceSuiteIds` | UUID[] | Yes | References to one or more existing test suites (read-only — suites managed externally). |
+| `assignedTesterIds` | UUID[] | Yes | One or more tester user IDs. |
+| `maxCases` | Integer | Yes | Constraint: ≤ 500 (enforced at creation). |
+| `createdBy` | UUID | Yes | User who created the run. |
+| `createdAt` | Timestamp | Yes | Auto-set. |
+| `updatedAt` | Timestamp | Yes | Auto-set. |
+| `completedAt` | Timestamp | No | Set when status transitions to `completed`. |
+
+**Rules:**
+- REQ-1.1.1: A run must reference at least 1 and at most 500 test cases.
+- REQ-1.1.2: A run must have at least one assigned tester.
+- REQ-1.1.3: `sourceSuiteIds` are validated at creation time; suites must exist and be active.
+- REQ-1.1.4: Deleting a suite does not cascade-delete its runs; historical run data is preserved.
+
+#### REQ-1.2: Test Case Result Entity
+A **Test Case Result** captures the execution outcome of one test case within a run.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | UUID | Yes | Unique identifier. |
+| `testRunId` | UUID | Yes | FK to Test Run. |
+| `testCaseId` | UUID | Yes | FK to the externally-managed test case. |
+| `executedBy` | UUID | No | Tester who last executed this case. |
+| `status` | Enum | Yes | `not_executed`, `pass`, `fail`, `blocked`, `skipped`. Defaults to `not_executed`. |
+| `overrideStatus` | Enum | No | Manual override of auto-calculated result: `pass`, `fail`, `blocked`. |
+| `overrideReason` | Text | No | Required when `overrideStatus` is set. |
+| `executionOrder` | Integer | No | Sequence within the run (default: insertion order). |
+| `startedAt` | Timestamp | No | When execution began for this case. |
+| `completedAt` | Timestamp | No | When the final step result was logged. |
+
+**Rules:**
+- REQ-1.2.1: The `status` field is normally auto-calculated from step results (see REQ-3.3). When `overrideStatus` is set, the displayed result is the override value and `status` retains the calculated value for audit.
+- REQ-1.2.2: Override requires a non-empty `overrideReason`.
+- REQ-1.2.3: A test case result is considered "executed" once at least one step has a logged result.
+
+#### REQ-1.3: Step Result Entity
+A **Step Result** captures the outcome of a single step within a test case execution.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | UUID | Yes | Unique identifier. |
+| `testCaseResultId` | UUID | Yes | FK to Test Case Result. |
+| `stepNumber` | Integer | Yes | 1-based step position within the test case. |
+| `expectedBehavior` | Text | Yes | Copied from the test case step at execution time (immutable snapshot). |
+| `result` | Enum | Yes | `pass`, `fail`, `blocked`, `not_executed`. |
+| `comment` | Text | No | Free-text notes from the tester. |
+| `attachments` | Attachment[] | No | Zero or more file attachments. |
+| `loggedBy` | UUID | Yes | Tester who recorded this result. |
+| `loggedAt` | Timestamp | Yes | Auto-set. |
+| `updatedAt` | Timestamp | Yes | Auto-set on edit. |
+
+**Rules:**
+- REQ-1.3.1: `expectedBehavior` is snapshotted from the test case at the time the step result is first created. Changes to the source test case after execution do not retroactively alter logged results.
+- REQ-1.3.2: Each attachment must be ≤ 10 MB. The system must validate file size before upload.
+- REQ-1.3.3: Supported attachment types: PNG, JPEG, GIF, BMP, WEBP, MP4 (≤ 30s), TXT, LOG, CSV, JSON, XML, PDF, ZIP. Reject all other types.
+
+#### REQ-1.4: Attachment Entity
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | UUID | Yes | Unique identifier. |
+| `stepResultId` | UUID | Yes | FK to Step Result. |
+| `fileName` | String (255) | Yes | Original file name. |
+| `fileSize` | Integer | Yes | Bytes. |
+| `contentType` | String | Yes | MIME type. |
+| `storagePath` | String | Yes | Object storage key. |
+| `uploadedBy` | UUID | Yes | Uploader. |
+| `uploadedAt` | Timestamp | Yes | Auto-set. |
+
+### REQ-2: Test Run Lifecycle & Workflows
+
+#### REQ-2.1: Run Creation Workflow
+1. **QA Lead** navigates to the "New Test Run" screen.
+2. Selects one or more test suites from a searchable, filterable list.
+3. The system displays a preview of the selected test cases (title, priority, estimated duration) with a count. The UI must show a warning if the selection exceeds 500 cases and disable creation.
+4. The lead can de-select individual cases within the chosen suites.
+5. Assigns one or more testers from the team roster (searchable, with current workload indicators).
+6. Provides a title and optional description.
+7. On submit, the system creates the Test Run with status `draft` and the selected Test Case Results (all `not_executed`).
+8. The lead is redirected to the run detail page.
+
+**Edge Cases:**
+- REQ-2.1.1: If a selected suite is archived between selection and submission, show a validation error and allow the user to remove it.
+- REQ-2.1.2: If all selected testers are deactivated, reject creation with an error.
+- REQ-2.1.3: Duplicate test cases across selected suites must be deduplicated (by test case ID), keeping the first occurrence.
+
+#### REQ-2.2: Run Status Transitions
+```
+draft ──(first result logged)──▶ in_progress ──(all cases executed)──▶ completed
+  │                                    │
+  └──(manual archive)──▶ archived      └──(manual archive, all-or-nothing)──▶ archived
+```
+- REQ-2.2.1: A `completed` run can be re-opened (transition back to `in_progress`) by the QA Lead.
+- REQ-2.2.2: Only runs in `draft` or `completed` can be archived.
+- REQ-2.2.3: Archiving is reversible by the QA Lead.
+
+#### REQ-2.3: Tester Assignment Changes
+- REQ-2.3.1: QA Lead can add or remove testers from a run at any status except `archived`.
+- REQ-2.3.2: Removing a tester does not delete their logged results.
+- REQ-2.3.3: When a tester is added mid-run, they see all unexecuted cases.
+
+### REQ-3: Execution Workspace (Tester Experience)
+
+#### REQ-3.1: My Assignments View
+- REQ-3.1.1: Tester lands on a dashboard showing all runs assigned to them, grouped by status (in_progress first, then draft, then completed).
+- REQ-3.1.2: Each run card shows: title, % executed, pass/fail/blocked counts (own contribution), and overall run progress.
+- REQ-3.1.3: Clicking a run opens the execution workspace.
+
+#### REQ-3.2: Execution View Layout
+- REQ-3.2.1: Split-pane layout:
+  - **Left panel**: List of test cases in the run, color-coded by status (grey=not_executed, green=pass, red=fail, amber=blocked). Current case is highlighted.
+  - **Right panel**: The active test case with its steps displayed sequentially.
+- REQ-3.2.2: Tester navigates between cases via the left panel or "Next Case" / "Previous Case" buttons.
+- REQ-3.2.3: The system remembers the last case the tester was on and returns to it on re-entry.
+
+#### REQ-3.3: Step Execution Flow
+1. Tester selects a test case (or the system auto-advances).
+2. The system displays step 1 with its expected behavior and result controls.
+3. Tester selects: **Pass**, **Fail**, or **Blocked**.
+4. Optional: add a comment and/or upload attachments.
+5. System auto-saves the step result (no explicit "Save" button per step — optimistic save with debounce).
+6. The next step is revealed. Steps are shown one at a time but previously-logged steps remain visible as a scrollable log below the current step.
+7. After the last step is logged, the case result auto-calculates:
+   - **Fail** if ANY step = Fail.
+   - **Blocked** if ANY step = Blocked AND NO step = Fail.
+   - **Pass** otherwise (all steps Pass, or mixed Pass/not_executed).
+8. The UI shows the calculated result prominently with a "Mark as Complete" button.
+9. Tester can override the result via an "Override" action, requiring a reason.
+
+**Edge Cases:**
+- REQ-3.3.1: Tester can revisit and change any previously-logged step at any time; changing a step result triggers recalculation of the case result.
+- REQ-3.3.2: If a tester marks a step as Blocked, the UI prompts "Continue or return later?" — they can skip remaining steps or proceed.
+- REQ-3.3.3: Attachments are uploaded asynchronously; the step result saves immediately with a placeholder that resolves when the upload completes.
+
+#### REQ-3.4: Real-Time Result Calculation
+- REQ-3.4.1: Step result changes must propagate to the case result indicator in under 500ms (client-side calculation preferred; server reconciliation on save).
+- REQ-3.4.2: Case result changes must propagate to the run dashboard within 2 seconds of the server acknowledging the change (websocket or polling).
+- REQ-3.4.3: No page reload is required for any result update.
+
+### REQ-4: Progress Dashboard (QA Lead View)
+
+#### REQ-4.1: Run-Level Dashboard
+- REQ-4.1.1: Single-run dashboard accessible from the runs list.
+- REQ-4.1.2: Displays:
+  - **Progress bar**: % executed (cases with at least one logged step / total cases).
+  - **Result breakdown**: Pass count, Fail count, Blocked count, Not Executed count.
+  - **Pass rate**: Pass / (Pass + Fail) × 100%.
+  - **Elapsed time**: Since the run moved to `in_progress`.
+- REQ-4.1.3: **Per-tester breakdown table**: Tester name, cases assigned, cases executed, pass/fail/blocked counts, % complete.
+
+#### REQ-4.2: Aggregate Dashboard
+- REQ-4.2.1: Across all active runs: total cases, % executed, pass rate, runs by status.
+- REQ-4.2.2: Filter by date range, suite, tester, or status.
+
+#### REQ-4.3: Refresh Behavior
+- REQ-4.3.1: Manual refresh button; data re-fetches from the server on click.
+- REQ-4.3.2: Optional auto-refresh toggle (30s interval); disabled by default.
+
+### REQ-5: Reporting
+
+#### REQ-5.1: PDF Report Content
+- REQ-5.1.1: Cover page: run title, description, creator, dates, overall stats.
+- REQ-5.1.2: Summary section: pass/fail/blocked/not-executed counts, pass rate, per-tester stats.
+- REQ-5.1.3: Per-case detail: test case ID, title, final result, execution time, each step with expected behavior, actual result, comment, and attachment thumbnails (linked to the stored file).
+- REQ-5.1.4: Footer on every page: report generation timestamp, page number, confidentiality notice.
+
+#### REQ-5.2: Generation Constraints
+- REQ-5.2.1: Must complete within 10 seconds for a 500-case run (asynchronous generation acceptable; user can download once ready).
+- REQ-5.2.2: The system queues report generation jobs; a run can have at most one pending generation at a time.
+- REQ-5.2.3: Generated reports are stored for 30 days, then purged.
+
+### REQ-6: REST API
+
+#### REQ-6.1: Submit Results Endpoint
+- REQ-6.1.1: `POST /api/v1/test-runs/{runId}/results`
+- REQ-6.1.2: Request body:
+
+```json
+{
+  "testCaseId": "uuid",
+  "steps": [
+    {
+      "stepNumber": 1,
+      "result": "pass",
+      "comment": "optional"
+    }
+  ],
+  "overrideStatus": "pass",
+  "overrideReason": "optional"
+}
+```
+
+- REQ-6.1.3: Authentication: API key (header `X-Api-Key`) or bearer token. Each key is scoped to specific runs.
+- REQ-6.1.4: The endpoint must respond within 2 seconds (202 Accepted with a job ID is acceptable for attachment-heavy payloads; 200 OK for results-only payloads).
+- REQ-6.1.5: Rate limiting: 100 requests/second per API key. Requests beyond the limit receive 429 with `Retry-After` header.
+
+#### REQ-6.2: API Key Management
+- REQ-6.2.1: QA Leads can generate, revoke, and scope API keys.
+- REQ-6.2.2: API keys are shown once at creation; the system stores only a hash.
+- REQ-6.2.3: Each key has an optional expiry date.
+
+#### REQ-6.3: Idempotency
+- REQ-6.3.1: API requests include an optional `Idempotency-Key` header. Duplicate submissions with the same key within 24 hours return the original response.
+
+### REQ-7: Non-Functional Requirements
+
+#### REQ-7.1: Performance
+| Metric | Target |
+|--------|--------|
+| Step result save (save → UI confirmation) | < 1s |
+| Execution view load (click case → steps rendered) | < 3s |
+| Dashboard load (run-level) | < 2s |
+| PDF generation (500-case run) | < 10s |
+| API response (results-only) | < 2s |
+| API throughput | ≥ 100 results/s |
+
+#### REQ-7.2: Availability
+- REQ-7.2.1: 99.5% uptime during business hours (08:00–20:00 local, Mon–Fri).
+- REQ-7.2.2: Planned maintenance windows: Saturday 02:00–06:00.
+
+#### REQ-7.3: Data Integrity
+- REQ-7.3.1: Step results must never be lost once acknowledged by the server. All writes are durable (write-ahead log or equivalent).
+- REQ-7.3.2: Attachment uploads use multipart upload with checksum verification.
+- REQ-7.3.3: Test run results are retained indefinitely unless explicitly archived and purged (minimum 2-year retention for audit).
+
+#### REQ-7.4: Security
+- REQ-7.4.1: All endpoints require authentication.
+- REQ-7.4.2: Role-based access: QA Tester (execute assigned runs, view own results), QA Lead (create/manage runs, view all results, generate reports, manage API keys), Developer (read-only view of execution logs for failed cases).
+- REQ-7.4.3: Attachments are scanned for malware on upload (reject infected files before storage).
+- REQ-7.4.4: All data in transit uses TLS 1.3.
+- REQ-7.4.5: Audit log captures: who created/edited/archived a run, who logged/changed each step result, who generated/downloaded a report, who created/revoked an API key.
+
+#### REQ-7.5: Accessibility
+- REQ-7.5.1: WCAG 2.1 Level AA compliance.
+- REQ-7.5.2: All result indicators use both color and icon/shape (not color alone).
+- REQ-7.5.3: Keyboard-navigable execution workspace (Tab through steps, Enter to log result, Space to toggle).
+
+#### REQ-7.6: Browser Support
+- REQ-7.6.1: Latest two major versions of Chrome, Firefox, Safari, and Edge.
+
+### REQ-8: Error Handling & Edge Cases
+
+| Scenario | Expected Behavior |
+|----------|-------------------|
+| Network interruption during step save | Retry up to 3 times with exponential backoff; show offline indicator; queue results locally if persistent. |
+| Attachment exceeds 10 MB | Reject before upload with clear error message showing file size and limit. |
+| Concurrent step edits (two tabs) | Last-write-wins with a conflict warning toast in the stale tab. |
+| Test case deleted from source suite mid-run | The test case result row is preserved with a "source deleted" flag; the case is excluded from progress calculation. |
+| Run with 0 executable cases (all source-deleted) | Allow the run to be archived immediately. |
+| PDF generation failure | Notify the requester; allow retry; log the failure for ops. |
+| API key compromised | Revoke immediately; all in-flight requests with that key return 401. |
+
+### REQ-9: Integration Points
+
+- REQ-9.1: **Test Case Module** (existing, external): Read-only access to test cases, suites, and step definitions. The execution module does not modify test cases.
+- REQ-9.2: **User Directory / IAM**: User lookup, role resolution, and authentication tokens.
+- REQ-9.3: **Object Storage**: Attachment persistence (S3-compatible API).
+- REQ-9.4: **Notification Service**: Email/in-app notifications for run assignment, run completion, and report readiness.
+- REQ-9.5: **CI/CD Pipelines** (future): Results submission via the REST API (REQ-6).
+
+### REQ-10: Constraints & Assumptions
+
+- REQ-10.1: Test cases and suites already exist and are accessible via a read API. The execution module does not own test case CRUD.
+- REQ-10.2: Users and roles are managed by an existing IAM system; the execution module consumes role claims from the auth token.
+- REQ-10.3: Object storage (S3-compatible) is available and provisioned before this module is deployed.
+- REQ-10.4: A message queue or job system exists for asynchronous work (report generation, attachment scanning).
+- REQ-10.5: The system clock is synchronized across all services (NTP).
+- REQ-10.6: Step result "instant" UI updates assume a network round-trip under 200ms; offline support (REQ-8) covers degraded conditions.
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
