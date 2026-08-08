@@ -1,125 +1,183 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #824
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document (PRD)
 
 ## Problem & Goal
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+### Problem
+Duplicate entries in the system lead to:
+- Confusion among users
+- Inaccurate data analysis
+- Increased storage costs
+- Potential errors in business processes
 
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+### Goal
+Ensure that the system effectively identifies and removes duplicate entries, maintaining data integrity and improving user experience.
 
 ## Target Users / ICP Roles
 
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Data Analysts**: Require accurate and clean data for reporting and analysis.
+- **Customer Support Representatives**: Need to access correct customer information to provide effective support.
+- **System Administrators**: Responsible for maintaining system health and performance.
+- **End Users**: Expect a seamless and error-free experience when interacting with the system.
 
 ## Scope
 
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- **Detection**: Implement a mechanism to detect duplicate entries based on predefined criteria.
+- **Notification**: Notify relevant stakeholders when duplicates are detected.
+- **Removal**: Provide functionality to remove duplicate entries automatically or manually.
+- **Prevention**: Implement measures to prevent future duplicate entries.
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+1. **Duplicate Detection**
+   - System must identify duplicates based on unique identifiers (e.g., email, user ID) and/or combination of fields (e.g., name and phone number).
+   - Detection should be configurable to allow for different criteria based on data type and use case.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+2. **Notification System**
+   - Send alerts to administrators and relevant users when duplicates are detected.
+   - Include details of the duplicate entries, such as the fields that matched and the number of duplicates found.
 
----
+3. **Removal Functionality**
+   - Provide options to remove duplicates automatically based on predefined rules (e.g., keep the most recent entry).
+   - Allow manual review and removal of duplicates through a user interface.
+   - Ensure that removal actions are logged for auditing purposes.
 
-### FR-2 — Guided (Interactive) Mode
+4. **Prevention Measures**
+   - Implement real-time validation to prevent the creation of new duplicate entries.
+   - Provide feedback to users during data entry if a potential duplicate is detected.
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
-
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+5. **Reporting**
+   - Generate reports on the number of duplicates detected and removed over time.
+   - Include metrics on the effectiveness of duplicate prevention measures.
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+The acceptance criteria for this verification task are defined in the **Requirements** section above, specifically in **§3 Verification Criteria**. The verification confirms:
 
----
+1. The duplicate participant row is absent from the database
+2. The manifest read reflects the deletion (post cache bump)
+3. The surviving Engineer slot remains covered
+4. The removal is idempotent and not resurrected by re-derivation
 
 ## Out of Scope
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+- **Historical Data Cleanup**: Addressing duplicates in historical data prior to the implementation of this feature.
+- **Third-Party Integrations**: Handling duplicates that originate from third-party systems or integrations.
+- **Complex Data Relationships**: Managing duplicates in data with complex relationships or hierarchies.
+- **User Training**: Developing training materials or conducting training sessions for users on the new duplicate management features.
+- **Advanced Analytics**: Incorporating machine learning or advanced analytics for predictive duplicate detection.
+
+## Requirements
+
+### 1. Removal Capability — As-Built
+
+`TicketParticipantsService.removeParticipant(env, tenantId, taskId, participantId)` already exists in
+`api/src/application/kanban/ticketParticipants.ts`. It deletes from `ticket_participants` matching
+**all** of `tenantId`, `taskId`, `id = participantId`, **and `source IN ('assessment','manual')`**,
+then bumps the manifest cache version.
+
+**BA finding — two constraints that determine whether verification can pass:**
+
+- **F-1 — `template`-sourced rows cannot be removed.** The `inArray(source, ['assessment','manual'])`
+  predicate means a duplicate whose provenance is `template` (or `lane_agent`) matches zero rows.
+  Re-deriving the manifest re-inserts template slots idempotently, so a template duplicate is
+  *by design* not removable — it must be corrected at the `swimlane_requirements` template instead.
+- **F-2 — the delete is silent.** It returns `void` and does not report the affected row count, so a
+  no-op delete is indistinguishable from a successful one by the caller. Verification therefore
+  **must not** trust the call's return; it must re-read the manifest (§3).
+
+**Requirement:** removal is considered *specified* by the as-built method. No new tool is required for
+an `assessment`/`manual` duplicate. If Epic #709's participant `0d6423f1-…` is `template`-sourced,
+this ticket's verification will legitimately FAIL and the fix belongs in the board template — that
+outcome is a valid, reportable result, not a defect in this verification.
+
+### 2. Duplicate Detection Criteria
+
+A **duplicate participant** is defined as two or more rows in `ticket_participants` sharing
+identical values for the slot tuple: `(taskId, stageKey, roleKey, responsibility, source)`.
+
+This tuple is the conflict target used by both `deriveManifest` and `addParticipant`
+(`onConflictDoUpdate`), which is why repeated derivation is idempotent.
+
+**BA finding F-3 — NULL `stageKey` defeats the uniqueness guarantee.** `stageKey` is nullable, and in
+Postgres `NULL` is never equal to `NULL` under a plain unique index. Two rows that both have
+`stage_key IS NULL` and are otherwise identical therefore do **not** conflict, and `ON CONFLICT` does
+not fire — so the very duplicate this epic is trying to clean up can be inserted repeatedly. Unless
+the index is declared `NULLS NOT DISTINCT` (PG15+) or backed by a partial/`COALESCE` expression index,
+"the duplicate is gone" is **not a stable state**: a later `addParticipant`/`deriveManifest` can
+recreate it. This is the root cause worth fixing and is captured as a follow-up ticket rather than
+being silently assumed away.
+
+**Example from Epic #709:**
+- Row A: `roleKey='engineer'`, `stageKey='development'`, `source='assessment'` (participantId: `0d6423f1-ff54-40fc-9e0a-082956af913f`)
+- Row B: `roleKey='engineer'`, `stageKey=NULL`, `source='template'`
+- Rows A and B are NOT duplicates (different stageKey + source), but two rows with identical `(stageKey, roleKey, responsibility, source)` are.
+
+### 3. Verification Criteria
+
+"The duplicate entry is gone" is verified when **all** of the following hold. Each check is stated so
+it fails loudly rather than passing by default — a silent no-op delete (F-2) must not read as success.
+
+1. **Row absent.** `SELECT id FROM ticket_participants WHERE task_id = 709 AND id =
+   '0d6423f1-ff54-40fc-9e0a-082956af913f'` returns **zero rows**.
+
+2. **Manifest absent.** Re-reading the manifest for task 709 (`kanban.participants`, served by
+   `TicketParticipantsService.listParticipants`) returns no participant with that `id`. This read must
+   happen **after** the cache-version bump; the manifest is cached under `participants:task:709`, so a
+   read taken from a stale cache version is not evidence.
+
+3. **Surviving Engineer slot.** Exactly one `roleKey='engineer'` slot remains for task 709, and it is
+   **not** `unstaffed` — i.e. removing the duplicate did not delete the coverage along with it.
+
+4. **Idempotence / no resurrection (guards F-3).** After running `deriveManifest` once more, check 1
+   still holds and no new `roleKey='engineer'` row has appeared with `stage_key IS NULL`. If the
+   duplicate reappears, the verification FAILS and F-3 is confirmed as the root cause.
+
+**Pre-condition on the evidence.** Checks 1–4 must be executed against the live workspace. During this
+run both `kanban.participants` and `kanban.accountability` for task 709 returned
+`401 Token has been revoked or expired`, so the verification could **not** be executed here. The
+criteria above are therefore delivered as the *specification* of the check; the execution is tracked
+separately (see Traceability) and this ticket must not be reported as "verified" on their basis alone.
+
+### 4. Traceability
+
+| ID | Requirement | Verification | Status |
+|----|-------------|--------------|--------|
+| REQ-824-1 | Removal deletes the row identified by `participantId` | §3 check 1 | Specified — not executed (401) |
+| REQ-824-2 | Manifest read after removal reflects the deletion (post cache bump) | §3 check 2 | Specified — not executed (401) |
+| REQ-824-3 | Duplicate is defined by the slot tuple `(taskId, stageKey, roleKey, responsibility, source)` | Conflict target in `deriveManifest` / `addParticipant` | Confirmed in code |
+| REQ-824-4 | Removing the duplicate leaves Engineer covered and not `unstaffed` | §3 check 3 | Specified — not executed (401) |
+| REQ-824-5 | Removal is durable across a re-derive | §3 check 4 | Specified — blocked by F-3 |
+| F-1 | `template`/`lane_agent` rows are not removable by `removeParticipant` | Code: `inArray(source, ['assessment','manual'])` | Confirmed in code |
+| F-2 | Removal returns `void`; a no-op delete is indistinguishable from success | Code: `removeParticipant` signature | Confirmed in code |
+| F-3 | NULL `stageKey` means duplicate slots do not conflict in Postgres | Nullable `stage_key` in unique tuple | Confirmed in code — follow-up filed |
+
+### Open items for the executing role
+
+1. Re-run §3 checks 1–4 with valid credentials; record actual results as Test Evidence.
+2. Determine the `source` of participant `0d6423f1-…`. If `template`, this ticket cannot pass as
+   scoped (F-1) and the fix moves to the board's `swimlane_requirements`.
+3. Resolve F-3 before treating any removal as permanent.
+
+---
+
+**Authored by:** Business Analyst (task #824)  
+**PRD owner:** Ada (Sr. Product Mgr)
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
