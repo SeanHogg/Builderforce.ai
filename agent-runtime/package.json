@@ -204,7 +204,7 @@
     "oxlint-tsgolint": "^0.16.0",
     "tsdown": "^0.20.3",
     "tsx": "^4.21.0",
-    "vitest": "^4.0.18"
+    "vitest": "^4.1.0"
   },
   "peerDependencies": {
     "@huggingface/transformers": "^3.0.0",
