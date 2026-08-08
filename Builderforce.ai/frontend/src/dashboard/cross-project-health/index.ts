@@ -1,13 +1,16 @@
 /**
  * Cross-project health dashboard entry point.
- * Provides the main React component and supporting exports that a route or app consumes.
+ *
+ * Default export: the CrossProjectHealthDashboard component (PRD §1).
+ * Named exports: ProjectHealth interface + supporting data types.
  */
 
-export { CrossProjectHealthDashboard } from './CrossProjectHealthDashboard';
+export { default as CrossProjectHealthDashboard } from './CrossProjectHealthDashboard';
+export type { ProjectHealth, CrossProjectHealthDashboardProps } from './CrossProjectHealthDashboard';
+
 export {
   projects,
   portfolioSummary,
-  type ProjectHealth,
   type PortfolioSummary,
   type RAG,
   type ProjectStatus,

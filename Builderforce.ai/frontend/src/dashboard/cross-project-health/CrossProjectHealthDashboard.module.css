@@ -1,0 +1,165 @@
+/* ─── Dashboard grid ─────────────────────────────────────────────────────── */
+
+.dashboard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+  padding: 16px;
+}
+
+/* ─── Card ───────────────────────────────────────────────────────────────── */
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: box-shadow 0.15s ease;
+}
+
+.card:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.card-name {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #111827;
+}
+
+.card-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.card-blocker,
+.card-recommendation {
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.card-label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+  margin-bottom: 2px;
+}
+
+.card-recommendation-text {
+  color: #4b5563;
+  font-style: italic;
+}
+
+.card-fallback {
+  color: #9ca3af;
+}
+
+/* ─── Badges ─────────────────────────────────────────────────────────────── */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* Status badges — PRD §2 colour coding */
+.status--on-track {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.status--at-risk {
+  background-color: #fef9c3;
+  color: #854d0e;
+}
+
+.status--off-track {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.status--unknown {
+  background-color: #f3f4f6;
+  color: #6b7280;
+}
+
+/* Risk level badges — PRD §2 colour coding */
+.risk--low {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.risk--medium {
+  background-color: #fef9c3;
+  color: #854d0e;
+}
+
+.risk--high {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.risk--unknown {
+  background-color: #f3f4f6;
+  color: #6b7280;
+}
+
+/* ─── Truncated text + tooltip ───────────────────────────────────────────── */
+
+.truncated-text {
+  position: relative;
+  cursor: default;
+  color: #374151;
+}
+
+.tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 10;
+  max-width: 360px;
+  padding: 8px 12px;
+  background: #1f2937;
+  color: #f9fafb;
+  font-size: 0.78rem;
+  line-height: 1.4;
+  border-radius: 6px;
+  white-space: normal;
+  word-break: break-word;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+}
+
+/* ─── Empty state ────────────────────────────────────────────────────────── */
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  padding: 32px;
+  border: 2px dashed #d1d5db;
+  border-radius: 12px;
+  background-color: #f9fafb;
+}
+
+.empty-state-text {
+  font-size: 1rem;
+  color: #9ca3af;
+  font-style: italic;
+  margin: 0;
+}
