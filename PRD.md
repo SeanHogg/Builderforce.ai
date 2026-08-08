@@ -1,125 +1,140 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #1222
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document (PRD)
 
-## Problem & Goal
+## 1. Problem & Goal
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+### Problem
+The current implementation of the Builderforce.ai application lacks essential features for comprehensive project health diagnostics. This limitation prevents users from effectively assessing project status, identifying potential issues, and generating actionable resolution plans.
 
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
+### Goal
+To integrate a robust project health diagnostic system into the Builderforce.ai application, enabling users to:
+- Onboard seamlessly with a guided wizard.
+- Ingest data from multiple project management and productivity tools.
+- Assess project health across six key dimensions with configurable thresholds.
+- Generate AI-driven resolution plans.
+- Monitor project health over time through historical snapshots.
+- Export and share diagnostic reports in PDF and shareable link formats.
 
----
+## 2. Target Users / ICP Roles
 
-## Target Users / ICP Roles
+- **Project Managers**: Responsible for overseeing project progress and ensuring timely delivery.
+- **Team Leads**: Need to monitor team performance and identify areas for improvement.
+- **Executives**: Require high-level insights into project health and strategic decision-making support.
+- **Developers and Contributors**: Benefit from clear visibility into project status and task prioritization.
 
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
+## 3. Scope
 
----
+### In-Scope
+- **Onboarding Diagnostic Wizard**: A step-by-step guide to set up and configure project health diagnostics.
+- **Integration Ingestion**:
+  - Jira
+  - Linear
+  - Asana
+  - GitHub
+  - GitLab
+  - Harvest
+  - Toggl
+  - CSV Import
+- **Six-Dimension RAG Scoring Engine**:
+  - Configurable thresholds for Red, Amber, and Green statuses.
+  - Dimensions include: Scope, Time, Quality, Resources, Risk, and Stakeholder Satisfaction.
+- **LLM-Generated Resolution Plan**: AI-driven recommendations for addressing identified issues.
+- **Health Dashboard**:
+  - Real-time project health visualization.
+  - Historical snapshots for trend analysis.
+- **Export Functionality**:
+  - PDF reports.
+  - Shareable links for stakeholders.
 
-## Scope
+### Out-of-Scope
+- **Integration with Additional Tools**: Any tools not listed in the In-Scope section.
+- **Custom RAG Scoring Models**: While thresholds are configurable, the core RAG model is fixed.
+- **Advanced Analytics**: Predictive analytics, machine learning models beyond the LLM for resolution plans.
+- **User Management**: Features related to user roles, permissions, and authentication are assumed to be handled by the existing system.
+- **Mobile Application Support**: The diagnostic features are for the web application only.
 
-### In Scope
+## 4. Functional Requirements
 
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
+### FR-1: Onboarding Diagnostic Wizard
+- Users can initiate a guided setup process for project health diagnostics.
+- The wizard covers configuration of data sources, RAG thresholds, and initial project settings.
 
-### Out of Scope
+### FR-2: Integration Ingestion
+- Support for ingesting data from Jira, Linear, Asana, GitHub, GitLab, Harvest, Toggl, and CSV files.
+- Automated and manual data synchronization options.
 
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
+### FR-3: Six-Dimension RAG Scoring Engine
+- Calculation of RAG scores based on the six predefined dimensions.
+- Admin interface to configure thresholds for each dimension.
 
----
+### FR-4: LLM-Generated Resolution Plan
+- AI-driven generation of resolution plans based on current project health data.
+- Users can review, edit, and approve resolution plans.
 
-## Functional Requirements
+### FR-5: Health Dashboard
+- Real-time visualization of project health across all dimensions.
+- Historical data display with trend analysis capabilities.
 
-### FR-1 — Mode Selection
+### FR-6: Export Functionality
+- Generate PDF reports of current project health diagnostics.
+- Generate shareable links for stakeholders to view diagnostics.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+## 5. Acceptance Criteria
 
----
+### AC-01: Onboarding Wizard
+- Users can complete the onboarding process without errors.
+- Configuration settings are saved and applied correctly.
 
-### FR-2 — Guided (Interactive) Mode
+### AC-02: Data Integration
+- Data from all supported tools is ingested accurately.
+- Synchronization occurs without data loss or corruption.
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+### AC-03: RAG Scoring
+- RAG scores are calculated correctly based on configured thresholds.
+- Changes to thresholds are reflected in scoring immediately.
 
----
+### AC-04: Resolution Plan
+- AI-generated resolution plans are relevant and actionable.
+- Users can modify and save resolution plans without issues.
 
-### FR-3 — Bulk (Import) Mode
+### AC-05: Health Dashboard
+- Dashboard displays real-time data accurately.
+- Historical snapshots are stored and accessible.
 
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
+### AC-06: Export Functionality
+- PDF reports are generated correctly and are printable.
+- Shareable links provide accurate access to diagnostics.
 
----
+## 6. Out of Scope
 
-### FR-4 — Shared / Cross-Mode Requirements
+- Integration with tools not listed in FR-2.
+- Customization of the RAG scoring model beyond threshold configuration.
+- Advanced analytics features.
+- User management features.
+- Mobile application support.
 
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
+## Requirements
 
----
+_Owned by the business-analyst — to be authored._
 
-## Acceptance Criteria
+## Design
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+_Owned by the architect — to be authored._
 
----
+## Implementation Notes
 
-## Out of Scope
+_Owned by the developer — to be authored._
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
+
+## Acceptance
+
+_Owned by the validator — to be authored._
