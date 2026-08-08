@@ -1,125 +1,336 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #533
 > _Each agent that updates this PRD signs its change below._
+> Business Analyst — 2026-08-03: authored Requirements section (traceable reqs REQ-G1-01 through REQ-SO-02, traceability matrix)
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document: Security Audit Sign-Off for GAP-G1 and GAP-G2 (Task #486)
 
 ## Problem & Goal
+Security hardening deltas GAP-G1 and GAP‑G2 have been implemented (middleware and Docker/Kubernetes), but the corresponding audit evidence and validation steps are not yet consistently collected, reviewed, or signed off. Without a formal audit sign-off, compliance status remains unverifiable, and the risk of token exposure or configuration drift is not closed.
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+**Goal:** Complete the audit sign-off by verifying and documenting that GAP-G1 and GAP-G2 controls are fully operational in production, that all audit artifacts are tamper‑evident and correctly scrubbed, and that a designated manager confirms closure. This document defines the verification steps and acceptance criteria required to mark task #486 as done.
 
 ## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Operations/Platform Engineers** – Execute verification steps, deploy policies, and gather evidence.
+- **Security Auditor / Compliance Reviewer** – Reviews logs, schemas, and test results for correctness.
+- **Manager (Approver)** – Performs final sign-off after all checks pass.
 
 ## Scope
-
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- **GAP‑G1 verification:**  
+  - Deploy AppArmor profile to production sandboxes.  
+  - Confirm cgroup metrics and associated alerts are in place.  
+  - Verify event logs contain no raw tokens (i.e., token scrubbing works end‑to‑end).  
+- **GAP‑G2 verification:**  
+  - Update the audit schema to replace the `Authorization` field with a SHA‑256 token hash.  
+  - Run an audit log sanity check on recent production logs.  
+  - Confirm that the automated test suite explicitly covers token scrubbing.  
+- **Manager sign‑off:** Validate that all verifications are completed and documented; record the approval.
 
 ## Functional Requirements
+### GAP‑G1
+1. **AppArmor Deployment**  
+   - The AppArmor profile defined in the hardening delta must be loaded and enforced on all production sandbox workloads.  
+   - A verification command (e.g., `aa-status`) must show the profile in enforce mode.  
+2. **Cgroup Metrics & Alerts**  
+   - Prometheus (or equivalent) must export resource usage metrics for each sandbox cgroup.  
+   - Alert rules must be configured to fire when resource limits are approached or breached.  
+   - A dashboard or alert history must confirm that the metric pipeline is active and alerts are evaluated.  
+3. **Event Log Token Scrubbing**  
+   - All event logs (application, access, audit) must be sampled from the last 24 hours.  
+   - A log‑scanning script must demonstrate that no raw `Authorization` header values, bearer tokens, or similar secrets appear in plaintext.  
 
-### FR-1 — Mode Selection
+### GAP‑G2
+1. **Audit Schema Update**  
+   - The audit log’s data model must be changed so that the previous `Authorization` string column is removed and a new `token_hash` (SHA‑256, hex‑encoded) column is added.  
+   - A migration script must backfill existing logs: `token_hash = SHA256(old_authorization)` and then drop the plaintext column.  
+   - The change must be applied to the production audit database.  
+2. **Sanity Check**  
+   - After schema migration, query the audit log for recent entries and confirm:  
+     - No column named `Authorization` exists.  
+     - The `token_hash` column contains valid 64‑character hex strings for all non‑null entries.  
+     - Row counts before and after migration match.  
+3. **Test Suite Coverage**  
+   - The automated test suite must include a test case that creates audit records with a token, forces log flushing, and then asserts that the emitted log entry contains `token_hash` and no plaintext token.  
+   - The test must pass in the CI pipeline and be traceable to the GAP‑G2 requirement.  
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
-
----
-
-### FR-2 — Guided (Interactive) Mode
-
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
-
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+### Manager Sign‑Off
+- A signed‑off checklist (or equivalent approval record) must be added to the task tracking system, confirming that all GAP‑1 and GAP‑2 verifications were independently reviewed and passed.
 
 ## Acceptance Criteria
+- [ ] AppArmor profile enforced on all production sandboxes (verified by a timestamped output).  
+- [ ] cgroup metrics dashboards show live data; alert rules exist and at least one test firing event is recorded.  
+- [ ] Log‑scanning script output confirms zero raw tokens in a representative log sample.  
+- [ ] Audit schema migration completed – production audit table has `token_hash`, no `Authorization`.  
+- [ ] Sanity check script exits 0: hash validity, no plaintext column, count preservation.  
+- [ ] CI test for token scrubbing passes and is linked to the requirement.  
+- [ ] Manager approval recorded in the ticket with a date and identity (e.g., “Signed off: jane.doe@company.com on 2025‑MM‑DD”).  
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+## Out of Scope
+- Implementation of the original GAP‑G1 / GAP‑G2 hardening deltas (already completed).  
+- Changes to AppArmor profile or cgroup limits outside the scope of verification.  
+- Broader audit log retention policy or encryption‑at‑rest (only the immediate schema change and verification).  
+- Integration with external compliance systems beyond internal manager sign‑off.  
+- Rollback plan for GAP‑G1 or GAP‑G2 (handled by separate change management).
+
+## Requirements
+
+_Owned by the business-analyst._
+
+### REQ-G1-01: AppArmor Profile Enforcement
+
+**Priority:** P0 (blocking)  
+**Traceability:** GAP‑G1 Functional Requirement 1 · AC‑1  
+
+The system SHALL enforce the AppArmor profile defined in the GAP‑G1 hardening delta on every production sandbox workload. A verification command (`aa-status`) executed on each production host MUST return the profile name in enforce mode, and the output MUST be captured as timestamped evidence.
+
+**Validation:**  
+- Run `aa-status | grep -A3 <profile-name>` on each production sandbox host.  
+- Store the full output as a timestamped artifact linked to this task.  
+- The artifact SHALL show `enforce` (not complain/audit) for the target profile.
 
 ---
 
-## Out of Scope
+### REQ-G1-02: Cgroup Metrics Export
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+**Priority:** P1  
+**Traceability:** GAP‑G1 Functional Requirement 2 · AC‑2  
+
+The metrics pipeline SHALL export per‑sandbox cgroup resource-usage metrics (CPU, memory, I/O) to the observability stack (Prometheus or equivalent) with a scrape interval ≤ 60 seconds. An alert rule SHALL be configured to fire at `WARNING` severity when any sandbox cgroup exceeds 80% of its resource limit, and at `CRITICAL` when it exceeds 95%.
+
+**Validation:**  
+- Confirm metric series exist in the Prometheus TSDB for each sandbox cgroup (query: `container_cpu_usage_seconds_total{container=~"sandbox-.*"}` or equivalent).  
+- Confirm alert rules are loaded and evaluating (`promtool check rules`, or UI screenshot).  
+- Trigger a test alert (e.g., temporarily lower the limit) and capture the firing notification as evidence.
+
+---
+
+### REQ-G1-03: Log Token Scrubbing — Zero Plaintext Secrets
+
+**Priority:** P0 (blocking)  
+**Traceability:** GAP‑G1 Functional Requirement 3 · AC‑3  
+
+A log‑scanning script SHALL sample the last 24 hours of application, access, and audit logs and SHALL exit 0 ONLY when zero raw `Authorization` header values, bearer tokens, or `token=` query‑string parameters appear in plaintext. The scan scope SHALL include all log streams emitted by the API, agent‑runtime, and sandbox infrastructure.
+
+**Token patterns to detect:**  
+- `Authorization: Bearer <jwt>` (any JSON Web Token in header value)  
+- `Authorization: Basic <base64>`  
+- `token=<jwt>` (query‑string token)  
+- `x-api-key:` headers  
+- Any 64‑char hex string matching a known SHA‑256 hash pattern (false‑positive mitigation: exclude known non‑secret hashes like git commit SHAs and content‑hash ETags)
+
+**Validation:**  
+- Execute the log‑scanning script against production log archives.  
+- Script exit code 0 = pass; exit code 1 = raw tokens found (the script SHALL emit the file path and line number of any match).  
+- Store the scan output as evidence linked to this task.
+
+---
+
+### REQ-G2-01: Audit Schema Migration — Replace Authorization with token_hash
+
+**Priority:** P0 (blocking)  
+**Traceability:** GAP‑G2 Functional Requirement 1 · AC‑4  
+
+The audit database schema SHALL be migrated so that:  
+
+1. A new column `token_hash CHAR(64) NOT NULL DEFAULT ''` is added to the audit log table.  
+2. Every existing row with a non‑null `Authorization` value is backfilled: `token_hash = SHA256(authorization)`.  
+3. The `Authorization` column is dropped.  
+4. Row count before and after migration MUST be identical.  
+
+The migration SHALL be applied to the production audit database via a single idempotent migration script that is safe to re‑run (detects already‑applied schema and exits 0).
+
+**Validation:**  
+- After migration, `DESCRIBE audit_log` (or equivalent) SHALL show `token_hash` and SHALL NOT show `Authorization`.  
+- `SELECT COUNT(*) FROM audit_log` before and after migration SHALL return the same value.  
+- `SELECT COUNT(*) FROM audit_log WHERE token_hash = '' OR token_hash IS NULL OR LENGTH(token_hash) != 64` SHALL return 0 for non‑null original tokens (empty/revoked tokens where `Authorization` was null or empty may remain `''`).
+
+---
+
+### REQ-G2-02: Sanity Check Script
+
+**Priority:** P1  
+**Traceability:** GAP‑G2 Functional Requirement 2 · AC‑5  
+
+A standalone sanity‑check script SHALL validate the migrated audit log table and SHALL exit 0 only when all of the following hold:  
+
+1. No column named `Authorization` (case‑insensitive) exists in the table.  
+2. Every non‑empty `token_hash` value matches the regex `^[a-f0-9]{64}> **PRD** — drafted by Ada (Sr. Product Mgr) · task #533
+> _Each agent that updates this PRD signs its change below._
+> Business Analyst — 2026-08-03: authored Requirements section (traceable reqs REQ-G1-01 through REQ-SO-02, traceability matrix)
+
+# Product Requirements Document: Security Audit Sign-Off for GAP-G1 and GAP-G2 (Task #486)
+
+## Problem & Goal
+Security hardening deltas GAP-G1 and GAP‑G2 have been implemented (middleware and Docker/Kubernetes), but the corresponding audit evidence and validation steps are not yet consistently collected, reviewed, or signed off. Without a formal audit sign-off, compliance status remains unverifiable, and the risk of token exposure or configuration drift is not closed.
+
+**Goal:** Complete the audit sign-off by verifying and documenting that GAP-G1 and GAP-G2 controls are fully operational in production, that all audit artifacts are tamper‑evident and correctly scrubbed, and that a designated manager confirms closure. This document defines the verification steps and acceptance criteria required to mark task #486 as done.
+
+## Target Users / ICP Roles
+- **Operations/Platform Engineers** – Execute verification steps, deploy policies, and gather evidence.
+- **Security Auditor / Compliance Reviewer** – Reviews logs, schemas, and test results for correctness.
+- **Manager (Approver)** – Performs final sign-off after all checks pass.
+
+## Scope
+- **GAP‑G1 verification:**  
+  - Deploy AppArmor profile to production sandboxes.  
+  - Confirm cgroup metrics and associated alerts are in place.  
+  - Verify event logs contain no raw tokens (i.e., token scrubbing works end‑to‑end).  
+- **GAP‑G2 verification:**  
+  - Update the audit schema to replace the `Authorization` field with a SHA‑256 token hash.  
+  - Run an audit log sanity check on recent production logs.  
+  - Confirm that the automated test suite explicitly covers token scrubbing.  
+- **Manager sign‑off:** Validate that all verifications are completed and documented; record the approval.
+
+## Functional Requirements
+### GAP‑G1
+1. **AppArmor Deployment**  
+   - The AppArmor profile defined in the hardening delta must be loaded and enforced on all production sandbox workloads.  
+   - A verification command (e.g., `aa-status`) must show the profile in enforce mode.  
+2. **Cgroup Metrics & Alerts**  
+   - Prometheus (or equivalent) must export resource usage metrics for each sandbox cgroup.  
+   - Alert rules must be configured to fire when resource limits are approached or breached.  
+   - A dashboard or alert history must confirm that the metric pipeline is active and alerts are evaluated.  
+3. **Event Log Token Scrubbing**  
+   - All event logs (application, access, audit) must be sampled from the last 24 hours.  
+   - A log‑scanning script must demonstrate that no raw `Authorization` header values, bearer tokens, or similar secrets appear in plaintext.  
+
+### GAP‑G2
+1. **Audit Schema Update**  
+   - The audit log’s data model must be changed so that the previous `Authorization` string column is removed and a new `token_hash` (SHA‑256, hex‑encoded) column is added.  
+   - A migration script must backfill existing logs: `token_hash = SHA256(old_authorization)` and then drop the plaintext column.  
+   - The change must be applied to the production audit database.  
+2. **Sanity Check**  
+   - After schema migration, query the audit log for recent entries and confirm:  
+     - No column named `Authorization` exists.  
+     - The `token_hash` column contains valid 64‑character hex strings for all non‑null entries.  
+     - Row counts before and after migration match.  
+3. **Test Suite Coverage**  
+   - The automated test suite must include a test case that creates audit records with a token, forces log flushing, and then asserts that the emitted log entry contains `token_hash` and no plaintext token.  
+   - The test must pass in the CI pipeline and be traceable to the GAP‑G2 requirement.  
+
+### Manager Sign‑Off
+- A signed‑off checklist (or equivalent approval record) must be added to the task tracking system, confirming that all GAP‑1 and GAP‑2 verifications were independently reviewed and passed.
+
+## Acceptance Criteria
+- [ ] AppArmor profile enforced on all production sandboxes (verified by a timestamped output).  
+- [ ] cgroup metrics dashboards show live data; alert rules exist and at least one test firing event is recorded.  
+- [ ] Log‑scanning script output confirms zero raw tokens in a representative log sample.  
+- [ ] Audit schema migration completed – production audit table has `token_hash`, no `Authorization`.  
+- [ ] Sanity check script exits 0: hash validity, no plaintext column, count preservation.  
+- [ ] CI test for token scrubbing passes and is linked to the requirement.  
+- [ ] Manager approval recorded in the ticket with a date and identity (e.g., “Signed off: jane.doe@company.com on 2025‑MM‑DD”).  
+
+## Out of Scope
+- Implementation of the original GAP‑G1 / GAP‑G2 hardening deltas (already completed).  
+- Changes to AppArmor profile or cgroup limits outside the scope of verification.  
+- Broader audit log retention policy or encryption‑at‑rest (only the immediate schema change and verification).  
+- Integration with external compliance systems beyond internal manager sign‑off.  
+- Rollback plan for GAP‑G1 or GAP‑G2 (handled by separate change management).
+
+.  
+3. Row count matches the pre‑migration snapshot (or, if no snapshot is available, is non‑zero and consistent with the most recent audit‑log flush count).  
+
+The script SHALL output a structured JSON report (`{ passed: true|false, checks: [{ name, passed, detail }], rowCount: N }`) to stdout. When `passed` is `false`, the failing check(s) SHALL include a diagnostic detail string.
+
+**Validation:**  
+- Execute the sanity‑check script against the production audit database.  
+- Confirm exit code 0 and `"passed": true` in the JSON report.  
+- Commit the report as evidence.
+
+---
+
+### REQ-G2-03: CI Test Coverage for Token Scrubbing
+
+**Priority:** P1  
+**Traceability:** GAP‑G2 Functional Requirement 3 · AC‑6  
+
+The automated test suite SHALL include at least one test case that:  
+
+1. Creates one or more audit records using the audit service, passing a known bearer token.  
+2. Forces log flush (or awaits flush interval).  
+3. Asserts that the emitted/logged record contains `token_hash` (a 64‑char hex string).  
+4. Asserts that the emitted/logged record does NOT contain the original bearer token in plaintext.  
+
+The test case SHALL be annotated with a comment or tag linking it to REQ‑G2‑03 / GAP‑G2 for traceability. It SHALL pass in the CI pipeline on every commit to `main`.
+
+**Validation:**  
+- Locate the test case in the test suite (search for `REQ-G2-03` or `GAP-G2` annotation).  
+- Confirm the test passes in the most recent CI run for the `main` branch.  
+- Link the CI run URL as evidence.
+
+---
+
+### REQ-SO-01: Manager Sign‑Off Checklist
+
+**Priority:** P0 (blocking completion)  
+**Traceability:** Manager Sign‑Off · AC‑7  
+
+Before task #486 is marked Done, a designated manager SHALL record a sign‑off in the task tracking system containing:  
+
+- Full name (or verified identity) of the approver.  
+- Date of approval (ISO 8601).  
+- Explicit confirmation that each of the seven acceptance criteria (AC‑1 through AC‑7) has been independently reviewed and passed.  
+
+The sign‑off SHALL be non‑transferable (the approver's identity is verified by the system). A placeholder or automated "bot" sign‑off does NOT satisfy this requirement.
+
+**Validation:**  
+- The task tracking record for #486 SHALL contain a manager approval entry meeting all fields above.  
+- The approval entry SHALL be immutable once recorded.
+
+---
+
+### REQ-SO-02: Evidence Retention
+
+**Priority:** P2  
+**Traceability:** Cross‑cutting (all GAP‑G1/GAP‑G2 verification)  
+
+Every verification artifact (AppArmor output, cgroup metrics screenshot, log‑scan report, migration snapshot, sanity‑check report, CI run URL) SHALL be retained as an attachment or linked reference on task #486 for a minimum of 90 days post‑sign‑off. Artifacts SHALL be stored in a tamper‑evident manner (versioned file, immutable attachment, or content‑addressed store).
+
+**Validation:**  
+- Confirm that task #486 has attachments or references for each artifact class listed above.  
+- Spot‑check one artifact to verify it is retrievable and unaltered.
+
+---
+
+### Traceability Matrix
+
+| Requirement | Covers | GAP Source | Acceptance Criteria | Priority |
+|---|---|---|---|---|
+| REQ-G1-01 | AppArmor enforcement verification | GAP‑G1 FR‑1 | AC‑1 | P0 |
+| REQ-G1-02 | Cgroup metrics + alerts verification | GAP‑G1 FR‑2 | AC‑2 | P1 |
+| REQ-G1-03 | Log token‑scrubbing verification | GAP‑G1 FR‑3 | AC‑3 | P0 |
+| REQ-G2-01 | Audit schema migration | GAP‑G2 FR‑1 | AC‑4 | P0 |
+| REQ-G2-02 | Sanity‑check script | GAP‑G2 FR‑2 | AC‑5 | P1 |
+| REQ-G2-03 | CI test coverage for token scrubbing | GAP‑G2 FR‑3 | AC‑6 | P1 |
+| REQ-SO-01 | Manager sign‑off | Manager Sign‑Off | AC‑7 | P0 |
+| REQ-SO-02 | Evidence retention | Cross‑cutting | All | P2 |
+
+### Requirement Dependencies
+
+```
+REQ-G1-01 ──┐
+REQ-G1-02 ──┤
+REQ-G1-03 ──┼──► REQ-SO-01 (all G1+G2 verifications must pass before sign-off)
+REQ-G2-01 ──┤
+REQ-G2-02 ──┤
+REQ-G2-03 ──┘
+                 │
+                 └──► REQ-SO-02 (evidence collected during verification is retained)
+```
+
+REQ‑G2‑01 (schema migration) MUST complete before REQ‑G2‑02 (sanity check) can pass. All six G1/G2 verification requirements MUST be satisfied before REQ‑SO‑01 (manager sign‑off) can be recorded. Evidence collected during any verification step SHALL satisfy REQ‑SO‑02.
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
