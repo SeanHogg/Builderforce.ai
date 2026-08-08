@@ -1,125 +1,105 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #665
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document (PRD)
 
 ## Problem & Goal
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+### Problem
+Users are experiencing difficulties in managing and tracking their project tasks and deadlines effectively. The current system lacks a unified view of tasks, progress tracking, and collaboration features, leading to inefficiencies and missed deadlines.
 
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+### Goal
+Develop a task management and tracking system that provides a unified view of all tasks, enhances progress tracking, and facilitates seamless collaboration among team members. The system should improve productivity and ensure timely completion of projects.
 
 ## Target Users / ICP Roles
 
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Project Managers**: Responsible for overseeing projects, assigning tasks, and tracking progress.
+- **Team Members**: Individuals who need to view their assigned tasks, update progress, and collaborate with others.
+- **Executives**: Need a high-level overview of project statuses and key metrics to make informed decisions.
 
 ## Scope
 
-### In Scope
+### In-Scope
+- **Task Management**: Create, assign, update, and delete tasks.
+- **Progress Tracking**: Visual indicators (e.g., progress bars, status labels) to show task progress.
+- **Collaboration Tools**: Commenting, file sharing, and notifications for task-related activities.
+- **Dashboard**: A unified dashboard displaying all tasks, their statuses, and key metrics.
+- **Reporting**: Generate reports on task completion, team performance, and project status.
+- **Integration**: API support for integration with other tools (e.g., email, calendar, Slack).
 
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+### Out-of-Scope
+- **Time Tracking**: Detailed time logging for tasks.
+- **Advanced Analytics**: Predictive analytics or machine learning features.
+- **Mobile App**: Native mobile application development (mobile-responsive web app is in scope).
+- **Billing & Invoicing**: Financial management features.
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+1. **User Authentication & Authorization**
+   - Users can register, log in, and reset passwords.
+   - Role-based access control (RBAC) to restrict access to certain features.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+2. **Task Management**
+   - Create tasks with titles, descriptions, due dates, and assignees.
+   - Edit and delete tasks.
+   - Categorize tasks using tags or labels.
 
----
+3. **Progress Tracking**
+   - Mark tasks as in-progress, completed, or blocked.
+   - Visual indicators to show task status and progress.
 
-### FR-2 — Guided (Interactive) Mode
+4. **Collaboration**
+   - Comment on tasks and reply to comments.
+   - Attach files to tasks.
+   - Receive notifications for task updates and comments.
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+5. **Dashboard**
+   - View all tasks in a list or kanban view.
+   - Filter and sort tasks based on status, due date, and assignee.
+   - Display key metrics such as task completion rate and overdue tasks.
 
----
+6. **Reporting**
+   - Generate reports on task completion, team performance, and project status.
+   - Export reports in PDF or Excel format.
 
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+7. **Integration**
+   - Integrate with email for task notifications.
+   - Sync with calendar applications for due dates.
+   - Connect with Slack for real-time updates.
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
-
----
+- **Authentication**: Users can successfully register, log in, and reset passwords.
+- **Task Management**: Tasks can be created, edited, assigned, and deleted without errors.
+- **Progress Tracking**: Task statuses update in real-time and are accurately reflected in the dashboard.
+- **Collaboration**: Comments and file attachments are visible to all relevant team members.
+- **Dashboard**: The dashboard displays accurate and up-to-date information on tasks and key metrics.
+- **Reporting**: Reports are generated correctly and can be exported in the specified formats.
+- **Integration**: Email, calendar, and Slack integrations function as expected, with appropriate notifications and syncing.
 
 ## Out of Scope
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+- Development of a native mobile application.
+- Implementation of time tracking and advanced analytics features.
+- Financial management tools such as billing and invoicing.
+- Customizable user roles beyond the standard RBAC.
+
+## Requirements
+
+_Owned by the business-analyst — to be authored._
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
