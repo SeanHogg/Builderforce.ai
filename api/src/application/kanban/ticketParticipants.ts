@@ -20,6 +20,7 @@
 import { and, asc, eq, inArray, isNull, or } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
+import { NotFoundError, ValidationError } from '../../domain/shared/errors';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import {
   boards, swimlaneRequirements, swimlanes, tasks, ticketParticipants, ticketRoleSignoffs,
@@ -418,8 +419,37 @@ export class TicketParticipantsService {
     return row ? this.mapRow(row) : null;
   }
 
+  /**
+   * Validate that a participant exists and is associated with the given task.
+   * Throws ValidationError with the exact messages from PRD:
+   * - "Participant does not exist." — participant not found in the manifest
+   * - "Participant is not associated with this task." — participant exists but belongs to a different task
+   */
+  async validateParticipant(env: Env, tenantId: number, taskId: number, participantId: string): Promise<ManifestParticipant> {
+    // First, check if the participant exists at all in the tenant's manifest
+    const [participant] = await this.db
+      .select()
+      .from(ticketParticipants)
+      .where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.id, participantId)))
+      .limit(1);
+
+    if (!participant) {
+      throw new ValidationError('Participant does not exist.');
+    }
+
+    // Then verify it's associated with the specified task
+    if (participant.taskId !== taskId) {
+      throw new ValidationError('Participant is not associated with this task.');
+    }
+
+    return this.mapRow(participant);
+  }
+
   /** Waive/remove an assessment-added participant (audited elsewhere via sign-off). */
   async removeParticipant(env: Env, tenantId: number, taskId: number, participantId: string): Promise<void> {
+    // Validate first — throws with the exact PRD error messages if invalid
+    await this.validateParticipant(env, tenantId, taskId, participantId);
+
     await this.db
       .delete(ticketParticipants)
       .where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId), eq(ticketParticipants.id, participantId), inArray(ticketParticipants.source, ['assessment', 'manual'])));
