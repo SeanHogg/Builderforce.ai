@@ -316,14 +316,25 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
 
   // Resource Assessment — add a role the ticket needs beyond the template (designer,
   // security engineer, …). Manager-gated. An unstaffed add surfaces as a resource gap.
+  // Optionally accepts an explicit assignee to pin a specific agent/human to the role.
   router.post('/tasks/:taskId/participants', async (c) => {
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
     const tenantId = c.get('tenantId') as number;
     const taskId = Number(c.req.param('taskId'));
-    const body = await c.req.json<{ roleKey: string; responsibility?: 'owner' | 'reviewer' | 'contributor'; stageKey?: string; note?: string }>();
+    const body = await c.req.json<{
+      roleKey: string;
+      responsibility?: 'owner' | 'reviewer' | 'contributor';
+      stageKey?: string;
+      note?: string;
+      assignee?: { kind: string; ref: string; name: string } | null;
+    }>();
     if (!body.roleKey) return c.json({ error: 'roleKey is required' }, 400);
     const participant = await participantsService.addParticipant(env(c), tenantId, taskId, {
-      roleKey: body.roleKey, responsibility: body.responsibility, stageKey: body.stageKey, note: body.note,
+      roleKey: body.roleKey,
+      responsibility: body.responsibility,
+      stageKey: body.stageKey,
+      note: body.note,
+      assignee: body.assignee ?? null,
     });
     if (participant) {
       const [proj] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
