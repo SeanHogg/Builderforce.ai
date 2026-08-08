@@ -1,125 +1,248 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #583
 > _Each agent that updates this PRD signs its change below._
+>
+> **Business Analyst** (2026-07-15) — authored Requirements section grounded in existing codebase.
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document (PRD): Remediation Notes for Failures
 
 ## Problem & Goal
+Failures in automated test runs, deployments, or incidents often recur because root causes and fix steps are not systematically documented alongside the failure record. Teams lose time re-investigating known issues, and knowledge remains siloed in chat or individual heads.  
+**Goal:** Provide a structured, persistent way to attach human‑written remediation notes directly to any failure entity, making corrective actions visible, searchable, and shareable across the team.
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
-
-## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+## Target users / ICP roles
+- Developers and QA engineers who own the failing test or code path  
+- DevOps / SRE engineers handling deployment failures or infrastructure incidents  
+- Support engineers and on‑call responders who need reproducible fix steps  
+- Engineering managers who review failure trends and recurrence rates
 
 ## Scope
+**In scope**
+- Create, read, update, and soft‑delete remediation notes attached to a failure record (test run, deployment event, incident, etc.)
+- Rich‑text (Markdown) note body with automatic hyper‑linking of URLs and references to issue trackers
+- Metadata per note: author, timestamp (created/updated), optional status (`draft`, `resolved`, `in-progress`) and a private/public toggle
+- Ability to link multiple notes to one failure and one note to multiple failures (cross‑linking)
+- Full‑text search across note content, and filter by status, author, or date range
+- View/edit history (audit log) for each note
+- Role‑based access control: viewers, editors, and admins (admins can delete permanently)
+- Inline editing from failure detail views in existing dashboards
+- API endpoints for external integrations
 
-### In Scope
+**Out of scope**
+- Automatic generation of remediation notes from logs or runbooks
+- Machine‑learning suggestions or similarity detection between failures
+- Full‑fledged document collaboration (simultaneous editing, comments)
+- Integration with external knowledge‑management platforms beyond simple linking
+- Migration of pre‑existing remediation notes from other systems (can be addressed as a separate project)
 
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
+## Functional requirements
+1. **Note creation** – A user with edit rights can add a note to any failure via a modal or inline editor; the note must contain a title (max 200 chars) and a body (max 20k chars, Markdown).  
+2. **Note lifecycle** – Notes can be soft‑deleted (hidden but recoverable by admins). Hard deletion is an admin‑only action that removes the record and its audit history.  
+3. **Status and visibility** – Each note has a status (`draft`, `in-progress`, `resolved`, `archived`) and a visibility flag (public to the team or private to author). Only public notes appear in searches for other users.  
+4. **Cross‑linking** – When viewing a note, the system shows all associated failure records. Users can attach an existing note to a new failure via a search‑and‑link dialog.  
+5. **Search & filtering** – A global search bar accepts text that matches title or body content. Filter chips allow narrowing by status, author, date range, or failure type.  
+6. **Audit trail** – Every change (create, edit, status change, visibility toggle, link/unlink, delete) generates an audit entry with who, what, and when, visible on the note’s history panel.  
+7. **Notifications** – When a note is created or its status changes, relevant stakeholders (e.g., failure assignee, watchers) receive a notification (in‑app and optional email).  
+8. **API** – REST endpoints for CRUD operations on notes, linking, and search, mirroring the UI capabilities.  
+9. **Access control** – Permissions are checked against the failure record’s project/team ownership; a separate role `failure_notes_admin` allows hard‑delete and global audit access.  
 
-### Out of Scope
+## Acceptance criteria
+1. A developer opens a failed test run detail page, clicks “Add Remediation Note”, enters a title and body, selects “draft” status, and saves. The note appears in the failure’s notes list with the author’s name and creation time.
+2. An SRE views a deployment failure, sees two existing notes, clicks one to edit, changes its body and sets status to “resolved”. The note’s history shows the edit event; a notification is sent to the failure’s assignees.
+3. A QA engineer uses the global search to find notes containing “timeout”. Results show notes across all failure types, filtered by “resolved” status. Clicking a result opens the note with its linked failures listed.
+4. An admin hard‑deletes a note from the admin panel; the note disappears from all linked failures, and its audit log remains accessible to admins for 90 days.
+5. A service account uses the API to create a remediation note attached to a failure ID, with public visibility. The note is immediately searchable in the UI by authorized users.
+6. A user without edit permissions attempts to add a note to a failure; the UI hides the “Add Note” button, and the API returns a 403 error.
+7. A note’s cross‑links are updated: a user links an existing note to a second failure; both failures now show the note, and the note’s detail view shows both linked failures.
 
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
+## Out of scope
+- Automatic remediation runbook execution or triggering CI/CD jobs from notes
+- Integration with natural‑language processing to categorize failures
+- Custom note templates or mandatory fields beyond title and body
+- Bulk import/export of remediation notes
+- Real‑time collaborative editing (OT/CRDT)
+- Comment threads on notes (notes are immutable except for status and body edits, which generate new versions)
 
----
+## Requirements
 
-## Functional Requirements
+### 1. Failure Entity Taxonomy
 
-### FR-1 — Mode Selection
+A "failure" in the BuilderForce platform is any entity that records a negative outcome requiring investigation or remediation. The following are the canonical failure surfaces the remediation-notes system **must** support as linkable targets:
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+| Failure type | Source table | Key identifier | Existing linkage |
+|---|---|---|---|
+| Production incident | `prod_incidents` (schema/delivery.ts) | `id` (uuid) | Bridged to a `tasks` row via `boardTaskId`; `incidentEvents` timeline |
+| Security incident | `security_incidents` (schema/governance.ts) | `id` (uuid) | Bridged to a SECURITY board task via `boardTaskId` |
+| Deployment failure | `deployment_events` (schema/delivery.ts) | `id` (uuid) | `isFailure` boolean; linked to PRs via `prNumber` |
+| PR reconciliation error | `pr_reconciliation_errors` (schema/delivery.ts) | `id` (uuid) | Linked to `deploymentEvents` via `deploymentEventId` |
+| Error group | `error_groups` (schema/delivery.ts) | `id` (uuid) | Fingerprint-grouped; linked to a fix `taskId` |
+| QA finding | `qa_findings` (schema/quality.ts) | `id` (uuid) | Linked to `qa_runs` + `qa_explorations` |
+| Security finding | `security_findings` (schema/governance.ts) | `id` (uuid) | Linked to `security_incidents` via `incidentId` |
+| Monitor alert | `alerts` (schema/delivery.ts) | `id` (uuid) | Linked to `segments`; fired via `monitor_events` |
 
----
+The system **must** use a polymorphic association pattern — a single `remediation_notes` table with a `target_type` / `target_id` pair — so one note can link to any failure type, and a new failure type added later does not need a schema migration.
 
-### FR-2 — Guided (Interactive) Mode
+### 2. Data Model
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+#### 2.1 `remediation_notes` table
 
----
+Create via a new Drizzle schema module at `api/src/infrastructure/database/schema/remediation.ts` and re-export from `schema.ts`. Migration number: next available in `api/migrations/` (check the highest existing number and increment).
 
-### FR-3 — Bulk (Import) Mode
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | `uuid` | PK, `defaultRandom()` | |
+| `tenantId` | `integer` | NOT NULL, FK → `tenants.id` ON DELETE CASCADE | Tenant isolation |
+| `authorId` | `uuid` | NOT NULL, FK → `users.id` ON DELETE SET NULL | The note's creator |
+| `title` | `varchar(200)` | NOT NULL | Max 200 chars per FR-1 |
+| `body` | `text` | NOT NULL | Max 20k chars; Markdown |
+| `status` | `varchar(16)` | NOT NULL, DEFAULT `'draft'` | One of: `draft`, `in-progress`, `resolved`, `archived` |
+| `visibility` | `varchar(8)` | NOT NULL, DEFAULT `'public'` | `public` (team-visible) or `private` (author-only) |
+| `deletedAt` | `timestamp` | nullable | Soft-delete tombstone; non-null = hidden from normal queries |
+| `createdAt` | `timestamp` | NOT NULL, DEFAULT `now()` | |
+| `updatedAt` | `timestamp` | NOT NULL, DEFAULT `now()` | Bumped on every edit via application-layer trigger |
 
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
+Indexes:
+- `(tenantId, createdAt DESC)` — list all notes for a tenant, newest first
+- `(tenantId, status)` — filtered queries by status
+- `(tenantId, authorId)` — "my notes" queries
+- `(tenantId, deletedAt)` WHERE `deletedAt IS NULL` — soft-delete-aware scans
+- GIN index on `to_tsvector('english', title || ' ' || body)` for full‑text search (PostgreSQL `tsvector`)
 
----
+#### 2.2 `remediation_note_links` table (cross‑linking / polymorphic junction)
 
-### FR-4 — Shared / Cross-Mode Requirements
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | `uuid` | PK, `defaultRandom()` | |
+| `noteId` | `uuid` | NOT NULL, FK → `remediation_notes.id` ON DELETE CASCADE | |
+| `targetType` | `varchar(32)` | NOT NULL | One of the canonical failure types: `prod_incident`, `security_incident`, `deployment_event`, `pr_reconciliation_error`, `error_group`, `qa_finding`, `security_finding`, `alert` |
+| `targetId` | `uuid` | NOT NULL | The ID of the failure row |
+| `linkedBy` | `uuid` | NOT NULL, FK → `users.id` ON DELETE SET NULL | Who created the link |
+| `linkedAt` | `timestamp` | NOT NULL, DEFAULT `now()` | |
 
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
+Unique constraint: `(noteId, targetType, targetId)` — a note cannot be linked to the same failure twice.
 
----
+Indexes:
+- `(targetType, targetId)` — "show all notes for this failure"
+- `(noteId)` — "show all failures linked to this note"
 
-## Acceptance Criteria
+#### 2.3 `remediation_note_events` table (audit log)
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | `uuid` | PK, `defaultRandom()` | |
+| `tenantId` | `integer` | NOT NULL, FK → `tenants.id` ON DELETE CASCADE | |
+| `noteId` | `uuid` | NOT NULL, FK → `remediation_notes.id` ON DELETE CASCADE | |
+| `kind` | `varchar(24)` | NOT NULL | `created`, `edited`, `status_change`, `visibility_toggle`, `linked`, `unlinked`, `soft_deleted`, `restored`, `hard_deleted` |
+| `actorId` | `uuid` | nullable, FK → `users.id` ON DELETE SET NULL | Who performed the action |
+| `diff` | `jsonb` | nullable | Before/after snapshot for edits; `{ field, oldValue, newValue }` |
+| `createdAt` | `timestamp` | NOT NULL, DEFAULT `now()` | |
 
----
+Index: `(noteId, createdAt DESC)` — the note's history panel.
 
-## Out of Scope
+Retention: hard-deleted note audit events are retained for 90 days (matching AC-4), enforced by a nightly sweep job that deletes rows where `noteId` references a hard‑deleted note and `createdAt < NOW() - INTERVAL '90 days'`.
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+### 3. API Surface
+
+All routes live under `/api/remediation-notes` following the existing Hono route conventions (`api/src/api/`). The service class `RemediationNoteService` lives at `api/src/application/remediation/RemediationNoteService.ts`.
+
+#### 3.1 Endpoints
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `POST` | `/api/remediation-notes` | `requirePermission('failure_note:write')` | Create a note; body: `{ title, body, status?, visibility?, links?: [{targetType, targetId}] }`. Returns the created note with its links. |
+| `GET` | `/api/remediation-notes/:id` | `requirePermission('failure_note:read')` | Get a single note with its links, audit trail, and linked failure summaries. |
+| `PATCH` | `/api/remediation-notes/:id` | `requirePermission('failure_note:write')` + author or admin | Update title/body/status/visibility. Every edit writes an audit event. Returns updated note. |
+| `DELETE` | `/api/remediation-notes/:id` | `requirePermission('failure_note:write')` + author or admin | Soft-delete (set `deletedAt`). Admins pass `?hard=true` for permanent deletion. |
+| `POST` | `/api/remediation-notes/:id/restore` | `requirePermission('failure_note:admin')` | Admin-only: un‑soft‑delete (set `deletedAt = null`). |
+| `POST` | `/api/remediation-notes/:id/links` | `requirePermission('failure_note:write')` | Link the note to another failure; body: `{ targetType, targetId }`. |
+| `DELETE` | `/api/remediation-notes/:id/links/:linkId` | `requirePermission('failure_note:write')` | Remove a link. |
+| `GET` | `/api/remediation-notes` | `requirePermission('failure_note:read')` | Search & list. Query params: `q` (full‑text), `status`, `authorId`, `targetType`, `targetId`, `visibility` (defaults to excluding private notes by other users), `from`, `to` (date range), `page`, `limit`. |
+| `GET` | `/api/failures/:targetType/:targetId/notes` | `requirePermission('failure_note:read')` | Convenience: all notes for a specific failure. |
+| `GET` | `/api/remediation-notes/:id/history` | `requirePermission('failure_note:read')` | Paginated audit events for one note. |
+
+#### 3.2 Response shapes
+
+- A note object always includes: `id`, `title`, `body` (truncated to 300 chars in list responses), `status`, `visibility`, `author` (`{ id, displayName, avatarUrl }`), `createdAt`, `updatedAt`, `deletedAt` (null for active notes), `linkCount`, and an `_links` map.
+- List/search responses: `{ data: Note[], total: number, page: number, limit: number }`.
+- Error responses use existing `ApiError` conventions (`{ error: string, code: string, status: number }`).
+
+### 4. Permission Model
+
+Integrate with the existing `permissionRegistry.ts` role matrix:
+
+```typescript
+// Add to PERMISSIONS constant:
+FAILURE_NOTE_READ:   'failure_note:read',
+FAILURE_NOTE_WRITE:  'failure_note:write',
+FAILURE_NOTE_ADMIN:  'failure_note:admin',
+```
+
+Default role assignment:
+| Permission | Viewer | Developer | Manager | Owner |
+|---|---|---|---|---|
+| `failure_note:read` | ✓ | ✓ | ✓ | ✓ |
+| `failure_note:write` | — | ✓ | ✓ | ✓ |
+| `failure_note:admin` | — | — | — | ✓ |
+
+Rules:
+- **Read**: Any user with `failure_note:read` can see public notes. Private notes are visible only to their author (and admins). Soft‑deleted notes are excluded from all views except admin queries with `?includeDeleted=true`.
+- **Write**: Any user with `failure_note:write` can create notes and link them to any failure in a project they have access to. Editing is restricted to the note author or a `failure_note:admin`.
+- **Admin**: Hard‑delete, restore, view deleted notes, view all private notes, and access the global audit trail. Mapped to the Owner role by default; can be granted to other roles via `role_permission_overrides`.
+
+### 5. Integration Points
+
+#### 5.1 Failure detail views (Frontend)
+Each existing failure detail page (incident panel, deployment event detail, error group view, QA findings dashboard, security finding detail) **must** add an inline "Remediation Notes" section that:
+- Lists linked notes with title, status badge, author, and relative timestamp.
+- Shows an "Add Note" / "Link Existing" button (gated on `failure_note:write`).
+- Allows inline editing of notes the current user authored.
+
+#### 5.2 Notifications
+Reuse the existing notification infrastructure (`incidentNotifier.ts` pattern: Slack webhook + Resend email + MS Teams MessageCard):
+- When a note is created or its status changes to `resolved`: notify the failure's assignees (for incidents: the incident board task assignee; for deployment events: the deployment's author; for error groups: the fix task assignee).
+- In‑app notification via the existing activity-feed mechanism.
+- Notification content includes: note title (linked), failure reference, new status, actor name.
+
+#### 5.3 Full‑text search
+Use PostgreSQL native `tsvector`/`tsquery` (no external search engine). The GIN index on `remediation_notes` supports the `q` parameter. The query builder in `RemediationNoteService` constructs a `to_tsquery('english', :q)` clause. This is consistent with how the platform handles `brainKnowledgeSearch` and `projectEvermind` embeddings — no Elasticsearch/Meilisearch dependency.
+
+#### 5.4 Audit retention sweep
+Add a new cron job at `api/src/application/remediation/runRemediationAuditRetentionSweep.ts` (registered in the existing sweep runner) that runs daily and deletes `remediation_note_events` rows older than 90 days for hard‑deleted notes. This satisfies AC-4.
+
+### 6. Cross‑cutting Constraints
+
+1. **Tenant isolation**: Every query includes `tenantId` from the request context (extracted via existing `requireTenant` middleware). Cross‑tenant note access is impossible by construction — the FK cascade on `tenants.id` is a safety net, not the primary gate.
+
+2. **No API‑key bypass of ownership**: Service accounts (API keys) authenticate as a user; the same permission checks apply. There is no "machine" role that skips ownership — consistent with the existing `ApiKeyService` pattern.
+
+3. **Markdown rendering**: The frontend renders note bodies with the existing Markdown component (used in Brain chat messages and Knowledge articles). Auto‑linking of URLs and issue‑tracker references (e.g. `#123` → task link, `ORG/REPO#123` → GitHub issue) is a **frontend‑only** transformation — the stored body is plain Markdown.
+
+4. **Rate limiting**: The existing `rateLimiter` middleware applies to all `/api/remediation-notes` routes with the default tier limits. No special carve‑out is needed because remediation notes are human‑authored (low volume).
+
+5. **Migration safety**: The new `remediation_notes`, `remediation_note_links`, and `remediation_note_events` tables are additive — no existing tables are altered. Rollback is a simple `DROP TABLE … CASCADE`.
+
+### 7. Non‑Functional Requirements
+
+| Concern | Target |
+|---|---|
+| Note create/edit latency | < 500ms p95 (single‑row write + 1 audit event) |
+| Search latency | < 1s p95 for up to 100k notes (GIN index on `tsvector`) |
+| List notes for a failure | < 200ms p95 (indexed `targetType`/`targetId` lookup) |
+| History panel load | < 300ms p95 (indexed `noteId`/`createdAt` scan, paginated) |
+| Concurrent edits | Last‑write‑wins (no OT/CRDT; the audit trail records both versions) |
+| Availability | Inherits from the API Worker (no new SPOF) |
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
