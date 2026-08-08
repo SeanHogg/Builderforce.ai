@@ -1,125 +1,113 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #655
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document: StakeholderMapService.ts
 
 ## Problem & Goal
-
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+The Stakeholder Alignment Diagnostic (#503) is missing its core domain logic. Without a dedicated service, there is no way to detect conflicts when two stakeholders submit conflicting P0 priorities for the same team within a review window, nor any defined sign‑off state machine (Approve / Approve-with-Comment / Block → escalation). This gap blocks delivery of the alignment feature.  
+**Goal**: Deliver `StakeholderMapService.ts`, a self‑contained domain service that encapsulates stakeholder map conflict detection and the sign‑off state machine, exposing at least one primary export for integration.
 
 ## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Backend/domain developers** integrating stakeholder alignment workflows (direct consumers of the service).
+- **Product managers and team leads** who use the alignment diagnostic to resolve priority conflicts and track sign‑off statuses (indirect beneficiaries).
 
 ## Scope
-
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- Single TypeScript file: `StakeholderMapService.ts`.
+- Domain logic for:
+  - Detecting conflicts: two different P0 priorities for the same team, both submitted within the active review window.
+  - Sign‑off state machine: transitions between `Approve`, `Approve‑with‑Comment`, `Block`, and automatic escalation after `Block`.
+- Export at least one primary class or function (e.g., `StakeholderMapService` class or factory function).
 
 ## Functional Requirements
+1. **Conflict Detection**
+   - Given a team identifier and a review window timeframe, compare the submitted P0s of all stakeholders who have submitted during that window.
+   - Return a conflict flag (and optionally the conflicting stakeholders and their P0s) when two or more distinct P0 values exist.
+   - If all submitted P0s are identical or only one submission exists, no conflict.
 
-### FR-1 — Mode Selection
+2. **Sign‑Off State Machine**
+   - Support states: `Pending`, `Approved`, `ApprovedWithComment`, `Blocked`.
+   - Valid transitions:
+     - `Pending` → `Approved` (via `approve()` action)
+     - `Pending` → `ApprovedWithComment` (via `approveWithComment()`)
+     - `Pending` → `Blocked` (via `block()`)
+     - `Blocked` → automatically triggers an escalation event (logic to emit or return an escalation object, not handle notification).
+   - Invalid transitions (e.g., `Approved` → `Blocked`) must be rejected with an appropriate error or result.
+   - Optional: record transition timestamp and actor for audit trail.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+3. **Service Export**
+   - Export at least one primary construct (class or function) that presents these capabilities. The export must be importable by other modules.
 
----
-
-### FR-2 — Guided (Interactive) Mode
-
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
-
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+4. **Input/Output Contracts**
+   - Conflict detection input: team ID, list of submissions (each with stakeholder ID, P0 priority, timestamp), review window start/end.
+   - Conflict detection output: object with `hasConflict: boolean`, and optionally `conflicts: { stakeholderIds, priorities }[]`.
+   - State machine input: current state, action type, payload (e.g., comment text for ApproveWithComment).
+   - State machine output: new state and any side‑effect events (e.g., escalation event).
 
 ## Acceptance Criteria
-
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
-
----
+1. The file `StakeholderMapService.ts` exists in the repository and contains no syntax errors.
+2. Export at least one class/function that is referenced (or expected to be referenced) by other parts of the system.
+3. Unit tests (or demonstrable invocation) confirm:
+   - Two stakeholders submitting different P0s for the same team inside the window → `hasConflict: true`.
+   - Two stakeholders submitting the same P0 → `hasConflict: false`.
+   - Only one stakeholder submission → `hasConflict: false`.
+4. State machine tests:
+   - `Pending` + `approve()` → `Approved`.
+   - `Pending` + `approveWithComment("looks good")` → `ApprovedWithComment` (comment stored).
+   - `Pending` + `block()` → `Blocked`, and an escalation event is produced.
+   - Transitions from `Approved`, `ApprovedWithComment`, or `Blocked` with an invalid action throw an error or return a rejected result.
+5. All AC items for the GAP’s three assets must be individually fulfilled; this service is the first asset and must stand alone as a deliverable.
 
 ## Out of Scope
+- **Schema/type file** (`stakeholder-profile.ts` or equivalent structured health‑profile schema) – separate asset.
+- **Migration** `0340_stakeholder_maps.sql` (DDL for tables) – separate asset.
+- **UI components**, API endpoints, or notification delivery (escalation event consumers).
+- **Persistence logic** – the service operates on in‑memory inputs and returns results; no database access.
+- **Authentication/authorization** – consuming layer is responsible for caller context.
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+## Requirements
+
+> **Author:** Business Analyst · 2026-07-12
+
+### 1. StakeholderMapService.ts — Conflict Detection
+- **REQ-1.1** `detectConflicts({ teamId, submissions, reviewWindowStart, reviewWindowEnd })` MUST return `{ hasConflict: boolean, conflicts: PriorityConflict[] }`.
+- **REQ-1.2** A conflict exists when ≥2 stakeholders submit distinct P0 values for the same team within the review window. Submissions outside the window are ignored.
+- **REQ-1.3** When a stakeholder submits multiple times, only the latest (by `submittedAt`) counts.
+- **REQ-1.4** `conflicts` MUST enumerate every pair of distinct P0 values, each listing the implicated stakeholder IDs and the two conflicting priorities.
+- **REQ-1.5** The service MUST operate purely on in-memory inputs; no database access.
+
+### 2. StakeholderMapService.ts — Sign-Off State Machine
+- **REQ-2.1** `createSignOff(mapId)` MUST return a `StakeholderSignOff` with initial state `Pending` and an empty audit trail.
+- **REQ-2.2** `StakeholderSignOff` MUST expose `approve()`, `approveWithComment(comment)`, and `block(reason?)` transition methods, plus a read-only `state`, `comment`, and `history`.
+- **REQ-2.3** Valid transitions:
+  - `Pending → Approved` (no escalation)
+  - `Pending → ApprovedWithComment` (comment required; no escalation)
+  - `Pending → Blocked` (returns `EscalationEvent`)
+- **REQ-2.4** Any transition from a non-`Pending` state MUST throw a `ValidationError`.
+- **REQ-2.5** The audit trail (`history`) MUST record `{ from, to, action, timestamp, actorId?, comment? }` for every transition.
+- **REQ-2.6** `applyAction(signOff, action, payload?)` MUST provide a unified invocation path for all actions.
+
+### 3. Export Contract
+- **REQ-3.1** The module MUST export `StakeholderMapService` (class), `StakeholderSignOff` (class), and all type/enum contracts (`SignOffState`, `SignOffAction`, `EscalationEvent`, `ConflictDetectionResult`, `PriorityConflict`, `StakeholderSubmission`, `SignOffTransition`).
+
+### 4. Test Coverage
+- **REQ-4.1** Unit tests (vitest) MUST cover every AC-3 and AC-4 scenario from the Acceptance Criteria above.
+- **REQ-4.2** Additional edge cases: multi-way (3+) stakeholder conflicts, late-submission supersedes earlier, scoping to team, out-of-window filtering, reconstitution from persistence.
+
+### 5. Migration Note
+- Migration `0340` is already occupied (`0340_llm_usage_byo_provider.sql`). The stakeholder maps DDL must use the next available number: **`0396_stakeholder_maps.sql`** or later (separate asset — out of scope for this deliverable).
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
