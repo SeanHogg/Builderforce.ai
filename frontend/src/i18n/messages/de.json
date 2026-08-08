@@ -5750,25 +5750,25 @@
       "Kontrollierter Weg in die Lieferung",
       "Optionale VS-Code-Oberfläche für Engineering"
     ],
-    "stepsHeading": "Von der Idee zum Ergebnis in drei Schritten",
+    "stepsHeading": "Von IDEE zu REAL in drei Schritten",
     "steps": [
       {
-        "title": "Ergebnis beschreiben",
-        "desc": "Beginnen Sie mit dem, was Sie erschaffen möchten. Builderforce öffnet sofort eine private Leinwand für Ihre Idee."
+        "title": "Die Idee einbringen",
+        "desc": "Beginnen Sie mit dem, was Sie machen möchten – ohne es zuerst in Tickets, Prompts oder Tool-Formate übersetzen zu müssen."
       },
       {
-        "title": "Erstellen und verbinden",
-        "desc": "Fügen Sie Websites, Workflows, Daten, Modelle, Menschen und Agenten hinzu und bewahren Sie Kontext und Absicht."
+        "title": "An einem Ort gestalten",
+        "desc": "Menschen und Agents arbeiten mit denselben Ideen, Entscheidungen und demselben Kontext, ohne die Geschichte ständig zu wiederholen."
       },
       {
-        "title": "Prüfen und liefern",
-        "desc": "Gestalten Sie die Arbeit gemeinsam, genehmigen Sie wichtige Änderungen und übergeben Sie das Ergebnis an Projekte, Aufgaben oder Agenten."
+        "title": "Real werden lassen",
+        "desc": "Prüfen, genehmigen und in Produktion bringen: live, funktionsfähig und sofort einsatzbereit."
       }
     ],
     "featuresHeading": "Alles, was Sie auf die Leinwand bringen können",
     "pricingHeading": "Preise",
     "currentPricing": "Aktuelle Preise ansehen",
-    "pricePerSeat": "/Platz/Monat",
+    "pricePerMonth": "/Monat",
     "pricingTeaser": [
       {
         "name": "Free",
@@ -5848,7 +5848,7 @@
       },
       {
         "question": "Ist Builderforce kostenlos?",
-        "answer": "Ja – die Free-Stufe kostet für immer $0/Monat ohne Kreditkarte. Sie umfasst WebGPU-Training, Datensatzgenerierung, KI-Bewertung und öffentliches Durchsuchen der Workforce. Der Pro-Plan ($29/seat/Monat) schaltet private Agenten, unbegrenztes Training und priorisierten Support frei."
+        "answer": "Ja – die Free-Stufe kostet für immer $0/Monat ohne Kreditkarte. Sie umfasst WebGPU-Training, Datensatzgenerierung, KI-Bewertung und öffentliches Durchsuchen der Workforce. Der Pro-Plan schaltet private Agenten, unbegrenztes Training und priorisierten Support frei."
       },
       {
         "question": "Wie trainiere ich ein Modell in meinem Browser?",
@@ -5917,8 +5917,8 @@
     "featuresLead": "Websites, Workflows, Datensätze, Modelle, Dokumente, Menschen und Agents – alles echte, verbundene Objekte auf einem Board statt Anhänge in einem Chat.",
     "tension": {
       "eyebrow": "Das Problem",
-      "heading": "Die Arbeit beginnt vor dem Code",
-      "body": "Eine Idee entsteht in einem Dokument, wird im Chat diskutiert, landet auf einem Board, wird im Editor gebaut und in einer Tabelle gemessen. Fünf Werkzeuge, von denen keines weiß, was die anderen entschieden haben – Kontext wird neu getippt, Entscheidungen gehen verloren, und nichts trägt von der Idee bis zum ausgelieferten Ergebnis.",
+      "heading": "Ideen sollten real werden – nicht zwischen Tools verloren gehen",
+      "body": "Jeder Wechsel zwischen Dokumenten, Chat, Boards, Editoren und Tabellen kostet Zeit und zwingt Menschen, den Kontext zu wiederholen. Builderforce hält den gesamten Weg verbunden – von der ersten Idee bis zu etwas, das live und sofort nutzbar ist.",
       "fragments": [
         "Dokument",
         "Chat",
@@ -5926,19 +5926,24 @@
         "Editor",
         "Tabelle"
       ],
-      "diagramAlt": "Ein Dokument, ein Chat, ein Board, ein Editor und eine Tabelle, deren Verbindungen unterbrochen sind.",
-      "canvasLabel": "Ein Canvas",
-      "resolve": "Builderforce bringt all das auf <em>ein Canvas</em> – Idee, Arbeit, Review und Ergebnis sind dasselbe Objekt."
+      "diagramAlt": "Der übliche Weg von der Idee zur Produktion verliert Zeit und Kontext über fünf Tools; Builderforce verbindet IDEE und REAL direkt.",
+      "oldWayLabel": "Der übliche Weg",
+      "ideaLabel": "IDEE",
+      "switchCost": "Zeit verloren · Kontext wiederholt",
+      "canvasLabel": "Ein durchgehender Kontext",
+      "realLabel": "REAL",
+      "realDefinition": "Live in Produktion. Sofort nutzbar.",
+      "resolve": "Builderforce hält Idee, Entscheidungen, Arbeit und Auslieferung zusammen – von <em>IDEE zu REAL</em>, ohne bei jedem Schritt neu anzufangen."
     }
   },
   "pricing": {
     "seo": {
       "title": "Preise — Free-, Pro- & Teams-Tarife",
-      "description": "Builderforce.ai Preise: Free-Tarif ($0/Monat für immer), Pro ($29/Platz/Monat) und Teams ($20/Platz/Monat). WebGPU-LoRA-Training, Datensatzgenerierung, KI-Evaluierung und Workforce Registry.",
+      "description": "Vergleichen Sie die Free-, Pro- und Teams-Tarife von Builderforce.ai für WebGPU-LoRA-Training, Datensatzgenerierung, KI-Evaluierung und Workforce Registry.",
       "ogTitle": "Builderforce.ai Preise — Free, Pro & Teams",
-      "ogDescription": "Für immer kostenloser Tarif mit WebGPU-Training. Pro für $29/Platz/Monat für unbegrenzte Agenten. Teams für $20/Platz/Monat mit gemeinsamem Freigabe-Posteingang.",
+      "ogDescription": "Vergleichen Sie Free-, Pro- und Teams-Tarife für WebGPU-Training, Agenten und gemeinsame Freigabe-Workflows.",
       "twitterTitle": "Builderforce.ai Preise",
-      "twitterDescription": "Für immer kostenlos. Pro $29/Platz/Mon. Teams $20/Platz/Mon. WebGPU-LoRA-Training inklusive."
+      "twitterDescription": "Vergleichen Sie Free-, Pro- und Teams-Tarife. WebGPU-LoRA-Training inklusive."
     },
     "titleAnon": "Einfache, transparente Preise",
     "titleConsole": "Preise & Abrechnung",
@@ -11973,6 +11978,8 @@
     "home": "Start",
     "product": "Produkt",
     "resources": "Ressourcen",
+    "learn": "Lernen",
+    "tutorials": "Tutorials",
     "talentWorkforce": "Talente / Workforce",
     "agents": "Agenten",
     "models": "Modelle",
@@ -12042,10 +12049,13 @@
     "colProduct": "Produkt",
     "colPlatform": "Plattform",
     "colGetStarted": "Loslegen",
+    "colLearn": "Lernen",
     "linkProduct": "Produkt",
     "linkCompare": "Vergleichen",
     "linkPricing": "Preise",
     "linkMediaKit": "Medienkit",
+    "linkPromptLibrary": "Prompt-Bibliothek",
+    "linkIntegrations": "Integrationen",
     "linkSellBuilderforce": "Builderforce verkaufen",
     "linkEvermind": "Evermind LLM",
     "linkWorkforceRegistry": "Workforce-Verzeichnis",
@@ -14740,5 +14750,51 @@
   "homeScroller": {
     "previous": "Vorheriges anzeigen",
     "next": "Mehr anzeigen"
+  },
+  "liveBar": {
+    "region": "Live-Sitzung",
+    "cameras": "Kameras",
+    "you": "Du",
+    "youShort": "ICH",
+    "member": "Mitglied",
+    "mic": "Mikro",
+    "micOff": "Mikro aus",
+    "camera": "Kamera",
+    "cameraOff": "Kamera aus",
+    "presentScreen": "Bildschirm teilen",
+    "stopPresenting": "Teilen beenden",
+    "present": "Präsentieren",
+    "exitPresentation": "Präsentation beenden",
+    "leave": "Verlassen",
+    "connecting": "Verbinde…",
+    "mediaUnavailable": "Kamera oder Mikrofon nicht verfügbar",
+    "following": "{count, plural, one {# Person folgt dir} other {# Personen folgen dir}}",
+    "shareError": {
+      "denied": "Bildschirmfreigabe wurde blockiert",
+      "unsupported": "Dieser Browser kann keinen Bildschirm teilen",
+      "missing": "Kein Bildschirm zum Teilen vorhanden",
+      "in-use": "Eine andere App verwendet diesen Bildschirm",
+      "cancelled": "",
+      "failed": "Bildschirmfreigabe fehlgeschlagen"
+    }
+  },
+  "workbench": {
+    "region": "Werkbank",
+    "title": "Werkbank",
+    "close": "Werkbank schließen",
+    "resize": "Werkbank-Breite ändern"
+  },
+  "canvasStage": {
+    "outsideCurrentProject": "Du siehst eine Canvas außerhalb des aktuellen Projekts"
+  },
+  "scopePolicy": {
+    "leaveRoomOnTenantSwitch": "Ein Workspace-Wechsel beendet die Live-Sitzung – der Raum gehört zum Workspace, den du verlässt. Fortfahren?"
+  },
+  "liveChip": {
+    "start": "Live-Sitzung starten",
+    "startTitle": "Eine Live-Sitzung auf dieser Canvas starten",
+    "leaveTitle": "Live-Sitzung verlassen",
+    "onThisCanvas": "Diese Canvas",
+    "liveWithCount": "{count, plural, one {Live · # hier} other {Live · # hier}}"
   }
 }

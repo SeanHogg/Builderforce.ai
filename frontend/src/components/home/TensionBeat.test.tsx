@@ -4,16 +4,20 @@ import { TensionBeat } from './TensionBeat';
 
 const messages: Record<string, unknown> = {
   'home.tension.fragments': ['Doc', 'Chat', 'Board', 'Editor', 'Spreadsheet'],
+  'home.tension.ideaLabel': 'IDEA',
+  'home.tension.realLabel': 'REAL',
+  'home.tension.realDefinition': 'Live in production. Ready to use.',
+  'home.tension.switchCost': 'Time lost · context repeated',
   'home.steps': [
-    { title: 'Describe the outcome', desc: 'Start with the result.' },
-    { title: 'Create and connect', desc: 'Keep the context together.' },
-    { title: 'Review and deliver', desc: 'Ship with control.' },
+    { title: 'Bring the idea', desc: 'Start with the result.' },
+    { title: 'Shape it in one place', desc: 'Keep the context together.' },
+    { title: 'Make it real', desc: 'Put it into production.' },
   ],
 };
 
 vi.mock('next-intl', () => ({
   useTranslations: () => {
-    const translate = (key: string) => key;
+    const translate = (key: string) => String(messages[key] ?? key);
     translate.raw = (key: string) => messages[key] ?? [];
     translate.rich = (key: string) => key;
     return translate;
@@ -29,5 +33,9 @@ describe('TensionBeat', () => {
     expect(section).toContainElement(screen.getByRole('heading', { name: 'home.stepsHeading' }));
     expect(section?.querySelector('#how-it-works')).toBeInTheDocument();
     expect(screen.getAllByRole('listitem')).toHaveLength(3);
+    expect(section).toHaveTextContent('IDEA');
+    expect(section).toHaveTextContent('REAL');
+    expect(section).toHaveTextContent('Time lost · context repeated');
+    expect(section).toHaveTextContent('Live in production. Ready to use.');
   });
 });

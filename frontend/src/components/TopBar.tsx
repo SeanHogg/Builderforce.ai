@@ -16,6 +16,7 @@ import { ManagerStatusIndicator } from './ManagerStatusIndicator';
 import { TenantProjectSwitcher } from './TenantProjectSwitcher';
 import { CanvasSwitcher } from './workspace/CanvasSwitcher';
 import { CommandPalette } from './workspace/CommandPalette';
+import { LiveSessionChip } from './live/LiveSessionChip';
 import { OnboardingProgressPill } from './OnboardingProgressPill';
 
 const PREVIEW_ROLES: PreviewRole[] = ['owner', 'manager', 'developer', 'viewer'];
@@ -138,6 +139,10 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
             Each self-gates on a tenant. */}
         <TenantProjectSwitcher />
         <CanvasSwitcher />
+        {/* …and who is here with you. The third thing that must survive every
+            navigation, so it is a peer of the other two rather than a control
+            that lives on whichever page happens to own the room. */}
+        <LiveSessionChip />
         {/* Search-first navigation over the shared destination registry. Self-gates
             on a tenant, and hides its trigger on phones where the bottom nav leads. */}
         <CommandPalette />

@@ -5750,25 +5750,25 @@
       "Parcours gouverné vers la livraison",
       "Surface VS Code facultative pour l’ingénierie"
     ],
-    "stepsHeading": "De l’idée au résultat en trois étapes",
+    "stepsHeading": "D’IDÉE à RÉEL en trois étapes",
     "steps": [
       {
-        "title": "Décrivez le résultat",
-        "desc": "Commencez par ce que vous voulez créer. Builderforce ouvre immédiatement un canevas privé où l’idée peut prendre forme."
+        "title": "Apportez l’idée",
+        "desc": "Commencez par ce que vous voulez créer, sans le traduire d’abord en tickets, prompts ou formats propres à un outil."
       },
       {
-        "title": "Créez et connectez",
-        "desc": "Ajoutez sites, workflows, données, modèles, personnes et agents tout en préservant le contexte et l’intention."
+        "title": "Façonnez-la au même endroit",
+        "desc": "Personnes et agents partagent la même idée, les mêmes décisions et le même contexte, sans répéter l’histoire à chaque étape."
       },
       {
-        "title": "Révisez et livrez",
-        "desc": "Façonnez le travail en équipe, approuvez les changements importants et envoyez le résultat vers les projets, tâches ou agents."
+        "title": "Rendez-la réelle",
+        "desc": "Révisez, approuvez et mettez le résultat en production : actif, fonctionnel et immédiatement utilisable."
       }
     ],
     "featuresHeading": "Tout ce que vous pouvez apporter au canevas",
     "pricingHeading": "Tarifs",
     "currentPricing": "Voir les tarifs actuels",
-    "pricePerSeat": "/poste/mois",
+    "pricePerMonth": "/mois",
     "pricingTeaser": [
       {
         "name": "Gratuit",
@@ -5848,7 +5848,7 @@
       },
       {
         "question": "Builderforce est-il gratuit ?",
-        "answer": "Oui — l'offre Gratuit est à $0/mois pour toujours, sans carte bancaire. Elle inclut l'entraînement WebGPU, la génération de jeux de données, l'évaluation par IA et l'exploration publique de la Workforce. Le plan Pro ($29/seat/mois) débloque les agents privés, l'entraînement illimité et le support prioritaire."
+        "answer": "Oui — l'offre Gratuit est à $0/mois pour toujours, sans carte bancaire. Elle inclut l'entraînement WebGPU, la génération de jeux de données, l'évaluation par IA et l'exploration publique de la Workforce. Le plan Pro débloque les agents privés, l'entraînement illimité et le support prioritaire."
       },
       {
         "question": "Comment entraîner un modèle dans mon navigateur ?",
@@ -5917,8 +5917,8 @@
     "featuresLead": "Sites web, workflows, jeux de données, modèles, documents, personnes et agents : autant d’objets réels et connectés sur un même canevas, et non des pièces jointes dans une conversation.",
     "tension": {
       "eyebrow": "Le problème",
-      "heading": "Le travail commence avant le code",
-      "body": "Une idée naît dans un document, se discute dans une conversation, atterrit sur un tableau, se construit dans un éditeur et se mesure dans un tableur. Cinq outils, dont aucun ne sait ce que les autres ont décidé : le contexte est ressaisi, les décisions se perdent, et rien ne relie l’idée à ce que vous avez livré.",
+      "heading": "Les idées doivent devenir réelles, pas se perdre entre les outils",
+      "body": "Chaque passage entre documents, conversations, tableaux, éditeurs et tableurs fait perdre du temps et oblige à répéter le contexte. Builderforce garde tout le parcours connecté, de la première idée à un résultat en production et prêt à l’emploi.",
       "fragments": [
         "Document",
         "Conversation",
@@ -5926,19 +5926,24 @@
         "Éditeur",
         "Tableur"
       ],
-      "diagramAlt": "Un document, une conversation, un tableau, un éditeur et un tableur, dont les liens sont rompus.",
-      "canvasLabel": "Un seul canevas",
-      "resolve": "Builderforce réunit tout cela sur <em>un seul canevas</em> — l’idée, le travail, la revue et le résultat sont un même objet."
+      "diagramAlt": "Le parcours habituel de l’idée à la production perd du temps et du contexte entre cinq outils ; Builderforce relie IDEA à REAL.",
+      "oldWayLabel": "Le parcours habituel",
+      "ideaLabel": "IDÉE",
+      "switchCost": "Temps perdu · contexte répété",
+      "canvasLabel": "Un contexte continu",
+      "realLabel": "RÉEL",
+      "realDefinition": "En production. Prêt à l’emploi.",
+      "resolve": "Builderforce réunit l’idée, les décisions, le travail et la livraison pour passer de <em>IDÉE à RÉEL</em> sans tout recommencer à chaque étape."
     }
   },
   "pricing": {
     "seo": {
       "title": "Tarifs — Forfaits Free, Pro et Teams",
-      "description": "Tarifs Builderforce.ai : forfait Free (0 $/mois à vie), Pro (29 $/poste/mois) et Teams (20 $/poste/mois). Entraînement LoRA WebGPU, génération de jeux de données, évaluation IA et Workforce Registry.",
+      "description": "Comparez les forfaits Free, Pro et Teams de Builderforce.ai pour l'entraînement LoRA WebGPU, la génération de jeux de données, l'évaluation IA et Workforce Registry.",
       "ogTitle": "Tarifs Builderforce.ai — Free, Pro et Teams",
-      "ogDescription": "Forfait gratuit à vie avec entraînement WebGPU. Pro à 29 $/poste/mois pour des agents illimités. Teams à 20 $/poste/mois avec boîte de réception d'approbation partagée.",
+      "ogDescription": "Comparez les forfaits Free, Pro et Teams pour l'entraînement WebGPU, les agents et les workflows d'approbation partagés.",
       "twitterTitle": "Tarifs Builderforce.ai",
-      "twitterDescription": "Gratuit à vie. Pro 29 $/poste/mois. Teams 20 $/poste/mois. Entraînement LoRA WebGPU inclus."
+      "twitterDescription": "Comparez les forfaits Free, Pro et Teams. Entraînement LoRA WebGPU inclus."
     },
     "titleAnon": "Une tarification simple et transparente",
     "titleConsole": "Tarifs et facturation",
@@ -11973,6 +11978,8 @@
     "home": "Accueil",
     "product": "Produit",
     "resources": "Ressources",
+    "learn": "Apprendre",
+    "tutorials": "Tutoriels",
     "talentWorkforce": "Talents / Main-d’œuvre",
     "agents": "Agents",
     "models": "Modèles",
@@ -12042,10 +12049,13 @@
     "colProduct": "Produit",
     "colPlatform": "Plateforme",
     "colGetStarted": "Commencer",
+    "colLearn": "Apprendre",
     "linkProduct": "Produit",
     "linkCompare": "Comparer",
     "linkPricing": "Tarifs",
     "linkMediaKit": "Kit média",
+    "linkPromptLibrary": "Bibliothèque de prompts",
+    "linkIntegrations": "Intégrations",
     "linkSellBuilderforce": "Vendre Builderforce",
     "linkEvermind": "Evermind LLM",
     "linkWorkforceRegistry": "Registre de main-d’œuvre",
@@ -14740,5 +14750,51 @@
   "homeScroller": {
     "previous": "Afficher le précédent",
     "next": "Afficher plus"
+  },
+  "liveBar": {
+    "region": "Session en direct",
+    "cameras": "Caméras",
+    "you": "Vous",
+    "youShort": "MOI",
+    "member": "Membre",
+    "mic": "Micro",
+    "micOff": "Micro coupé",
+    "camera": "Caméra",
+    "cameraOff": "Caméra coupée",
+    "presentScreen": "Partager l’écran",
+    "stopPresenting": "Arrêter le partage",
+    "present": "Présenter",
+    "exitPresentation": "Quitter la présentation",
+    "leave": "Quitter",
+    "connecting": "Connexion…",
+    "mediaUnavailable": "Caméra ou micro indisponible",
+    "following": "{count, plural, one {# personne vous suit} other {# personnes vous suivent}}",
+    "shareError": {
+      "denied": "Le partage d’écran a été bloqué",
+      "unsupported": "Ce navigateur ne peut pas partager l’écran",
+      "missing": "Aucun écran à partager",
+      "in-use": "Une autre application utilise cet écran",
+      "cancelled": "",
+      "failed": "Échec du partage d’écran"
+    }
+  },
+  "workbench": {
+    "region": "Établi",
+    "title": "Établi",
+    "close": "Fermer l’établi",
+    "resize": "Redimensionner l’établi"
+  },
+  "canvasStage": {
+    "outsideCurrentProject": "Vous consultez un canevas hors du projet actuel"
+  },
+  "scopePolicy": {
+    "leaveRoomOnTenantSwitch": "Changer d’espace de travail mettra fin à la session en direct : la salle appartient à l’espace que vous quittez. Continuer ?"
+  },
+  "liveChip": {
+    "start": "Démarrer une session",
+    "startTitle": "Démarrer une session en direct sur ce canevas",
+    "leaveTitle": "Quitter la session en direct",
+    "onThisCanvas": "Ce canevas",
+    "liveWithCount": "{count, plural, one {En direct · # présent} other {En direct · # présents}}"
   }
 }

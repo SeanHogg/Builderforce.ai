@@ -5750,25 +5750,25 @@
       "受治理的交付路径",
       "面向工程的可选 VS Code 界面"
     ],
-    "stepsHeading": "三步从想法走向成果",
+    "stepsHeading": "三步从 IDEA 走向 REAL",
     "steps": [
       {
-        "title": "描述你想要的成果",
-        "desc": "从你想创造的内容开始。Builderforce 会立即打开一个私密画布，让想法自由生长。"
+        "title": "带来想法",
+        "desc": "从你想创造的内容开始，无需先把它翻译成工单、提示词或特定工具的格式。"
       },
       {
-        "title": "创建并连接",
-        "desc": "添加网站、工作流、数据、模型、人员和智能体，并让工作背景与创作意图始终清晰可见。"
+        "title": "在同一处塑造它",
+        "desc": "人员与智能体共享同一个想法、决策和上下文，工作推进时无需一遍遍重述。"
       },
       {
-        "title": "审核并交付",
-        "desc": "与团队共同完善工作，批准重要变更，并将成果交付到项目、任务或智能体执行。"
+        "title": "让它成为现实",
+        "desc": "审核、批准并投入生产：已经上线、正常工作，任何人都能立即使用。"
       }
     ],
     "featuresHeading": "你可以带到画布上的一切",
     "pricingHeading": "定价",
     "currentPricing": "查看当前价格",
-    "pricePerSeat": "/席位/月",
+    "pricePerMonth": "/月",
     "pricingTeaser": [
       {
         "name": "免费版",
@@ -5848,7 +5848,7 @@
       },
       {
         "question": "Builderforce 是免费的吗？",
-        "answer": "是的——免费层永久 $0/月，无需信用卡。它包含 WebGPU 训练、数据集生成、AI 评估，以及公开的 Workforce 浏览。Pro 套餐（$29/席位/月）解锁私有智能体、不限量训练和优先支持。"
+        "answer": "是的——免费层永久 $0/月，无需信用卡。它包含 WebGPU 训练、数据集生成、AI 评估，以及公开的 Workforce 浏览。Pro 套餐解锁私有智能体、不限量训练和优先支持。"
       },
       {
         "question": "我如何在我的浏览器中训练一个模型？",
@@ -5917,8 +5917,8 @@
     "featuresLead": "网站、工作流、数据集、模型、文档、人员与智能体——全部作为真实且互联的对象置于同一画布，而不是聊天中的附件。",
     "tension": {
       "eyebrow": "问题所在",
-      "heading": "工作在写代码之前就开始了",
-      "body": "一个想法始于文档，在聊天中争论，落在看板上，在编辑器里构建，最后用表格衡量。五个工具，彼此都不知道对方做了什么决定——于是上下文被反复重输，决策不知去向，从想法到交付的过程中什么也没能延续下来。",
+      "heading": "想法应该成为现实，而不是迷失在工具之间",
+      "body": "每次在文档、聊天、看板、编辑器和表格之间切换，都会浪费时间，并迫使人们重复上下文。Builderforce 让整个过程保持连接——从最初的想法，到已上线且立即可用的成果。",
       "fragments": [
         "文档",
         "聊天",
@@ -5926,19 +5926,24 @@
         "编辑器",
         "表格"
       ],
-      "diagramAlt": "文档、聊天、看板、编辑器与表格，彼此之间的连接已经断开。",
-      "canvasLabel": "同一块画布",
-      "resolve": "Builderforce 把这一切放在<em>同一块画布</em>上——想法、工作、评审与结果都是同一个对象。"
+      "diagramAlt": "通常从想法到生产会在五种工具之间损失时间和上下文；Builderforce 提供从 IDEA 到 REAL 的连续路径。",
+      "oldWayLabel": "通常方式",
+      "ideaLabel": "IDEA",
+      "switchCost": "时间流失 · 上下文重复",
+      "canvasLabel": "一个连续的上下文",
+      "realLabel": "REAL",
+      "realDefinition": "已上线。立即可用。",
+      "resolve": "Builderforce 将想法、决策、工作与交付保持在一起，让你从 <em>IDEA 走到 REAL</em>，无需在每一步重新开始。"
     }
   },
   "pricing": {
     "seo": {
       "title": "定价 — 免费版、Pro 版和 Teams 版",
-      "description": "Builderforce.ai 定价：免费版（永久 $0/月）、Pro 版（$29/席位/月）和 Teams 版（$20/席位/月）。包含 WebGPU LoRA 训练、数据集生成、AI 评估和 Workforce Registry。",
+      "description": "比较 Builderforce.ai 免费版、Pro 版和 Teams 版，了解 WebGPU LoRA 训练、数据集生成、AI 评估和 Workforce Registry。",
       "ogTitle": "Builderforce.ai 定价 — 免费版、Pro 版和 Teams 版",
-      "ogDescription": "永久免费版，含 WebGPU 训练。Pro 版 $29/席位/月，可无限创建智能体。Teams 版 $20/席位/月，含共享审批收件箱。",
+      "ogDescription": "比较免费版、Pro 版和 Teams 版的 WebGPU 训练、智能体和共享审批工作流。",
       "twitterTitle": "Builderforce.ai 定价",
-      "twitterDescription": "永久免费。Pro 版 $29/席位/月。Teams 版 $20/席位/月。含 WebGPU LoRA 训练。"
+      "twitterDescription": "比较免费版、Pro 版和 Teams 版。包含 WebGPU LoRA 训练。"
     },
     "titleAnon": "简单、透明的定价",
     "titleConsole": "定价与账单",
@@ -11973,6 +11978,8 @@
     "home": "首页",
     "product": "产品",
     "resources": "资源",
+    "learn": "学习",
+    "tutorials": "教程",
     "talentWorkforce": "人才 / 智能劳动力",
     "agents": "智能体",
     "models": "模型",
@@ -12042,10 +12049,13 @@
     "colProduct": "产品",
     "colPlatform": "平台",
     "colGetStarted": "开始使用",
+    "colLearn": "学习",
     "linkProduct": "产品",
     "linkCompare": "对比",
     "linkPricing": "价格",
     "linkMediaKit": "媒体资料包",
+    "linkPromptLibrary": "提示词库",
+    "linkIntegrations": "集成",
     "linkSellBuilderforce": "销售 Builderforce",
     "linkEvermind": "Evermind LLM",
     "linkWorkforceRegistry": "工作力注册表",
@@ -14740,5 +14750,51 @@
   "homeScroller": {
     "previous": "显示上一项",
     "next": "显示更多"
+  },
+  "liveBar": {
+    "region": "实时会话",
+    "cameras": "摄像头",
+    "you": "你",
+    "youShort": "我",
+    "member": "成员",
+    "mic": "麦克风",
+    "micOff": "麦克风已关",
+    "camera": "摄像头",
+    "cameraOff": "摄像头已关",
+    "presentScreen": "共享屏幕",
+    "stopPresenting": "停止共享",
+    "present": "演示",
+    "exitPresentation": "退出演示",
+    "leave": "离开",
+    "connecting": "连接中…",
+    "mediaUnavailable": "摄像头或麦克风不可用",
+    "following": "{count, plural, other {# 人正在跟随你}}",
+    "shareError": {
+      "denied": "屏幕共享被阻止",
+      "unsupported": "此浏览器无法共享屏幕",
+      "missing": "没有可共享的屏幕",
+      "in-use": "另一个应用正在使用该屏幕",
+      "cancelled": "",
+      "failed": "屏幕共享失败"
+    }
+  },
+  "workbench": {
+    "region": "工作台",
+    "title": "工作台",
+    "close": "关闭工作台",
+    "resize": "调整工作台宽度"
+  },
+  "canvasStage": {
+    "outsideCurrentProject": "正在查看当前项目之外的画布"
+  },
+  "scopePolicy": {
+    "leaveRoomOnTenantSwitch": "切换工作区将结束实时会话——该房间属于你即将离开的工作区。是否继续？"
+  },
+  "liveChip": {
+    "start": "开始实时会话",
+    "startTitle": "在此画布上开始实时会话",
+    "leaveTitle": "离开实时会话",
+    "onThisCanvas": "此画布",
+    "liveWithCount": "{count, plural, other {进行中 · # 人}}"
   }
 }

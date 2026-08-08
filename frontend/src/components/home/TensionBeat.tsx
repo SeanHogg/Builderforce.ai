@@ -1,6 +1,5 @@
 'use client';
 
-import { Fragment } from 'react';
 import { useTranslations } from 'next-intl';
 import { HomeSection, HomeSectionHeader } from './HomePatterns';
 import styles from './TensionBeat.module.css';
@@ -8,21 +7,9 @@ import styles from './TensionBeat.module.css';
 type WorkflowStep = { title: string; desc: string };
 
 /**
- * The problem and the cure, presented as one continuous argument.
- *
- * The page used to open on the solution and never name the tension, so a visitor
- * who did not already feel tool sprawl was being sold a fix for something they
- * had not been told they had — the single largest conversion gap in the old
- * narrative.
- *
- * The claim is not new copy invented for this section: it is the product's own
- * positioning, which already says "the work begins before the code" and
- * "without stitching together a board, a code host, an observability tool, and a
- * spreadsheet". This makes that argument explicit and gives it a picture — five
- * fragments with the connections visibly severed, resolving into one surface.
- * The broken links ARE the argument, which is why they carry the accent. The
- * resolved canvas then flows directly into the only numbered sequence on the
- * homepage, so the visitor sees how the promise becomes an outcome.
+ * The homepage's core promise as a single argument: ideas lose time and context
+ * while being handed between tools; Builderforce keeps the journey continuous
+ * until the result is real — live in production and ready to use.
  */
 export function TensionBeat() {
   const t = useTranslations();
@@ -37,19 +24,34 @@ export function TensionBeat() {
         lead={t('home.tension.body')}
       />
       <div className={styles.beat}>
-        <div className={styles.diagram}>
-          <div className={styles.fragments} role="img" aria-label={t('home.tension.diagramAlt')}>
-            {fragments.map((fragment, index) => (
-              <Fragment key={fragment}>
-                {index > 0 && <span className={styles.break} aria-hidden="true" />}
-                <span className={styles.fragment}>{fragment}</span>
-              </Fragment>
-            ))}
+        <div className={styles.diagram} role="img" aria-label={t('home.tension.diagramAlt')}>
+          <div className={styles.route} aria-hidden="true">
+            <span className={styles.routeLabel}>{t('home.tension.oldWayLabel')}</span>
+            <span className={styles.endpoint}>{t('home.tension.ideaLabel')}</span>
+            <span className={styles.arrow}>→</span>
+            <div className={styles.switching}>
+              <div className={styles.fragments}>
+                {fragments.map((fragment) => <span className={styles.fragment} key={fragment}>{fragment}</span>)}
+              </div>
+              <span className={styles.switchCost}>{t('home.tension.switchCost')}</span>
+            </div>
+            <span className={styles.arrow}>→</span>
+            <span className={`${styles.endpoint} ${styles.faded}`}>{t('home.tension.realLabel')}</span>
           </div>
-          <span className={styles.joinArrow} aria-hidden="true">↓</span>
-          <div className={styles.canvasBar}>
-            <span aria-hidden="true">✦</span>
-            {t('home.tension.canvasLabel')}
+
+          <div className={`${styles.route} ${styles.builderforceRoute}`} aria-hidden="true">
+            <span className={styles.routeLabel}>Builderforce</span>
+            <span className={styles.endpoint}>{t('home.tension.ideaLabel')}</span>
+            <span className={styles.solidArrow}>→</span>
+            <div className={styles.canvasBar}>
+              <span>✦</span>
+              {t('home.tension.canvasLabel')}
+            </div>
+            <span className={styles.solidArrow}>→</span>
+            <span className={`${styles.endpoint} ${styles.realEndpoint}`}>
+              {t('home.tension.realLabel')}
+              <small>{t('home.tension.realDefinition')}</small>
+            </span>
           </div>
         </div>
 

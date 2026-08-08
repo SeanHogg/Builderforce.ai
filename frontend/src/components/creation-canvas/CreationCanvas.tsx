@@ -71,6 +71,9 @@ import { detectGeoColumns, mapObjectFields, mapPointsFromRows } from '@/lib/canv
 import { useCoarsePointer } from '@/lib/useCoarsePointer';
 import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode';
 import { importCanvasFile, type ImportTranslator } from '@/lib/canvasFileImport';
+import { boardInventory, findInInventory, scopeNote } from '@/lib/canvasContextSnapshot';
+import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
+import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 import { appendImageToDrawioCanvas, createDrawioImageCanvas, drawingDataUrl, type DrawioImageAsset } from '@/lib/drawioImageCanvas';
 import { WorkflowBuilder } from '@/components/workflow-builder/WorkflowBuilder';
 import { VoiceConfigPanel } from '@/components/ide/VoiceConfigPanel';
@@ -510,14 +513,43 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     } catch { setPaletteOpen(window.innerWidth > 760); }
     setPalettePreferencesReady(true);
   }, []);
-  const [presentMode, setPresentMode] = useState(initialPresent);
+  /**
+   * PRESENTATION AND FOLLOW ARE SHELL STATE NOW.
+   *
+   * Both used to be `useState` here, which meant leaving the board ended the
+   * presentation and dropped whoever you were following — so "let me show you
+   * the delivery numbers" was a way to END the thing you were doing. They live on
+   * the live session, which outlives every navigation; the local fallbacks below
+   * keep the board working on surfaces with no session provider (the embed tree,
+   * and the tests, which mount the canvas bare).
+   */
+  const liveSession = useOptionalLiveSession();
+  const [localPresentMode, setLocalPresentMode] = useState(initialPresent);
+  const presentMode = liveSession ? liveSession.presentMode : localPresentMode;
+  // A ref, because the functional-updater form (`setPresentMode(v => !v)`) has to
+  // read the CURRENT value, and the shell's value does not live in this closure.
+  const presentModeRef = useRef(presentMode);
+  presentModeRef.current = presentMode;
+  const setPresentMode = useCallback((value: boolean | ((current: boolean) => boolean)) => {
+    const next = typeof value === 'function' ? value(presentModeRef.current) : value;
+    if (liveSession) liveSession.setPresentMode(next);
+    else setLocalPresentMode(next);
+  }, [liveSession]);
   const [drawingMode, setDrawingMode] = useState(false);
   // Pan is the default in both pointer worlds, so a board behaves on first touch the way
   // it always has on first click. The toggle exists because a one-finger drag can only
   // do one of the two things — see `canvasPointerMode.ts`.
   const [canvasGesture, setCanvasGesture] = useState<CanvasGesture>('pan');
   const [showHidden, setShowHidden] = useState(false);
-  const [followingUserId, setFollowingUserId] = useState<string | null>(null);
+  const [localFollowingUserId, setLocalFollowingUserId] = useState<string | null>(null);
+  const followingUserId = liveSession ? liveSession.followingUserId : localFollowingUserId;
+  const followingRef = useRef(followingUserId);
+  followingRef.current = followingUserId;
+  const setFollowingUserId = useCallback((value: string | null | ((current: string | null) => string | null)) => {
+    const next = typeof value === 'function' ? value(followingRef.current) : value;
+    if (liveSession) liveSession.setFollowing(next);
+    else setLocalFollowingUserId(next);
+  }, [liveSession]);
   const [branchParentId, setBranchParentId] = useState<string | null>(null);
   const [mergeReview, setMergeReview] = useState<MergeReview | null>(null);
   const [workflowFocus, setWorkflowFocus] = useState<{ nodeId: string; definitionId: string | null } | null>(null);
@@ -1241,6 +1273,36 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         : effectiveSelectedIds.length > 1 ? `${effectiveSelectedIds.length} selected objects`
           : selectedNode ? `Selected: ${selectedNode.data.title}` : t('entireCanvas');
   const scopedNodes = useMemo(() => nodes.filter((node) => scopedNodeIds.has(node.id)), [nodes, scopedNodeIds]);
+
+  /**
+   * The board is the source of truth for WHO IS ON IT; the shell is the source of
+   * truth for who is on the CALL. Publishing the roster upward is what lets the
+   * live bar show one set of people instead of the board and the room each
+   * keeping their own — and it is why a teammate who navigates away from the
+   * board does not vanish from the call.
+   */
+  const publishPresence = liveSession?.publishPresence;
+  useEffect(() => {
+    if (!publishPresence) return;
+    publishPresence(members.map((member) => ({ userId: member.userId, displayName: member.displayName })), currentUserId);
+  }, [currentUserId, members, publishPresence]);
+
+  /**
+   * Which canonical projects this board references — read by the stage to decide
+   * whether to show "viewing a canvas outside the current project" after a scope
+   * change, per `canvasScopePolicy`. Published rather than recomputed there so
+   * the project reference is read out of the board by the one module that already
+   * knows how (`canvasProjectRef`).
+   */
+  const activeCanvas = useOptionalActiveCanvas();
+  const publishProjectIds = activeCanvas?.publishProjectIds;
+  const boardProjectIds = useMemo(
+    () => [...new Set(canvasProjectNodes(nodes).flatMap((node) => { const id = canvasProjectId(node.data); return id == null ? [] : [id]; }))],
+    [nodes],
+  );
+  useEffect(() => {
+    publishProjectIds?.(boardProjectIds);
+  }, [boardProjectIds, publishProjectIds]);
   const scopedEdges = useMemo(() => edges.filter((edge) => scopedNodeIds.has(edge.source) && scopedNodeIds.has(edge.target)), [edges, scopedNodeIds]);
   const evermindProjectId = useMemo(() => {
     const candidates = [...scopedNodes, ...nodes.filter((node) => !scopedNodeIds.has(node.id))];
@@ -2346,13 +2408,54 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
 
   const canvasActions = useMemo<BrainAction[]>(() => [{
     name: 'canvas_read_snapshot',
-    description: 'Read every object and relationship currently visible on the creation canvas.',
+    // This tool PROMISED "every object" and delivered the scoped subset, which is
+    // how the one escape hatch from a partial view became a second confirmation
+    // of it: the model checked, was told the board held one object, and reported
+    // a file missing that was sitting right there. Asking to read everything is
+    // an explicit request to leave the scope, so it now does.
+    description: 'Read every object and relationship on the creation canvas — the WHOLE board, regardless of what the user has selected. Use this whenever you are about to say something is not on the canvas.',
     parameters: { type: 'object', properties: {}, additionalProperties: false },
     run: () => ({
       scope: resolvedScopeMode,
-      objects: scopedNodes.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true }; }),
-      connections: scopedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
+      scopeNote: scopeNote('canvas', nodes.length, nodes.length),
+      objects: nodes.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true, inScope: scopedNodeIds.has(node.id) }; }),
+      connections: edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
     }),
+  }, {
+    // The lookup the scope note points at. Named rather than positional because
+    // the reported failure was a NAME miss (`.htm` vs `.html`), and a model that
+    // has to guess an object id to check whether an object exists will not check.
+    name: 'canvas_read_object',
+    description: 'Read one object on this canvas in full by id, title, or file name — including objects outside the current selection. Use this before telling the user that a file or object is not on the canvas: matching tolerates a wrong extension and a partial name.',
+    parameters: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        objectId: { type: 'string', description: 'Exact object id from boardInventory.' },
+        name: { type: 'string', description: 'Title or file name the user referred to, e.g. "Sales-Discovery-Guide.htm".' },
+      },
+    },
+    run: (raw: unknown) => {
+      const args = raw as { objectId?: string; name?: string };
+      const inventory = boardInventory(nodes, scopedNodeIds);
+      const match = args.objectId
+        ? inventory.find((entry) => entry.id === args.objectId) ?? null
+        : findInInventory(inventory, args.name ?? '');
+      if (!match) {
+        // An honest miss carries the inventory, so the next sentence the model
+        // writes is grounded in what IS there rather than in what it expected.
+        return { found: false, boardInventory: inventory, message: 'No object on this board matches that id or name. The full inventory is included — do not ask the user to upload something listed in it.' };
+      }
+      const node = nodes.find((candidate) => candidate.id === match.id);
+      if (!node) return { found: false, boardInventory: inventory };
+      const definition = creationObjectDefinition(node.data.kind);
+      return {
+        found: true,
+        object: { id: node.id, ...definition.contextAdapter(node.data), mutableFields: definition.mutableFields, actions: definition.actions },
+        connections: edges
+          .filter((edge) => edge.source === node.id || edge.target === node.id)
+          .map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
+      };
+    },
   }, {
     name: 'canvas_read_project_prds',
     description: 'Read the complete canonical PRDs and version history for every ticket in a project. Always use this before synthesizing, consolidating, or explaining project requirements; canvas selection does not limit this project-wide read.',
@@ -2949,7 +3052,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.delete', label: `Delete connection ${connectionId}`, connectionId });
       return { ok: true, proposed: true, connectionId };
     },
-  }], [canEdit, convertObjectToDrawio, edges, effectiveSelectedIds, nodes, persistence, prompt, requireAccount, resolvedScopeMode, scopedEdges, scopedNodes, sessionId]);
+  }], [canEdit, convertObjectToDrawio, edges, effectiveSelectedIds, nodes, persistence, prompt, requireAccount, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId]);
 
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
@@ -3043,6 +3146,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const request = requestText;
       const snapshot = JSON.stringify({
         sessionId, scope: resolvedScopeMode, selectedObjectIds: effectiveSelectedIds,
+        // A scoped turn used to send ONLY the scoped objects, with nothing saying
+        // the view was partial — so the model answered "that file is not anywhere
+        // on the canvas" about a file that was on the canvas, and asked the user
+        // to upload it again. The inventory is identity-only (cheap) and always
+        // complete, so an absence claim is never available to be made.
+        scopeNote: scopeNote(resolvedScopeMode, nodes.length, scopedNodes.length),
+        boardInventory: boardInventory(nodes, scopedNodeIds),
         objects: scopedNodes.map((node) => { const definition = creationObjectDefinition(node.data.kind); const dimensions = canvasNodeDimensions(node); return { id: node.id, ...definition.contextAdapter(node.data), mutableFields: definition.mutableFields, actions: definition.actions, position: node.position, ...dimensions, hidden: node.hidden === true, locked: node.data.placementLocked === true }; }),
         connections: scopedEdges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, kind: edge.data?.connectionKind, label: edge.label })),
       });

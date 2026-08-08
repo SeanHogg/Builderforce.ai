@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
-import { PRODUCT_SECTIONS } from '@/lib/content';
+import { PRODUCT_SECTIONS, RESOURCE_NAV_LINKS } from '@/lib/content';
 import { isNavItemActive } from '@/lib/nav';
 import { useMobileNav } from '@/lib/useMobileNav';
 
@@ -27,22 +27,13 @@ interface SimpleLink {
   labelKey: string;
 }
 
-const RESOURCE_LINKS: SimpleLink[] = [
-  { href: '/blog', labelKey: 'blog' },
-  { href: '/tools', labelKey: 'diagnosticsTools' },
-  { href: '/soc2', labelKey: 'soc2Audits' },
-  { href: '/prompts', labelKey: 'promptLibrary' },
-  { href: '/compare', labelKey: 'compare' },
-  { href: '/integrations', labelKey: 'integrations' },
-  { href: '/media', labelKey: 'mediaKit' },
-];
-
 // Flat links that sit directly in the bar (no dropdown).
 const FLAT_LINKS: SimpleLink[] = [
   // The guided demo deck + live persona demos live at /demo — reached from the
   // footer's "Get started" column, not the top bar (kept lean).
   // Talent (freelancers) + Workforce (AI agents/skills/personas) are one merged
   // marketplace surface now — a single nav entry, no separate /talent link.
+  { href: '/tutorials', labelKey: 'tutorials' },
   { href: '/marketplace', labelKey: 'talentWorkforce' },
   { href: '/agents', labelKey: 'agents' },
   // Evermind intentionally NOT a top-level flat link — it lives under the Product
@@ -116,12 +107,12 @@ export default function MarketingHeader() {
 
           <div className="mh-item has-menu">
             <button type="button" className="mh-link mh-trigger" aria-haspopup="true">
-              {t('resources')}
+              {t('learn')}
               <svg className="mh-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
             </button>
             <div className="mh-panel">
-              {RESOURCE_LINKS.map((l) => (
-                <Link key={l.href} href={l.href} className="mh-panel-link">{t(l.labelKey)}</Link>
+              {RESOURCE_NAV_LINKS.map((l) => (
+                <Link key={l.href} href={l.href} className="mh-panel-link">{t(l.marketingLabelKey)}</Link>
               ))}
             </div>
           </div>
@@ -168,9 +159,9 @@ export default function MarketingHeader() {
         ))}
 
         <div className="mh-drawer-group">
-          <div className="mh-drawer-group-label">{t('resources')}</div>
-          {RESOURCE_LINKS.map((l) => (
-            <Link key={l.href} href={l.href} className="mh-drawer-link mh-drawer-sub" onClick={closeNav}>{t(l.labelKey)}</Link>
+          <div className="mh-drawer-group-label">{t('learn')}</div>
+          {RESOURCE_NAV_LINKS.map((l) => (
+            <Link key={l.href} href={l.href} className="mh-drawer-link mh-drawer-sub" onClick={closeNav}>{t(l.marketingLabelKey)}</Link>
           ))}
         </div>
 

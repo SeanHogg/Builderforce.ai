@@ -5751,25 +5751,25 @@
       "Governed path into delivery",
       "Optional VS Code engineering surface"
     ],
-    "stepsHeading": "From idea to outcome in three steps",
+    "stepsHeading": "From IDEA to REAL in three steps",
     "steps": [
       {
-        "title": "Describe the outcome",
-        "desc": "Start with what you want to create. Builderforce opens a private canvas and gives the idea room to grow before you choose a tool or structure."
+        "title": "Bring the idea",
+        "desc": "Start with what you want to make. No translation into tickets, prompts, or tool-specific formats before the real work can begin."
       },
       {
-        "title": "Create and connect",
-        "desc": "Add websites, workflows, data, models, people, and agents. Connect them so the context and intent behind the work stay visible."
+        "title": "Shape it in one place",
+        "desc": "People and agents work from the same idea, decisions, and context—without repeating the story every time the work moves forward."
       },
       {
-        "title": "Review and deliver",
-        "desc": "Shape the work with your team, approve the changes that matter, and send the result into projects, tasks, or agent execution."
+        "title": "Make it real",
+        "desc": "Review, approve, and put the result into production: live, working, and ready for someone to use immediately."
       }
     ],
     "featuresHeading": "Everything you can bring onto the canvas",
     "pricingHeading": "Pricing",
     "currentPricing": "See current pricing",
-    "pricePerSeat": "/seat/month",
+    "pricePerMonth": "/month",
     "pricingTeaser": [
       {
         "name": "Free",
@@ -5849,7 +5849,7 @@
       },
       {
         "question": "Is Builderforce free?",
-        "answer": "Yes — the Free tier is $0/month forever with no credit card required. It includes WebGPU training, dataset generation, AI evaluation, and public Workforce browsing. The Pro plan ($29/seat/month) unlocks private agents, unlimited training, and priority support."
+        "answer": "Yes — the Free tier is $0/month forever with no credit card required. It includes WebGPU training, dataset generation, AI evaluation, and public Workforce browsing. The Pro plan unlocks private agents, unlimited training, and priority support."
       },
       {
         "question": "How do I train a model in my browser?",
@@ -5918,8 +5918,8 @@
     "featuresLead": "Websites, workflows, datasets, models, documents, people and agents — all real, connected objects on one board, not attachments in a chat.",
     "tension": {
       "eyebrow": "The problem",
-      "heading": "The work begins before the code",
-      "body": "An idea starts in a doc, gets argued in chat, lands on a board, is built in an editor, and is measured in a spreadsheet. Five tools, none of which knows what the others decided — so context gets retyped, decisions go missing, and nothing carries from the idea to the thing you shipped.",
+      "heading": "Ideas should become real—not get lost between tools",
+      "body": "Every switch between docs, chat, boards, editors, and spreadsheets costs time and forces people to repeat the context. Builderforce keeps the whole journey connected—from the first idea to something live in production and ready to use.",
       "fragments": [
         "Doc",
         "Chat",
@@ -5927,19 +5927,24 @@
         "Editor",
         "Spreadsheet"
       ],
-      "diagramAlt": "A doc, a chat, a board, an editor and a spreadsheet, with the connections between them broken.",
-      "canvasLabel": "One canvas",
-      "resolve": "Builderforce puts all of it on <em>one canvas</em> — so the idea, the work, the review and the result are the same object."
+      "diagramAlt": "The usual route from idea to production loses time and context across five tools, while Builderforce provides one continuous route from IDEA to REAL.",
+      "oldWayLabel": "The usual way",
+      "ideaLabel": "IDEA",
+      "switchCost": "Time lost · context repeated",
+      "canvasLabel": "One continuous context",
+      "realLabel": "REAL",
+      "realDefinition": "Live in production. Ready to use.",
+      "resolve": "Builderforce keeps the idea, decisions, work, and delivery together—so you can go from <em>IDEA to REAL</em> without starting over at every step."
     }
   },
   "pricing": {
     "seo": {
       "title": "Pricing — Free, Pro & Teams Plans",
-      "description": "Builderforce.ai pricing: Free plan ($0/month forever), Pro ($29/seat/month), and Teams ($20/seat/month). WebGPU LoRA training, dataset generation, AI evaluation, and Workforce Registry.",
+      "description": "Compare Builderforce.ai Free, Pro, and Teams plans for WebGPU LoRA training, dataset generation, AI evaluation, and Workforce Registry.",
       "ogTitle": "Builderforce.ai Pricing — Free, Pro & Teams",
-      "ogDescription": "Free forever plan with WebGPU training. Pro $29/seat/month for unlimited agents. Teams $20/seat/month with shared approval inbox.",
+      "ogDescription": "Compare Free, Pro, and Teams plans for WebGPU training, agents, and shared approval workflows.",
       "twitterTitle": "Builderforce.ai Pricing",
-      "twitterDescription": "Free forever. Pro $29/seat/mo. Teams $20/seat/mo. WebGPU LoRA training included."
+      "twitterDescription": "Compare Free, Pro, and Teams plans. WebGPU LoRA training included."
     },
     "titleAnon": "Simple, transparent pricing",
     "titleConsole": "Pricing & Billing",
@@ -11974,6 +11979,8 @@
     "home": "Home",
     "product": "Product",
     "resources": "Resources",
+    "learn": "Learn",
+    "tutorials": "Tutorials",
     "talentWorkforce": "Talent / Workforce",
     "agents": "Agents",
     "models": "Models",
@@ -11990,6 +11997,41 @@
     "toggleMenu": "Toggle menu",
     "switchToLight": "Switch to light mode",
     "switchToDark": "Switch to dark mode"
+  },
+  "tutorials": {
+    "seo": {
+      "title": "AI-Guided Tutorials and Interactive Courses",
+      "description": "Learn entrepreneurship, recruiting, product, marketing, leadership, finance, software, AI, and more in an adaptive LMS built on the Creation Canvas.",
+      "ogTitle": "Learn with an AI Teacher on the Creation Canvas"
+    },
+    "eyebrow": "Learning, built around you",
+    "title": "Pick a subject. Build your course. Meet your AI teacher.",
+    "lead": "Every tutorial opens a private Creation Canvas, builds an interactive LMS course, and brings a specialist AI teacher into the chat to guide your practice and adapt each lesson.",
+    "howItWorks": "How interactive tutorials work",
+    "steps": [
+      { "title": "Choose a direction", "description": "Start with a practical subject or bring any learning goal of your own." },
+      { "title": "Canvas builds the LMS", "description": "Brain creates modules, lessons, exercises, assessments, progress, and a capstone." },
+      { "title": "Learn with a specialist", "description": "A topic-matched AI teacher joins your chat, checks understanding, and adapts the path." }
+    ],
+    "catalogTitle": "What do you want to learn?",
+    "catalogLead": "Choose a starting point. Your course is generated for your goals and experience, so no two learning paths need to be the same.",
+    "teacherLabel": "Teacher: {agent}",
+    "startCourse": "Create my course",
+    "customTitle": "Want to learn something else?",
+    "customLead": "From negotiation and public speaking to gardening, design, history, or a subject only you can name—Canvas can shape it into a course and match you with the right AI teacher.",
+    "customCta": "Design a custom course",
+    "customPrompt": "I want to learn a subject of my choice. First ask what I want to learn, why it matters to me, my current experience, preferred pace, and desired outcome. Then create a complete interactive LMS course object on the Canvas with modules, lessons, exercises, assessments, progress tracking, and a practical capstone. Create an appropriate specialist AI teacher agent, connect that agent to the course and Brain chat so the teacher joins the conversation, and begin teaching one step at a time. Adapt based on my answers and check my understanding. Do not only describe the course; create the course and teacher agent on the Canvas.",
+    "coursePrompt": "Create a complete interactive LMS course on the Canvas that teaches me {topic}. Focus the course on {focus}. Include structured modules, lessons, hands-on exercises, assessments, progress tracking, and a practical capstone. Create a specialist AI teacher agent named {agent}, give the agent expert teaching instructions for this subject, and connect the agent to both the course and Brain chat so the teacher joins our conversation. Begin by asking about my experience level and goal, then teach one step at a time, adapt to my answers, give useful feedback, and check my understanding. Do not only describe a curriculum; create the course object and teacher agent on the Canvas.",
+    "topics": {
+      "entrepreneurship": { "title": "Entrepreneurship", "summary": "Turn an idea into a tested business with customer discovery, positioning, a business model, and a credible launch plan.", "agent": "Venture Coach", "focus": "finding a real customer problem, validating demand, choosing a business model, pricing, go-to-market, fundraising fundamentals, and an actionable launch plan", "outcomes": ["Validate an idea", "Build a business model", "Plan a launch"] },
+      "recruiting": { "title": "Recruiting and Hiring", "summary": "Learn to define roles, source strong candidates, run fair interviews, and close the right hire with confidence.", "agent": "Talent Partner", "focus": "workforce planning, job scorecards, inclusive sourcing, structured interviews, evidence-based selection, candidate experience, and closing", "outcomes": ["Write a scorecard", "Interview consistently", "Choose with evidence"] },
+      "product": { "title": "Product Management", "summary": "Move from user problem to product strategy, discovery evidence, prioritized roadmap, and measurable outcomes.", "agent": "Product Mentor", "focus": "customer discovery, product strategy, opportunity mapping, prioritization, roadmaps, experimentation, metrics, and stakeholder alignment", "outcomes": ["Discover needs", "Prioritize outcomes", "Shape a roadmap"] },
+      "marketing": { "title": "Marketing and Growth", "summary": "Build a clear audience, message, channel strategy, experiments, and a measurement system that compounds learning.", "agent": "Growth Strategist", "focus": "audience research, positioning, messaging, content, acquisition channels, conversion, retention, experiments, and growth metrics", "outcomes": ["Clarify positioning", "Design campaigns", "Measure growth"] },
+      "leadership": { "title": "Leadership and Management", "summary": "Practice setting direction, coaching people, handling conflict, delegating well, and creating accountable teams.", "agent": "Leadership Coach", "focus": "leadership styles, goals, delegation, feedback, coaching, difficult conversations, decision-making, team health, and accountability", "outcomes": ["Lead with clarity", "Coach effectively", "Navigate conflict"] },
+      "finance": { "title": "Finance for Decision-Makers", "summary": "Understand financial statements, cash flow, budgets, unit economics, forecasts, and investment tradeoffs.", "agent": "Finance Tutor", "focus": "financial statements, cash flow, budgeting, forecasting, unit economics, scenario analysis, valuation basics, and capital allocation", "outcomes": ["Read the numbers", "Build a forecast", "Evaluate tradeoffs"] },
+      "softwareAi": { "title": "Software and AI", "summary": "Learn how modern software and AI systems are designed, built, evaluated, secured, and shipped responsibly.", "agent": "AI Engineering Instructor", "focus": "software architecture, APIs, data, testing, security, LLM applications, prompting, retrieval, agents, evaluations, and responsible deployment", "outcomes": ["Design a system", "Build with AI", "Evaluate quality"] },
+      "career": { "title": "Career Growth", "summary": "Map your strengths to a direction, close skill gaps, communicate your value, and execute a practical growth plan.", "agent": "Career Coach", "focus": "strengths, career options, skill-gap analysis, portfolio evidence, networking, interviewing, negotiation, and a 90-day development plan", "outcomes": ["Choose a direction", "Show your value", "Plan the next 90 days"] }
+    }
   },
   "media": {
     "seo": {
@@ -12043,10 +12085,13 @@
     "colProduct": "Product",
     "colPlatform": "Platform",
     "colGetStarted": "Get started",
+    "colLearn": "Learn",
     "linkProduct": "Product",
     "linkCompare": "Compare",
     "linkPricing": "Pricing",
     "linkMediaKit": "Media Kit",
+    "linkPromptLibrary": "Prompt Library",
+    "linkIntegrations": "Integrations",
     "linkSellBuilderforce": "Sell Builderforce",
     "linkEvermind": "Evermind LLM",
     "linkWorkforceRegistry": "Workforce Registry",
@@ -14741,5 +14786,51 @@
   "homeScroller": {
     "previous": "Show previous",
     "next": "Show more"
+  },
+  "liveBar": {
+    "region": "Live session",
+    "cameras": "Cameras",
+    "you": "You",
+    "youShort": "YOU",
+    "member": "Member",
+    "mic": "Mic",
+    "micOff": "Mic off",
+    "camera": "Camera",
+    "cameraOff": "Camera off",
+    "presentScreen": "Present screen",
+    "stopPresenting": "Stop presenting",
+    "present": "Present",
+    "exitPresentation": "Exit presentation",
+    "leave": "Leave",
+    "connecting": "Connecting…",
+    "mediaUnavailable": "Camera or microphone unavailable",
+    "following": "{count, plural, one {# person following you} other {# people following you}}",
+    "shareError": {
+      "denied": "Screen sharing was blocked",
+      "unsupported": "This browser cannot share a screen",
+      "missing": "No screen available to share",
+      "in-use": "Another app is using that screen",
+      "cancelled": "",
+      "failed": "Screen sharing failed"
+    }
+  },
+  "workbench": {
+    "region": "Workbench",
+    "title": "Workbench",
+    "close": "Close workbench",
+    "resize": "Resize the workbench"
+  },
+  "canvasStage": {
+    "outsideCurrentProject": "Viewing a canvas outside the current project"
+  },
+  "scopePolicy": {
+    "leaveRoomOnTenantSwitch": "Switching workspace will end the live session — the room belongs to the workspace you are leaving. Continue?"
+  },
+  "liveChip": {
+    "start": "Start live session",
+    "startTitle": "Start a live session on this canvas",
+    "leaveTitle": "Leave the live session",
+    "onThisCanvas": "This canvas",
+    "liveWithCount": "{count, plural, one {Live · # here} other {Live · # here}}"
   }
 }

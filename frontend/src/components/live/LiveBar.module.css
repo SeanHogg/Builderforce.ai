@@ -1,0 +1,248 @@
+/*
+ * Shell-themed chrome, driven entirely by design tokens so both themes are
+ * covered by construction. The STAGE below declares its own palette; this bar
+ * does not, and must never reach into the board's variables.
+ */
+
+.bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 46px;
+  padding: 7px clamp(8px, 2vw, 14px);
+  background: var(--surface-panel, var(--bg-elevated));
+  border-top: 1px solid var(--border-subtle);
+  box-shadow: 0 -4px 18px var(--shadow-color);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full, 50%);
+  background: var(--error);
+  flex-shrink: 0;
+  animation: livePulse 1.6s ease-in-out infinite;
+}
+
+@keyframes livePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.who {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full, 50%);
+  display: grid;
+  place-items: center;
+  font-size: 0.6rem;
+  font-weight: 700;
+  background: var(--surface-interactive);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+}
+
+.avatarSelf {
+  background: var(--accent-subtle);
+  border-color: var(--border-accent);
+}
+
+/* A live camera is the one thing on this bar worth an unmissable ring. */
+.avatar[data-cam='1'] {
+  box-shadow: 0 0 0 2px var(--error);
+}
+
+.more {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  padding-left: 2px;
+}
+
+.anchor {
+  color: var(--text-primary);
+  font-weight: 600;
+  text-decoration: none;
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.anchor:hover {
+  text-decoration: underline;
+}
+
+.ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--surface-interactive);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.74rem;
+  padding: 5px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--duration-fast, 0.14s), color var(--duration-fast, 0.14s), background var(--duration-fast, 0.14s);
+}
+
+.ctl:hover {
+  color: var(--text-primary);
+  border-color: var(--border-accent);
+}
+
+.ctl:focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 2px;
+}
+
+/* "On" is a state you must be able to read at a glance from across the room —
+   colour alone would not survive a colour-vision difference, so the border and
+   the label text change with it. */
+.ctl[data-on='1'] {
+  background: var(--accent-subtle);
+  border-color: var(--border-accent);
+  color: var(--text-primary);
+}
+
+.leave {
+  border-color: var(--error-border);
+  color: var(--error-text);
+}
+
+.leave:hover {
+  background: var(--error-bg);
+  border-color: var(--error-border);
+  color: var(--error-text);
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.followPill {
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--violet-bright);
+  border: 1px solid var(--violet-bright);
+  border-radius: var(--radius-sm);
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+
+.error {
+  font-size: 0.72rem;
+  color: var(--error-text);
+  white-space: nowrap;
+}
+
+/* The filmstrip sits ABOVE the bar and over whatever surface is on screen. */
+.film {
+  position: fixed;
+  right: 12px;
+  bottom: 58px;
+  z-index: 59;
+  display: flex;
+  gap: 7px;
+  max-width: calc(100vw - 24px);
+  overflow-x: auto;
+}
+
+.tile {
+  position: relative;
+  width: 108px;
+  height: 74px;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-lg);
+  flex-shrink: 0;
+}
+
+.tileSelf {
+  border-color: var(--border-accent);
+}
+
+.tileVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tileLabel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 2px 5px;
+  font-size: 0.58rem;
+  color: var(--text-on-accent);
+  background: var(--panel-overlay-bg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Phones: the bar is the only thing that must stay reachable, so the labels go
+   and the controls become tap targets rather than a wrapped paragraph. */
+@media (max-width: 640px) {
+  .bar {
+    gap: 6px;
+    padding: 6px 8px;
+  }
+
+  .anchor {
+    max-width: 12ch;
+  }
+
+  .ctl {
+    padding: 7px 9px;
+    font-size: 0;
+    gap: 0;
+  }
+
+  .ctl > [aria-hidden='true'] {
+    font-size: 0.85rem;
+  }
+
+  .leave {
+    font-size: 0.74rem;
+  }
+
+  .film {
+    bottom: 54px;
+    right: 8px;
+  }
+
+  .tile {
+    width: 84px;
+    height: 58px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse {
+    animation: none;
+  }
+}

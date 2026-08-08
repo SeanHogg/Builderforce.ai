@@ -1,0 +1,70 @@
+/**
+ * Which bucket a route falls into — the classifier that replaces "every route is
+ * a page that replaces the screen".
+ *
+ * Three buckets, and a route declares its bucket by SHAPE rather than by being
+ * listed in a central map that becomes a six-hundred-line file nobody reviews:
+ *
+ *  - `stage`      — the board itself. The route sets active-canvas state and
+ *                   renders nothing, so switching between canvas modes no longer
+ *                   remounts the board.
+ *  - `workbench`  — an operational page. It opens BESIDE the board in the dock
+ *                   instead of replacing it, so "show me the runway" no longer
+ *                   costs you the thing you were building.
+ *  - `standalone` — marketing, auth, framed embeds, public browse, the restricted
+ *                   gig shell. Unchanged: they keep their own chrome, and an
+ *                   external viewer must never see the operator shell.
+ *
+ * Pure, so the buckets are a unit-testable table rather than emergent behaviour.
+ */
+
+import { classifyShell } from './shellRouting';
+
+export type RouteBucket = 'stage' | 'workbench' | 'standalone';
+
+/**
+ * Canvas surfaces. Each is a MODE of one stage rather than its own component
+ * tree — which is the reason this list can grow (PRD 18 brings more runtimes)
+ * without the stage being rebuilt per runtime.
+ */
+const STAGE_PATTERNS: RegExp[] = [
+  /^\/create\/[^/]+/,
+  /^\/brainstorm(?:\/|$)/,
+  /^\/workflows\/builder(?:\/|$)/,
+];
+
+/**
+ * App-shell routes that still own the whole screen. The IDE and a single project
+ * are editors in their own right — docking them beside a board would give the
+ * person two infinite surfaces competing for one pointer.
+ */
+const FULL_WIDTH_PATTERNS: RegExp[] = [
+  /^\/ide\/(?!dashboard$|voice$)[^/]+/,
+  /^\/projects\/[^/]+$/,
+  /^\/freelancer(?:\/|$)/,
+  /^\/sales(?:\/|$)/,
+];
+
+/** True when this route puts a board on the stage rather than rendering a page. */
+export function isStageRoute(pathname: string): boolean {
+  return STAGE_PATTERNS.some((pattern) => pattern.test(pathname));
+}
+
+export function classifyRoute(pathname: string): RouteBucket {
+  // Anything outside the operator shell keeps its own chrome, by definition.
+  if (classifyShell(pathname) !== 'app') return 'standalone';
+  if (isStageRoute(pathname)) return 'stage';
+  if (FULL_WIDTH_PATTERNS.some((pattern) => pattern.test(pathname))) return 'standalone';
+  return 'workbench';
+}
+
+/**
+ * Should the dock be open right now?
+ *
+ * The dock exists to keep the board while you consult a page — so with no board
+ * there is nothing to keep, and the page takes the screen exactly as it does
+ * today. That is what makes this change free for anyone who never opens a canvas.
+ */
+export function dockOpen(pathname: string, hasActiveCanvas: boolean): boolean {
+  return hasActiveCanvas && classifyRoute(pathname) === 'workbench';
+}

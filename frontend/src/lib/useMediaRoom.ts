@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AUTH_API_URL, getStoredTenantToken } from './auth';
 import { meetingsApi } from './builderforceApi';
+import { acquireUserMedia, stopStream } from './mediaCapture';
 
 /**
  * useMediaRoom — mesh-P2P WebRTC for a live meeting / ceremony.
@@ -36,6 +37,8 @@ export interface RemoteTile {
   stream: MediaStream;
   camOn: boolean;
   micOn: boolean;
+  /** This peer's video track is their SCREEN, not their camera. */
+  sharing: boolean;
 }
 
 export interface MediaPathEvidence {
@@ -54,6 +57,7 @@ interface PeerState {
   stream: MediaStream;
   camOn: boolean;
   micOn: boolean;
+  sharing: boolean;
 }
 
 interface RoomPeer { id: string; name: string; kind: string; ref: string; }
@@ -98,6 +102,19 @@ export interface UseMediaRoom {
   mediaPaths: MediaPathEvidence[];
   toggleCam: () => void;
   toggleMic: () => void;
+  /**
+   * Broadcast a screen capture in place of the camera to every peer.
+   *
+   * The stream is ACQUIRED by `useDisplayCapture` and merely published here —
+   * this hook owns the transport, not the device. Uses `replaceTrack` on the
+   * existing video sender so no renegotiation is needed and the switch is
+   * seamless for receivers.
+   */
+  publishDisplay: (stream: MediaStream) => void;
+  /** Put the camera back on the wire. */
+  unpublishDisplay: () => void;
+  /** This participant is currently publishing a screen. */
+  sharing: boolean;
 }
 
 const EMPTY: RemoteTile[] = [];
@@ -136,6 +153,9 @@ export function useMediaRoom(
   const [captions, setCaptions] = useState<Record<string, string>>({});
   const [speaking, setSpeaking] = useState<Set<string>>(() => new Set());
   const [mediaPaths, setMediaPaths] = useState<MediaPathEvidence[]>([]);
+  const [sharing, setSharing] = useState(false);
+  /** The display stream currently on the wire, replacing the camera track. */
+  const publishedRef = useRef<MediaStream | null>(null);
 
   const captionTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const wsRef = useRef<WebSocket | null>(null);
@@ -149,7 +169,7 @@ export function useMediaRoom(
   // Re-render tiles from the peer map.
   const syncTiles = useCallback(() => {
     setTiles([...peersRef.current.entries()].map(([peerId, p]) => ({
-      peerId, name: p.name, ref: p.ref, stream: p.stream, camOn: p.camOn, micOn: p.micOn,
+      peerId, name: p.name, ref: p.ref, stream: p.stream, camOn: p.camOn, micOn: p.micOn, sharing: p.sharing,
     })));
   }, []);
 
@@ -188,12 +208,21 @@ export function useMediaRoom(
     if (existing) return existing;
     const pc = new RTCPeerConnection({ iceServers: iceRef.current });
     const stream = new MediaStream();
-    const state: PeerState = { pc, name: peer.name || 'Guest', ref: peer.ref, stream, camOn: true, micOn: true };
+    const state: PeerState = { pc, name: peer.name || 'Guest', ref: peer.ref, stream, camOn: true, micOn: true, sharing: false };
     peersRef.current.set(peer.id, state);
 
-    // Publish my local tracks to this peer.
+    // Publish my local tracks to this peer. Someone joining WHILE I am sharing
+    // must receive the screen, not the camera — otherwise a late joiner is the
+    // only person in the room looking at the wrong thing.
     const local = localRef.current;
-    if (local) for (const track of local.getTracks()) pc.addTrack(track, local);
+    const shared = publishedRef.current?.getVideoTracks()[0] ?? null;
+    if (local) {
+      for (const track of local.getTracks()) {
+        if (track.kind === 'video' && shared) continue;
+        pc.addTrack(track, local);
+      }
+    }
+    if (shared) pc.addTrack(shared, publishedRef.current!);
 
     pc.onicecandidate = (e) => {
       if (e.candidate) send({ type: 'rtc-ice', to: peer.id, candidate: e.candidate.toJSON() });
@@ -294,6 +323,11 @@ export function useMediaRoom(
     } else if (type === 'm-state') {
       const p = peersRef.current.get(from);
       if (p) { p.camOn = !!msg.camOn; p.micOn = !!msg.micOn; syncTiles(); }
+    } else if (type === 'm-share') {
+      // `replaceTrack` is deliberately invisible to the receiver, so the only way
+      // a peer knows the video they are watching became a SCREEN is being told.
+      const p = peersRef.current.get(from);
+      if (p) { p.sharing = !!msg.on; syncTiles(); }
     }
   }, [ensurePeer, makeOffer, shouldOffer, closePeer, send, syncTiles, markCaption]);
 
@@ -307,10 +341,11 @@ export function useMediaRoom(
     let retry: ReturnType<typeof setTimeout> | null = null;
 
     const start = async () => {
-      // 1) Local media.
+      // 1) Local media — acquisition + error classification belong to
+      //    `mediaCapture`, the one layer every sink attaches to.
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: !audioOnly, audio: true });
-        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
+        const stream = await acquireUserMedia({ video: !audioOnly, audio: true });
+        if (cancelled) { stopStream(stream); return; }
         localRef.current = stream;
         setLocalStream(stream);
         stream.getVideoTracks().forEach((t) => { t.enabled = !audioOnly; });
@@ -354,11 +389,13 @@ export function useMediaRoom(
       wsRef.current = null;
       for (const [id] of peersRef.current) { try { peersRef.current.get(id)?.pc.close(); } catch { /* ignore */ } }
       peersRef.current.clear();
-      localRef.current?.getTracks().forEach((t) => t.stop());
+      stopStream(localRef.current);
       localRef.current = null;
+      publishedRef.current = null;
       setLocalStream(null);
       setTiles(EMPTY);
       setConnected(false);
+      setSharing(false);
       myIdRef.current = '';
       for (const [, timer] of captionTimers.current) clearTimeout(timer);
       captionTimers.current.clear();
@@ -387,5 +424,40 @@ export function useMediaRoom(
     send({ type: 'm-state', camOn, micOn: next });
   }, [camOn, micOn, send]);
 
-  return { localStream, tiles, camOn, micOn, connected, mediaError, captions, speaking, privacyMode, mediaPaths, toggleCam, toggleMic };
+  /**
+   * Swap the outbound video track for a screen capture on every peer.
+   *
+   * `replaceTrack` rather than add/remove: it needs no renegotiation, so the
+   * switch cannot race a glare-resolution round and leave half the room on the
+   * camera. Peers are told separately (`m-share`) because the swap is otherwise
+   * indistinguishable from the camera pointing at a monitor.
+   */
+  const publishDisplay = useCallback((stream: MediaStream) => {
+    const track = stream.getVideoTracks()[0];
+    if (!track) return;
+    publishedRef.current = stream;
+    for (const [, peer] of peersRef.current) {
+      const sender = peer.pc.getSenders().find((candidate) => candidate.track?.kind === 'video');
+      if (sender) void sender.replaceTrack(track).catch(() => undefined);
+      else peer.pc.addTrack(track, stream);
+    }
+    setSharing(true);
+    send({ type: 'm-share', on: true });
+  }, [send]);
+
+  const unpublishDisplay = useCallback(() => {
+    if (!publishedRef.current) return;
+    publishedRef.current = null;
+    const camera = localRef.current?.getVideoTracks()[0] ?? null;
+    for (const [, peer] of peersRef.current) {
+      const sender = peer.pc.getSenders().find((candidate) => candidate.track?.kind === 'video');
+      // A null track keeps the transceiver in place and simply sends nothing —
+      // the correct end state when the room was joined audio-only.
+      if (sender) void sender.replaceTrack(camera).catch(() => undefined);
+    }
+    setSharing(false);
+    send({ type: 'm-share', on: false });
+  }, [send]);
+
+  return { localStream, tiles, camOn, micOn, connected, mediaError, captions, speaking, privacyMode, mediaPaths, toggleCam, toggleMic, publishDisplay, unpublishDisplay, sharing };
 }

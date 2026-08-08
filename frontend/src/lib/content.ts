@@ -768,9 +768,9 @@ export const COMPARE = {
 /* ════════════════════ GETTING STARTED ════════════════════ */
 
 export const GETTING_STARTED_STEPS = [
-  { num: '01', title: 'Describe the outcome', desc: 'Start with the thing you want to create, without translating the idea into a tool-specific workflow first.' },
-  { num: '02', title: 'Create and connect', desc: 'Add live artifacts, context, collaborators, and agents to one visual workspace.' },
-  { num: '03', title: 'Review and deliver', desc: 'Shape the result with your team and move approved work into projects, workflows, or execution.' },
+  { num: '01', title: 'Bring the idea', desc: 'Start with what you want to make, without translating it into a tool-specific format first.' },
+  { num: '02', title: 'Shape it in one place', desc: 'Keep people, agents, decisions, and context together as the work moves forward.' },
+  { num: '03', title: 'Make it real', desc: 'Review, approve, and put the result into production—live, working, and ready to use.' },
 ];
 
 /* ════════════════════ FAQ ════════════════════ */
@@ -1664,6 +1664,22 @@ export interface FooterColumn {
   links: FooterLink[];
 }
 
+/** A resource destination shared by the marketing-header menu and footer. */
+export interface ResourceNavLink extends FooterLink {
+  /** i18n key under the `marketingNav` namespace. */
+  marketingLabelKey: string;
+}
+
+export const RESOURCE_NAV_LINKS: ResourceNavLink[] = [
+  { href: '/blog', marketingLabelKey: 'blog', labelKey: 'linkBlog' },
+  { href: '/tools', marketingLabelKey: 'diagnosticsTools', labelKey: 'linkDiagnostics' },
+  { href: '/soc2', marketingLabelKey: 'soc2Audits', labelKey: 'linkSoc2' },
+  { href: '/prompts', marketingLabelKey: 'promptLibrary', labelKey: 'linkPromptLibrary' },
+  { href: '/compare', marketingLabelKey: 'compare', labelKey: 'linkCompare' },
+  { href: '/integrations', marketingLabelKey: 'integrations', labelKey: 'linkIntegrations' },
+  { href: '/media', marketingLabelKey: 'mediaKit', labelKey: 'linkMediaKit' },
+];
+
 /**
  * Grouped footer navigation, rendered as columns on desktop and collapsed to
  * stacked sections on mobile. `Home` is reached via the footer brand mark, so it
@@ -1699,6 +1715,10 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
       { href: '/login', labelKey: 'linkSignIn' },
       { href: '/register', labelKey: 'linkGetStarted' },
     ],
+  },
+  {
+    titleKey: 'colLearn',
+    links: RESOURCE_NAV_LINKS,
   },
 ];
 

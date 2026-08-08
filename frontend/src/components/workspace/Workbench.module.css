@@ -1,0 +1,105 @@
+/* The dock is SHELL chrome — theme tokens throughout, no board colours. */
+
+.dock {
+  position: relative;
+  flex: 0 0 auto;
+  width: var(--workbench-width, 460px);
+  max-width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-panel, var(--bg-elevated));
+  border-left: 1px solid var(--border-subtle);
+}
+
+.handle {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+  z-index: 3;
+  background: transparent;
+  touch-action: none;
+}
+
+.handle:hover,
+.handle:focus-visible,
+.dock[data-dragging='true'] .handle {
+  background: var(--border-accent);
+}
+
+.handle:focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: -2px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex: 0 0 auto;
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.close {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.close:hover {
+  color: var(--text-primary);
+  border-color: var(--border-accent);
+}
+
+.close:focus-visible {
+  outline: 2px solid var(--focus-color);
+  outline-offset: 2px;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--content-pad-y, 12px) var(--content-pad-x, 12px);
+}
+
+/*
+ * Below the split breakpoint the dock IS the screen: two infinite surfaces side
+ * by side on a phone gives each of them nothing. The board stays mounted behind
+ * it, which is the part the person is keeping.
+ */
+@media (max-width: 900px) {
+  .dock {
+    width: 100%;
+    border-left: 0;
+  }
+
+  .handle {
+    display: none;
+  }
+}

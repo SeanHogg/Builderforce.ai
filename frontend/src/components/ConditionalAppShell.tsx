@@ -42,6 +42,9 @@ import { useOptionalBrainContext } from '@seanhogg/builderforce-brain-embedded';
 import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { ResumeWorkBridge } from './workspace/ResumeWorkBridge';
 import { PlatformAnnouncements } from './announcements/PlatformAnnouncements';
+import { LiveSessionProvider } from '@/lib/live/LiveSessionContext';
+import { ActiveCanvasProvider, shellHostsCanvasStage } from '@/lib/canvas/ActiveCanvasContext';
+import { LiveBar } from './live/LiveBar';
 
 /** Preserve old campaign links while moving prompt-led creation onto Canvas. */
 function LegacyPromptCanvasRedirect() {
@@ -270,7 +273,12 @@ function MarketingConversionTracker() {
 
 function AppBrainShell({ children }: { children: React.ReactNode }) {
   const content = useShellContent(children);
-  const { hasTenant } = useAuth();
+  const { hasTenant, isAuthenticated } = useAuth();
+  const pathname = usePathname() || '';
+  // Whether THIS route's shell renders the persistent stage. Derived rather than
+  // reported by the stage on mount: a flag that arrives one commit late makes the
+  // route render the board for a frame before handing it over, loading it twice.
+  const stageHosted = shellHostsCanvasStage(pathname, isAuthenticated);
   // Freelancers get the restricted shell: no global Brain launcher/bridges.
   const isFreelancer = useIsFreelancer();
   const showBrain = !isFreelancer;
@@ -292,6 +300,12 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
     // scope and its chat history / new-chat scoping ignored the TopBar project
     // filter. Hoisting it here gives the switcher and the Brain ONE shared scope.
     <ProjectScopeProvider>
+    {/* The live session and the active canvas are the two things that must
+        outlive a navigation, so they are mounted ABOVE the shell switch — a
+        provider inside AppShell would be torn down the moment a route moved
+        between the app shell and the public one, taking the call with it. */}
+    <LiveSessionProvider>
+    <ActiveCanvasProvider stageHosted={stageHosted}>
     <BrainProvider config={hasTenant ? brainConfig : guestBrainConfig}>
       {/* App-wide pin state: any widget anywhere can show a pin control that
           reflects/updates the user's personal /insights home dashboard. */}
@@ -308,6 +322,10 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
             <BrainContextProvider>
               <ReportErrorProvider>
               {content}
+              {/* The room, rendered once at shell level so the call is visible —
+                  and controllable — from wherever the person has navigated to.
+                  Self-gating: no room, no bar. */}
+              <LiveBar />
               {/* Superadmin-authored messages to whoever is on the page. Mounted
                   here rather than in a shell because it must reach BOTH the
                   logged-out marketing pages and the signed-in app; it decides
@@ -365,6 +383,8 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
       </AiInsightPanelProvider>
       </PinsProvider>
     </BrainProvider>
+    </ActiveCanvasProvider>
+    </LiveSessionProvider>
     </ProjectScopeProvider>
   );
 }

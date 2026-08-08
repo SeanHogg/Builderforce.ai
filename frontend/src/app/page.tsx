@@ -6,15 +6,15 @@ import { useTranslations } from 'next-intl';
 import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
 import { STATS } from '@/lib/content';
-import { BLOG_POSTS } from '@/lib/blogData';
-import { ArticleCardGrid } from '@/components/blog/ArticleCard';
 import QuickStart from '@/components/QuickStart';
 import { DemoShowcase } from '@/components/demo/DemoShowcase';
 import { AUTH_API_URL } from '@/lib/auth';
 import { LandingCanvasHero } from '@/components/home/LandingCanvasHero';
 import { MeetCarousel } from '@/components/home/MeetCarousel';
 import { TensionBeat } from '@/components/home/TensionBeat';
-import { Button } from '@/components/ui';
+import { CreationCtaSection } from '@/components/marketing/CreationCtaSection';
+import { LatestBlogSection } from '@/components/marketing/LatestBlogSection';
+import { NewsletterSignupSection } from '@/components/marketing/NewsletterSignupSection';
 import {
   HomeScrollerControls,
   HomeScrollerItem,
@@ -59,8 +59,6 @@ type PricingTeaser = { name: string; perks: string[] };
  */
 export default function LandingPage() {
   const t = useTranslations();
-  const [nlEmail, setNlEmail] = useState('');
-  const [nlStatus, setNlStatus] = useState<'idle' | 'sending' | 'ok' | 'error'>('idle');
   const [publicPlanPrices, setPublicPlanPrices] = useState<{ pro: number } | null>(null);
   const capabilityScroller = useHomeScroller();
 
@@ -74,23 +72,6 @@ export default function LandingPage() {
       .catch(() => { /* Pricing CTA remains available; never invent a fallback price. */ });
     return () => { active = false; };
   }, []);
-
-  async function handleNewsletterSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    if (!nlEmail.trim()) return;
-    setNlStatus('sending');
-    try {
-      const response = await fetch('/api/auth/newsletter/subscribers', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: nlEmail.trim(), action: 'subscribe', source: 'builderforce-landing' }),
-      });
-      if (!response.ok) throw new Error('subscribe failed');
-      setNlStatus('ok');
-    } catch {
-      setNlStatus('error');
-    }
-  }
 
   return (
     <>
@@ -169,7 +150,7 @@ export default function LandingPage() {
                 <CardTitle>{plan.name}</CardTitle>
                 <div className={styles.price}>
                   {index === 0 ? '$0' : publicPlanPrices
-                    ? `$${publicPlanPrices.pro}${t('home.pricePerSeat')}`
+                    ? `$${publicPlanPrices.pro}${t('home.pricePerMonth')}`
                     : <Link href="/pricing">{t('home.currentPricing')}</Link>}
                 </div>
                 <ul className={styles.perks}>{plan.perks.map((perk) => <li className={styles.perk} key={perk}>{perk}</li>)}</ul>
@@ -193,47 +174,13 @@ export default function LandingPage() {
         </HomeSection>
 
         {/* 11 · THE ASK */}
-        <HomeSection tone="grid">
-          <div className={styles.cta}>
-            <HomeSectionHeader title={t('home.ctaTitle')} lead={t('home.ctaDesc')} />
-            <div className={styles.actions}>
-              <HomeButton href="/register" primary arrow>{t('marketing.ctaGetStartedFree')}</HomeButton>
-              <HomeButton href="/creation-canvas" arrow>{t('home.ctaSeeLiveAgents')}</HomeButton>
-            </div>
-          </div>
-        </HomeSection>
+        <CreationCtaSection />
 
         {/* Secondary. Below the ask on purpose — these used to sit between the
             reader and the call to action. They stay on the page for the crawler
             and for the visitor who wants depth before deciding. */}
-        <HomeSection id="blog">
-          <HomeSectionHeader centered eyebrow={t('home.beat.writing')} title={t('home.blogHeading')} lead={t('home.blogLead')} />
-          <ArticleCardGrid posts={BLOG_POSTS} limit={3} />
-          <div className={`${styles.actions} ${styles.actionsCenter}`}>
-            <HomeButton href="/blog" arrow>{t('home.blogReadAll')}</HomeButton>
-          </div>
-        </HomeSection>
-
-        <HomeSection narrow tone="soft">
-          <HomeSectionHeader centered eyebrow={t('home.beat.keepUp')} title={t('home.newsletterHeading')} lead={t('home.newsletterLead')} />
-          <form onSubmit={handleNewsletterSubmit} className={styles.form}>
-            <input
-              className="ui-input"
-              type="email"
-              placeholder={t('home.newsletterPlaceholder')}
-              aria-label={t('home.newsletterPlaceholder')}
-              required
-              value={nlEmail}
-              onChange={(event) => setNlEmail(event.target.value)}
-              disabled={nlStatus === 'sending' || nlStatus === 'ok'}
-            />
-            <Button type="submit" disabled={nlStatus === 'sending' || nlStatus === 'ok'} variant="primary" size="lg">
-              {nlStatus === 'sending' ? t('home.newsletterSubscribing') : nlStatus === 'ok' ? t('home.newsletterSubscribed') : t('home.newsletterSubscribe')}
-            </Button>
-          </form>
-          {nlStatus === 'ok' && <p className={styles.formStatus}>{t('home.newsletterSubscribedConfirm')}</p>}
-          {nlStatus === 'error' && <p className={`${styles.formStatus} ${styles.formError}`}>{t('home.newsletterError')}</p>}
-        </HomeSection>
+        <LatestBlogSection />
+        <NewsletterSignupSection />
       </main>
     </>
   );
