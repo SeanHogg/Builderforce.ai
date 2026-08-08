@@ -1,125 +1,88 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #603
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document (PRD)
 
 ## Problem & Goal
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+### Problem
+When worker nodes or containers are torn down, residual artifacts (e.g., temporary files, cached data, configuration settings) may persist in the underlying infrastructure. These artifacts can inadvertently be accessed by subsequent workloads, leading to potential security vulnerabilities, data leakage, or unintended interactions between workloads.
 
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+### Goal
+Ensure that the teardown process for worker nodes or containers is comprehensive and leaves no persistent artifacts accessible to subsequent workloads. This will enhance security, ensure workload isolation, and maintain the integrity of the environment.
 
 ## Target Users / ICP Roles
 
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **DevOps Engineers**: Responsible for deploying and managing containerized workloads and ensuring the infrastructure is secure and compliant.
+- **Security Engineers**: Concerned with maintaining the security posture of the environment and ensuring that data is not inadvertently exposed.
+- **Platform Operators**: Manage the underlying infrastructure and ensure that resources are efficiently utilized and securely managed.
 
 ## Scope
 
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- **Worker Node Teardown**: The process of shutting down and removing worker nodes or containers from the environment.
+- **Artifact Identification**: Identification of all types of artifacts that could potentially persist after teardown.
+- **Artifact Removal**: Ensuring that all identified artifacts are removed as part of the teardown process.
+- **Access Control Verification**: Verifying that subsequent workloads cannot access any residual artifacts.
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+1. **Artifact Identification**
+   - Automatically detect all types of artifacts that could persist after teardown, including:
+     - Temporary files and directories
+     - Cached data
+     - Configuration files
+     - Logs
+     - Secrets and credentials
+     - Shared memory segments
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+2. **Teardown Process Enhancement**
+   - Modify the teardown process to include steps for removing identified artifacts.
+   - Ensure that the teardown process is idempotent and can be safely retried without leaving residual artifacts.
 
----
+3. **Access Control Enforcement**
+   - Implement access controls to prevent subsequent workloads from accessing any residual artifacts.
+   - Ensure that file system permissions and access controls are reset during teardown.
 
-### FR-2 — Guided (Interactive) Mode
+4. **Verification and Validation**
+   - Implement automated tests to verify that no artifacts persist after teardown.
+   - Provide logs and audit trails to confirm that the teardown process has been completed successfully.
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
-
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+5. **Notification and Reporting**
+   - Provide notifications and reports on the success or failure of the teardown process.
+   - Include details on any artifacts that were identified and removed.
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
-
----
+- All identified artifacts are removed as part of the teardown process.
+- Subsequent workloads cannot access any residual artifacts from previous workloads.
+- Automated tests confirm that no artifacts persist after teardown.
+- Logs and audit trails are generated and stored for verification purposes.
+- Notifications and reports are generated and sent to relevant stakeholders upon completion of the teardown process.
 
 ## Out of Scope
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+- **Persistent Storage Management**: Managing persistent storage volumes and ensuring data is properly backed up or migrated is not part of this task.
+- **Network Configuration**: Changes to network configurations or firewall rules as part of the teardown process are not included.
+- **Resource Quota Management**: Ensuring that resource quotas are reset or managed during teardown is not covered.
+- **Container Image Cleanup**: Managing the cleanup of container images or registries is not part of this task.
+- **Performance Optimization**: Optimizing the teardown process for performance is not included in this scope.
+
+## Requirements
+
+_Owned by the business-analyst — to be authored._
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
