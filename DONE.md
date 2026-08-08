@@ -4,6 +4,104 @@
 
 ---
 
+## ✅ RESOLVED 2026-08-08 — The data model had no guard against being written twice
+
+Measuring the three-product consolidation ([PRD 20](./specs/builderforce/20-prd-consolidated-data-model.md))
+turned up **eight duplicate table clusters inside this repo alone**, before any merge:
+`drive_connections` = `mailbox_connections`, `portfolios` = `initiatives`,
+`tenant_custom_roles` = `platform_modules`, `tool_runs` = `marketing_tool_runs`,
+`tenant_manager_defaults` = `project_manager_configs`,
+`tenant_skill_assignments` = `agent_host_skill_assignments`,
+`import_type_mappings` = `board_type_mappings`,
+`kanban_template_lane_requirements` = `swimlane_requirements`. Exact name matching finds none of
+them — the method that does is IDF-weighted column-signature comparison, and nothing in CI ran it.
+
+**PRD 20 §5 Step 0 shipped**: six ratchets in `api/scripts/`, wired into the `npm test` chain
+(eleven guards → seventeen), each printing a baseline that can only shrink.
+
+| Script | Baseline |
+|---|---|
+| `check-signature-duplication.mjs` | 8 duplicate-shape clusters at ≥0.55 |
+| `check-shape-lint.mjs` | 93 names matching a kernel shape |
+| `check-tenant-column.mjs` | 72 tables with no tenant-scoping column |
+| `check-polymorphic-fk.mjs` | 3 `(kind, id)` pairs with no `objects` registry |
+| `check-domain-boundary.mjs` | 82 cross-module schema imports |
+| `check-model-coverage.mjs` | 1,130 mapped · 0 unaccounted · 362 keeps + 25 kernel = 387 |
+
+All six ride the **existing** `scripts/lib/drizzleSchema.mjs` parser — no second parser was
+written — and share one new `scripts/lib/ratchet.mjs` extracted from the baseline/`--update`
+pattern `check-tenant-scope.mjs` and `check-migrations.mjs` were each doing by hand.
+`check-model-coverage.mjs` independently recounts the number PRD 20 rests on and fails if the
+committed map and §3 stop agreeing, so the headline cannot silently rot.
+
+Also corrected: `check-tenant-scope.mjs`'s header claimed "261 of the 318 tables carry
+`tenant_id`" — the guard itself reports **306 of 374**.
+
+Baselines at `api/scripts/.<name>-baseline.txt`. Paying them down is tracked in the roadmap;
+three of the eight clusters are PRD 20 §6 operator decisions, not cleanup.
+
+---
+
+## ✅ RESOLVED 2026-08-08 — `link:`ed packages had no dependencies in CI, so the VSIX publish failed on types that exist
+
+The "Publish VS Code extension" job died in `npm run type-check` with eight errors
+that reproduce on no developer machine: `Property 'paidCostDetail' does not exist
+on type 'PromptOptionsLabels'` (it does — `PromptOptionsLabels extends
+ModelChoiceLabels`), plus a scatter of `TS7006` implicit-`any` parameters on
+`<ChatTicketsPanel>` / `<PromptPanel>` props.
+
+**Root cause — a `link:` installs a directory, not a package.** The repo is
+separately-installed packages that reference each other with `link:../..`
+specifiers (deliberately not a pnpm workspace — per-package lockfiles). pnpm
+honours a `link:` by symlinking the target and installing *nothing* inside it, so
+on a clean checkout `packages/brain-ui/node_modules` does not exist and every bare
+import inside its shipped `dist` — `react`,
+`@seanhogg/builderforce-brain-embedded` — is unresolvable *from that directory*.
+`skipLibCheck: true` then swallows the unresolved import inside brain-ui's `.d.ts`,
+so `PromptOptionsLabels` silently loses the members it inherits and the failure
+surfaces only in the *consumer's* source. Developer machines pass because each
+package has been installed locally at some point. The trigger was simply the first
+consumer use of an inherited member (`paidCostDetail`); the degraded typing had
+been in place, unnoticed, for as long as the link has existed — the frontend
+type-checks against the same degraded shape today.
+
+**Fix.** `scripts/ensure-linked-deps.mjs` walks a package's `link:` targets
+(recursively, cycle-guarded across the nested installs via `BF_ENSURE_LINKED_DEPS`),
+and runs `pnpm install --frozen-lockfile` in any whose declared dependencies are
+not on disk. Wired as `postinstall` in `clients/vscode`, `frontend`,
+`packages/brain-ui` and `brain-embedded`, so a fresh CI install reproduces the
+on-disk shape a developer has. Failures warn rather than fail — a linked package
+that cannot install must degrade the build the way it already does, not break an
+install that used to succeed.
+
+The frontend deploy job already carried a hand-maintained version of this — a
+`for package_dir in sdk studio studio-embedded brain-embedded packages/brain-ui`
+loop in `release.yml` — which is why only the VS Code job broke. That loop was
+deleted in favour of the shared script, which also covers the two linked packages
+the list had missed (`voice`, `builderforce-embedded`).
+
+**Ratchet.** `clients/vscode/src/linkedPackageDeps.test.ts` asserts every linked
+target has its dependencies present and that `@seanhogg/builderforce-brain-embedded`
+and `react` resolve *from inside* `packages/brain-ui` — `createRequire` from the
+linked package's own manifest, the resolution tsc and vite actually perform. It
+fails loudly in the environment the type-checker fails silently in.
+
+**Drift found and fixed in the same pass.**
+`packages/creation-canvas-contract` was declared as a `link:` dependency but had no
+`package.json` at all — only `src/index.ts` — so the dependency resolved *only*
+because five separate configs (`esbuild.mjs`, `tsconfig.json`,
+`webview/tsconfig.canvas.json`, `vitest.config.ts`, `vite.canvas.config.ts`) alias
+the bare specifier at the source file. Its sibling source-only package
+(`@builderforce/agent-tools`) has a manifest; this one had lost it. Added, mirroring
+that shape (`private`, `exports: ./src/index.ts`), and the new test asserts no
+`link:` dependency points at a directory with no package to install.
+
+Verified: `npm run type-check`, `npm test` (33 tests) and `vsce package` (which
+runs the full `vscode:prepublish` — esbuild + `tsc` + both vite builds) all green,
+and the broken CI shape reproduced and re-fixed on demand.
+
+---
+
 ## ✅ RESOLVED 2026-08-07 — Builderforce had nine listable SKUs and two listings
 
 A marketplace-research pass found the gap was not "which marketplaces exist" but

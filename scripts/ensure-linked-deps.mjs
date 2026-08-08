@@ -102,16 +102,26 @@ function walk(dir) {
   for (const target of linkedTargets(dir, manifest)) walk(target);
 }
 
-// cwd is the package being installed (pnpm/npm run lifecycle scripts there); an
-// explicit directory argument is for running the script by hand.
-const root = process.argv[2] ? resolve(process.argv[2]) : process.cwd();
+// No argument: cwd is the package pnpm/npm just installed (the `postinstall`
+// shape), so only its link targets are missing. An explicit directory is a
+// caller saying "this package must be installed before I can build" — the canvas
+// bundle compiles `frontend/` source, so its own bare imports have to resolve —
+// and that directory is walked like any other target: installed if its declared
+// dependencies are not on disk, then recursed into. Already installed is the
+// common case and costs one `existsSync` per dependency.
+const explicit = process.argv.slice(2).map((dir) => resolve(dir));
+const root = explicit[0] ?? process.cwd();
 const rootManifest = readManifest(root);
 if (!rootManifest) {
   console.warn(`[ensure-linked-deps] no package.json at ${root} — nothing to do.`);
 } else {
-  // The consumer itself was just installed; only its link targets need walking.
-  visited.add(realpathSync(root));
-  for (const target of linkedTargets(root, rootManifest)) walk(target);
+  if (explicit.length) {
+    for (const dir of explicit) walk(dir);
+  } else {
+    // The consumer itself was just installed; only its link targets need walking.
+    visited.add(realpathSync(root));
+    for (const target of linkedTargets(root, rootManifest)) walk(target);
+  }
 
   if (installed.length) console.log(`[ensure-linked-deps] installed: ${installed.join(', ')}`);
   if (failed.length) {

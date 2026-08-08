@@ -725,7 +725,7 @@
     "test:watch": "vitest",
     "harness": "node esbuild.mjs --harness && node out/harness.cjs",
     "probe": "node esbuild.mjs --harness && node out/harness.cjs probe",
-    "build:canvas": "vite build --config webview/vite.canvas.config.ts",
+    "build:canvas": "node ../../scripts/ensure-linked-deps.mjs ../../frontend && vite build --config webview/vite.canvas.config.ts",
     "watch:canvas": "vite build --watch --config webview/vite.canvas.config.ts"
   },
   "devDependencies": {

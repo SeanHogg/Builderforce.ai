@@ -14,6 +14,12 @@
     "check:schema": "node scripts/check-schema-drift.mjs",
     "check:db-access": "node scripts/check-db-access.mjs",
     "check:migrations": "node scripts/check-migrations.mjs",
+    "check:signature-duplication": "node scripts/check-signature-duplication.mjs",
+    "check:shape-lint": "node scripts/check-shape-lint.mjs",
+    "check:tenant-column": "node scripts/check-tenant-column.mjs",
+    "check:polymorphic-fk": "node scripts/check-polymorphic-fk.mjs",
+    "check:domain-boundary": "node scripts/check-domain-boundary.mjs",
+    "check:model-coverage": "node scripts/check-model-coverage.mjs",
     "check:layering": "node scripts/check-layering.mjs",
     "check:tenant-scope": "node scripts/check-tenant-scope.mjs",
     "check:tracks": "node scripts/check-track-manifest.mjs --check",
@@ -22,7 +28,7 @@
     "check:dispatch-budget": "node scripts/check-dispatch-budget.mjs",
     "check:pinned-defects": "node scripts/check-pinned-defects.mjs",
     "check:prompt-tools": "node scripts/check-prompt-tool-names.mjs",
-    "test": "npm run check:schema && npm run check:db-access && npm run check:migrations && npm run check:layering && npm run check:tenant-scope && npm run check:tracks && npm run check:source && npm run check:silent-catches && npm run check:dispatch-budget && npm run check:pinned-defects && npm run check:prompt-tools && vitest run",
+    "test": "npm run check:schema && npm run check:db-access && npm run check:migrations && npm run check:signature-duplication && npm run check:shape-lint && npm run check:tenant-column && npm run check:polymorphic-fk && npm run check:domain-boundary && npm run check:model-coverage && npm run check:layering && npm run check:tenant-scope && npm run check:tracks && npm run check:source && npm run check:silent-catches && npm run check:dispatch-budget && npm run check:pinned-defects && npm run check:prompt-tools && vitest run",
     "typecheck:native": "tsgo --noEmit"
   },
   "dependencies": {

@@ -2,7 +2,7 @@
 /**
  * Tenant-scope ratchet — a query against a tenant-owned table must filter by tenant.
  *
- * 261 of the 318 tables carry `tenant_id`, and the rule "every query against them
+ * 306 of the 374 tables carry `tenant_id`, and the rule "every query against them
  * is scoped to the caller's tenant" is what keeps customers' data apart. It is
  * currently re-typed by hand at ~1,100 sites. An omission does not fail to
  * compile and does not throw — it just returns another tenant's rows. This guard
