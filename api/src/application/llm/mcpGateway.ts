@@ -26,19 +26,26 @@
 import { callConnectorTool, CONNECTOR_EXTENSION_ID, listConnectorTools } from '../connectors/connectorTools';
 import { BUILTIN_EXTENSION_ID, callBuiltinTool, listBuiltinTools } from './builtinMcpService';
 import { callMcpTool, listToolsForTenant, type McpToolEntry } from './mcpExtensionService';
-import type { Db } from '../../infrastructure/database/connection';
+import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import type { TenantRole } from '../../domain/shared/types';
 import type { Env } from '../../env';
 
 /** Everything the union needs to be built for one tenant. */
 export interface GatewayMcpContext {
-  db: Db;
   env: Env;
   tenantId: number;
   /** JWT signing secret — the key material external MCP secrets are sealed with. */
   keyMaterial: string;
+  /**
+   * An already-built connection. Optional so a transport that has no business
+   * touching the infrastructure layer (see `check-layering`) can just hand over
+   * `env`; callers already holding a connection pass it to avoid a second one.
+   */
+  db?: Db;
   fetchImpl?: typeof fetch;
 }
+
+const dbFor = (ctx: GatewayMcpContext): Db => ctx.db ?? buildDatabase(ctx.env);
 
 /**
  * The tenant's full advertised tool list.
@@ -47,9 +54,10 @@ export interface GatewayMcpContext {
  * customer server, and serialising a cached DB read behind it is free latency.
  */
 export async function listGatewayMcpTools(ctx: GatewayMcpContext): Promise<McpToolEntry[]> {
+  const db = dbFor(ctx);
   const [connectorTools, extensionTools] = await Promise.all([
-    listConnectorTools(ctx.db, ctx.tenantId, ctx.env),
-    listToolsForTenant(ctx.db, ctx.tenantId, ctx.keyMaterial, ctx.fetchImpl ?? fetch, ctx.env),
+    listConnectorTools(db, ctx.tenantId, ctx.env),
+    listToolsForTenant(db, ctx.tenantId, ctx.keyMaterial, ctx.fetchImpl ?? fetch, ctx.env),
   ]);
   return [...listBuiltinTools(), ...connectorTools, ...extensionTools];
 }
@@ -87,9 +95,11 @@ export async function callGatewayMcpTool(
   call: { extensionId: string; tool: string; arguments?: unknown },
   caller: GatewayMcpCaller = {},
 ): Promise<unknown> {
+  const db = dbFor(ctx);
+
   if (call.extensionId === CONNECTOR_EXTENSION_ID) {
     return callConnectorTool({
-      db: ctx.db,
+      db,
       env: ctx.env,
       tenantId: ctx.tenantId,
       tool: call.tool,
@@ -98,7 +108,7 @@ export async function callGatewayMcpTool(
   }
 
   if (call.extensionId === BUILTIN_EXTENSION_ID) {
-    return callBuiltinTool(ctx.db, {
+    return callBuiltinTool(db, {
       tenantId: ctx.tenantId,
       tool: call.tool,
       arguments: call.arguments,
@@ -110,7 +120,7 @@ export async function callGatewayMcpTool(
     });
   }
 
-  return callMcpTool(ctx.db, {
+  return callMcpTool(db, {
     tenantId: ctx.tenantId,
     extensionId: call.extensionId,
     tool: call.tool,

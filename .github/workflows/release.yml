@@ -73,6 +73,19 @@ jobs:
           publish_package studio-embedded @seanhogg/builderforce-studio-embedded
           publish_package voice @seanhogg/builderforce-voice
 
+  # Marketplace copy lives in distribution/listing.json and is stamped into every
+  # channel payload. A listing that contradicts the product is what a buyer reads,
+  # so drift fails the release rather than shipping quietly.
+  verify-distribution:
+    name: Verify distribution payloads
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node distribution/build.mjs --check
+
   # ── VS Code extension → BOTH extension registries ────────────────────────
   # Microsoft's marketplace licence restricts consumption to Microsoft products,
   # so Open VSX is not a duplicate listing — it is the only way the same VSIX
@@ -111,13 +124,11 @@ jobs:
             echo "::warning::VSCE_PAT is not set — skipping Visual Studio Marketplace publish."
             exit 0
           fi
-          version=$(node -p "require('./package.json').version")
-          published=$(npx --yes @vscode/vsce show builderforce.builderforce-ai --json 2>/dev/null | node -p "try{JSON.parse(require('fs').readFileSync(0,'utf8')).versions[0].version}catch(e){''}" || echo "")
-          if [ "$published" = "$version" ]; then
-            echo "builderforce-ai@$version already on the Visual Studio Marketplace; skipping."
-            exit 0
-          fi
-          npx --yes @vscode/vsce publish --no-dependencies --packagePath builderforce.vsix
+          # Both registries reject a version that already exists. That is the
+          # expected outcome of re-running this workflow on an unbumped version,
+          # so it must not fail the release.
+          npx --yes @vscode/vsce publish --no-dependencies --packagePath builderforce.vsix \
+            || echo "::warning::Visual Studio Marketplace publish did not apply (most likely this version is already published)."
 
       - name: Publish to Open VSX
         working-directory: clients/vscode
@@ -133,6 +144,48 @@ jobs:
           npx --yes ovsx publish builderforce.vsix -p "$OVSX_PAT" \
             || echo "::warning::Open VSX publish did not apply (most likely this version is already published)."
 
+  # ── GitHub Action → GitHub Marketplace ───────────────────────────────────
+  # The action is usable from this repo today
+  # (`SeanHogg/Builderforce.ai/actions/dispatch-agent@main`), but GitHub only
+  # lists an action whose `action.yml` sits at a repository ROOT. So the
+  # marketplace copy is a mirror: this job pushes the action directory to a
+  # dedicated repo and tags it, which is what the Marketplace listing tracks.
+  # No mirror secret → skipped, not failed; the in-repo action still works.
+  publish-action:
+    name: Mirror the GitHub Action
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push the action to its standalone repository
+        env:
+          MIRROR_TOKEN: ${{ secrets.ACTION_MIRROR_TOKEN }}
+          MIRROR_REPO: ${{ secrets.ACTION_MIRROR_REPO }}
+        run: |
+          if [ -z "$MIRROR_TOKEN" ] || [ -z "$MIRROR_REPO" ]; then
+            echo "::warning::ACTION_MIRROR_TOKEN/ACTION_MIRROR_REPO not set — skipping the GitHub Marketplace mirror."
+            exit 0
+          fi
+          version=$(node -p "require('./package.json').version" 2>/dev/null || echo "")
+          [ -n "$version" ] || version=$(date -u +%Y.%m.%d)
+
+          work=$(mktemp -d)
+          cp -R actions/dispatch-agent/. "$work"/
+          cp LICENSE "$work"/ 2>/dev/null || true
+          cd "$work"
+          git init -q
+          git config user.name "builderforce-release"
+          git config user.email "release@builderforce.ai"
+          git add -A
+          git commit -qm "Builderforce dispatch-agent action $version"
+          git remote add origin "https://x-access-token:${MIRROR_TOKEN}@github.com/${MIRROR_REPO}.git"
+          # The mirror is a projection of this directory, never a place work
+          # happens, so a force push to a fresh history is the correct shape.
+          git push -q --force origin HEAD:main
+          git tag -f "v${version}"
+          git push -q --force origin "v${version}"
+          echo "Mirrored dispatch-agent $version to ${MIRROR_REPO}"
+
   # ── Builderforce as a listed remote MCP server ───────────────────────────
   # `server.json` describes the public /mcp endpoint the API serves. It is
   # published AFTER the API deploy so the registry never advertises an endpoint
@@ -141,7 +194,7 @@ jobs:
   publish-mcp-registry:
     name: Publish MCP Registry listing
     runs-on: ubuntu-latest
-    needs: deploy-api
+    needs: [deploy-api, verify-distribution]
     permissions:
       contents: read
       id-token: write

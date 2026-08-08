@@ -24,7 +24,6 @@
 
 import { Hono, type Context } from 'hono';
 import { listGatewayMcpTools, callGatewayMcpTool, resolveGatewayMcpTool } from '../../application/llm/mcpGateway';
-import { buildDatabase } from '../../infrastructure/database/connection';
 import { requireTenantAccess, type TenantAccess } from './llmRoutes';
 import type { Env, HonoEnv } from '../../env';
 
@@ -138,8 +137,10 @@ async function handleRpc(
     return rpcResult(id, {});
   }
 
+  // No `db` here on purpose: a route must not reach into the infrastructure
+  // layer (enforced by `scripts/check-layering.mjs`). The gateway module opens
+  // the connection it needs.
   const gateway = {
-    db: buildDatabase(ctx.env),
     env: ctx.env,
     tenantId: ctx.access.tenantId,
     keyMaterial: ctx.env.JWT_SECRET,

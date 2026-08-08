@@ -3,6 +3,11 @@
 Research date: **2026-08-07**. Fees, review SLAs and program names change; re-verify
 anything marked ⚠️ before committing engineering time.
 
+> **Status**: the engineering prerequisites below are **built** — see
+> [distribution/README.md](../../distribution/README.md) for what ships automatically,
+> what is a prepared manual submission, and what is still blocked on a credential.
+> Read this document for *why* a channel is worth it; read that one to *do* it.
+
 Goal: get Builderforce listed in as many marketplaces as possible. The constraint is
 not "which marketplaces exist" — it is **which Builderforce artifact you list where**.
 Most channels only accept one shape of thing. Listing the wrong SKU is the single
@@ -14,19 +19,21 @@ biggest cause of rejection.
 
 | # | SKU | Artifact | Current state |
 | --- | --- | --- | --- |
-| S1 | **VS Code extension** | VSIX, `builderforce.builderforce-ai` (`clients/vscode`) | Built; `publish:marketplace` + `publish:openvsx` scripts exist |
-| S2 | **MCP server (memory)** | `@seanhogg/builderforce-memory-mcp` | Published to npm (2026.7.14) |
-| S3 | **MCP server (gateway/tools)** | Builtin MCP catalog (`builtinMcpService.ts`) — remote MCP over HTTP | Runs in-product; not packaged for external clients |
-| S4 | **Claude Code plugin** | The `/install` combo: MCP + skill + SessionStart/PreCompact hooks | Exists as an installer, not as a `plugin.json` marketplace entry |
+| S1 | **VS Code extension** | VSIX, `builderforce.builderforce-ai` (`clients/vscode`) | ✅ Published by CI to the VS Marketplace **and** Open VSX |
+| S2 | **MCP server (memory)** | `@seanhogg/builderforce-memory-mcp` | ✅ npm + MCP Registry (`io.github.SeanHogg/builderforce-memory`) |
+| S3 | **MCP server (gateway/tools)** | `POST https://api.builderforce.ai/mcp` — JSON-RPC 2.0 / Streamable HTTP, stateless | ✅ Built and listed (`server.json`) |
+| S4 | **Claude Code plugin** | The `/install` combo as a generated plugin + marketplace | ✅ `builderforce-memory/plugins/` + `.claude-plugin/marketplace.json` |
 | S5 | **SaaS web app** | builderforce.ai, Free/Pro, tenant-billed | Live |
 | S6 | **B2B AI gateway** | API-key auth, tenant-billed HTTP API | Live |
 | S7 | **npm SDKs** | `@seanhogg/builderforce-sdk`, `-brain-embedded`, `-feedback`, `-quality`, `-studio`, `-voice` | Published |
 | S8 | **Cloud agent runtime** | Container image (`Dockerfile.api`, agent-runtime) | Built, not published to a registry |
-| S9 | **Evermind model** | `hf-export/Evermind` | Exported, not published |
+| S9 | **Evermind model** | `hf-export/Evermind` | Exported; push blocked on an HF token |
+| S10 | **GitHub Action** | `actions/dispatch-agent` — file a ticket and dispatch an agent from CI | ✅ Usable from this repo; Marketplace listing needs the mirror secret |
 
-Two SKUs are worth creating specifically to unlock channels: a **standalone remote MCP
-endpoint** (S3 packaged for external clients) and a **published container** (S8). Between
-them they unlock AWS, Docker, Anthropic's directory and every MCP registry.
+The standalone remote MCP endpoint (S3) was the highest-leverage build: it is what
+Anthropic's Connectors Directory, AWS's AI Agents & Tools category, Gemini Enterprise's
+registry and every MCP registry actually consume. A **published container** (S8) is the
+one remaining artifact worth creating, for the AWS container path and Docker Hub.
 
 ---
 
@@ -162,16 +169,18 @@ All are demand-driven. Don't build for them speculatively.
 
 Fix these once and several listings unblock together:
 
-1. **A shared listing asset kit** — 400×400 and 1024×1024 logos, 5 screenshots, 60-word
-   and 250-word descriptions, category tags, a demo video. Almost every channel above
-   demands the same set in slightly different sizes.
-2. **A reviewer test tenant** — pre-populated with realistic sample data. Hard requirement
-   for Anthropic, Slack, Atlassian, AWS and Microsoft. Build it once.
-3. **Domain verification + org 2FA on GitHub** — gates GitHub Marketplace paid listings and
-   the verified badge.
-4. **A standalone remote MCP endpoint (S3)** — unlocks Anthropic's directory, AWS's AI
-   Agents category, Gemini Enterprise's registry, and improves every MCP-registry listing.
-5. **A published container (S8)** — required for AWS container path and Docker Hub.
+1. ✅ **A shared listing source** — `distribution/listing.json` holds the copy every
+   channel asks for and is stamped into each payload. Still to produce: 400×400 and
+   1024×1024 logos, 5 screenshots, a demo video.
+2. ⛔ **A reviewer test tenant** — pre-populated with realistic sample data. Hard
+   requirement for Anthropic, Slack, Atlassian, AWS and Microsoft. Needs a live
+   environment; build it once.
+3. ⛔ **Domain verification + org 2FA on GitHub** — gates GitHub Marketplace paid listings
+   and the verified badge.
+4. ✅ **A standalone remote MCP endpoint (S3)** — shipped as `POST /mcp`; unlocks
+   Anthropic's directory, AWS's AI Agents category, Gemini Enterprise's registry, and every
+   MCP-registry listing.
+5. ⛔ **A published container (S8)** — required for the AWS container path and Docker Hub.
 
 ## 8. Sources
 

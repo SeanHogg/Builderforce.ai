@@ -156,8 +156,10 @@ describe('mcpServerRoutes — JSON-RPC 2.0 / Streamable HTTP', () => {
     // version we don't advertise, is a broken install for every client that
     // discovers us through the registry.
     expect(manifest.version).toBe(SERVER_INFO.version);
-    expect(manifest.remotes[0].type).toBe('streamable-http');
-    expect(new URL(manifest.remotes[0].url).pathname).toBe('/mcp');
+    const remote = manifest.remotes[0];
+    expect(remote).toBeDefined();
+    expect(remote!.type).toBe('streamable-http');
+    expect(new URL(remote!.url).pathname).toBe('/mcp');
   });
 
   it('GET and DELETE are refused — this server is stateless', async () => {

@@ -4,6 +4,81 @@
 
 ---
 
+## ✅ RESOLVED 2026-08-07 — Builderforce had nine listable SKUs and two listings
+
+A marketplace-research pass found the gap was not "which marketplaces exist" but
+that the artifacts those marketplaces consume did not exist. Four engineering
+prerequisites blocked roughly twenty listings at once; all four shipped, plus the
+CI that keeps them from rotting.
+
+**1. No standard remote MCP server.** The platform spoke only Builderforce's own
+REST tool shape (`GET /v1/mcp/tools` + `POST /v1/mcp/call`), which no third-party
+MCP client can consume — the reason Anthropic's Connectors Directory, AWS's AI
+Agents & Tools category and every MCP registry were unreachable. Added
+`POST /mcp`: JSON-RPC 2.0 over Streamable HTTP, stateless (`GET`/`DELETE` → 405),
+`initialize` / `notifications/initialized` / `ping` / `tools/list` / `tools/call`,
+authenticated by a `bfk_*` tenant key with a `401` + `WWW-Authenticate` challenge.
+Tool failures come back as results with `isError` rather than JSON-RPC errors, so
+the model still sees them. The catalog and dispatch were NOT reimplemented: the
+three-source union and the extensionId dispatch were extracted out of
+`llmRoutes.ts` into `application/llm/mcpGateway.ts`, and both transports now call
+it, so they cannot advertise different tools. `mcpServerRoutes.ts` +
+`mcpGateway.ts` + 14 tests; mounted at `/mcp` with the same per-tenant rate limit
+as the rest of the gateway. `readOnlyHint` is advertised only on an explicit
+`mutates === false` — an external server that cannot declare the flag stays
+"assume it writes".
+
+**2. The `/install` combo was not a Claude Code plugin.** It was an installer that
+mutates `~/.claude`, which no plugin marketplace can list. `builderforce-memory`
+now ships `plugins/builderforce-memory/` and a root `.claude-plugin/marketplace.json`
+(both pass `claude plugin validate --strict`). The plugin's hook script and skill
+are GENERATED from the same `claude-hooks.ts` functions the installer uses, via
+`scripts/build-claude-plugin.mjs`, and CI fails on a stale copy — so the two
+delivery shapes cannot drift. Required making the hook script machine-independent:
+`bfmemHookSource(null)` now resolves the snapshot path at run time, `HOOK_EVENTS`
+became the single source for both the settings.json merge and the plugin's
+`hooks.json`, and `defaultMemoryFile()`/`resolveMemoryFile()` were extracted so the
+installer, the stdio bin and the plugin all address ONE store. That last extraction
+also fixed a real footgun: the stdio bin previously persisted nothing unless
+`BUILDERFORCE_MEMORY_FILE` was set, so an MCP client respawning it between sessions
+silently lost everything.
+
+**3. Nothing was listed in the MCP registries.** Two `server.json` manifests:
+`packages/memory-mcp/server.json` (npm stdio, `mcpName` ownership marker,
+version-synced from `package.json` by `scripts/sync-mcp-registry.mjs` with a CI
+check) and `Builderforce.ai/server.json` (the remote `/mcp` endpoint). Both publish
+on release over GitHub OIDC — no long-lived registry token. The platform job first
+probes `https://api.builderforce.ai/mcp` and refuses to publish unless it answers
+`401`, because a listing pointing at a dead endpoint fails every client that
+discovers it. A unit test pins `server.json`'s version and URL to the served
+`SERVER_INFO`.
+
+**4. The VSIX was never published by CI, and there was no GitHub Action.** Added a
+`publish-extension` job that packages once and publishes to BOTH the Visual Studio
+Marketplace and Open VSX (the latter is the only route to Cursor, Windsurf,
+VSCodium and Gitpod, since Microsoft's licence bars non-Microsoft editors); each
+publish warns rather than fails when its token is unset or the version already
+exists. Added `actions/dispatch-agent/` — a dependency-free JS action that files a
+ticket and dispatches a cloud agent through the new `/mcp` endpoint, with optional
+wait-and-fail. Because it is a separate runtime it must hard-code advertised tool
+names, which is exactly the silent-failure class `toolNaming.ts` documents, so
+`check-prompt-tool-names.mjs` was extended to verify every `builtin_*` literal in a
+shipped client resolves to a real catalog tool (verified to fail on a bad name).
+
+**Also**: `distribution/listing.json` is now the single source for marketplace copy,
+stamped into the Docker MCP Catalog PR payload and verified against `server.json`
+by `distribution/build.mjs --check` in CI; `docs-site` gained a
+[Remote MCP server](https://builderforce.ai/docs/gateway/mcp) page in en + zh-cn;
+`distribution/README.md` is the operational index. Research behind the channel
+choices: `docs/marketing/DISTRIBUTION-CHANNELS.md`.
+
+Full api suite green (5205 tests, all 11 architecture guards including the layering
+ratchet — `mcpGateway` owns its connection so the route never touches
+infrastructure). Remaining work is credential/live-environment only and stays on the
+roadmap.
+
+---
+
 ## ✅ RESOLVED 2026-08-07 — The Brain chat list had no index behind its ordering
 
 Found while verifying a claim for the consolidated navigation design, which unions

@@ -29,7 +29,16 @@ const TOOL = {
 const TERMINAL = new Set(['completed', 'succeeded', 'failed', 'cancelled', 'canceled', 'error', 'timeout']);
 const SUCCESS = new Set(['completed', 'succeeded']);
 
-const input = (name) => (process.env[`INPUT_${name.toUpperCase().replace(/ /g, '_')}`] ?? '').trim();
+/**
+ * GitHub exports an input as `INPUT_<NAME>` with spaces — and ONLY spaces —
+ * replaced by underscores, so `api-key` arrives as the hyphenated `INPUT_API-KEY`.
+ * The underscore form is accepted as a fallback because a hyphenated name cannot
+ * be assigned in POSIX shell syntax, which makes running this locally awkward.
+ */
+const input = (name) => {
+  const base = `INPUT_${name.toUpperCase().replace(/ /g, '_')}`;
+  return (process.env[base] ?? process.env[base.replace(/-/g, '_')] ?? '').trim();
+};
 const bool = (name) => /^(1|true|yes)$/i.test(input(name));
 
 function fail(message) {
@@ -95,14 +104,29 @@ async function callTool(name, args) {
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * The ticket's deep link. `/projects?tab=tasks&task=<id>` opens the board with
+ * that ticket's detail drawer already open — the same target the Brain's ticket
+ * chips route to. `/tasks/<id>` is NOT a route; the legacy `/tasks` page only
+ * redirects, so a path-style link would land on an empty board.
+ */
+function taskUrl(id, projectId) {
+  const params = new URLSearchParams({ tab: 'tasks' });
+  if (projectId != null && Number.isFinite(projectId)) params.set('project', String(projectId));
+  params.set('task', String(id));
+  return `https://builderforce.ai/projects?${params.toString()}`;
+}
+
 // ── 1. Resolve the ticket ────────────────────────────────────────────────────
 let taskId = input('task-id') ? Number(input('task-id')) : null;
+let taskProjectId = null;
 let deduped = false;
 
 if (taskId != null && Number.isNaN(taskId)) fail(`task-id must be a number, got "${input('task-id')}"`);
 
 if (taskId == null) {
   const projectId = Number(input('project-id'));
+  taskProjectId = projectId;
   const title = input('title');
   if (!Number.isFinite(projectId)) fail('project-id is required when task-id is not given.');
   if (!title) fail('title is required when task-id is not given.');
@@ -134,7 +158,7 @@ if (taskId == null) {
 }
 
 setOutput('task-id', taskId);
-setOutput('task-url', `https://builderforce.ai/tasks/${taskId}`);
+setOutput('task-url', taskUrl(taskId, taskProjectId));
 setOutput('deduped', String(deduped));
 process.stdout.write(`${deduped ? 'Reusing' : 'Created'} Builderforce ticket #${taskId}\n`);
 
