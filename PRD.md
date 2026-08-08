@@ -1,125 +1,170 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #650
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document: Project Health Diagnostic Report Service
 
 ## Problem & Goal
-
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+Stakeholders and project managers lack a single, structured, and programmatically accessible snapshot of project health across six critical dimensions. Manual check-ins and scattered dashboards lead to inconsistent visibility, delayed risk identification, and misalignment. The goal is to provide a backend service that generates a comprehensive, machine-readable diagnostic report with health scores and trend indicators, enabling automated reporting, integration into monitoring pipelines, and consistent health evaluation.
 
 ## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Engineering Managers & Tech Leads**: Consume health data to prioritize mitigations.
+- **Program & Delivery Managers**: Rely on structured reports for status updates.
+- **Downstream Automation Services**: Orchestration engines or CI/CD pipelines that trigger actions based on health metrics.
+- **Internal Analytics Dashboards**: Display historical health trends aggregated from generated reports.
 
 ## Scope
+Deliver a single TypeScript service file (`diagnosticReport.ts`) that exposes at least one exported class or function capable of creating a structured project health snapshot. The output includes typed sections for Timeline, Budget, Quality, Risk, Team, and Alignment, each containing a numeric health score (0–100), a trend indicator, and a short summary.
 
 ### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
+- Single file implementation with clear public API surface.
+- Strictly-typed diagnostic report generation function/class.
+- Six mandatory report sections.
+- Trend indicator logic (improving, stable, declining) per section.
+- Unit-test-friendly structure (pure functions where feasible, minimal side effects).
 
 ### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- Persistent storage or database integration.
+- Real-time data ingestion from external APIs or systems.
+- Authentication, authorization, or request throttling.
+- Visualization or UI rendering of the report.
+- Historical report versioning or comparison logic.
+- Alerting or notification dispatch.
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+### FR1: Report Generation Entry Point
+The module must export at least one named entity (function or class) that, when invoked with required input parameters, returns a complete `DiagnosticReport` object.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+### FR2: DiagnosticReport Schema
+The generated report must conform to the following structure:
 
----
+```
+DiagnosticReport {
+  generatedAt: ISO-8601 string;
+  projectId: string;
+  sections: {
+    timeline: Section;
+    budget: Section;
+    quality: Section;
+    risk: Section;
+    team: Section;
+    alignment: Section;
+  };
+}
+```
 
-### FR-2 — Guided (Interactive) Mode
+Where each `Section` contains:
+- `score`: number (integer, 0–100)
+- `trend`: "improving" | "stable" | "declining"
+- `summary`: string (1–3 sentence natural-language summary)
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+### FR3: Input Parameters
+The service must accept a typed input object containing at minimum:
+- `projectId: string`
+- `metrics`: An object with fields representing raw data points for each section (e.g., schedule variance, budget burn rate, defect density, risk count, team velocity, stakeholder alignment percentage). The exact shape is at the discretion of the implementation but must be strictly typed and documented.
 
----
+### FR4: Scoring Normalization
+Each section score must be normalized to a 0–100 scale based on the provided input metrics. The normalization algorithm must be deterministic and testable.
 
-### FR-3 — Bulk (Import) Mode
+### FR5: Trend Computation
+The service must compute trend based on either:
+- A comparison between current metrics and optional `previousMetrics` provided in the input, OR
+- A threshold-based heuristic defined per section type if no previous data is supplied.
 
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
+If previous data is unavailable, trend defaults to `"stable"` with a clear indication in the summary.
 
----
+### FR6: Summary Generation
+Each section summary must be a human-readable string dynamically composed from the score, trend, and key metric highlights. No hardcoded generic text; summaries must reflect input data.
 
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+### FR7: Input Validation
+The service must validate the input object and throw a descriptive error if required fields are missing or malformed (e.g., scores out of range, negative values where inappropriate).
 
 ## Acceptance Criteria
+- Export `generateDiagnosticReport` (function) or `DiagnosticReportGenerator` (class) from `diagnosticReport.ts`.
+- Calling the exported entity with a valid `DiagnosticInput` returns a `DiagnosticReport` object matching the schema.
+- All six sections are present and contain valid scores (0–100), recognized trends, and non-empty summaries.
+- Providing identical inputs yields identical outputs (pure function behavior).
+- When `previousMetrics` is supplied, trend computation reflects directional change (e.g., declining if quality score dropped).
+- Invalid inputs (missing projectId, out-of-range metrics) cause thrown errors with clear messages.
+- Output JSON-serializable, containing no circular references or runtime-specific artifacts.
+- Implementation passes linting, type checks, and does not rely on runtime environment globals (except standard library).
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+## Requirements
 
----
+_Owned by the business-analyst — authored by the BA role on task #650._
 
-## Out of Scope
+### RQ1: Module & Export Shape
+- The module SHALL reside at `api/src/application/diagnostics/diagnosticReport.ts`.
+- It MUST export a named function `generateDiagnosticReport`.
+- All types (interfaces) used in the public API (`DiagnosticInput`, `DiagnosticReport`, `DiagnosticMetrics`, `Section`, `Trend`) MUST also be exported so consumers can type their call sites.
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+### RQ2: Input Contract (`DiagnosticInput`)
+- `projectId` (string, required, non-empty).
+- `metrics` (object, required) — a `DiagnosticMetrics` bag where every sub-field is optional. Consumers supply only the data they have.
+- `previousMetrics` (object, optional) — same shape as `metrics`. When present, trend is derived by comparing each section's current score against the previous score.
+
+### RQ3: Output Contract (`DiagnosticReport`)
+- The returned object MUST contain:
+  - `generatedAt`: ISO‑8601 timestamp string.
+  - `projectId`: echo of the input.
+  - `sections`: an object with exactly six keys — `timeline`, `budget`, `quality`, `risk`, `team`, `alignment`.
+- Each section value MUST be a `Section` with:
+  - `score`: integer 0–100.
+  - `trend`: `"improving"` | `"stable"` | `"declining"`.
+  - `summary`: a non‑empty, human‑readable string (1‑3 sentences).
+
+### RQ4: Scoring Algorithm (per dimension)
+| Dimension  | Primary inputs                                          | Algorithm summary |
+|------------|--------------------------------------------------------|-------------------|
+| Timeline   | `completionPct`, `elapsedDays`, `plannedDurationDays`   | Schedule Performance Index (SPI = completion% ÷ elapsed%); linear score clamped to [0,100]. |
+| Budget     | `totalBudget`, `spentToDate`, `completionPct`           | Cost Performance Index (CPI = progress% ÷ spent%); linear score clamped to [0,100]. Falls back to burn-rate heuristic when totalBudget is absent. |
+| Quality    | `defectDensity`, `openDefects`, `changeFailureRatePct`, `mttrHours`, `testCoveragePct` | Weighted average of inverted / direct metrics; all sub-components clamped to [0,100]. |
+| Risk       | `aggregateRiskScore`, `riskCount`, `highSeverityRiskCount`, `mitigatedRiskCount` | Prefers aggregate score if supplied; otherwise derives from high-severity ratio and mitigation coverage. |
+| Team       | `velocity`, `targetVelocity`, `activeContributors`, `openRoles`, `churnRatePct` | Velocity ratio double-weighted; penalised by unfilled roles and churn. All clamped to [0,100]. |
+| Alignment  | `stakeholderAlignmentPct`, `okrLinkedPct`, `scopeChangeCount`, `acceptedScopeChanges` | Weighted average of direct percentages; scope‑churn penalty applied when acceptance rate is low. |
+
+- When a section has NO relevant data, its score MUST be `0` and its summary MUST indicate "no data available".
+- All scoring functions MUST be deterministic and free of side effects.
+
+### RQ5: Trend Derivation
+- When `previousMetrics` is provided: compare each section's current score to its previous score.
+  - Δ > +5 → `"improving"`
+  - Δ < −5 → `"declining"`
+  - Otherwise → `"stable"`
+- When `previousMetrics` is absent: apply an absolute-score heuristic:
+  - Score ≥ 70 → `"improving"`
+  - Score ≤ 40 → `"declining"`
+  - Otherwise → `"stable"`
+  - The summary MUST note that no previous data was available for comparison.
+
+### RQ6: Summary Generation
+- Every section summary MUST be constructed dynamically from the input metric values — no hard‑coded, generic strings.
+- Each summary MUST include: the key metric highlights for that dimension, the trend label, and the numeric score.
+
+### RQ7: Input Validation
+- Missing or empty `projectId` → thrown `Error` with descriptive message.
+- `metrics` absent or not an object → thrown `Error`.
+- Any supplied numeric metric outside its documented range (e.g. percentages not in [0,100], fractions not in [0,1], negative counts) → thrown `Error`.
+- The validation error type is `ValidationError` extending `Error` (name `"ValidationError"`).
+
+### RQ8: Non‑Functional
+- Pure function — identical inputs produce identical outputs.
+- No network, file‑system, or database access.
+- No runtime globals beyond `Date` and standard library.
+- JSON‑serializable output (no circular references).
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
