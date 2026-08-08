@@ -1,125 +1,171 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #754
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document (PRD)
 
 ## Problem & Goal
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+### Problem
+When a call is transferred to a different agent, the system currently creates a duplicate row in the call log. This duplication leads to:
+- Inaccurate reporting and analytics.
+- Confusion for agents who see multiple entries for the same call.
+- Increased storage usage and potential performance issues.
 
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+### Goal
+To update the existing call log entry when a call is transferred to a different agent, ensuring that no duplicate rows are created. This will maintain accurate records and improve system efficiency.
 
 ## Target Users / ICP Roles
 
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Call Center Agents**: Users who handle customer calls and need to transfer calls to other agents.
+- **Call Center Managers**: Users who monitor call logs and generate reports for performance analysis.
+- **IT Support**: Users who manage and maintain the call logging system.
 
 ## Scope
 
-### In Scope
+### In-Scope
+- Update the existing call log entry with the new agent's information when a call is transferred.
+- Ensure that the transfer is seamless and does not disrupt the call flow.
+- Provide a clear audit trail of the transfer within the call log.
+- Update reporting and analytics to reflect the accurate agent assignment.
 
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+### Out-of-Scope
+- Changing the current call transfer mechanism.
+- Implementing new UI elements for call transfer.
+- Handling call transfers between different systems or platforms.
+- Modifying the data schema for call logs (unless absolutely necessary).
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+1. **Call Transfer Functionality**
+   - When an agent transfers a call to another agent, the system should identify the existing call log entry.
+   - The system should update the "Assigned Agent" field with the new agent's ID.
+   - The system should record the timestamp of the transfer.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+2. **Audit Trail**
+   - Maintain a history of transfers within the call log entry.
+   - Include the original agent, new agent, and timestamp for each transfer.
 
----
+3. **User Notifications**
+   - Notify the new agent of the transferred call.
+   - Provide a brief summary of the call history to the new agent.
 
-### FR-2 — Guided (Interactive) Mode
+4. **Reporting and Analytics**
+   - Ensure that reports accurately reflect the assigned agent at each stage of the call.
+   - Update any relevant metrics (e.g., call duration, handle time) based on the transfer.
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
-
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+5. **Error Handling**
+   - If the call transfer fails, the system should notify the original agent and log the error.
+   - Provide retry options for the agent if the transfer fails.
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+1. **No Duplicate Rows**
+   - After a call transfer, only one entry exists in the call log for that call.
+   - The entry is updated with the new agent's information.
 
----
+2. **Accurate Reporting**
+   - Reports generated show the correct agent assignment for each call segment.
+   - Historical data reflects the transfer history accurately.
+
+3. **Seamless User Experience**
+   - The transfer process does not cause interruptions or delays in the call.
+   - Agents receive timely notifications about transferred calls.
+
+4. **Error Handling**
+   - The system handles transfer failures gracefully, providing clear feedback to the agent.
+   - Errors are logged for IT support to review and address.
+
+5. **Audit Trail**
+   - The call log includes a complete history of transfers, including timestamps and agent IDs.
 
 ## Out of Scope
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+- Modifying the call transfer workflow or UI.
+- Integrating with external systems for call transfers.
+- Implementing new features related to call monitoring or recording.
+- Changes to the data storage architecture.
+
+## Requirements
+
+### Data Requirements
+
+1. **Call Log Entry Schema**
+   - Each call log entry MUST have a unique `call_id` (UUID) as the primary identifier.
+   - The `assigned_agent_id` field MUST be updatable without creating a new record.
+   - A `transfer_history` JSON array field MUST store transfer events with: `from_agent_id`, `to_agent_id`, `transfer_timestamp`, and optional `transfer_reason`.
+   - The `call_status` field MUST reflect the current state: `active`, `transferred`, `completed`, or `failed`.
+
+2. **Data Integrity**
+   - The system MUST enforce a unique constraint on `call_id` to prevent duplicate entries.
+   - All transfer operations MUST use database transactions to ensure atomicity.
+
+### Functional Requirements
+
+3. **Transfer Detection**
+   - The system MUST detect a call transfer event through the existing transfer API/handler.
+   - The transfer event MUST include: `call_id`, `from_agent_id`, `to_agent_id`, and `transfer_timestamp`.
+
+4. **Update Logic**
+   - Upon detecting a transfer, the system MUST locate the existing call log entry by `call_id`.
+   - The system MUST update only the `assigned_agent_id` field (and optionally `call_status` if transferred).
+   - The system MUST append a new entry to the `transfer_history` array rather than overwriting.
+
+5. **Audit Trail Requirements**
+   - Each transfer MUST record: timestamp (ISO 8601), source agent ID, destination agent ID.
+   - Transfer history MUST be queryable for reporting purposes.
+   - The original agent assignment MUST be preserved in the transfer history.
+
+### Non-Functional Requirements
+
+6. **Performance**
+   - Call transfer updates MUST complete within 500ms to avoid call disruption.
+   - The transfer history array SHOULD be capped at 10 entries to prevent unbounded growth.
+
+7. **Reliability**
+   - Transfer operations MUST be idempotent — re-sending the same transfer request MUST NOT create duplicate entries.
+   - Failed transfers MUST NOT leave the call log in an inconsistent state (partial update).
+
+8. **Notifications**
+   - The system MUST emit a `call.transferred` event to the notification service.
+   - The notification payload MUST include: `call_id`, `new_agent_id`, `transfer_history_summary`.
+
+### Error Handling Requirements
+
+9. **Failure Scenarios**
+   - If the call ID does not exist, the system MUST create a new entry and log a warning (fallback behavior).
+   - If the transfer to the same agent is attempted, the system MUST reject with an appropriate error.
+   - Database connection failures MUST trigger a retry with exponential backoff (max 3 attempts).
+
+10. **Logging**
+    - All transfer attempts (success and failure) MUST be logged with correlation IDs.
+    - Error logs MUST include: `call_id`, `from_agent_id`, `to_agent_id`, `error_code`, `timestamp`.
+
+### API Requirements
+
+11. **Transfer Endpoint Contract**
+    - The existing transfer endpoint MUST accept: `{ call_id, target_agent_id, reason? }`.
+    - Response MUST return the updated call log entry with transfer history.
+    - HTTP status codes: 200 (success), 404 (call not found), 409 (invalid transfer), 500 (server error).
+
+### Reporting & Analytics Integration
+
+12. **Metrics Calculation**
+    - The system MUST calculate `agent_handle_time` as the duration from agent assignment to transfer/completion.
+    - Transfer count per agent MUST be trackable via the `transfer_history` query.
+    - Reports MUST be able to reconstruct the call journey from the `transfer_history` array.
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
