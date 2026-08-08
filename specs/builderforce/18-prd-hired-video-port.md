@@ -1,10 +1,18 @@
 # PRD 18 — hired.video → Builderforce.ai port
 
 **Status:** Proposed · **Owner:** platform · **Created:** 2026-08-07
+**Companion to:** [PRD 19 — burnrateos.com consolidation](./19-prd-burnrateos-consolidation.md)
 **Goal:** absorb the whole of `C:\code\hired\hired.video` into Builderforce.ai so
 `hired.video` traffic can be redirected at `builderforce.ai` with nothing lost, and so
 **two new built-in agents — Recruiter and HR — own the recruiting and people work as
 first-class Builderforce teammates.**
+
+> **Read [PRD 19 §2](./19-prd-burnrateos-consolidation.md#2--capability-ownership-register--governs-prd-18-and-prd-19) before scheduling any track here.** hired.video and BurnRateOS
+> collide with *each other* on twelve capabilities — affiliates, bookings, phone/VoIP, the
+> campaign engine, the OKR store, people/HR, payouts, content, support and more. That register
+> names one owner per capability and governs both PRDs. In several rows hired.video's
+> implementation is the one that survives (payouts, tax reporting); in others it is dropped
+> rather than ported (bookings, phone).
 
 The headline capability that has to work on day one of Phase 1:
 

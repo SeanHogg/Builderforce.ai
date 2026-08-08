@@ -19,8 +19,11 @@ import { Hono } from 'hono';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { TenantRole } from '../../domain/shared/types';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
-import type { Db } from '../../infrastructure/database/connection';
-import { signState, verifyState, exchangeCodeForTokens } from '../../infrastructure/auth/oauthState';
+import type { DbHandle as Db } from '../../application/shared/dbHandle';
+import {
+  buildProviderConsentUrl,
+  completeProviderOAuthCallback,
+} from '../../application/shared/providerOAuthConnect';
 import {
   availableMailboxProviders,
   clampMailboxLimit,
@@ -38,20 +41,8 @@ import {
 } from '../../application/mailbox/mailboxService';
 import { reportCaughtError } from '../../application/observability/caughtErrorReporter';
 
-interface MailboxState extends Record<string, unknown> {
-  provider: string;
-  userId: string;
-  tenantId: number;
-  returnTo: string;
-}
-
-/** Where the connect flow sends the browser back to. Constrained to a path on
- *  our own app so a crafted `returnTo` cannot turn the callback into an open
- *  redirect to an attacker's host. */
-function safeReturnTo(raw: string | undefined): string {
-  const value = (raw ?? '').trim();
-  return value.startsWith('/') && !value.startsWith('//') ? value : '/growth';
-}
+/** Where the connect flow sends the browser back to when it is not told. */
+const DEFAULT_RETURN_TO = '/growth';
 
 /** Parse the shared inbox-filter query string. ONE parser, so the REST route and
  *  the MCP tools cannot disagree about what `unread=true` means. */
@@ -104,27 +95,18 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
     const provider = getMailboxProvider(name);
     if (!provider) return c.json({ error: 'Unknown mailbox provider.' }, 400);
 
-    const rec = env as unknown as Record<string, string | undefined>;
-    if (!rec[provider.clientIdKey] || !rec[provider.clientSecretKey]) {
+    const authUrl = await buildProviderConsentUrl(env, provider, {
+      providerName: name,
+      redirectUri: callbackUrl(c, name),
+      userId: c.get('userId') as string,
+      tenantId: c.get('tenantId') as number,
+      returnTo: c.req.query('returnTo'),
+      returnToFallback: DEFAULT_RETURN_TO,
+    });
+    if (!authUrl) {
       return c.json({ error: `${provider.label} is not configured on this deployment.` }, 503);
     }
-
-    const state = await signState(env.JWT_SECRET, {
-      provider: name,
-      userId: c.get('userId'),
-      tenantId: c.get('tenantId'),
-      returnTo: safeReturnTo(c.req.query('returnTo')),
-    } satisfies MailboxState);
-
-    const params = new URLSearchParams({
-      client_id: rec[provider.clientIdKey]!,
-      redirect_uri: callbackUrl(c, name),
-      response_type: 'code',
-      scope: provider.scopes.join(' '),
-      state,
-      ...(provider.extraAuthParams ?? {}),
-    });
-    return c.json({ authUrl: `${provider.authUrl}?${params}` });
+    return c.json({ authUrl });
   });
 
   // GET /callback/:provider — provider redirect (PUBLIC; authed by signed state).
@@ -137,21 +119,23 @@ export function createMailboxRoutes(db: Db): Hono<HonoEnv> {
     const rawState = c.req.query('state');
 
     // The user declining consent is a normal outcome, not an error — say so.
-    if (c.req.query('error')) return c.redirect(`${base}/growth?mailbox=declined`);
-    if (!provider || !code || !rawState) return c.redirect(`${base}/growth?mailbox=error`);
+    if (c.req.query('error')) return c.redirect(`${base}${DEFAULT_RETURN_TO}?mailbox=declined`);
+    if (!provider || !code || !rawState) return c.redirect(`${base}${DEFAULT_RETURN_TO}?mailbox=error`);
 
-    const state = await verifyState<MailboxState>(env.JWT_SECRET, rawState);
-    if (!state || state.provider !== name) return c.redirect(`${base}/growth?mailbox=invalid_state`);
-
-    const rec = env as unknown as Record<string, string | undefined>;
-    const clientId = rec[provider.clientIdKey];
-    const clientSecret = rec[provider.clientSecretKey];
-    if (!clientId || !clientSecret) return c.redirect(`${base}${state.returnTo}?mailbox=unavailable`);
+    const result = await completeProviderOAuthCallback(env, provider, {
+      providerName: name, code, rawState, redirectUri: callbackUrl(c, name),
+    });
+    if (!result.ok) {
+      if (result.reason === 'exchange_failed') {
+        reportCaughtError(result.error, { source: 'presentation/routes/mailboxRoutes.ts', operation: 'callback' });
+      }
+      const returnTo = result.returnTo ?? DEFAULT_RETURN_TO;
+      const outcome = result.reason === 'exchange_failed' ? 'error' : result.reason;
+      return c.redirect(`${base}${returnTo}?mailbox=${outcome}`);
+    }
+    const { state, tokens: tok } = result;
 
     try {
-      const tok = await exchangeCodeForTokens(
-        { tokenUrl: provider.tokenUrl, clientId, clientSecret }, code, callbackUrl(c, name),
-      );
       // The mailbox address is not optional the way a calendar's is: it is the
       // From: of every campaign and the natural key of the row, so a grant we
       // cannot name is refused rather than stored half-identified.

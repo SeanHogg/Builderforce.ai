@@ -315,6 +315,6 @@ export function availableDriveProviders(
   return PROVIDERS.map((provider) => ({
     name: provider.name,
     label: provider.label,
-    configured: Boolean(env[provider.clientIdKey] && env[provider.clientSecretKey]),
+    configured: isProviderOAuthConfigured(env, provider),
   }));
 }

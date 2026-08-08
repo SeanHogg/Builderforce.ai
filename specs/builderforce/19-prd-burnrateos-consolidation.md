@@ -77,8 +77,10 @@ logic beneath it.
 | Workspace packages | 1 — `packages/push-pwa` |
 | CxO AI tools | **48** across 11 tool modules |
 
-**Combined program (PRD 18 + PRD 19):** ~832 tables, ~322 route modules, ~660 pages,
-~410K LOC. This is the real size of "one platform".
+**Combined incoming (PRD 18 + PRD 19):** **832 tables** (428 + 404), **328 API route modules**
+(219 + 109), **471 pages** (209 + 262). Against Builderforce's own 78 surveyed routes that
+makes **549 destinations** the navigation architecture has to hold — a 7× increase on what it
+was designed against.
 
 ### The one free lunch
 
@@ -163,6 +165,7 @@ For each contested capability: who owns the surviving implementation, and what t
 | 16 | **Meetings / notes** | meetings (0292), ceremonies | — | `ScratchPad*` (13), `MeetingTranscript`, `ScratchPadNotesTemplate` | **Builderforce meetings** | ScratchPad transcript + notes-template half is net-new and merges in |
 | 17 | **AI credits vs token caps** | token caps + consumption meters (0218) | tier enforcement | `AiCreditBalance/Transaction/Purchase`, credit packs | **the consumption-meter framework** ([[consumption-meter-framework]]) | credits become a meter denomination, not a parallel ledger |
 | 18 | **Enrichment / dedup / import** | connectors | `enrichment`, `scraping` | `EnrichmentCache/Transaction`, `TenantEnrichmentCredits`, `Dedup`, `ImportJob/Row` | **BurnRateOS** (credit-metered) | hired's enrichment merges in |
+| 19 | **"Company" — three meanings, one table** | none | `companies` (8 tables — employer profiles a candidate browses, reviews) | `Company` + `CompanyDomain` + facets (`CompanyCRM`/`Billing`/`Support`/`Product`/`Marketing`) + `AccountCompanyRelationship` | **BurnRateOS's company graph** (§3.2) | hired.video's employer profiles are the SAME entity with no `OWNER` relationship to your tenant — they merge in as `kind` rows rather than becoming a third company concept. Resolves what looked like an unavoidable collision. |
 
 Rows 4, 6 and 12 are genuine either/or calls; the rest have an obvious owner. **All of them
 must be settled before the losing side's track is scheduled**, because the cost of discovering
@@ -181,20 +184,70 @@ explicit FK columns + Drizzle `relations()`; `@@map`/`@map` become the SQL names
 data migrates without a rename. Runtime queries are already raw Neon tagged-template SQL, so
 they port with type changes only.
 
-### 3.2 Two-level tenancy → tenant + ?
+### 3.2 Tenancy — RESOLVED 2026-08-07: company is a real axis, and BurnRateOS already built it
 
-BurnRateOS scopes **every** row by both `accountId` (the tenant) and `companyId` (the
-business being operated). Builderforce has `tenant_id` + `project_id` ([[global-project-scope]])
-and **no company entity**. Three options, in preference order:
+**Decision:** `accountId` → `tenant_id`; `companyId` → a first-class **company** axis; the
+tenant↔company relationship is many-to-many; a project associates with one or more companies.
+Company creation is a **CEO-agent** capability, not a settings form.
 
-1. **`accountId` → `tenant_id`, `companyId` → a new `companies` table under tenant.** Honest
-   to the model; adds one scope axis the rest of the platform can ignore (default company).
-2. `accountId` → `tenant_id`, `companyId` → `project_id`. Cheapest, but a company is not a
-   project and the semantics will leak.
-3. Collapse to `tenant_id` only. Loses multi-company accounts — a real BurnRateOS feature.
+The proposal turned out to be already implemented upstream — this is an adoption, not a design.
+BurnRateOS shipped it in April 2026 as "company-graph v1":
 
-**Recommend (1).** This is an operator decision because it changes the platform's scope model;
-it is logged in the Gap Register.
+- **`account_company_relationships`** *is* the junction — `(accountId, companyId, kind)` unique,
+  with `kind ∈ OWNER | CUSTOMER | PROSPECT | INVESTOR_TARGET | PORTFOLIO_COMPANY | PARTNER |
+  COMPETITOR | VENDOR | OTHER`, an `isPrimary` flag (which replaced `Company.isDefault`), and a
+  full ownership-claim flow — `claimedByUserId`, `claimVerificationMethod`
+  (`DOMAIN_DNS_TXT | EMAIL_AT_DOMAIN | MANUAL_REVIEW`), DNS TXT token, and verification stamps.
+- **`Company.accountId` is deliberately nullable** — NULL is a global business-graph row nobody
+  has claimed (enriched from a data provider); non-NULL means a tenant runs it. That single
+  nullable column is what lets one table be both *the business you operate* and *a company in
+  your CRM / portfolio / investor pipeline*, discriminated by relationship `kind`.
+- `Company` already carries the operating facets a CEO agent would fill in: onboarding status,
+  `isDraft`, team size, funding round, available cash, monthly budget, team cost, monthly
+  revenue, business stage, industry, market focus, plus public profile fields. The schema
+  comments state these feed the pitch-deck AI and the market-research tool directly.
+
+**`isDraft` matches a pattern Builderforce already has.** It is the silent pre-onboarding
+company auto-created so a user can reach the dashboard without declaring a business yet — the
+same idea as the auto-provisioned Default workspace + project ([[zero-setup-onboarding]]).
+Reconcile them rather than shipping both.
+
+#### The one invariant this decision forces — and it cannot be deferred
+
+**Every ported row must carry `tenant_id NOT NULL`, denormalized, in the same codemod.**
+
+Measured across the 404 models: **79** carry `accountId` + `companyId`, **51** carry `accountId`
+only, **112** carry neither (child rows scoped through a parent FK) — and **162 carry
+`companyId` with no `accountId` at all** (`Deal`, `KanbanBoard`, `Task`, `Epic`,
+`FinancialTransaction`, `PlanningPokerSession`, …). The tenancy service's docstring claims
+"every authenticated row is scoped by BOTH accountId and companyId"; the schema does not agree.
+
+For those 162, the owning tenant is derivable *only* through the junction — and the junction's
+`@@unique([accountId, companyId, kind])` permits two different accounts to each hold an `OWNER`
+row for the same company. So a `Deal`'s owning tenant is genuinely ambiguous at the schema
+level. Every Builderforce gate gates on tenant: `enforceTokenCaps` and the consumption meters
+([[consumption-meter-framework]]), the `activity_log` audit store
+([[unified-activity-audit-log]]), per-tenant derived-key connector credential decryption,
+`planFeatures.ts` / `featureGate.ts` ([[paid-plan-feature-gate]]), and the superadmin bypass
+([[superadmin-unlimited-dispatch-two-caps]]). None of them can run on a derived, possibly
+two-valued tenant.
+
+Fix is mechanical and belongs in the B0 codemod: stamp `tenant_id NOT NULL` on all 404,
+back-filled from the primary `OWNER` relationship at migration time, keeping `company_id` as the
+business axis beside it. Doing this later means a second migration the size of the first, plus
+rewriting every query written in between.
+
+With the invariant in place, **switching company never crosses an identity boundary** — it stays
+a filter inside one tenant, which is exactly how the navigation architecture's scope table
+already draws it. Many-to-many tenant↔company then means what it should: an agency and its
+client both *see* a company record, while every data row still has exactly one owner.
+
+#### Project ↔ company
+
+Many-to-many, using the `isPrimary` pattern already in the junction: **one primary company per
+project** for rollups and billing attribution, plus additional associations for visibility.
+Without a primary, `portfolioRollup.ts`, `lib/deliveryVerdict.ts` and `objective_links` all
+double-count a project shared by two companies.
 
 ### 3.3 Valkey/Redis → `getOrSetCached`
 
@@ -240,13 +293,23 @@ Each track is **merge-first**: reconcile against the §2 owner, then port only w
 
 ## 5 · Exceptions — decisions, not engineering
 
-1. **Tenancy model** (§3.2) — does Builderforce gain a `companies` axis under `tenant`?
-   Everything in B1–B9 is scoped by it, so this blocks B0's codemod.
+1. ~~**Tenancy model**~~ — **RESOLVED 2026-08-07** (§3.2). Company is a first-class axis;
+   tenant↔company is many-to-many via the `account_company_relationships` junction BurnRateOS
+   already ships; projects associate with one or more companies with one primary; a CEO agent
+   creates companies. B0's codemod and the navigation architecture's scope rules are both
+   unblocked. The one condition carried into B0: `tenant_id NOT NULL` denormalized onto all 404
+   models in the same pass, because 162 of them carry `companyId` with no tenant column today.
 2. **Web push comes back.** Migration 0195 deleted Web Push from Builderforce and the standing
    note is "never reintroduce VAPID" ([[push-removed-burnrateos]]) — precisely *because* push
-   lived in BurnRateOS. Consolidating BurnRateOS reverses that. Either re-admit VAPID + the
-   `push-fanout` queue + `packages/push-pwa`, or drop BurnRateOS's push campaigns and lose a
-   shipped marketing capability. Not an engineering call.
+   lived in BurnRateOS. Consolidating BurnRateOS reverses that: `MarketingPushSubscriber/
+   Campaign/Delivery`, the `push-fanout` queue and `packages/push-pwa` all arrive with B4.
+   **This also settles an open question in the navigation architecture**, whose invite matrix
+   lists "installed PWA, not running → a true ring while the app is closed" as *blocked by
+   policy* for exactly this reason. So the question is no longer "revisit the VAPID rule to
+   enable one feature" — push is re-admitted anyway by this consolidation, and all that remains
+   is whether the live-session ring rides it. Either re-admit VAPID (and get the closed-app ring
+   nearly free), or drop BurnRateOS's push campaigns and lose a shipped marketing capability.
+   Not an engineering call.
 3. **Rows 4, 6 and 12 of §2** — affiliates, VoIP provider, content store. Each is a genuine
    either/or between two working implementations.
 4. **AI credits vs token caps** (§2 row 17) — BurnRateOS sells credit packs (500/$4.99 →

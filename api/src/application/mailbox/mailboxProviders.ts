@@ -675,7 +675,7 @@ export function availableMailboxProviders(
     return {
       name,
       label: provider.label,
-      configured: Boolean(env[provider.clientIdKey] && env[provider.clientSecretKey]),
+      configured: isProviderOAuthConfigured(env, provider),
     };
   });
 }
