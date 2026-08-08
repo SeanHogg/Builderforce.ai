@@ -1,125 +1,163 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #740
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document (PRD)
 
 ## Problem & Goal
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+### Problem
+Developers and QA engineers often face challenges with test execution due to unreliable test environments, flaky tests, and lack of visibility into test results. This leads to increased debugging time, delayed releases, and reduced confidence in the product quality.
 
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+### Goal
+Ensure that all tests pass reliably and efficiently, providing clear visibility into test results and reducing the time spent on debugging and maintaining tests.
 
 ## Target Users / ICP Roles
 
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Software Developers**: Individuals responsible for writing and maintaining code and associated tests.
+- **QA Engineers**: Professionals focused on ensuring product quality through testing and validation.
+- **DevOps Engineers**: Team members responsible for setting up and maintaining the CI/CD pipeline and test environments.
 
 ## Scope
 
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- **Test Environment Management**: Ensure that test environments are stable and consistent.
+- **Test Execution**: Implement a reliable mechanism for executing tests across different environments.
+- **Test Result Reporting**: Provide detailed and actionable test results.
+- **Flaky Test Detection**: Identify and flag tests that are non-deterministic or unreliable.
+- **Integration with CI/CD**: Seamlessly integrate with existing CI/CD pipelines.
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+1. **Test Environment Management**
+   - Automatically provision and configure test environments.
+   - Support for multiple environments (e.g., dev, staging, prod-like).
+   - Ensure environment isolation to prevent conflicts.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+2. **Test Execution**
+   - Support for multiple test frameworks (e.g., JUnit, pytest, Mocha).
+   - Parallel test execution to reduce overall test runtime.
+   - Ability to schedule test runs at specific times or triggers.
 
----
+3. **Test Result Reporting**
+   - Generate detailed test reports with pass/fail status, execution time, and error logs.
+   - Provide a dashboard for real-time visibility into test results.
+   - Support for exporting reports in various formats (e.g., HTML, PDF, JSON).
 
-### FR-2 — Guided (Interactive) Mode
+4. **Flaky Test Detection**
+   - Analyze test results to identify flaky tests.
+   - Flag tests that fail intermittently and suggest possible causes.
+   - Provide recommendations for fixing flaky tests.
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
-
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+5. **Integration with CI/CD**
+   - Integrate with popular CI/CD tools (e.g., Jenkins, GitHub Actions, GitLab CI).
+   - Trigger test runs as part of the CI/CD pipeline.
+   - Provide feedback to the pipeline based on test results.
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
-
----
+- All tests execute successfully without manual intervention.
+- Test environments are consistently stable and reproducible.
+- Test reports are comprehensive and easily interpretable.
+- Flaky tests are identified and reported accurately.
+- CI/CD integration works seamlessly, with tests triggering automatically on code commits.
+- Developers and QA engineers can access test results and reports without delay.
 
 ## Out of Scope
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+- **Test Case Management**: This PRD does not cover the creation or management of test cases.
+- **Performance Testing**: Tools and frameworks for performance testing are not included.
+- **Security Testing**: Security-specific testing tools and processes are out of scope.
+- **Test Data Management**: The management and provisioning of test data are not addressed.
+- **Test Environment Cleanup**: Automated cleanup of test environments after test runs is not covered.
+
+## Requirements
+
+### Test Environment Management Requirements
+
+| ID | Requirement | Priority | Traceability |
+|----|-------------|----------|--------------|
+| TEM-001 | The system shall support provisioning test environments automatically using containerization (Docker/Kubernetes) | Must Have | FR-1.1 |
+| TEM-002 | The system shall support configuration management for environment variables, dependencies, and services | Must Have | FR-1.1 |
+| TEM-003 | The system shall support multiple named environments (dev, staging, prod-like) with isolated resources | Must Have | FR-1.2 |
+| TEM-004 | Each test environment shall be isolated to prevent conflicts between test runs | Must Have | FR-1.3 |
+| TEM-005 | The system shall provide status tracking for environment provisioning and teardown | Should Have | FR-1.1 |
+| TEM-006 | The system shall support environment templates for reproducibility | Should Have | FR-1.2 |
+
+### Test Execution Requirements
+
+| ID | Requirement | Priority | Traceability |
+|----|-------------|----------|--------------|
+| TE-001 | The system shall support JUnit (Java) test framework | Must Have | FR-2.1 |
+| TE-002 | The system shall support pytest (Python) test framework | Must Have | FR-2.1 |
+| TE-003 | The system shall support Mocha (JavaScript/Node.js) test framework | Must Have | FR-2.1 |
+| TE-004 | The system shall support parallel test execution with configurable worker count | Must Have | FR-2.2 |
+| TE-005 | The system shall support scheduling test runs via cron expressions | Should Have | FR-2.3 |
+| TE-006 | The system shall support triggering test runs via webhook callbacks | Should Have | FR-2.3 |
+| TE-007 | The system shall support test run prioritization based on code changes | Could Have | FR-2.3 |
+| TE-008 | The system shall provide test execution cancellation capability | Should Have | FR-2.2 |
+
+### Test Result Reporting Requirements
+
+| ID | Requirement | Priority | Traceability |
+|----|-------------|----------|--------------|
+| TRR-001 | Each test execution shall generate a report with pass/fail status for every test | Must Have | FR-3.1 |
+| TRR-002 | Each test execution shall record execution time for every test | Must Have | FR-3.1 |
+| TRR-003 | Each failed test shall capture and store error logs and stack traces | Must Have | FR-3.1 |
+| TRR-004 | The system shall provide a web-based dashboard for real-time test result visibility | Must Have | FR-3.2 |
+| TRR-005 | The system shall support exporting reports in HTML format | Must Have | FR-3.3 |
+| TRR-006 | The system shall support exporting reports in JSON format | Must Have | FR-3.3 |
+| TRR-007 | The system shall support exporting reports in PDF format | Should Have | FR-3.3 |
+| TRR-008 | The system shall provide historical trend analysis for test results over time | Should Have | FR-3.2 |
+
+### Flaky Test Detection Requirements
+
+| ID | Requirement | Priority | Traceability |
+|----|-------------|----------|--------------|
+| FTD-001 | The system shall track test execution history to identify non-deterministic behavior | Must Have | FR-4.1 |
+| FTD-002 | A test shall be flagged as flaky when it fails in ≥30% of runs over the last 30 executions | Must Have | FR-4.1 |
+| FTD-003 | The system shall provide a confidence score for flaky test classification | Should Have | FR-4.2 |
+| FTD-004 | The system shall suggest possible causes for flaky behavior based on error patterns | Should Have | FR-4.2 |
+| FTD-005 | The system shall provide recommendations for fixing flaky tests | Should Have | FR-4.3 |
+| FTD-006 | The system shall allow configuration of the flaky test threshold | Could Have | FR-4.1 |
+
+### CI/CD Integration Requirements
+
+| ID | Requirement | Priority | Traceability |
+|----|-------------|----------|--------------|
+| CI-001 | The system shall integrate with GitHub Actions via custom action | Must Have | FR-5.1 |
+| CI-002 | The system shall integrate with Jenkins via plugin | Should Have | FR-5.1 |
+| CI-003 | The system shall integrate with GitLab CI via CI/CD template | Should Have | FR-5.1 |
+| CI-004 | The system shall trigger test runs automatically on code commit events | Must Have | FR-5.2 |
+| CI-005 | The system shall return exit codes compatible with CI/CD pipeline failure detection | Must Have | FR-5.3 |
+| CI-006 | The system shall provide detailed build status annotations in CI/CD platforms | Should Have | FR-5.3 |
+
+### Non-Functional Requirements
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| NFR-001 | Test execution shall complete within 5 minutes for a suite of 100 tests (excluding external dependencies) | Should Have |
+| NFR-002 | The dashboard shall load test results within 2 seconds for up to 10,000 test records | Should Have |
+| NFR-003 | The system shall support concurrent execution of at least 10 test suites | Should Have |
+| NFR-004 | All API endpoints shall respond within 500ms under normal load | Should Have |
+
+### Data Retention Requirements
+
+| ID | Requirement | Priority |
+|----|-------------|----------|
+| DRR-001 | Test results shall be retained for 90 days by default | Should Have |
+| DRR-002 | Configuration shall allow admin to adjust data retention period | Could Have |
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
