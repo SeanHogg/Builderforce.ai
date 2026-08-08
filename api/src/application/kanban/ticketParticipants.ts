@@ -418,12 +418,27 @@ export class TicketParticipantsService {
     return row ? this.mapRow(row) : null;
   }
 
+  /** Check if a participant exists for the given task. */
+  async participantExists(env: Env, tenantId: number, taskId: number, participantId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: ticketParticipants.id })
+      .from(ticketParticipants)
+      .where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId), eq(ticketParticipants.id, participantId)))
+      .limit(1);
+    return !!row;
+  }
+
   /** Waive/remove an assessment-added participant (audited elsewhere via sign-off). */
-  async removeParticipant(env: Env, tenantId: number, taskId: number, participantId: string): Promise<void> {
+  async removeParticipant(env: Env, tenantId: number, taskId: number, participantId: string): Promise<{ removed: boolean }> {
+    const exists = await this.participantExists(env, tenantId, taskId, participantId);
+    if (!exists) {
+      return { removed: false };
+    }
     await this.db
       .delete(ticketParticipants)
       .where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId), eq(ticketParticipants.id, participantId), inArray(ticketParticipants.source, ['assessment', 'manual'])));
     await this.bump(env, taskId);
+    return { removed: true };
   }
 
   /**
