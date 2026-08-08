@@ -550,7 +550,11 @@
       "memory": "记忆",
       "rehearsal": "预演"
     },
-    "primaryAria": "主导航"
+    "primaryAria": "主导航",
+    "destination": {
+      "canvasLibrary": "画布",
+      "newCanvas": "新建画布"
+    }
   },
   "alerts": {
     "title": "告警",
@@ -5881,7 +5885,18 @@
         "answer": "可以。将一套交付流程——泳道、必需角色、审阅关卡和推荐名单——打包为看板模板并发布到市场出售或共享。任何团队都可以一键将经过验证的模板安装到项目中，继承一套受治理、按角色放行的工作流，而无需从零构建。"
       }
     ],
-    "newsletterPlaceholder": "your@email.com"
+    "newsletterPlaceholder": "your@email.com",
+    "beat": {
+      "howItWorks": "工作方式",
+      "proof": "实证",
+      "breadth": "你能构建什么",
+      "compare": "为何选择 Builderforce",
+      "pricing": "价格",
+      "questions": "常见问题",
+      "writing": "文章",
+      "keepUp": "保持关注"
+    },
+    "featuresLead": "网站、工作流、数据集、模型、文档、人员与智能体——全部作为真实且互联的对象置于同一画布，而不是聊天中的附件。"
   },
   "pricing": {
     "seo": {
@@ -11935,7 +11950,9 @@
     "mediaKit": "媒体资料包",
     "signIn": "登录",
     "getStarted": "立即开始 →",
-    "toggleMenu": "切换菜单"
+    "toggleMenu": "切换菜单",
+    "switchToLight": "切换到浅色模式",
+    "switchToDark": "切换到深色模式"
   },
   "media": {
     "seo": {
@@ -14475,7 +14492,6 @@
     "cookiePolicy": "Cookie 政策"
   },
   "pwa": {
-    "dismiss": "关闭通知",
     "updateReady": "新版本已就绪 — {seconds} 秒后更新。",
     "updateNow": "立即更新",
     "installPitch": "安装 Builderforce，获得更快的全屏应用体验。",
@@ -14640,5 +14656,47 @@
     "regionLabel": "公告",
     "dismiss": "关闭",
     "defaultCta": "了解更多"
+  },
+  "toast": {
+    "dismiss": "关闭通知"
+  },
+  "resumeWork": {
+    "savedOne": "我们已将“{title}”保存到您的工作区。",
+    "savedMany": "我们已将“{title}”以及另外 {count} 个画布保存到您的工作区。",
+    "open": "打开"
+  },
+  "canvasSwitcher": {
+    "title": "画布：{name}",
+    "selectAria": "选择画布",
+    "canvases": "画布",
+    "untitled": "未命名画布",
+    "unsavedLabel": "尚未保存",
+    "unsavedHint": "保存在此浏览器中",
+    "recentLabel": "最近",
+    "empty": "还没有画布",
+    "newCanvas": "新建画布",
+    "creating": "正在创建…",
+    "allCanvases": "全部画布"
+  },
+  "canvasLibrary": {
+    "title": "您的画布",
+    "subtitle": "您创建的全部内容，以及开始新作品的方式。",
+    "pendingTitle": "等待保存",
+    "pendingHint": "这些画布仍保存在此浏览器中。打开其中一个即可将其保存到您的工作区。",
+    "untitled": "未命名画布"
+  },
+  "commandPalette": {
+    "trigger": "搜索",
+    "openAria": "搜索目的地（Ctrl 或 Cmd + K）",
+    "title": "前往",
+    "placeholder": "搜索页面、报告或画布…",
+    "noResults": "没有与“{query}”匹配的结果。",
+    "hintMove": "<kbd>↑↓</kbd> 移动",
+    "hintOpen": "<kbd>⏎</kbd> 打开",
+    "hintClose": "<kbd>esc</kbd> 关闭"
+  },
+  "homeScroller": {
+    "previous": "显示上一项",
+    "next": "显示更多"
   }
 }

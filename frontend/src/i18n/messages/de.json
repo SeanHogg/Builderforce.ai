@@ -550,7 +550,11 @@
       "memory": "Gedächtnis",
       "rehearsal": "Probelauf"
     },
-    "primaryAria": "Primär"
+    "primaryAria": "Primär",
+    "destination": {
+      "canvasLibrary": "Canvas",
+      "newCanvas": "Neues Canvas"
+    }
   },
   "alerts": {
     "title": "Warnungen",
@@ -5881,7 +5885,18 @@
         "answer": "Ja. Verpacken Sie einen Lieferprozess — Lanes, erforderliche Rollen, Prüf-Gates und ein empfohlenes Aufgebot — als Kanban-Vorlage und veröffentlichen Sie sie auf dem Marktplatz zum Verkauf oder Teilen. Jedes Team kann eine bewährte Vorlage mit einem Klick in ein Projekt installieren und einen gesteuerten, rollengeschützten Workflow erben, statt einen von Grund auf zu bauen."
       }
     ],
-    "newsletterPlaceholder": "du@email.com"
+    "newsletterPlaceholder": "du@email.com",
+    "beat": {
+      "howItWorks": "So funktioniert es",
+      "proof": "Belege",
+      "breadth": "Was du bauen kannst",
+      "compare": "Warum Builderforce",
+      "pricing": "Was es kostet",
+      "questions": "Fragen",
+      "writing": "Artikel",
+      "keepUp": "Auf dem Laufenden bleiben"
+    },
+    "featuresLead": "Websites, Workflows, Datensätze, Modelle, Dokumente, Menschen und Agents – alles echte, verbundene Objekte auf einem Board statt Anhänge in einem Chat."
   },
   "pricing": {
     "seo": {
@@ -11935,7 +11950,9 @@
     "mediaKit": "Medien-Kit",
     "signIn": "Anmelden",
     "getStarted": "Loslegen →",
-    "toggleMenu": "Menü umschalten"
+    "toggleMenu": "Menü umschalten",
+    "switchToLight": "Zum hellen Modus wechseln",
+    "switchToDark": "Zum dunklen Modus wechseln"
   },
   "media": {
     "seo": {
@@ -14475,7 +14492,6 @@
     "cookiePolicy": "Cookie-Richtlinie"
   },
   "pwa": {
-    "dismiss": "Benachrichtigung schließen",
     "updateReady": "Eine neue Version ist bereit – Update in {seconds} s.",
     "updateNow": "Jetzt aktualisieren",
     "installPitch": "Installiere Builderforce für eine schnellere Vollbild-App.",
@@ -14640,5 +14656,47 @@
     "regionLabel": "Ankündigungen",
     "dismiss": "Schließen",
     "defaultCta": "Mehr erfahren"
+  },
+  "toast": {
+    "dismiss": "Benachrichtigung schließen"
+  },
+  "resumeWork": {
+    "savedOne": "Wir haben „{title}“ in deinem Workspace gespeichert.",
+    "savedMany": "Wir haben „{title}“ und {count} weitere in deinem Workspace gespeichert.",
+    "open": "Öffnen"
+  },
+  "canvasSwitcher": {
+    "title": "Canvas: {name}",
+    "selectAria": "Canvas auswählen",
+    "canvases": "Canvas",
+    "untitled": "Unbenanntes Canvas",
+    "unsavedLabel": "Noch nicht gespeichert",
+    "unsavedHint": "In diesem Browser gespeichert",
+    "recentLabel": "Zuletzt",
+    "empty": "Noch keine Canvas",
+    "newCanvas": "Neues Canvas",
+    "creating": "Wird erstellt…",
+    "allCanvases": "Alle Canvas"
+  },
+  "canvasLibrary": {
+    "title": "Deine Canvas",
+    "subtitle": "Alles, was du erstellt hast – und die Wege, etwas Neues zu beginnen.",
+    "pendingTitle": "Warten auf Speicherung",
+    "pendingHint": "Diese Canvas liegen noch in diesem Browser. Öffne eines, um es in deinem Workspace zu speichern.",
+    "untitled": "Unbenanntes Canvas"
+  },
+  "commandPalette": {
+    "trigger": "Suchen",
+    "openAria": "Ziele durchsuchen (Strg oder Cmd + K)",
+    "title": "Gehe zu",
+    "placeholder": "Nach Seite, Bericht oder Canvas suchen…",
+    "noResults": "Keine Treffer für „{query}“.",
+    "hintMove": "<kbd>↑↓</kbd> bewegen",
+    "hintOpen": "<kbd>⏎</kbd> öffnen",
+    "hintClose": "<kbd>esc</kbd> schließen"
+  },
+  "homeScroller": {
+    "previous": "Vorheriges anzeigen",
+    "next": "Mehr anzeigen"
   }
 }

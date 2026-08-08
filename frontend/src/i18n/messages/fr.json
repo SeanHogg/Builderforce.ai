@@ -550,7 +550,11 @@
       "memory": "Mémoire",
       "rehearsal": "Répétition"
     },
-    "primaryAria": "Principale"
+    "primaryAria": "Principale",
+    "destination": {
+      "canvasLibrary": "Canevas",
+      "newCanvas": "Nouveau canevas"
+    }
   },
   "alerts": {
     "title": "Alertes",
@@ -5881,7 +5885,18 @@
         "answer": "Oui. Empaquetez un processus de livraison — couloirs, rôles requis, contrôles de relecture et répertoire recommandé — sous forme de modèle Kanban et publiez-le sur le marché pour le vendre ou le partager. N’importe quelle équipe peut installer un modèle éprouvé dans un projet en un clic et hériter d’un flux gouverné et régi par les rôles au lieu d’en construire un de zéro."
       }
     ],
-    "newsletterPlaceholder": "vous@email.com"
+    "newsletterPlaceholder": "vous@email.com",
+    "beat": {
+      "howItWorks": "Comment ça marche",
+      "proof": "Preuves",
+      "breadth": "Ce que vous pouvez créer",
+      "compare": "Pourquoi Builderforce",
+      "pricing": "Le prix",
+      "questions": "Questions",
+      "writing": "Articles",
+      "keepUp": "Restez informé"
+    },
+    "featuresLead": "Sites web, workflows, jeux de données, modèles, documents, personnes et agents : autant d’objets réels et connectés sur un même canevas, et non des pièces jointes dans une conversation."
   },
   "pricing": {
     "seo": {
@@ -11935,7 +11950,9 @@
     "mediaKit": "Kit média",
     "signIn": "Se connecter",
     "getStarted": "Commencer →",
-    "toggleMenu": "Basculer le menu"
+    "toggleMenu": "Basculer le menu",
+    "switchToLight": "Passer au mode clair",
+    "switchToDark": "Passer au mode sombre"
   },
   "media": {
     "seo": {
@@ -14475,7 +14492,6 @@
     "cookiePolicy": "Politique relative aux cookies"
   },
   "pwa": {
-    "dismiss": "Ignorer la notification",
     "updateReady": "Une nouvelle version est prête : mise à jour dans {seconds} s.",
     "updateNow": "Mettre à jour",
     "installPitch": "Installez Builderforce pour une application plus rapide en plein écran.",
@@ -14640,5 +14656,47 @@
     "regionLabel": "Annonces",
     "dismiss": "Fermer",
     "defaultCta": "En savoir plus"
+  },
+  "toast": {
+    "dismiss": "Ignorer la notification"
+  },
+  "resumeWork": {
+    "savedOne": "Nous avons enregistré « {title} » dans votre espace de travail.",
+    "savedMany": "Nous avons enregistré « {title} » et {count} autres dans votre espace de travail.",
+    "open": "Ouvrir"
+  },
+  "canvasSwitcher": {
+    "title": "Canevas : {name}",
+    "selectAria": "Sélectionner un canevas",
+    "canvases": "Canevas",
+    "untitled": "Canevas sans titre",
+    "unsavedLabel": "Pas encore enregistré",
+    "unsavedHint": "Conservé dans ce navigateur",
+    "recentLabel": "Récents",
+    "empty": "Aucun canevas pour l’instant",
+    "newCanvas": "Nouveau canevas",
+    "creating": "Création…",
+    "allCanvases": "Tous les canevas"
+  },
+  "canvasLibrary": {
+    "title": "Vos canevas",
+    "subtitle": "Tout ce que vous avez créé, et les façons de commencer autre chose.",
+    "pendingTitle": "En attente d’enregistrement",
+    "pendingHint": "Ces canevas sont encore conservés dans ce navigateur. Ouvrez-en un pour l’enregistrer dans votre espace de travail.",
+    "untitled": "Canevas sans titre"
+  },
+  "commandPalette": {
+    "trigger": "Rechercher",
+    "openAria": "Rechercher une destination (Ctrl ou Cmd + K)",
+    "title": "Aller à",
+    "placeholder": "Rechercher une page, un rapport ou un canevas…",
+    "noResults": "Aucun résultat pour « {query} ».",
+    "hintMove": "<kbd>↑↓</kbd> naviguer",
+    "hintOpen": "<kbd>⏎</kbd> ouvrir",
+    "hintClose": "<kbd>échap</kbd> fermer"
+  },
+  "homeScroller": {
+    "previous": "Afficher le précédent",
+    "next": "Afficher plus"
   }
 }

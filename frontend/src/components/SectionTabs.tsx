@@ -1,6 +1,5 @@
 'use client';
 
-import type { CSSProperties } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -18,16 +17,6 @@ import { TabCountBadge } from '@/components/TabCountBadge';
  * tabs (e.g. API Keys) are hidden from non-owners, matching the prior sidebar
  * behavior.
  */
-
-function tabStyle(active: boolean): CSSProperties {
-  return {
-    display: 'inline-flex', alignItems: 'center', gap: 7, padding: '12px 14px', fontSize: 13,
-    fontWeight: 600, whiteSpace: 'nowrap', textDecoration: 'none',
-    color: active ? 'var(--text-strong)' : 'var(--text-secondary)',
-    borderBottom: `2px solid ${active ? 'var(--accent)' : 'transparent'}`,
-    marginBottom: -1, transition: 'color .15s, border-color .15s',
-  };
-}
 
 export default function SectionTabs() {
   const t = useTranslations('nav');
@@ -64,7 +53,7 @@ export default function SectionTabs() {
             <Link
               key={tab.id || 'default'}
               href={tabHref(group, tab)}
-              style={tabStyle(active)}
+              className={`section-tab${active ? ' is-active' : ''}`}
               aria-current={active ? 'page' : undefined}
             >
               <span aria-hidden="true" style={{ fontSize: 15 }}>{tab.icon}</span>

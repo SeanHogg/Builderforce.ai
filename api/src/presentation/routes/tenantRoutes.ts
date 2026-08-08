@@ -5,11 +5,16 @@ import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { TenantService } from '../../application/tenant/TenantService';
 import {
   acceptInvitation,
+  acceptInvitationStatement,
+  findByTokenHash,
   findPendingByEmail,
+  invalidateInvitations,
   invite,
   listPending,
   revokeInvitation,
 } from '../../application/kernel/InvitationService';
+import { getObject } from '../../application/kernel/ObjectRegistry';
+import { sha256Hex } from '../../domain/shared/hash';
 import { TenantRole, TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
@@ -36,9 +41,7 @@ import {
   agentHosts,
   agentHostProjects,
   sourceControlIntegrations,
-  creationSessionInvites,
   creationSessionMembers,
-  tenantInvitations,
   tenantMembers,
   tenants,
   users,
@@ -99,11 +102,6 @@ async function assertTenantMember(db: Db, tenantId: number, userId: string): Pro
     .limit(1);
 
   return Boolean(row);
-}
-
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 /**
@@ -250,24 +248,24 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     // This is the sole deliberate cross-tenant read: the unguessable one-time
     // token is the lookup key and the selected tenantId becomes the scope for
     // every subsequent membership check and write.
-    const [invitation] = await db.select({
-      id: creationSessionInvites.id,
-      sessionId: creationSessionInvites.sessionId,
-      tenantId: creationSessionInvites.tenantId,
-      email: creationSessionInvites.email,
-      role: creationSessionInvites.role,
-      expiresAt: creationSessionInvites.expiresAt,
-      acceptedAt: creationSessionInvites.acceptedAt,
-      revokedAt: creationSessionInvites.revokedAt,
-      createdBy: creationSessionInvites.createdBy,
-    }).from(creationSessionInvites)
-      .where(eq(creationSessionInvites.tokenHash, tokenHash)).limit(1);
-    if (!invitation || invitation.revokedAt || invitation.acceptedAt || invitation.expiresAt.getTime() <= Date.now()) {
+    // `findByTokenHash` returns pending rows only — revoked, accepted and expired
+    // are excluded by the service's single `isPending()`, so this route no longer
+    // re-derives "still usable" from four nullable columns.
+    const invitation = await findByTokenHash(db, tokenHash);
+    if (!invitation || invitation.kind !== 'session') {
       return c.json({ error: 'Invitation is invalid, expired, or already used' }, 410);
     }
-    if (!account?.email || account.email.trim().toLowerCase() !== invitation.email.trim().toLowerCase()) {
+    if (!account?.email || !invitation.email
+      || account.email.trim().toLowerCase() !== invitation.email.trim().toLowerCase()) {
       return c.json({ error: 'Sign in with the email address that received this invitation' }, 403);
     }
+    // The session it grants access to is the registry entry it points at —
+    // `creation_session_invites.session_id` was dropped by migration 0435.
+    const target = invitation.objectId
+      ? await getObject(db, c.env as Env, invitation.tenantId, invitation.objectId)
+      : null;
+    if (!target) return c.json({ error: 'Invitation is invalid, expired, or already used' }, 410);
+    const sessionId = target.refId;
     await acceptPendingInvitations(db, c.env as Env, tenantService, userId, account.email);
     if (!(await assertTenantMember(db, invitation.tenantId, userId))) {
       return c.json({ error: 'The invited workspace cannot add another member yet', code: 'TENANT_SEAT_LIMIT' }, 409);
@@ -277,16 +275,13 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       : null;
     if (!role) return c.json({ error: 'Invitation role is invalid' }, 409);
     await db.batch([
-      db.insert(creationSessionMembers).values({ sessionId: invitation.sessionId, userId, role, invitedBy: invitation.createdBy })
+      db.insert(creationSessionMembers).values({ sessionId, userId, role, invitedBy: invitation.invitedBy })
         .onConflictDoUpdate({ target: [creationSessionMembers.sessionId, creationSessionMembers.userId], set: { role } }),
-      db.update(creationSessionInvites).set({ acceptedBy: userId, acceptedAt: new Date() }).where(and(
-        eq(creationSessionInvites.id, invitation.id),
-        eq(creationSessionInvites.tenantId, invitation.tenantId),
-        isNull(creationSessionInvites.acceptedAt),
-        isNull(creationSessionInvites.revokedAt),
-      )),
+      acceptInvitationStatement(db, { id: invitation.id, tenantId: invitation.tenantId, inviteeRef: userId }),
     ]);
-    return c.json({ sessionId: invitation.sessionId, tenantId: invitation.tenantId, role });
+    // The batch bypasses `acceptInvitation`, so its cache drop happens here.
+    await invalidateInvitations(c.env as Env, invitation.tenantId);
+    return c.json({ sessionId, tenantId: invitation.tenantId, role });
   });
 
   // PATCH /api/tenants/:id/name  – WebJWT required; renames a workspace (owner/manager only)

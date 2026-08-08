@@ -5,8 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { CreationCanvas } from '@/components/creation-canvas/CreationCanvas';
 import { useAuth } from '@/lib/AuthContext';
-import { creationSessionsApi } from '@/lib/builderforceApi';
-import { creationGraphFromSnapshot, isLocalCreationSession, readLocalCreationSession, removeLocalCreationSession } from '@/lib/creationSessions';
+import { isLocalCreationSession } from '@/lib/creationSessions';
+import { claimLocalDraft, rememberLastCanvas } from '@/lib/pendingWork';
 
 export default function CreationSessionClient({ sessionId }: { sessionId: string }) {
   const router = useRouter();
@@ -17,23 +17,31 @@ export default function CreationSessionClient({ sessionId }: { sessionId: string
   const [claimError, setClaimError] = useState<string | null>(null);
   const local = isLocalCreationSession(sessionId);
 
+  // Claiming itself lives in `lib/pendingWork` — this route and the shell-level
+  // <ResumeWorkBridge> both call the same coalesced function, so whichever gets
+  // there first does the work and the other joins its promise. Two copies of this
+  // effect is how the same board got claimed twice.
   useEffect(() => {
     if (!local || !isAuthenticated || !hasTenant || claiming.current) return;
-    const snapshot = readLocalCreationSession(sessionId);
-    if (!snapshot) return;
     claiming.current = true;
-    void (async () => {
-      try {
-        const graph = creationGraphFromSnapshot(snapshot);
-        const created = await creationSessionsApi.claim({ clientSessionId: sessionId, title: snapshot.title, initialPrompt: snapshot.initialPrompt, timeline: snapshot.timeline, ...graph });
-        removeLocalCreationSession(sessionId);
-        router.replace(`/create/${created.session.id}`);
-      } catch (error) {
+    void claimLocalDraft(sessionId)
+      .then((claimed) => {
+        if (claimed) router.replace(`/create/${claimed.sessionId}`);
+        else claiming.current = false;
+      })
+      .catch((error: unknown) => {
         claiming.current = false;
         setClaimError(error instanceof Error ? error.message : t('noticeClaimFailed'));
-      }
-    })();
-  }, [hasTenant, isAuthenticated, local, router, sessionId]);
+      });
+  }, [hasTenant, isAuthenticated, local, router, sessionId, t]);
+
+  // A durable canvas the person is looking at IS "what I was working on" — the
+  // switcher and the shell read this back so returning never depends on them
+  // remembering a name.
+  useEffect(() => {
+    if (local || !hasTenant) return;
+    rememberLastCanvas(sessionId, document.title || sessionId);
+  }, [hasTenant, local, sessionId]);
 
   return <>
     {/* Theme tokens, not literals: this rides on the guest→sign-in path, which

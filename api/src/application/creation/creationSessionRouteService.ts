@@ -16,7 +16,6 @@ import {
   brainChatMessages,
   creationSessionEvents,
   creationOutcomeEvents,
-  creationSessionInvites,
   creationSessionMembers,
   creationSessionObjects,
   creationSessionProjectLinks,
@@ -36,12 +35,11 @@ import {
   taskSpecs,
   specVersions,
   tenantMembers,
-  tenantInvitations,
   tenants,
   users,
 } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
-import type { HonoEnv } from '../../env';
+import type { Env, HonoEnv } from '../../env';
 import { resolveAppBaseUrl } from '../../env';
 import { resolveChatAccess } from '../brain/chatAccess';
 import { getLimits, type PlanLimits } from '../../domain/tenant/PlanLimits';
@@ -54,6 +52,17 @@ import { sendTransactionalEmail } from '../email/sendEmail';
 import { sendCreationSessionInviteEmail } from '../../infrastructure/email/EmailService';
 import { reportCaughtError } from '../observability/caughtErrorReporter';
 import { normalizeChatMode } from '../brain/chatMode';
+import { sha256Hex } from '../../domain/shared/hash';
+import { findObject, getObject, registerObject, type ObjectRef } from '../kernel/ObjectRegistry';
+import {
+  acceptInvitation,
+  acceptInvitationStatement,
+  findByTokenHash,
+  invalidateInvitations,
+  invite as inviteToObject,
+  listForObject,
+  revokeInvitation,
+} from '../kernel/InvitationService';
 
 type SessionRole = 'viewer' | 'commenter' | 'editor' | 'runner' | 'owner';
 const ROLE_RANK: Record<SessionRole, number> = { viewer: 0, commenter: 1, editor: 2, runner: 3, owner: 4 };
@@ -166,9 +175,30 @@ function cleanRole(raw: unknown): SessionRole | null {
   return typeof raw === 'string' && raw in ROLE_RANK ? raw as SessionRole : null;
 }
 
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+/**
+ * A session's entry in the object registry — what its invitations point at now
+ * that `creation_session_invites.session_id` is gone (migration 0435).
+ *
+ * TWO helpers rather than one, because the registry write is an upsert and a GET
+ * must not perform one: `ensure` runs on the invite-creation path, where a session
+ * that has never been registered is exactly the case that needs fixing, and `find`
+ * runs on list and revoke, where a missing entry means there are no invitations to
+ * show and a write would be a read path quietly mutating the database.
+ */
+type SessionRef = { id: string; tenantId: number; title: string };
+
+async function ensureSessionObject(db: Db, env: Env, session: SessionRef): Promise<ObjectRef> {
+  return registerObject(db, env, {
+    tenantId: session.tenantId,
+    kind: 'creation_session',
+    refId: session.id,
+    domain: 'canvas',
+    title: session.title,
+  });
+}
+
+async function findSessionObject(db: Db, session: SessionRef): Promise<ObjectRef | null> {
+  return findObject(db, session.tenantId, 'creation_session', session.id);
 }
 
 export function validCreationGraph(objects: GraphObjectInput[], connections: GraphConnectionInput[]): string | null {
@@ -1725,46 +1755,38 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const tenantId = c.get('tenantId') as number;
     const userId = c.get('userId') as string;
     const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId)).limit(1);
-    const [invitation] = await db.select().from(creationSessionInvites).where(and(
-      eq(creationSessionInvites.tokenHash, tokenHash),
-      eq(creationSessionInvites.tenantId, tenantId),
-    )).limit(1);
-    if (!invitation || invitation.revokedAt || invitation.acceptedAt || invitation.expiresAt.getTime() <= Date.now()) {
+    // `findByTokenHash` returns only rows that are still pending — accepted,
+    // revoked and expired are filtered by the service's one `isPending()` — so the
+    // route no longer re-derives "still usable" from four nullable columns.
+    const invitation = await findByTokenHash(db, tokenHash);
+    if (!invitation || invitation.tenantId !== tenantId || invitation.kind !== 'session') {
       return c.json({ error: 'Invitation is invalid, expired, or already used' }, 410);
     }
-    if (!user?.email || user.email.trim().toLowerCase() !== invitation.email.trim().toLowerCase()) {
+    if (!user?.email || !invitation.email || user.email.trim().toLowerCase() !== invitation.email.trim().toLowerCase()) {
       return c.json({ error: 'Sign in with the email address that received this invitation' }, 403);
     }
     const role = cleanRole(invitation.role);
     if (!role) return c.json({ error: 'Invitation role is invalid' }, 409);
+    // The invitation points at the session through the object registry, so the
+    // session id is the registry entry's `refId` rather than a column here.
+    const target = invitation.objectId ? await getObject(db, c.env, tenantId, invitation.objectId) : null;
+    if (!target) return c.json({ error: 'Invitation is invalid, expired, or already used' }, 410);
+    const sessionId = target.refId;
     await db.batch([
-      db.insert(creationSessionMembers).values({ sessionId: invitation.sessionId, userId, role, invitedBy: invitation.createdBy })
+      db.insert(creationSessionMembers).values({ sessionId, userId, role, invitedBy: invitation.invitedBy })
         .onConflictDoUpdate({ target: [creationSessionMembers.sessionId, creationSessionMembers.userId], set: { role } }),
-      db.update(creationSessionInvites).set({ acceptedBy: userId, acceptedAt: new Date() }).where(and(
-        eq(creationSessionInvites.id, invitation.id),
-        eq(creationSessionInvites.tenantId, tenantId),
-        isNull(creationSessionInvites.acceptedAt),
-        isNull(creationSessionInvites.revokedAt),
-      )),
+      acceptInvitationStatement(db, { tenantId, id: invitation.id, inviteeRef: userId }),
     ]);
-    return c.json({ sessionId: invitation.sessionId, role });
+    // The batch bypasses `acceptInvitation`, so its cache drop happens here.
+    await invalidateInvitations(c.env, tenantId);
+    return c.json({ sessionId, role });
   });
 
   router.get('/:id/invitations', async (c) => {
     const access = await requireSession(c, 'owner');
     if (!access) return c.json({ error: 'Session not found or invitations are not visible' }, 404);
-    const invitations = await db.select({
-      id: creationSessionInvites.id,
-      email: creationSessionInvites.email,
-      role: creationSessionInvites.role,
-      expiresAt: creationSessionInvites.expiresAt,
-      acceptedAt: creationSessionInvites.acceptedAt,
-      revokedAt: creationSessionInvites.revokedAt,
-      createdAt: creationSessionInvites.createdAt,
-    }).from(creationSessionInvites).where(and(
-      eq(creationSessionInvites.sessionId, access.session.id),
-      eq(creationSessionInvites.tenantId, access.session.tenantId),
-    )).orderBy(desc(creationSessionInvites.createdAt)).limit(100);
+    const object = await findSessionObject(db, access.session);
+    const invitations = object ? await listForObject(db, access.session.tenantId, object.id) : [];
     return c.json({ invitations });
   });
 
@@ -1773,13 +1795,13 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     if (!access) return c.json({ error: 'Session not found or invitations are not editable' }, 404);
     const invitationId = c.req.param('invitationId');
     if (!UUID_RE.test(invitationId)) return c.json({ error: 'Invalid invitation id' }, 400);
-    const [revoked] = await db.update(creationSessionInvites).set({ revokedAt: new Date() }).where(and(
-      eq(creationSessionInvites.id, invitationId),
-      eq(creationSessionInvites.sessionId, access.session.id),
-      eq(creationSessionInvites.tenantId, access.session.tenantId),
-      isNull(creationSessionInvites.acceptedAt),
-      isNull(creationSessionInvites.revokedAt),
-    )).returning({ id: creationSessionInvites.id });
+    // Scoped to this session's object before revoking, so an owner of one session
+    // cannot revoke an invitation belonging to another.
+    const object = await findSessionObject(db, access.session);
+    const onThisSession = object
+      && (await listForObject(db, access.session.tenantId, object.id)).some((row) => row.id === invitationId);
+    const revoked = onThisSession
+      && (await revokeInvitation(db, c.env, { tenantId: access.session.tenantId, id: invitationId }));
     if (!revoked) return c.json({ error: 'Pending invitation not found' }, 404);
     return c.body(null, 204);
   });
@@ -1841,23 +1863,26 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       const tokenHash = await sha256Hex(rawToken);
       const expiresInHours = Math.min(24 * 30, Math.max(1, Math.floor(Number(body.expiresInHours) || 24 * 7)));
       const expiresAt = new Date(Date.now() + expiresInHours * 3_600_000);
-      const [invitation] = await db.insert(creationSessionInvites).values({
-        sessionId: access.session.id,
+      const object = await ensureSessionObject(db, c.env, access.session);
+      const invitation = await inviteToObject(db, c.env, {
         tenantId,
+        kind: 'session',
+        objectId: object.id,
         email,
         role,
         tokenHash,
         expiresAt,
-        createdBy: c.get('userId') as string,
-      }).returning({ id: creationSessionInvites.id });
-      if (!invitation) return c.json({ error: 'Invitation could not be created' }, 500);
-      const [workspaceInvite] = await db.select({ id: tenantInvitations.id }).from(tenantInvitations).where(and(
-        eq(tenantInvitations.tenantId, tenantId),
-        eq(tenantInvitations.email, email),
-        eq(tenantInvitations.status, 'pending'),
-      )).limit(1);
-      if (!workspaceInvite) await db.insert(tenantInvitations).values({
-        tenantId, email, role: 'developer', status: 'pending', invitedByUserId: c.get('userId') as string,
+        invitedBy: c.get('userId') as string,
+      });
+      // A canvas invite to a stranger implies a workspace invite. No pre-check:
+      // `invite()` is idempotent on (tenant, kind, email) for a pending row, which
+      // is the select-then-insert race the service exists to remove.
+      await inviteToObject(db, c.env, {
+        tenantId,
+        kind: 'tenant',
+        email,
+        role: 'developer',
+        invitedBy: c.get('userId') as string,
       });
       const acceptPath = `/create/invitations/${rawToken}`;
       const [inviter] = await db.select({ name: users.displayName, email: users.email }).from(users)
@@ -1905,18 +1930,21 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     // Keep a durable invitation record even when the person already has an
     // account. acceptedAt distinguishes this immediate membership grant from a
     // pending cold-email invite while preserving the campaign/audit evidence.
-    const auditToken = `${crypto.randomUUID()}${crypto.randomUUID()}`.replace(/-/g, '');
-    await db.insert(creationSessionInvites).values({
-      sessionId: access.session.id,
+    const auditObject = await ensureSessionObject(db, c.env, access.session);
+    const auditRow = await inviteToObject(db, c.env, {
       tenantId,
-      email: target.email.trim().toLowerCase(),
+      kind: 'session',
+      objectId: auditObject.id,
+      email: target.email,
       role,
-      tokenHash: await sha256Hex(auditToken),
       expiresAt: new Date(Date.now() + 7 * 24 * 3_600_000),
-      acceptedBy: target.id,
-      acceptedAt: new Date(),
-      createdBy: c.get('userId') as string,
+      invitedBy: c.get('userId') as string,
     });
+    // Immediately accepted, which is what distinguishes this record from a pending
+    // cold-email invite. If the person already had a pending invite to this
+    // session, `invite()` returned that row and this resolves it rather than
+    // leaving it open beside a membership they now hold.
+    await acceptInvitation(db, c.env, { id: auditRow.id, tenantId, inviteeRef: target.id });
     await notifyAttention(c, access.session.id, {
       kind: existingMember ? 'creation.session.role_changed' : 'creation.session.invitation', title: existingMember ? `Your role changed in ${access.session.title}` : `You were invited to ${access.session.title}`,
       body: `Access role: ${role}`, directUserIds: [target.id],

@@ -16,7 +16,7 @@ import { recordGuestPrompt, startGuestCreationSession } from './guestPromptCaptu
 
 /** The JSON body the helper actually posted. */
 function sentBody(): Record<string, unknown> {
-  const [, init] = mocks.apiRequestStream.mock.calls.at(-1) as [string, RequestInit];
+  const [, init] = mocks.apiRequestStream.mock.calls.at(-1) as unknown as [string, RequestInit];
   return JSON.parse(String(init.body));
 }
 
@@ -33,7 +33,7 @@ describe('recordGuestPrompt', () => {
       prompt: '  Build me a CRM  ', surface: 'landing', sessionRef: 'local-1', mode: 'work',
     })).resolves.toBe(true);
 
-    const [path] = mocks.apiRequestStream.mock.calls[0] as [string];
+    const [path] = mocks.apiRequestStream.mock.calls[0] as unknown as [string];
     expect(path).toBe('/api/guest/prompt');
     expect(sentBody()).toMatchObject({
       visitorId: 'visitor-1',
@@ -46,7 +46,7 @@ describe('recordGuestPrompt', () => {
 
   it('rides the navigation that follows it — the request must be keepalive', async () => {
     await recordGuestPrompt({ prompt: 'Build a CRM', surface: 'landing' });
-    const [, init] = mocks.apiRequestStream.mock.calls[0] as [string, RequestInit];
+    const [, init] = mocks.apiRequestStream.mock.calls[0] as unknown as [string, RequestInit];
     expect(init.keepalive).toBe(true);
   });
 

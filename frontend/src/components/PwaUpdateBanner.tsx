@@ -2,8 +2,8 @@
 
 import { useTranslations } from 'next-intl';
 import { useEffect, useRef, useState } from 'react';
-import { PwaToast, PwaToastDismissButton, PwaToastPrimaryButton, PwaToastText } from './PwaToast';
-import { usePwaToastSlot } from './pwaToastStack';
+import { AppToast, AppToastDismissButton, AppToastPrimaryButton, AppToastText } from './AppToast';
+import { useAppToastSlot } from './appToastStack';
 
 /** Seconds before an available update auto-applies if the user doesn't act. */
 const AUTORELOAD_SECONDS = 60;
@@ -128,7 +128,7 @@ export function PwaUpdateBanner() {
 
   // Register in the shared bottom-center stack while the banner is live so the
   // install prompt offsets above it instead of overlapping (slot 0 = bottom).
-  const slot = usePwaToastSlot('update', waitingSw != null);
+  const slot = useAppToastSlot('update', waitingSw != null);
 
   if (!waitingSw) return null;
 
@@ -138,10 +138,10 @@ export function PwaUpdateBanner() {
   };
 
   return (
-    <PwaToast slot={slot}>
-      <PwaToastText>{t('updateReady', { seconds: secondsLeft })}</PwaToastText>
-      <PwaToastPrimaryButton onClick={applyUpdate}>{t('updateNow')}</PwaToastPrimaryButton>
-      <PwaToastDismissButton onClick={dismiss} />
-    </PwaToast>
+    <AppToast slot={slot}>
+      <AppToastText>{t('updateReady', { seconds: secondsLeft })}</AppToastText>
+      <AppToastPrimaryButton onClick={applyUpdate}>{t('updateNow')}</AppToastPrimaryButton>
+      <AppToastDismissButton onClick={dismiss} />
+    </AppToast>
   );
 }

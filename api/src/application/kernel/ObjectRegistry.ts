@@ -47,6 +47,7 @@ import {
   revisions,
   shareLinks,
 } from '../../infrastructure/database/schema';
+import { sha256Hex } from '../../domain/shared/hash';
 import type { Env } from '../../env';
 
 /** The fifteen seats on the roster (PRD 20 §3). The schema's domain column, the
@@ -422,10 +423,7 @@ export async function getObjectShares(db: Db, env: Env, tenantId: number, id: st
 }
 
 /** SHA-256, matching the hash-only rule the one-time-code store already applies. */
-async function hashToken(token: string): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(token));
-  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
+const hashToken = sha256Hex;
 
 export async function createShareLink(
   db: Db,

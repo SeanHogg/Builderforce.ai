@@ -18,6 +18,7 @@ import { DeliveryPanelBrainBridge } from './insights/DeliveryPanelBrainBridge';
 import { FinancePanelProvider } from './insights/finance/FinancePanelProvider';
 import { FinancePanelBrainBridge } from './insights/finance/FinancePanelBrainBridge';
 import { WidgetBrainBridge } from './widgets/WidgetBrainBridge';
+import { DestinationBrainBridge } from './workspace/DestinationBrainBridge';
 import { DevexPanelProvider } from './insights/DevexPanelProvider';
 import { DevexPanelBrainBridge } from './insights/DevexPanelBrainBridge';
 import { CanvasPanelProvider } from './canvas/CanvasPanelProvider';
@@ -39,7 +40,7 @@ import { convertVisitor } from '@/lib/marketingApi';
 import { claimGuestRoomIntoAccount } from '@/lib/guestRoomApi';
 import { useOptionalBrainContext } from '@seanhogg/builderforce-brain-embedded';
 import { startGuestCreationSession } from '@/lib/guestPromptCapture';
-import { CanvasRouteArtifact } from './workspace-canvas/CanvasRouteArtifact';
+import { ResumeWorkBridge } from './workspace/ResumeWorkBridge';
 import { PlatformAnnouncements } from './announcements/PlatformAnnouncements';
 
 /** Preserve old campaign links while moving prompt-led creation onto Canvas. */
@@ -119,7 +120,7 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
     // routes (blog, marketplace, …) stay in PublicShell.
     const group = findActiveGroup(pathname);
     if (group?.tabs && group.tabs.length > 1) {
-      return <AppShell><CanvasRouteArtifact>{children}</CanvasRouteArtifact></AppShell>;
+      return <AppShell>{children}</AppShell>;
     }
     return <PublicShell>{children}</PublicShell>;
   }
@@ -164,7 +165,7 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
     return <AppShell>{null}</AppShell>;
   }
   return (
-    <OnboardingGate renderShell={(gated) => <AppShell><CanvasRouteArtifact>{gated}</CanvasRouteArtifact></AppShell>}>
+    <OnboardingGate renderShell={(gated) => <AppShell>{gated}</AppShell>}>
       {children}
     </OnboardingGate>
   );
@@ -314,6 +315,12 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
                   no targeted message. */}
               <PlatformAnnouncements />
               <MarketingConversionTracker />
+              {/* Claims every account-less canvas this browser holds the moment a
+                  tenant exists, and offers the way back. Driven by the local-draft
+                  INDEX rather than `?next=`, so a redirect lost to an OAuth round
+                  trip or the workspace picker is no longer data loss. Self-gating:
+                  renders nothing unless it actually rescued something. */}
+              <ResumeWorkBridge />
               <FreelancerRouteGuard />
               <SalesRouteGuard />
               {/* Audited "click sense" capture — navigations + explicit signals
@@ -341,6 +348,10 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
               {/* Widget tools: list_widgets / pin_widget / unpin_widget / show_widget
                   — let the Brain curate the user's pinnable home dashboard. */}
               {showBrain && <WidgetBrainBridge />}
+              {/* Navigation tools: list_destinations / show_panel over the SAME
+                  registry the palette and sidebar read, so asking to open a page
+                  and searching for it can never disagree about what exists. */}
+              {showBrain && hasTenant && <DestinationBrainBridge />}
               {/* Canvas slide-out tool: `show_canvas` lets the Brain generate a
                   visual board (notes/timers) and the user save it to Knowledge. */}
               {showBrain && <CanvasPanelBrainBridge />}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeSlot, type PwaToastId } from './pwaToastStack';
+import { computeSlot, type AppToastId } from './appToastStack';
 
 describe('computeSlot', () => {
   it('puts a lone toast in slot 0 (normal bottom position)', () => {
@@ -8,7 +8,7 @@ describe('computeSlot', () => {
   });
 
   it('stacks the update banner below the install prompt when both are live', () => {
-    const live: PwaToastId[] = ['install', 'update'];
+    const live: AppToastId[] = ['install', 'update'];
     // update has the lower priority → bottom-most row (slot 0); install sits above.
     expect(computeSlot(live, 'update')).toBe(0);
     expect(computeSlot(live, 'install')).toBe(1);

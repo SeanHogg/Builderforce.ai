@@ -21,8 +21,10 @@ function isIdePage(pathname: string | null): boolean {
   return pathname != null && pathname.startsWith('/ide/');
 }
 
+/** A canvas ITSELF is full-screen. `/create` alone is now the canvas library — an
+ *  ordinary scrolling page — so it must not be swept into the edge-to-edge case. */
 function isCreationPage(pathname: string | null): boolean {
-  return pathname != null && pathname.startsWith('/create');
+  return pathname != null && pathname.startsWith('/create/');
 }
 
 /** Deep full-screen routes (the IDE editor + a single project) render edge-to-edge

@@ -2,42 +2,43 @@
 
 import { useTranslations } from 'next-intl';
 import type { CSSProperties, ReactNode } from 'react';
-import styles from './PwaToast.module.css';
+import styles from './AppToast.module.css';
 
 /**
- * Shared presentational shell for the PWA toasts (update-available +
- * install-app). Owns the placement, the surface and the primary-action button so
- * the two banners stay visually identical without duplicating the chrome, and so
- * the phone layout — where the bottom edge already belongs to the fixed bottom
- * bar and whatever the page docks above it — is decided in ONE stylesheet.
+ * Shared presentational shell for the app's bottom-of-screen toasts — the PWA
+ * update-available and install-app banners, and the resume-your-work prompt that
+ * appears when signing in claims an account-less canvas. Owns the placement, the
+ * surface and the primary-action button so the banners stay visually identical
+ * without duplicating the chrome, and so the phone layout — where the bottom edge
+ * already belongs to the fixed bottom bar and whatever the page docks above it —
+ * is decided in ONE stylesheet.
  *
  * `slot` is the toast's index in the shared stack (0 = nearest the anchored
  * edge). When two toasts are live at once they pass different slots so they
  * stack instead of overlapping. The offset arithmetic is the stylesheet's: the
- * slot is handed over as a custom property, because the anchor edge and the row
- * height are not the same on a phone as on a desktop.
+ * anchor edge and the row height are not the same on a phone as on a desktop.
  */
 
-type SlotStyle = CSSProperties & { '--pwa-toast-slot': number };
+type SlotStyle = CSSProperties & { '--app-toast-slot': number };
 
-export function PwaToast({ children, slot = 0 }: { children: ReactNode; slot?: number }) {
+export function AppToast({ children, slot = 0 }: { children: ReactNode; slot?: number }) {
   return (
     <div
       role="status"
       aria-live="polite"
       className={styles.shell}
-      style={{ '--pwa-toast-slot': Math.max(0, slot) } as SlotStyle}
+      style={{ '--app-toast-slot': Math.max(0, slot) } as SlotStyle}
     >
       {children}
     </div>
   );
 }
 
-export function PwaToastText({ children }: { children: ReactNode }) {
+export function AppToastText({ children }: { children: ReactNode }) {
   return <span className={styles.text}>{children}</span>;
 }
 
-export function PwaToastPrimaryButton({ children, onClick }: { children: ReactNode; onClick: () => void }) {
+export function AppToastPrimaryButton({ children, onClick }: { children: ReactNode; onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} className={styles.primary}>
       {children}
@@ -45,8 +46,8 @@ export function PwaToastPrimaryButton({ children, onClick }: { children: ReactNo
   );
 }
 
-export function PwaToastDismissButton({ onClick }: { onClick: () => void }) {
-  const t = useTranslations('pwa');
+export function AppToastDismissButton({ onClick }: { onClick: () => void }) {
+  const t = useTranslations('toast');
   return (
     <button type="button" onClick={onClick} aria-label={t('dismiss')} title={t('dismiss')} className={styles.dismiss}>
       {/* A drawn ✕ rather than the character: the glyph rendered at whatever

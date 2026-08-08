@@ -10,7 +10,7 @@ import { useEffect, useState } from 'react';
  * Each toast that is currently visible registers its `id` here while mounted;
  * the registry assigns a stable vertical order (lower `priority` sits nearer the
  * anchored viewport edge) and reports each live toast its slot index. The slot
- * drives an offset in `PwaToast.module.css`, so two live toasts stack rather
+ * drives an offset in `AppToast.module.css`, so two live toasts stack rather
  * than collide — and a single live toast sits in the normal position (slot 0).
  * Neither component imports the other. The row height is the stylesheet's to
  * decide: a phone anchors these to a different edge, at a different height.
@@ -21,10 +21,10 @@ import { useEffect, useState } from 'react';
  */
 
 /** Known toast ids with their stacking priority (lower = closer to the edge). */
-export type PwaToastId = 'update' | 'install';
-const PRIORITY: Record<PwaToastId, number> = { update: 0, install: 1 };
+export type AppToastId = 'update' | 'install' | 'resume';
+const PRIORITY: Record<AppToastId, number> = { update: 0, resume: 1, install: 2 };
 
-const active = new Set<PwaToastId>();
+const active = new Set<AppToastId>();
 const listeners = new Set<() => void>();
 
 function emit(): void {
@@ -36,13 +36,13 @@ function emit(): void {
  * for `id`, or -1 when `id` is not live. Lower-priority toasts sit nearer the
  * viewport edge (slot 0). Exported for unit testing the stacking order.
  */
-export function computeSlot(liveIds: Iterable<PwaToastId>, id: PwaToastId): number {
+export function computeSlot(liveIds: Iterable<AppToastId>, id: AppToastId): number {
   const ordered = [...liveIds].sort((a, b) => PRIORITY[a] - PRIORITY[b]);
   return ordered.indexOf(id);
 }
 
 /** Slot index (0 = bottom-most) for a live toast, or -1 when not registered. */
-function slotOf(id: PwaToastId): number {
+function slotOf(id: AppToastId): number {
   if (!active.has(id)) return -1;
   return computeSlot(active, id);
 }
@@ -52,7 +52,7 @@ function slotOf(id: PwaToastId): number {
  * slot index in the shared stack (0 = bottom-most row). Returns -1 while hidden.
  * Drop-in for a component's render: the returned slot drives a `bottom` offset.
  */
-export function usePwaToastSlot(id: PwaToastId, visible: boolean): number {
+export function useAppToastSlot(id: AppToastId, visible: boolean): number {
   const [, force] = useState(0);
 
   useEffect(() => {

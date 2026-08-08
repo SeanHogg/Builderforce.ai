@@ -550,7 +550,11 @@
       "memory": "Memory",
       "rehearsal": "Rehearsal"
     },
-    "primaryAria": "Primary"
+    "primaryAria": "Primary",
+    "destination": {
+      "canvasLibrary": "Canvases",
+      "newCanvas": "New canvas"
+    }
   },
   "alerts": {
     "title": "Alerts",
@@ -5882,7 +5886,18 @@
         "answer": "Yes. Package a delivery process — lanes, required roles, review gates, and a recommended roster — as a Kanban template and publish it to the marketplace to sell or share. Any team can install a proven template into a project in one click and inherit a governed, role-gated workflow instead of building one from scratch."
       }
     ],
-    "newsletterPlaceholder": "your@email.com"
+    "newsletterPlaceholder": "your@email.com",
+    "beat": {
+      "howItWorks": "How it works",
+      "proof": "Proof",
+      "breadth": "What you can build",
+      "compare": "Why Builderforce",
+      "pricing": "What it costs",
+      "questions": "Questions",
+      "writing": "Writing",
+      "keepUp": "Keep up"
+    },
+    "featuresLead": "Websites, workflows, datasets, models, documents, people and agents — all real, connected objects on one board, not attachments in a chat."
   },
   "pricing": {
     "seo": {
@@ -11936,7 +11951,9 @@
     "mediaKit": "Media Kit",
     "signIn": "Sign In",
     "getStarted": "Get Started →",
-    "toggleMenu": "Toggle menu"
+    "toggleMenu": "Toggle menu",
+    "switchToLight": "Switch to light mode",
+    "switchToDark": "Switch to dark mode"
   },
   "media": {
     "seo": {
@@ -14476,7 +14493,6 @@
     "cookiePolicy": "Cookie policy"
   },
   "pwa": {
-    "dismiss": "Dismiss notification",
     "updateReady": "A new version is ready — updating in {seconds}s.",
     "updateNow": "Update now",
     "installPitch": "Install Builderforce for a faster, full-screen app.",
@@ -14641,5 +14657,47 @@
     "regionLabel": "Announcements",
     "dismiss": "Dismiss",
     "defaultCta": "Learn more"
+  },
+  "toast": {
+    "dismiss": "Dismiss notification"
+  },
+  "resumeWork": {
+    "savedOne": "We saved “{title}” to your workspace.",
+    "savedMany": "We saved “{title}” and {count} more to your workspace.",
+    "open": "Open"
+  },
+  "canvasSwitcher": {
+    "title": "Canvas: {name}",
+    "selectAria": "Select a canvas",
+    "canvases": "Canvases",
+    "untitled": "Untitled canvas",
+    "unsavedLabel": "Not saved yet",
+    "unsavedHint": "Held in this browser",
+    "recentLabel": "Recent",
+    "empty": "No canvases yet",
+    "newCanvas": "New canvas",
+    "creating": "Creating…",
+    "allCanvases": "All canvases"
+  },
+  "canvasLibrary": {
+    "title": "Your canvases",
+    "subtitle": "Everything you have created, and the ways to start something new.",
+    "pendingTitle": "Waiting to be saved",
+    "pendingHint": "These canvases are still held in this browser. Open one to save it to your workspace.",
+    "untitled": "Untitled canvas"
+  },
+  "commandPalette": {
+    "trigger": "Search",
+    "openAria": "Search destinations (Ctrl or Cmd + K)",
+    "title": "Go to",
+    "placeholder": "Search for a page, report or canvas…",
+    "noResults": "Nothing matches “{query}”.",
+    "hintMove": "<kbd>↑↓</kbd> move",
+    "hintOpen": "<kbd>⏎</kbd> open",
+    "hintClose": "<kbd>esc</kbd> close"
+  },
+  "homeScroller": {
+    "previous": "Show previous",
+    "next": "Show more"
   }
 }

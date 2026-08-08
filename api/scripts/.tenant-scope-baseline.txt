@@ -46,6 +46,13 @@ application/kanban/kanbanTemplateService.ts:8
 application/kanban/rosterService.ts:1
 application/kanban/ticketParticipants.ts:8
 application/kernel/ObjectRegistry.ts:1
+# InvitationService: two reads that CANNOT take a tenant, both documented at the
+# function. `findByTokenHash` — the token IS the credential (same shape as
+# resolveShareToken above); the holder is establishing which tenant admits them,
+# and every caller re-scopes to row.tenantId immediately. `findPendingByEmail` —
+# the sign-in path, where the caller has proved an email address and belongs to
+# no tenant yet, so there is no tenant to scope by. Not debt; do not "fix".
+application/kernel/InvitationService.ts:2
 application/knowledge/knowledgeMarket.ts:1
 application/llm/projectEvermind.ts:2
 application/llm/projectFacts.ts:1

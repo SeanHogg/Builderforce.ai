@@ -1482,23 +1482,12 @@ export const creationSessionMembers = pgTable('creation_session_members', {
 
 /** One-time, expiring invitation to a Creation Session. Only a SHA-256 token
  * digest is stored so a database read cannot be used to join the Session. */
-export const creationSessionInvites = pgTable('creation_session_invites', {
-  id:         uuid('id').primaryKey().defaultRandom(),
-  sessionId:  uuid('session_id').notNull().references(() => creationSessions.id, { onDelete: 'cascade' }),
-  tenantId:   integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  email:      varchar('email', { length: 320 }).notNull(),
-  role:       varchar('role', { length: 16 }).notNull(),
-  tokenHash:  varchar('token_hash', { length: 64 }).notNull().unique(),
-  expiresAt:  timestamp('expires_at').notNull(),
-  acceptedBy: varchar('accepted_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-  acceptedAt: timestamp('accepted_at'),
-  revokedAt:  timestamp('revoked_at'),
-  createdBy:  varchar('created_by', { length: 36 }).references(() => users.id, { onDelete: 'set null' }),
-  createdAt:  timestamp('created_at').notNull().defaultNow(),
-}, (t) => ({
-  bySession: index('idx_creation_session_invites_session').on(t.sessionId, t.createdAt),
-  byEmail: index('idx_creation_session_invites_email').on(t.tenantId, t.email, t.expiresAt),
-}));
+/**
+ * `creation_session_invites` was DROPPED by migration 0435 (PRD 20 §5 step 5,
+ * family 1). A canvas-session invitation is now an `invitations` row with
+ * `kind = 'session'` whose `object_id` points at the session's registry entry.
+ * Read and write it through `application/kernel/InvitationService`.
+ */
 
 export const creationSessionSnapshots = pgTable('creation_session_snapshots', {
   sessionId: uuid('session_id').notNull().references(() => creationSessions.id, { onDelete: 'cascade' }),

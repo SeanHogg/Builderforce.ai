@@ -1,6 +1,6 @@
 /*
- * The shared chrome for the bottom-of-screen PWA toasts (update-available +
- * install-app).
+ * The shared chrome for the app's bottom-of-screen toasts (PWA update-available,
+ * install-app, and the resume-your-work prompt).
  *
  * These used to be inline styles: a nowrap pill pinned to `bottom: 24px` in the
  * middle of the screen. On a phone that put them straight on top of the two
@@ -10,7 +10,7 @@
  * under the header instead, full width, with the message and its actions on
  * their own rows.
  *
- * `--pwa-toast-slot` is the toast's index in the shared bottom-of-screen stack
+ * `--app-toast-slot` is the toast's index in the shared bottom-of-screen stack
  * (0 = nearest the edge it is anchored to); the component writes it as an inline
  * custom property so the offset arithmetic lives HERE, where the anchor edge and
  * the row height differ between phone and desktop.
@@ -19,7 +19,7 @@
 .shell {
   position: fixed;
   z-index: 9999;
-  bottom: calc(24px + var(--pwa-toast-slot, 0) * 72px);
+  bottom: calc(24px + var(--app-toast-slot, 0) * 72px);
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -87,7 +87,7 @@
  */
 @media (max-width: 767px) {
   .shell {
-    top: calc(env(safe-area-inset-top, 0px) + 74px + var(--pwa-toast-slot, 0) * 104px);
+    top: calc(env(safe-area-inset-top, 0px) + 74px + var(--app-toast-slot, 0) * 104px);
     right: 10px;
     bottom: auto;
     left: 10px;

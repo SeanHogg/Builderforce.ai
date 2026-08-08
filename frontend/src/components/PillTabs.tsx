@@ -22,24 +22,6 @@ export interface PillTab {
   href: string;
 }
 
-function pillStyle(active: boolean): CSSProperties {
-  return {
-    display: 'inline-flex',
-    alignItems: 'center',
-    gap: 7,
-    padding: '7px 14px',
-    borderRadius: 999,
-    fontSize: 13,
-    fontWeight: 600,
-    whiteSpace: 'nowrap',
-    textDecoration: 'none',
-    border: `1px solid ${active ? 'var(--border-accent, var(--accent))' : 'var(--border-subtle)'}`,
-    background: active ? 'var(--accent-subtle)' : 'var(--bg-elevated)',
-    color: active ? 'var(--text-strong)' : 'var(--text-secondary)',
-    transition: 'color .15s, background .15s, border-color .15s',
-  };
-}
-
 export default function PillTabs({
   tabs,
   activeId,
@@ -56,7 +38,8 @@ export default function PillTabs({
   return (
     <nav
       aria-label={ariaLabel}
-      style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 24, paddingBottom: 4, overflowX: 'auto', ...style }}
+      className="pill-tabs"
+      style={style}
     >
       {tabs.map((tab) => {
         const active = tab.id === activeId;
@@ -65,7 +48,7 @@ export default function PillTabs({
             key={tab.id || 'default'}
             href={tab.href}
             aria-current={active ? 'page' : undefined}
-            style={pillStyle(active)}
+            className={`pill-tab${active ? ' is-active' : ''}`}
           >
             {tab.icon && <span aria-hidden="true" style={{ fontSize: 14 }}>{tab.icon}</span>}
             <span>{tab.label}</span>

@@ -550,7 +550,11 @@
       "memory": "Memoria",
       "rehearsal": "Ensayo"
     },
-    "primaryAria": "Principal"
+    "primaryAria": "Principal",
+    "destination": {
+      "canvasLibrary": "Lienzos",
+      "newCanvas": "Nuevo lienzo"
+    }
   },
   "alerts": {
     "title": "Alertas",
@@ -5881,7 +5885,18 @@
         "answer": "Sí. Empaqueta un proceso de entrega —carriles, roles requeridos, controles de revisión y un plantel recomendado— como una plantilla Kanban y publícala en el mercado para venderla o compartirla. Cualquier equipo puede instalar una plantilla probada en un proyecto con un clic y heredar un flujo gobernado y con roles en lugar de construir uno desde cero."
       }
     ],
-    "newsletterPlaceholder": "tu@email.com"
+    "newsletterPlaceholder": "tu@email.com",
+    "beat": {
+      "howItWorks": "Cómo funciona",
+      "proof": "Pruebas",
+      "breadth": "Lo que puedes crear",
+      "compare": "Por qué Builderforce",
+      "pricing": "Cuánto cuesta",
+      "questions": "Preguntas",
+      "writing": "Artículos",
+      "keepUp": "Mantente al día"
+    },
+    "featuresLead": "Sitios web, flujos de trabajo, conjuntos de datos, modelos, documentos, personas y agentes: objetos reales y conectados en un mismo lienzo, no archivos adjuntos en un chat."
   },
   "pricing": {
     "seo": {
@@ -11935,7 +11950,9 @@
     "mediaKit": "Kit de medios",
     "signIn": "Iniciar sesión",
     "getStarted": "Comenzar →",
-    "toggleMenu": "Alternar menú"
+    "toggleMenu": "Alternar menú",
+    "switchToLight": "Cambiar al modo claro",
+    "switchToDark": "Cambiar al modo oscuro"
   },
   "media": {
     "seo": {
@@ -14475,7 +14492,6 @@
     "cookiePolicy": "Política de cookies"
   },
   "pwa": {
-    "dismiss": "Descartar notificación",
     "updateReady": "Hay una versión nueva: se actualizará en {seconds} s.",
     "updateNow": "Actualizar ahora",
     "installPitch": "Instala Builderforce para una app más rápida y a pantalla completa.",
@@ -14640,5 +14656,47 @@
     "regionLabel": "Anuncios",
     "dismiss": "Descartar",
     "defaultCta": "Más información"
+  },
+  "toast": {
+    "dismiss": "Descartar notificación"
+  },
+  "resumeWork": {
+    "savedOne": "Guardamos «{title}» en tu espacio de trabajo.",
+    "savedMany": "Guardamos «{title}» y {count} más en tu espacio de trabajo.",
+    "open": "Abrir"
+  },
+  "canvasSwitcher": {
+    "title": "Lienzo: {name}",
+    "selectAria": "Seleccionar un lienzo",
+    "canvases": "Lienzos",
+    "untitled": "Lienzo sin título",
+    "unsavedLabel": "Sin guardar",
+    "unsavedHint": "Guardado en este navegador",
+    "recentLabel": "Recientes",
+    "empty": "Aún no hay lienzos",
+    "newCanvas": "Nuevo lienzo",
+    "creating": "Creando…",
+    "allCanvases": "Todos los lienzos"
+  },
+  "canvasLibrary": {
+    "title": "Tus lienzos",
+    "subtitle": "Todo lo que has creado y las formas de empezar algo nuevo.",
+    "pendingTitle": "Pendientes de guardar",
+    "pendingHint": "Estos lienzos siguen guardados en este navegador. Abre uno para guardarlo en tu espacio de trabajo.",
+    "untitled": "Lienzo sin título"
+  },
+  "commandPalette": {
+    "trigger": "Buscar",
+    "openAria": "Buscar destinos (Ctrl o Cmd + K)",
+    "title": "Ir a",
+    "placeholder": "Busca una página, informe o lienzo…",
+    "noResults": "Nada coincide con «{query}».",
+    "hintMove": "<kbd>↑↓</kbd> mover",
+    "hintOpen": "<kbd>⏎</kbd> abrir",
+    "hintClose": "<kbd>esc</kbd> cerrar"
+  },
+  "homeScroller": {
+    "previous": "Mostrar anterior",
+    "next": "Mostrar más"
   }
 }

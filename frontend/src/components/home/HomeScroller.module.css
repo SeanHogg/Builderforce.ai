@@ -1,0 +1,102 @@
+/*
+ * Horizontal card rail.
+ *
+ * Breadth is not a grid problem. A catalogue of "everything you can bring onto
+ * the canvas" rendered as a four-column wall makes the reader do the work: nine
+ * dense paragraphs land at once, every card competes with every other, and the
+ * page stalls exactly where it should be building momentum. A rail shows a few
+ * at a time, admits there are more by clipping the next one at the edge, and
+ * lets the reader move at their own pace.
+ *
+ * Native scroll-snap does the work — no JS is required to use this, so it keeps
+ * working before hydration and with a trackpad, a touch swipe, or the arrow
+ * buttons. Colours are theme tokens throughout, so the rail reads in light and
+ * dark alike.
+ */
+
+.wrap {
+  position: relative;
+  /* Break out of the section's inner column so the rail can run to the viewport
+     edge — a rail that stops short of the edge looks like a grid that failed. */
+  margin-right: calc(50% - 50vw);
+}
+
+.rail {
+  display: flex;
+  gap: 16px;
+  padding: 4px 0 20px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-left: 0;
+  scrollbar-width: none;
+  /* Room for the last card to sit clear of the viewport edge. */
+  padding-right: max(24px, calc(50vw - 580px));
+  overscroll-behavior-x: contain;
+}
+
+.rail::-webkit-scrollbar { display: none; }
+
+.item {
+  display: flex;
+  flex: 0 0 auto;
+  width: min(320px, 78vw);
+  scroll-snap-align: start;
+}
+
+.item > * { width: 100%; }
+
+/* Controls sit with the section header rather than floating over the cards:
+   overlaid arrows cover content on exactly the narrow screens where the cards
+   are already tight. */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.arrowButton {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full, 999px);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, opacity 160ms ease;
+}
+
+.arrowButton:hover:not(:disabled) { border-color: var(--coral-bright); color: var(--coral-bright); }
+.arrowButton:focus-visible { outline: 2px solid var(--coral-bright); outline-offset: 2px; }
+.arrowButton:disabled { cursor: default; opacity: .35; }
+.arrowButton > svg { width: 16px; height: 16px; }
+
+/* Progress rail — how far through the set you are, without inventing pagination
+   dots for a list whose length the reader does not care about. */
+.progress {
+  width: min(1160px, 100%);
+  height: 2px;
+  margin-top: 4px;
+  background: var(--border-subtle);
+  border-radius: 2px;
+}
+
+.progressBar {
+  height: 100%;
+  background: var(--coral-bright);
+  border-radius: 2px;
+  transition: width 160ms ease, transform 160ms ease;
+  transform-origin: left;
+}
+
+@media (max-width: 820px) {
+  .wrap { margin-right: -18px; }
+  .rail { padding-right: 18px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rail { scroll-behavior: auto; }
+  .arrowButton, .progressBar { transition: none; }
+}

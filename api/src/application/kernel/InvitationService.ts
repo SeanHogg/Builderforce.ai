@@ -142,6 +142,12 @@ export async function invite(
   const email = normaliseEmail(input.email);
   const role = input.role ?? 'member';
 
+  // Idempotent on (tenant, kind, email) — AND on the object when the kind carries
+  // one. Without the object clause, inviting the same address to a second canvas
+  // session matches the FIRST session's pending row and returns it, so the second
+  // invitation is never created and the person is never invited. `tenant` invites
+  // have no object and fall back to the three-column match, which is what makes
+  // one pending workspace row per address the right answer there.
   const [existing] = await db
     .select(PUBLIC)
     .from(invitations)
@@ -150,6 +156,7 @@ export async function invite(
         eq(invitations.tenantId, input.tenantId),
         eq(invitations.kind, input.kind),
         eq(invitations.email, email),
+        input.objectId ? eq(invitations.objectId, input.objectId) : isNull(invitations.objectId),
         isPending(),
       ),
     )
@@ -161,7 +168,7 @@ export async function invite(
       await db
         .update(invitations)
         .set({ role, invitedBy: input.invitedBy ?? existing.invitedBy, updatedAt: new Date() })
-        .where(eq(invitations.id, existing.id));
+        .where(and(eq(invitations.id, existing.id), eq(invitations.tenantId, input.tenantId)));
     }
     await invalidateInvitations(env, input.tenantId);
     return { ...existing, role };
@@ -202,10 +209,19 @@ export async function listPending(
     env,
     pendingKey(tenantId, kind ?? 'all'),
     async () => {
-      const where = kind
-        ? and(eq(invitations.tenantId, tenantId), eq(invitations.kind, kind), isPending())
-        : and(eq(invitations.tenantId, tenantId), isPending());
-      return db.select(PUBLIC).from(invitations).where(where).orderBy(desc(invitations.createdAt));
+      // Predicate inlined rather than built into a variable: the tenant-scope
+      // guard reads the `.where()` call, and a variable hides the tenant filter
+      // from it — a scoped query that LOOKS unscoped is the same review problem
+      // as an unscoped one.
+      return db
+        .select(PUBLIC)
+        .from(invitations)
+        .where(and(
+          eq(invitations.tenantId, tenantId),
+          kind ? eq(invitations.kind, kind) : undefined,
+          isPending(),
+        ))
+        .orderBy(desc(invitations.createdAt));
     },
     { kvTtlSeconds: 120, l1TtlMs: 15_000 },
   );
@@ -223,8 +239,16 @@ export async function countPending(
   return (await listPending(db, env, tenantId, kind)).length;
 }
 
-/** Pending invitations for one address, across every tenant — what the sign-in
- *  path reads to decide which workspaces a new account joins. */
+/**
+ * Pending invitations for one address, across every tenant — what the sign-in
+ * path reads to decide which workspaces a new account joins.
+ *
+ * DELIBERATELY UNSCOPED, and it cannot be otherwise: the caller is a person who
+ * has just proved control of an email address and does not yet belong to any
+ * tenant, so there is no tenant to scope BY. The address is the key, and the rows
+ * returned are by definition invitations addressed to it. Baselined in
+ * `.tenant-scope-baseline.txt` for this reason rather than because nobody looked.
+ */
 export async function findPendingByEmail(
   db: Db,
   email: string,
@@ -236,7 +260,15 @@ export async function findPendingByEmail(
   return db.select(PUBLIC).from(invitations).where(where);
 }
 
-/** Resolve an invitation by the hash of the token its holder presented. */
+/**
+ * Resolve an invitation by the hash of the token its holder presented.
+ *
+ * DELIBERATELY UNSCOPED: the token IS the credential, exactly as in
+ * `resolveShareToken`. The holder is establishing which tenant they are being
+ * admitted to, so requiring a tenant to look it up inverts the flow — and every
+ * caller re-scopes to `row.tenantId` immediately afterwards. Baselined for this
+ * reason.
+ */
 export async function findByTokenHash(db: Db, tokenHash: string): Promise<InvitationRow | null> {
   const [row] = await db
     .select(PUBLIC)
@@ -290,12 +322,36 @@ export async function revokeInvitation(
   return !!row;
 }
 
+/**
+ * The accept UPDATE, returned rather than awaited.
+ *
+ * `acceptInvitation` above is the normal path. The canvas accept route is the one
+ * caller that cannot use it: it commits the membership row and the acceptance in a
+ * single `db.batch`, because a membership granted while the invitation stays
+ * pending is a link that can be redeemed twice. Handing back the statement keeps
+ * that atomicity while keeping `isPending()` — the definition of what may still be
+ * accepted — in this file rather than copied into the route.
+ *
+ * The caller owns cache invalidation for this path; `invalidateInvitations` is
+ * exported for exactly that.
+ */
+export function acceptInvitationStatement(
+  db: Db,
+  input: { id: string; tenantId: number; inviteeRef?: string | null },
+) {
+  const now = new Date();
+  return db
+    .update(invitations)
+    .set({ state: 'accepted', acceptedAt: now, inviteeRef: input.inviteeRef ?? null, updatedAt: now })
+    .where(and(eq(invitations.id, input.id), eq(invitations.tenantId, input.tenantId), isPending()));
+}
+
 /** Every invitation on one object, whatever its state — the canvas session's
  *  "who has been invited" panel. */
-export async function listForObject(db: Db, objectId: string): Promise<InvitationRow[]> {
+export async function listForObject(db: Db, tenantId: number, objectId: string): Promise<InvitationRow[]> {
   return db
     .select(PUBLIC)
     .from(invitations)
-    .where(eq(invitations.objectId, objectId))
+    .where(and(eq(invitations.tenantId, tenantId), eq(invitations.objectId, objectId)))
     .orderBy(desc(invitations.createdAt));
 }

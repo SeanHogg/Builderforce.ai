@@ -14,6 +14,8 @@ import ShoppingCart from './ShoppingCart';
 import NotificationBell from './NotificationBell';
 import { ManagerStatusIndicator } from './ManagerStatusIndicator';
 import { TenantProjectSwitcher } from './TenantProjectSwitcher';
+import { CanvasSwitcher } from './workspace/CanvasSwitcher';
+import { CommandPalette } from './workspace/CommandPalette';
 import { OnboardingProgressPill } from './OnboardingProgressPill';
 
 const PREVIEW_ROLES: PreviewRole[] = ['owner', 'manager', 'developer', 'viewer'];
@@ -130,7 +132,15 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
         )}
       </div>
       <div className="topbar-right">
+        {/* The session bar: scope (who you are working as) then canvas (what you
+            are working on). Both are present on EVERY route, because "where is
+            the thing I was making" must never depend on which page you are on.
+            Each self-gates on a tenant. */}
         <TenantProjectSwitcher />
+        <CanvasSwitcher />
+        {/* Search-first navigation over the shared destination registry. Self-gates
+            on a tenant, and hides its trigger on phones where the bottom nav leads. */}
+        <CommandPalette />
 
         {/* New-account setup progress — self-gates to nothing once onboarding is
             complete/dismissed or for non-owner members. */}

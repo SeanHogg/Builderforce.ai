@@ -1316,8 +1316,12 @@ export function createAdminRoutes(): Hono<HonoEnv> {
             'acceptedAt', csi.accepted_at,
             'revokedAt', csi.revoked_at
           ) ORDER BY csi.created_at DESC)
-          FROM creation_session_invites csi
-          WHERE csi.session_id = cs.id
+          FROM invitations csi
+          JOIN objects o ON o.id = csi.object_id
+          WHERE csi.kind = 'session'
+            AND o.kind = 'creation_session'
+            AND o.ref_id = cs.id::text
+            AND o.tenant_id = cs.tenant_id
         ), '[]'::jsonb) AS invitations
       FROM creation_sessions cs
       JOIN tenants t ON t.id = cs.tenant_id

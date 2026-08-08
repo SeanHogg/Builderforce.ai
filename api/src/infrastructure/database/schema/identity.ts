@@ -430,17 +430,12 @@ export const tenantMembers = pgTable('tenant_members', {
  * login with a matching email the pending row auto-converts to a tenant_members
  * row and is stamped 'accepted'. Managers can 'revoke' a still-pending row.
  */
-export const tenantInvitations = pgTable('tenant_invitations', {
-  id:               uuid('id').primaryKey().defaultRandom(),
-  tenantId:         integer('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  email:            varchar('email', { length: 255 }).notNull(),   // stored lower-cased
-  role:             tenantRoleEnum('role').notNull().default('developer'),
-  status:           varchar('status', { length: 20 }).notNull().default('pending'), // pending | accepted | revoked
-  invitedByUserId:  varchar('invited_by_user_id', { length: 36 }),
-  createdAt:        timestamp('created_at').notNull().defaultNow(),
-  acceptedAt:       timestamp('accepted_at'),
-  revokedAt:        timestamp('revoked_at'),
-});
+/**
+ * `tenant_invitations` was DROPPED by migration 0435 (PRD 20 §5 step 5, family 1).
+ * A workspace invitation is now an `invitations` row with `kind = 'tenant'` and a
+ * null `object_id` — a workspace is not an addressable object in the registry.
+ * Read and write it through `application/kernel/InvitationService`.
+ */
 
 
 /**

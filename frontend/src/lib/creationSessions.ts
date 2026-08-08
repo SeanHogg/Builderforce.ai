@@ -5,6 +5,16 @@ import { NEW_CHAT_MODE, normalizeChatMode, type ChatMode } from '@/lib/brain';
 
 export const LOCAL_CREATION_PREFIX = 'local-';
 const STORAGE_PREFIX = 'builderforce:create:';
+/**
+ * Index of every account-less canvas this browser holds.
+ *
+ * Without it a draft was reachable ONLY by already knowing its uuid: the board
+ * was written to `builderforce:create:local-<uuid>` and registered nowhere, so
+ * any hop that dropped `?next=` (an OAuth round trip, the workspace picker,
+ * verifying email in a second tab) left real work in localStorage with no path
+ * back to it. The index is what makes "what was I working on" answerable.
+ */
+const INDEX_KEY = `${STORAGE_PREFIX}index`;
 
 export interface LocalCreationSnapshot {
   version: 1;
@@ -29,6 +39,75 @@ export function creationStorageKey(sessionId: string): string {
 
 export function isLocalCreationSession(sessionId: string): boolean {
   return sessionId.startsWith(LOCAL_CREATION_PREFIX);
+}
+
+/** One row of the local-draft index: enough to list and open a draft without
+ *  parsing every stored board. */
+export interface LocalCreationEntry {
+  sessionId: string;
+  title: string;
+  updatedAt: string;
+}
+
+function readIndex(): LocalCreationEntry[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(INDEX_KEY) ?? '[]') as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((entry): entry is LocalCreationEntry =>
+      !!entry && typeof entry === 'object'
+      && typeof (entry as LocalCreationEntry).sessionId === 'string'
+      && typeof (entry as LocalCreationEntry).title === 'string'
+      && typeof (entry as LocalCreationEntry).updatedAt === 'string');
+  } catch {
+    return [];
+  }
+}
+
+function writeIndex(entries: LocalCreationEntry[]): void {
+  try {
+    localStorage.setItem(INDEX_KEY, JSON.stringify(entries));
+  } catch {
+    // Private mode / quota. The board itself is the durable copy; the index is a
+    // convenience that {@link listLocalCreationSessions} can rebuild by scanning.
+  }
+}
+
+/** Upsert one draft into the index, newest first. */
+function indexLocalCreationSession(sessionId: string, title: string, updatedAt: string): void {
+  const rest = readIndex().filter((entry) => entry.sessionId !== sessionId);
+  writeIndex([{ sessionId, title, updatedAt }, ...rest]);
+}
+
+/**
+ * Every account-less canvas this browser holds, newest first.
+ *
+ * Self-healing on BOTH sides, because it has to work for drafts that already
+ * exist in a real user's browser from before the index did:
+ *   - any `builderforce:create:local-*` board with no index row is adopted;
+ *   - any index row whose board is gone is dropped.
+ */
+export function listLocalCreationSessions(): LocalCreationEntry[] {
+  if (typeof localStorage === 'undefined') return [];
+  const indexed = new Map(readIndex().map((entry) => [entry.sessionId, entry]));
+
+  try {
+    for (let position = 0; position < localStorage.length; position += 1) {
+      const key = localStorage.key(position);
+      if (!key?.startsWith(`${STORAGE_PREFIX}${LOCAL_CREATION_PREFIX}`)) continue;
+      const sessionId = key.slice(STORAGE_PREFIX.length);
+      if (indexed.has(sessionId)) continue;
+      const snapshot = readLocalCreationSession(sessionId);
+      if (snapshot) indexed.set(sessionId, { sessionId, title: snapshot.title, updatedAt: snapshot.updatedAt });
+    }
+  } catch {
+    // Enumeration blocked (rare privacy modes) — the stored index still stands.
+  }
+
+  const live = [...indexed.values()]
+    .filter((entry) => localStorage.getItem(creationStorageKey(entry.sessionId)) != null)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  writeIndex(live);
+  return live;
 }
 
 export function createLocalCreationSession(prompt: string, mode: ChatMode = NEW_CHAT_MODE): string {
@@ -68,7 +147,7 @@ export function createLocalCreationSession(prompt: string, mode: ChatMode = NEW_
     nodes,
     edges,
   };
-  localStorage.setItem(creationStorageKey(sessionId), JSON.stringify(snapshot));
+  writeLocalCreationSession(sessionId, snapshot);
   return sessionId;
 }
 
@@ -84,7 +163,10 @@ export function writeLocalCreationSession(sessionId: string, snapshot: LocalCrea
   } catch {
     // Private mode / quota — the board stays live in memory for this page, and a
     // shared session still has the room as its durable copy.
+    return;
   }
+  // The index rides the ONE write, so a board can never exist unlisted.
+  indexLocalCreationSession(sessionId, snapshot.title, snapshot.updatedAt);
 }
 
 export function readLocalCreationSession(sessionId: string): LocalCreationSnapshot | null {
@@ -135,6 +217,7 @@ export function localCreationSnapshot(
 
 export function removeLocalCreationSession(sessionId: string): void {
   localStorage.removeItem(creationStorageKey(sessionId));
+  writeIndex(readIndex().filter((entry) => entry.sessionId !== sessionId));
 }
 
 export function creationGraphFromSnapshot(snapshot: Pick<LocalCreationSnapshot, 'nodes' | 'edges' | 'viewport'>): CreationGraphInput {
