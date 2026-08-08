@@ -267,6 +267,85 @@ export function createInsightsRoutes(db: Db): Hono<HonoEnv> {
     });
   });
 
+  // SCENARIO MODELING endpoint (PRD #1435) — POST interface for "what if" queries
+  // Accepts: { scenario: { type: "addAgents" | "reduceScope", value: number }, projectId: string }
+  // Returns: { projectedCompletionDate, projectedEffort: { unit, value } }
+  router.post('/scenario-modeling', requireRole(TenantRole.DEVELOPER), async (c) => {
+    const { tenantId } = scope(c);
+    const env = c.env as Env;
+    const now = Date.now();
+
+    // Parse request body
+    type ScenarioBody = {
+      scenario?: { type?: string; value?: number };
+      projectId?: string;
+    };
+    const body = await c.req.json<ScenarioBody>().catch(() => ({} as ScenarioBody));
+
+    const scenarioType = body.scenario?.type;
+    const scenarioValue = body.scenario?.value;
+    const projectId = body.projectId;
+
+    // Validate inputs
+    if (!projectId) return c.json({ error: 'projectId is required' }, 400);
+    if (!scenarioType || !['addAgents', 'reduceScope'].includes(scenarioType)) {
+      return c.json({ error: 'scenario.type must be "addAgents" or "reduceScope"' }, 400);
+    }
+    if (scenarioValue === undefined || !Number.isFinite(scenarioValue) || scenarioValue < 0) {
+      return c.json({ error: 'scenario.value must be a non-negative number' }, 400);
+    }
+
+    // Fetch baseline delivery insights for the project
+    const projectIdNum = parseInt(projectId, 10);
+    if (isNaN(projectIdNum)) return c.json({ error: 'projectId must be a valid numeric string' }, 400);
+
+    const key = `insights:deliv:t:${tenantId}:s:project:id:${projectId}`;
+    const baseline = await getOrSetCached(
+      env, key,
+      () => computeDeliveryInsights(db, tenantId, 'project', projectId, now),
+      SHORT_TTL,
+    );
+    if (!baseline) return c.json({ error: 'project not found' }, 404);
+
+    // Transform scenario to buildScenario params
+    // addAgents: new developers = current contributors + added agents
+    // reduceScope: scopeDelta = negative percentage of open tasks
+    let developers: number, attentionPct: number, scopeDelta: number;
+
+    if (scenarioType === 'addAgents') {
+      developers = Math.max(1, baseline.activeContributors) + scenarioValue;
+      attentionPct = 100;
+      scopeDelta = 0;
+    } else { // reduceScope
+      developers = Math.max(1, baseline.activeContributors);
+      attentionPct = 100;
+      // Reduce scope by the percentage value
+      scopeDelta = -Math.floor(baseline.openTasks * (scenarioValue / 100));
+    }
+
+    const scenario = buildScenario(
+      {
+        openTasks: baseline.openTasks,
+        throughputPerWeek: baseline.throughputPerWeek,
+        activeContributors: baseline.activeContributors,
+        targetDate: baseline.targetDate,
+        now,
+      },
+      { developers, attentionPct, scopeDelta },
+    );
+
+    // Convert effort from person-weeks to person-days (5 days/week)
+    const effortPersonDays = scenario.effortPersonWeeks !== null ? scenario.effortPersonWeeks * 5 : null;
+
+    // Return the response in the PRD format
+    return c.json({
+      projectedCompletionDate: scenario.projectedDate ?? null,
+      projectedEffort: effortPersonDays !== null
+        ? { unit: 'person-days' as const, value: Math.round(effortPersonDays * 100) / 100 }
+        : null,
+    });
+  });
+
   // Deliverable qualitative UPDATE stream (EMP-11) — the human narrative companion
   // to /delivery's quantitative status. Developer-gated (same audience). Newest
   // first, bounded. Not cached (a small, hot, append-mostly feed).
