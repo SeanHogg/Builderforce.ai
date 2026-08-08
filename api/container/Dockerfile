@@ -2,7 +2,7 @@
 # Boots a small Node HTTP server (server.mjs) that AgentContainerDO proxies /run to.
 # Includes git + bash so the agent has a REAL shell to clone the repo and run
 # builds/type-checks/lint/tests (run_command) before finishing.
-FROM node:22-bookworm-slim
+FROM node:26-bookworm-slim
 
 # git for cloning the ticket repo; ca-certificates for HTTPS to the gateway/GitHub.
 RUN apt-get update \
