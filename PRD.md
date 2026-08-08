@@ -1,125 +1,173 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #587
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document: GAP-G2 Closure Visibility on Security Provisioning Dashboard
 
 ## Problem & Goal
+**Problem:** The Security Provisioning Dashboard does not reflect the closed status of the security gap GAP-G2. Stakeholders cannot determine from the dashboard that GAP-G2 is no longer an outstanding risk, leading to confusion and duplicated effort.
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+**Goal:** Update the dashboard so that when GAP-G2 is closed in the authoritative source (e.g., remediation tracker), the dashboard clearly displays its closed status with supporting details.
 
 ## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- Security Operations Center (SOC) analysts
+- Compliance officers
+- Security program managers
+- Risk management teams
 
 ## Scope
-
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- Modify the Security Provisioning Dashboard’s GAP-G2 tile/row/section to display the closed state.
+- Integrate with the source of truth for GAP-G2 status (e.g., Remediation Tracking System API).
+- Display closure metadata (timestamp, reason, closed by) when available.
 
 ## Functional Requirements
-
-### FR-1 — Mode Selection
-
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
-
----
-
-### FR-2 — Guided (Interactive) Mode
-
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
-
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+1. **Status ingestion:** The dashboard must fetch GAP-G2’s current status from the authoritative system (in real-time or on page refresh) without user action beyond loading the dashboard.
+2. **Closed state rendering:** When the status is “Closed”, the dashboard must visually indicate this (e.g., green “Closed” badge, strikethrough text, or checkmark) in the dedicated GAP-G2 area.
+3. **Metadata display:** If the source provides closure details, show:
+   - Date and time of closure
+   - Reason for closure (resolved, waived, false positive, etc.)
+   - User or system that closed the gap
+4. **Waiver/exception handling:** If GAP-G2 is closed via a waiver or exception, the dashboard must clearly label it (e.g., “Closed – Waiver”) and display relevant justification.
+5. **Fallback and error handling:** If the status cannot be retrieved (network error, source down), display an appropriate message (e.g., “Status unavailable”) and log the error without breaking the rest of the dashboard.
+6. **Non‑regression:** The update must not alter the display behavior for any other gap (e.g., GAP‑G1, GAP‑G3). All other gaps must continue to reflect their actual statuses from the source.
 
 ## Acceptance Criteria
-
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
-
----
+- When GAP‑G2 is marked as closed in the source system, the dashboard updates to show “Closed” with a distinct visual indicator within 1 minute of a manual page refresh (or automatically within a defined polling interval if real‑time update is supported).
+- The closed state displays the closure timestamp in the user’s local timezone and the closure reason, if provided by the source.
+- A waiver or exception‑based closure is distinctly marked, e.g., “Closed – Waiver”.
+- If the source returns an open state for GAP‑G2, the dashboard continues to show it as open (no false positives).
+- No other gap tile/row is affected; a spot check confirms GAP‑G1, GAP‑G3, etc. still render their correct statuses.
+- The dashboard’s overall load time does not increase by more than 200 ms in a controlled test environment.
 
 ## Out of Scope
+- Dashboard re‑design or addition of new widgets.
+- Bulk closure operations or workflow changes for closing gaps.
+- Historical status timeline for GAP‑G2 (only current state is in scope).
+- Mobile‑specific layout or other form factors beyond the current web dashboard.
+- Changes to the source system’s API or data model.
+- Dashboards or views beyond the existing Security Provisioning Dashboard (e.g., executive summary dashboards).
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+## Requirements
+
+_Owned by the business-analyst — authored 2026-08-03._
+
+### Business Context
+
+GAP-G2 is a tracked security finding within the organisation's remediation programme. It was opened through a prior security assessment (penetration test, audit, or vulnerability scan) and, as of this PRD, has been resolved and closed in the authoritative Remediation Tracking System (RTS). The Security Provisioning Dashboard — a real-time operational view used daily by SOC analysts, compliance officers, and risk managers — currently shows GAP-G2 as an open gap. This stale state causes:
+
+- **Duplicated triage effort:** Analysts re-investigate GAP-G2 because the dashboard implies it is still open.
+- **Compliance-reporting drift:** Compliance officers pulling dashboard snapshots for audit evidence incorrectly report GAP-G2 as an unresolved finding.
+- **Eroded trust in the dashboard:** When one gap is visibly stale, stakeholders question the accuracy of every other gap shown.
+
+Closing this visibility gap is a high-value, low-effort correctness fix: the data already exists in the RTS; the dashboard simply does not consume it for GAP-G2's closure state.
+
+### User Stories
+
+| ID | As a… | I want to… | So that… |
+|----|-------|-------------|----------|
+| US-1 | SOC Analyst | See that GAP-G2 is Closed at a glance when I load the Security Provisioning Dashboard | I don't waste time re-triaging a resolved finding |
+| US-2 | Compliance Officer | Pull a dashboard screenshot or export showing GAP-G2's closed status with a timestamp and closure reason | I have audit-ready evidence that the gap was addressed |
+| US-3 | Security Program Manager | Distinguish a waiver-based closure from a true resolution | I can track residual risk accepted via waivers separately from remediated gaps |
+| US-4 | Risk Manager | See a clear error state ("Status unavailable") when the remediation source is unreachable, without the rest of the dashboard breaking | I know when data is stale vs. when a gap is genuinely open |
+
+### Detailed Business Requirements
+
+#### BR-1 — Gap Status Data Contract
+The dashboard SHALL consume gap status from the Remediation Tracking System (RTS) via a well-defined API endpoint. Each response for a gap SHALL include, at minimum:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `gapId` | string | Yes | Immutable identifier, e.g. `"GAP-G2"` |
+| `status` | enum | Yes | One of: `Open`, `In Progress`, `Resolved`, `Closed – Resolved`, `Closed – Waiver`, `Closed – False Positive`, `Closed – Risk Accepted` |
+| `closedAt` | ISO-8601 timestamp | No | Present only when status is a `Closed – *` variant |
+| `closedBy` | string | No | User or system identifier that performed the closure |
+| `closureReason` | string | No | Free-text justification; REQUIRED for waiver/exception closures |
+| `lastUpdated` | ISO-8601 timestamp | Yes | Timestamp of the last status change, used for staleness detection |
+
+#### BR-2 — GAP-G2 Closed-State Rendering
+When `status` is any `Closed – *` variant, the GAP-G2 tile/row on the Security Provisioning Dashboard SHALL:
+
+- Display a **green "Closed" badge** (or equivalent positive indicator) in the tile header.
+- Render the gap title/label with a **strikethrough** or a **checkmark icon** to convey finality.
+- Show **closure metadata** below the tile: closed-at timestamp (converted to the user's browser-local timezone), closure reason, and closed-by identity.
+- For `Closed – Waiver` and `Closed – Risk Accepted` specifically, append the distinct label (e.g. **"Closed – Waiver"**) in an amber-tinted inline tag to distinguish residual-risk closures from full remediations.
+
+#### BR-3 — Open-State Continuity
+When `status` is `Open` or `In Progress`, the GAP-G2 tile SHALL continue to render its existing open-state treatment. No false-positive "Closed" indicators SHALL appear. This guarantees that re-opening a gap in the RTS immediately restores the correct dashboard state on next fetch.
+
+#### BR-4 — Other Gap Non-Regression
+The data-fetching and rendering logic for every other gap (GAP-G1, GAP-G3, … GAP-Gn) SHALL be unchanged by this work. A spot-check SHALL verify:
+
+- GAP-G1 renders its status from the RTS independently of GAP-G2.
+- GAP-G3 and any additional gaps continue to display correct data.
+- The looping/rendering logic is gap-agnostic — adding GAP-G2 closed-state support does not alter the code path for any other gap.
+
+#### BR-5 — Error Resilience
+If the RTS endpoint returns an error (HTTP 4xx/5xx, network timeout, DNS failure) for the GAP-G2 status fetch:
+
+- The GAP-G2 tile SHALL display **"Status unavailable"** in a muted/neutral style.
+- The error SHALL be logged to the browser console (or equivalent diagnostics channel) with the error code/message.
+- **No other gap tile, widget, or dashboard section SHALL break, stall, or fail to render** because GAP-G2's fetch failed. Each gap's data fetch SHALL be independently error-bounded.
+
+#### BR-6 — Performance
+The additional API call (or the additional field processing within an existing bulk call) SHALL NOT increase the dashboard's time-to-interactive by more than 200 ms in a controlled test environment (matching the AC). If a dedicated per-gap call is used, it SHALL be non-blocking (Promise.all / concurrent fetch) relative to other gap fetches.
+
+### Data Flow Diagram (Conceptual)
+
+```
+┌──────────────────────┐       HTTP GET /gaps/{gapId}/status       ┌──────────────────────┐
+│  Security Provisioning │  ◄────────────────────────────────────── │  Remediation Tracking │
+│      Dashboard         │                                          │      System (RTS)      │
+│  (Browser / Web App)   │  ──────────────────────────────────────► │                        │
+│                        │       JSON { gapId, status, ... }        └──────────────────────┘
+└────────┬───────────────┘
+         │
+         ▼
+┌──────────────────────┐
+│  GAP-G2 Tile          │
+│  ┌──────────────────┐ │
+│  │ 🟢 Closed         │ │  ← closed-state rendering (BR-2)
+│  │ Closed: 2026-…   │ │
+│  │ Reason: resolved  │ │
+│  │ By: j.smith       │ │
+│  └──────────────────┘ │
+└──────────────────────┘
+```
+
+### Traceability Matrix
+
+| Functional Requirement | Business Requirements | Acceptance Criteria |
+|------------------------|----------------------|---------------------|
+| FR-1 (Status ingestion) | BR-1, BR-5 | AC: "within 1 minute of refresh" |
+| FR-2 (Closed state rendering) | BR-2 | AC: "distinct visual indicator" |
+| FR-3 (Metadata display) | BR-2 | AC: "timestamp in local timezone + closure reason" |
+| FR-4 (Waiver/exception handling) | BR-2 | AC: "Closed – Waiver distinctly marked" |
+| FR-5 (Fallback and error handling) | BR-5 | AC: "Status unavailable, log error, rest of dashboard unaffected" |
+| FR-6 (Non-regression) | BR-3, BR-4 | AC: "No other gap tile affected; spot-check passes" |
+
+### Assumptions & Dependencies
+
+1. **RTS API exists and is stable.** The endpoint returning gap status is already deployed and returning the data contract described in BR-1. If the RTS API must be extended to provide closure metadata, that work is out of scope for this task and must be completed by the RTS platform team before dashboard development begins.
+
+2. **Authentication to RTS is pre-established.** The dashboard's existing session/auth token is sufficient to call the RTS endpoint. No new authentication integration is in scope.
+
+3. **GAP-G2's gapId is stable.** The identifier `"GAP-G2"` does not change in the RTS. If RTS uses a different internal ID, a mapping must be provided by the RTS team.
+
+4. **Dashboard framework is React/TypeScript** (consistent with the `Builderforce.ai/frontend/` tree). If the actual Security Provisioning Dashboard uses a different stack, the implementation approach adapts but the business requirements remain valid.
+
+5. **One dashboard deployment.** This change targets the single, current Security Provisioning Dashboard web application. No mobile, no executive summary, no secondary views.
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
