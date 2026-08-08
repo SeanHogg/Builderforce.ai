@@ -1,125 +1,239 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #552
 > _Each agent that updates this PRD signs its change below._
+> - **Business Analyst** (this run): Authored the Requirements section; documented domain mismatch and re-scoped to platform-appropriate recommendation capabilities.
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document: Recommendation Engine
 
 ## Problem & Goal
+- **Problem:** The current platform lacks any mechanism to generate personalized recommendations for users. No data linking, recommendation logic, or UI components exist, resulting in a static experience that does not surface relevant items, content, or actions to individual users.
+- **Goal:** Implement a functional recommendation engine that ingests user behavioral data, generates item-to-item or user-to-item recommendations, and delivers them through dedicated UI components, improving engagement, discovery, and conversion.
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
-
-## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+## Target users / ICP roles
+- **End Users:** Consumers browsing the platform who benefit from personalized suggestions (e.g., shoppers, content viewers).
+- **Business Stakeholders:** Product managers, marketing teams, and data analysts who use recommendation performance to optimize catalog exposure and campaigns.
+- **Internal Developers:** Engineers who will maintain and extend the engine's data pipelines and feedback loops.
 
 ## Scope
+- Build a batch-based recommendation generation pipeline that processes historical user-item interactions (clicks, views, purchases, ratings) and produces daily precomputed recommendation lists.
+- Store generated recommendations in a queryable serving layer for low-latency retrieval.
+- Expose recommendations via REST API endpoints with support for user-specific and item-based "similar to" requests.
+- Develop reusable frontend widgets (carousel, grid) to display recommendations on key surfaces (e.g., homepage, product detail page, user profile).
+- Instrument recommendation impressions and clicks for future model evaluation.
+- Deliver a minimal admin dashboard to trigger a manual refresh of recommendations and view basic health metrics.
 
-### In Scope
+## Functional requirements
+1. **Data Ingestion & Linking**  
+   - Consume event streams (clicks, views, add-to-cart, purchases) from the event bus.  
+   - Link events to unified user profiles and item catalogs to build an interaction matrix.  
+   - Support daily incremental updates; handle late-arriving data within a configurable window.
 
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
+2. **Recommendation Generation**  
+   - Compute collaborative filtering (user-based and item-based) and optionally content-based similarity.  
+   - Generate "Recommended for You" ranked lists per user (max 50 items).  
+   - Generate "Similar Items" lists per item (max 20 items) based on co-occurrence.  
+   - Allow configurable recency and popularity boosts, and filter out previously purchased/consumed items.
 
-### Out of Scope
+3. **Serving Layer**  
+   - Store precomputed recommendations in a key-value store (e.g., Redis or DynamoDB) with user/item IDs as keys.  
+   - Provide `GET /recommendations/for-user/{user_id}?limit=N` returning a ranked list of item IDs with predicted scores.  
+   - Provide `GET /recommendations/similar-items/{item_id}?limit=N` returning similar items.  
+   - Respond within 50ms p99 for cached results.
 
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
+4. **Frontend Components**  
+   - `RecommendationCarousel` component: displays horizontally scrollable items with title, image, and link.  
+   - `RecommendationGrid` component: grid layout.  
+   - Components must accept a `source` prop (e.g., "homepage", "pdp") and fire impression/click events.
 
----
+5. **Feedback Loop**  
+   - Log every served impression and every user click on a recommendation.  
+   - Forward logs to a data lake for future model retraining and bias analysis.
 
-## Functional Requirements
+6. **Admin Controls**  
+   - Dashboard page listing generation run status, last successful run timestamp, and item coverage.  
+   - Button to trigger an on-demand full recalculation (asynchronous job).  
 
-### FR-1 — Mode Selection
+## Acceptance criteria
+- A daily scheduled job successfully produces recommendation lists for 100% of active users (users with ≥1 interaction in the last 90 days).
+- API endpoints return valid recommendations within 50ms p99 for at least 99.9% of requests under normal load.
+- UI components render correctly with fallback text when no recommendations exist; they fire impression and click events verified in browser console/network.
+- Empty user state (new user with no interactions) returns a preconfigured fallback strategy (e.g., popular items) and logs a fallback event.
+- Admin page displays correct last-run timestamp, job success status, and item coverage (percentage of catalog items appearing in at least one recommendation list).
+- Manual recalculation completes within 2 hours for up to 1 million users and 100k items.
+- System handles duplicate events and missing user/item IDs gracefully without crashes or corrupt recommendation output.
+- All events (impression, click) are successfully delivered to the data lake and queryable within 30 minutes.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+## Out of scope
+- Real‑time / streaming recommendation updates; initial release is batch-only.
+- Advanced deep‑learning models (e.g., transformers, two‑tower neural networks); initial model is classic collaborative filtering.
+- A/B testing framework for recommendations; that will be built separately.
+- Personalizing based on demographic or contextual data (time, location, device) beyond user‑item interactions.
+- Multi‑lingual or cross‑domain recommendations.
+- Self‑service UI for business users to manually curate or override recommendations.
+- Integrating external paid recommendation APIs.
 
----
+## Requirements
 
-### FR-2 — Guided (Interactive) Mode
+_Owned by the business-analyst._
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+### Domain Analysis — PRD-to-Platform Mapping
 
----
+**Critical finding:** The PRD body (authored by Ada, Sr. Product Manager) describes a **consumer e-commerce recommendation engine** — collaborative filtering over clicks/purchases/ratings, "Recommended for You" product carousels, item-to-item similarity, a data lake feedback loop, and an admin pipeline dashboard. However, the bound repository (`seanhogg/builderforce.ai`) is **not** a consumer platform — it is an **AI dev-workforce orchestration platform** whose domain entities are projects, tasks, AI agent runs, LLM usage, DORA delivery metrics, and workforce allocation. There is no item catalog, no shopper identity, no product detail page, and no event bus for consumer interactions.
 
-### FR-3 — Bulk (Import) Mode
+**What already exists (and is relevant):**
 
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
-
-## Acceptance Criteria
-
-| ID | Criterion | Verification Method |
+| Existing subsystem | File | What it does |
 |---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+| Prescriptive business-insight recommendations | `api/src/application/insights/recommendationsEngine.ts` | Computes ranked operational recommendations ("budget at risk", "low merge rate", "high change-failure rate") from finance/engineering/allocation/DORA lenses. Rules are pure and unit-testable. Dismissals persist via `recommendation_dismissals` table (migration 0232). |
+| Assignee recommendation | `api/src/application/metrics/assigneeRecommender.ts` | Ranks candidate workforce members by fit score (availability, WIP capacity, skill match, ramp factor) for task assignment. |
+| Recommendations API routes | `api/src/presentation/routes/recommendationsRoutes.ts` | `GET /api/insights/recommendations` (ranked prescriptive actions), `POST /api/insights/recommendations/dismiss`, `GET /api/insights/space` (SPACE metrics). Mounted alongside `aiImpactRoutes.ts` which bundles the same cache. |
+| Cache + dismissal infrastructure | `api/src/infrastructure/cache/readThroughCache.ts`, migration 0232 | Short-TTL read-through cache with per-tenant version-token invalidation on dismissal. |
+
+**What the PRD describes that simply cannot exist on this platform:**
+- Consumer user-item interaction matrices (clicks, views, add-to-cart, purchases) — no consumer catalog, no shopping cart
+- Collaborative filtering (user-based / item-based) over consumer products — no item corpus
+- `RecommendationCarousel` / `RecommendationGrid` frontend widgets displaying products — the frontend is a workforce dashboard
+- Data lake feedback pipeline for impression/click logs — no data lake integration
+- An admin dashboard for "generation run status" and "item coverage" — the platform's recommendations are computed live, not batch-generated
+
+### Re-scoped Requirements — Platform-Appropriate Recommendation Capabilities
+
+The following requirements map the PRD's *intent* (personalized, actionable recommendations surfaced through reusable UI) to what this platform *can actually deliver*. They extend the existing `recommendationsEngine.ts` and `assigneeRecommender.ts` foundation.
 
 ---
 
-## Out of Scope
+#### R1: Unified Recommendation Domain Model
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+**R1.1** A single `Recommendation` type SHALL be shared across all recommendation surfaces (insights, assignee, project, model). It MUST carry at minimum: a stable `key` for dismissal tracking, a `category` enum, a `severity` level, a human-readable `title` and `detail`, a quantifiable `metric` string, and a prescriptive `recommendation` action.
+
+**R1.2** The existing `Recommendation` interface in `recommendationsEngine.ts` SHALL be promoted to a shared domain type at `api/src/domain/recommendation/types.ts` and re-exported so the assignee recommender and any future recommenders consume the same contract.
+
+**R1.3** The `RecCategory` enum SHALL be extended from `'cost' | 'quality' | 'allocation' | 'delivery'` to include `'staffing'`, `'model'`, and `'project'` so future recommenders have canonical slots.
+
+---
+
+#### R2: Model Routing Recommendations (New)
+
+**R2.1** A `ModelRecommender` service SHALL be implemented at `api/src/application/insights/modelRecommender.ts`. Given a task's characteristics (task type, estimated complexity, project modality, historical merge rates per model for similar tasks), it SHALL return a ranked list of recommended LLM models with fit scores (0–100).
+
+**R2.2** The recommender SHALL consume the existing `engineeringInsights.byModel` data (merge rate per model, degraded rate, runs count) and the learned model routing table (migration 0197) as inputs.
+
+**R2.3** The recommender SHALL expose a pure `rankModels(inputs: ModelRankingInputs): ModelRecommendation[]` function, unit-testable without a database.
+
+**R2.4** A `GET /api/insights/model-recommendations?projectId=X&taskType=Y` endpoint SHALL serve the ranked list, cached under the existing short-TTL policy.
+
+---
+
+#### R3: Project Health Recommendations (New)
+
+**R3.1** A `ProjectRecommender` service SHALL be implemented at `api/src/application/insights/projectRecommender.ts`. It SHALL consume the existing `computeProject360.ts` health-tier computation and the project's diagnostic profiles to emit prescriptive actions.
+
+**R3.2** Recommendations SHALL include, at minimum: projects with stalled tickets (no lane-move in 7+ days), projects with zero agent runs in the window, projects approaching budget limits, and projects whose DORA metrics have regressed vs. the prior window.
+
+**R3.3** The pure derivation function SHALL be exported and unit-testable.
+
+**R3.4** A `GET /api/insights/project-recommendations?days=N` endpoint SHALL serve the ranked list, filtered by tenant dismissals.
+
+---
+
+#### R4: Extended Assignee Recommendations (Enhance Existing)
+
+**R4.1** The existing `assigneeRecommender.ts` SHALL emit its `Recommendation` results in the unified `Recommendation` shape (R1), adding a `category: 'staffing'` field.
+
+**R4.2** Each assignee recommendation SHALL carry a stable `key` (e.g., `staffing.candidate.{memberRef}`) so the manager can dismiss a candidate for a given project context.
+
+**R4.3** The recommendation detail SHALL include the reasons array (e.g., "3/5 skills matched", "2 WIP slots free") as part of the `detail` field.
+
+---
+
+#### R5: Unified Recommendations API Surface
+
+**R5.1** A new composite endpoint `GET /api/insights/recommendations/feed` SHALL accept query parameters `?categories=cost,staffing,model,project&days=30&projectId=X` and return a merged, interleaved, ranked feed of recommendations from all active recommenders (R1–R4).
+
+**R5.2** The feed SHALL respect the existing dismissal mechanism: a dismissed `rec_key` from any category SHALL be filtered out of the composite feed.
+
+**R5.3** Each item in the feed SHALL carry a `source` field (e.g., `"insights"`, `"staffing"`, `"model"`, `"project"`) so the frontend can render category-appropriate cards.
+
+---
+
+#### R6: Recommendation UI Components (Frontend)
+
+**R6.1** A `RecommendationList` component SHALL render a vertically stacked list of recommendation cards, grouped by category, with dismiss (×) buttons that POST to `/api/insights/recommendations/dismiss`.
+
+**R6.2** A `RecommendationBadge` component SHALL display severity (critical/warning/info) as a color-coded dot/badge alongside the metric value. It SHALL accept a `source` prop (e.g., `"project-dashboard"`, `"home"`) and fire an analytics event on render (impression) and on dismiss (action).
+
+**R6.3** The components SHALL be implemented in the existing dashboard frontend at `Builderforce.ai/frontend/src/dashboard/` following the patterns established by `CrossProjectHealthDashboard.tsx`.
+
+**R6.4** When the feed returns zero recommendations (all dismissed or none generated), the component SHALL render an empty-state message: "No recommendations right now. Everything looks on track."
+
+---
+
+#### R7: Recommendation Telemetry
+
+**R7.1** Every recommendation impression (component mount) and user action (dismiss, click-through) SHALL write a structured event to the existing `activity_log` table (migration 0287) with `eventType = 'recommendation_impression' | 'recommendation_dismiss' | 'recommendation_click'`.
+
+**R7.2** Each event SHALL carry the `rec_key`, `category`, `source` prop, `tenantId`, and `userId` (if authenticated).
+
+**R7.3** A `GET /api/insights/recommendations/telemetry?days=N` endpoint SHALL return aggregate impression/dismiss/click counts grouped by category and rec_key for auditing recommendation effectiveness.
+
+---
+
+#### R8: Admin Controls (Minimal)
+
+**R8.1** The existing manager-facing AI-overview dashboard (served by `aiImpactRoutes.ts`) SHALL include a recommendations summary section showing: total active recommendations, count by severity, and the timestamp of the latest cache refresh.
+
+**R8.2** A `POST /api/insights/recommendations/invalidate` endpoint (manager role) SHALL bump the version token for all recommendation cache keys, forcing a live recomputation on the next read. This serves as the "manual refresh" equivalent.
+
+---
+
+### What the Re-scope Excludes (and Why)
+
+| PRD item | Exclusion rationale |
+|---|---|
+| Collaborative filtering, interaction matrices, item similarity | No item catalog or consumer interaction data exists on this platform. |
+| `RecommendationCarousel` / `RecommendationGrid` product widgets | The frontend is a workforce dashboard, not a consumer storefront. |
+| Event bus ingestion (clicks, views, add-to-cart) | No consumer event bus. Activity is tracked through `activity_log`. |
+| Data lake feedback pipeline | No data lake integration. Telemetry uses existing `activity_log`. |
+| Batch recommendation generation pipeline (Spark/MapReduce style) | Platform recommendations are computed live from hot operational data, not batch-generated. |
+| "Item coverage" metric | No item corpus to measure coverage against. |
+| 50ms p99 SLA on KV store lookups | Existing cache layer (readThroughCache) already provides sub-50ms response; the SLA is on the live computation, which is scoped by the 2-hour manual recalculation window — not applicable. |
+
+---
+
+### Traceability Matrix
+
+| Requirement | Existing Platform Foundation | New Implementation Needed |
+|---|---|---|
+| R1 (unified type) | `recommendationsEngine.ts` `Recommendation` interface | Extract to `api/src/domain/recommendation/types.ts` |
+| R2 (model recommender) | `engineeringInsights.byModel`, migration 0197 routing | New `modelRecommender.ts` + route |
+| R3 (project recommender) | `computeProject360.ts`, diagnostic profiles | New `projectRecommender.ts` + route |
+| R4 (extended assignee) | `assigneeRecommender.ts` | Add unified type + stable keys |
+| R5 (composite feed) | `recommendationsRoutes.ts` caching layer | New `/feed` endpoint |
+| R6 (UI components) | `CrossProjectHealthDashboard.tsx` patterns | New `RecommendationList`, `RecommendationBadge` |
+| R7 (telemetry) | `activity_log` table (migration 0287) | Instrumentation in UI + `/telemetry` endpoint |
+| R8 (admin) | `aiImpactRoutes.ts` | Summary section + `/invalidate` endpoint |
+
+### Open Questions for Stakeholders
+
+1. **Should the assignee recommender's candidate keys be dismissible?** Dismissing a candidate across all projects may hide someone the manager wants for a different task. Consider scoping dismissals to (tenant, rec_key, project_id) instead of (tenant, rec_key).
+
+2. **Should model recommendations be per-project or per-task?** A model that under-merges on React tasks may excel on Python data tasks. The current proposal is per-project; a finer-grained per-task-type recommendation would be more useful but requires more wiring.
+
+3. **Should the recommendation feed support push (WebSocket/SSE) updates?** The current PRD is batch-only, but since these are computed live from hot data, a real-time refresh on the dashboard could be valuable. This is out of scope but worth scheduling.
+
+4. **Is there appetite to re-title the PRD?** The current title ("Recommendation Engine") and the PRD body describe a consumer product recommender. Renaming to "Operational Recommendations Engine" or "AI Workforce Recommendations" would avoid future confusion.
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
