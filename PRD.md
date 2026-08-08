@@ -1,125 +1,74 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #773
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Feature: Agent-Role Assignment via Manifest Update
 
 ## Problem & Goal
+Multi-agent orchestrations often fail when the assignment of agents to roles is ambiguous or unverifiable. Currently, the relationship between a role and its assigned agent is implicit or stored outside the system’s single source of truth (the crew manifest). This leads to runtime inconsistencies, duplicate assignments, and difficulty in auditing which agent is responsible for a given role.
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
-
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+**Goal:** Introduce an explicit “assign agent to role” operation that atomically updates the crew manifest. The manifest must reflect the assignment by setting the role’s `state` to `"assigned"` and recording the chosen agent’s identifier. This ensures the manifest remains the authoritative, deployable artifact for the crew.
 
 ## Target Users / ICP Roles
-
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Crew Architect / DevOps Engineer**: Defines crew structure and needs to programmatically or manually finalize assignments without editing raw YAML/JSON by hand.
+- **Orchestrator Runtime**: The internal engine that consumes the manifest and expects well-formed, unambiguous assignments before execution.
+- **CI/CD Pipelines**: Automated systems that assemble crews from a pool of available agents and must produce a valid, fully-assigned manifest artifact.
 
 ## Scope
-
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- A single API or CLI command (`assign_role`) that, given a crew manifest and a role name, sets the `state` field of that role to `"assigned"` and populates the `assigned_agent` field with the provided agent ID.
+- Input validation: Reject if the role doesn’t exist, if the role is already assigned to a different agent (unless forced), or if the agent ID is invalid/offline.
+- The manifest is the only mutable artifact; no side effects on the actual agent (e.g., no connection test, no token exchange) — those are separate concerns.
+- The output is the updated manifest; the caller is responsible for persisting the new version.
 
 ## Functional Requirements
-
-### FR-1 — Mode Selection
-
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
-
----
-
-### FR-2 — Guided (Interactive) Mode
-
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
-
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+1. **Manifest parsing**: The system must accept a manifest document (YAML/JSON) conforming to the crew schema (list of roles, each with a `state` and optionally `assigned_agent`).
+2. **Assignment request**: The operation receives a role identifier and an agent identifier.
+3. **State transition**:
+   - The target role’s `state` is changed to `"assigned"`.
+   - The role’s `assigned_agent` field is set to the provided agent identifier.
+   - Other fields in the role definition are preserved unchanged.
+4. **Conflict handling**:
+   - If the role already has `state: "assigned"` and `assigned_agent` differs from the requested agent, the operation fails with a clear error unless an `overwrite` flag is set to `true`.
+   - If `overwrite` is true, the existing assignment is replaced.
+5. **Idempotency**: Repeating the same assignment request with the same role and agent (when already assigned to that agent) succeeds without error and returns the unchanged manifest.
+6. **Validation**:
+   - Role must exist in the manifest.
+   - Agent ID must be a non-empty string.
+   - Invalid role names or agent IDs cause a rejected request with an appropriate error code.
+7. **Output**: The updated manifest document is returned (same format as input), with the modification applied to the specified role.
 
 ## Acceptance Criteria
-
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
-
----
+- Given a manifest with a role `"researcher"` in state `"unassigned"`, calling `assign_role(manifest, role="researcher", agent_id="agent-007")` returns a manifest where `researcher.state = "assigned"` and `researcher.assigned_agent = "agent-007"`.
+- Calling the same function a second time with identical arguments succeeds (idempotent) and returns the same output.
+- Calling `assign_role` with a different `agent_id` (without `overwrite`) on an already assigned role results in a conflict error.
+- Passing a role name that doesn’t exist throws a “role not found” error.
+- Passing an empty or invalid `agent_id` throws a validation error.
+- All errors include a descriptive message and do not mutate the original manifest.
 
 ## Out of Scope
+- Agent availability checks or real-time health validation.
+- Provisioning or launching the assigned agent.
+- Role creation or deletion; this feature only modifies an existing role’s assignment fields.
+- Concurrent modification safety (e.g., optimistic locking) — the caller is responsible for managing multiple writers.
+- Automatic rollback of the manifest if downstream execution fails.
+- Graphical/manual assignment UI (API/CLI only).
+- Notification to the assigned agent or any event stream.
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+## Requirements
+
+_Owned by the business-analyst — to be authored._
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
