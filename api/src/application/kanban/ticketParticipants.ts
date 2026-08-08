@@ -22,7 +22,8 @@ import type { Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrastructure/cache/readThroughCache';
 import {
-  boards, swimlaneRequirements, swimlanes, tasks, ticketParticipants, ticketRoleSignoffs,
+  boards, ideAgents, swimlaneRequirements, swimlanes, tasks, ticketParticipants,
+  ticketRoleSignoffs, users,
 } from '../../infrastructure/database/schema';
 import { roleDisplayName } from './roleCatalog';
 import { resolveRoleCapableAgents } from './roleCapability';
