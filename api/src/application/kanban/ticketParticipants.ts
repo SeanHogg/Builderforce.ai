@@ -25,7 +25,6 @@ import {
   boards, swimlaneRequirements, swimlanes, tasks, ticketParticipants, ticketRoleSignoffs,
 } from '../../infrastructure/database/schema';
 import { roleDisplayName } from './roleCatalog';
-import { resolveRoleCapableAgents } from './roleCapability';
 import { projectRoleAssignments } from '../../infrastructure/database/schema';
 import { requirementApplies, type Responsibility } from './types';
 import { ADVANCEABLE_PARTICIPANT_STATES, blocksCompletion, isParticipantSatisfied } from './participantStates';
@@ -314,7 +313,13 @@ export class TicketParticipantsService {
     return slots;
   }
 
-  /** Resolve the best concrete assignee for a role (explicit pin → capable agent). */
+  /** Resolve the best concrete assignee for a role (explicit pin only).
+   * 
+   * NOTE: This method intentionally does NOT fall back to the first role-capable agent.
+   * When no explicit pin exists, returns null so the slot displays as `unstaffed`.
+   * This prevents auto-assigning a user/agent that was never explicitly chosen,
+   * which would mislead stakeholders about who is actually responsible.
+   */
   private async resolveAssignee(env: Env, tenantId: number, projectId: number, roleKey: string): Promise<{ kind: string; ref: string; name: string } | null> {
     const pins = await this.db
       .select({ projectId: projectRoleAssignments.projectId, kind: projectRoleAssignments.assigneeKind, ref: projectRoleAssignments.assigneeRef, name: projectRoleAssignments.assigneeName })
@@ -327,8 +332,8 @@ export class TicketParticipantsService {
     pins.sort((a, b) => Number(b.projectId === projectId) - Number(a.projectId === projectId));
     const pin = pins[0];
     if (pin) return { kind: pin.kind, ref: pin.ref, name: pin.name ?? pin.ref };
-    const [agent] = await resolveRoleCapableAgents(env, this.db, tenantId, projectId, roleKey);
-    return agent ? { kind: 'agent', ref: agent.ref, name: agent.name } : null;
+    // No fallback to resolveRoleCapableAgents — return null so the slot shows as unstaffed
+    return null;
   }
 
   /**
