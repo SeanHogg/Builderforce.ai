@@ -1,125 +1,206 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #593
 > _Each agent that updates this PRD signs its change below._
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+# Product Requirements Document (PRD)
 
 ## Problem & Goal
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+### Problem
+- **Inefficient Test Case Execution**: Current manual and semi-automated processes for executing test cases lead to delays, human errors, and inconsistent results.
+- **Lack of Visibility**: Limited visibility into the status and outcomes of test case executions makes it difficult to track progress and identify bottlenecks.
+- **Resource Intensive**: High resource consumption due to the need for extensive manual intervention and coordination.
 
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+### Goal
+- **Automate Test Case Execution**: Develop a system that automates the execution of test cases to improve efficiency, accuracy, and consistency.
+- **Enhance Visibility**: Provide real-time dashboards and reports to track the status and outcomes of test case executions.
+- **Optimize Resource Utilization**: Reduce the need for manual intervention and optimize resource allocation through automation.
 
 ## Target Users / ICP Roles
 
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Quality Assurance Engineers**: Responsible for designing, executing, and managing test cases.
+- **Software Developers**: Need to understand test results to address defects and improve code quality.
+- **Project Managers**: Require insights into testing progress and outcomes to manage project timelines and resources.
+- **DevOps Engineers**: Integrate automated test case execution into the CI/CD pipeline.
 
 ## Scope
 
-### In Scope
-
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
-
-### Out of Scope
-
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
-
----
+- **Automated Test Execution**: Develop a framework for automating the execution of test cases across different environments and platforms.
+- **Integration with CI/CD**: Seamlessly integrate with existing CI/CD pipelines to trigger test executions on code commits or deployments.
+- **Reporting and Analytics**: Provide comprehensive reports and analytics on test execution results, including pass/fail rates, execution times, and trends.
+- **Notifications and Alerts**: Implement a notification system to alert stakeholders on test execution status, failures, and critical issues.
+- **Configuration Management**: Allow users to configure test execution parameters, environments, and schedules through a user-friendly interface.
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+1. **Test Case Management**
+   - Import and manage test cases from various sources (e.g., spreadsheets, test management tools).
+   - Organize test cases into suites and categories for easy execution and tracking.
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+2. **Automation Framework**
+   - Support for multiple scripting languages (e.g., Python, JavaScript) for writing automated test scripts.
+   - Ability to execute tests in parallel across different environments and platforms.
 
----
+3. **CI/CD Integration**
+   - Plugins and APIs for integration with popular CI/CD tools (e.g., Jenkins, GitLab CI, CircleCI).
+   - Trigger test executions based on predefined events (e.g., code commits, pull requests).
 
-### FR-2 — Guided (Interactive) Mode
+4. **Reporting and Analytics**
+   - Real-time dashboards displaying the status of test executions, including pass/fail rates and execution times.
+   - Detailed reports with drill-down capabilities for analyzing test results and identifying trends.
+   - Export options for reports in various formats (e.g., PDF, Excel).
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+5. **Notifications and Alerts**
+   - Configurable alerts for test execution status, failures, and critical issues.
+   - Integration with email, Slack, and other communication tools for notifications.
 
----
-
-### FR-3 — Bulk (Import) Mode
-
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
-
----
-
-### FR-4 — Shared / Cross-Mode Requirements
-
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
-
----
+6. **Configuration Management**
+   - User-friendly interface for configuring test execution parameters, environments, and schedules.
+   - Version control for configuration settings to track changes and rollback if necessary.
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
-
----
+- **Automated Execution**: Test cases are executed automatically without manual intervention, and results are recorded accurately.
+- **Integration**: The system integrates seamlessly with the existing CI/CD pipeline, and test executions are triggered as expected.
+- **Reporting**: Comprehensive reports are generated and accessible through the dashboard, with accurate and up-to-date information.
+- **Notifications**: Stakeholders receive timely notifications on test execution status and critical issues.
+- **Configuration**: Users can configure test execution parameters, environments, and schedules through the interface, and changes are applied correctly.
 
 ## Out of Scope
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+- **Test Case Creation**: The system will not include functionality for creating new test cases; it will only manage and execute existing ones.
+- **Test Data Management**: Management and provisioning of test data are not part of this project.
+- **Advanced Analytics**: While basic reporting and analytics are included, advanced data analysis and machine learning capabilities are out of scope.
+- **Third-Party Tool Development**: Development of plugins for third-party tools not listed in the integration requirements is not included.
+
+## Requirements
+
+### Non-Functional Requirements
+
+1. **Performance**
+   - Test case execution must complete within 5 minutes for a standard suite of 100 test cases.
+   - The system must support concurrent execution of at least 50 test cases in parallel.
+   - Dashboard must load within 3 seconds with real-time data refresh.
+
+2. **Scalability**
+   - The system must support managing at least 10,000 test cases without performance degradation.
+   - The execution engine must scale horizontally to handle increased load.
+
+3. **Reliability**
+   - Test execution must have 99.5% reliability with automatic retry for transient failures.
+   - System uptime must be 99.9% availability.
+
+4. **Security**
+   - All test data and results must be encrypted at rest and in transit.
+   - Role-based access control (RBAC) must be implemented for all operations.
+   - Audit logs must capture all user actions and system events.
+
+5. **Compatibility**
+   - The system must support Chrome, Firefox, Safari, and Edge for browser-based testing.
+   - APIs must maintain backward compatibility across versions.
+
+### Technical Requirements
+
+1. **API Requirements**
+   - RESTful API endpoints for test case CRUD operations.
+   - Webhook support for CI/CD integration.
+   - GraphQL API for flexible querying of test results.
+   - Rate limiting: 1000 requests per minute per API key.
+
+2. **Data Storage**
+   - PostgreSQL for structured test case and execution metadata.
+   - Redis for caching and real-time state management.
+   - Object storage for test logs and artifacts.
+
+3. **Authentication & Authorization**
+   - OAuth 2.0 for third-party integrations.
+   - JWT tokens for API authentication.
+   - SAML SSO support for enterprise deployments.
+
+### Data Requirements
+
+1. **Test Case Schema**
+   - Unique identifier, name, description, test steps, expected results.
+   - Tags for categorization, priority level, associated test suite.
+   - Version history for test case modifications.
+
+2. **Execution Result Schema**
+   - Execution ID, start/end timestamps, duration, status (pass/fail/error).
+   - Detailed logs, screenshots for failures, environment details.
+   - Link to associated commit/PR for traceability.
+
+3. **Retention Policy**
+   - Execution results retained for 90 days by default.
+   - Configurable retention period based on compliance requirements.
+
+### Integration Requirements
+
+1. **CI/CD Tools**
+   - Jenkins plugin with pipeline support.
+   - GitLab CI integration via CI configuration file.
+   - CircleCI orb for seamless integration.
+   - GitHub Actions workflow triggers.
+
+2. **Test Management Tools**
+   - Import/export capabilities for TestRail.
+   - Zephyr Scale API integration.
+   - CSV/spreadsheet import for bulk test case migration.
+
+3. **Communication Tools**
+   - Email notifications via SMTP.
+   - Slack webhook integration for real-time alerts.
+   - Microsoft Teams incoming webhook support.
+
+### Operational Requirements
+
+1. **Monitoring**
+   - Prometheus metrics endpoint for custom dashboards.
+   - Grafana integration for visualization.
+   - Health check endpoint for load balancer verification.
+
+2. **Deployment**
+   - Docker container support for all components.
+   - Kubernetes deployment manifests.
+   - Blue-green deployment support for zero-downtime updates.
+
+3. **Backup & Recovery**
+   - Automated daily database backups.
+   - Point-in-time recovery capability.
+   - Disaster recovery plan with RTO < 4 hours and RPO < 1 hour.
+
+### User Experience Requirements
+
+1. **Accessibility**
+   - WCAG 2.1 Level AA compliance for web interface.
+   - Keyboard navigation support.
+   - Screen reader compatibility.
+
+2. **Internationalization**
+   - Support for English, Spanish, French, German, Japanese, and Chinese languages.
+   - Right-to-left (RTL) language support.
+
+### Compliance Requirements
+
+1. **Data Privacy**
+   - GDPR compliance for personal data handling.
+   - Data anonymization capabilities for test data.
+   - Right to deletion support.
+
+2. **Industry Standards**
+   - ISO 27001 aligned security practices.
+   - SOC 2 Type II compliance readiness.
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
