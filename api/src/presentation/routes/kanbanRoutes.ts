@@ -343,6 +343,40 @@ export function createKanbanRoutes(db: Db, createChild?: CreateChildTaskPort): H
     return c.json({ ok: true });
   });
 
+  // Assign a specific resource to an ALREADY-EXISTING manifest slot. Unlike addParticipant
+  // (which creates a new row), this staffs an existing slot — e.g. the Engineer role that
+  // was derived from the board template but is currently unstaffed.
+  router.patch('/tasks/:taskId/participants/assign', async (c) => {
+    if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);
+    const tenantId = c.get('tenantId') as number;
+    const taskId = Number(c.req.param('taskId'));
+    const body = await c.req.json<{
+      roleKey: string;
+      assignee: { kind: string; ref: string; name: string };
+      stageKey?: string | null;
+      responsibility?: 'owner' | 'reviewer' | 'contributor' | null;
+      note?: string;
+    }>();
+    if (!body.roleKey || !body.assignee?.ref) return c.json({ error: 'roleKey and assignee are required' }, 400);
+    if (body.assignee.kind !== 'agent' && body.assignee.kind !== 'human') return c.json({ error: 'assignee.kind must be agent or human' }, 400);
+    const participant = await participantsService.assignParticipant(env(c), tenantId, taskId, {
+      roleKey: body.roleKey,
+      assignee: body.assignee,
+      stageKey: body.stageKey,
+      responsibility: body.responsibility,
+      note: body.note,
+    });
+    if (!participant) return c.json({ error: 'no matching participant slot found' }, 404);
+    const [proj] = await db.select({ projectId: tasks.projectId }).from(tasks).where(eq(tasks.id, taskId)).limit(1);
+    await recordActivity(env(c), db, {
+      tenantId, projectId: proj?.projectId ?? null, actor: await resolveHumanActor(env(c), db, tenantId, (c.get('userId') as string) ?? ''),
+      verb: 'ticket.participant.assigned', targetType: 'task', targetId: String(taskId), targetLabel: `#${taskId}`,
+      summary: `Assigned ${participant.assigneeName ?? body.assignee.ref} to ${roleLabel(body.roleKey)}`.slice(0, 300),
+      metadata: { roleKey: body.roleKey, assigneeKind: body.assignee.kind, assigneeRef: body.assignee.ref },
+    });
+    return c.json({ participant });
+  });
+
   // Materialize a child work-item task per resolved participant (the %-complete rollup).
   router.post('/tasks/:taskId/participants/materialize', async (c) => {
     if (!isManager(c)) return c.json({ error: 'manager role required' }, 403);

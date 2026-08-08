@@ -159,6 +159,30 @@ export interface AddParticipantInput {
   assignee?: ExplicitAssignee | null;
 }
 
+/**
+ * Staff an ALREADY-EXISTING manifest slot (see `assignParticipant`).
+ *
+ * Identifies the slot the way an operator does — "the Engineer role on this ticket" —
+ * rather than by the full five-column unique index, because the caller staffing a role
+ * generally knows the role, not which `source` derived it.
+ */
+export interface AssignParticipantInput {
+  /** Which role's slot to staff, e.g. `engineer`. */
+  roleKey: string;
+  /** The resource to pin. `kind` is `agent` | `human` (mirrors `assigneeKind`). */
+  assignee: ExplicitAssignee;
+  /**
+   * Narrow to one lane's slot. Omit to staff EVERY slot the role holds on the ticket —
+   * the right default for a role that appears once, and an explicit, auditable choice
+   * for one that appears in several lanes.
+   */
+  stageKey?: string | null;
+  /** Narrow to one responsibility when the role is carried as both owner and reviewer. */
+  responsibility?: Responsibility | null;
+  /** Optional free-text provenance for the staffing decision. */
+  note?: string | null;
+}
+
 /** Port for creating a child work-item task — injected from the route (TaskService). */
 export type CreateChildTask = (input: {
   title: string;
@@ -424,6 +448,67 @@ export class TicketParticipantsService {
       .delete(ticketParticipants)
       .where(and(eq(ticketParticipants.tenantId, tenantId), eq(ticketParticipants.taskId, taskId), eq(ticketParticipants.id, participantId), inArray(ticketParticipants.source, ['assessment', 'manual'])));
     await this.bump(env, taskId);
+  }
+
+  /**
+   * Staff an ALREADY-EXISTING manifest slot.
+   *
+   * Unlike `addParticipant` (which creates a new row), this updates the slot that
+   * already exists on the ticket — the template-derived Engineer slot that is currently
+   * `unstaffed`. Useful when a manager knows exactly which role to staff and does not
+   * want to create a duplicate row.
+   *
+   * Idempotent: re-staffing the same person to the same slot is a no-op.
+   */
+  async assignParticipant(env: Env, tenantId: number, taskId: number, input: AssignParticipantInput): Promise<ManifestParticipant | null> {
+    const ctx = await this.taskContext(taskId);
+    if (!ctx) return null;
+
+    // Build the query to find the slot(s): match task, tenant, role, and optionally stage + responsibility.
+    const conditions = [
+      eq(ticketParticipants.tenantId, tenantId),
+      eq(ticketParticipants.taskId, taskId),
+      eq(ticketParticipants.roleKey, input.roleKey),
+    ];
+    if (input.stageKey !== undefined) {
+      conditions.push(input.stageKey == null ? isNull(ticketParticipants.stageKey) : eq(ticketParticipants.stageKey, input.stageKey));
+    }
+    if (input.responsibility !== undefined) {
+      conditions.push(input.responsibility == null ? isNull(ticketParticipants.responsibility) : eq(ticketParticipants.responsibility, input.responsibility));
+    }
+
+    // Find all matching slots — when stageKey is omitted, this may return multiple rows.
+    const existingRows = await this.db.select().from(ticketParticipants).where(and(...conditions));
+    if (!existingRows.length) return null;
+
+    const now = new Date();
+    const nowDate = new Date(now);
+    const nowIso = now.toISOString();
+
+    // Check if ALL are already staffed with the same person → no-op returning the first.
+    const allMatch = existingRows.every((r) => r.assigneeRef === input.assignee.ref && r.assigneeKind === input.assignee.kind);
+    if (allMatch) return this.mapRow(existingRows[0]);
+
+    // Update every matching slot with the new assignee.
+    const newState = 'assigned';
+    const note = input.note ?? null;
+    for (const existing of existingRows) {
+      await this.db
+        .update(ticketParticipants)
+        .set({
+          assigneeKind: input.assignee.kind,
+          assigneeRef: input.assignee.ref,
+          assigneeName: input.assignee.name,
+          state: newState,
+          note: note ?? existing.note,
+          updatedAt: nowDate,
+        })
+        .where(eq(ticketParticipants.id, existing.id));
+    }
+
+    await this.syncStates(env, tenantId, taskId);
+    await this.bump(env, taskId);
+    return this.mapRow(existingRows[0]);
   }
 
   /**
