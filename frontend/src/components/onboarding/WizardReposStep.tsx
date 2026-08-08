@@ -80,7 +80,7 @@ export function WizardReposStep({ projectId }: { projectId: number }) {
               </span>
               <span style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                 {r.isDefault ? (
-                  <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 600 }}>{t('default')}</span>
+                  <span style={{ fontSize: 11, color: 'var(--success-text)', fontWeight: 600 }}>{t('default')}</span>
                 ) : (
                   <button type="button" onClick={() => makeDefault(r.id)} style={{ fontSize: 11, background: 'none', border: 'none', color: 'var(--coral-bright)', cursor: 'pointer', padding: 0 }}>{t('makeDefault')}</button>
                 )}

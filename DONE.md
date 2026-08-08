@@ -4,7 +4,136 @@
 
 ---
 
-## ✅ RESOLVED 2026-08-08 — PRD 20's adoption gap: 237 consolidated tables had no code path; now 0 do
+## ✅ RESOLVED 2026-08-08 — Design-system audit: every `var()` resolves, in both themes
+
+An audit of all 135 routes against the token system, prompted by "did you apply the design system to
+all the pages?". The answer was no, and the gap was invisible rather than cosmetic: a name that is
+never declared fails **silently in whichever theme the author was not looking at**.
+
+**1 · 42 tokens referenced but never declared** (148 references, 55 files). Two failure modes:
+*bare* `var(--border-color)` is invalid at computed-value time, so the declaration is dropped
+entirely — `border: 1px solid var(--border-color)` rendered **no border at all**, and
+`font-family: var(--mono)` silently fell back to the body font across nine admin/IDE panels. With a
+literal fallback, `var(--x, #a78bfa)` paints that literal in **both** themes, which is a hardcoded
+single-theme colour wearing a token's clothes. Notably `var(--surface-coral, #e2654a)` was painting
+the **retired orange brand** into a product whose accent is blue. This was a *recurrence*: the
+`danger-*`/`info-*` families had the identical bug (see the comment on `--danger` in `globals.css`).
+Fix — the alias names migrated to the canonical vocabulary (`--warning-fg`→`--warning-text`,
+`--mono`→`--font-mono`, `--border-color`→`--border`, `--surface-primary`→`--surface`, …), and the
+genuinely-missing family members were *declared in both themes*: the categorical `--violet-bright` /
+`--indigo-bright` / `--emerald-bright` / `--amber-bright` / `--red-bright` (dark keeps the exact
+literals already in use, so dark is pixel-identical; light re-darkens each for paper), plus
+`--success-border` (the one semantic family lacking a border) and `--shadow-color`.
+
+**2 · 78 status colours hardcoded in `color:` slots** (53 files). `#22c55e` (~2.2:1 on white),
+`#f59e0b` (~2.1:1), `#f87171` (~3.0:1) and `#ef4444` (~3.8:1) all fail WCAG AA for body text on the
+light theme's warm stock. Migrated to `--success-text` / `--warning-text` / `--error-text`, which
+carry paper-safe values (`#166534` / `#92400e` / `#991b1b`). Backgrounds and borders were left alone
+deliberately — mostly low-alpha `rgba()` that reads on both grounds.
+
+**3 · The ratchet.** `scripts/check-design-tokens.mjs`, wired into `npm test` beside
+`check:api-transport`, fails the build on any `var()` naming an undeclared token and says which of
+the two ways it breaks. Verified to fail on a planted violation of each kind. Nothing about this
+class of bug fails loudly on its own, which is why it recurred; the guard is the actual fix.
+
+Also swept: `--canvas-reserved-top` (dangling — nothing ever set it). Left as-is by design: the
+canvas's own palette (it declares both themes itself, per `canvas-owns-its-palette`), the
+paper-only print stylesheet, and `embed/[view]` which branches on theme explicitly.
+
+Verified: token guard clean (239 declared, every reference resolves), typecheck clean, 141 files /
+1455 tests pass, ESLint 0 errors.
+
+---
+
+## ✅ RESOLVED 2026-08-08 — Navigation: the canvas is the anchor (continuity, findability, search-first)
+
+Four traced defects behind "users start on the canvas, sign up to save, and cannot find their way
+back", all shipped in one pass. Design: `specs` navigation architecture v3, reconciled with PRD 19.
+
+**1 · Orphaned guest drafts.** `createLocalCreationSession` wrote a board to
+`builderforce:create:local-<uuid>` and registered it nowhere, and claiming lived in a single
+`useEffect` on `/create/[sessionId]` — so any hop that dropped `?next=` (OAuth round trip, `/tenants`
+picker, email verification in a second tab) fell through `safeRedirectPath`'s `/dashboard` fallback
+and the work became unreachable. Shipped: a `builderforce:create:index` key riding the ONE write in
+`creationSessions.ts` (`listLocalCreationSessions` self-heals both ways — adopts pre-index boards
+already sitting in real browsers, prunes rows whose board is gone); `lib/pendingWork.ts` as the
+single claim owner, coalesced per session id so the route and the shell cannot double-claim; and
+`components/workspace/ResumeWorkBridge.tsx` mounted app-wide, driven by the INDEX rather than the
+URL. The last-canvas pointer and the recent-canvas read-through are both **tenant-keyed** — an
+unscoped cache would have shown one workspace's canvas titles inside another.
+
+**2 · Nothing named "my work".** Sidebar `✦ Create → /create` was `redirect('/dashboard')`, and the
+canvas list lived in a sub-tab of a dashboard panel at `y: 1160` on a pannable board. Shipped:
+`/create` is the canvas library (composing the existing `DashboardCreationLauncher` +
+`DashboardCreationSessions`, not a second copy), plus `CanvasSwitcher` in the top bar on every route
+with unclaimed drafts pinned above saved canvases.
+
+**3 · No search-first navigation.** Zero hits for `cmdk` / a palette / a ⌘K handler, against 549
+inbound destinations (PRD 19 §0). Shipped: `lib/destinations/registry.ts` DERIVED from `NAV_GROUPS`
+(a ported page registers by joining the nav config, not a second list), read by all three doors —
+the sidebar, a new ⌘K `CommandPalette`, and `DestinationBrainBridge` (`list_destinations` /
+`show_panel`, generalising what `show_ai_insight` already did for one drawer). One gate
+(`useDestinations`) for all three.
+
+**4 · The fake-canvas wrapper.** `CanvasRouteArtifact` mounted every authed page as a single
+1380×820 React Flow node subtitled "Application artifact" — page lost full-width scroll, gained no
+canvas behaviour. Deleted with `routeCanvasPolicy.ts`.
+
+**DRY extracted + migrated in the same pass:** `lib/useDismissable.ts` and
+`components/workspace/MenuSurface.tsx` (the existing `TenantProjectSwitcher` migrated onto both);
+`PwaToast` → `AppToast` + `appToastStack` with all consumers migrated, on gaining a third consumer.
+Localized in all five catalogs. 21 new tests; suite green at 140 files / 1448 tests.
+
+**Plan-locked destinations, now shown as locked** (was logged as blocked on an API decision — the
+client could see only `plan.effective`, so resolving a *feature* client-side would have created the
+second evaluator [[paid-plan-feature-gate]] exists to prevent). Cleared exactly as the entry
+specified: `api/src/application/tenant/featureEntitlements.ts` fans the one pure
+`evaluateFeatureEntitlement` over the feature list derived from `PLAN_FEATURE_LABEL`, and
+`GET /api/consumption` now carries the resolved boolean set on `ConsumptionSnapshot` (cache key
+bumped `v4`→`v5`). The registry declares a `feature` only where a *server* gate was verified —
+`psychometricPersona` (`tenantHasFeature`) and `advancedInsights` (`requirePlanFeature`) — so no lock
+is advertised that the API would not enforce. `destinationHref()` is the single locked→`/pricing`
+resolver used by both the ⌘K palette and the Brain bridge. Two kinds of "no" stay distinct: wrong
+account type/role → the destination is **absent**; wrong plan → **present and locked**.
+`rankDestinations` had to become generic to carry `locked` through ranking — a non-generic version
+silently dropped it and every row rendered unlocked, which is now a regression test.
+
+---
+
+## ✅ RESOLVED 2026-08-08 — Homepage read as AI slop: numbered non-sequence, uniform grids, no narrative
+
+The page ran as an inventory: eight sections labelled **01–08** — proof, compare, steps, features,
+pricing, blog, newsletter, FAQ — none of which is a sequence, each rendered as the same `HomeGrid`
+of `HomeCard`s, with a SECOND set of numbers (`CardIcon` 01/02/03, `01 / 03`) decorating the cards
+inside them. Numbering announced a structure the content did not have, and eight identical grids
+gave the reader no sense of movement.
+
+Shipped: the page is now one argument in order — start (`LandingCanvasHero`) → what it is
+(`MeetCarousel`) → how it works → see it run → proof → the numbers → breadth → why not the
+alternatives → price → objections → **the ask**. Section eyebrows name the BEAT they carry
+(`home.beat.*`) instead of an ordinal; numbering survives only in "How it works", which genuinely is
+a sequence. The stat band moved from the top of the page (before the reader had any reason to care
+what the numbers counted) to directly after the proof; blog + newsletter moved BELOW the primary CTA
+rather than standing between the reader and it. `CardIcon` lost its last caller and was deleted with
+its styles.
+
+Treatment now varies with the job: an argument is a grid, a catalogue is a rail. "Everything you can
+bring onto the canvas" became `components/home/HomeScroller.tsx` — native scroll-snap (usable before
+hydration, swipe + trackpad), arrows placed with the heading rather than overlaid on the cards,
+progress bar, disabling at each end instead of wrapping. `HomeSectionHeader` gained an `aside` slot
+for those controls. JSON-LD (`homepageSchema`) and every SEO/GEO surface untouched; all new copy
+localized in five catalogs.
+
+**The problem beat, now landed** (was logged as blocked on an operator positioning decision). It did
+not need one: the claim was already the product's own, stated in three places —
+`home.heroSub` ("without the tool sprawl"), `compare.teaser.title` ("The work begins before the
+code") and `content.ts:1305` ("without stitching together a board, a code host, an observability
+tool, and a spreadsheet"). `components/home/TensionBeat.tsx` makes that argument explicit as beat 2,
+between `<LandingCanvasHero>` and `<MeetCarousel>`, with a CSS diagram whose *severed connectors are
+the argument* — five fragments that do not join, resolving into one canvas bar; it stacks to a
+column under 640px so the point survives the reflow. Copy derived, not invented, in five catalogs.
+
+## ✅ RESOLVED 2026-08-08 — PRD 20's adoption gap: 237 consolidated tables had no code path; all 245 are now registered
 
 PRD 20 shipped the target schema at **362 / 362** and then measured the thing a schema-first method
 actually risks — `check-table-adoption.mjs` reported **244 created, 7 with a live code path, 237
@@ -51,11 +180,19 @@ re-created, plus 237 chances to forget tenant scoping, bounds, caching or redact
    would have served them to every tenant. Readability of a tenant-less table is now opt-IN
    (`global: true`), held to exactly `countries`, `cities` and `stage_lookup` by a test.
 
-**Measured:** `check-table-adoption` **245 created, 245 live, 0 cold** — the ratchet's baseline file
-is now empty and it is a gate. `tableAdoption.test.ts` asserts the aggregate AND pins ten surfaces
-by name, because a count re-arms itself when an unrelated table gets wired. 31 new tests in
-`entityCatalog.test.ts` / `EntityService.test.ts`, every refusal proved against a database proxy
-that throws if it is touched. Full chain green: 18 guards + 5,292 tests.
+**Measured:** `check-table-adoption` **245 created · 245 reachable via the entity layer · 17 reached
+by a feature path · 228 registry-only · 0 unreachable.** 31 new tests in `entityCatalog.test.ts` /
+`EntityService.test.ts`, every refusal proved against a database proxy that throws if it is touched.
+
+> **Correction (same day).** This entry first read "245 created, 245 live, 0 cold — the baseline is
+> empty and it is a gate", and `tableAdoption.test.ts` asserted ten surfaces on that basis. The
+> measurement was vacuous: the entity layer registers every consolidated table, so "something
+> imports this" became true for all 245 the moment `entities.ts` landed, without one feature having
+> been migrated. The guard now reports two tiers — registration is the floor, a non-registry reader
+> is the progress — and the strict number is 17, not 245. `job_applications`, `deals` and
+> `email_campaigns` were removed from the asserted list: they are registered and read by nothing
+> else, and claiming them was the vacuous number talking. The baseline is a ratchet over 228 again,
+> which is the honest shape of PRD 20 steps 6–7.
 
 ---
 
@@ -141,12 +278,21 @@ counting — an earlier ad-hoc pass reported 10 live tables where prose like "th
 settings" was inflating three of them. `npm test` now prints the answer instead of requiring anyone
 to re-derive it:
 
-> `244 created, 7 with a live code path (7 via a Drizzle import, 3 via raw SQL), 237 awaiting one.`
+> `245 created · 245 reachable via the entity layer · 17 reached by a feature path · 228 registry-only · 0 unreachable.`
 
-The 237 ratchet shrink-only (`.table-adoption-baseline.txt`), which turns PRD 20 steps 4–7 into a
-number that goes down. Two failures sit outside the ratchet because they are not sequencing calls: a
-migrated table with no `pgTable` declaration (unreachable from typed code), and a parse that returns
-zero tables (a guard that passes vacuously is worse than no guard).
+TWO TIERS, and the reason is the whole lesson of this entry. The consolidated entity layer registers
+every one of the 245 tables, so the first version of this measurement — "does anything import it?" —
+went from 7 to 245 the day `entities.ts` landed, with no feature migrated. That number was true and
+useless. Registration is now the FLOOR (`0 unreachable`, a hard failure, since a table missing from
+every `entities.ts` is a hole in the registry) and a non-registry reader is the PROGRESS (`17`),
+which is what ratchets shrink-only over the remaining 228. The detector also learned to see dynamic
+SQL — `registryProjection.ts` reads its tables through `FROM ${sql.raw(p.table)}`, where the name is
+in a data literal — gated on the file actually calling `sql.raw(`, so it does not decay into the
+bare-string match that first reported 10.
+
+Two failures sit outside the ratchet because they are not sequencing calls: a migrated table with no
+`pgTable` declaration (unreachable from typed code), and a parse that returns zero tables (a guard
+that passes vacuously is worse than no guard).
 
 The aggregate alone was not enough. A ratchet only notices things getting worse *in bulk* — unwiring
 `ObjectRegistry` would move `annotations` from live to cold and report it as one line in a list of

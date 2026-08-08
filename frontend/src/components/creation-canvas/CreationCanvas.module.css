@@ -18,9 +18,14 @@
      it clears contrast at small sizes in both themes from this one definition. */
   --canvas-ink-soft: color-mix(in srgb, var(--canvas-muted) 74%, var(--canvas-ink));
   --canvas-line: #e3ddd3;
-  /* Warm stock for the board, pure white for the objects on it. The step between
-     them is what makes a card look like it is lying ON something. */
-  --canvas-board: #f4f1ec;
+  /* A cool neutral board keeps the workspace crisp in light mode without
+     competing with white objects. Restrained blue/violet light gives the large
+     empty surface depth without reading as a colored sheet. */
+  --canvas-board: #f5f7fb;
+  --canvas-board-background:
+    radial-gradient(circle at 18% 12%, rgba(59, 130, 246, .035), transparent 30rem),
+    radial-gradient(circle at 82% 76%, rgba(109, 78, 233, .025), transparent 34rem),
+    var(--canvas-board);
   --canvas-panel: #ffffff;
   --canvas-panel-muted: #faf8f4;
   --canvas-hover: #efeae1;
@@ -58,13 +63,13 @@
   --canvas-brain-border: #d5c6ee;
   --canvas-brain-icon-bg: #eae0fa;
   --canvas-brain-accent: #6d4ee9;
-  --creation-dot: #ded6c9;
+  --creation-dot: #d4dce8;
   --creation-minimap-mask: color-mix(in srgb, var(--canvas-board) 76%, transparent);
-  height: calc(100vh - var(--topbar-height, 58px));
+  height: calc(100vh - var(--shell-topbar-height, 58px));
   min-height: 620px;
   overflow: hidden;
   color: var(--canvas-ink);
-  background: var(--canvas-board);
+  background: var(--canvas-board-background);
   font-family:var(--font-sans);
 }
 
@@ -208,7 +213,7 @@
    Anything else that sits low (the canvas outline, the Brain launcher) clears it
    from this ONE number instead of each guessing its own offset. */
 .flowWrap {
-  height:calc(100% - 54px); position:relative; background:var(--canvas-board); --composer-space:112px;
+  height:calc(100% - 54px); position:relative; background:var(--canvas-board-background); --composer-space:112px;
   /* The dock's footprint, restated under the name the shared canvas chrome reads
      (see CanvasCommands.module.css). One source, so the command rail and the mini
      map move out from under a docked Brain exactly like every panel above. */
@@ -1378,6 +1383,7 @@
   /* Dark keeps the blue accent: teal leads on paper, blue leads on ink. */
   --canvas-accent:#3978f6;
   --canvas-board:#09111f;
+  --canvas-board-background:var(--canvas-board);
   --canvas-panel:#111d2f;
   --canvas-panel-muted:#0d1828;
   --canvas-hover:#192a40;
@@ -1821,10 +1827,10 @@
 .courseSummary>div:first-child{display:flex;justify-content:space-between;gap:18px}.courseSummary span,.courseSummary small{color:var(--text-secondary)}
 .courseProgress{height:7px;border-radius:99px;background:rgba(116,128,160,.2);overflow:hidden}.courseProgress i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,#7559ed,#28c7bb)}
 .courseWorkspace{display:grid;grid-template-columns:190px minmax(0,1fr);gap:14px;min-height:400px}
-.courseWorkspace>nav{display:flex;flex-direction:column;gap:6px}.courseWorkspace>nav button{display:grid;grid-template-columns:25px 1fr;gap:8px;align-items:center;text-align:left;padding:9px;border:1px solid var(--border-color);border-radius:9px;background:var(--surface-secondary);color:var(--text-primary)}
+.courseWorkspace>nav{display:flex;flex-direction:column;gap:6px}.courseWorkspace>nav button{display:grid;grid-template-columns:25px 1fr;gap:8px;align-items:center;text-align:left;padding:9px;border:1px solid var(--border);border-radius:9px;background:var(--surface-2);color:var(--text-primary)}
 .courseWorkspace>nav button[aria-current="step"]{border-color:#7559ed;background:rgba(109,82,237,.12)}.courseWorkspace>nav button span{display:grid;place-items:center;width:23px;height:23px;border-radius:50%;background:rgba(109,82,237,.16);color:#7559ed}.courseWorkspace>nav button b{font-size:12px}
 .courseWorkspace>section{overflow:auto;padding-right:5px}.courseWorkspace>section>header h3{font-size:20px;margin:3px 0}.courseWorkspace>section>header p{color:var(--text-secondary);margin:0 0 10px}
-.courseWorkspace details{border:1px solid var(--border-color);border-radius:10px;margin:8px 0;background:var(--surface-primary)}.courseWorkspace summary{display:grid;grid-template-columns:24px 1fr auto;align-items:center;gap:7px;padding:11px;cursor:pointer}.courseWorkspace summary small{color:var(--text-secondary)}
-.courseLesson{padding:0 14px 14px;border-top:1px solid var(--border-color)}.courseLesson strong{display:block;margin-top:12px;color:#7559ed;font-size:11px;text-transform:uppercase;letter-spacing:.06em}.courseLesson p{margin:5px 0 10px}.courseLesson button{padding:7px 10px;border:0;border-radius:7px;background:#6d52ed;color:white;font-weight:700}
-.courseQuiz{margin-top:14px;padding:14px;border-radius:12px;background:rgba(40,199,187,.08);border:1px solid rgba(40,199,187,.25)}.courseQuiz>strong{color:#118b83}.courseQuiz>button{display:flex;width:100%;gap:8px;text-align:left;margin:6px 0;padding:8px;border:1px solid var(--border-color);border-radius:8px;background:var(--surface-primary);color:var(--text-primary)}.courseQuiz>button[data-selected]{border-color:#6d52ed}.courseQuiz>button span{font-weight:800;color:#6d52ed}.courseQuiz>p[role="status"]{padding:8px;border-radius:7px;background:rgba(221,85,95,.1)}.courseQuiz>p[data-correct]{background:rgba(40,199,187,.12)}
+.courseWorkspace details{border:1px solid var(--border);border-radius:10px;margin:8px 0;background:var(--surface)}.courseWorkspace summary{display:grid;grid-template-columns:24px 1fr auto;align-items:center;gap:7px;padding:11px;cursor:pointer}.courseWorkspace summary small{color:var(--text-secondary)}
+.courseLesson{padding:0 14px 14px;border-top:1px solid var(--border)}.courseLesson strong{display:block;margin-top:12px;color:#7559ed;font-size:11px;text-transform:uppercase;letter-spacing:.06em}.courseLesson p{margin:5px 0 10px}.courseLesson button{padding:7px 10px;border:0;border-radius:7px;background:#6d52ed;color:white;font-weight:700}
+.courseQuiz{margin-top:14px;padding:14px;border-radius:12px;background:rgba(40,199,187,.08);border:1px solid rgba(40,199,187,.25)}.courseQuiz>strong{color:#118b83}.courseQuiz>button{display:flex;width:100%;gap:8px;text-align:left;margin:6px 0;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text-primary)}.courseQuiz>button[data-selected]{border-color:#6d52ed}.courseQuiz>button span{font-weight:800;color:#6d52ed}.courseQuiz>p[role="status"]{padding:8px;border-radius:7px;background:rgba(221,85,95,.1)}.courseQuiz>p[data-correct]{background:rgba(40,199,187,.12)}
 @media(max-width:760px){.courseShell{min-width:0}.courseWorkspace{grid-template-columns:1fr}.courseWorkspace>nav{display:grid;grid-template-columns:repeat(2,1fr)}}

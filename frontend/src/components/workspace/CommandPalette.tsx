@@ -5,8 +5,16 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { useDestinations } from '@/lib/destinations/useDestinations';
-import { rankDestinations, type RankedDestination } from '@/lib/destinations/registry';
+import { rankDestinations, type Ranked } from '@/lib/destinations/registry';
+import { destinationHref, type GatedDestination } from '@/lib/destinations/useDestinations';
 import styles from './CommandPalette.module.css';
+
+const PLAN_LABEL: Record<string, string> = { free: 'Free', pro: 'Pro', teams: 'Teams' };
+
+/** Plan names are product nouns and stay literal in every locale. */
+function planLabel(plan: string | undefined): string {
+  return PLAN_LABEL[plan ?? ''] ?? 'Pro';
+}
 
 /**
  * Search-first navigation — the door that scales.
@@ -47,9 +55,12 @@ export function CommandPalette() {
 
   const close = useCallback(() => { setOpen(false); setQuery(''); setCursor(0); }, []);
 
-  const openDestination = useCallback((destination: RankedDestination) => {
+  // The row stays visible and selectable when locked so "you need Pro" reads as
+  // an upsell rather than as "this product cannot do that"; `destinationHref`
+  // decides where that actually lands.
+  const openDestination = useCallback((destination: Ranked<GatedDestination>) => {
     close();
-    router.push(destination.href);
+    router.push(destinationHref(destination));
   }, [close, router]);
 
   // Global shortcut. Bound at the document so it works whatever has focus, but
@@ -128,6 +139,7 @@ export function CommandPalette() {
             <div className={styles.results} id="command-palette-results" role="listbox" aria-label={tp('title')} ref={listRef}>
               {results.map((destination, index) => {
                 const isFirstOfGroup = index === 0 || results[index - 1]?.groupLabel !== destination.groupLabel;
+                const locked = destination.locked;
                 return (
                   <div key={destination.id}>
                     {isFirstOfGroup && <div className={styles.group}>{destination.groupLabel}</div>}
@@ -136,13 +148,16 @@ export function CommandPalette() {
                       role="option"
                       aria-selected={index === cursor}
                       data-active={index === cursor}
+                      data-locked={locked}
                       className={styles.row}
                       onMouseEnter={() => setCursor(index)}
                       onClick={() => openDestination(destination)}
                     >
                       <span className={styles.rowIcon} aria-hidden="true">{destination.icon}</span>
                       <span className={styles.rowLabel}>{destination.label}</span>
-                      <span className={styles.rowPath}>{destination.href}</span>
+                      {locked
+                        ? <span className={styles.rowLock}>{tp('locked', { plan: planLabel(destination.requiredPlan) })}</span>
+                        : <span className={styles.rowPath}>{destination.href}</span>}
                     </button>
                   </div>
                 );

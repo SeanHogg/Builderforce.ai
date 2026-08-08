@@ -93,7 +93,7 @@ export function GovernanceContent({ projectId, agentAssignment, className, style
         )}
       </div>
 
-      {error && <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.15)', color: '#ef4444', borderRadius: 8 }}>{error}</div>}
+      {error && <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.15)', color: 'var(--error-text)', borderRadius: 8 }}>{error}</div>}
 
       {loading ? (
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>

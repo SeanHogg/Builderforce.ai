@@ -464,7 +464,7 @@ export default function UsagePanel() {
                   fontFamily: 'var(--font-mono, monospace)',
                   fontSize: 12,
                   padding: 12,
-                  background: 'var(--bg-secondary, #0b0b0b)',
+                  background: 'var(--bg-surface, #0b0b0b)',
                   color: 'var(--text-primary)',
                   border: '1px solid var(--border)',
                   borderRadius: 6,

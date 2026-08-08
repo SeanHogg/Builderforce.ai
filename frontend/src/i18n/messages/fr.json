@@ -5556,6 +5556,24 @@
           "title": "Note d'une page",
           "detail": "Rédigée à partir du graphique ci-dessus",
           "prefill": "Rédige une note d'une page pour le conseil à partir de cette analyse"
+        },
+        {
+          "kind": "Idée",
+          "title": "Opportunité de renouvellement",
+          "detail": "Problème · client · première hypothèse",
+          "prefill": "Transforme cette opportunité de renouvellement en plan de lancement"
+        },
+        {
+          "kind": "Recherche",
+          "title": "Entretiens clients",
+          "detail": "12 appels · signaux + objections",
+          "prefill": "Synthétise ces entretiens clients en exigences produit"
+        },
+        {
+          "kind": "Prototype",
+          "title": "Portail de renouvellement",
+          "detail": "Concept actif · prêt à tester",
+          "prefill": "Crée un portail de renouvellement testable à partir de ce prototype"
         }
       ]
     },
@@ -5896,7 +5914,22 @@
       "writing": "Articles",
       "keepUp": "Restez informé"
     },
-    "featuresLead": "Sites web, workflows, jeux de données, modèles, documents, personnes et agents : autant d’objets réels et connectés sur un même canevas, et non des pièces jointes dans une conversation."
+    "featuresLead": "Sites web, workflows, jeux de données, modèles, documents, personnes et agents : autant d’objets réels et connectés sur un même canevas, et non des pièces jointes dans une conversation.",
+    "tension": {
+      "eyebrow": "Le problème",
+      "heading": "Le travail commence avant le code",
+      "body": "Une idée naît dans un document, se discute dans une conversation, atterrit sur un tableau, se construit dans un éditeur et se mesure dans un tableur. Cinq outils, dont aucun ne sait ce que les autres ont décidé : le contexte est ressaisi, les décisions se perdent, et rien ne relie l’idée à ce que vous avez livré.",
+      "fragments": [
+        "Document",
+        "Conversation",
+        "Tableau",
+        "Éditeur",
+        "Tableur"
+      ],
+      "diagramAlt": "Un document, une conversation, un tableau, un éditeur et un tableur, dont les liens sont rompus.",
+      "canvasLabel": "Un seul canevas",
+      "resolve": "Builderforce réunit tout cela sur <em>un seul canevas</em> — l’idée, le travail, la revue et le résultat sont un même objet."
+    }
   },
   "pricing": {
     "seo": {
@@ -5943,6 +5976,9 @@
     "labelSeats": "Postes",
     "labelBillingEmail": "E-mail de facturation",
     "placeholderBillingEmail": "facturation@exemple.com",
+    "labelDiscountCode": "Code promo",
+    "placeholderDiscountCode": "Facultatif",
+    "discountVerificationNote": "La remise sera vérifiée avant le paiement.",
     "redirectNote": "Vous serez redirigé vers notre prestataire de paiement pour saisir vos informations de carte en toute sécurité.",
     "total": "Total : {price} $/{unit}",
     "totalForSeats": "{seats, plural, one {pour # poste} other {pour # postes}}",
@@ -12064,6 +12100,11 @@
       "launching": "Lancement…",
       "error": "Impossible de démarrer la démo. Réessayez.",
       "note": "Les démos sont partagées, réinitialisées régulièrement et ne nécessitent aucun compte. Vos modifications sont temporaires.",
+      "carousel": {
+        "label": "Scénarios de démonstration en direct",
+        "previous": "Scénarios de démonstration précédents",
+        "next": "Scénarios de démonstration suivants"
+      },
       "personas": {
         "ai-team": {
           "title": "Équipe logicielle IA",
@@ -14693,7 +14734,8 @@
     "noResults": "Aucun résultat pour « {query} ».",
     "hintMove": "<kbd>↑↓</kbd> naviguer",
     "hintOpen": "<kbd>⏎</kbd> ouvrir",
-    "hintClose": "<kbd>échap</kbd> fermer"
+    "hintClose": "<kbd>échap</kbd> fermer",
+    "locked": "Formule {plan}"
   },
   "homeScroller": {
     "previous": "Afficher le précédent",

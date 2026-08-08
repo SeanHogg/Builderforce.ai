@@ -224,7 +224,7 @@ export default function PersonasPanel() {
                   <td>
                     <span className="badge" style={{ background: 'var(--accent-subtle)', color: 'var(--accent)', fontSize: 10, textTransform: 'uppercase' }}>{p.source}</span>
                   </td>
-                  <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{p.outputPrefix ?? '—'}</td>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{p.outputPrefix ?? '—'}</td>
                   <td>{(p.tags ?? []).join(', ') || '—'}</td>
                   <td>
                     <button type="button" className="btn-ghost" onClick={() => setPersonaForm({ ...p, name: p.name })}>{t('common.edit')}</button>

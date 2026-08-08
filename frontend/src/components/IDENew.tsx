@@ -1032,7 +1032,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
 
         {/* Right: collab status, run */}
         {collabConnected && (
-          <span style={{ fontSize: '0.72rem', color: '#4ade80', display: 'flex', alignItems: 'center', gap: 4 }}>
+          <span style={{ fontSize: '0.72rem', color: 'var(--success-text)', display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ width: 6, height: 6, background: '#4ade80', borderRadius: '50%', display: 'inline-block' }} />
             Live
           </span>
@@ -1312,7 +1312,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                   <>
                     <span aria-hidden>{modalityDef.center === 'device' ? '📱' : '🌐'}</span>
                     {t('centerPreview')}
-                    {previewUrl && <span style={{ color: '#4ade80' }}>●</span>}
+                    {previewUrl && <span style={{ color: 'var(--success-text)' }}>●</span>}
                   </>
                 ) : (
                   <>

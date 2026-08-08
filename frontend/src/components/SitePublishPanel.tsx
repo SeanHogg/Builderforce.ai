@@ -128,7 +128,7 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
         disabled={busy || !loaded}
         style={{
           padding: '10px 14px', borderRadius: 8, border: 'none', cursor: busy ? 'wait' : 'pointer',
-          background: busy ? 'var(--chat-input-disabled-send-bg)' : 'var(--surface-coral, #e2654a)',
+          background: busy ? 'var(--chat-input-disabled-send-bg)' : 'var(--coral-bright, #e2654a)',
           color: '#fff', fontWeight: 600, fontSize: 14,
         }}
       >
@@ -136,7 +136,7 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
       </button>
 
       {error && (
-        <div style={{ color: 'var(--text-error, #c0392b)', fontSize: 12.5, whiteSpace: 'pre-wrap' }}>{error}</div>
+        <div style={{ color: 'var(--error-text, #c0392b)', fontSize: 12.5, whiteSpace: 'pre-wrap' }}>{error}</div>
       )}
 
       {site && phase !== 'building' && phase !== 'uploading' && (
@@ -144,7 +144,7 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
           <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>
             {phase === 'done' ? t('publish.published') : t('publish.liveSite')}
           </div>
-          <a href={site.url} target="_blank" rel="noreferrer" style={{ color: 'var(--surface-coral, #e2654a)', fontWeight: 600, wordBreak: 'break-all' }}>
+          <a href={site.url} target="_blank" rel="noreferrer" style={{ color: 'var(--coral-bright, #e2654a)', fontWeight: 600, wordBreak: 'break-all' }}>
             {site.url}
           </a>
           <div style={{ fontSize: 11.5, color: 'var(--text-muted)' }}>

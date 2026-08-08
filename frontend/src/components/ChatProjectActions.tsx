@@ -119,7 +119,7 @@ export function ChatProjectActions({
       </div>
 
       {error && (
-        <div style={{ marginTop: 8, padding: 8, fontSize: 12, background: 'rgba(239,68,68,0.1)', color: '#ef4444', borderRadius: 6 }}>
+        <div style={{ marginTop: 8, padding: 8, fontSize: 12, background: 'rgba(239,68,68,0.1)', color: 'var(--error-text)', borderRadius: 6 }}>
           {error}
         </div>
       )}

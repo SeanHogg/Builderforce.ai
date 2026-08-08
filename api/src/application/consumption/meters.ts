@@ -15,6 +15,7 @@ import { tenants } from '../../infrastructure/database/schema';
 import { buildTransactionalDatabase, type Db } from '../../infrastructure/database/connection';
 import type { Env } from '../../env';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
+import { resolveAllFeatureEntitlements, type FeatureEntitlementSet } from '../tenant/featureEntitlements';
 import { resolveTokenLimits, resolveIngestionMonthlyBytes, resolveErrorEventsMonthly, resolveOutboundFetchesMonthly, resolveCloudRunsMonthly } from '../../domain/tenant/PlanLimits';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
 import { dailyTenantTextTokens, utcDayStart } from '../llm/tokenUsage';
@@ -69,6 +70,17 @@ export interface ConsumptionSnapshot {
   period: { start: string; resetsAt: string };
   plan: { effective: TenantPlan; billingStatus: TenantBillingStatus };
   meters: MeterSnapshot[];
+  /**
+   * Every plan feature resolved for this caller.
+   *
+   * Rides this snapshot rather than getting an endpoint of its own because the
+   * inputs are already here — effective plan, premium override, superadmin — and
+   * because the client surfaces that need it (navigation deciding which
+   * destinations to show locked) are the same ones already reading the meters.
+   * Without it a client can only see `plan.effective`, and turning that into a
+   * feature answer means a second evaluator on the client.
+   */
+  features: FeatureEntitlementSet;
 }
 
 /** Assemble one meter from a raw used/limit pair (-1 limit = unlimited). */
@@ -142,6 +154,7 @@ export async function buildConsumptionSnapshot(
         billingStatus: tenants.billingStatus,
         trialEndsAt: tenants.trialEndsAt,
         tokenDailyLimitOverride: tenants.tokenDailyLimitOverride,
+        premiumOverride: tenants.premiumOverride,
       })
       .from(tenants)
       .where(eq(tenants.id, tenantId))
@@ -184,6 +197,13 @@ export async function buildConsumptionSnapshot(
   return {
     period: { start: monthStart.toISOString(), resetsAt: monthEnd.toISOString() },
     plan: { effective: effectivePlan, billingStatus },
+    // Same three inputs the per-route gates use, fanned over the ONE pure
+    // evaluator — so a client can never disagree with what a route enforces.
+    features: resolveAllFeatureEntitlements({
+      effectivePlan,
+      premiumOverride: tenantRow?.premiumOverride ?? false,
+      isSuperadmin,
+    }),
     meters: [
       makeMeter('ai_tokens', 'tokens', tokensUsed, tokenLimit, tokensTrend),
       makeMeter('cloud_runs', 'runs', cloudRunsUsed, cloudRunsLimit, cloudRunsTrend),

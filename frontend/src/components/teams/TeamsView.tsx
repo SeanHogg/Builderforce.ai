@@ -301,7 +301,7 @@ export function TeamsView() {
               <button
                 type="button"
                 onClick={() => setConfirmDelete(detail)}
-                style={{ ...btnSubtle, color: '#ef4444', borderColor: '#ef4444' }}
+                style={{ ...btnSubtle, color: 'var(--error-text)', borderColor: '#ef4444' }}
               >
                 {tc('delete')}
               </button>

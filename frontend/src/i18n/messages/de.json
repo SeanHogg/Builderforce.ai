@@ -5556,6 +5556,24 @@
           "title": "Einseitiges Board-Update",
           "detail": "Aus dem Diagramm oben verfasst",
           "prefill": "Verfasse aus dieser Analyse ein einseitiges Board-Update"
+        },
+        {
+          "kind": "Idee",
+          "title": "Verlängerungschance",
+          "detail": "Problem · Kunde · erste These",
+          "prefill": "Mach aus dieser Verlängerungschance einen Startplan"
+        },
+        {
+          "kind": "Recherche",
+          "title": "Kundeninterviews",
+          "detail": "12 Gespräche · Signale + Einwände",
+          "prefill": "Fasse diese Kundeninterviews zu Produktanforderungen zusammen"
+        },
+        {
+          "kind": "Prototyp",
+          "title": "Verlängerungsportal",
+          "detail": "Live-Konzept · testbereit",
+          "prefill": "Baue aus diesem Prototyp ein testbares Verlängerungsportal"
         }
       ]
     },
@@ -5896,7 +5914,22 @@
       "writing": "Artikel",
       "keepUp": "Auf dem Laufenden bleiben"
     },
-    "featuresLead": "Websites, Workflows, Datensätze, Modelle, Dokumente, Menschen und Agents – alles echte, verbundene Objekte auf einem Board statt Anhänge in einem Chat."
+    "featuresLead": "Websites, Workflows, Datensätze, Modelle, Dokumente, Menschen und Agents – alles echte, verbundene Objekte auf einem Board statt Anhänge in einem Chat.",
+    "tension": {
+      "eyebrow": "Das Problem",
+      "heading": "Die Arbeit beginnt vor dem Code",
+      "body": "Eine Idee entsteht in einem Dokument, wird im Chat diskutiert, landet auf einem Board, wird im Editor gebaut und in einer Tabelle gemessen. Fünf Werkzeuge, von denen keines weiß, was die anderen entschieden haben – Kontext wird neu getippt, Entscheidungen gehen verloren, und nichts trägt von der Idee bis zum ausgelieferten Ergebnis.",
+      "fragments": [
+        "Dokument",
+        "Chat",
+        "Board",
+        "Editor",
+        "Tabelle"
+      ],
+      "diagramAlt": "Ein Dokument, ein Chat, ein Board, ein Editor und eine Tabelle, deren Verbindungen unterbrochen sind.",
+      "canvasLabel": "Ein Canvas",
+      "resolve": "Builderforce bringt all das auf <em>ein Canvas</em> – Idee, Arbeit, Review und Ergebnis sind dasselbe Objekt."
+    }
   },
   "pricing": {
     "seo": {
@@ -5943,6 +5976,9 @@
     "labelSeats": "Plätze",
     "labelBillingEmail": "Abrechnungs-E-Mail",
     "placeholderBillingEmail": "billing@example.com",
+    "labelDiscountCode": "Rabattcode",
+    "placeholderDiscountCode": "Optional",
+    "discountVerificationNote": "Der Rabatt wird vor der Zahlung geprüft.",
     "redirectNote": "Sie werden zu unserem Zahlungsanbieter weitergeleitet, um Ihre Kartendaten sicher einzugeben.",
     "total": "Gesamt: ${price}/{unit}",
     "totalForSeats": "{seats, plural, one {für # Platz} other {für # Plätze}}",
@@ -12064,6 +12100,11 @@
       "launching": "Wird gestartet…",
       "error": "Demo konnte nicht gestartet werden. Bitte erneut versuchen.",
       "note": "Demos sind geteilt, werden regelmäßig zurückgesetzt und benötigen kein Konto. Deine Änderungen sind temporär.",
+      "carousel": {
+        "label": "Live-Demo-Szenarien",
+        "previous": "Vorherige Demo-Szenarien",
+        "next": "Nächste Demo-Szenarien"
+      },
       "personas": {
         "ai-team": {
           "title": "KI-Softwareteam",
@@ -14693,7 +14734,8 @@
     "noResults": "Keine Treffer für „{query}“.",
     "hintMove": "<kbd>↑↓</kbd> bewegen",
     "hintOpen": "<kbd>⏎</kbd> öffnen",
-    "hintClose": "<kbd>esc</kbd> schließen"
+    "hintClose": "<kbd>esc</kbd> schließen",
+    "locked": "{plan}-Tarif"
   },
   "homeScroller": {
     "previous": "Vorheriges anzeigen",

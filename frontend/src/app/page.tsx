@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
-import { STATS, WORKFLOW_PROOF_DEMOS } from '@/lib/content';
+import { STATS } from '@/lib/content';
 import { BLOG_POSTS } from '@/lib/blogData';
 import { ArticleCardGrid } from '@/components/blog/ArticleCard';
 import QuickStart from '@/components/QuickStart';
@@ -13,6 +13,7 @@ import { DemoShowcase } from '@/components/demo/DemoShowcase';
 import { AUTH_API_URL } from '@/lib/auth';
 import { LandingCanvasHero } from '@/components/home/LandingCanvasHero';
 import { MeetCarousel } from '@/components/home/MeetCarousel';
+import { TensionBeat } from '@/components/home/TensionBeat';
 import { Button } from '@/components/ui';
 import {
   HomeScrollerControls,
@@ -21,8 +22,6 @@ import {
   useHomeScroller,
 } from '@/components/home/HomeScroller';
 import {
-  Badge,
-  BadgeRow,
   CardText,
   CardTitle,
   HomeButton,
@@ -33,11 +32,9 @@ import {
   homePatternStyles as styles,
 } from '@/components/home/HomePatterns';
 
-type TitleDesc = { title: string; desc: string };
 type StatLabel = { label: string };
 type FaqItem = { question: string; answer: string };
 type PricingTeaser = { name: string; perks: string[] };
-type WorkflowProofCopy = { title: string; audience: string; outcome: string; steps: string[]; evidence: string };
 
 /**
  * The homepage is one argument, told in order.
@@ -49,9 +46,9 @@ type WorkflowProofCopy = { title: string; audience: string; outcome: string; ste
  * announced a structure the content did not have, and eight identical grids gave
  * the reader no sense of moving through anything.
  *
- * The order below is a narrative: start on the canvas → see what it is → watch
- * it work → see the evidence → see the breadth → see why not the alternatives →
- * price → objections → act. Section eyebrows now name the BEAT they carry.
+ * The order below is a narrative: start on the canvas → name the problem and
+ * resolve it into a workflow → see what it is → watch it work → see the evidence → see the breadth → see why not
+ * the alternatives → price → objections → act. Section eyebrows now name the BEAT they carry.
  * Numbering survives in exactly one place, "How it works", because those three
  * steps genuinely are a sequence.
  *
@@ -103,58 +100,21 @@ export default function LandingPage() {
             itself before a word of description. */}
         <LandingCanvasHero />
 
-        {/* 2 · WHAT IT IS — the rotating Create → Evermind → governed-delivery story. */}
-        <MeetCarousel />
+        {/* 2 · PROBLEM → WORKFLOW — the fragmented-tool tension and the
+            three-step answer are one argument, not two disconnected sections. */}
+        <TensionBeat />
 
-        {/* 3 · HOW IT WORKS — the one genuine sequence on the page, so the one
-            place numbering means something. */}
-        <HomeSection id="how-it-works">
-          <HomeSectionHeader eyebrow={t('home.beat.howItWorks')} title={t('home.stepsHeading')} />
-          <HomeGrid columns={3}>
-            {(t.raw('home.steps') as TitleDesc[]).map((step, index) => (
-              <HomeCard key={step.title} className={styles.numberCard}>
-                <span className={styles.number}>{String(index + 1).padStart(2, '0')} / 03</span>
-                <CardTitle>{step.title}</CardTitle>
-                <CardText>{step.desc}</CardText>
-              </HomeCard>
-            ))}
-          </HomeGrid>
-        </HomeSection>
+        {/* 3 · WHAT IT IS — the rotating Create → Evermind → governed-delivery story. */}
+        <MeetCarousel />
 
         <QuickStart />
 
-        {/* 4 · SEE IT RUN */}
+        {/* 5 · SEE IT RUN */}
         <DemoShowcase />
 
-        {/* 5 · EVIDENCE — real workflows, then the numbers. The stat band used to
+        {/* 6 · EVIDENCE — the live showcase, then the numbers. The stat band used to
             open the page, before the reader had any reason to care what the
             numbers counted; it lands here instead, as the payoff of the proof. */}
-        <HomeSection id="workflow-proof" tone="soft">
-          <HomeSectionHeader
-            eyebrow={t('home.beat.proof')}
-            title={t('home.workflowProof.heading')}
-            lead={t('home.workflowProof.lead')}
-          />
-          <HomeGrid columns={3}>
-            {(t.raw('home.workflowProof.demos') as WorkflowProofCopy[]).map((demo, index) => {
-              const proof = WORKFLOW_PROOF_DEMOS[index];
-              return (
-                <HomeCard key={proof?.id ?? demo.title}>
-                  <BadgeRow>
-                    <Badge accent>{t('product.capabilityStatus.beta')}</Badge>
-                    <Badge>{t(`product.dataBoundary.${proof?.dataBoundary ?? 'hybrid'}`)}</Badge>
-                  </BadgeRow>
-                  <CardTitle>{demo.title}</CardTitle>
-                  <CardText><strong>{demo.audience}</strong> — {demo.outcome}</CardText>
-                  <ol className={styles.steps}>{demo.steps.map((step) => <li key={step}>{step}</li>)}</ol>
-                  <p className={styles.evidence}>{demo.evidence}</p>
-                </HomeCard>
-              );
-            })}
-          </HomeGrid>
-          <div className={styles.actions}><HomeButton href="/product#workflow-proof" arrow>{t('home.workflowProof.cta')}</HomeButton></div>
-        </HomeSection>
-
         <div className={styles.statBand}>
           {(t.raw('home.stats') as StatLabel[]).map((stat, index) => (
             <div key={stat.label} className={styles.stat}>
@@ -164,7 +124,7 @@ export default function LandingPage() {
           ))}
         </div>
 
-        {/* 6 · BREADTH — a catalogue, so a rail rather than a wall of nine dense
+        {/* 7 · BREADTH — a catalogue, so a rail rather than a wall of nine dense
             paragraphs in four columns. */}
         <HomeSection id="features" tone="soft">
           <HomeSectionHeader
@@ -185,7 +145,7 @@ export default function LandingPage() {
           </HomeScrollerRail>
         </HomeSection>
 
-        {/* 7 · WHY NOT THE ALTERNATIVES */}
+        {/* 8 · WHY NOT THE ALTERNATIVES */}
         <HomeSection tone="grid">
           <HomeSectionHeader centered eyebrow={t('home.beat.compare')} title={t('compare.teaser.title')} lead={t('compare.teaser.blurb')} />
           <HomeGrid columns={3}>
@@ -200,7 +160,7 @@ export default function LandingPage() {
           </div>
         </HomeSection>
 
-        {/* 8 · WHAT IT COSTS */}
+        {/* 9 · WHAT IT COSTS */}
         <HomeSection id="pricing">
           <HomeSectionHeader eyebrow={t('home.beat.pricing')} title={t('home.pricingHeading')} />
           <HomeGrid columns={2}>
@@ -218,7 +178,7 @@ export default function LandingPage() {
           </HomeGrid>
         </HomeSection>
 
-        {/* 9 · OBJECTIONS — answered immediately before the ask, which is where
+        {/* 10 · OBJECTIONS — answered immediately before the ask, which is where
             they actually surface. */}
         <HomeSection narrow tone="soft">
           <HomeSectionHeader centered eyebrow={t('home.beat.questions')} title={t('home.faqHeading')} />
@@ -232,7 +192,7 @@ export default function LandingPage() {
           </div>
         </HomeSection>
 
-        {/* 10 · THE ASK */}
+        {/* 11 · THE ASK */}
         <HomeSection tone="grid">
           <div className={styles.cta}>
             <HomeSectionHeader title={t('home.ctaTitle')} lead={t('home.ctaDesc')} />

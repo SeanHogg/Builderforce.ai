@@ -19,7 +19,7 @@ const LABELS: Record<AgentPillKind, string> = {
 type Palette = { background: string; color: string };
 const ACCENT: Palette = { background: 'var(--surface-coral-soft)', color: 'var(--accent)' };
 const NEUTRAL: Palette = { background: 'var(--bg-elevated)', color: 'var(--text-strong)' };
-const AMBER: Palette = { background: 'rgba(245,158,11,0.15)', color: '#d97706' };
+const AMBER: Palette = { background: 'rgba(245,158,11,0.15)', color: 'var(--warning-text)' };
 
 const PALETTES: Record<AgentPillKind, Palette> = {
   cloud: ACCENT,

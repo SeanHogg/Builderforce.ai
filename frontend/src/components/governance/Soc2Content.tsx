@@ -89,7 +89,7 @@ export function Soc2Content() {
         <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>SOC 2 Control Tracker</div>
         <div style={{ color: '#64748b', marginBottom: 16 }}>No controls yet. Seed the SOC 2 Common Criteria (CC1–CC9) baseline to start tracking readiness.</div>
         <button onClick={seed} disabled={busy} style={btnStyle}>{busy ? 'Seeding…' : 'Seed SOC 2 baseline'}</button>
-        {error && <div role="alert" style={{ color: '#dc2626', marginTop: 8 }}>{error}</div>}
+        {error && <div role="alert" style={{ color: 'var(--error-text)', marginTop: 8 }}>{error}</div>}
       </div>
     );
   }
@@ -102,7 +102,7 @@ export function Soc2Content() {
           Readiness <strong style={{ color: 'var(--text-primary, #0f172a)' }}>{overall.pct}%</strong> ({overall.ready}/{overall.inScope} in scope)
         </div>
       </div>
-      {error && <div role="alert" style={{ color: '#dc2626', marginBottom: 8 }}>{error}</div>}
+      {error && <div role="alert" style={{ color: 'var(--error-text)', marginBottom: 8 }}>{error}</div>}
 
       {byCategory.map(([category, items]) => {
         const r = readiness(items);

@@ -139,7 +139,7 @@ export function CronJobsContent({
       </div>
 
       {error && (
-        <div style={{ padding: '10px 14px', fontSize: 13, background: 'rgba(239,68,68,0.15)', color: '#ef4444', borderRadius: 8 }}>
+        <div style={{ padding: '10px 14px', fontSize: 13, background: 'rgba(239,68,68,0.15)', color: 'var(--error-text)', borderRadius: 8 }}>
           {error}
         </div>
       )}
@@ -240,7 +240,7 @@ export function CronJobsContent({
                   fontSize: 12,
                   fontWeight: 600,
                   background: 'rgba(239,68,68,0.1)',
-                  color: '#ef4444',
+                  color: 'var(--error-text)',
                   border: '1px solid rgba(239,68,68,0.3)',
                   borderRadius: 6,
                   cursor: 'pointer',

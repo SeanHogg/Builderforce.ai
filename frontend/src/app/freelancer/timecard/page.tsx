@@ -238,7 +238,7 @@ export default function FreelancerTimecardPage() {
                         {en.billable ? t('entries.billable') : t('entries.nonBillable')}
                       </button>
                       <button type="button" onClick={() => removeEntry(c.id, en.id)} disabled={busy === `e:${en.id}`}
-                        aria-label={t('entries.remove')} style={{ fontSize: 13, padding: '2px 7px', borderRadius: 6, cursor: 'pointer', border: '1px solid rgba(239,68,68,0.4)', background: 'var(--bg-elevated)', color: '#f87171' }}>✕</button>
+                        aria-label={t('entries.remove')} style={{ fontSize: 13, padding: '2px 7px', borderRadius: 6, cursor: 'pointer', border: '1px solid rgba(239,68,68,0.4)', background: 'var(--bg-elevated)', color: 'var(--error-text)' }}>✕</button>
                     </div>
                   ))}
                   {/* Add manual entry */}

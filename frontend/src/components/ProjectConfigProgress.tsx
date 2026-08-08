@@ -54,7 +54,7 @@ export function ProjectConfigProgress({ project }: { project: Project }) {
   const goalsMissing = cfg.missing.includes('goals');
 
   const segments = [
-    { key: 'done', label: t('configDone'), value: cfg.done.length, color: '#22c55e' },
+    { key: 'done', label: t('configDone'), value: cfg.done.length, color: 'var(--success-text)' },
     { key: 'todo', label: t('configTodo'), value: cfg.missing.length, color: 'var(--border-subtle)' },
   ];
 

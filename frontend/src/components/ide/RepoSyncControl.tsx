@@ -119,7 +119,7 @@ export function RepoSyncControl({ projectId, onChanged }: { projectId: number; o
                   {creds.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </Select>
               ) : (
-                <div style={{ fontSize: 12, color: 'var(--amber, #f59e0b)' }}>
+                <div style={{ fontSize: 12, color: 'var(--warning, #f59e0b)' }}>
                   No GitHub credential found. Add one under Integrations first.
                 </div>
               )}

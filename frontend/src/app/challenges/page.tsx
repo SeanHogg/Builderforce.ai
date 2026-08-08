@@ -48,7 +48,7 @@ const chip: React.CSSProperties = {
   padding: '3px 10px',
   borderRadius: 999,
   border: '1px solid var(--border-subtle)',
-  background: 'var(--bg-subtle, transparent)',
+  background: 'var(--surface-sunken, transparent)',
   color: 'var(--text-secondary)',
   fontSize: 12,
   lineHeight: 1.6,
@@ -57,8 +57,8 @@ const chip: React.CSSProperties = {
 const primaryButton: React.CSSProperties = {
   padding: '10px 18px',
   borderRadius: 8,
-  border: '1px solid var(--accent-primary, #2f6fed)',
-  background: 'var(--accent-primary, #2f6fed)',
+  border: '1px solid var(--accent, #2f6fed)',
+  background: 'var(--accent, #2f6fed)',
   color: '#fff',
   fontWeight: 600,
   fontSize: 14,
@@ -81,7 +81,7 @@ const codeCell: React.CSSProperties = {
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
   fontSize: 12.5,
   color: 'var(--text-primary)',
-  background: 'var(--bg-subtle, transparent)',
+  background: 'var(--surface-sunken, transparent)',
   border: '1px solid var(--border-subtle)',
   borderRadius: 6,
   padding: '3px 7px',
@@ -236,7 +236,7 @@ function ReadinessView({
           href={step.url}
           target="_blank"
           rel="noreferrer"
-          style={{ fontSize: 13, color: 'var(--accent-primary, #2f6fed)' }}
+          style={{ fontSize: 13, color: 'var(--accent, #2f6fed)' }}
         >
           {t('openConsole')}
         </a>
@@ -404,7 +404,7 @@ export default function ChallengesPage() {
               </button>
             )}
             {selected?.projectId && (
-              <a href={`/projects/${selected.projectId}`} style={{ fontSize: 14, color: 'var(--accent-primary, #2f6fed)' }}>
+              <a href={`/projects/${selected.projectId}`} style={{ fontSize: 14, color: 'var(--accent, #2f6fed)' }}>
                 {t('openProject')}
               </a>
             )}

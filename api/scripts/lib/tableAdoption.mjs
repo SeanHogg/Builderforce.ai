@@ -28,6 +28,19 @@ import { collectSourceFiles } from './drizzleSchema.mjs';
  */
 export const CONSOLIDATION_FROM_PREFIX = 418;
 
+/**
+ * The generic entity layer: `application/domains/<domain>/entities.ts`.
+ *
+ * These sixteen files register every PRD-20 table with one `EntityService` — the
+ * consolidation's answer to "never a per-table service". That makes them a real
+ * code path, and it also makes "something imports this table" true for all 245 at
+ * once, which is why the measurement is reported in TWO tiers. Counting only the
+ * first tier would report the schema as fully adopted the day the registry landed;
+ * ignoring it would call a table unreachable when it is not. Both numbers are
+ * facts, and they answer different questions.
+ */
+const ENTITY_LAYER = /\/application\/domains\/[^/]+\/entities\.ts$/;
+
 /** SQL keywords that precede a table name in the raw-SQL the repo writes.
  *  Matched CASE-SENSITIVELY: raw SQL here is uppercase by convention, and prose
  *  ("the sweep updates settings") is not, so case is what separates a real
@@ -95,8 +108,9 @@ export function analyseTableAdoption({ srcDir, migrationsDir, schemaDir }) {
 
   const live = new Map();
   const note = (table, bucket, file) => {
-    if (!live.has(table)) live.set(table, { imports: [], rawSql: [] });
-    const entry = live.get(table)[bucket];
+    if (!live.has(table)) live.set(table, { imports: [], rawSql: [], entityLayer: [] });
+    const target = ENTITY_LAYER.test(file) ? 'entityLayer' : bucket;
+    const entry = live.get(table)[target];
     if (!entry.includes(file)) entry.push(file);
   };
 
@@ -116,12 +130,44 @@ export function analyseTableAdoption({ srcDir, migrationsDir, schemaDir }) {
       const re = new RegExp(`\\b(?:${SQL_KEYWORDS.join('|')})\\s+"?${table}"?\\b`);
       if (re.test(text)) note(table, 'rawSql', rel);
     }
+
+    // Dynamic SQL built from a manifest. `registryProjection.ts` reads twenty
+    // tables through `FROM ${sql.raw(p.table)}`, where the name lives in a data
+    // literal — a real read the keyword scan above cannot see, because at the
+    // point of the SQL there is no table name to match.
+    //
+    // Gated on the file actually using `sql.raw(`, which is what keeps this from
+    // becoming the bare-string match that made the first draft of this
+    // measurement report ten live tables when the truth was seven: `'settings'`
+    // and `'orders'` appear as ordinary strings all over the codebase, but not
+    // in files that interpolate raw identifiers into SQL.
+    if (text.includes('sql.raw(')) {
+      for (const table of created.keys()) {
+        if (text.includes(`'${table}'`)) note(table, 'rawSql', rel);
+      }
+    }
   }
+
+  /** Tier 1: reachable at all — through the entity layer or directly. */
+  const registered = [...created.keys()].filter((t) => live.has(t));
+  /** Tier 2: something OTHER than the generic registry reads or writes it. This
+   *  is the number that moves as PRD 20 steps 6–7 migrate features across, and
+   *  the one the ratchet guards. */
+  const featureReached = registered.filter((t) => {
+    const u = live.get(t);
+    return u.imports.length > 0 || u.rawSql.length > 0;
+  });
+  const featureSet = new Set(featureReached);
 
   return {
     created,
     exports: exports_,
     live,
+    registered,
+    featureReached,
+    /** Created, registered in the entity layer, but no feature path yet. */
+    registryOnly: [...created.keys()].filter((t) => live.has(t) && !featureSet.has(t)).sort(),
+    /** Created and not reachable at all. */
     cold: [...created.keys()].filter((t) => !live.has(t)).sort(),
     missingExport: [...created.keys()].filter((t) => !exports_.has(t)).sort(),
   };

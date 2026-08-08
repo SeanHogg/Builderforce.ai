@@ -159,7 +159,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
 
         {/* Tenant selector (for permission/security tabs) */}
         {(tab === 'permissions' || tab === 'sessions' || tab === 'security') && (
-          <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border-color)' }}>
+          <div style={{ padding: '8px 16px', borderBottom: '1px solid var(--border)' }}>
             <Select
               className="admin-select"
               value={selectedTenantId ?? ''}
@@ -234,7 +234,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                     <span>{fmtDateTime(user.createdAt)}</span>
                   </div>
 
-                  <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                     <button
                       type="button"
                       className="admin-tab"
@@ -254,7 +254,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                     <button
                       type="button"
                       className="admin-tab"
-                      style={{ color: '#ef4444' }}
+                      style={{ color: 'var(--error-text)' }}
                       disabled={statusBusy}
                       onClick={() => doSuspend(true)}
                     >
@@ -276,12 +276,12 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                       <div style={{ marginBottom: 12, fontSize: 13 }}>
                         {t('users.drawer.roleLabel')} <strong>{effectivePerms.role}</strong>
                         &nbsp;·&nbsp;
-                        <span style={{ color: '#22c55e' }}>{t('users.drawer.effectivePermissionsCount', { count: effectivePerms.permissions.length })}</span>
+                        <span style={{ color: 'var(--success-text)' }}>{t('users.drawer.effectivePermissionsCount', { count: effectivePerms.permissions.length })}</span>
                         {effectivePerms.userGrants.length > 0 && (
                           <span style={{ marginLeft: 8, color: '#3b82f6' }}>+{t('users.drawer.userGrantsCount', { count: effectivePerms.userGrants.length })}</span>
                         )}
                         {effectivePerms.userRevocations.length > 0 && (
-                          <span style={{ marginLeft: 8, color: '#ef4444' }}>-{t('users.drawer.revocationsCount', { count: effectivePerms.userRevocations.length })}</span>
+                          <span style={{ marginLeft: 8, color: 'var(--error-text)' }}>-{t('users.drawer.revocationsCount', { count: effectivePerms.userRevocations.length })}</span>
                         )}
                       </div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -289,8 +289,8 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                           <span
                             key={p}
                             style={{
-                              background: 'var(--bg-card)',
-                              border: '1px solid var(--border-color)',
+                              background: 'var(--surface-card)',
+                              border: '1px solid var(--border)',
                               borderRadius: 4,
                               padding: '2px 7px',
                               fontSize: 11,
@@ -377,7 +377,7 @@ export default function UserDetailDrawer({ user, tenants, onClose, onStartImpers
                         <span className="user-drawer__field-label">{t('users.drawer.fieldActiveTokens')}</span>
                         <span>{secDetails.tokens.filter((t) => t.isActive).length}</span>
                       </div>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 8, borderTop: '1px solid var(--border-color)' }}>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingTop: 8, borderTop: '1px solid var(--border)' }}>
                         <button
                           type="button"
                           className="admin-tab"

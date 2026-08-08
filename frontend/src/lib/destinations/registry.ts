@@ -1,4 +1,5 @@
 import { NAV_GROUPS, tabHref, type NavGroup } from '@/lib/navGroups';
+import type { PlanFeatureKey } from '@/lib/builderforceApi';
 
 /**
  * The destination registry — ONE list of every place in the app you can go, read
@@ -17,11 +18,12 @@ import { NAV_GROUPS, tabHref, type NavGroup } from '@/lib/navGroups';
  * pages register by joining the nav config, which is the only reason this stays
  * maintainable as the merge lands.
  *
- * Deliberately NOT here: plan-feature locks. The client has no authoritative
- * entitlement snapshot — only `plan.effective` — and the standing rule is one
- * evaluator for paid-plan gates. A client-side plan→feature map would be a
- * second one. Role/ownership gating below is authoritative on the client and is
- * applied; plan locks wait for a server-provided entitlement payload.
+ * Plan locks are declared, never derived. A destination names the `PlanFeature`
+ * its route actually enforces, and the answer comes from the entitlement set the
+ * SERVER resolves (`ConsumptionSnapshot.features`) using the same evaluator the
+ * route gates on. Deriving a lock from `plan.effective` on the client would be a
+ * second evaluator, and it would disagree the first time a flag moved plans.
+ * Only features with a verified server gate are mapped.
  */
 
 export interface Destination {
@@ -39,6 +41,12 @@ export interface Destination {
   superadminOnly?: boolean;
   /** Extra match terms that are not in the label (synonyms, the old route name). */
   keywords?: string[];
+  /**
+   * The plan feature this destination's route ENFORCES server-side. Only set
+   * where a gate genuinely exists — advertising a lock the API does not apply
+   * would be worse than showing none.
+   */
+  feature?: PlanFeatureKey;
 }
 
 /**
@@ -49,6 +57,18 @@ const CANVAS_DESTINATIONS: Destination[] = [
   { id: 'canvas.library', labelKey: 'destination.canvasLibrary', groupLabelKey: 'group.create', href: '/create', icon: '✦', keywords: ['canvas', 'canvases', 'sessions', 'library', 'my work', 'recent'] },
   { id: 'canvas.new', labelKey: 'destination.newCanvas', groupLabelKey: 'group.create', href: '/create/new', icon: '＋', keywords: ['new', 'blank', 'start', 'create'] },
 ];
+
+/**
+ * Route → the plan feature its API actually enforces. Verified against the
+ * server: `/settings/persona` is gated by `tenantHasFeature('psychometricPersona')`
+ * in personaRoutes/personalityRoutes, and `/insights/finance` by
+ * `requirePlanFeature('advancedInsights')` in insightsRoutes. Nothing else is
+ * listed, because nothing else is gated.
+ */
+const FEATURE_BY_HREF: Record<string, PlanFeatureKey | undefined> = {
+  '/settings/persona': 'psychometricPersona',
+  '/insights/finance': 'advancedInsights',
+};
 
 /** Flatten the nav config into destinations: every group, and every tab within it. */
 export function listDestinations(groups: readonly NavGroup[] = NAV_GROUPS): Destination[] {
@@ -68,6 +88,7 @@ export function listDestinations(groups: readonly NavGroup[] = NAV_GROUPS): Dest
       // put two identical rows in the palette.
       if (!tab.id || tab.id === group.href) continue;
       destinations.push({
+        feature: FEATURE_BY_HREF[tab.id],
         id: `${group.id}.${tab.id.replace(/^\//, '').replace(/\//g, '.')}`,
         labelKey: tab.labelKey,
         groupLabelKey: group.labelKey,
@@ -105,30 +126,38 @@ export function scoreDestination(destination: Destination, label: string, groupL
   return 0;
 }
 
-export interface RankedDestination extends Destination {
-  label: string;
-  groupLabel: string;
-}
+export type Ranked<T extends Destination> = T & { label: string; groupLabel: string };
+export type RankedDestination = Ranked<Destination>;
 
 /**
  * Rank destinations for a query. `translate` resolves a `nav`-namespace key; it
  * is passed in so this stays a pure function that unit tests can drive without
  * mounting an i18n provider.
+ *
+ * Generic in the destination type so a caller passing gated destinations gets
+ * gated ones back — narrowing the result to the base `Destination` would make
+ * the palette re-discover the lock it was already told about.
  */
-export function rankDestinations(
-  destinations: readonly Destination[],
+export function rankDestinations<T extends Destination>(
+  destinations: readonly T[],
   query: string,
   translate: (key: string) => string,
   limit = 12,
-): RankedDestination[] {
+): Ranked<T>[] {
+  // The score rides ALONGSIDE the entry rather than on it: spreading it in and
+  // then Omit-ing it back out erases the generic, and the caller loses the gate
+  // fields it passed in.
   return destinations
     .map((destination) => {
       const label = translate(destination.labelKey);
       const groupLabel = translate(destination.groupLabelKey);
-      return { ...destination, label, groupLabel, score: scoreDestination(destination, label, groupLabel, query) };
+      return {
+        entry: { ...destination, label, groupLabel } as Ranked<T>,
+        score: scoreDestination(destination, label, groupLabel, query),
+      };
     })
-    .filter((entry) => entry.score > 0)
-    .sort((a, b) => b.score - a.score || a.label.localeCompare(b.label))
+    .filter((scored) => scored.score > 0)
+    .sort((a, b) => b.score - a.score || a.entry.label.localeCompare(b.entry.label))
     .slice(0, limit)
-    .map(({ score: _score, ...rest }) => rest);
+    .map((scored) => scored.entry);
 }

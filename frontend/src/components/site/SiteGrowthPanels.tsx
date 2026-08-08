@@ -73,7 +73,7 @@ const primaryButton: React.CSSProperties = {
   ...button,
   background: 'var(--accent, #2563eb)',
   borderColor: 'var(--accent, #2563eb)',
-  color: 'var(--accent-contrast, #ffffff)',
+  color: 'var(--text-on-accent, #ffffff)',
 };
 
 /** A copyable DNS value. Monospace and horizontally scrollable — a TXT token
@@ -101,9 +101,9 @@ function DnsValue({ children }: { children: string }) {
 /** Status pill. `tone` drives the colour so the mapping lives in one place. */
 function Pill({ tone, children }: { tone: 'ok' | 'pending' | 'bad'; children: React.ReactNode }) {
   const palette = {
-    ok: { bg: 'var(--success-bg, #dcfce7)', fg: 'var(--success-fg, #166534)' },
-    pending: { bg: 'var(--warning-bg, #fef3c7)', fg: 'var(--warning-fg, #92400e)' },
-    bad: { bg: 'var(--danger-bg, #fee2e2)', fg: 'var(--danger-fg, #991b1b)' },
+    ok: { bg: 'var(--success-bg, #dcfce7)', fg: 'var(--success-text, #166534)' },
+    pending: { bg: 'var(--warning-bg, #fef3c7)', fg: 'var(--warning-text, #92400e)' },
+    bad: { bg: 'var(--danger-bg, #fee2e2)', fg: 'var(--danger-text, #991b1b)' },
   }[tone];
   return (
     <span style={{
@@ -228,13 +228,13 @@ export function SiteDomainPanel({ projectId }: { projectId: number }) {
       {/* Verified but the CNAME is missing is the single most common "why is it
           still broken" — say it explicitly rather than leaving them guessing. */}
       {state.status !== 'unset' && state.cnamePointsAtUs === false && (
-        <p style={{ marginTop: 10, fontSize: 13, color: 'var(--warning-fg, #92400e)' }}>{t('cnameMissing')}</p>
+        <p style={{ marginTop: 10, fontSize: 13, color: 'var(--warning-text, #92400e)' }}>{t('cnameMissing')}</p>
       )}
       {state.error && (
         <p style={{ marginTop: 10, fontSize: 13, color: 'var(--text-muted, #6b7280)' }}>{state.error}</p>
       )}
       {error && (
-        <p role="alert" style={{ marginTop: 10, fontSize: 13, color: 'var(--danger-fg, #991b1b)' }}>{error}</p>
+        <p role="alert" style={{ marginTop: 10, fontSize: 13, color: 'var(--danger-text, #991b1b)' }}>{error}</p>
       )}
     </section>
   );
@@ -363,7 +363,7 @@ export function SiteFormsPanel({ projectId }: { projectId: number }) {
         </button>
       </div>
       {error && (
-        <p role="alert" style={{ marginTop: 10, fontSize: 13, color: 'var(--danger-fg, #991b1b)' }}>{error}</p>
+        <p role="alert" style={{ marginTop: 10, fontSize: 13, color: 'var(--danger-text, #991b1b)' }}>{error}</p>
       )}
     </section>
   );
@@ -409,7 +409,7 @@ export function SiteTrafficPanel({ projectId }: { projectId: number }) {
                 minHeight: 30,
                 fontSize: 12,
                 background: days === option ? 'var(--accent, #2563eb)' : 'var(--surface-2, #f9fafb)',
-                color: days === option ? 'var(--accent-contrast, #ffffff)' : 'var(--text-primary, #111827)',
+                color: days === option ? 'var(--text-on-accent, #ffffff)' : 'var(--text-primary, #111827)',
                 borderColor: days === option ? 'var(--accent, #2563eb)' : 'var(--border, #e5e7eb)',
               }}
             >

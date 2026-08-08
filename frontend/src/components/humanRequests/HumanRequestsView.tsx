@@ -220,7 +220,7 @@ export function HumanRequestsView({
           style={{
             marginBottom: 12, padding: '10px 12px',
             border: '1px solid var(--border-subtle)', borderRadius: 8,
-            background: 'var(--surface-rose-soft)', color: 'var(--text-primary)', fontSize: 13,
+            background: 'var(--danger-bg)', color: 'var(--text-primary)', fontSize: 13,
           }}
         >
           {error}

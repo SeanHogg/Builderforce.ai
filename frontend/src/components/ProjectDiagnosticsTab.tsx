@@ -132,7 +132,7 @@ export function ProjectDiagnosticsTab({ projectId, initialAuditId }: { projectId
       </div>
 
       {error && (
-        <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.12)', color: '#ef4444', borderRadius: 8 }}>
+        <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.12)', color: 'var(--error-text)', borderRadius: 8 }}>
           {t('loadError')}: {error}
         </div>
       )}

@@ -5557,6 +5557,24 @@
           "title": "Board one-pager",
           "detail": "Drafted from the chart above",
           "prefill": "Draft a board one-pager from this analysis"
+        },
+        {
+          "kind": "Idea",
+          "title": "Retention opportunity",
+          "detail": "Problem · customer · first bet",
+          "prefill": "Turn this retention opportunity into a launch plan"
+        },
+        {
+          "kind": "Research",
+          "title": "Customer interviews",
+          "detail": "12 calls · signals + objections",
+          "prefill": "Synthesize these customer interviews into product requirements"
+        },
+        {
+          "kind": "Prototype",
+          "title": "Renewal portal",
+          "detail": "Live concept · ready to test",
+          "prefill": "Build a testable renewal portal from this prototype"
         }
       ]
     },
@@ -5897,7 +5915,22 @@
       "writing": "Writing",
       "keepUp": "Keep up"
     },
-    "featuresLead": "Websites, workflows, datasets, models, documents, people and agents — all real, connected objects on one board, not attachments in a chat."
+    "featuresLead": "Websites, workflows, datasets, models, documents, people and agents — all real, connected objects on one board, not attachments in a chat.",
+    "tension": {
+      "eyebrow": "The problem",
+      "heading": "The work begins before the code",
+      "body": "An idea starts in a doc, gets argued in chat, lands on a board, is built in an editor, and is measured in a spreadsheet. Five tools, none of which knows what the others decided — so context gets retyped, decisions go missing, and nothing carries from the idea to the thing you shipped.",
+      "fragments": [
+        "Doc",
+        "Chat",
+        "Board",
+        "Editor",
+        "Spreadsheet"
+      ],
+      "diagramAlt": "A doc, a chat, a board, an editor and a spreadsheet, with the connections between them broken.",
+      "canvasLabel": "One canvas",
+      "resolve": "Builderforce puts all of it on <em>one canvas</em> — so the idea, the work, the review and the result are the same object."
+    }
   },
   "pricing": {
     "seo": {
@@ -5944,6 +5977,9 @@
     "labelSeats": "Seats",
     "labelBillingEmail": "Billing Email",
     "placeholderBillingEmail": "billing@example.com",
+    "labelDiscountCode": "Discount code",
+    "placeholderDiscountCode": "Optional",
+    "discountVerificationNote": "The discount will be verified before payment.",
     "redirectNote": "You will be redirected to our payment provider to securely enter your card details.",
     "total": "Total: ${price}/{unit}",
     "totalForSeats": "{seats, plural, one {for # seat} other {for # seats}}",
@@ -12065,6 +12101,11 @@
       "launching": "Launching…",
       "error": "Could not start the demo. Please try again.",
       "note": "Demos are shared, reset regularly, and require no account. Changes you make are temporary.",
+      "carousel": {
+        "label": "Live demo scenarios",
+        "previous": "Previous demo scenarios",
+        "next": "Next demo scenarios"
+      },
       "personas": {
         "ai-team": {
           "title": "AI Software Team",
@@ -14694,7 +14735,8 @@
     "noResults": "Nothing matches “{query}”.",
     "hintMove": "<kbd>↑↓</kbd> move",
     "hintOpen": "<kbd>⏎</kbd> open",
-    "hintClose": "<kbd>esc</kbd> close"
+    "hintClose": "<kbd>esc</kbd> close",
+    "locked": "{plan} plan"
   },
   "homeScroller": {
     "previous": "Show previous",

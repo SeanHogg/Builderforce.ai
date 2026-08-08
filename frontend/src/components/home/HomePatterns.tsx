@@ -50,7 +50,6 @@ export function HomeCard({ children, className = '' }: { children: ReactNode; cl
   return <Surface padding="none" interactive className={`${styles.card} ${className}`}><article>{children}</article></Surface>;
 }
 
-export function CardIcon({ children }: { children: ReactNode }) { return <span className={styles.cardIcon} aria-hidden>{children}</span>; }
 export function CardTitle({ children }: { children: ReactNode }) { return <h3 className={styles.cardTitle}>{children}</h3>; }
 export function CardText({ children }: { children: ReactNode }) { return <p className={styles.cardText}>{children}</p>; }
 export function BadgeRow({ children }: { children: ReactNode }) { return <div className={styles.badgeRow}>{children}</div>; }

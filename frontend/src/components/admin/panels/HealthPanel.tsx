@@ -160,7 +160,7 @@ export default function HealthPanel() {
                           <button
                             type="button"
                             className="btn-ghost"
-                            style={{ color: '#ef4444', fontSize: 12 }}
+                            style={{ color: 'var(--error-text)', fontSize: 12 }}
                             onClick={async () => {
                               try {
                                 await adminApi.impersonationEnd(s.id);

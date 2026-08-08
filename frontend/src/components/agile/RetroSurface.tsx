@@ -60,7 +60,7 @@ export function RetroSurface() {
     return (
       <div>
         <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Retrospectives</div>
-        {error && <div role="alert" style={{ color: '#dc2626', marginBottom: 8 }}>{error}</div>}
+        {error && <div role="alert" style={{ color: 'var(--error-text)', marginBottom: 8 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New retro name" style={inp} />
           <Select value={template} onChange={(e) => setTemplate(e.target.value)} style={{ ...inp, flex: '0 0 auto' }}>
@@ -87,7 +87,7 @@ export function RetroSurface() {
     <div>
       <button onClick={() => setSelected(null)} style={link}>← Retrospectives</button>
       <div style={{ fontSize: 16, fontWeight: 600, margin: '8px 0' }}>{detail?.name ?? 'Loading…'}</div>
-      {error && <div role="alert" style={{ color: '#dc2626', marginBottom: 8 }}>{error}</div>}
+      {error && <div role="alert" style={{ color: 'var(--error-text)', marginBottom: 8 }}>{error}</div>}
       <div style={{ display: 'grid', gridTemplateColumns: `repeat(${columns.length}, 1fr)`, gap: 12 }}>
         {columns.map((col) => {
           const items = (detail?.items ?? []).filter((i) => i.category === col).sort((a, b) => b.votes - a.votes);

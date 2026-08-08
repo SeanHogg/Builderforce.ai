@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import BrainBackdrop from '@/components/BrainBackdrop';
@@ -42,11 +42,14 @@ import styles from './LandingCanvasHero.module.css';
  * already uses for FEATURES icons. Keep both arrays the same length and order.
  */
 const OBJECT_LAYOUT: { style: React.CSSProperties }[] = [
-  { style: { left: '3%', top: '12%' } },
-  { style: { left: '30%', top: '6%' } },
-  { style: { right: '4%', top: '14%' } },
-  { style: { left: '4%', top: '55%' } },
-  { style: { right: '5%', top: '60%' } },
+  { style: { left: '52%', top: '10%' } },
+  { style: { left: '27%', top: '3%' } },
+  { style: { right: '2%', top: '10%' } },
+  { style: { left: '28%', top: '60%' } },
+  { style: { right: '2%', top: '58%' } },
+  { style: { left: '2%', top: '10%' } },
+  { style: { left: '3%', top: '58%' } },
+  { style: { left: '53%', top: '58%' } },
 ];
 
 /** Index of the object that renders a chart preview, and of the live agent. */
@@ -62,7 +65,11 @@ export function LandingCanvasHero() {
   const router = useRouter();
   const t = useTranslations('home');
   const [prompt, setPrompt] = useState('');
-  const [focusToken, setFocusToken] = useState(0);
+  const [selectedObject, setSelectedObject] = useState<number | null>(null);
+  const [canvasRevealed, setCanvasRevealed] = useState(false);
+  const [lensActive, setLensActive] = useState(false);
+  const boardRef = useRef<HTMLDivElement>(null);
+  const blurRef = useRef<HTMLDivElement>(null);
   // The visitor's first turn is armed HERE, before the canvas exists — so the mode
   // rides into the guest session rather than being a control that did nothing.
   const [chatMode, setChatMode] = useState<ChatMode>(NEW_CHAT_MODE);
@@ -79,6 +86,18 @@ export function LandingCanvasHero() {
 
   const objects = t.raw('canvas.objects') as CanvasObjectCopy[];
 
+  useEffect(() => {
+    function resetWhenClickingOutside(event: PointerEvent) {
+      if (boardRef.current?.contains(event.target as Node)) return;
+      setSelectedObject(null);
+      setCanvasRevealed(false);
+      setLensActive(false);
+    }
+
+    document.addEventListener('pointerdown', resetWhenClickingOutside);
+    return () => document.removeEventListener('pointerdown', resetWhenClickingOutside);
+  }, []);
+
   function startCreating(text: string) {
     const trimmed = text.trim();
     if (!trimmed) return;
@@ -93,9 +112,24 @@ export function LandingCanvasHero() {
   }
 
   /** Seed the composer instead of navigating: the board is an invitation. */
-  function seedPrompt(text: string) {
+  function seedPrompt(text: string, index: number) {
     setPrompt(text);
-    setFocusToken((token) => token + 1);
+    setSelectedObject(index);
+    setCanvasRevealed(false);
+  }
+
+  function moveLens(event: React.PointerEvent<HTMLDivElement>) {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    blurRef.current?.style.setProperty('--lens-x', `${event.clientX - bounds.left}px`);
+    blurRef.current?.style.setProperty('--lens-y', `${event.clientY - bounds.top}px`);
+    setLensActive(true);
+  }
+
+  function resetFromCanvasBackground(event: React.PointerEvent<HTMLDivElement>) {
+    const target = event.target as HTMLElement;
+    if (target.closest('[data-canvas-object], [data-canvas-prompt]')) return;
+    setSelectedObject(null);
+    setCanvasRevealed(false);
   }
 
   // One composer, declared once and placed in whichever layout renders — so the
@@ -105,9 +139,9 @@ export function LandingCanvasHero() {
       value={prompt}
       onChange={setPrompt}
       onSubmit={() => startCreating(prompt)}
-      focusToken={focusToken}
       chatMode={chatMode}
       onChatModeChange={setChatMode}
+      onEngage={() => setCanvasRevealed(true)}
     />
   );
 
@@ -128,7 +162,16 @@ export function LandingCanvasHero() {
 
         <div className={`${styles.stage} ${showBoard ? '' : styles.stageNarrow}`}>
           {showBoard && (
-            <div className={styles.board} role="group" aria-label={t('canvas.boardAria')}>
+            <div
+              ref={boardRef}
+              className={`${styles.board}${canvasRevealed ? ` ${styles.boardRevealed}` : ''}`}
+              role="group"
+              aria-label={t('canvas.boardAria')}
+              data-revealed={canvasRevealed}
+              onPointerMove={moveLens}
+              onPointerLeave={() => setLensActive(false)}
+              onPointerDown={resetFromCanvasBackground}
+            >
               <div className={styles.field}>
                 <svg
                   className={styles.wires}
@@ -136,19 +179,24 @@ export function LandingCanvasHero() {
                   preserveAspectRatio="none"
                   aria-hidden="true"
                 >
-                  <path className="solid" d="M227 100 C 300 100, 300 85, 372 85" />
-                  <path d="M568 140 C 720 140, 840 300, 988 330" />
-                  <path d="M240 313 C 500 313, 780 180, 1000 130" />
+                  <path className="solid" d="M190 92 C 235 92, 260 82, 330 82" />
+                  <path d="M175 295 C 260 295, 280 235, 365 235" />
+                  <path d="M475 235 C 565 235, 610 285, 690 285" />
+                  <path d="M785 285 C 815 230, 790 135, 735 105" />
+                  <path d="M790 105 C 860 105, 885 265, 1030 285" />
+                  <path d="M790 105 C 875 105, 945 95, 1040 95" />
                 </svg>
 
                 {objects.map((object, index) => (
                   <button
                     key={object.title}
                     type="button"
-                    className={styles.node}
+                    className={`${styles.node}${selectedObject === index ? ` ${styles.nodeSelected}` : ''}`}
                     style={OBJECT_LAYOUT[index]?.style}
-                    onClick={() => seedPrompt(object.prefill)}
+                    onClick={() => seedPrompt(object.prefill, index)}
                     aria-label={t('canvas.objectAction', { title: object.title })}
+                    aria-pressed={selectedObject === index}
+                    data-canvas-object
                   >
                     <span className={styles.nodeKind}>{object.kind}</span>
                     <span className={styles.nodeTitle}>{object.title}</span>
@@ -169,6 +217,12 @@ export function LandingCanvasHero() {
                   </button>
                 ))}
               </div>
+
+              <div
+                ref={blurRef}
+                className={`${styles.blurVeil}${lensActive ? ` ${styles.blurVeilLens}` : ''}`}
+                aria-hidden="true"
+              />
 
               {composer}
             </div>
@@ -197,18 +251,23 @@ export function LandingCanvasHero() {
  * no model pin, no memory — those need a tenant behind them, and a control that
  * cannot do what it says is worse than no control.
  */
-function Composer({ value, onChange, onSubmit, focusToken, chatMode, onChatModeChange }: {
+function Composer({ value, onChange, onSubmit, chatMode, onChatModeChange, onEngage }: {
   value: string;
   onChange: (next: string) => void;
   onSubmit: () => void;
-  focusToken: number;
   chatMode: ChatMode;
   onChatModeChange: (mode: ChatMode) => void;
+  onEngage: () => void;
 }) {
   const t = useTranslations('home');
   const examples = t.raw('heroExamples') as string[];
   return (
-    <div className={styles.promptWrap}>
+    <div
+      className={styles.promptWrap}
+      data-canvas-prompt
+      onPointerDownCapture={onEngage}
+      onFocusCapture={onEngage}
+    >
       <ChatInput
         className={styles.prompt}
         value={value}
@@ -222,7 +281,6 @@ function Composer({ value, onChange, onSubmit, focusToken, chatMode, onChatModeC
         showVoice
         chatMode={chatMode}
         onChatModeChange={onChatModeChange}
-        focusToken={focusToken}
       />
       <div className={styles.chips}>
         {examples.map((example) => (

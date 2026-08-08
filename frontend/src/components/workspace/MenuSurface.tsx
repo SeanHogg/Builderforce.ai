@@ -28,7 +28,7 @@ export function MenuSurface({ children, label }: { children: ReactNode; label: s
         background: 'var(--panel-drawer-bg, var(--bg-elevated))',
         border: '1px solid var(--border)',
         borderRadius: 8,
-        boxShadow: '0 6px 20px var(--shadow-strong, rgba(0, 0, 0, 0.35))',
+        boxShadow: '0 6px 20px var(--shadow-color, rgba(0, 0, 0, 0.35))',
         zIndex: 100000,
         padding: 6,
       }}

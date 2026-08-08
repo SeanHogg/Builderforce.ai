@@ -18,7 +18,7 @@
   justify-content: center;
   align-items: flex-start;
   padding: clamp(12px, 8vh, 96px) 12px 12px;
-  background: var(--overlay-scrim, rgba(8, 12, 20, 0.55));
+  background: var(--panel-overlay-bg, rgba(8, 12, 20, 0.55));
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
 }
@@ -32,7 +32,7 @@
   border: 1px solid var(--border);
   border-radius: 14px;
   background: var(--panel-drawer-bg, var(--bg-elevated));
-  box-shadow: 0 18px 48px var(--shadow-strong, rgba(0, 0, 0, 0.4));
+  box-shadow: 0 18px 48px var(--shadow-color, rgba(0, 0, 0, 0.4));
 }
 
 .inputRow {
@@ -126,6 +126,23 @@
   font-size: 0.72rem;
 }
 
+/* A plan-locked row stays fully readable — it is an upsell, not an error. The
+   label dims slightly so the lock chip is what the eye lands on. */
+.row[data-locked='true'] .rowLabel { color: var(--text-secondary); }
+
+.rowLock {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border: 1px solid var(--border-accent, var(--coral-bright));
+  border-radius: var(--radius-full, 999px);
+  color: var(--coral-bright);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
 .empty {
   padding: 22px 14px;
   color: var(--text-muted);
@@ -176,6 +193,8 @@
 @media (max-width: 900px) {
   .trigger { display: none; }
   .rowPath { display: none; }
+  /* The lock chip survives the narrow breakpoint — it is the reason the row
+     behaves differently, so hiding it would make the row look broken. */
 }
 
 @media (prefers-reduced-motion: reduce) {

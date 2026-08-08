@@ -95,7 +95,7 @@ export default function WhatsNewPanel({ open, onClose }: { open: boolean; onClos
                   >
                     {t(`categories.${key}`)}
                   </span>
-                  <span style={{ fontSize: 12, color: 'var(--text-secondary, #94a3b8)', fontFamily: 'var(--mono, monospace)' }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-secondary, #94a3b8)', fontFamily: 'var(--font-mono, monospace)' }}>
                     v{note.version}
                   </span>
                   {note.publishedAt && (

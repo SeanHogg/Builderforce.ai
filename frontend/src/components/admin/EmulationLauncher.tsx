@@ -109,7 +109,7 @@ export function EmulationLauncherProvider({ children }: { children: React.ReactN
                 {t('emulate.noWorkspaces')}
               </p>
             ) : (
-              <div style={{ padding: '8px 12px', background: 'var(--surface-alt, #1e1e2e)', borderRadius: 6, fontSize: 13 }}>
+              <div style={{ padding: '8px 12px', background: 'var(--surface-2, #1e1e2e)', borderRadius: 6, fontSize: 13 }}>
                 <span style={{ opacity: 0.6, marginRight: 8 }}>{t('emulate.workspace')}</span>
                 <strong>{workspaces[0]!.name}</strong>
                 <span style={{ opacity: 0.5, margin: '0 8px' }}>·</span>

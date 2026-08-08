@@ -88,7 +88,7 @@ const primary: React.CSSProperties = {
   ...button,
   background: 'var(--accent, #2563eb)',
   borderColor: 'var(--accent, #2563eb)',
-  color: 'var(--accent-contrast, #ffffff)',
+  color: 'var(--text-on-accent, #ffffff)',
 };
 
 const muted: React.CSSProperties = { fontSize: 13, color: 'var(--text-muted, #6b7280)' };
@@ -284,8 +284,8 @@ export function GrowthClient() {
       <h1 style={{ fontSize: 'clamp(1.4rem, 4vw, 1.9rem)', margin: 0 }}>{t('title')}</h1>
       <p style={{ ...muted, marginTop: 6 }}>{t('description')}</p>
 
-      {notice && <p role="status" style={{ ...muted, color: 'var(--success-fg, #166534)' }}>{notice}</p>}
-      {error && <p role="alert" style={{ ...muted, color: 'var(--danger-fg, #991b1b)' }}>{error}</p>}
+      {notice && <p role="status" style={{ ...muted, color: 'var(--success-text, #166534)' }}>{notice}</p>}
+      {error && <p role="alert" style={{ ...muted, color: 'var(--danger-text, #991b1b)' }}>{error}</p>}
 
       <div style={{
         display: 'grid', gap: 16, marginTop: 20,
@@ -306,8 +306,8 @@ export function GrowthClient() {
                     <span style={{
                       ...muted,
                       color: mailbox.status === 'connected'
-                        ? 'var(--success-fg, #166534)'
-                        : 'var(--danger-fg, #991b1b)',
+                        ? 'var(--success-text, #166534)'
+                        : 'var(--danger-text, #991b1b)',
                     }}>
                       {t(`mailboxes.status.${mailbox.status === 'connected' ? 'connected' : 'reconnect'}`)}
                     </span>
@@ -400,8 +400,8 @@ export function GrowthClient() {
                     <span style={{
                       ...muted,
                       color: sender.status === 'verified'
-                        ? 'var(--success-fg, #166534)'
-                        : 'var(--warning-fg, #92400e)',
+                        ? 'var(--success-text, #166534)'
+                        : 'var(--warning-text, #92400e)',
                     }}>
                       {t(`senders.status.${sender.status === 'verified' ? 'verified' : 'pending'}`)}
                     </span>

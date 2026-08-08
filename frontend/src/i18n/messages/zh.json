@@ -5556,6 +5556,24 @@
           "title": "董事会一页纸",
           "detail": "根据上方图表起草",
           "prefill": "根据这份分析起草一页董事会汇报"
+        },
+        {
+          "kind": "想法",
+          "title": "续约机会",
+          "detail": "问题 · 客户 · 初步设想",
+          "prefill": "把这个续约机会整理成发布计划"
+        },
+        {
+          "kind": "调研",
+          "title": "客户访谈",
+          "detail": "12 次通话 · 信号 + 异议",
+          "prefill": "将这些客户访谈总结为产品需求"
+        },
+        {
+          "kind": "原型",
+          "title": "续约门户",
+          "detail": "实时概念 · 可供测试",
+          "prefill": "根据这个原型构建可测试的续约门户"
         }
       ]
     },
@@ -5896,7 +5914,22 @@
       "writing": "文章",
       "keepUp": "保持关注"
     },
-    "featuresLead": "网站、工作流、数据集、模型、文档、人员与智能体——全部作为真实且互联的对象置于同一画布，而不是聊天中的附件。"
+    "featuresLead": "网站、工作流、数据集、模型、文档、人员与智能体——全部作为真实且互联的对象置于同一画布，而不是聊天中的附件。",
+    "tension": {
+      "eyebrow": "问题所在",
+      "heading": "工作在写代码之前就开始了",
+      "body": "一个想法始于文档，在聊天中争论，落在看板上，在编辑器里构建，最后用表格衡量。五个工具，彼此都不知道对方做了什么决定——于是上下文被反复重输，决策不知去向，从想法到交付的过程中什么也没能延续下来。",
+      "fragments": [
+        "文档",
+        "聊天",
+        "看板",
+        "编辑器",
+        "表格"
+      ],
+      "diagramAlt": "文档、聊天、看板、编辑器与表格，彼此之间的连接已经断开。",
+      "canvasLabel": "同一块画布",
+      "resolve": "Builderforce 把这一切放在<em>同一块画布</em>上——想法、工作、评审与结果都是同一个对象。"
+    }
   },
   "pricing": {
     "seo": {
@@ -5943,6 +5976,9 @@
     "labelSeats": "席位",
     "labelBillingEmail": "账单邮箱",
     "placeholderBillingEmail": "billing@example.com",
+    "labelDiscountCode": "优惠码",
+    "placeholderDiscountCode": "可选",
+    "discountVerificationNote": "优惠将在付款前验证。",
     "redirectNote": "您将被重定向到我们的支付服务商，以安全地输入您的卡片详情。",
     "total": "合计：${price}/{unit}",
     "totalForSeats": "{seats, plural, one {共 # 个席位} other {共 # 个席位}}",
@@ -12064,6 +12100,11 @@
       "launching": "正在启动……",
       "error": "无法启动演示，请重试。",
       "note": "演示为共享环境，会定期重置，无需账户。您所做的更改是临时的。",
+      "carousel": {
+        "label": "实时演示场景",
+        "previous": "上一组演示场景",
+        "next": "下一组演示场景"
+      },
       "personas": {
         "ai-team": {
           "title": "AI 软件团队",
@@ -14693,7 +14734,8 @@
     "noResults": "没有与“{query}”匹配的结果。",
     "hintMove": "<kbd>↑↓</kbd> 移动",
     "hintOpen": "<kbd>⏎</kbd> 打开",
-    "hintClose": "<kbd>esc</kbd> 关闭"
+    "hintClose": "<kbd>esc</kbd> 关闭",
+    "locked": "{plan} 方案"
   },
   "homeScroller": {
     "previous": "显示上一项",

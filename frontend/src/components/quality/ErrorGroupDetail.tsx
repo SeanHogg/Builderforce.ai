@@ -145,7 +145,7 @@ export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: str
             )}
 
             {fixMsg && (
-              <div style={{ marginTop: 14, fontSize: 13, color: '#16a34a' }}>{fixMsg}</div>
+              <div style={{ marginTop: 14, fontSize: 13, color: 'var(--success-text)' }}>{fixMsg}</div>
             )}
 
             {/* Actions */}

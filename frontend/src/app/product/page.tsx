@@ -85,7 +85,7 @@ export default async function ProductPage() {
         .pp-card-icon { font-size: 1.5rem; margin-bottom: 12px; }
         .pp-card-proof { display: flex; flex-wrap: wrap; gap: 6px; margin: -2px 0 10px; }
         .pp-proof-chip { border: 1px solid var(--border-subtle); border-radius: 999px; padding: 3px 8px; color: var(--text-muted); font-size: 0.7rem; line-height: 1.2; }
-        .pp-proof-chip[data-status="available"] { border-color: color-mix(in srgb, #22c55e 48%, var(--border-subtle)); color: #22c55e; }
+        .pp-proof-chip[data-status="available"] { border-color: color-mix(in srgb, #22c55e 48%, var(--border-subtle)); color: var(--success-text); }
         .pp-proof-chip[data-status="beta"] { border-color: color-mix(in srgb, var(--coral-bright) 48%, var(--border-subtle)); color: var(--coral-bright); }
         .pp-proof-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
         .pp-proof-card { border: 1px solid var(--border-subtle); border-radius: 16px; background: var(--surface-card); padding: 20px; }

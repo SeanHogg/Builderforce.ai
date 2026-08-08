@@ -31,6 +31,9 @@ const OBJECTS = [
   { kind: 'Agent', title: 'Revenue analyst', detail: 'Writes the brief', prefill: 'Review the pipeline' },
   { kind: 'Workflow', title: 'Renewal outreach', detail: '4 steps', prefill: 'Build a renewal workflow' },
   { kind: 'Document', title: 'Board one-pager', detail: 'Drafted', prefill: 'Draft a one-pager' },
+  { kind: 'Idea', title: 'Retention opportunity', detail: 'Problem and first bet', prefill: 'Turn this idea into a plan' },
+  { kind: 'Research', title: 'Customer interviews', detail: '12 calls', prefill: 'Synthesize the interviews' },
+  { kind: 'Prototype', title: 'Renewal portal', detail: 'Ready to test', prefill: 'Build the prototype' },
 ];
 const raw: Record<string, unknown> = {
   'canvas.objects': OBJECTS,
@@ -101,7 +104,24 @@ describe('LandingCanvasHero', () => {
     fireEvent.click(screen.getByText('Revenue analyst'));
 
     expect(screen.getByLabelText('heroPromptPlaceholder')).toHaveValue('Review the pipeline');
+    expect(screen.getByText('Revenue analyst').closest('button')).toHaveAttribute('aria-pressed', 'true');
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it('reveals the board from the prompt and resets interactions on an outside click', async () => {
+    render(<LandingCanvasHero />);
+    const board = await screen.findByRole('group', { name: 'canvas.boardAria' });
+    const prompt = screen.getByLabelText('heroPromptPlaceholder');
+
+    fireEvent.pointerDown(prompt);
+    expect(board).toHaveAttribute('data-revealed', 'true');
+
+    fireEvent.pointerDown(board);
+    expect(board).toHaveAttribute('data-revealed', 'false');
+
+    fireEvent.pointerDown(prompt);
+    fireEvent.pointerDown(document.body);
+    expect(board).toHaveAttribute('data-revealed', 'false');
   });
 
   it('renders no board on a narrow viewport but keeps the composer usable', async () => {

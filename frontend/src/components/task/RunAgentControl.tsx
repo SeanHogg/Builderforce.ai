@@ -177,7 +177,7 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
       {error && <div style={{ fontSize: 12, color: 'var(--danger, #dc2626)', marginTop: 6 }}>{error}</div>}
       {repoStatus && (!repoStatus.bound || !repoStatus.hasCredential) && (
         <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8, padding: '8px 10px', background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8 }}>
-          <span style={{ color: 'var(--amber, #f59e0b)', fontWeight: 600 }}>⚠ {t('noWritableRepo')} </span>
+          <span style={{ color: 'var(--warning, #f59e0b)', fontWeight: 600 }}>⚠ {t('noWritableRepo')} </span>
           {repoStatus.bound ? t('repoNoCredential') : t('repoUnbound')}{' '}
           <Link href={`/projects/${task.projectId}`} style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>{t('openProjectSourceControl')}</Link>
         </div>

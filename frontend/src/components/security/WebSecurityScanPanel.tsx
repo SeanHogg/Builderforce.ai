@@ -193,7 +193,7 @@ export function WebSecurityScanPanel() {
                   <span style={{ fontSize: 11, color: '#f4726e' }}>{t('webNewFindings', { count: result.baseline.newFindings })}</span>
                 )}
                 {result.baseline.resolvedFindings > 0 && (
-                  <span style={{ fontSize: 11, color: '#22c55e' }}>{t('webResolved', { count: result.baseline.resolvedFindings })}</span>
+                  <span style={{ fontSize: 11, color: 'var(--success-text)' }}>{t('webResolved', { count: result.baseline.resolvedFindings })}</span>
                 )}
               </div>
               <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('webFindingsFiled', { count: result.recorded })}</span>
@@ -202,7 +202,7 @@ export function WebSecurityScanPanel() {
 
           <div style={{ marginTop: 14, borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }}>
             {result.findings.length === 0 ? (
-              <div style={{ fontSize: 13, color: '#22c55e', fontWeight: 600 }}>✓ {t('webNoIssues')}</div>
+              <div style={{ fontSize: 13, color: 'var(--success-text)', fontWeight: 600 }}>✓ {t('webNoIssues')}</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {sortedFindings(result.findings).map((f) => {

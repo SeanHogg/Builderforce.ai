@@ -38,7 +38,7 @@ const ghostBtn: React.CSSProperties = {
   ...btnStyle, background: 'transparent', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)',
 };
 const dangerBtn: React.CSSProperties = {
-  ...btnStyle, background: 'transparent', color: '#dc2626', border: '1px solid var(--border-subtle)',
+  ...btnStyle, background: 'transparent', color: 'var(--error-text)', border: '1px solid var(--border-subtle)',
 };
 
 const WS_ZONE = '__ws__'; // drop-zone key for the Unassigned / org-level bucket

@@ -5556,6 +5556,24 @@
           "title": "Informe de una página",
           "detail": "Redactado a partir del gráfico anterior",
           "prefill": "Redacta un informe de una página para el consejo con este análisis"
+        },
+        {
+          "kind": "Idea",
+          "title": "Oportunidad de renovación",
+          "detail": "Problema · cliente · primera apuesta",
+          "prefill": "Convierte esta oportunidad de renovación en un plan de lanzamiento"
+        },
+        {
+          "kind": "Investigación",
+          "title": "Entrevistas con clientes",
+          "detail": "12 llamadas · señales + objeciones",
+          "prefill": "Sintetiza estas entrevistas con clientes en requisitos de producto"
+        },
+        {
+          "kind": "Prototipo",
+          "title": "Portal de renovación",
+          "detail": "Concepto activo · listo para probar",
+          "prefill": "Crea un portal de renovación comprobable a partir de este prototipo"
         }
       ]
     },
@@ -5896,7 +5914,22 @@
       "writing": "Artículos",
       "keepUp": "Mantente al día"
     },
-    "featuresLead": "Sitios web, flujos de trabajo, conjuntos de datos, modelos, documentos, personas y agentes: objetos reales y conectados en un mismo lienzo, no archivos adjuntos en un chat."
+    "featuresLead": "Sitios web, flujos de trabajo, conjuntos de datos, modelos, documentos, personas y agentes: objetos reales y conectados en un mismo lienzo, no archivos adjuntos en un chat.",
+    "tension": {
+      "eyebrow": "El problema",
+      "heading": "El trabajo empieza antes que el código",
+      "body": "Una idea nace en un documento, se discute en el chat, aterriza en un tablero, se construye en un editor y se mide en una hoja de cálculo. Cinco herramientas, y ninguna sabe lo que decidieron las demás: el contexto se vuelve a escribir, las decisiones se pierden y nada llega desde la idea hasta lo que entregaste.",
+      "fragments": [
+        "Documento",
+        "Chat",
+        "Tablero",
+        "Editor",
+        "Hoja de cálculo"
+      ],
+      "diagramAlt": "Un documento, un chat, un tablero, un editor y una hoja de cálculo, con las conexiones entre ellos rotas.",
+      "canvasLabel": "Un solo lienzo",
+      "resolve": "Builderforce lo reúne todo en <em>un solo lienzo</em>: la idea, el trabajo, la revisión y el resultado son el mismo objeto."
+    }
   },
   "pricing": {
     "seo": {
@@ -5943,6 +5976,9 @@
     "labelSeats": "Asientos",
     "labelBillingEmail": "Correo de facturación",
     "placeholderBillingEmail": "facturacion@ejemplo.com",
+    "labelDiscountCode": "Código de descuento",
+    "placeholderDiscountCode": "Opcional",
+    "discountVerificationNote": "El descuento se verificará antes del pago.",
     "redirectNote": "Serás redirigido a nuestro proveedor de pagos para introducir los datos de tu tarjeta de forma segura.",
     "total": "Total: ${price}/{unit}",
     "totalForSeats": "{seats, plural, one {por # asiento} other {por # asientos}}",
@@ -12064,6 +12100,11 @@
       "launching": "Abriendo…",
       "error": "No se pudo iniciar la demo. Inténtalo de nuevo.",
       "note": "Las demos son compartidas, se reinician con regularidad y no requieren cuenta. Tus cambios son temporales.",
+      "carousel": {
+        "label": "Escenarios de demostración en vivo",
+        "previous": "Escenarios de demostración anteriores",
+        "next": "Siguientes escenarios de demostración"
+      },
       "personas": {
         "ai-team": {
           "title": "Equipo de software con IA",
@@ -14693,7 +14734,8 @@
     "noResults": "Nada coincide con «{query}».",
     "hintMove": "<kbd>↑↓</kbd> mover",
     "hintOpen": "<kbd>⏎</kbd> abrir",
-    "hintClose": "<kbd>esc</kbd> cerrar"
+    "hintClose": "<kbd>esc</kbd> cerrar",
+    "locked": "Plan {plan}"
   },
   "homeScroller": {
     "previous": "Mostrar anterior",

@@ -76,7 +76,7 @@ function BuildStatus({ status, error, phase, showValidating }: {
       {status === 'failure' && error && (
         <pre style={{
           margin: 0, fontSize: 11, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word',
-          color: 'var(--text-secondary)', background: 'var(--bg-subtle, rgba(127,127,127,0.08))',
+          color: 'var(--text-secondary)', background: 'var(--surface-sunken, rgba(127,127,127,0.08))',
           border: '1px solid var(--border-subtle)', borderRadius: 6, padding: '8px 10px',
           maxHeight: 220, overflow: 'auto', fontFamily: 'var(--font-mono)',
         }}>{error}</pre>

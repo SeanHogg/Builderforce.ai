@@ -206,8 +206,8 @@ export default function ErrorsPanel() {
                       }
                     }}
                   >
-                    <td style={{ fontFamily: 'var(--mono)', fontSize: 12, wordBreak: 'break-all' }}>{g.source ?? '—'}</td>
-                    <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{g.operation ?? '—'}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{g.source ?? '—'}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{g.operation ?? '—'}</td>
                     <td style={{ textAlign: 'right', fontWeight: 600 }}>{g.count.toLocaleString()}</td>
                     <td style={{ textAlign: 'right', color: g.unhandledCount > 0 ? 'var(--danger, #dc2626)' : undefined }}>
                       {g.unhandledCount.toLocaleString()}
@@ -287,10 +287,10 @@ export default function ErrorsPanel() {
                             {e.handled ? t('errors.handled_handled') : t('errors.handled_unhandled')}
                           </span>
                         </td>
-                        <td style={{ fontFamily: 'var(--mono)', fontSize: 11, maxWidth: 240, wordBreak: 'break-all' }}>
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, maxWidth: 240, wordBreak: 'break-all' }}>
                           {e.source ? `${e.source}${e.operation ? ` · ${e.operation}` : ''}` : '—'}
                         </td>
-                        <td style={{ fontFamily: 'var(--mono)', fontSize: 11, maxWidth: 200, wordBreak: 'break-all' }}>
+                        <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11, maxWidth: 200, wordBreak: 'break-all' }}>
                           {e.method ? `${e.method} ` : ''}{e.path ?? '—'}
                         </td>
                         <td className="text-muted">{e.tenantId ?? '—'}</td>
@@ -307,7 +307,7 @@ export default function ErrorsPanel() {
                                   <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>
                                     {t('errors.context')}
                                   </div>
-                                  <pre style={{ margin: '0 0 12px', fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text-primary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                                  <pre style={{ margin: '0 0 12px', fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                                     {JSON.stringify(e.context, null, 2)}
                                   </pre>
                                 </>
@@ -317,7 +317,7 @@ export default function ErrorsPanel() {
                                   <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 4 }}>
                                     {t('errors.stack')}
                                   </div>
-                                  <pre style={{ margin: 0, fontSize: 11, fontFamily: 'var(--mono)', color: 'var(--text-primary)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                                  <pre style={{ margin: 0, fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-primary)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
                                     {e.stack}
                                   </pre>
                                 </>

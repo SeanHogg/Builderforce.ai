@@ -421,7 +421,7 @@ export default function SecurityPanel() {
                     <tbody>
                       {securityDetails.tokens.filter((t) => t.isActive).map((tok) => (
                         <tr key={tok.jti}>
-                          <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{tok.jti.slice(0, 12)}…</td>
+                          <td style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{tok.jti.slice(0, 12)}…</td>
                           <td>{tok.tokenType}</td>
                           <td className="text-muted">{tok.tenantId ?? '—'}</td>
                           <td className="text-muted">{fmtDateTime(tok.expiresAt)}</td>

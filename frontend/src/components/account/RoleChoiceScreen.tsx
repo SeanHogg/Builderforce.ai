@@ -125,7 +125,7 @@ export default function RoleChoiceScreen({
               marginTop: 20,
               background: 'rgba(239,68,68,0.12)',
               border: '1px solid rgba(239,68,68,0.4)',
-              color: '#f87171',
+              color: 'var(--error-text)',
               borderRadius: 10,
               padding: '10px 14px',
               fontSize: '0.875rem',

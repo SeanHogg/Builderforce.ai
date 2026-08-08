@@ -18,7 +18,7 @@ import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useRegisterBrainActions, type BrainAction } from '@/lib/brain';
-import { useDestinations } from '@/lib/destinations/useDestinations';
+import { destinationHref, useDestinations } from '@/lib/destinations/useDestinations';
 
 export function DestinationBrainBridge() {
   const router = useRouter();
@@ -36,14 +36,18 @@ export function DestinationBrainBridge() {
       title: label(destination.labelKey),
       section: label(destination.groupLabelKey),
       href: destination.href,
+      // Locked destinations are LISTED, so the model can say "that needs Pro"
+      // instead of either hiding a capability the product has or walking the
+      // user into a 402.
+      ...(destination.locked ? { locked: true, requiredPlan: destination.requiredPlan } : {}),
     }));
 
     return [
       {
         name: 'list_destinations',
         description:
-          'List every page/panel in the app this user can open (projects, tasks, insights lenses, workforce, knowledge, quality, incidents, settings, canvases). '
-          + 'Call this before show_panel to discover valid destination ids.',
+          'List every page/panel in the app this user can open (projects, tasks, insights lenses, workforce, knowledge, quality, incidents, settings, canvases), '
+          + 'including which are locked behind a paid plan. Call this before show_panel to discover valid destination ids.',
         parameters: { type: 'object', properties: {}, required: [] },
         mutates: false,
         run: () => ({ destinations: catalog() }),
@@ -52,7 +56,8 @@ export function DestinationBrainBridge() {
         name: 'show_panel',
         description:
           'Open one of the app\'s destinations for the user. Use when they ask to go to / open / show a page, report, board or canvas. '
-          + 'Call list_destinations first if unsure of the id.',
+          + 'Call list_destinations first if unsure of the id. A destination marked locked needs a paid plan — '
+          + 'opening it takes the user to pricing, so say so rather than implying the product cannot do it.',
         parameters: {
           type: 'object',
           properties: { destination: { type: 'string', enum: ids, description: 'The destination id to open.' } },
@@ -63,8 +68,14 @@ export function DestinationBrainBridge() {
           const id = (args as { destination?: unknown })?.destination;
           const found = typeof id === 'string' ? destinations.find((destination) => destination.id === id) : undefined;
           if (!found) return { error: 'Unknown destination id. Call list_destinations for valid ids.' };
-          router.push(found.href);
-          return { opened: found.id, href: found.href, title: label(found.labelKey) };
+          // The SAME resolver the palette uses, so the two doors cannot disagree
+          // about where a locked destination sends you.
+          const href = destinationHref(found);
+          router.push(href);
+          return {
+            opened: found.id, href, title: label(found.labelKey),
+            ...(found.locked ? { locked: true, requiredPlan: found.requiredPlan } : {}),
+          };
         },
       },
     ];

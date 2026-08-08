@@ -428,13 +428,13 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           style={{
             ...panelStyle,
             display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap',
-            borderColor: 'var(--danger-fg, #dc2626)',
+            borderColor: 'var(--danger-text, #dc2626)',
             background: 'var(--danger-bg, rgba(220, 38, 38, 0.08))',
           }}
         >
           <span aria-hidden style={{ fontSize: '1.1rem', lineHeight: '1.3rem' }}>🚫</span>
           <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--danger-fg, #dc2626)' }}>
+            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--danger-text, #dc2626)' }}>
               {t('notConfigured.title')}
             </div>
             <div style={{ ...mutedStyle, marginTop: 4 }}>{t('notConfigured.body')}</div>
@@ -457,13 +457,13 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           style={{
             ...panelStyle,
             display: 'flex', alignItems: 'flex-start', gap: 10,
-            borderColor: 'var(--warning-fg, #b45309)',
+            borderColor: 'var(--warning-text, #b45309)',
             background: 'var(--warning-bg, rgba(180, 83, 9, 0.08))',
           }}
         >
           <span aria-hidden style={{ fontSize: '1.1rem', lineHeight: '1.3rem' }}>⏸️</span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--warning-fg, #b45309)' }}>
+            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--warning-text, #b45309)' }}>
               {t('autonomyPaused.title')}
             </div>
             <div style={{ ...mutedStyle, marginTop: 4 }}>
@@ -547,12 +547,12 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
           <div style={mutedStyle}>{t('chart.empty')}</div>
         )}
         {(stats.unscored > 0 || stats.unranked > 0) && (
-          <div style={{ marginTop: 12, fontSize: '0.8rem', color: 'var(--warning-fg, #b45309)' }}>
+          <div style={{ marginTop: 12, fontSize: '0.8rem', color: 'var(--warning-text, #b45309)' }}>
             💡 {t('insightNudge', { unscored: stats.unscored, unranked: stats.unranked })}
           </div>
         )}
         {stats.flagged > 0 && (
-          <div style={{ marginTop: 8, fontSize: '0.8rem', color: 'var(--warning-fg, #b45309)' }}>
+          <div style={{ marginTop: 8, fontSize: '0.8rem', color: 'var(--warning-text, #b45309)' }}>
             🚩 {t('coverageNudge', { flagged: stats.flagged })}
           </div>
         )}
@@ -563,7 +563,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       {activeSub === 'policy' && (
       <>
       {workspaceManagerDisabled && (
-        <div role="alert" style={{ ...panelStyle, borderColor: 'var(--warning-fg, #b45309)', background: 'var(--warning-bg, rgba(180,83,9,.08))', color: 'var(--warning-fg, #b45309)', fontWeight: 600, fontSize: '0.85rem' }}>
+        <div role="alert" style={{ ...panelStyle, borderColor: 'var(--warning-text, #b45309)', background: 'var(--warning-bg, rgba(180,83,9,.08))', color: 'var(--warning-text, #b45309)', fontWeight: 600, fontSize: '0.85rem' }}>
           {t('disabledNotice')}
         </div>
       )}
@@ -944,7 +944,7 @@ function Notice({ title, body, muted, retryLabel, onRetry }: {
 function StatTile({ label, value, tone }: { label: string; value: number; tone?: 'warn' }) {
   return (
     <div style={{ ...panelStyle, padding: 14 }}>
-      <div style={{ fontSize: '1.6rem', fontWeight: 800, color: tone === 'warn' ? 'var(--warning-fg, #b45309)' : 'var(--text-primary)' }}>
+      <div style={{ fontSize: '1.6rem', fontWeight: 800, color: tone === 'warn' ? 'var(--warning-text, #b45309)' : 'var(--text-primary)' }}>
         {value.toLocaleString()}
       </div>
       <div style={{ ...mutedStyle, marginTop: 2 }}>{label}</div>
@@ -1003,8 +1003,8 @@ function runTaskStatusKey(status: string): 'in_progress' | 'done' | 'blocked' | 
 /** Status → theme tone for the run-task badge (light + dark safe via CSS vars). */
 const RUN_TASK_TONE: Record<'in_progress' | 'done' | 'blocked' | 'open', string> = {
   in_progress: 'var(--accent, #2563eb)',
-  done: 'var(--success-fg, #15803d)',
-  blocked: 'var(--warning-fg, #b45309)',
+  done: 'var(--success-text, #15803d)',
+  blocked: 'var(--warning-text, #b45309)',
   open: 'var(--text-secondary)',
 };
 

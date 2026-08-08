@@ -133,7 +133,7 @@ export default function PersonalityUsagePanel({
         fontWeight: 600,
         padding: '2px 8px',
         borderRadius: 9999,
-        background: d > 0 ? 'var(--surface-success-soft, var(--surface-2))' : 'var(--surface-coral-soft, var(--surface-2))',
+        background: d > 0 ? 'var(--success-bg, var(--surface-2))' : 'var(--surface-coral-soft, var(--surface-2))',
         color: d > 0 ? 'var(--success-text, var(--text-strong))' : 'var(--coral-bright, var(--text-strong))',
         border: '1px solid var(--border)',
       }}

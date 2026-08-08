@@ -2942,10 +2942,27 @@ export interface MeterSnapshot {
   breakdown?: Array<{ key: string; used: number }>;
 }
 
+/** A boolean plan-feature flag, named exactly as the server's `PlanFeature`. */
+export type PlanFeatureKey =
+  | 'approvalWorkflows' | 'fleetMesh' | 'fullTelemetry' | 'customAgentRoles'
+  | 'psychometricPersona' | 'teamApprovalInbox' | 'seatCostControls'
+  | 'voiceCloning' | 'advancedInsights';
+
 export interface ConsumptionSnapshot {
   period: { start: string; resetsAt: string };
   plan: { effective: 'free' | 'pro' | 'teams'; billingStatus: string };
   meters: MeterSnapshot[];
+  /**
+   * Plan features resolved BY THE SERVER, from the same evaluator the routes
+   * gate on. The client never derives entitlement from `plan.effective` — that
+   * would be a second evaluator, and it would disagree the first time a flag
+   * moved between plans. Optional so a client running against an older API
+   * degrades to "nothing is known to be locked" rather than locking everything.
+   */
+  features?: {
+    entitled: Partial<Record<PlanFeatureKey, boolean>>;
+    requiredPlan: Partial<Record<PlanFeatureKey, 'free' | 'pro' | 'teams'>>;
+  };
 }
 
 export const consumptionApi = {

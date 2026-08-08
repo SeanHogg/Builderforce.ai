@@ -96,7 +96,7 @@ export default function TenantsPanel() {
                     <span style={{ display: 'inline-block', transition: 'transform 0.2s', transform: expandedTenantId === tenant.id ? 'rotate(90deg)' : 'none' }}>▶</span>
                   </td>
                   <td>{tenant.name}</td>
-                  <td style={{ fontFamily: 'var(--mono)', fontSize: 13 }}>{tenant.slug}</td>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{tenant.slug}</td>
                   <td>
                     <span className={`badge ${tenant.status === 'active' ? 'badge-success' : 'badge-neutral'}`}>
                       {tenant.status}
@@ -243,7 +243,7 @@ export default function TenantsPanel() {
                       {tenant.effectivePlan}
                     </span>
                   </div>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--text-muted)' }}>{tenant.slug}</div>
+                  <div style={{ fontFamily: 'var(--font-mono)', fontSize: 13, color: 'var(--text-muted)' }}>{tenant.slug}</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 13 }}>
                     <span className={`badge ${tenant.status === 'active' ? 'badge-success' : 'badge-neutral'}`}>{tenant.status}</span>
                     <span className="text-muted">{tenant.billingStatus}</span>

@@ -132,7 +132,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
     if (!result) return [];
     return [
       { key: 'top1', label: t('metric.top1'), value: result.top1Accuracy * 100, color: 'var(--coral-bright, #4d9eff)' },
-      { key: 'topk', label: t('metric.topK', { k: result.topK }), value: result.topKAccuracy * 100, color: '#22c55e' },
+      { key: 'topk', label: t('metric.topK', { k: result.topK }), value: result.topKAccuracy * 100, color: 'var(--success-text)' },
     ];
   }, [result, t]);
 
@@ -298,7 +298,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
         <div
           role="alert"
           style={{
-            background: 'var(--warning-bg, rgba(239,68,68,0.12))', border: '1px solid #ef4444', color: '#fca5a5',
+            background: 'var(--warning-bg, rgba(239,68,68,0.12))', border: '1px solid #ef4444', color: 'var(--error-text)',
             borderRadius: 8, padding: '8px 12px', fontSize: '0.78rem',
           }}
         >

@@ -253,7 +253,7 @@ export function TalentView() {
                     <div style={{ display: 'flex', gap: 4 }}>
                       {[1, 2, 3, 4, 5].map((n) => (
                         <button key={n} type="button" onClick={() => setReviewForm((r) => ({ ...r, rating: n }))} aria-label={`${n}`}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: n <= reviewForm.rating ? 'var(--warning-fg, #f59e0b)' : 'var(--border-subtle)' }}>★</button>
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: n <= reviewForm.rating ? 'var(--warning-text, #f59e0b)' : 'var(--border-subtle)' }}>★</button>
                       ))}
                     </div>
                     <textarea style={{ ...input, minHeight: 56, resize: 'vertical' }} placeholder={t('reviewComment')} value={reviewForm.comment} onChange={(ev) => setReviewForm((r) => ({ ...r, comment: ev.target.value }))} />

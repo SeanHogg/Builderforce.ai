@@ -57,7 +57,7 @@ export function PokerSurface() {
     return (
       <div>
         <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 12 }}>Planning Poker</div>
-        {error && <div role="alert" style={{ color: '#dc2626', marginBottom: 8 }}>{error}</div>}
+        {error && <div role="alert" style={{ color: 'var(--error-text)', marginBottom: 8 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="New session name" style={inp} />
           <button onClick={createSession} style={btn}>Start session</button>
@@ -79,7 +79,7 @@ export function PokerSurface() {
     <div>
       <button onClick={() => setSelected(null)} style={link}>← Sessions</button>
       <div style={{ fontSize: 16, fontWeight: 600, margin: '8px 0' }}>{detail?.name ?? 'Loading…'}</div>
-      {error && <div role="alert" style={{ color: '#dc2626', marginBottom: 8 }}>{error}</div>}
+      {error && <div role="alert" style={{ color: 'var(--error-text)', marginBottom: 8 }}>{error}</div>}
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <input value={storyTitle} onChange={(e) => setStoryTitle(e.target.value)} placeholder="Add a story" style={inp} />
         <button onClick={addStory} style={btn}>Add</button>

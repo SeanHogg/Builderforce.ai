@@ -95,3 +95,27 @@ describe('rankDestinations', () => {
     expect(ranked[0]?.label).not.toContain('group.');
   });
 });
+
+describe('plan-gated destinations', () => {
+  it('declares a feature only where a server gate was verified', () => {
+    const byId = new Map(listDestinations().map((destination) => [destination.id, destination]));
+    // Enforced by tenantHasFeature('psychometricPersona') and
+    // requirePlanFeature('advancedInsights') respectively.
+    expect(byId.get('settings.settings.persona')?.feature).toBe('psychometricPersona');
+    expect(byId.get('insights.insights.finance')?.feature).toBe('advancedInsights');
+  });
+
+  it('leaves ungated destinations with no feature, so no lock is advertised the API would not apply', () => {
+    const projects = listDestinations().find((destination) => destination.id === 'projects');
+    expect(projects?.feature).toBeUndefined();
+  });
+
+  it('preserves gate fields through ranking', () => {
+    // rankDestinations is generic precisely so the palette keeps what it passed
+    // in; a non-generic version silently dropped `locked` and every row rendered
+    // as unlocked.
+    const gated = listDestinations().map((destination) => ({ ...destination, locked: true }));
+    const ranked = rankDestinations(gated, 'persona', translate);
+    expect(ranked[0]?.locked).toBe(true);
+  });
+});

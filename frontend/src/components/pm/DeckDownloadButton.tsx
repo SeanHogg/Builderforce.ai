@@ -82,7 +82,7 @@ export function DeckDownloadButton() {
       >
         {busy ? t('generating') : t('download')}
       </button>
-      {error && <span style={{ fontSize: '0.75rem', color: '#dc2626' }}>{error}</span>}
+      {error && <span style={{ fontSize: '0.75rem', color: 'var(--error-text)' }}>{error}</span>}
     </div>
   );
 }

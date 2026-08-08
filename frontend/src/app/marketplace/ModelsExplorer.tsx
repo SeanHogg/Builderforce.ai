@@ -84,7 +84,7 @@ function RoutableChip({ record }: { record: ModelRecord }) {
       title={t('routableChip.title')}
       style={{
         fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99,
-        background: 'rgba(34,197,94,0.12)', color: '#16a34a',
+        background: 'rgba(34,197,94,0.12)', color: 'var(--success-text)',
         border: '1px solid rgba(34,197,94,0.35)', whiteSpace: 'nowrap',
       }}
     >
@@ -98,7 +98,7 @@ function PriceTag({ record }: { record: ModelRecord }) {
   const free = record.pricing.prompt <= 0 && record.pricing.completion <= 0;
   if (free) {
     return (
-      <span style={{ fontSize: 12, fontWeight: 700, color: '#22c55e', background: 'rgba(34,197,94,0.1)', padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(34,197,94,0.3)' }}>
+      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--success-text)', background: 'rgba(34,197,94,0.1)', padding: '2px 8px', borderRadius: 6, border: '1px solid rgba(34,197,94,0.3)' }}>
         {t('price.free')}
       </span>
     );

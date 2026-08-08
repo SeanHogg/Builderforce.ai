@@ -593,7 +593,7 @@ const BRAINMAP_CSS = `
 .ev-brainmap .ev-core-emoji { dominant-baseline: middle; }
 .ev-status { display: inline-flex; align-items: center; gap: 6px; font-size: 0.72rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--border-subtle); background: var(--bg-elevated); }
 .ev-status-dot { width: 7px; height: 7px; border-radius: 999px; background: currentColor; }
-.ev-status-live { color: #22c55e; }
+.ev-status-live { color: var(--success-text); }
 .ev-status-frozen, .ev-status-dormant { color: var(--text-muted); }
 .ev-legend-tier { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .ev-legend-heading { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }

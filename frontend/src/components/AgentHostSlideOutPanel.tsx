@@ -166,9 +166,9 @@ export function AgentHostSlideOutPanel({
   const slug = agentHost.slug;
   const statusColor =
     statusLabel === 'active'
-      ? 'var(--surface-success-soft, rgba(34,197,94,0.15))'
+      ? 'var(--success-bg, rgba(34,197,94,0.15))'
       : statusLabel === 'suspended'
-        ? 'var(--surface-danger-soft, rgba(239,68,68,0.15))'
+        ? 'var(--danger-bg, rgba(239,68,68,0.15))'
         : 'var(--bg-elevated)';
 
   // Chat tab needs full height; other tabs scroll naturally
@@ -308,7 +308,7 @@ export function AgentHostSlideOutPanel({
               padding: '6px 12px',
               fontSize: 12,
               fontWeight: 600,
-              background: 'var(--surface-danger-soft, rgba(239,68,68,0.12))',
+              background: 'var(--danger-bg, rgba(239,68,68,0.12))',
               color: 'var(--danger, #ef4444)',
               border: '1px solid var(--border-subtle)',
               borderRadius: 8,

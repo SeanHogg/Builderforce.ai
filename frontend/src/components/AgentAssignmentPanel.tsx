@@ -135,7 +135,7 @@ export function AgentAssignmentPanel({
         <button type="button" onClick={() => setShowAdd((v) => !v)} style={primaryBtn}>{showAdd ? 'Done' : '+ Assign agent'}</button>
       </div>
 
-      {error && <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.15)', color: '#ef4444', borderRadius: 8 }}>{error}</div>}
+      {error && <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.15)', color: 'var(--error-text)', borderRadius: 8 }}>{error}</div>}
 
       {loading ? (
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
@@ -199,7 +199,7 @@ const primaryBtn: React.CSSProperties = {
 };
 const addBtn: React.CSSProperties = { ...primaryBtn, padding: '4px 10px', fontSize: 11, flexShrink: 0 };
 const dangerBtn: React.CSSProperties = {
-  padding: '4px 10px', fontSize: 11, fontWeight: 600, background: 'rgba(239,68,68,0.1)', color: '#ef4444',
+  padding: '4px 10px', fontSize: 11, fontWeight: 600, background: 'rgba(239,68,68,0.1)', color: 'var(--error-text)',
   border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, cursor: 'pointer', flexShrink: 0,
 };
 const selectStyle: React.CSSProperties = {

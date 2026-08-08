@@ -111,7 +111,7 @@ export function ContentAssignmentsContent({ scope, scopeId, tenantId, className,
         </button>
       </div>
 
-      {error && <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.15)', color: '#ef4444', borderRadius: 8 }}>{error}</div>}
+      {error && <div style={{ padding: '8px 12px', fontSize: 12, background: 'rgba(239,68,68,0.15)', color: 'var(--error-text)', borderRadius: 8 }}>{error}</div>}
 
       {loading ? (
         <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>Loading…</div>
@@ -205,7 +205,7 @@ export function ContentAssignmentsContent({ scope, scopeId, tenantId, className,
                   fontSize: 11,
                   fontWeight: 600,
                   background: 'rgba(239,68,68,0.1)',
-                  color: '#ef4444',
+                  color: 'var(--error-text)',
                   border: '1px solid rgba(239,68,68,0.3)',
                   borderRadius: 6,
                   cursor: 'pointer',

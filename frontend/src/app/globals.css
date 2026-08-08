@@ -177,6 +177,29 @@
   --info-text: #bfdbfe;
   --info-bg: rgba(59, 130, 246, 0.18);
   --info-border: rgba(59, 130, 246, 0.45);
+  /* `success` was the one semantic family missing its border, so call sites that
+     wanted one fell through to a literal. Completed here rather than at the call
+     site, so all five families (error/danger/success/warning/info) are uniform. */
+  --success-border: rgba(34, 197, 94, 0.45);
+
+  /* Categorical hues — the "bright" palette family.
+     `--coral-bright` / `--cyan-bright` above are the brand's two signal slots; these
+     five are the CATEGORICAL extension, used where a chart series, a speaker tile or
+     a run-source badge needs hues that stay distinct from each other AND from the
+     brand. They were used at ~14 call sites but never declared, so each one painted
+     its dark-mode literal onto light stock as well (a pale #a78bfa violet on white).
+     The dark values below are exactly those literals, so dark is unchanged; light
+     re-darkens each hue for paper the same way the accent slots do. Never hardcode
+     these — a categorical hue has to flip per theme like everything else. */
+  --violet-bright: #a78bfa;
+  --indigo-bright: #7c83fd;
+  --emerald-bright: #34d399;
+  --amber-bright: #fbbf24;
+  --red-bright: #ff6b6b;
+
+  /* Ambient shadow colour, for the shadows composed at a call site (drawer, palette)
+     rather than taken whole from --shadow-*. Flips warm on light like the scale. */
+  --shadow-color: rgba(0, 0, 0, 0.5);
   /* Opaque panel surfaces — theme-aware aliases that flip via the tokens they
      reference (bg-elevated / surface-interactive are overridden per theme). Many
      components reference these intuitive names; defining them here keeps them
@@ -321,6 +344,17 @@ html[data-theme='light'] {
   --info-text: #1e3a8a;
   --info-bg: rgba(29, 78, 216, 0.1);
   --info-border: rgba(29, 78, 216, 0.32);
+  --success-border: rgba(21, 128, 61, 0.35);
+
+  /* Categorical hues on paper: same five identities, darkened to carry on warm
+     stock (each ≥4.5:1 on white) instead of glowing as they do on near-black. */
+  --violet-bright: #6d28d9;
+  --indigo-bright: #4338ca;
+  --emerald-bright: #047857;
+  --amber-bright: #b45309;
+  --red-bright: #b91c1c;
+
+  --shadow-color: rgba(60, 48, 36, 0.16);
   --text-on-accent: #fff;
   --badge-unread: #4f46e5;
   --surface-page: var(--bg-deep);
@@ -424,7 +458,11 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   max-width: 100vw;
-  overflow-x: hidden;
+  /* Keep wide decorative elements from creating horizontal scroll without
+     turning the page body into a scroll container. Sticky chrome such as the
+     marketing header must remain anchored to the viewport while the page
+     scrolls. */
+  overflow-x: clip;
 }
 
 button,
@@ -870,9 +908,9 @@ html[data-theme='light'] .nebula {
 }
 
 .topbar-role-preview__select {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
+  background: var(--surface-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   color: var(--text-muted);
   font-size: 11px;
   padding: 3px 6px;
@@ -882,7 +920,7 @@ html[data-theme='light'] .nebula {
 .topbar-role-preview__badge {
   background: rgba(59, 130, 246, 0.15);
   border: 1px solid rgba(59, 130, 246, 0.4);
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   color: #60a5fa;
   font-size: 11px;
   font-weight: 600;
@@ -1046,8 +1084,9 @@ html[data-theme='light'] .nebula {
 
 .global-footer-links {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 18px;
 }
 
 .global-footer-links a,
@@ -1058,6 +1097,8 @@ html[data-theme='light'] .nebula {
   border: none;
   padding: 0;
   font: inherit;
+  line-height: 1.4;
+  white-space: nowrap;
   cursor: pointer;
 }
 
@@ -1142,7 +1183,10 @@ html[data-theme='light'] .nebula {
   min-height: 0;
   margin: 0;
   padding: 0;
+  flex-direction: column;
+  align-items: flex-start;
   justify-content: flex-start;
+  gap: 8px;
 }
 
 /* Link columns. */
@@ -2051,7 +2095,7 @@ select.input option {
 .admin-page .admin-token-textarea {
   width: 100%;
   min-height: 84px;
-  font-family: var(--mono);
+  font-family: var(--font-mono);
   font-size: 12px;
   padding: 10px;
   border-radius: var(--radius-md);
@@ -2718,7 +2762,7 @@ select.input option {
 }
 
 .emulation-bar__timer--warn {
-  color: #fca5a5;               /* red-300 */
+  color: var(--error-text);               /* red-300 */
   font-weight: 700;
 }
 
@@ -2901,7 +2945,7 @@ select.input option {
   transition: background 0.1s;
 }
 
-.perm-debugger-tab:hover { background: var(--surface-hover, rgba(255, 255, 255, 0.05)); }
+.perm-debugger-tab:hover { background: var(--surface-interactive-hover, rgba(255, 255, 255, 0.05)); }
 .perm-debugger-tab--active {
   color: var(--text-primary, #e4e4e7);
   border-bottom: 2px solid var(--accent, #6366f1);
@@ -2942,7 +2986,7 @@ select.input option {
   vertical-align: middle;
 }
 
-.perm-debugger-table tr:hover td { background: var(--surface-hover, rgba(255, 255, 255, 0.03)); }
+.perm-debugger-table tr:hover td { background: var(--surface-interactive-hover, rgba(255, 255, 255, 0.03)); }
 
 .perm-debugger-btn {
   min-height: 28px;
@@ -2955,7 +2999,7 @@ select.input option {
   cursor: pointer;
 }
 
-.perm-debugger-btn:hover { background: var(--surface-hover, rgba(255, 255, 255, 0.1)); }
+.perm-debugger-btn:hover { background: var(--surface-interactive-hover, rgba(255, 255, 255, 0.1)); }
 .perm-debugger-btn--close { font-size: 16px; padding: 1px 7px; }
 
 .perm-debugger-count-badge {
@@ -3004,7 +3048,7 @@ select.input option {
   justify-content: space-between;
   align-items: flex-start;
   padding: 16px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
@@ -3012,7 +3056,7 @@ select.input option {
   display: flex;
   gap: 2px;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   flex-wrap: wrap;
 }
@@ -3027,7 +3071,7 @@ select.input option {
   justify-content: space-between;
   align-items: center;
   padding: 6px 0;
-  border-bottom: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border);
   font-size: 13px;
 }
 
@@ -3098,6 +3142,7 @@ select.input option {
 .mh {
   position: sticky;
   top: 0;
+  flex: 0 0 auto;
   z-index: 50;
   width: 100%;
   background: var(--chrome);

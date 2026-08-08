@@ -39,7 +39,7 @@
 }
 
 .legend strong { color: var(--text-primary); }
-.liveDot { width: 7px; height: 7px; border-radius: 50%; background: var(--success-fg, #16a34a); box-shadow: 0 0 0 4px color-mix(in srgb, var(--success-fg, #16a34a) 16%, transparent); }
+.liveDot { width: 7px; height: 7px; border-radius: 50%; background: var(--success-text, #16a34a); box-shadow: 0 0 0 4px color-mix(in srgb, var(--success-text, #16a34a) 16%, transparent); }
 
 .node {
   width: 290px;
@@ -52,7 +52,7 @@
 }
 
 .node[data-tone='manager'] { width: 330px; border-color: color-mix(in srgb, var(--accent, #2563eb) 55%, var(--border-subtle)); box-shadow: 0 16px 38px color-mix(in srgb, var(--accent, #2563eb) 16%, transparent); }
-.node[data-tone='warning'] { border-color: color-mix(in srgb, var(--warning-fg, #b45309) 45%, var(--border-subtle)); }
+.node[data-tone='warning'] { border-color: color-mix(in srgb, var(--warning-text, #b45309) 45%, var(--border-subtle)); }
 .node[data-tone='activity'] { width: 390px; }
 
 .head { display: flex; gap: 10px; align-items: flex-start; padding: 13px 14px 9px; }
@@ -67,7 +67,7 @@
 .metric { min-width: 0; padding: 9px 10px; background: var(--bg-base); }
 .metric b { display: block; overflow: hidden; font-size: 1rem; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
 .metric span { display: block; overflow: hidden; margin-top: 3px; color: var(--text-muted); font-size: .61rem; text-overflow: ellipsis; white-space: nowrap; }
-.metric[data-alert='true'] b { color: var(--warning-fg, #b45309); }
+.metric[data-alert='true'] b { color: var(--warning-text, #b45309); }
 
 .body { padding: 0 14px 11px; }
 .list { display: grid; gap: 7px; margin: 0; padding: 0; list-style: none; }

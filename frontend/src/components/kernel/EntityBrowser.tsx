@@ -273,7 +273,7 @@ export function EntityBrowser({ scope, locale = 'en' }: { scope: EntityScope; lo
               className="rounded-full px-2.5 py-1 text-xs min-w-0"
               style={{
                 background: selected ? 'var(--accent)' : 'var(--surface-2, rgba(255,255,255,0.06))',
-                color: selected ? 'var(--accent-contrast, #fff)' : 'var(--text-secondary)',
+                color: selected ? 'var(--text-on-accent, #fff)' : 'var(--text-secondary)',
                 border: '1px solid var(--border-subtle)',
               }}
             >
@@ -309,7 +309,7 @@ export function EntityBrowser({ scope, locale = 'en' }: { scope: EntityScope; lo
               type="button"
               onClick={startCreate}
               className="rounded px-3 py-1.5 text-sm"
-              style={{ background: 'var(--accent)', color: 'var(--accent-contrast, #fff)', border: 'none' }}
+              style={{ background: 'var(--accent)', color: 'var(--text-on-accent, #fff)', border: 'none' }}
             >
               {t('new')}
             </button>
@@ -370,7 +370,7 @@ export function EntityBrowser({ scope, locale = 'en' }: { scope: EntityScope; lo
               type="submit"
               disabled={busy}
               className="rounded px-3 py-1.5 text-sm"
-              style={{ background: 'var(--accent)', color: 'var(--accent-contrast, #fff)', border: 'none' }}
+              style={{ background: 'var(--accent)', color: 'var(--text-on-accent, #fff)', border: 'none' }}
             >
               {busy ? t('saving') : t('save')}
             </button>

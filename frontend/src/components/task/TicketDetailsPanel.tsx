@@ -52,7 +52,7 @@ export function TicketDetailsPanel({ taskId, onClose }: TicketDetailsPanelProps)
       <div style={{ padding: 20 }}>
         {loading && <div className="text-muted">Loading ticket...</div>}
         {error && (
-          <div style={{ padding: 12, border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--surface-rose-soft)' }}>
+          <div style={{ padding: 12, border: '1px solid var(--border-subtle)', borderRadius: 8, background: 'var(--danger-bg)' }}>
             {error}
           </div>
         )}

@@ -35,7 +35,7 @@ export function EmbedPrdSurface() {
   }, []);
 
   if (loading) return <div style={{ color: '#64748b' }}>Loading projects…</div>;
-  if (error) return <div role="alert" style={{ color: '#dc2626' }}>{error}</div>;
+  if (error) return <div role="alert" style={{ color: 'var(--error-text)' }}>{error}</div>;
   if (projects.length === 0) {
     return <div style={{ color: '#64748b' }}>No projects yet — create one in BuilderForce to manage its PRDs &amp; specs.</div>;
   }

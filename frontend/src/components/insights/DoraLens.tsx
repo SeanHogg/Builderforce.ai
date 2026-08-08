@@ -140,8 +140,8 @@ export function DoraLens() {
             // share column carry the number; suppress the redundant value column.
             formatValue={() => ''}
             segments={[
-              { key: 'failed', label: t('dora.failed'), value: cfr, color: '#ef4444' },
-              { key: 'ok', label: t('dora.succeeded'), value: Math.max(0, 100 - cfr), color: '#22c55e' },
+              { key: 'failed', label: t('dora.failed'), value: cfr, color: 'var(--error-text)' },
+              { key: 'ok', label: t('dora.succeeded'), value: Math.max(0, 100 - cfr), color: 'var(--success-text)' },
             ]}
           />
         )}

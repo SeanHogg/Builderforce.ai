@@ -112,7 +112,7 @@ export default function AccountSecurityPanel() {
                       {new Date(s.startedAt).toLocaleString()}
                       {' · '}{t('duration')}: {durStr}
                       {s.writeBlockCount > 0 && (
-                        <span style={{ color: 'var(--warning-fg, #f59e0b)', marginLeft: 6 }}>({t('writeBlocked', { count: s.writeBlockCount })})</span>
+                        <span style={{ color: 'var(--warning-text, #f59e0b)', marginLeft: 6 }}>({t('writeBlocked', { count: s.writeBlockCount })})</span>
                       )}
                     </div>
                     {s.reason && (
@@ -124,10 +124,10 @@ export default function AccountSecurityPanel() {
                   <span
                     style={{
                       fontSize: 10, fontWeight: 600, padding: '2px 7px', borderRadius: 4,
-                      background: s.endedAt ? 'var(--bg-card)' : 'rgba(245,158,11,0.15)',
+                      background: s.endedAt ? 'var(--surface-card)' : 'rgba(245,158,11,0.15)',
                       border: '1px solid',
                       borderColor: s.endedAt ? 'var(--border-subtle)' : 'rgba(245,158,11,0.5)',
-                      color: s.endedAt ? 'var(--text-muted)' : 'var(--warning-fg, #f59e0b)',
+                      color: s.endedAt ? 'var(--text-muted)' : 'var(--warning-text, #f59e0b)',
                       flexShrink: 0,
                     }}
                   >

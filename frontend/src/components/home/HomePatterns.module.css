@@ -118,19 +118,6 @@
 
 .card:hover::after { opacity: 1; }
 
-.cardIcon {
-  display: grid;
-  width: 42px;
-  height: 42px;
-  margin-bottom: 34px;
-  place-items: center;
-  color: var(--coral-bright);
-  background: var(--surface-coral-soft);
-  border: 1px solid var(--border-accent);
-  border-radius: var(--radius-md);
-  font: 700 .72rem/1 var(--font-mono);
-}
-
 .cardTitle {
   margin: 0 0 9px;
   color: var(--text-primary);
@@ -142,23 +129,11 @@
 
 .badgeRow { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 24px; }
 
-.steps { margin: 18px 0 0; padding-left: 18px; color: var(--text-secondary); font-size: .84rem; line-height: 1.68; }
-.evidence { margin: 18px 0 0; padding-top: 16px; color: var(--text-muted); border-top: 1px solid var(--border-subtle); font-size: .76rem; line-height: 1.55; }
-
 .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
 .actionsCenter { justify-content: center; }
 
 .arrow { width: 15px; height: 15px; transition: transform 160ms ease; }
 .actions a:hover .arrow { transform: translateX(3px); }
-
-.numberCard { padding-top: 30px; }
-.number {
-  display: block;
-  margin-bottom: 54px;
-  color: var(--coral-bright);
-  font: 650 .76rem/1 var(--font-mono);
-  letter-spacing: .08em;
-}
 
 .statBand {
   display: grid;
@@ -217,7 +192,6 @@
   .section { padding: 64px 18px; }
   .grid2, .grid3, .grid4 { grid-template-columns: 1fr; }
   .card { padding: 22px; }
-  .cardIcon, .number { margin-bottom: 30px; }
   .statBand { width: calc(100% - 36px); }
   .stat { padding: 20px; }
   .form { align-items: stretch; flex-direction: column; }

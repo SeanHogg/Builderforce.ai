@@ -321,7 +321,7 @@ function LifecycleExplorer() {
             {phases.map((p, i) => (
               <div key={p.phase} style={{ display: 'grid', gridTemplateColumns: '110px 1fr 84px', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: '0.84rem', color: 'var(--text-secondary)' }}>{t(`deliv.lifecycle.phase.${p.phase}`)}</span>
-                <div style={{ background: 'var(--bg-subtle, #00000010)', borderRadius: 6, height: 18, overflow: 'hidden' }}>
+                <div style={{ background: 'var(--surface-sunken, #00000010)', borderRadius: 6, height: 18, overflow: 'hidden' }}>
                   <div style={{ width: `${(p.avgHours / maxAvg) * 100}%`, height: '100%', background: colorAt(i), borderRadius: 6, minWidth: p.avgHours > 0 ? 2 : 0 }} />
                 </div>
                 <span style={{ fontSize: '0.82rem', textAlign: 'right', fontWeight: 600 }} title={t('deliv.lifecycle.median', { d: fmtDur(p.medianHours) })}>

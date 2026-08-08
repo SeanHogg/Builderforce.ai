@@ -27,7 +27,7 @@ export function UpgradeGate({ error, fallback = null }: { error: unknown; fallba
       style={{
         display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start',
         padding: '20px 22px', borderRadius: 12, border: '1px solid var(--border-subtle)',
-        background: 'var(--bg-subtle, rgba(37,99,235,0.06))',
+        background: 'var(--surface-sunken, rgba(37,99,235,0.06))',
       }}
     >
       <span style={{ fontSize: '1.4rem' }} aria-hidden>🔒</span>

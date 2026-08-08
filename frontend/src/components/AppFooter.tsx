@@ -50,7 +50,7 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
         UI {appVersion} · API {apiVersion ?? '…'}
       </button>
       <div className="global-footer-links">
-        <button type="button" onClick={() => window.dispatchEvent(new Event('builderforce:cookie-preferences'))} className="global-footer-link">Cookie preferences</button>
+        <button type="button" onClick={() => window.dispatchEvent(new Event('builderforce:cookie-preferences'))} className="global-footer-link">Cookies</button>
         <Link href="/legal/subprocessors" className="global-footer-link">Subprocessors</Link>
         <Link href="/legal/accessibility" className="global-footer-link">Accessibility</Link>
         <button

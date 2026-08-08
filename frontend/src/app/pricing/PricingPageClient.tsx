@@ -14,6 +14,7 @@ import { PremiumModelUnlock } from '@/components/llm/PremiumModelUnlock';
 import { CardOnFile } from '@/components/llm/CardOnFile';
 import { pricingSchema } from '@/lib/structured-data';
 import { getRetainedDiscountCode, retainDiscountCode } from '@/lib/discountCode';
+import styles from './pricing.module.css';
 
 type Plan = 'free' | 'pro' | 'teams';
 
@@ -45,39 +46,14 @@ interface PublicPricingContract {
   }>;
 }
 
-const cardStyle: React.CSSProperties = {
-  background: 'var(--bg-base)',
-  border: '1px solid var(--border-subtle)',
-  borderRadius: 12,
-  padding: 24,
-};
-
 function PlanBadge({ plan }: { plan: Plan }) {
-  const colors: Record<Plan, { bg: string; color: string; label: string }> = {
-    free:  { bg: 'var(--bg-elevated)', color: 'var(--text-muted)', label: 'Free' },
-    pro:   { bg: 'var(--surface-coral-soft, rgba(244,114,94,0.15))', color: 'var(--coral-bright, #f4726e)', label: 'Pro' },
-    teams: { bg: 'rgba(96,165,250,0.15)', color: '#60a5fa', label: 'Teams' },
-  };
-  const { bg, color, label } = colors[plan];
-  return (
-    <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 700, textTransform: 'uppercase', background: bg, color }}>
-      {label}
-    </span>
-  );
+  const t = useTranslations('planBadge.tier');
+  const labels: Record<Plan, string> = { free: t('free'), pro: t('pro'), teams: t('teams') };
+  return <span className={styles.planBadge} data-plan={plan}>{labels[plan]}</span>;
 }
 
-function CheckIcon({ checked, color }: { checked: boolean; color: string }) {
-  return (
-    <span style={{ color: checked ? color : 'var(--text-muted)', fontWeight: 700, fontSize: 14 }}>
-      {checked ? '✓' : '—'}
-    </span>
-  );
-}
-
-const PLAN_ACCENT: Record<Plan, string> = {
-  free: 'var(--text-secondary)',
-  pro: 'var(--coral-bright, #f4726e)',
-  teams: '#60a5fa',
+function CheckIcon({ checked }: { checked: boolean }) {
+  return <span className={checked ? styles.check : styles.dash}>{checked ? '✓' : '—'}</span>;
 };
 
 /**
@@ -92,16 +68,17 @@ function PlanCta({ plan, effectivePlan, onUpgrade, isAnon }: {
   isAnon?: boolean;
 }) {
   const t = useTranslations('pricing');
-  const planName = plan === 'teams' ? 'Teams' : 'Pro';
+  const tierT = useTranslations('planBadge.tier');
+  const planName = plan === 'teams' ? tierT('teams') : tierT('pro');
   // An anonymous visitor has no subscription, so never label a column as their
   // "Current plan"; the free column links them to sign-up instead.
   if (!isAnon && plan === effectivePlan) {
-    return <span style={{ fontSize: 12, color: PLAN_ACCENT[plan], fontWeight: 600 }}>{t('ctaCurrentPlan')}</span>;
+    return <span className={styles.statusText}>{t('ctaCurrentPlan')}</span>;
   }
   if (plan === 'free') {
     if (isAnon) {
       return (
-        <a href="/register" style={{ fontSize: 12, color: PLAN_ACCENT.free, fontWeight: 600, textDecoration: 'none' }}>
+        <a href="/register" className={styles.planButton} data-plan="free">
           {t('ctaGetStarted')}
         </a>
       );
@@ -109,8 +86,7 @@ function PlanCta({ plan, effectivePlan, onUpgrade, isAnon }: {
     return null; // Free is the base tier — downgrade lives in the Current Plan card.
   }
   return (
-    <button type="button" onClick={() => onUpgrade(plan)}
-      style={{ padding: '7px 16px', fontSize: 12, fontWeight: 600, background: PLAN_ACCENT[plan], color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer' }}>
+    <button type="button" onClick={() => onUpgrade(plan)} className={styles.planButton} data-plan={plan}>
       {isAnon ? t('ctaGet', { plan: planName }) : t('ctaUpgradeTo', { plan: planName })}
     </button>
   );
@@ -118,6 +94,7 @@ function PlanCta({ plan, effectivePlan, onUpgrade, isAnon }: {
 
 export default function PricingPageClient() {
   const t = useTranslations('pricing');
+  const tierT = useTranslations('planBadge.tier');
   const confirm = useConfirm();
   const { tenant } = useAuth();
   const searchParams = useSearchParams();
@@ -293,84 +270,89 @@ export default function PricingPageClient() {
       : t('teamsCostNoteMonth', { perSeat: teamMonthly, total: teamMonthly * seats })
     : null;
 
+  const featureLabels = t.raw('planFeatures') as string[];
+  const planCards: Array<{ plan: Plan; price: string; note: string; features: number[] }> = [
+    { plan: 'free', price: t('priceFree'), note: t('anonBannerDesc'), features: [0, 3, 5] },
+    {
+      plan: 'pro',
+      price: proMonthly != null ? t('priceProMonthly', { price: proMonthly }) : '—',
+      note: pricing ? t('cycleYearlyWithSaving', { cycle: t('cycleYearlyCap'), saving: t('saveCycle', { pct: pricing.pro.yearlySavingsPercent }) }) : '',
+      features: [1, 4, 6, 8],
+    },
+    {
+      plan: 'teams',
+      price: teamMonthly != null ? t('priceTeamsMonthly', { price: teamMonthly }) : '—',
+      note: t('teamsVolumeNote', { min: teamMinSeats }),
+      features: [2, 4, 7, 11, 12],
+    },
+  ];
+
   return (
     <>
     <JsonLd data={pricingSchema(publicPricing?.pricing)} />
-    <PageContainer width="readable">
-      <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', margin: 0 }}>
-          {isAnon ? t('titleAnon') : t('titleConsole')}
-        </h1>
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6, marginBottom: 0 }}>
-          {isAnon ? t('subtitleAnon') : t('subtitleConsole')}
-        </p>
-      </div>
+    <PageContainer width="full" style={{ padding: 0 }}>
+    <main className={styles.page}>
+      <section className={styles.hero}>
+        <div>
+          <p className={styles.eyebrow}>{t('planComparison')}</p>
+          <h1>{isAnon ? t('titleAnon') : t('titleConsole')}</h1>
+          <p className={styles.lede}>{isAnon ? t('subtitleAnon') : t('subtitleConsole')}</p>
+        </div>
+        <div className={styles.heroPanel}>
+          <span className={styles.heroPanelLabel}>{t('anonBannerTitle')}</span>
+          <h2>{t('priceFree')}</h2>
+          <p>{t('anonBannerDesc')}</p>
+          <a href="/register" className={styles.primaryButton}>{t('anonBannerCta')}</a>
+        </div>
+      </section>
 
-      {error && <div style={{ ...cardStyle, color: 'var(--coral-bright)', fontSize: 13, marginBottom: 16 }}>{error}</div>}
+      {error && <div className={styles.error}>{error}</div>}
 
       {loading ? (
-        <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{t('loading')}</div>
+        <div className={styles.notice}>{t('loading')}</div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-          {/* Anonymous visitor: a sales-tone "get started" banner instead of the
-              billing-console "Current Plan" card (they have no subscription). */}
-          {isAnon ? (
-            <div style={{ ...cardStyle, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
-                  {t('anonBannerTitle')}
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                  {t('anonBannerDesc')}
-                </div>
-              </div>
-              <a href="/register"
-                style={{ padding: '9px 18px', fontSize: 13, fontWeight: 700, background: 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, textDecoration: 'none' }}>
-                {t('anonBannerCta')}
-              </a>
-            </div>
-          ) : (
+        <div className={styles.content}>
+          {!isAnon && (
           <>
           {/* Current plan */}
-          <div style={{ ...cardStyle, display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{t('currentPlan')}</div>
+          <div className={styles.accountCard}>
+            <div className={styles.accountCardBody}>
+              <div className={styles.accountCardTitle}>
+                <span>{t('currentPlan')}</span>
                 <PlanBadge plan={sub?.plan ?? 'free'} />
                 {sub?.billingStatus && sub.billingStatus !== 'active' && sub.billingStatus !== 'none' && (
                   <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>({sub.billingStatus})</span>
                 )}
               </div>
               {effectivePlan !== 'free' && sub && (
-                <div style={{ display: 'grid', gap: 6, fontSize: 13 }}>
+                <div className={styles.accountDetails}>
                   {sub.billingCycle && (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>{t('fieldBillingCycle')}</span>
+                    <div className={styles.accountDetail}>
+                      <span>{t('fieldBillingCycle')}</span>
                       <span>{sub.billingCycle === 'yearly' ? t('cycleYearlyCap') : t('cycleMonthlyCap')}</span>
                     </div>
                   )}
                   {sub.seatCount != null && (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>{t('fieldSeats')}</span>
+                    <div className={styles.accountDetail}>
+                      <span>{t('fieldSeats')}</span>
                       <span>{sub.seatCount}</span>
                     </div>
                   )}
                   {sub.billingEmail && (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>{t('fieldBillingEmail')}</span>
+                    <div className={styles.accountDetail}>
+                      <span>{t('fieldBillingEmail')}</span>
                       <span>{sub.billingEmail}</span>
                     </div>
                   )}
                   {sub.billingPaymentBrand && sub.billingPaymentLast4 && (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>{t('fieldPaymentMethod')}</span>
+                    <div className={styles.accountDetail}>
+                      <span>{t('fieldPaymentMethod')}</span>
                       <span style={{ textTransform: 'capitalize' }}>{sub.billingPaymentBrand} ···· {sub.billingPaymentLast4}</span>
                     </div>
                   )}
                   {sub.billingUpdatedAt && (
-                    <div style={{ display: 'flex', gap: 8 }}>
-                      <span style={{ color: 'var(--text-muted)', minWidth: 130 }}>{t('fieldLastUpdated')}</span>
+                    <div className={styles.accountDetail}>
+                      <span>{t('fieldLastUpdated')}</span>
                       <span>{new Date(sub.billingUpdatedAt).toLocaleDateString()}</span>
                     </div>
                   )}
@@ -378,13 +360,12 @@ export default function PricingPageClient() {
               )}
             </div>
             {effectivePlan === 'free' || sub?.billingStatus !== 'active' ? (
-              <button type="button" onClick={() => openUpgrade('pro')}
-                style={{ padding: '9px 18px', fontSize: 13, fontWeight: 700, background: 'var(--coral-bright, #f4726e)', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}>
+              <button type="button" onClick={() => openUpgrade('pro')} className={styles.primaryButton}>
                 {t('upgradePlan')}
               </button>
             ) : (
               <button type="button" onClick={handleDowngrade} disabled={downgrading}
-                style={{ padding: '9px 18px', fontSize: 13, fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 8, cursor: downgrading ? 'wait' : 'pointer' }}>
+                className={styles.secondaryButton}>
                 {downgrading ? t('downgrading') : t('downgradeToFree')}
               </button>
             )}
@@ -402,13 +383,34 @@ export default function PricingPageClient() {
           </>
           )}
 
+          <section className={styles.section}>
+            <div className={styles.planGrid}>
+              {planCards.map(({ plan, price, note, features }) => (
+                <article key={plan} className={styles.planCard} data-featured={plan === 'pro'}>
+                  <div className={styles.planCardTop}>
+                    <h3>{tierT(plan)}</h3>
+                    {effectivePlan === plan && !isAnon && <PlanBadge plan={plan} />}
+                  </div>
+                  <div className={styles.price}>{price}</div>
+                  <p className={styles.priceNote}>{note}</p>
+                  <ul className={styles.featureList}>
+                    {features.map((index) => <li key={index}>{featureLabels[index]}</li>)}
+                  </ul>
+                  <div className={styles.planCardAction}>
+                    <PlanCta plan={plan} effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} />
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+
           {/* Upgrade checkout — a slide-out panel (opened by any upgrade CTA). Per the
               app convention only terminal/destructive confirms use a centered modal;
               everything else, this checkout included, uses SlideOutPanel. */}
           <SlideOutPanel
             open={upgradeTarget != null && !(sub?.billingStatus === 'active' && sub.plan === upgradeTarget)}
             onClose={() => { setUpgradeTarget(null); setUpgradeError(null); }}
-            title={t('modalUpgradeTo', { plan: upgradeTarget === 'teams' ? 'Teams' : 'Pro' })}
+            title={t('modalUpgradeTo', { plan: upgradeTarget === 'teams' ? tierT('teams') : tierT('pro') })}
             width="min(560px, 96vw)"
           >
             <div style={{ padding: 20 }}>
@@ -452,12 +454,12 @@ export default function PricingPageClient() {
                 </div>
 
                 <div>
-                  <label htmlFor="checkout-discount-code" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>Discount code</label>
+                  <label htmlFor="checkout-discount-code" style={{ display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 6 }}>{t('labelDiscountCode')}</label>
                   <input id="checkout-discount-code" type="text" value={discountCode}
                     onChange={(e) => { setDiscountCode(e.target.value.toUpperCase()); retainDiscountCode(e.target.value); }}
-                    placeholder="Optional"
+                    placeholder={t('placeholderDiscountCode')}
                     style={{ width: '100%', padding: '8px 12px', fontSize: 13, background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', borderRadius: 8, boxSizing: 'border-box' }} />
-                  {discountCode && <div style={{ fontSize: 11, color: 'var(--coral-bright)', marginTop: 6 }}>The discount will be verified before payment.</div>}
+                  {discountCode && <div style={{ fontSize: 11, color: 'var(--coral-bright)', marginTop: 6 }}>{t('discountVerificationNote')}</div>}
                 </div>
 
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', padding: '8px 12px', background: 'var(--bg-elevated)', borderRadius: 8 }}>
@@ -486,25 +488,22 @@ export default function PricingPageClient() {
           </SlideOutPanel>
 
           {/* Plan comparison table */}
-          <div style={cardStyle}>
-            <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>{t('planComparison')}</div>
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+          <section className={styles.comparisonCard}>
+            <div className={styles.comparisonTitle}>{t('planComparison')}</div>
+            <div className={styles.tableScroll}>
+              <table className={styles.comparisonTable}>
                 <thead>
                   <tr>
-                    <th style={{ textAlign: 'left', padding: '8px 12px', color: 'var(--text-muted)', fontWeight: 600, borderBottom: '1px solid var(--border-subtle)' }}>{t('colFeature')}</th>
-                    <th style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 700, color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-subtle)', minWidth: 90 }}>
-                      Free<br /><span style={{ fontWeight: 400, fontSize: 11 }}>{t('priceFree')}</span>
-                      <div style={{ marginTop: 8 }}><PlanCta plan="free" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} /></div>
+                    <th>{t('colFeature')}</th>
+                    <th>
+                      {tierT('free')}<br /><span style={{ fontWeight: 400, fontSize: 11 }}>{t('priceFree')}</span>
                     </th>
-                    <th style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 700, color: 'var(--coral-bright, #f4726e)', borderBottom: '1px solid var(--border-subtle)', minWidth: 90 }}>
-                      Pro<br /><span style={{ fontWeight: 400, fontSize: 11 }}>{proMonthly != null ? t('priceProMonthly', { price: proMonthly }) : '—'}</span>
-                      <div style={{ marginTop: 8 }}><PlanCta plan="pro" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} /></div>
+                    <th>
+                      {tierT('pro')}<br /><span style={{ fontWeight: 400, fontSize: 11 }}>{proMonthly != null ? t('priceProMonthly', { price: proMonthly }) : '—'}</span>
                     </th>
-                    <th style={{ textAlign: 'center', padding: '8px 12px', fontWeight: 700, color: '#60a5fa', borderBottom: '1px solid var(--border-subtle)', minWidth: 110 }}>
-                      Teams<br /><span style={{ fontWeight: 400, fontSize: 11 }}>{teamMonthly != null ? t('priceTeamsMonthly', { price: teamMonthly }) : '—'}</span>
+                    <th>
+                      {tierT('teams')}<br /><span style={{ fontWeight: 400, fontSize: 11 }}>{teamMonthly != null ? t('priceTeamsMonthly', { price: teamMonthly }) : '—'}</span>
                       <br /><span style={{ fontWeight: 400, fontSize: 10, color: 'var(--text-muted)' }}>{t('teamsVolumeNote', { min: teamMinSeats })}</span>
-                      <div style={{ marginTop: 8 }}><PlanCta plan="teams" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} /></div>
                     </th>
                   </tr>
                 </thead>
@@ -513,41 +512,42 @@ export default function PricingPageClient() {
                     const flags = publicPricing?.featureAvailability[i];
                     if (!flags) return null;
                     return (
-                    <tr key={i} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                      <td style={{ padding: '9px 12px', color: 'var(--text-secondary)' }}>{label}</td>
-                      <td style={{ textAlign: 'center', padding: '9px 12px' }}><CheckIcon checked={flags.free} color="var(--text-secondary)" /></td>
-                      <td style={{ textAlign: 'center', padding: '9px 12px' }}><CheckIcon checked={flags.pro} color="var(--coral-bright, #f4726e)" /></td>
-                      <td style={{ textAlign: 'center', padding: '9px 12px' }}><CheckIcon checked={flags.teams} color="#60a5fa" /></td>
+                    <tr key={i}>
+                      <td>{label}</td>
+                      <td><CheckIcon checked={flags.free} /></td>
+                      <td><CheckIcon checked={flags.pro} /></td>
+                      <td><CheckIcon checked={flags.teams} /></td>
                     </tr>
                   );})}
                 </tbody>
                 <tfoot>
                   <tr>
-                    <td style={{ padding: '14px 12px' }} />
-                    <td style={{ textAlign: 'center', padding: '14px 12px' }}>
+                    <td />
+                    <td>
                       <PlanCta plan="free" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} />
                     </td>
-                    <td style={{ textAlign: 'center', padding: '14px 12px' }}>
+                    <td>
                       <PlanCta plan="pro" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} />
                     </td>
-                    <td style={{ textAlign: 'center', padding: '14px 12px' }}>
+                    <td>
                       <PlanCta plan="teams" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} />
                     </td>
                   </tr>
                 </tfoot>
               </table>
             </div>
-            <div style={{ marginTop: 14, fontSize: 11, color: 'var(--text-muted)' }}>
+            <p className={styles.addon}>
               {t.rich('managedAddon', {
                 price: pricing?.managedAgentHost.perAgentHostMonthly ?? '—',
                 b: (c) => <strong>{c}</strong>,
               })}
-            </div>
-          </div>
+            </p>
+          </section>
 
         </div>
       )}
-      {isAnon && <RelatedArticles surface="pricing" heading={t('relatedHeading')} />}
+      {isAnon && <div className={styles.related}><RelatedArticles surface="pricing" heading={t('relatedHeading')} /></div>}
+    </main>
     </PageContainer>
     </>
   );

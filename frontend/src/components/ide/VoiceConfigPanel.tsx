@@ -55,7 +55,7 @@ export function VoiceConfigPanel({ voice, projectId }: { voice: VoiceStudio; pro
       )}
 
       {voice.error && (
-        <div style={{ ...section, background: 'rgba(239,68,68,0.12)', color: '#fca5a5' }}>
+        <div style={{ ...section, background: 'rgba(239,68,68,0.12)', color: 'var(--error-text)' }}>
           ⚠ {voice.error}{' '}
           <button onClick={() => void voice.reload()} style={{ ...ghostBtn, marginLeft: 6 }}>{t('retry')}</button>
         </div>
@@ -210,7 +210,7 @@ function CreateCloneForm({ voice }: { voice: VoiceStudio }) {
         <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} style={{ marginTop: 3 }} />
         <span>{t('consentText')}</span>
       </label>
-      {err && <p style={{ color: '#fca5a5', fontSize: '0.8rem', marginBottom: 8 }}>{err}</p>}
+      {err && <p style={{ color: 'var(--error-text)', fontSize: '0.8rem', marginBottom: 8 }}>{err}</p>}
       <button style={{ ...primaryBtn, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => void submit()}>
         {busy ? t('creating') : t('createVoice')}
       </button>

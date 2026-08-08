@@ -161,10 +161,10 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{t('statusSending')}</span>
               )}
               {invite.status === 'added' && (
-                <span style={{ fontSize: 11, color: '#22c55e', fontWeight: 600 }}>✓ {t('statusAdded')}</span>
+                <span style={{ fontSize: 11, color: 'var(--success-text)', fontWeight: 600 }}>✓ {t('statusAdded')}</span>
               )}
               {invite.status === 'invited' && (
-                <span style={{ fontSize: 11, color: '#d97706', fontWeight: 600 }} title={t('statusInvitedHint')}>✉ {t('statusInvited')}</span>
+                <span style={{ fontSize: 11, color: 'var(--warning-text)', fontWeight: 600 }} title={t('statusInvitedHint')}>✉ {t('statusInvited')}</span>
               )}
               {invite.status === 'error' && (
                 <span style={{ fontSize: 11, color: 'var(--error-text, #e74c3c)' }} title={invite.errorMsg}>

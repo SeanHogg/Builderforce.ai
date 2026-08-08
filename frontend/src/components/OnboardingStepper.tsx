@@ -206,7 +206,7 @@ export function OnboardingStepper({
               background: 'transparent',
               border: '1px solid var(--border-subtle)',
               borderRadius: 8,
-              color: canClose ? 'var(--text-muted)' : 'var(--text-faint, #3a4060)',
+              color: canClose ? 'var(--text-muted)' : 'var(--text-muted, #3a4060)',
               fontSize: 20,
               lineHeight: 1,
               padding: '4px 10px',

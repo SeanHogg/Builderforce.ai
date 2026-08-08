@@ -44,7 +44,7 @@ const code: React.CSSProperties = {
   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
   fontSize: 12.5,
   color: 'var(--text-primary)',
-  background: 'var(--bg-subtle, transparent)',
+  background: 'var(--surface-sunken, transparent)',
   border: '1px solid var(--border-subtle)',
   borderRadius: 6,
   padding: '3px 7px',
@@ -226,8 +226,8 @@ export default function ProjectBackendPanel({ projectId }: { projectId: number }
                   title={s.summary}
                   style={{
                     ...button,
-                    borderColor: active ? 'var(--accent-primary, #2f6fed)' : 'var(--border-subtle)',
-                    color: active ? 'var(--accent-primary, #2f6fed)' : 'var(--text-primary)',
+                    borderColor: active ? 'var(--accent, #2f6fed)' : 'var(--border-subtle)',
+                    color: active ? 'var(--accent, #2f6fed)' : 'var(--text-primary)',
                     cursor: active ? 'default' : 'pointer',
                     opacity: busy && !active ? 0.6 : 1,
                   }}

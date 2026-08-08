@@ -70,7 +70,7 @@ export default function BillingPanel() {
           <div className="table-wrap">
             <table className="data-table"><thead><tr><th>Code</th><th>Offer</th><th>Duration</th><th>Uses</th><th>Status</th><th></th></tr></thead>
               <tbody>{discounts.map((d) => <tr key={d.id}>
-                <td style={{ fontFamily: 'var(--mono)' }}>{d.code}</td>
+                <td style={{ fontFamily: 'var(--font-mono)' }}>{d.code}</td>
                 <td>{d.percentOff}% off {d.billingCycle} {d.applicablePlan === 'pro' ? 'Individual' : 'Teams'}</td>
                 <td>{d.durationYears} {d.durationYears === 1 ? 'year' : 'years'}</td>
                 <td>{d.redeemedCount} redeemed / {d.redemptionCount} applied</td>
@@ -239,7 +239,7 @@ export default function BillingPanel() {
                 {errors.slice(0, 20).map((e) => (
                   <tr key={e.id}>
                     <td>{e.method ?? '—'}</td>
-                    <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{e.path ?? '—'}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{e.path ?? '—'}</td>
                     <td style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.message ?? '—'}</td>
                     <td className="text-muted" style={{ whiteSpace: 'nowrap' }}>{fmtDateTime(e.createdAt)}</td>
                   </tr>

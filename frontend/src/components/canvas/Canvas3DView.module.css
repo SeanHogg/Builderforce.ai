@@ -14,7 +14,7 @@
      `--canvas-reserved-*` in CanvasCommands.module.css). Without it the scene —
      and its own controls — render underneath a docked panel. Defaults to the
      full surface when nothing is docked. */
-  top: var(--canvas-reserved-top, 0px);
+  top: 0px;
   bottom: var(--canvas-reserved-bottom, 0px);
   left: var(--canvas-reserved-left, 0px);
   right: var(--canvas-reserved-right, 0px);

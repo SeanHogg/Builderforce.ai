@@ -114,7 +114,7 @@ export function PublishToMarketplaceModal({
         </div>
         <p style={{ fontSize: 11, color: 'var(--text-muted)', margin: 0 }}>{t('publish.rateHint')}</p>
 
-        {error && <div style={{ fontSize: 12, color: '#f87171' }}>{error}</div>}
+        {error && <div style={{ fontSize: 12, color: 'var(--error-text)' }}>{error}</div>}
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
           <button type="button" style={btn(false)} onClick={onClose}>{t('publish.cancel')}</button>

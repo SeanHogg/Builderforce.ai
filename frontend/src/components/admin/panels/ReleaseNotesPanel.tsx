@@ -270,7 +270,7 @@ export default function ReleaseNotesPanel() {
               {notes.map((note) => (
                 <tr key={note.id}>
                   <td>{note.title}</td>
-                  <td style={{ fontFamily: 'var(--mono)' }}>{note.version}</td>
+                  <td style={{ fontFamily: 'var(--font-mono)' }}>{note.version}</td>
                   <td>{tCat(`categories.${CATEGORIES.includes(note.category as AdminReleaseNoteCategory) ? note.category : 'improvement'}`)}</td>
                   <td>
                     <span className={`badge ${note.publishedAt ? 'badge-success' : 'badge-neutral'}`}>

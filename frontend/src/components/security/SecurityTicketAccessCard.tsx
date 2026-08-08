@@ -152,7 +152,7 @@ export function SecurityTicketAccessCard() {
             >
               {saving ? t('saving') : t('accessSave')}
             </button>
-            {saved && <span style={{ fontSize: 12, color: 'var(--success-fg, #22c55e)' }}>{t('accessSaved')}</span>}
+            {saved && <span style={{ fontSize: 12, color: 'var(--success-text, #22c55e)' }}>{t('accessSaved')}</span>}
           </div>
         </>
       )}

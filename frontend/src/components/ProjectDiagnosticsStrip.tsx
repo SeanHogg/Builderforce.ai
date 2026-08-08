@@ -89,7 +89,7 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
           // (green), outstanding gaps read as "attention" (coral); otherwise none.
           const remState = d.remediation?.state ?? 'none';
           const dot = (remState === 'pr_open' || remState === 'resolved')
-            ? { color: '#22c55e', title: remediationBadge(d).label }
+            ? { color: 'var(--success-text)', title: remediationBadge(d).label }
             : d.gapCount > 0 ? { color: 'var(--coral-bright)', title: gapText(d) } : null;
           const chip = (
             <>

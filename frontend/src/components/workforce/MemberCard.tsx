@@ -66,7 +66,7 @@ export function RoleSelect({
 
 const mfaBadgeStyle: CSSProperties = {
   fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 6,
-  background: 'rgba(34,197,94,0.15)', color: '#22c55e', letterSpacing: 0.3,
+  background: 'rgba(34,197,94,0.15)', color: 'var(--success-text)', letterSpacing: 0.3,
 };
 
 // Coral-outline destructive action, matching the old MembersView Remove button.

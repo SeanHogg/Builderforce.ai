@@ -1,19 +1,22 @@
 /**
  * The consolidated schema's adoption CONTRACT (PRD 20 §5, §7).
  *
- * The baseline this used to describe is EMPTY: every table migrations 0418+
- * create now has a code path, so `check-table-adoption.mjs` is a gate at zero
- * rather than a ratchet over a list of 237. The interesting assertion changed
- * with it — "did the number shrink" is no longer a question worth asking, and
- * "did anything fall out" is.
+ * Adoption is measured in TWO tiers, because one number lies in one direction or
+ * the other. The generic entity layer registers all 245 consolidated tables, so
+ * "is anything importing this?" became true for every one of them the day that
+ * layer landed — without a single feature having been migrated. Reporting that as
+ * full adoption would be false; reporting those tables as unreachable would also
+ * be false. So: `registered` is the floor, `featureReached` is the progress.
  *
- * Two things are asserted here, and they fail differently on purpose:
+ * Three things are asserted here, and they fail differently on purpose:
  *
- *   · the AGGREGATE — nothing is cold. A table added without a code path fails
- *     here and in the guard, and neither can be satisfied by a comment.
- *   · the SURFACES PRD 20 ships — pinned by name, because a count re-arms itself.
- *     Deleting `ObjectRegistry`'s reads while adding an unrelated catalog entry
- *     nets to zero cold tables and would otherwise pass.
+ *   · the FLOOR — nothing is cold. A consolidated table missing from every
+ *     `entities.ts` is a hole in the registry, so this is flat zero, not a ratchet.
+ *   · the PROGRESS — accounted for in exactly one tier, so a table cannot be
+ *     counted as adopted and awaiting adoption at the same time.
+ *   · the SURFACES PRD 20 ships — asserted by name and against the STRICT tier,
+ *     because a count re-arms itself: deleting `ObjectRegistry`'s reads while
+ *     adding an unrelated catalog entry nets to zero and would otherwise pass.
  */
 import { describe, expect, it } from 'vitest';
 import { resolve } from 'node:path';
@@ -34,8 +37,14 @@ const analysis = analyseTableAdoption({
  * `objects` is the registry itself; the next four back the object panel's tabs;
  * `metric_facts` backs every seat's Trends chart and is written by the projection
  * sweep; `email_otp_challenges` is the legacy consolidation §5 step 3 finished
- * end to end; the last three are the roots the entity layer registers, one per
- * seat family, so a catalog that stopped being wired fails here by name.
+ * end to end.
+ *
+ * `job_applications`, `deals` and `email_campaigns` were listed here for a while
+ * and are deliberately NOT: they are registered by their domain's `entities.ts`
+ * and read by nothing else. They looked qualified while the measurement counted
+ * entity-layer registration as a code path — which it did for all 245 at once.
+ * They belong here the day a hiring, revenue or growth feature reads them, and
+ * asserting it sooner would make this list say something untrue.
  */
 const MUST_BE_LIVE = [
   'objects',
@@ -45,9 +54,6 @@ const MUST_BE_LIVE = [
   'revisions',
   'metric_facts',
   'email_otp_challenges',
-  'job_applications',
-  'deals',
-  'email_campaigns',
 ] as const;
 
 describe('consolidated table adoption', () => {
@@ -63,31 +69,39 @@ describe('consolidated table adoption', () => {
     expect(analysis.missingExport).toEqual([]);
   });
 
-  it.each(MUST_BE_LIVE)('keeps %s wired to a code path', (table) => {
+  it.each(MUST_BE_LIVE)('keeps %s reached by a feature, not merely registered', (table) => {
+    // Deliberately NOT satisfied by the entity layer. Every consolidated table is
+    // registered in some `domains/<domain>/entities.ts`, so an assertion that
+    // accepted registration would pass for all 245 and prove nothing about these
+    // seven — which is exactly how the first version of this test read green.
     const entry = analysis.live.get(table);
     expect(entry, `${table} has no non-test reader or writer`).toBeDefined();
-    expect((entry?.imports.length ?? 0) + (entry?.rawSql.length ?? 0)).toBeGreaterThan(0);
+    expect(
+      (entry?.imports.length ?? 0) + (entry?.rawSql.length ?? 0),
+      `${table} is registered by the entity layer but no feature reads or writes it`,
+    ).toBeGreaterThan(0);
   });
 
-  it('leaves nothing cold — the ratchet reached its gate', () => {
-    // PRD 20 §5's stated failure mode, measured: a schema that ships and a code
-    // path that never arrives. Zero is the whole claim.
+  it('registers every created table with its domain entity layer', () => {
+    // A table absent from every `entities.ts` is a hole in the registry, not a
+    // feature awaiting migration — so this is flat zero, not a ratchet.
     expect(analysis.cold).toEqual([]);
   });
 
-  it('reports live and cold as disjoint', () => {
-    const overlap = analysis.cold.filter((t: string) => analysis.live.has(t));
+  it('reports registry-only and feature-reached as disjoint', () => {
+    const overlap = analysis.registryOnly.filter((t: string) => analysis.featureReached.includes(t));
     expect(overlap).toEqual([]);
   });
 
-  it('accounts for every created table as either live or cold', () => {
-    expect(analysis.live.size + analysis.cold.length).toBe(analysis.created.size);
+  it('accounts for every created table in exactly one tier', () => {
+    expect(analysis.featureReached.length + analysis.registryOnly.length + analysis.cold.length)
+      .toBe(analysis.created.size);
   });
 
-  it('backs each object-panel relation with a live table', () => {
+  it('backs each object-panel relation with a feature-reached table', () => {
     // The panel's tabs come from OBJECT_RELATIONS; `activity` reads `activity_log`,
     // which predates the consolidation (migration 0287) and so is not in the created
-    // set. The other four are consolidated tables and must be live.
+    // set. The other four are consolidated tables and must be feature-reached.
     const relationTables: Record<string, string | null> = {
       activity: null,
       annotations: 'annotations',
@@ -100,7 +114,7 @@ describe('consolidated table adoption', () => {
       expect(Object.keys(relationTables), `OBJECT_RELATIONS gained "${relation}" with no table mapping`).toContain(
         relation,
       );
-      if (table) expect(analysis.live.has(table), `${relation} tab reads a cold table`).toBe(true);
+      if (table) expect(analysis.featureReached.includes(table), `${relation} tab reads a table no feature touches`).toBe(true);
     }
   });
 });

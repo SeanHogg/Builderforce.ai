@@ -148,7 +148,7 @@ export function FinetuneStudioPanel({ projectId, files = [], onGoToTab, onOpenFi
         {error && (
           <div
             style={{
-              background: 'rgba(239,68,68,0.12)', border: '1px solid #ef4444', color: '#fca5a5',
+              background: 'rgba(239,68,68,0.12)', border: '1px solid #ef4444', color: 'var(--error-text)',
               borderRadius: 8, padding: '8px 12px', fontSize: '0.8rem', marginBottom: 16,
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
             }}
@@ -158,7 +158,7 @@ export function FinetuneStudioPanel({ projectId, files = [], onGoToTab, onOpenFi
               type="button"
               onClick={() => void load()}
               style={{
-                background: 'transparent', color: '#fca5a5', border: '1px solid #ef4444',
+                background: 'transparent', color: 'var(--error-text)', border: '1px solid #ef4444',
                 borderRadius: 6, padding: '2px 10px', fontSize: '0.75rem', cursor: 'pointer',
               }}
             >

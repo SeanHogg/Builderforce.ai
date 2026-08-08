@@ -271,8 +271,8 @@ export default function PersonasPage() {
   const sourceBadge = (source: Persona['source']) => {
     const map: Record<string, { label: string; color: string }> = {
       builtin: { label: t('sourceBuiltin'), color: 'var(--accent,#6366f1)' },
-      agenthub: { label: t('sourceAgenthub'), color: '#22c55e' },
-      'project-local': { label: t('sourceProject'), color: '#f59e0b' },
+      agenthub: { label: t('sourceAgenthub'), color: 'var(--success-text)' },
+      'project-local': { label: t('sourceProject'), color: 'var(--warning-text)' },
       'user-global': { label: t('sourceUser'), color: '#06b6d4' },
       'agentlink-assigned': { label: t('sourceAssigned'), color: '#ec4899' },
     };

@@ -1139,9 +1139,9 @@ export function BrainPanel({
         lineHeight: 1,
         background: 'var(--bg-elevated)',
         color: capture.state === 'error'
-          ? 'var(--red, #ef4444)'
+          ? 'var(--danger, #ef4444)'
           : capture.state === 'copied'
-            ? 'var(--green, #22c55e)'
+            ? 'var(--success, #22c55e)'
             : 'var(--text-secondary)',
         border: '1px solid var(--border-subtle)',
         borderRadius: 8,

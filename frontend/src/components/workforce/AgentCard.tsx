@@ -39,7 +39,7 @@ import type { CloudAgentPanelTab } from './CloudAgentSlideOutPanel';
 
 const runtimePillStyle: React.CSSProperties = { padding: '2px 8px', borderRadius: 6, background: 'var(--surface-coral-soft)', color: 'var(--accent)' };
 const pricePillStyle: React.CSSProperties = { padding: '2px 8px', borderRadius: 6, background: 'var(--bg-elevated)', color: 'var(--text-strong)' };
-const evalPillStyle: React.CSSProperties = { padding: '2px 8px', borderRadius: 6, background: 'rgba(34,197,94,0.12)', color: '#16a34a', border: '1px solid rgba(34,197,94,0.3)' };
+const evalPillStyle: React.CSSProperties = { padding: '2px 8px', borderRadius: 6, background: 'rgba(34,197,94,0.12)', color: 'var(--success-text)', border: '1px solid rgba(34,197,94,0.3)' };
 
 /** Public eval score (0-1) for an agent, preferring the camelCase contract field
  *  and falling back to the snake_case row column. null when not yet scored. */

@@ -103,7 +103,7 @@ export function button(kind: 'primary' | 'ghost' | 'danger' = 'ghost'): CSSPrope
     color: 'var(--text-primary)',
   };
   if (kind === 'primary') {
-    return { ...base, background: 'var(--accent, #4f46e5)', color: 'var(--accent-contrast, #ffffff)', borderColor: 'transparent' };
+    return { ...base, background: 'var(--accent, #4f46e5)', color: 'var(--text-on-accent, #ffffff)', borderColor: 'transparent' };
   }
   if (kind === 'danger') {
     return { ...base, color: 'var(--danger, #dc2626)', borderColor: 'var(--danger, #dc2626)' };

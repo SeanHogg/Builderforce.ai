@@ -138,9 +138,9 @@ function isErrorEvent(ev: ToolAuditEvent): boolean {
 const AGENT_COLORS = [
   'var(--coral-bright, #f97316)',
   'var(--accent, #6366f1)',
-  'var(--green, #22c55e)',
-  'var(--blue, #3b82f6)',
-  'var(--amber, #f59e0b)',
+  'var(--success, #22c55e)',
+  'var(--info, #3b82f6)',
+  'var(--warning, #f59e0b)',
 ];
 
 /** Stable per-agent color, indexed by position in the current selection. */
@@ -704,9 +704,9 @@ export function ObservabilityContent({
                       borderRadius: '50%',
                       background:
                         connState === 'connected'
-                          ? 'var(--green, #22c55e)'
+                          ? 'var(--success, #22c55e)'
                           : connState === 'offline'
-                            ? 'var(--red, #ef4444)'
+                            ? 'var(--danger, #ef4444)'
                             : 'var(--text-muted)',
                     }}
                   />
@@ -734,7 +734,7 @@ export function ObservabilityContent({
                 type="button"
                 onClick={copyTriage}
                 title={reportTransaction ? t('copyReportTitle') : t('copyTriageTitle')}
-                style={triageCopy.state === 'error' ? { ...smallBtn, color: 'var(--red, #ef4444)', borderColor: 'var(--red, #ef4444)' } : smallBtn}
+                style={triageCopy.state === 'error' ? { ...smallBtn, color: 'var(--danger, #ef4444)', borderColor: 'var(--danger, #ef4444)' } : smallBtn}
               >
                 {triageCopy.state === 'copied'
                   ? `${tc('copied')} ✓`
@@ -766,9 +766,9 @@ export function ObservabilityContent({
                     marginBottom: 4,
                     color:
                       l.level === 'error'
-                        ? 'var(--red, #ef4444)'
+                        ? 'var(--danger, #ef4444)'
                         : l.level === 'warn'
-                          ? 'var(--amber, #f59e0b)'
+                          ? 'var(--warning, #f59e0b)'
                           : 'var(--text-secondary)',
                   }}
                 >
@@ -823,7 +823,7 @@ export function ObservabilityContent({
               </div>
               <div style={{ background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 8, padding: 24, minHeight: 240, maxHeight: 480, overflow: 'auto' }}>
                 {diagError ? (
-                  <div style={{ color: 'var(--red, #ef4444)', fontSize: 13 }}>{diagError}</div>
+                  <div style={{ color: 'var(--danger, #ef4444)', fontSize: 13 }}>{diagError}</div>
                 ) : diagLoading && tracks.length === 0 ? (
                   <div style={centerMuted}>{t('loadingTimeline')}</div>
                 ) : tracks.length === 0 ? (
@@ -843,13 +843,13 @@ export function ObservabilityContent({
                             borderRadius: '50%',
                             background:
                               track.status === 'failed'
-                                ? 'var(--red, #ef4444)'
+                                ? 'var(--danger, #ef4444)'
                                 : track.kind === 'tool'
                                   ? 'var(--accent, #6366f1)'
                                   : track.status === 'completed'
-                                    ? 'var(--green, #22c55e)'
+                                    ? 'var(--success, #22c55e)'
                                     : track.status === 'running'
-                                      ? 'var(--blue, #3b82f6)'
+                                      ? 'var(--info, #3b82f6)'
                                       : 'var(--text-muted)',
                             marginTop: 5,
                             flexShrink: 0,

@@ -60,7 +60,7 @@ export function PmoRollup({ scope }: { scope: { kind: PmoScopeKind; id: string }
       {(scope.kind === 'portfolio' || scope.kind === 'workspace') && (data.criticalPath.length > 0 || data.cycleDetected) && (
         <PmCard title={t('section.criticalPath')}>
           {data.cycleDetected && (
-            <div style={{ fontSize: '0.82rem', color: '#dc2626', fontWeight: 600, marginBottom: 10 }}>{t('cycleWarning')}</div>
+            <div style={{ fontSize: '0.82rem', color: 'var(--error-text)', fontWeight: 600, marginBottom: 10 }}>{t('cycleWarning')}</div>
           )}
           {data.criticalPath.length > 0 ? (
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, fontSize: '0.88rem' }}>

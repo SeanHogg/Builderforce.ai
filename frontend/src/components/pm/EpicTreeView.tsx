@@ -79,7 +79,7 @@ function EpicTable({ tasks, t, tCommon, onEdit }: { tasks: Task[]; t: ReturnType
                 <tr
                   key={epic.id}
                   onClick={() => onEdit(epic)}
-                  style={{ ...trStyle, background: 'var(--bg-subtle, rgba(127,127,127,0.06))', cursor: 'pointer' }}
+                  style={{ ...trStyle, background: 'var(--surface-sunken, rgba(127,127,127,0.06))', cursor: 'pointer' }}
                   title={t('editEpic')}
                 >
                   <td style={{ ...tdStyle, fontWeight: 700 }}>
@@ -96,7 +96,7 @@ function EpicTable({ tasks, t, tCommon, onEdit }: { tasks: Task[]; t: ReturnType
           })}
           {orphans.length > 0 && (
             <>
-              <tr style={{ ...trStyle, background: 'var(--bg-subtle, rgba(127,127,127,0.06))' }}>
+              <tr style={{ ...trStyle, background: 'var(--surface-sunken, rgba(127,127,127,0.06))' }}>
                 <td style={{ ...tdMutedStyle, fontStyle: 'italic' }} colSpan={4}>
                   {t('unparented', { count: orphans.length })}
                 </td>

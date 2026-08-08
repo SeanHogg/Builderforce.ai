@@ -108,7 +108,7 @@ export function TrackerSurface({ title, apiBase, fields }: TrackerSurfaceProps) 
         <div style={{ fontSize: 16, fontWeight: 600 }}>{title}</div>
         {!form && <button onClick={openAdd} style={btn}>+ Add</button>}
       </div>
-      {error && <div role="alert" style={{ color: '#dc2626', marginBottom: 8 }}>{error}</div>}
+      {error && <div role="alert" style={{ color: 'var(--error-text)', marginBottom: 8 }}>{error}</div>}
 
       {form ? (
         <div style={card}>
@@ -146,7 +146,7 @@ export function TrackerSurface({ title, apiBase, fields }: TrackerSurfaceProps) 
                 ))}
                 <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                   <button onClick={() => openEdit(row)} style={linkBtn}>Edit</button>
-                  <button onClick={() => remove(row.id)} style={{ ...linkBtn, color: '#dc2626' }}>Delete</button>
+                  <button onClick={() => remove(row.id)} style={{ ...linkBtn, color: 'var(--error-text)' }}>Delete</button>
                 </td>
               </tr>
             ))}

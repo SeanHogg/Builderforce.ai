@@ -44,9 +44,9 @@ function fmtDuration(ms: number): string {
 
 function statusColor(status: string): string {
   switch (status) {
-    case 'completed': return 'var(--green, #22c55e)';
-    case 'failed': return 'var(--red, #ef4444)';
-    case 'running': return 'var(--blue, #3b82f6)';
+    case 'completed': return 'var(--success, #22c55e)';
+    case 'failed': return 'var(--danger, #ef4444)';
+    case 'running': return 'var(--info, #3b82f6)';
     default: return 'var(--text-muted)';
   }
 }

@@ -106,6 +106,31 @@
   box-shadow: 0 24px 60px var(--shadow-coral-soft), inset 0 1px 0 var(--surface-inset-highlight);
 }
 
+/* The veil blurs whatever is behind it while its mask cuts a soft lens around
+   the pointer. Cards promoted above this layer remain crisp after selection;
+   the composer always lives above it. */
+.blurVeil {
+  --lens-x: 50%;
+  --lens-y: 50%;
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.01);
+  -webkit-backdrop-filter: blur(7px);
+  backdrop-filter: blur(7px);
+  -webkit-mask-image: linear-gradient(#000, #000);
+  mask-image: linear-gradient(#000, #000);
+  transition: opacity 180ms ease;
+}
+.blurVeilLens {
+  -webkit-mask-image: radial-gradient(circle 110px at var(--lens-x) var(--lens-y), transparent 0 68px, #000 108px);
+  mask-image: radial-gradient(circle 110px at var(--lens-x) var(--lens-y), transparent 0 68px, #000 108px);
+}
+.boardRevealed .blurVeil {
+  opacity: 0;
+}
+
 /*
  * The objects live in a field that stops short of the bottom, so the composer
  * owns an exclusive lane. Positioning the nodes as a percentage of the FIELD
@@ -156,6 +181,11 @@
   text-align: left;
   cursor: pointer;
   transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.22s, box-shadow 0.22s;
+}
+.nodeSelected {
+  z-index: 2;
+  border-color: var(--border-accent);
+  box-shadow: 0 20px 44px var(--shadow-coral-mid);
 }
 .node:hover,
 .node:focus-visible {
@@ -240,7 +270,7 @@
   left: 50%;
   bottom: 20px;
   transform: translateX(-50%);
-  z-index: 2;
+  z-index: 3;
   width: min(600px, calc(100% - 40px));
   display: flex;
   flex-direction: column;

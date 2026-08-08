@@ -62,46 +62,47 @@ export default function MarketingDeck() {
   return (
     <section className="mdk" aria-roledescription="carousel" aria-label={t('seo.title')}>
       <style>{`
-        .mdk { position: relative; min-height: calc(100vh - 64px); display: flex; flex-direction: column;
-          padding: clamp(24px, 5vw, 56px) clamp(16px, 5vw, 48px) clamp(20px, 4vw, 40px); }
-        .mdk-stage { flex: 1; display: flex; align-items: center; justify-content: center; }
+        .mdk { position: relative; width: 100%; max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column;
+          padding: clamp(48px, 7vw, 92px) clamp(18px, 4vw, 40px) clamp(36px, 5vw, 64px); }
+        .mdk-stage { display: flex; align-items: center; min-height: min(610px, calc(100svh - 180px)); }
         .mdk-card {
-          width: 100%; max-width: 900px; text-align: center;
-          background: var(--surface-card, var(--bg-elevated, #fff));
-          border: 1px solid var(--border-subtle, rgba(0,0,0,0.08));
-          border-radius: 24px; padding: clamp(28px, 5vw, 64px) clamp(22px, 5vw, 60px);
-          box-shadow: var(--shadow-coral-soft, 0 20px 60px -30px rgba(0,0,0,0.4));
+          position: relative; width: 100%; overflow: hidden; text-align: left;
+          background: linear-gradient(145deg, var(--bg-elevated), color-mix(in srgb, var(--accent-subtle) 72%, transparent));
+          border: 1px solid var(--border-accent, var(--border-subtle));
+          border-radius: 24px; padding: clamp(34px, 6vw, 70px);
+          box-shadow: 0 24px 70px var(--shadow-coral-mid, rgba(59,130,246,.14));
         }
+        .mdk-card::after { position: absolute; width: 420px; height: 420px; right: -190px; top: -230px;
+          border: 1px solid var(--border-accent, var(--border-subtle)); border-radius: 50%;
+          box-shadow: 0 0 0 55px color-mix(in srgb, var(--accent) 4%, transparent), 0 0 0 110px color-mix(in srgb, var(--accent) 2%, transparent);
+          pointer-events: none; content: ''; }
         .mdk-chapter {
           font-family: var(--font-display); font-weight: 800; letter-spacing: -0.02em;
-          font-size: clamp(2.6rem, 9vw, 4.4rem); line-height: 1;
-          color: var(--coral-bright, #ff6b4a); opacity: 0.9; margin-bottom: 10px;
+          font-size: clamp(2.8rem, 8vw, 5.4rem); line-height: .85;
+          color: var(--accent); opacity: .24; margin-bottom: 18px;
         }
         .mdk-eyebrow {
-          display: inline-flex; align-items: center; gap: 8px; margin-bottom: 18px;
-          font-family: var(--font-display); font-size: 0.72rem; font-weight: 600;
+          display: inline-flex; align-items: center; gap: 8px; margin-bottom: 16px;
+          font-family: var(--font-display); font-size: 0.72rem; font-weight: 800;
           letter-spacing: 0.16em; text-transform: uppercase;
-          color: var(--coral-bright, #ff6b4a);
-          border: 1px solid var(--border-accent, var(--border-subtle, rgba(0,0,0,0.12)));
-          border-radius: 999px; padding: 5px 15px;
-          background: color-mix(in srgb, var(--coral-bright, #ff6b4a) 8%, transparent);
+          color: var(--accent);
         }
         .mdk-title {
-          font-family: var(--font-display); font-weight: 800; letter-spacing: -0.02em;
-          font-size: clamp(1.7rem, 4.6vw, 3rem); line-height: 1.08;
-          color: var(--text-primary, #14181f); margin: 0 0 14px;
+          font-family: var(--font-display); font-weight: 800; letter-spacing: -0.045em;
+          font-size: clamp(2.5rem, 6.2vw, 5rem); line-height: .98;
+          color: var(--text-primary, #14181f); margin: 0 0 22px; max-width: 920px;
         }
         .mdk-tagline {
-          font-size: clamp(1rem, 2.2vw, 1.28rem); line-height: 1.5;
-          color: var(--text-secondary, #4a5568); margin: 0 auto; max-width: 640px;
+          font-size: clamp(1.05rem, 2vw, 1.28rem); line-height: 1.65;
+          color: var(--text-secondary, #4a5568); margin: 0; max-width: 720px;
         }
         .mdk-steps {
-          list-style: none; margin: 30px auto 0; padding: 0; max-width: 560px;
-          display: flex; flex-direction: column; gap: 12px; text-align: left;
+          list-style: none; margin: 34px 0 0; padding: 0; max-width: 760px;
+          display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; text-align: left;
         }
         .mdk-step {
           display: flex; align-items: flex-start; gap: 14px;
-          background: var(--surface, var(--bg-base, rgba(0,0,0,0.02)));
+          background: var(--bg-surface, var(--surface, rgba(0,0,0,0.02)));
           border: 1px solid var(--border-subtle, rgba(0,0,0,0.08));
           border-radius: 14px; padding: 14px 16px;
           color: var(--text-primary, #14181f); font-size: clamp(0.95rem, 1.8vw, 1.05rem);
@@ -110,25 +111,24 @@ export default function MarketingDeck() {
           flex: 0 0 auto; width: 26px; height: 26px; border-radius: 999px;
           display: inline-flex; align-items: center; justify-content: center;
           font-family: var(--font-display); font-weight: 700; font-size: 0.82rem;
-          color: #fff; background: var(--coral-bright, #ff6b4a);
+          color: #fff; background: var(--accent);
         }
         .mdk-see {
-          margin: 30px auto 0; max-width: 620px; border-radius: 14px;
+          margin: 28px 0 0; max-width: 760px; border: 1px solid var(--border-accent); border-radius: 14px;
           padding: 16px 20px; font-size: clamp(0.98rem, 2vw, 1.12rem); font-weight: 600;
-          color: var(--text-on-accent, #fff);
-          background: linear-gradient(135deg, var(--coral-bright, #ff6b4a), var(--coral-dark, #e0452a));
+          color: var(--text-primary); background: var(--accent-subtle);
         }
         .mdk-see-label {
           display: block; font-size: 0.68rem; letter-spacing: 0.16em; text-transform: uppercase;
           font-weight: 700; opacity: 0.85; margin-bottom: 4px;
         }
-        .mdk-ctas { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 32px; }
+        .mdk-ctas { display: flex; flex-wrap: wrap; gap: 12px; justify-content: flex-start; margin-top: 32px; }
         .mdk-btn {
           font-family: var(--font-display); font-weight: 600; font-size: 0.98rem;
           padding: 12px 26px; border-radius: 12px; cursor: pointer; border: none;
           text-decoration: none; display: inline-flex; align-items: center; gap: 8px;
         }
-        .mdk-btn-primary { color: #fff; background: linear-gradient(135deg, var(--coral-bright, #ff6b4a), var(--coral-dark, #e0452a)); }
+        .mdk-btn-primary { color: #fff; background: var(--accent); box-shadow: 0 10px 28px var(--shadow-coral-mid, rgba(59,130,246,.24)); }
         .mdk-btn-ghost {
           color: var(--text-primary, #14181f); background: var(--surface, transparent);
           border: 1px solid var(--border-subtle, rgba(0,0,0,0.14));
@@ -136,7 +136,7 @@ export default function MarketingDeck() {
         .mdk-btn:disabled { opacity: 0.4; cursor: not-allowed; }
         .mdk-controls {
           display: flex; align-items: center; justify-content: space-between; gap: 16px;
-          max-width: 900px; width: 100%; margin: clamp(20px, 3vw, 32px) auto 0;
+          width: 100%; margin: 22px 0 0; padding-top: 20px; border-top: 1px solid var(--border);
         }
         .mdk-dots { display: flex; gap: 9px; flex-wrap: wrap; justify-content: center; }
         .mdk-dot {
@@ -144,11 +144,16 @@ export default function MarketingDeck() {
           background: var(--border-strong, var(--text-muted, rgba(0,0,0,0.25)));
           opacity: 0.5; transition: opacity 0.15s, transform 0.15s;
         }
-        .mdk-dot[aria-current="true"] { opacity: 1; transform: scale(1.35); background: var(--coral-bright, #ff6b4a); }
+        .mdk-dot[aria-current="true"] { width: 28px; opacity: 1; background: var(--accent); }
         .mdk-progress { font-family: var(--font-display); font-weight: 600; font-size: 0.85rem;
           color: var(--text-muted, #6b7280); min-width: 54px; }
         .mdk-nav { display: flex; gap: 10px; }
         @media (max-width: 560px) {
+          .mdk { padding-top: 30px; }
+          .mdk-stage { min-height: 0; }
+          .mdk-card { padding: 28px 22px; }
+          .mdk-title { font-size: clamp(2.15rem, 12vw, 3.2rem); }
+          .mdk-steps { grid-template-columns: 1fr; }
           .mdk-controls { flex-direction: column-reverse; }
           .mdk-nav { width: 100%; }
           .mdk-nav .mdk-btn { flex: 1; justify-content: center; }
@@ -209,7 +214,7 @@ export default function MarketingDeck() {
             {t('ui.next')} →
           </button>
         </div>
-        <div className="mdk-dots" role="tablist" aria-label={t('ui.progressLabel')}>
+        <div className="mdk-dots" role="group" aria-label={t('ui.progressLabel')}>
           {slides.map((s, d) => (
             <button
               key={d}

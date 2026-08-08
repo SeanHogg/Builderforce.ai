@@ -44,7 +44,7 @@ const mutedStyle: CSSProperties = { color: 'var(--text-muted)', fontSize: '0.8re
 /** Escalated rows read as "needs a human"; everything else as "manager working". */
 function toneFor(row: StallWatchRow): { fg: string; bg: string } {
   return row.escalatedAt
-    ? { fg: 'var(--warning-fg, #b45309)', bg: 'var(--warning-bg, rgba(180, 83, 9, 0.12))' }
+    ? { fg: 'var(--warning-text, #b45309)', bg: 'var(--warning-bg, rgba(180, 83, 9, 0.12))' }
     : { fg: 'var(--text-muted)', bg: 'var(--bg-base)' };
 }
 
@@ -163,7 +163,7 @@ export function ManagerStallRegister({ projectId }: ManagerStallRegisterProps) {
               <div style={{ ...mutedStyle, marginTop: 2 }}>{t('stat.working')}</div>
             </div>
             <div style={{ ...panelStyle, padding: 14 }}>
-              <div style={{ fontSize: '1.6rem', fontWeight: 800, color: (data?.escalated ?? 0) > 0 ? 'var(--warning-fg, #b45309)' : 'var(--text-primary)' }}>
+              <div style={{ fontSize: '1.6rem', fontWeight: 800, color: (data?.escalated ?? 0) > 0 ? 'var(--warning-text, #b45309)' : 'var(--text-primary)' }}>
                 {(data?.escalated ?? 0).toLocaleString()}
               </div>
               <div style={{ ...mutedStyle, marginTop: 2 }}>{t('stat.escalated')}</div>
@@ -217,7 +217,7 @@ export function ManagerStallRegister({ projectId }: ManagerStallRegisterProps) {
                         {row.escalatedAt ? (
                           <Badge
                             label={t('needsYou')}
-                            fg="var(--warning-fg, #b45309)"
+                            fg="var(--warning-text, #b45309)"
                             bg="var(--warning-bg, rgba(180, 83, 9, 0.12))"
                           />
                         ) : (

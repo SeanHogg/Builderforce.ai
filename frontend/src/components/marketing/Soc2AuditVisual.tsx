@@ -74,7 +74,7 @@ export function Soc2AuditVisual({ labels }: { labels: Soc2AuditVisualLabels }) {
         </div>
         <span style={{
           display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600,
-          color: '#22c55e', background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.4)',
+          color: 'var(--success-text)', background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.4)',
           borderRadius: 999, padding: '5px 12px',
         }}>✓ {labels.prBadge}</span>
       </div>

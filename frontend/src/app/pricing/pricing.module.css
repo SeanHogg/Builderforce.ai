@@ -1,0 +1,237 @@
+.page {
+  width: 100%;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: clamp(28px, 5vw, 72px) clamp(18px, 4vw, 40px) 88px;
+  color: var(--text-primary);
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr);
+  gap: clamp(32px, 6vw, 76px);
+  align-items: center;
+  padding: clamp(20px, 4vw, 52px) 0 64px;
+}
+
+.eyebrow {
+  margin: 0 0 12px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+}
+
+.hero h1 {
+  max-width: 760px;
+  margin: 0;
+  font-size: clamp(42px, 7vw, 76px);
+  line-height: .98;
+  letter-spacing: -.055em;
+}
+
+.lede {
+  max-width: 700px;
+  margin: 25px 0 0;
+  color: var(--text-secondary);
+  font-size: clamp(17px, 2vw, 20px);
+  line-height: 1.65;
+}
+
+.heroPanel {
+  padding: 28px;
+  border: 1px solid var(--border-accent);
+  border-radius: 22px;
+  background: linear-gradient(145deg, var(--bg-elevated), var(--accent-subtle));
+  box-shadow: 0 24px 70px var(--shadow-coral-mid, rgba(59, 130, 246, .14));
+}
+
+.heroPanelLabel {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.heroPanelLabel::before {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 5px rgba(34, 197, 94, .12);
+  content: '';
+}
+
+.heroPanel h2 {
+  margin: 20px 0 8px;
+  font-size: clamp(25px, 3vw, 34px);
+  line-height: 1.12;
+}
+
+.heroPanel p {
+  margin: 0 0 24px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.primaryButton,
+.secondaryButton,
+.planButton {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 20px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 750;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.primaryButton,
+.planButton[data-plan='pro'] {
+  border: 0;
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 10px 28px var(--shadow-coral-mid, rgba(59, 130, 246, .24));
+}
+
+.secondaryButton,
+.planButton[data-plan='free'] {
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.planButton[data-plan='teams'] {
+  border: 0;
+  background: #3b82f6;
+  color: #fff;
+}
+
+.statusText {
+  display: inline-flex;
+  min-height: 46px;
+  align-items: center;
+  color: var(--accent);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.error,
+.notice {
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-elevated);
+  font-size: 13px;
+}
+
+.error { color: var(--coral-bright); }
+.notice { color: var(--text-muted); }
+
+.content { display: flex; flex-direction: column; gap: 20px; }
+
+.accountCard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 18px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--bg-elevated);
+}
+
+.accountCardBody { flex: 1; min-width: 0; }
+.accountCardTitle { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 17px; font-weight: 750; }
+.accountDetails { display: grid; gap: 6px; font-size: 13px; }
+.accountDetail { display: grid; grid-template-columns: 130px 1fr; gap: 8px; }
+.accountDetail span:first-child { color: var(--text-muted); }
+
+.planBadge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 99px;
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.planBadge[data-plan='free'] { background: var(--bg-surface); color: var(--text-muted); }
+.planBadge[data-plan='teams'] { background: rgba(59, 130, 246, .14); color: #60a5fa; }
+
+.section { padding-top: 28px; }
+
+.planGrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.planCard {
+  display: flex;
+  min-height: 410px;
+  flex-direction: column;
+  padding: 26px;
+  border: 1px solid var(--border);
+  border-radius: 17px;
+  background: var(--bg-elevated);
+}
+.planCard[data-featured='true'] {
+  border-color: var(--border-accent);
+  background: linear-gradient(155deg, var(--bg-elevated), var(--accent-subtle));
+  box-shadow: 0 20px 55px var(--shadow-coral-mid, rgba(59, 130, 246, .13));
+}
+.planCardTop { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.planCard h3 { margin: 0; font-size: 20px; }
+.price { min-height: 58px; margin: 22px 0 4px; font-size: clamp(29px, 3vw, 38px); font-weight: 800; letter-spacing: -.04em; }
+.priceNote { min-height: 34px; margin: 0; color: var(--text-muted); font-size: 12px; }
+.featureList { display: grid; gap: 12px; margin: 24px 0 28px; padding: 20px 0 0; border-top: 1px solid var(--border); list-style: none; }
+.featureList li { display: flex; gap: 10px; color: var(--text-secondary); font-size: 14px; line-height: 1.4; }
+.featureList li::before { color: var(--accent); font-weight: 800; content: '\2713'; }
+.planCardAction { margin-top: auto; }
+.planCardAction > * { width: 100%; }
+
+.comparisonCard {
+  margin-top: 52px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: var(--bg-elevated);
+}
+.comparisonTitle { padding: 24px 26px 18px; font-size: 20px; font-weight: 750; }
+.tableScroll { overflow-x: auto; }
+.comparisonTable { width: 100%; border-collapse: collapse; font-size: 13px; }
+.comparisonTable th { padding: 16px 18px; border-bottom: 1px solid var(--border); color: var(--text-muted); font-weight: 700; text-align: left; }
+.comparisonTable th:not(:first-child), .comparisonTable td:not(:first-child) { min-width: 135px; text-align: center; }
+.comparisonTable td { padding: 12px 18px; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
+.comparisonTable tbody tr:hover { background: var(--accent-subtle); }
+.comparisonTable tfoot td { padding: 18px; border-bottom: 0; }
+.check { color: var(--accent); font-size: 15px; font-weight: 800; }
+.dash { color: var(--text-muted); }
+.addon { margin: 0; padding: 18px 26px 24px; color: var(--text-muted); font-size: 12px; line-height: 1.5; }
+
+.related { margin-top: 48px; }
+
+@media (max-width: 850px) {
+  .hero { grid-template-columns: 1fr; padding-bottom: 44px; }
+  .planGrid { grid-template-columns: 1fr; }
+  .planCard { min-height: 0; }
+}
+
+@media (max-width: 560px) {
+  .page { padding-bottom: 56px; }
+  .heroPanel { padding: 22px; }
+  .primaryButton, .secondaryButton { width: 100%; }
+  .accountDetail { grid-template-columns: 1fr; gap: 2px; }
+  .comparisonCard { margin-right: -8px; margin-left: -8px; border-radius: 14px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .comparisonTable tbody tr { transition: none; }
+}

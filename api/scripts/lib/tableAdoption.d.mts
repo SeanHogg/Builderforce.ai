@@ -19,10 +19,13 @@ export function collectCreatedTables(migrationsDir: string): Map<string, string>
 export function collectTableExports(schemaDir: string): Map<string, string>;
 
 export interface TableUsage {
-  /** Non-test files importing the table's Drizzle export, repo-relative. */
+  /** Feature files importing the table's Drizzle export, repo-relative. */
   imports: string[];
-  /** Non-test files naming the table in raw SQL, repo-relative. */
+  /** Feature files naming the table in raw SQL, repo-relative. */
   rawSql: string[];
+  /** `application/domains/<domain>/entities.ts` files registering it. Kept apart
+   *  from `imports` because the generic registry covers every table at once. */
+  entityLayer: string[];
 }
 
 export interface TableAdoption {
@@ -32,7 +35,13 @@ export interface TableAdoption {
   exports: Map<string, string>;
   /** Created tables something reads or writes → where. */
   live: Map<string, TableUsage>;
-  /** Created tables nothing reads or writes yet, sorted. */
+  /** Reachable at all — through the entity layer or a feature path. */
+  registered: string[];
+  /** Reached by something OTHER than the generic entity registry. */
+  featureReached: string[];
+  /** Registered by the entity layer but reached by no feature, sorted. */
+  registryOnly: string[];
+  /** Created tables not reachable at all, sorted. */
   cold: string[];
   /** Created tables with no `pgTable` declaration at all, sorted. */
   missingExport: string[];

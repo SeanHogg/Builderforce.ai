@@ -43,7 +43,7 @@ export function RateClientButton({ engagementId, clientName }: { engagementId: s
               <div style={{ display: 'flex', gap: 4 }}>
                 {[1, 2, 3, 4, 5].map((n) => (
                   <button key={n} type="button" onClick={() => setRating(n)} aria-label={String(n)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 26, color: n <= rating ? 'var(--warning-fg, #f59e0b)' : 'var(--border-subtle)' }}>★</button>
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 26, color: n <= rating ? 'var(--warning-text, #f59e0b)' : 'var(--border-subtle)' }}>★</button>
                 ))}
               </div>
               <textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder={t('commentPlaceholder')}

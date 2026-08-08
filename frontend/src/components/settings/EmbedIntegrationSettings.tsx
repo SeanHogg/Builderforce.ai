@@ -158,8 +158,8 @@ export function EmbedIntegrationSettings() {
             >
               {saving ? 'Saving…' : needsConsent ? 'Review & enable…' : 'Save'}
             </button>
-            {saved && <span style={{ fontSize: 12, color: '#16a34a' }}>Saved ✓</span>}
-            {error && <span style={{ fontSize: 12, color: '#dc2626' }}>{error}</span>}
+            {saved && <span style={{ fontSize: 12, color: 'var(--success-text)' }}>Saved ✓</span>}
+            {error && <span style={{ fontSize: 12, color: 'var(--error-text)' }}>{error}</span>}
           </div>
 
           {/* The install snippet is only meaningful once embedding is actually on. */}

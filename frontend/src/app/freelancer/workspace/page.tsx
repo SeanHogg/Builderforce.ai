@@ -42,7 +42,7 @@ function ScoreChip({ score }: { score: number }) {
 
 const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
   submitted: { bg: 'rgba(59,130,246,0.12)', fg: 'rgba(59,130,246,0.95)' },
-  in_review: { bg: 'rgba(245,158,11,0.14)', fg: 'var(--warning-fg, #f59e0b)' },
+  in_review: { bg: 'rgba(245,158,11,0.14)', fg: 'var(--warning-text, #f59e0b)' },
   accepted: { bg: 'rgba(34,197,94,0.14)', fg: 'rgba(34,197,94,0.95)' },
   changes_requested: { bg: 'rgba(239,68,68,0.14)', fg: '#f87171' },
 };

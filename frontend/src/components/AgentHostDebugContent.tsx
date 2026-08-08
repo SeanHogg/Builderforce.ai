@@ -202,9 +202,9 @@ export function AgentHostDebugContent({
   const isOffline = connState === 'offline';
   const dotColor =
     connState === 'connected'
-      ? 'var(--surface-success, #22c55e)'
+      ? 'var(--success-bg, #22c55e)'
       : connState === 'offline'
-        ? 'var(--surface-danger, #ef4444)'
+        ? 'var(--danger-bg, #ef4444)'
         : 'var(--text-muted)';
 
   return (
@@ -216,7 +216,7 @@ export function AgentHostDebugContent({
             fontSize: 13,
             fontWeight: 600,
             background: 'rgba(239,68,68,0.2)',
-            color: '#fca5a5',
+            color: 'var(--error-text)',
             borderRadius: 8,
             border: '1px solid rgba(239,68,68,0.4)',
           }}
@@ -231,7 +231,7 @@ export function AgentHostDebugContent({
             padding: '10px 14px',
             fontSize: 13,
             background: 'rgba(239,68,68,0.15)',
-            color: '#ef4444',
+            color: 'var(--error-text)',
             borderRadius: 8,
           }}
         >

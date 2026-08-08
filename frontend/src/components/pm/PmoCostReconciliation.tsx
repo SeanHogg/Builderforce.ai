@@ -112,7 +112,7 @@ export function PmoCostReconciliation() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 150 }}>
                   {cls ? <span style={chip(COST_CLASS_COLORS[cls])}>{t(cls)}</span> : <span style={{ ...chip('var(--text-muted)'), background: 'transparent', color: 'var(--text-muted)', border: '1px dashed var(--border-subtle)' }}>{t('unclassified')}</span>}
                   <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{t(`source.${n.costClassSource}`)}</span>
-                  {(n.kind === 'task' || n.kind === 'epic') && n.costClassVerified && <span title={t('verified')} style={{ color: '#16a34a' }}>✓</span>}
+                  {(n.kind === 'task' || n.kind === 'epic') && n.costClassVerified && <span title={t('verified')} style={{ color: 'var(--success-text)' }}>✓</span>}
                 </div>
 
                 {n.cost.totalUsd > 0 && (

@@ -22,7 +22,7 @@ const input: React.CSSProperties = {
 };
 const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
   invited: { bg: 'rgba(59,130,246,0.12)', fg: 'rgba(59,130,246,0.95)' },
-  interviewing: { bg: 'rgba(245,158,11,0.14)', fg: 'var(--warning-fg, #f59e0b)' },
+  interviewing: { bg: 'rgba(245,158,11,0.14)', fg: 'var(--warning-text, #f59e0b)' },
   active: { bg: 'rgba(34,197,94,0.14)', fg: 'rgba(34,197,94,0.95)' },
   submitted: { bg: 'rgba(59,130,246,0.12)', fg: 'rgba(59,130,246,0.95)' },
   accepted: { bg: 'rgba(34,197,94,0.14)', fg: 'rgba(34,197,94,0.95)' },
@@ -147,7 +147,7 @@ export default function MarketplaceGigsSection({ search }: { search: string }) {
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span>{j.tenantName} · {rate(j.rateMinCents, j.rateMaxCents, j.currency)}</span>
                   {j.clientRating != null && (j.clientRatingCount ?? 0) > 0 && (
-                    <span title={t('gigs.clientRatingTip')} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--warning-fg, #f59e0b)', fontWeight: 600 }}>★ {j.clientRating.toFixed(1)} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({j.clientRatingCount})</span></span>
+                    <span title={t('gigs.clientRatingTip')} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: 'var(--warning-text, #f59e0b)', fontWeight: 600 }}>★ {j.clientRating.toFixed(1)} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>({j.clientRatingCount})</span></span>
                   )}
                 </div>
                 {j.description && <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 8, maxHeight: 60, overflow: 'hidden' }}>{j.description}</p>}
