@@ -4,6 +4,76 @@
 
 ---
 
+## ✅ RESOLVED 2026-08-07 — The Brain chat list had no index behind its ordering
+
+Found while verifying a claim for the consolidated navigation design, which unions
+`creation_sessions` with `brain_chats` into one "recents" list — a union is only as
+fast as its slower half.
+
+`BrainService.listChats` (`api/src/application/brain/BrainService.ts:485-491`) is the
+hot read behind every chat list: equality on `(tenant_id, origin, is_archived)` plus
+a visibility predicate, then `ORDER BY updated_at DESC LIMIT n OFFSET m`. Every index
+the table had covered equality columns only — `idx_brain_chats_tenant`,
+`idx_brain_chats_user_id`, `idx_brain_chats_project_id`, and the team-scope composite
+from 0294 — and **none contained `updated_at`**, so Postgres read every non-archived
+chat in the tenant and sorted the lot to return the first page. The canvas-side
+equivalent has had a matching composite since it was written
+(`idx_creation_sessions_creator (created_by, last_activity_at)`).
+
+**Migration 0417** adds `idx_brain_chats_tenant_origin_recent (tenant_id, origin,
+updated_at DESC) WHERE is_archived = false` — partial, because archived chats are
+never in this list, which keeps the index to the working set. Declared on the Drizzle
+table too (`schema/brain.ts`), which previously had no index block at all.
+`schema.tables.test.ts` passes (4/4) and the API typechecks.
+
+
+
+`Deploy API` was red: `check:layering` rejected `driveRoutes.ts` and
+`mailboxRoutes.ts` for importing `src/infrastructure/` — and behind that, three
+routes were each carrying their own copy of the same OAuth dance.
+
+**The dance is now one application-layer primitive** —
+`api/src/application/shared/providerOAuthConnect.ts`
+(`buildProviderConsentUrl` / `completeProviderOAuthCallback` /
+`providerOAuthCredentials` / `isProviderOAuthConfigured` / `safeReturnTo`).
+`driveRoutes`, `mailboxRoutes` and `calendarRoutes` all call it and keep only
+their own redirect vocabulary (`?drive=` / `?mailbox=` / `?calendar=`); the
+three provider registries share the one "is this provider configured?"
+predicate. 14 tests cover it. Two real defects fell out of the consolidation:
+
+- **Open-redirect hardening on the calendar connect flow.** `calendarRoutes`
+  took `returnTo` from the query string unvalidated and appended it to the app
+  base after the provider round trip. `safeReturnTo` (already enforced on drive
+  and mailbox) now applies to all three — a path on our own app or nothing.
+- **A calendar provider with a client id but NO secret** passed the connect
+  check and failed only at the callback, after the user had already granted
+  consent. Both halves are now required up front, so it 503s before anyone is
+  sent to a consent screen that cannot complete.
+
+Also closed in the same pass: three unscoped writes in `driveService`
+(`markRevoked` + both refresh-failure updates now `scopedToTenant`), an
+unscoped `projectSites` read in `application/game`, an empty catch in
+`mailboxProviders` (the non-JSON provider-error body is now parsed through
+`parseErrorEnvelope`), and `calendarRoutes`' silently swallowed callback error.
+`fakeFetch` records `URLSearchParams` bodies so form-encoded posts are
+assertable. `presentation → infrastructure` 146 → 144 files.
+
+**`check:tenant-scope` no longer mis-parses prose** (was a Gap Register item):
+`extractStatement` balanced brackets over comment text, so a comma in a comment
+between `.from()` and `.where()` truncated the statement and reported a scoped
+query as unscoped — and a `)` in prose could end a statement early and MASK a
+real violation. It now blanks comments first (positions preserved, strings
+skipped-not-blanked so a raw ``sql`… tenant_id …` `` still counts). That fixed
+the false positive on `campaignEngine` and uncovered three more —
+`executionLifecycleOutbox`, `buildRuntimeService`, `repoRoutes` — all now off
+the baseline. The one genuine exception, `templateLibrary.readAssetByToken`
+(public campaign asset, reached by unguessable token, no tenant at the call
+site), is baselined with its rationale in the file.
+
+`api` 2026.7.226 → 2026.7.227.
+
+---
+
 ## ✅ RESOLVED 2026-08-07 — Ask the canvas for a video game, then actually play it
 
 `creative.game` could author a game and nothing else. It produced one

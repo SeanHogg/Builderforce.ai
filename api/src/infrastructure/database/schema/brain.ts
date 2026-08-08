@@ -30,6 +30,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
+import { desc, sql } from 'drizzle-orm';
 import { freelancerEngagements, teams } from './collaboration';
 import { chatSessions, segments, tenants, users } from './identity';
 import { marketplacePersonas } from './llm';
@@ -120,7 +121,15 @@ export const brainChats = pgTable('brain_chats', {
   teamId:     integer('team_id').references(() => teams.id, { onDelete: 'cascade' }),
   createdAt:  timestamp('created_at').notNull().defaultNow(),
   updatedAt:  timestamp('updated_at').notNull().defaultNow(),
-});
+}, (t) => [
+  /** Serves listChats (0417): equality on tenant+origin, then ORDER BY updated_at
+   *  DESC LIMIT n. Every other index on this table is equality-only, so without
+   *  this one the list sorts every non-archived chat in the tenant per page. The
+   *  partial predicate matches the query — archived chats are never listed. */
+  index('idx_brain_chats_tenant_origin_recent')
+    .on(t.tenantId, t.origin, desc(t.updatedAt))
+    .where(sql`is_archived = false`),
+]);
 
 
 // ---------------------------------------------------------------------------

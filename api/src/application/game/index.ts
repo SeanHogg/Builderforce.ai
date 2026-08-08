@@ -234,7 +234,7 @@ async function buildContext(
   const [site] = await db
     .select({ subdomain: projectSites.subdomain, status: projectSites.status })
     .from(projectSites)
-    .where(eq(projectSites.projectId, projectId))
+    .where(scopedToTenant(projectSites, tenantId, eq(projectSites.projectId, projectId)))
     .limit(1);
   const secrets = await listProjectSecrets(db, tenantId, projectId);
 

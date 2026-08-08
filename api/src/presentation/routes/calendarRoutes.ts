@@ -3,9 +3,11 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * Calendar connections — /api/calendar/*
  *
  * Per-USER OAuth grants (Google Calendar / Microsoft Graph) used to schedule
- * meetings and surface upcoming events. Reuses the shared OAuth state/token
- * primitives ({@link ../../infrastructure/auth/oauthState}) and the provider
- * adapters ({@link ../../application/calendar/calendarProviders}).
+ * meetings and surface upcoming events. The connect/callback dance itself is the
+ * shared one ({@link ../../application/shared/providerOAuthConnect}, the same
+ * primitive the mailbox and drive flows use); this file adds only the calendar
+ * provider adapters ({@link ../../application/calendar/calendarProviders}) and
+ * its own redirect vocabulary.
  *
  * Auth model: every endpoint is bearer-authed EXCEPT the OAuth `/callback/:provider`,
  * which is a top-level browser redirect FROM the provider (no bearer available) —

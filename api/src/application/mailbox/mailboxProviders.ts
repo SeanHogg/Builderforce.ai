@@ -24,6 +24,7 @@
  */
 
 import { reportCaughtError } from '../observability/caughtErrorReporter';
+import { isProviderOAuthConfigured } from '../shared/providerOAuthConnect';
 
 // ---------------------------------------------------------------------------
 // The shared shape
@@ -276,15 +277,31 @@ export function applyClientSideFilters(messages: MailboxMessage[], query: Mailbo
   });
 }
 
+/** The OAuth/Graph/Gmail error envelope, when the body is one. */
+interface ProviderErrorEnvelope {
+  error?: { message?: string } | string;
+  error_description?: string;
+}
+
+/** `null` for a non-JSON body — an HTML error page is a normal thing for a
+ *  gateway to return, so the caller falls back to the raw text. */
+function parseErrorEnvelope(body: string): ProviderErrorEnvelope | null {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    return parsed && typeof parsed === 'object' ? (parsed as ProviderErrorEnvelope) : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Throw a readable error from a failed provider call rather than a bare status. */
 async function providerError(label: string, res: Response): Promise<never> {
   const body = await res.text().catch(() => '');
-  let detail = body.slice(0, 300);
-  try {
-    const parsed = JSON.parse(body) as { error?: { message?: string } | string; error_description?: string };
-    detail = (typeof parsed.error === 'object' ? parsed.error?.message : parsed.error)
-      ?? parsed.error_description ?? detail;
-  } catch { /* non-JSON body — the truncated text is the best detail available */ }
+  const truncated = body.slice(0, 300);
+  const parsed = parseErrorEnvelope(body);
+  const detail = (parsed
+    ? (typeof parsed.error === 'object' ? parsed.error?.message : parsed.error) ?? parsed.error_description
+    : undefined) ?? truncated;
   throw new MailboxProviderError(`${label} failed (${res.status}): ${detail}`, res.status);
 }
 

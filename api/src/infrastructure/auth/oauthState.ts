@@ -1,9 +1,18 @@
 /**
  * Shared OAuth primitives — HMAC-signed CSRF `state` (no DB round-trip) and the
- * authorization-code → token exchange. Used by BOTH the login/link OAuth flow
- * ({@link ../../presentation/routes/oauthRoutes}) and the calendar-connection
- * flow ({@link ../../presentation/routes/calendarRoutes}); keep it here so the
- * crypto lives in exactly one place.
+ * authorization-code → token exchange. Keep it here so the crypto lives in
+ * exactly one place.
+ *
+ * Two callers, and only two:
+ *
+ *   • {@link ../../presentation/routes/oauthRoutes} — the login/signup/link
+ *     flow, where the grant establishes WHO the user is.
+ *   • {@link ../../application/shared/providerOAuthConnect} — the connect flow
+ *     for a third party the user already owns (mailbox, drive, calendar).
+ *
+ * A route connecting a new provider surface should call the latter rather than
+ * this module: this is infrastructure, and a route importing it directly fails
+ * `npm run check:layering`.
  */
 
 function toHex(bytes: Uint8Array): string {

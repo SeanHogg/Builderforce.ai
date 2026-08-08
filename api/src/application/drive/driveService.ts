@@ -24,6 +24,7 @@ import type { Db } from '../../infrastructure/database/connection';
 import { driveConnections } from '../../infrastructure/database/schema';
 import { refreshAccessToken } from '../../infrastructure/auth/oauthState';
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import {
   isTerminalRefreshFailure,
   mergeRefreshedTokens,
@@ -167,11 +168,11 @@ export async function deleteDriveConnection(
   ));
 }
 
-async function markRevoked(db: Db, connectionId: number, message: string): Promise<void> {
+async function markRevoked(db: Db, tenantId: number, connectionId: number, message: string): Promise<void> {
   await db
     .update(driveConnections)
     .set({ status: 'revoked', lastError: message.slice(0, 1_000), updatedAt: sql`NOW()` })
-    .where(eq(driveConnections.id, connectionId));
+    .where(scopedToTenant(driveConnections, tenantId, eq(driveConnections.id, connectionId)));
 }
 
 // ---------------------------------------------------------------------------
@@ -225,7 +226,7 @@ export async function freshDriveToken(
     return { ok: true, accessToken: tokens.accessToken, provider, cacheVersion: row.cacheVersion };
   }
   if (!tokens.refreshToken) {
-    await markRevoked(db, connectionId, 'No refresh token stored — reconnect this drive.');
+    await markRevoked(db, tenantId, connectionId, 'No refresh token stored — reconnect this drive.');
     return { ok: false, status: 'revoked', error: 'No refresh token stored — reconnect this drive.' };
   }
 
@@ -246,19 +247,19 @@ export async function freshDriveToken(
         lastError: null,
         updatedAt: sql`NOW()`,
       })
-      .where(eq(driveConnections.id, connectionId));
+      .where(scopedToTenant(driveConnections, tenantId, eq(driveConnections.id, connectionId)));
     return { ok: true, accessToken: next.accessToken, provider, cacheVersion: row.cacheVersion };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Token refresh failed';
     if (isTerminalRefreshFailure(message)) {
-      await markRevoked(db, connectionId, message);
+      await markRevoked(db, tenantId, connectionId, message);
       return { ok: false, status: 'revoked', error: 'This drive needs to be reconnected.' };
     }
     reportCaughtError(error, { source: 'application/drive/driveService.ts', operation: 'freshDriveToken' });
     await db
       .update(driveConnections)
       .set({ lastError: message.slice(0, 1_000), updatedAt: sql`NOW()` })
-      .where(eq(driveConnections.id, connectionId));
+      .where(scopedToTenant(driveConnections, tenantId, eq(driveConnections.id, connectionId)));
     return { ok: false, status: 'unavailable', error: 'Could not refresh access to this drive.' };
   }
 }

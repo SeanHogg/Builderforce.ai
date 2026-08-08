@@ -64,6 +64,12 @@ application/manager/coordinateTicket.ts:2
 application/manager/runManagerSweep.ts:1
 application/manager/stallWatch.ts:2
 application/manager/triageStage.ts:2
+# application/marketing/templateLibrary.ts — the ONE statement here is
+# readAssetByToken(), the PUBLIC campaign-asset read: it is reached by an
+# unguessable token and nothing else, so no tenant is known at the call site —
+# the row IS the resolution. Every other read/write in that module is
+# scopedToTenant. Not debt; if this count ever rises, the new statement is.
+application/marketing/templateLibrary.ts:1
 application/meetings/meetingIntelligence.ts:3
 application/metrics/collaboration.ts:1
 application/metrics/workforceMetrics.ts:1
@@ -83,7 +89,6 @@ application/repos/recordPullRequestRow.ts:4
 application/runtime/autonomousExecutionSweep.ts:1
 application/runtime/cloudAgentEngine.ts:2
 application/runtime/cloudSelfHeal.ts:1
-application/runtime/executionLifecycleOutbox.ts:1
 application/runtime/executionSteering.ts:5
 application/runtime/runRollback.ts:1
 application/runtime/scoreRunOutcome.ts:4
@@ -114,7 +119,6 @@ application/workflow/runDueTriggers.ts:5
 application/workflow/triggerSync.ts:2
 application/workforce/liveMemberNames.ts:2
 application/workitem/convertWorkItemType.ts:1
-buildRuntimeService.ts:1
 infrastructure/relay/AnalysisRunnerDO.ts:12
 infrastructure/relay/CloudRunnerDO.ts:1
 infrastructure/repositories/AgentHostRepository.ts:4
@@ -149,7 +153,6 @@ presentation/routes/qaRoutes.ts:3
 presentation/routes/qualityIngestRoutes.ts:1
 presentation/routes/qualityRoutes.ts:7
 presentation/routes/releasesRoutes.ts:1
-presentation/routes/repoRoutes.ts:1
 presentation/routes/runtimeRoutes.ts:4
 presentation/routes/seamRoutes.ts:3
 presentation/routes/skillAssignmentRoutes.ts:1

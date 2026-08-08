@@ -147,7 +147,13 @@ export function fakeFetch(
       url,
       method: init?.method ?? 'GET',
       headers,
-      body: typeof init?.body === 'string' ? init.body : undefined,
+      // A form-encoded body (every OAuth token call) arrives as URLSearchParams,
+      // not a string — record its encoded form so a test can assert on it.
+      body: typeof init?.body === 'string'
+        ? init.body
+        : init?.body instanceof URLSearchParams
+          ? init.body.toString()
+          : undefined,
     });
     const route = routes.find((r) => url.includes(r.match));
     if (!route) return new Response('no route', { status: 599 });

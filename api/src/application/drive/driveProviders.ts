@@ -15,6 +15,8 @@
  * with no special case anywhere downstream.
  */
 
+import { isProviderOAuthConfigured } from '../shared/providerOAuthConnect';
+
 /** Everything the tree and the importer need about one item. */
 export interface DriveItem {
   id: string;
