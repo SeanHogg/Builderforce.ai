@@ -3,7 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createLocalCreationSession } from '@/lib/creationSessions';
 import { CreationCanvas } from './CreationCanvas';
 
-describe('CreationCanvas with the real XYFlow store', { timeout: 15_000 }, () => {
+// No suite-level timeout override — see the note in `CreationCanvas.test.tsx`:
+// the 15s cap was a mitigation for a render loop that no longer exists, and it
+// now only cuts off heavy mounts when this file runs alongside the rest of
+// `src/components` rather than on its own.
+describe('CreationCanvas with the real XYFlow store', () => {
   afterEach(() => {
     localStorage.clear();
     vi.restoreAllMocks();

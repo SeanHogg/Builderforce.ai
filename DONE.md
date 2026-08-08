@@ -4,6 +4,166 @@
 
 ---
 
+## ✅ RESOLVED 2026-08-07 — A web page is a panel on the Creation Canvas
+
+`browser` (Browser preview), `url` (Web resource) and `service` (Local service)
+were registered object kinds with mutable `url` fields and **no renderer** — all
+three fell through to the generic "object ready" body, so the board could name a
+web page but never show one. They now share one live panel.
+
+### What ships
+
+- **`frontend/src/lib/canvasWebPage.ts`** — the single source for what a page on
+  the board is: which kinds carry one, `normalizeWebPageUrl` (bare host → https;
+  `javascript:` / `data:` / `file:` / `blob:` refused), `canvasWebPageUrl`
+  (`siteUrl → url → previewUrl → pathUrl`, the precedence `BuildBody` had
+  inlined and now calls), device viewports, and the loopback / mixed-content
+  predicates. `BuildBody`'s hand-rolled URL pick was migrated onto it.
+- **`CanvasWebPage.tsx`** — sandboxed cross-origin frame rendered at the selected
+  device width and scaled into the panel, with an address bar (Enter loads,
+  Escape reverts), reload, and open-in-new-tab. Read-only for a viewer who
+  cannot edit the board.
+- **Framability is measured, not guessed.** A browser gives an embedder no
+  trustworthy signal when a frame is refused — `load` fires on the refusal page
+  — so `framePolicy()` in `api/src/application/web/webFetch.ts` reads
+  `X-Frame-Options` / CSP `frame-ancestors` off the response and
+  `WebFetchResult` now carries `frameable` + `frameBlockedBy`. A refused page
+  falls back to a **reader view** built from the text the same probe returned,
+  instead of a white rectangle.
+- **The probe grounds the board.** Page title + text are written onto the object
+  (`pageTitle`, `content`, both in `CONTEXT_FIELDS`), so Brain can reason about
+  the page a user is looking at rather than only its address. Probed once per
+  address (`frameCheckedUrl`), and never for a loopback host the gateway cannot
+  reach — that would be a wasted metered outbound fetch that always fails.
+- **`POST /api/brain/fetch-url` now uses `fetchWebDocumentCached`** (L1 Map + L2
+  KV) — it was the one caller still on the uncached path while the MCP `web.fetch`
+  tool and guest research both used the cached one.
+- **Drop a link on the board** (`text/uri-list`) → a Web page panel at the drop
+  point, titled with the host.
+- **CSP.** `frame-src` gains `https:` in `frontend/next.config.js` and in the VS
+  Code webview (`clients/vscode/src/webviewShared.ts`), which also gains
+  `http://localhost:*` / `http://127.0.0.1:*` — the editor can frame a dev server,
+  the deployed https app cannot (mixed content), and the panel says so rather
+  than showing a dead frame. `frame-ancestors` is untouched, so our own
+  clickjacking protection is unchanged.
+- Localized in all five catalogs (`creationCanvas.webPage.*`), theme-token
+  chrome, container-query responsive. Tests:
+  `frontend/src/lib/canvasWebPage.test.ts` (14),
+  `frontend/src/components/creation-canvas/canvasWebPageNode.test.tsx` (9),
+  `api/src/application/web/webFetch.test.ts` (+5 for `framePolicy`).
+
+Open follow-up: the knowledge whiteboard `<CanvasBoard>` has no web-page block —
+tracked in ROADMAP § Knowledge & canvas.
+
+---
+
+## ✅ RESOLVED 2026-08-07 — `CreationCanvas.test.tsx` gives a verdict: the hang and the OOM were one bug, in the test mock
+
+Two Gap Register entries — "does not give a stable verdict" (the 3D-group
+event-loop block) and "cannot finish: `ERR_WORKER_OUT_OF_MEMORY`" — were the same
+root cause, and it was never in the canvas at all.
+
+### The bug
+
+`useTranslations` returns a **referentially stable** `t` — the real hook memoizes
+per (locale, namespace), and components rely on it: `t` in a `useMemo`/
+`useCallback` dependency array is everywhere in this codebase. Every next-intl
+mock we had — the global one in `setup.ts` and five hand-rolled per-file copies —
+returned a **brand-new function on every call**, i.e. on every render.
+
+In the canvas that lit a fuse. `describeThreeD` depends on `t`; `Canvas3DView`
+derives `scene` from `describe`, `lifted` from `scene.cards`, and a `controls`
+object from `lifted`; `usePublishCanvas3DControls` publishes `controls` into a
+context **the canvas itself consumes**. With an unstable `t`, every link was new
+on every render, so publishing re-rendered the canvas, which rebuilt `t`, which
+rebuilt `controls`, which published again — an unbounded effect loop.
+
+That single mechanism explains both symptoms and why they looked unrelated: the
+loop never yields, so `--testTimeout` can never fire (the "hang", and why a
+20s per-test timeout was measured to do nothing), and it allocates on every pass,
+so a directory-wide run reaches the heap ceiling first (the "OOM"). The previous
+bisect was right that the 3D group was the trigger and right that it predated the
+canvas work — the mock predates all of it.
+
+### The fix
+
+Cache one `t` per namespace in both mocks (`src/test/setup.ts`, and the shared
+`src/test/realCatalogTranslations.ts` that replaced the five per-file copies).
+Roughly ten lines.
+
+**The roadmap's proposed fix — splitting the test file and the component — was
+not needed and would not have worked**, because neither addressed an unbounded
+loop. Recorded here so nobody spends that week: the durable fix for "this suite
+is slow/hung/OOM" was to make the mock honour the contract it stands in for.
+
+### The verdict it now gives
+
+`CreationCanvas.test.tsx`: **77 passed (77)** in 161s, from never completing.
+The whole `src/components/creation-canvas` directory: **11 files, 180 tests,
+142s**, against a previous `ERR_WORKER_OUT_OF_MEMORY` after 9,720s with 74 tests
+never run and a summary that still read mostly green.
+
+### The five defects it was hiding
+
+With the suite finally able to fail honestly, it did — five cases that had never
+actually run. Confirmed pre-existing by running them against the pre-pitch source
+(identical five failures), so none came from the pitch work:
+
+1. **Dataset import kept the placeholder name** *(real product bug)*. Importing
+   `revenue.csv` left the card called "Imported dataset.csv" — the import
+   deliberately dropped the incoming title — and every artifact derived from it
+   inherited the wrong name ("Imported dataset.csv visualization"). Now the file's
+   name is adopted **over the palette placeholder only**; a card the user has
+   named stays theirs.
+2. **The palette group toggle had no accessible name** *(real a11y bug)*. Its name
+   was its own contents — "Build 22 ⌄" — which says nothing about what pressing it
+   does and silently changed every time an object was added to the group. Now
+   labelled "Expand/Collapse {group} section", localized in five catalogs.
+3. **Composer options trigger** — the test required "Options · Model in use"
+   adjacent; a "Conversation mode" segment was added between them when work/chat
+   mode shipped. Assertion widened to span it.
+4. **Memory button** — memory moved *into* the `/` menu; the test still expected a
+   standalone button. Now asserts it inside the menu, which is the shipped design.
+5. **Share was expected to raise an account gate** — superseded by guest rooms.
+   The source says so explicitly ("NO ACCOUNT: invite by link into a shared free
+   session… signing up is offered as the way to KEEP it, not as the price of
+   sharing it"), so the stale assertion was replaced with one that protects that
+   guarantee: a guest gets the invite panel and **no** gate.
+
+### The suite-level timeout caps came off too
+
+Three canvas test files carried `describe(..., { timeout: 15_000 })` — a
+mitigation added while the file was hanging, and one that silently overrode the
+project ceiling. With the loop gone that cap became the *only* thing failing the
+heaviest mounts (3D, mini map) when the canvas runs alongside the other ~56
+files in `src/components` rather than on its own; the failing pair changed
+between runs, which is the signature of starvation rather than a defect. Caps
+removed, project `testTimeout`/`hookTimeout` set to 60s and `asyncUtilTimeout`
+raised to 20s. Neither ceiling can make a wrong assertion pass — `waitFor` polls,
+and a test that finishes early never spends its budget.
+
+**Whole-suite result: `src/components` is 57 files / 508 tests / all passing**,
+where it previously could not complete.
+
+Files: `frontend/vitest.config.ts`, `frontend/src/test/setup.ts`,
+`frontend/src/test/realCatalogTranslations.ts`,
+`frontend/src/components/creation-canvas/{CreationCanvas.test.tsx,CreationCanvas.build.test.tsx,CreationCanvas.realFlow.test.tsx,CreationCanvas.tsx}`,
+`frontend/src/i18n/messages/{en,zh,es,fr,de}.json`.
+
+> **Split commit, deliberately.** `CreationCanvas.tsx`, `CreationCanvas.test.tsx`
+> and the five message catalogs were simultaneously carrying ~570 lines of an
+> unrelated in-flight feature from a concurrent session (a Drive panel, a mailbox
+> API, web-page objects, and four new canvas kinds), including imports of files
+> that are still untracked. Committing those shared files here would have swept an
+> unfinished feature into this change — and committing `CreationCanvas.tsx` alone
+> would not even build. So the root-cause fix (the mocks, the config, the two
+> sibling test files) is committed on its own, and the two production fixes above
+> (the palette group's accessible name and the dataset import title) plus their
+> test assertions and the two catalog keys they need remain in the working tree,
+> verified green, to land with that session's commit.
+
+---
+
 ## ✅ SHIPPED 2026-08-07 — Pitch competitions are canvas objects, and the rules are data
 
 We want to enter [SXSW Pitch](https://sxsw.com/pitch/). The interesting question
@@ -209,6 +369,161 @@ keys were removed from all five catalogs. New copy is localized in all five
 Shipped: brain-ui 2026.7.42 · frontend 2026.7.190 · VSIX 2026.7.119 (packaged).
 Open residual (recipient + persona controls still differ per surface) → ROADMAP
 group 5.
+
+---
+
+## ✅ RESOLVED 2026-08-07 — A dropped file shows up immediately, and your Drive is on the canvas
+
+### 1 · The drop now has a receipt
+
+Reading a document is synchronous CPU wearing an async signature, and the node
+was only created AFTER the parse finished. The drop overlay was torn down on
+release, `setNodes` was called once after the LAST of twelve files, and in
+between the canvas showed nothing at all — indistinguishable from a drop that
+failed. A 40MB PDF looked like a bug.
+
+Every dropped file now gets a card before anything is read: a `file` stub naming
+the file and its size, with a spinner and a three-line skeleton of the page that
+is coming. The stub then BECOMES the artifact in place — same node id, same
+position — so the card a person is already looking at fills in rather than being
+replaced by a second one elsewhere on the board. A workbook's extra sheets stack
+underneath it. `nextPaint()` yields a frame between files, because committing to
+React state and immediately starting the next read means the commit never reaches
+the screen.
+
+### 2 · Two silent defects in the same path, found and fixed
+
+- **A dropped `.md` was cut at 20,000 characters.** The same content inside a
+  `.docx` came through complete, and nothing said otherwise — so a long markdown
+  document silently lost its second half. A dropped `.md` IS the document, so it
+  is now read whole; the 48MB parse ceiling is the real bound. The preview
+  truncation still applies to code and plain-text attachments, which is what it
+  was for.
+- **A file over 48MB became an icon with no explanation.** Now it says
+  `Too large to read` and names the limit, so the size is visibly the reason
+  rather than looking like a reader that failed.
+
+### 3 · Google Drive and OneDrive, browsable on the canvas
+
+Removes a round trip nobody should make: downloading a document out of Drive onto
+your desktop so you can drag it back in.
+
+- **One port, two adapters** — `driveProviders.ts` normalizes Drive's
+  `files.list` and Graph's `driveItem` children to one `DriveItem`, so the panel,
+  the walk and the importer are written once. Read-only scopes only
+  (`drive.readonly`, `Files.Read`).
+- **A Google Doc arrives as an editable document.** A Google-native file has no
+  bytes at all — it must be EXPORTED, and the format asked for is the Office
+  container the canvas already reads. So a Doc lands as `.docx`, a Sheet as
+  `.xlsx`, a Deck as `.pptx`, and goes through the identical import engine a
+  dragged file does. No special case anywhere downstream.
+- **Walked, not fetched whole** — one folder per request with a breadcrumb.
+  `FileExplorer` was the obvious reuse and is the wrong shape: it takes every
+  path up front and builds the tree client-side, which for a real Drive is an
+  unbounded fan-out. Listings are served through `getOrSetCached` (120s), keyed
+  by the connection's `cacheVersion` — the keyspace is unbounded, so reconnecting
+  bumps the version and the whole tree falls away at once, which is exactly the
+  moment a stale tree would be worst. Downloads are deliberately NOT cached.
+- **Per-USER, not per-tenant**, unlike a mailbox: a drive is personal storage,
+  and listing a colleague's private files to the whole tenant is not a feature.
+  Tokens are sealed; `freshDriveToken` loads scoped to (tenant, user) because a
+  connection id is a small integer and the drive it opens is someone's files.
+
+**A shared primitive extracted, its duplicate migrated in the same pass.**
+`oauthTokenVault.ts` now owns sealing, staleness, refresh-token merging (Microsoft
+rotates, Google omits — dropping the old one is how a Google grant silently
+becomes unrefreshable) and the terminal-vs-retryable verdict. `mailboxService`
+was migrated onto it rather than drive copying it. `guestIdentityFromRequest`
+likewise replaced `guestRoutes`' private token reader.
+
+Files: `api/src/application/drive/{driveProviders,driveService}.ts` (+ 16 tests),
+`api/src/application/integrations/oauthTokenVault.ts`,
+`api/src/presentation/routes/driveRoutes.ts`,
+`api/src/infrastructure/database/schema/drive.ts`, `migrations/0415_drive_connections.sql`,
+`api/src/application/mailbox/mailboxService.ts`, `frontend/src/lib/{driveApi,canvasFileImport}.ts`,
+`frontend/src/components/creation-canvas/{CanvasDrivePanel,CreationCanvas,CreationNode}.tsx`,
+`frontend/src/components/canvas/CanvasCommands.tsx`, all five i18n catalogs. 3 new card tests.
+
+Open follow-up in the roadmap: the Google and Azure app registrations must be
+granted the file scopes and the callback redirect URIs before a consent round
+trip can complete — the code is done, the registration is an operator action.
+
+---
+
+## ✅ RESOLVED 2026-08-07 — A logged-out visitor gets the real Office file, and every advertised format now exists
+
+Both export gaps left open by the native-formats pass are closed.
+
+### 1 · Guests render real `.docx` / `.pptx` / `.xlsx`
+
+The block was framed as a choice between shipping the OOXML writers into the
+browser bundle and dropping auth from `/api/exports`. It was a false choice: the
+product already has a first-class anonymous identity — a signed guest token with
+per-visitor and per-IP UTC-day allowances — and guest RESEARCH is the precedent
+for a public capability guarded by exactly that. Exports now take the same
+credential.
+
+These renders read nothing and persist nothing: the markdown or the rows arrive
+on the request and the bytes go straight back. The credential exists to BOUND an
+open compute endpoint, not to scope data — and the person who most needs the file
+is the visitor who just filled a board and has nowhere to put it.
+
+- `exportAccess` on `exportRoutes` resolves a guest token first and falls through
+  to `authMiddleware` when there is none, so an authenticated request is
+  unaffected.
+- `GUEST_EXPORT_LIMITS` (60/visitor/day, 300/IP/day) is its OWN ceiling, not a
+  share of the chat allowance — a guest who has spent their free messages still
+  has a finished document and every reason to want the file.
+- The client resolves its own credential in `exportOffice` (tenant header if
+  present, else guest token), so no caller has to know which kind of session it
+  is in, and `persistence` is no longer read by the export path at all.
+- Degradation is now decided by the ATTEMPT, not guessed from the session. Only
+  `OfficeExportUnavailableError` — 401/403/429, i.e. "not you / not today" —
+  falls back to markdown or CSV; a malformed payload or a render fault surfaces
+  as the real failure it is. The notice says the daily allowance is spent rather
+  than "sign in", which is now the true reason.
+
+**Two shared primitives extracted, all duplicates migrated in the same pass.**
+`consumeGuestAllowance(env, scope, visitorId, ip, limits)` moved into
+`guestDailyCounter.ts` — the file that already declared itself "the shared
+primitive behind every anonymous allowance" — and `guestResearch` was migrated
+onto it, keeping its exported name and shape. Scopes are independent by
+construction, so a visitor who has spent their research lookups can still
+download the document they already made. `guestIdentityFromRequest(request,
+secret)` moved into `guestToken.ts` and `guestRoutes`' private
+`readGuestToken`/`authenticate` pair now uses it. 6 tests.
+
+### 2 · comic PDF, cad SVG + PDF, resume HTML
+
+All three were advertised by `CREATIVE_CAPABILITIES` and produced by nothing.
+
+- **cad** — the generator already draws the DXF back as an SVG preview
+  (`dxfPreviewSvg`), stored as a data URL. `canvasObjectSvg` decodes it, so the
+  drawing exports as vector AND prints to a page. One function answers "what
+  drawing does this object have": a diagram is read off the live DOM, a CAD
+  profile out of its recorded preview.
+- **comic** — a picture prints as the picture. `printCanvasObject` now puts a
+  rendered artifact on a landscape page rather than printing the markdown brief
+  that produced it, and `PICTURE_KINDS` stops a drawn object from ever falling
+  through to the prose renderer.
+- **resume** — `markdownHtmlDocument` writes a standalone, self-contained HTML
+  file from the same markup and the same stylesheet the PDF prints from, so the
+  HTML and the PDF are the same document. Self-contained because a file that
+  pulls a stylesheet off our origin stops rendering the moment it is emailed.
+
+Both drawn kinds offer their formats only when the picture actually exists, so an
+ungenerated CAD object shows no download rather than promising a PDF of nothing.
+
+Files: `api/src/application/guest/{guestDailyCounter,guestResearch,guestToken}.ts`
+(+ `guestDailyCounter.test.ts`), `api/src/presentation/routes/{exportRoutes,guestRoutes}.ts`,
+`api/src/domain/tenant/PlanLimits.ts`, `frontend/src/lib/{exportApi,renderedSvg,printDocument,canvasExports}.ts`,
+`frontend/src/components/creation-canvas/{CanvasExportActions,CreationCanvas}.tsx`,
+all five i18n catalogs. 4 new card tests.
+
+Open follow-up in the roadmap: `CREATIVE_CAPABILITIES` still advertises generator
+outputs that do not exist for `model3d`, `podcast` and `game`, and the
+`image`/`comic`/`animation` sets cannot be verified without a live studio
+provider.
 
 ---
 

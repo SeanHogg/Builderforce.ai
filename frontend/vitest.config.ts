@@ -31,15 +31,29 @@ export default defineConfig({
      * warns and raises nothing), and `execArgv` is rejected outright by Node,
      * which refuses V8 flags on a worker and then fails to start ANY worker.
      *
-     * It has to be raised somewhere because of how this fails: with the default
-     * ceiling, `CreationCanvas.test.tsx` (a ~12,700-line component mounted ~77
-     * times in one worker, each mount retained by jsdom) dies with
-     * `ERR_WORKER_OUT_OF_MEMORY` partway through, the cases it never reached go
-     * unrun, and vitest still prints a mostly-green summary — so the run LOOKS
-     * like coverage while ~73 cases were skipped. The durable fix is splitting
-     * both the component and its test file.
+     * It is still worth having: a suite of jsdom mounts this size has no reason
+     * to run near the default ceiling.
+     *
+     * It is NOT, however, what made `CreationCanvas.test.tsx` die with
+     * `ERR_WORKER_OUT_OF_MEMORY` — that was an unbounded render/effect loop in
+     * the next-intl mock, which returned a new `t` per render and so invalidated
+     * every `useMemo` hanging off it. Fixed in `src/test/setup.ts`; the file now
+     * completes in ~160s. Recorded here because this comment previously blamed
+     * the component's size and prescribed splitting it, which would not have
+     * helped.
      */
     pool: 'threads',
+    /**
+     * Heavy jsdom mounts, measured against a shared thread pool rather than an
+     * idle one. A directory run of the canvas passes comfortably; the same files
+     * inside a 56-file `src/components` run get starved and were cut off
+     * mid-assertion. Neither ceiling can make a wrong assertion pass — `waitFor`
+     * POLLS, and a test that finishes early never spends its budget — so the
+     * only thing a longer ceiling buys is that a correct assertion is not
+     * reported as a failure because the scheduler was busy.
+     */
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
   },
   resolve: {
     alias: {

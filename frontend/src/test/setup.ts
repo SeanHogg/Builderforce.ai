@@ -12,8 +12,13 @@ import { vi } from 'vitest';
  * its resolved state, which produced failures that vanished when the same file was
  * run alone. A test that fails for that reason is telling you about the scheduler,
  * not the code, and it trains people to re-run rather than read failures.
+ *
+ * Raised again (5s → 15s) on 2026-08-07: with the canvas suite finally able to
+ * run to completion, two of its heaviest mounts were still being cut off inside
+ * a 56-file `src/components` run while passing comfortably in a directory run of
+ * their own — the same scheduler story, one level further up.
  */
-configure({ asyncUtilTimeout: 5000 });
+configure({ asyncUtilTimeout: 20_000 });
 
 /**
  * Global next-intl mock for the test environment.
@@ -48,9 +53,26 @@ vi.mock('next-intl', async (importOriginal) => {
     t.has = () => true;
     return t;
   };
+  /**
+   * ONE `t` per namespace, because referential stability is part of the contract
+   * this stands in for — the real hook memoizes per (locale, namespace), and a
+   * fresh function per render invalidates every `useMemo`/`useCallback` that
+   * lists `t` as a dependency. See `realCatalogTranslations.ts` for the hang that
+   * cost: an unstable `t` there spun the 3D scene's publish→re-render→rebuild
+   * cycle forever, with no test ever timing out.
+   */
+  const cache = new Map<string, ReturnType<typeof makeT>>();
+  const cachedT = (namespace?: string) => {
+    const key = namespace ?? '';
+    const existing = cache.get(key);
+    if (existing) return existing;
+    const t = makeT(namespace);
+    cache.set(key, t);
+    return t;
+  };
   return {
     ...actual,
-    useTranslations: (namespace?: string) => makeT(namespace),
+    useTranslations: cachedT,
     useLocale: () => 'en',
     useMessages: () => ({}),
     useFormatter: () => ({

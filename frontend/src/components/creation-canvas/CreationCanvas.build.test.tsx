@@ -54,7 +54,11 @@ function addBuilder() {
   fireEvent.click(screen.getByRole('button', { name: 'Builder' }));
 }
 
-describe('Builder objects on the Canvas', { timeout: 15_000 }, () => {
+// No suite-level timeout override — see the note in `CreationCanvas.test.tsx`:
+// the 15s cap was a mitigation for a render loop that no longer exists, and it
+// now only cuts off heavy mounts when this file runs alongside the rest of
+// `src/components` rather than on its own.
+describe('Builder objects on the Canvas', () => {
   it('offers exactly the IDE project types and reports that no workspace exists yet', () => {
     render(<CreationCanvas sessionId="builder-type-test" persistence="local" />);
 
