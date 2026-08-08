@@ -28,6 +28,7 @@ import { roleDisplayName } from './roleCatalog';
 import { resolveRoleCapableAgents } from './roleCapability';
 import { projectRoleAssignments } from '../../infrastructure/database/schema';
 import { requirementApplies, type Responsibility } from './types';
+import { isOnlyRequiredParticipant, soleRoleBlockReason } from './soleRoleGuard';
 import { ADVANCEABLE_PARTICIPANT_STATES, blocksCompletion, isParticipantSatisfied } from './participantStates';
 import { computeAccountabilityGaps, slotKey, type AccountabilityGapSeverity } from './accountabilityGaps';
 import type { SignoffContribution } from '../audit/ticketAuditService';
