@@ -8,7 +8,7 @@
  * Rate limiting: applied upstream via the shared rate limiter middleware.
  */
 import { Hono } from 'hono';
-import { eq, and, isNull, desc, sql } from 'drizzle-orm';
+import { eq, and, isNull, desc, sql, gte, lte, inArray } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import * as schema from '../../infrastructure/database/schema';
 import type { HonoEnv } from '../../env';
@@ -275,6 +275,140 @@ export function createPublicApiRoutes(db: Db): Hono<HonoEnv> {
     // Platform personas from DB (admin-managed)
     const rows = await db.select().from(schema.platformPersonas).where(eq(schema.platformPersonas.active, true));
     return c.json({ personas: rows });
+  });
+
+  // ── Rollup endpoints (Developer API key auth) ───────────────────────────────
+
+  /**
+   * GET /api/v1/rollup – aggregated counts by status, category, and health score
+   *
+   * Query parameters:
+   *   - date_range (optional): Start and end dates (e.g., `2023-01-01:2023-12-31`)
+   *   - categories (optional): Comma-separated list of categories (e.g., `innovation,ktlo`)
+   *   - statuses (optional): Comma-separated list of statuses (e.g., `backlog,in_progress`)
+   *   - health_score_min (optional): Minimum health score (0-100)
+   *   - health_score_max (optional): Maximum health score (0-100)
+   *
+   * Returns:
+   *   - status_counts: { [status]: count }
+   *   - category_counts: { [category]: count }
+   *   - health_score_distribution: { "0-50": count, "51-70": count, "71-90": count, "91-100": count }
+   */
+  router.get('/rollup', async (c) => {
+    const auth = await requireDevApiKey(db, c.req.header('Authorization'));
+    if (!auth.ok) return c.json({ error: auth.error }, auth.status as 401 | 403);
+
+    c.executionCtx.waitUntil(
+      db.update(schema.developerApiKeys).set({ lastUsedAt: new Date() }).where(eq(schema.developerApiKeys.id, auth.keyId)),
+    );
+
+    // Parse query parameters
+    const { date_range, categories, statuses, health_score_min, health_score_max } = c.req.query();
+
+    // Build filter conditions
+    const conditions: any[] = [];
+
+    // Date range filter (on created_at)
+    if (date_range) {
+      const [start, end] = date_range.split(':');
+      if (start && end) {
+        conditions.push(and(
+          gte(schema.tasks.createdAt, new Date(start)),
+          lte(schema.tasks.createdAt, new Date(end)),
+        ));
+      }
+    }
+
+    // Categories filter
+    if (categories) {
+      const categoryList = categories.split(',').map((s) => s.trim());
+      conditions.push(inArray(schema.tasks.allocationCategory, categoryList));
+    }
+
+    // Statuses filter
+    if (statuses) {
+      const statusList = statuses.split(',').map((s) => s.trim());
+      conditions.push(inArray(schema.tasks.status, statusList));
+    }
+
+    // Health score filter (using business_value as health score proxy)
+    const healthMin = health_score_min ? parseInt(health_score_min, 10) : null;
+    const healthMax = health_score_max ? parseInt(health_score_max, 10) : null;
+
+    if (healthMin !== null) {
+      conditions.push(gte(schema.tasks.businessValue, healthMin));
+    }
+    if (healthMax !== null) {
+      conditions.push(lte(schema.tasks.businessValue, healthMax));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // Get status counts
+    const statusRows = await db
+      .select({
+        status: schema.tasks.status,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(schema.tasks)
+      .where(whereClause)
+      .groupBy(schema.tasks.status);
+
+    const statusCounts: Record<string, number> = {};
+    for (const row of statusRows) {
+      statusCounts[row.status || 'unknown'] = Number(row.count);
+    }
+
+    // Get category counts (allocation_category)
+    const categoryRows = await db
+      .select({
+        category: schema.tasks.allocationCategory,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(schema.tasks)
+      .where(whereClause)
+      .groupBy(schema.tasks.allocationCategory);
+
+    const categoryCounts: Record<string, number> = {};
+    for (const row of categoryRows) {
+      categoryCounts[row.category || 'unclassified'] = Number(row.count);
+    }
+
+    // Get health score distribution (using business_value as proxy, 0-100)
+    // Buckets: 0-50, 51-70, 71-90, 91-100
+    const healthRows = await db
+      .select({
+        bucket: sql<string>`
+          CASE
+            WHEN ${schema.tasks.businessValue} IS NULL THEN 'unscored'
+            WHEN ${schema.tasks.businessValue} <= 50 THEN '0-50'
+            WHEN ${schema.tasks.businessValue} <= 70 THEN '51-70'
+            WHEN ${schema.tasks.businessValue} <= 90 THEN '71-90'
+            ELSE '91-100'
+          END
+        `,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(schema.tasks)
+      .where(whereClause)
+      .groupBy(sql`1`);
+
+    const healthScoreDistribution: Record<string, number> = {
+      '0-50': 0,
+      '51-70': 0,
+      '71-90': 0,
+      '91-100': 0,
+      unscored: 0,
+    };
+    for (const row of healthRows) {
+      healthScoreDistribution[row.bucket || 'unscored'] = Number(row.count);
+    }
+
+    return c.json({
+      status_counts: statusCounts,
+      category_counts: categoryCounts,
+      health_score_distribution: healthScoreDistribution,
+    });
   });
 
   return router;
