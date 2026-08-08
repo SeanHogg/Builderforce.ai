@@ -34,6 +34,7 @@ import { DocumentEditor } from './DocumentEditor';
 import { CanvasExportActions } from './CanvasExportActions';
 import { drawioLabelLines, drawioShapePolygon, parseDrawioXml, resolveDrawioXml, type DrawioGraph } from '@/lib/drawioDiagram';
 import { MermaidDiagram } from '@/components/MermaidDiagram';
+import { COURSE_EXPORT_STANDARDS, courseFromNode, courseProgress } from '@/lib/courseLms';
 
 export type CreationFlowNode = Node<CreationNodeData, 'creation'>;
 
@@ -64,6 +65,50 @@ function asRecord(value: unknown, fallback: Record<string, unknown>): Record<str
 
 function AuthoredContent({ data, fallback }: { data: CreationNodeData; fallback: string }) {
   return <p className={styles.authoredContent}>{authoredText(data) || fallback}</p>;
+}
+
+function CourseBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void }) {
+  const t = useTranslations('creationCanvas.course');
+  const course = courseFromNode(data);
+  const [activeId, setActiveId] = useState(course.modules[0]?.id ?? '');
+  const [answers, setAnswers] = useState<Record<string, number>>({});
+  const active = course.modules.find((module) => module.id === activeId) ?? course.modules[0];
+  const progress = courseProgress(course);
+  const completed = new Set(course.completedLessonIds);
+  const toggleLesson = (lessonId: string) => {
+    if (!onEdit) return;
+    const next = new Set(course.completedLessonIds);
+    if (next.has(lessonId)) next.delete(lessonId); else next.add(lessonId);
+    onEdit({ course: { ...course, completedLessonIds: [...next] }, status: next.size === progress.total ? t('completed') : t('inProgress') });
+  };
+  if (!active) return <p>{t('empty')}</p>;
+  return <div className={`${styles.courseShell} nodrag nowheel`}>
+    <div className={styles.courseSummary}>
+      <div><b>{t('progress', { percent: progress.percent })}</b><span>{t('lessonCount', { completed: progress.completed, total: progress.total })}</span></div>
+      <div className={styles.courseProgress} role="progressbar" aria-label={t('progressLabel')} aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress.percent}><i style={{ width: `${progress.percent}%` }} /></div>
+      <small>{t('duration', { minutes: course.estimatedMinutes })} · {COURSE_EXPORT_STANDARDS.join(' · ')}</small>
+    </div>
+    <div className={styles.courseWorkspace}>
+      <nav aria-label={t('modules')}>
+        {course.modules.map((module) => {
+          const moduleDone = module.lessons.every((item) => completed.has(item.id));
+          return <button key={module.id} type="button" aria-current={module.id === active.id ? 'step' : undefined} onClick={(event) => { event.stopPropagation(); setActiveId(module.id); }}><span>{moduleDone ? '✓' : String(course.modules.indexOf(module) + 1)}</span><b>{module.title.replace(/^\d+\.\s*/, '')}</b></button>;
+        })}
+      </nav>
+      <section>
+        <header><small>{t('module')}</small><h3>{active.title}</h3><p>{active.description}</p></header>
+        {active.lessons.map((item) => <details key={item.id} open={!completed.has(item.id)}>
+          <summary><span>{completed.has(item.id) ? '✓' : '○'}</span><b>{item.title}</b><small>{t('minutes', { count: item.durationMinutes })}</small></summary>
+          <div className={styles.courseLesson}><strong>{t('objective')}</strong><p>{item.objective}</p><p>{item.content}</p><strong>{t('practice')}</strong><p>{item.activity}</p><button type="button" disabled={!onEdit} onClick={(event) => { event.stopPropagation(); toggleLesson(item.id); }}>{completed.has(item.id) ? t('markIncomplete') : t('markComplete')}</button></div>
+        </details>)}
+        <div className={styles.courseQuiz}>
+          <strong>{t('knowledgeCheck')}</strong><p>{active.assessment.question}</p>
+          {active.assessment.choices.map((choice, index) => <button key={choice} type="button" data-selected={answers[active.id] === index || undefined} onClick={(event) => { event.stopPropagation(); setAnswers((current) => ({ ...current, [active.id]: index })); }}><span>{String.fromCharCode(65 + index)}</span>{choice}</button>)}
+          {answers[active.id] != null && <p role="status" data-correct={answers[active.id] === active.assessment.answer || undefined}><b>{answers[active.id] === active.assessment.answer ? t('correct') : t('tryAgain')}</b> {active.assessment.explanation}</p>}
+        </div>
+      </section>
+    </div>
+  </div>;
 }
 
 // `game` is deliberately absent: a game is the one creative kind whose artifact
@@ -1690,7 +1735,7 @@ function useAuthoredNodeSize(id: string): { width?: number; height?: number } {
 
 export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onEditData, onExport }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
-  const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication',
+  const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication', 'course',
     // A game is played in its own body, so it needs the width a game needs.
     'game'].includes(data.kind) || WEB_PAGE_KINDS.has(data.kind);
   // Every kind with a body of its own. A kind missing from here renders its own
@@ -1698,7 +1743,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
   // creative kinds did: a studio tile followed by a second, redundant block
   // repeating the same authored text. They are folded in from the one set that
   // already lists them, so a new creative kind cannot reintroduce the same bug.
-  const specialized = new Set(['workflow','website','build','prototype','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','game', ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
+  const specialized = new Set(['workflow','website','build','prototype','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','course','game', ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
   const authoredSize = useAuthoredNodeSize(id);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || '#f8f6ff'), borderColor: String(data.frameBorder || '#9d8bea') } : undefined;
   const cardStyle = { ...frameStyle, ...authoredSize };
@@ -1760,6 +1805,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {data.kind === 'mockupSet' && <><div className={styles.mockupGrid}><i /><i /><i /></div><p>{Array.isArray(data.items) && data.items.length ? t('linkedConcepts', { count: data.items.length }) : t('mockupSetFallback')}</p><div className={styles.pills}><span>{t('expandable')}</span><span>{t('citationsRetained')}</span></div></>}
         {data.kind === 'featureSummary' && <div className={styles.featureGrid}>{(Array.isArray(data.items) && data.items.length ? data.items.map((item) => typeof item === 'string' ? item : String((item as Record<string, unknown>)?.title || (item as Record<string, unknown>)?.name || t('feature'))).slice(0, 20) : ['Smart onboarding','Team analytics','Approval inbox','Voice commands','Custom dashboards','Agent handoffs','Mobile review','Audit history','Templates','Live collaboration']).map((feature, index) => <span key={`${feature}-${index}`}><b>{index + 1}</b>{feature}</span>)}</div>}
         {data.kind === 'evermind' && <EvermindBody data={data} />}
+        {data.kind === 'course' && <CourseBody data={data} {...(onEditData ? { onEdit: (patch: Partial<CreationNodeData>) => onEditData(id, patch) } : {})} />}
         {data.kind === 'projectComparison' && <ProjectComparisonBody data={data} />}
         {data.kind === 'pitch' && <PitchBody data={data} />}
         {data.kind === 'pitchScorecard' && <PitchScorecardBody data={data} />}

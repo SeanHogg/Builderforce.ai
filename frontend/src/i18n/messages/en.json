@@ -464,7 +464,8 @@
       "agentOps": "Agent Ops",
       "sales": "Sales Hub",
       "challenges": "Challenges",
-      "growth": "Growth"
+      "growth": "Growth",
+      "seat": "Team"
     },
     "tab": {
       "projects": "Projects",
@@ -549,8 +550,7 @@
       "memory": "Memory",
       "rehearsal": "Rehearsal"
     },
-    "primaryAria": "Primary",
-    "group.growth": "Growth"
+    "primaryAria": "Primary"
   },
   "alerts": {
     "title": "Alerts",
@@ -4424,6 +4424,19 @@
     },
     "eyebrow": "Meet Evermind",
     "tagline": "A project model designed to learn as the work changes",
+    "visual": {
+      "aria": "Live diagram of Evermind accepting a keyed project update through its four cooperating systems",
+      "kicker": "Live project memory",
+      "runtime": "WebGPU / on-device",
+      "system": "Builderforce / 02",
+      "core": "Learns as work changes",
+      "status": "Write accepted",
+      "key": "project.release.status",
+      "previous": "Previous",
+      "current": "Current",
+      "previousValue": "Blocked",
+      "currentValue": "Ready"
+    },
     "title": "Evermind — the <grad>Builderforce.ai LLM</grad>",
     "law": {
       "heading": "Write-Through Cognition",
@@ -8400,7 +8413,8 @@
       "demoFunnel": "Demo funnel",
       "salesLeads": "Sales leads",
       "salesCommissions": "Sales commissions",
-      "cron": "Scheduled sweeps"
+      "cron": "Scheduled sweeps",
+      "broadcasts": "Broadcasts"
     },
     "common": {
       "loading": "Loading…",
@@ -8604,7 +8618,7 @@
     },
     "sessions": {
       "title": "Adoption sessions",
-      "subtitle": "Anonymous Brain and free-tool visitors, including account and paid conversion.",
+      "subtitle": "Anonymous visitors, what they asked for, and how far they got.",
       "count": "{count, plural, one {# session} other {# sessions}}",
       "empty": "No guest sessions found.",
       "visitor": "Visitor",
@@ -8616,7 +8630,22 @@
       "tokensAndTools": "{tokens} tokens · {tools} tool runs",
       "guest": "guest",
       "registered": "registered",
-      "paid": "paid"
+      "paid": "paid",
+      "intent": "What they asked for",
+      "noPrompt": "No prompt recorded",
+      "promptMeta": "{count, plural, one {# prompt} other {# prompts}} - last on {surface}",
+      "promptRowMeta": "{surface} - {at}",
+      "firstSeenAt": "first seen {at}",
+      "drawerTitle": "Visitor",
+      "drawerMeta": "Landing {landing} - referrer {referrer}",
+      "messageVisitor": "Message this visitor",
+      "statSessions": "Sessions",
+      "statStatedIntent": "Stated an intent",
+      "statPromptsHint": "{count, plural, one {# prompt captured} other {# prompts captured}}",
+      "statRegistered": "Registered",
+      "statPaid": "Paid",
+      "statConversion": "Prompt to account",
+      "statConversionHint": "of sessions that stated an intent"
     },
     "creationSessions": {
       "title": "Creation Sessions",
@@ -9228,6 +9257,73 @@
         "title": "Force a scheduled sweep?",
         "dispatch": "Running \"{target}\" starts real agent runs across every tenant ({count} of the selected sweeps dispatch work). This spends tokens and is not a dry run.",
         "confirmLabel": "Run now"
+      }
+    },
+    "broadcasts": {
+      "title": "Platform broadcasts",
+      "subtitle": "Messages to visitors who have no workspace to reach them through.",
+      "count": "{count, plural, one {# broadcast} other {# broadcasts}}",
+      "empty": "No broadcasts yet.",
+      "compose": "New broadcast",
+      "composeTitle": "New broadcast",
+      "editTitle": "Edit broadcast",
+      "save": "Save",
+      "saving": "Saving...",
+      "edit": "Edit",
+      "goLive": "Go live",
+      "archive": "Archive",
+      "delete": "Delete",
+      "deleteTitle": "Delete this broadcast?",
+      "deleteMessage": "\"{message}\" will stop showing immediately. Engagement already recorded is kept.",
+      "deleteConfirm": "Delete",
+      "messageLabel": "Message",
+      "messagePlaceholder": "What should visitors see?",
+      "messageCounter": "{used}/500",
+      "messageRequired": "A broadcast needs a message.",
+      "toneLabel": "Tone",
+      "statusLabel": "Status",
+      "scopeLabel": "Audience",
+      "minPromptsLabel": "Minimum prompts",
+      "minPromptsHint": "Only visitors who have asked for something at least this many times.",
+      "ctaLabelLabel": "Button label",
+      "ctaHrefLabel": "Button link",
+      "startsAtLabel": "Starts",
+      "endsAtLabel": "Ends",
+      "dismissibleLabel": "Visitors can dismiss it",
+      "aimedAtVisitor": "Aimed at visitor {visitorId}",
+      "statLive": "Live now",
+      "statReach": "Visitors reached",
+      "statReachHint": "distinct visitors, all broadcasts",
+      "statClicks": "Clicks",
+      "statCtr": "Click-through",
+      "statCtrHint": "clicks per visitor reached",
+      "colMessage": "Message",
+      "colAudience": "Audience",
+      "colWindow": "Window",
+      "colEngagement": "Engagement",
+      "colActions": "Actions",
+      "audienceVisitors": "{count, plural, one {# named visitor} other {# named visitors}}",
+      "audienceMinPrompts": "{count}+ prompts",
+      "windowImmediate": "Live immediately",
+      "windowOpenEnded": "No end date",
+      "engagementReach": "{count, plural, one {# visitor} other {# visitors}}",
+      "engagementDetail": "{clicks} clicks - {ctr}% CTR - {dismissals} dismissed",
+      "tone": {
+        "info": "Info",
+        "success": "Success",
+        "warning": "Warning",
+        "critical": "Critical"
+      },
+      "status": {
+        "draft": "Draft",
+        "live": "Live",
+        "archived": "Archived"
+      },
+      "scope": {
+        "all": "Everyone",
+        "guest": "Anonymous visitors",
+        "registered": "Registered users",
+        "paid": "Paying customers"
       }
     }
   },
@@ -12735,7 +12831,27 @@
       "pdf": "PDF",
       "pptx": "PowerPoint",
       "svg": "SVG",
-      "json": "JSON"
+      "json": "JSON",
+      "scorm": "SCORM package"
+    },
+    "course": {
+      "progress": "{percent}% complete",
+      "lessonCount": "{completed} of {total} lessons",
+      "progressLabel": "Course progress",
+      "duration": "{minutes} minutes",
+      "modules": "Course modules",
+      "module": "Learning module",
+      "minutes": "{count} min",
+      "objective": "Objective",
+      "practice": "Hands-on practice",
+      "markComplete": "Mark lesson complete",
+      "markIncomplete": "Mark incomplete",
+      "knowledgeCheck": "Knowledge check",
+      "correct": "Correct.",
+      "tryAgain": "Try again.",
+      "completed": "Course completed",
+      "inProgress": "Learning in progress",
+      "empty": "Add modules to begin this course."
     },
     "sessionTitle": "Session title",
     "saved": "Session saved",
@@ -12896,7 +13012,8 @@
       "inbox": "Inbox",
       "email": "Email",
       "emailCampaign": "Email campaign",
-      "emailTemplate": "Email template"
+      "emailTemplate": "Email template",
+      "course": "Course"
     },
     "canvasOutline": "Accessible canvas outline",
     "canvasGestureToggle": "Drag to select",
@@ -13549,6 +13666,7 @@
     "noticeKnowledgeConnected": "Knowledge added and connected to the agent",
     "noticeBrainEvaluating": "Brain is evaluating connected objects…",
     "noticeRoadmapAdded": "Roadmap added to canvas",
+    "noticeLlmCourseAdded": "Your LLM course and capstone lab are ready",
     "noticeFeatureSummaryAdded": "Feature summary and mockups added",
     "noticeEvaluationAdded": "Evaluation added to canvas",
     "noticeSavingPrd": "Saving reviewed PRD to its project…",
@@ -13647,6 +13765,10 @@
     "templateCategoryMarketplace": "Marketplace template",
     "templateCategoryObjectPack": "Object pack",
     "template": {
+      "llm-builder-academy": {
+        "name": "LLM Builder Academy",
+        "description": "Learn the full LLM lifecycle through lessons, practice, assessments, and a portable SCORM package."
+      },
       "sales-command-center": {
         "name": "Sales command center",
         "description": "Run targeting, outreach, pipeline management, goals, and coaching from one collaborative canvas."
@@ -14375,5 +14497,149 @@
       "mutatesWarning": "This action changes something — it sends a message, places a call or moves money. It will run unattended every time this workflow fires.",
       "connectionHint": "Needs a live {name} connection under Integrations. The node fails closed until one exists."
     }
+  },
+  "kernel": {
+    "timeline": {
+      "loading": "Loading activity…",
+      "empty": "Nothing has happened here yet.",
+      "failed": "Activity could not be loaded.",
+      "someone": "Someone"
+    },
+    "comments": {
+      "placeholder": "Add a comment…",
+      "post": "Post",
+      "posting": "Posting…",
+      "loading": "Loading comments…",
+      "empty": "No comments yet.",
+      "resolved": "Resolved",
+      "someone": "Someone"
+    },
+    "share": {
+      "scopeLabel": "Access",
+      "create": "Create link",
+      "creating": "Creating…",
+      "shownOnce": "Copy this link now — only its hash is stored, so it cannot be shown again.",
+      "loading": "Loading links…",
+      "empty": "No share links.",
+      "revoke": "Revoke",
+      "uses": "{count} uses",
+      "expires": "expires {date}",
+      "scope": {
+        "view": "Can view",
+        "comment": "Can comment",
+        "edit": "Can edit"
+      }
+    },
+    "chart": {
+      "empty": "No measurements yet.",
+      "ariaLabel": "Trend chart, {count} series"
+    },
+    "panel": {
+      "title": "Details",
+      "breadcrumb": "Breadcrumb",
+      "sections": "Sections",
+      "untitled": "Untitled",
+      "close": "Close",
+      "noMembers": "Nobody is on this yet.",
+      "noRevisions": "No versions yet.",
+      "tab": {
+        "activity": "Activity",
+        "comments": "Comments",
+        "members": "Members",
+        "shares": "Sharing",
+        "revisions": "Versions"
+      }
+    },
+    "roster": {
+      "label": "Team",
+      "team": "Team",
+      "recents": "Recent",
+      "activeNow": "Active recently",
+      "expand": "Expand navigation",
+      "collapse": "Collapse navigation",
+      "domain": {
+        "growth": "Growth",
+        "delivery": "Delivery",
+        "agents": "Agents",
+        "hiring": "Hiring",
+        "finance": "Finance",
+        "revenue": "Revenue",
+        "commerce": "Commerce",
+        "identity": "Identity",
+        "people": "People",
+        "platform": "Platform",
+        "governance": "Governance",
+        "investor": "Portfolio",
+        "support": "Support",
+        "canvas": "Canvas",
+        "integrations": "Integrations"
+      }
+    },
+    "surface": {
+      "ownedBy": "Owned by the {seat}",
+      "loading": "Loading…",
+      "noItems": "Nothing here yet.",
+      "panelLabel": "Object details",
+      "stat": {
+        "items": "Items",
+        "recentEvents": "Events this week",
+        "lastActivity": "Last activity"
+      },
+      "section": {
+        "metrics": "Trends",
+        "items": "Owned by this seat",
+        "activity": "Recent activity",
+        "records": "Records",
+        "kernel": "Shared kernel"
+      },
+      "blurb": {
+        "growth": "Campaigns, landing pages, content and the audiences they reach.",
+        "delivery": "Every unit of work — tasks, epics, objectives, milestones — as one tree.",
+        "agents": "Agents, runs and the models behind them.",
+        "hiring": "Postings, applications, interviews and placements.",
+        "finance": "The ledger, plans, expenses and the scenarios built on them.",
+        "revenue": "Deals, pipelines, contacts and outreach.",
+        "commerce": "Listings, orders, bookings and gigs.",
+        "identity": "People, teams, workspaces and how they sign in.",
+        "people": "Employment, learning and how the organisation is doing.",
+        "platform": "Monitors, dashboards and what the platform is reporting.",
+        "governance": "Controls, findings and the evidence behind them.",
+        "investor": "Companies, products, diligence and validation.",
+        "support": "Tickets, articles and what customers are telling you.",
+        "canvas": "Everything authored, shared and worked on together.",
+        "integrations": "Connected accounts and what they sync."
+      },
+      "kernelBlurb": "The twenty-five primitives every seat shares. No domain owns them, and none may fork one."
+    },
+    "entities": {
+      "tabs": "Record types",
+      "loading": "Loading…",
+      "noEntities": "This seat owns no records yet.",
+      "empty": "No records.",
+      "search": "Search",
+      "searchBy": "Search by {field}",
+      "searchDisabled": "This record type has no searchable name",
+      "new": "New",
+      "edit": "Edit",
+      "retire": "Retire",
+      "actions": "Actions",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "creating": "New {entity}",
+      "editing": "Edit {entity}",
+      "readOnly": "Read-only — these rows are written by the service that owns them.",
+      "withheld": "Withheld fields: {fields}",
+      "loadFailed": "Could not load these records.",
+      "saveFailed": "Could not save.",
+      "previous": "Previous",
+      "next": "Next",
+      "range": "{from}–{to} of {total}"
+    }
+  },
+  "announcements": {
+    "regionLabel": "Announcements",
+    "dismiss": "Dismiss",
+    "defaultCta": "Learn more"
   }
 }

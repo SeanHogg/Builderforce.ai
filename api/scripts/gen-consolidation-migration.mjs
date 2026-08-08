@@ -68,10 +68,11 @@ for (const f of readdirSync(schemaDir).filter((f) => f.endsWith('.ts') && !f.end
  *  migration create this?" they look brand new. Emitting DDL for them would
  *  invent a CREATE TABLE for something already in production.
  *
- *  `append-domain-tables.mjs` writes a marker above the block it appends, so the
- *  boundary is recorded in the file rather than inferred. A module written whole
- *  by this work (hiring, people, revenue, investor, support, kernel) has no
- *  marker and is generated in full. */
+ *  The consolidation left a MARKER above the block it appended to each such
+ *  module, so the boundary is recorded IN the file rather than inferred — add a
+ *  table below that line and regenerate. A module written whole by this work
+ *  (kernel, hiring, people, revenue, investor, support) has no marker and is
+ *  generated in full. */
 const MARKER = '// ═══ PRD 20 §5 step 2 — target-schema tables ═══';
 const moduleText = readFileSync(modulePath, 'utf8');
 const markerAt = moduleText.indexOf(MARKER);

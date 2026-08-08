@@ -141,6 +141,7 @@ import { getLimits, resolveImageCreditsDailyLimit, GUEST_CHAT_LIMITS } from '../
 import { evaluateFrontierAccess, evaluatePremiumModelAccess, premiumModelGateBody } from '../../domain/tenant/planFeatures';
 import { isCardValidated } from '../../application/tenant/cardValidationService';
 import { GuestChatService } from '../../application/guest/GuestChatService';
+import { GuestPromptService } from '../../application/marketing/GuestPromptService';
 import { verifyGuestToken, guestBrainEnabled, GUEST_TOKEN_PREFIX } from '../../application/guest/guestToken';
 import { guestRoomTurn } from '../../application/guest/guestRoomClient';
 import { restrictGuestTools } from '../../application/guest/guestCanvasTools';
@@ -1144,6 +1145,31 @@ async function handleGuestChat(c: Context<HonoEnv>): Promise<Response> {
   const traceId = newTraceId();
   const estimatedTokens = estimateRequestTokens(body.messages, undefined);
   const result = await service.complete(body, undefined, traceId, undefined, { estimatedTokens });
+
+  // Harvest the visitor's own words for the funnel. The landing composer posts
+  // its prompt explicitly (it fires before any model call exists); every turn
+  // INSIDE a session arrives here instead, so this is where those are captured —
+  // off the request path, so a canvas turn pays nothing for it, and only when the
+  // client sent the original input rather than the assembled message array (a
+  // tool-loop continuation carries no new human sentence and must not be logged
+  // as one). `record` is idempotent about nothing and charges its own daily
+  // ceiling, which is why the same service owns both entry points.
+  if (originalUserInput) {
+    c.executionCtx.waitUntil(
+      new GuestPromptService(buildDatabase(c.env))
+        .record(c.env as Env, {
+          visitorId,
+          prompt: originalUserInput,
+          surface: roomCode ? 'room' : 'canvas',
+          mode: typeof metadata?.chatMode === 'string' ? metadata.chatMode : undefined,
+          sessionRef: typeof metadata?.sessionRef === 'string' ? metadata.sessionRef : undefined,
+          ip,
+        })
+        .catch((error) => {
+          reportCaughtError(error, { source: 'presentation/routes/llmRoutes.ts', operation: 'handleGuestChat.recordPrompt' });
+        }),
+    );
+  }
 
   // Charge only once an upstream has accepted the request. For streaming calls
   // this still happens before the response body is handed to the browser, so an

@@ -59,7 +59,7 @@ import { describeMailboxFilter, mailboxApi, resolveMailboxConnection, type Mailb
 import { trackActivity } from '@/lib/activity/tracker';
 import { useTranslations } from 'next-intl';
 import { CREATION_CONNECTION_KINDS, CREATIVE_CAPABILITIES, type CreationConnectionKind } from '@builderforce/creation-canvas-contract';
-import { downloadJson, downloadText, toCsv } from '@/lib/download';
+import { downloadBlob, downloadJson, downloadText, toCsv } from '@/lib/download';
 import { OfficeExportUnavailableError, exportCsv, exportDocx, exportPptx, exportXlsx } from '@/lib/exportApi';
 import { copyTextToClipboard } from '@/lib/useCopyToClipboard';
 import {
@@ -109,6 +109,7 @@ import { CanvasGamePanel } from './CanvasGamePanel';
 import { gamePayloadFrom } from '@/lib/gameTargets';
 import { useLocalizedModalities, useModalityCopy } from '@/lib/useModalityCopy';
 import type { ProjectModality } from '@/lib/modality';
+import { buildLlmCourse, buildScormPackage, courseFromNode } from '@/lib/courseLms';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
@@ -132,6 +133,18 @@ const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly stri
 };
 const CREATIVE_GENERATOR_KINDS = new Set<CreationObjectKind>(['image', 'animation', 'podcast', 'comic', 'game', 'cad', 'model3d', 'resume', 'template']);
 const CREATIVE_OUTPUTS = Object.fromEntries(CREATIVE_CAPABILITIES.map((capability) => [capability.kind, capability.outputs])) as Partial<Record<CreationObjectKind, readonly string[]>>;
+
+/** Serialize one trace arg/result for the diagnostics report. A trace payload can
+ *  hold a cyclic React value or a very large tool result, and the report that
+ *  explains a failure must never be the thing that throws while producing it. */
+function safeTraceJson(value: unknown): string {
+  try {
+    const text = typeof value === 'string' ? value : JSON.stringify(value);
+    return text === undefined ? '(unserializable)' : text.slice(0, 400);
+  } catch {
+    return '(unserializable)';
+  }
+}
 
 /** True only when an advertised capability has a real Canvas-side adapter. */
 export function canInvokeCreationObjectAction(kind: CreationObjectKind, action: string): boolean {
@@ -1781,7 +1794,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const applyTemplate = useCallback((template: CreationTemplate) => {
     if (!canEdit) return;
     const center = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 260 };
-    const created = template.objects.map((item) => { const node = newNode(item.kind, { x: center.x + item.x - 520, y: center.y + item.y - 180 }); if (item.title) node.data = { ...node.data, title: item.title }; return node; });
+    const created = template.objects.map((item) => { const node = newNode(item.kind, { x: center.x + item.x - 520, y: center.y + item.y - 180 }); node.data = { ...node.data, ...(item.data ?? {}), ...(item.title ? { title: item.title } : {}) }; return node; });
     const createdEdges = (template.connections ?? []).map((edge) => ({ id: crypto.randomUUID(), source: created[edge.source].id, target: created[edge.target].id, type: 'smoothstep', label: edge.label }));
     setNodes((current) => [...current, ...created]); setEdges((current) => [...current, ...createdEdges]); setTemplateOpen(false); setNotice(t('noticeTemplateAddedMarketplace', { name: templateText(template, 'name') }));
     trackActivity('creation_object_pack_added', { sessionId, metadata: { clientSurface: canvasSurface(), templateId: template.id, objectKinds: template.objects.map((item) => item.kind) } });
@@ -3167,6 +3180,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }
     window.setTimeout(() => {
       const request = requestText.toLowerCase();
+      if (/\b(?:course|training|lms|academy|learn)\b/.test(request) && /\b(?:llm|language model)\b/.test(request)) {
+        const brain = nodes.find((node) => node.data.kind === 'chat');
+        const course: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 420, y: 180 }, data: { kind: 'course', title: 'Build an LLM', status: 'Ready to learn', subtitle: 'From requirements and data to training, evaluation, and deployment.', course: buildLlmCourse() } };
+        const lab: CreationFlowNode = { id: crypto.randomUUID(), type: 'creation', position: { x: 1020, y: 230 }, data: { ...createDefaultCreationData('code'), title: 'LLM capstone lab', status: 'Practice workspace', language: 'python', code: '# Build your tokenizer, model, and training loop here\n' } };
+        setNodes((current) => [...current, course, lab]);
+        setEdges((current) => associateBrainWithArtifacts([...current, { id: crypto.randomUUID(), source: course.id, target: lab.id, type: 'smoothstep', label: 'practice', animated: true, data: { connectionKind: 'reference' } }], brain?.id || '', [course.id], 'Created with Brain'));
+        setSelectedId(course.id); setThinking(false); setPrompt(''); setNotice(t('noticeLlmCourseAdded')); return;
+      }
       if (request.includes('roadmap')) {
         const project = nodes.find((node) => node.data.kind === 'project');
         const brain = nodes.find((node) => node.data.kind === 'chat');
@@ -3771,6 +3792,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         if (!printCanvasObject(target.data, canvasObjectSvg(target.data, nodeId))) throw new Error(t('printUnavailable'));
       }
       if (action === 'json') downloadJson({ kind: target.data.kind, title: target.data.title, data: target.data }, fileName);
+      if (action === 'scorm') downloadBlob(new Blob([buildScormPackage(courseFromNode(target.data), target.data.title)], { type: EXPORT_MIME.scorm }), fileName);
 
       const delivered: CreationDeliverable = {
         id: crypto.randomUUID(), action: 'export', artifactKind: action, status: 'delivered',
@@ -4011,8 +4033,12 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }), [canRun, cardsEditable, exportFromNode, runWorkflow, updateNodeData]);
   const buildDiagnostics = useCallback(async () => buildCreationCanvasDiagnosticsReport({
     sessionId, title, persistence, role: sessionRole, revision: revision.current, realtimeState,
-    objectCount: nodes.length, connectionCount: edges.length,
-    objectKinds: nodes.reduce<Record<string, number>>((counts, node) => ({ ...counts, [node.data.kind]: (counts[node.data.kind] || 0) + 1 }), {}),
+    // Objects are passed WHOLE: the report decides which fields explain whether
+    // an object can act, so every caller reports the same evidence rather than
+    // each one choosing a different subset (which is how the field that mattered
+    // — a workflow's step count — came to be missing).
+    objects: nodes.map((node) => ({ id: node.id, data: node.data as Record<string, unknown> })),
+    connectionCount: edges.length,
     selectedObjectIds: effectiveSelectedIds,
     hiddenObjectCount: nodes.filter((node) => node.data.placementHidden === true).length,
     lockedObjectCount: nodes.filter((node) => node.data.placementLocked === true).length,
@@ -4020,9 +4046,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     canonicalResourceCount: nodes.filter((node) => !!node.data.resourceId).length,
     memberCount: persistence === 'local' ? 1 : allMembers.length,
     pendingInvitationCount: pendingInvitations.length,
+    unsavedChanges: currentGraph.current !== lastSavedGraph.current,
+    saveInFlight: saveInFlight.current,
+    undoDepth: undoStack.current.length,
     timeline: timeline.map((message) => ({ role: message.messageRole === 'assistant' ? 'Brain' : message.messageRole, body: message.body, createdAt: message.createdAt })),
     brain: { scope: resolvedScopeMode, thinking, proposedChangeCount: proposedChanges.length, actionCount: canvasActions.length },
-  }, await captureDiagnosticsContext()), [allMembers.length, canvasActions.length, edges.length, effectiveSelectedIds, nodes, pendingInvitations.length, persistence, proposedChanges.length, realtimeState, resolvedScopeMode, sessionId, sessionRole, thinking, timeline, title]);
+    trace: brainTrace.map((event) => ({
+      ts: event.ts, category: event.category, label: event.label,
+      ok: event.isError === true ? false : null,
+      detail: [event.args === undefined ? '' : `args=${safeTraceJson(event.args)}`, event.result === undefined ? '' : `result=${safeTraceJson(event.result)}`].filter(Boolean).join(' '),
+    })),
+  }, await captureDiagnosticsContext()), [allMembers.length, brainTrace, canvasActions.length, edges.length, effectiveSelectedIds, nodes, pendingInvitations.length, persistence, proposedChanges.length, realtimeState, resolvedScopeMode, sessionId, sessionRole, thinking, timeline, title]);
 
   /**
    * The diagnostics control does the whole job in one click: the report is on the

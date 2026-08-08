@@ -264,7 +264,15 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
     });
 
     await invalidateCached(c.env as Env, listCacheKey(tenantId));
-    const [row] = await db.select().from(workflowDefinitions).where(eq(workflowDefinitions.id, id));
+    // Scoped by tenant as well as id. The id is a freshly generated uuid, so the
+    // read cannot cross a boundary in practice — but `check-tenant-scope.mjs`
+    // counts statements, not reachability, and a read-back that is only safe
+    // because of how its id happened to be produced is the one that stops being
+    // safe the moment somebody reuses the helper.
+    const [row] = await db
+      .select()
+      .from(workflowDefinitions)
+      .where(and(eq(workflowDefinitions.id, id), eq(workflowDefinitions.tenantId, tenantId)));
     return c.json(row, 201);
   });
 
@@ -301,7 +309,15 @@ export function createWorkflowDefinitionRoutes(db: Db): Hono<HonoEnv> {
       definitionId: id, tenantId, segmentId, definition: def, target: { runtime: 'host', agentHostId: null },
     });
     await invalidateCached(c.env as Env, listCacheKey(tenantId));
-    const [row] = await db.select().from(workflowDefinitions).where(eq(workflowDefinitions.id, id));
+    // Scoped by tenant as well as id. The id is a freshly generated uuid, so the
+    // read cannot cross a boundary in practice — but `check-tenant-scope.mjs`
+    // counts statements, not reachability, and a read-back that is only safe
+    // because of how its id happened to be produced is the one that stops being
+    // safe the moment somebody reuses the helper.
+    const [row] = await db
+      .select()
+      .from(workflowDefinitions)
+      .where(and(eq(workflowDefinitions.id, id), eq(workflowDefinitions.tenantId, tenantId)));
     return c.json(row, 201);
   });
 

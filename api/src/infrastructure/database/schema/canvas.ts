@@ -11,9 +11,6 @@
  * thing is authored content, that people can be present in, and can be shared, it
  * is not a feature — it is the canvas. Authoring lived in one file and presence in
  * the other, and every feature that needed both had to import across the seam.
- *
- * Merged from `brain.ts` + `collaboration.ts` by
- * scripts/merge-schema-modules.mjs (PRD 20 §5 step 2).
  */
 
 import {
@@ -596,20 +593,7 @@ export const timeEntries = pgTable('time_entries', {
 export { activityLog } from './kernel';
 
 
-/** One-time 6-digit email-ownership codes issued at password signup (and re-issued when
- *  an unverified account tries to sign in). The code itself is never stored — only its
- *  SHA-256 hash. A row is consumed on success, superseded when a newer code is issued,
- *  and rejected once `attempts` hits the cap or `expiresAt` passes. (mig 0285) */
-export const emailVerificationCodes = pgTable('email_verification_codes', {
-  id:         uuid('id').primaryKey().defaultRandom(),
-  userId:     varchar('user_id', { length: 36 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
-  email:      varchar('email', { length: 255 }).notNull(),
-  codeHash:   varchar('code_hash', { length: 64 }).notNull(),
-  expiresAt:  timestamp('expires_at').notNull(),
-  attempts:   integer('attempts').notNull().default(0),
-  consumedAt: timestamp('consumed_at'),
-  createdAt:  timestamp('created_at').notNull().defaultNow(),
-});
+
 
 
 // ---------------------------------------------------------------------------

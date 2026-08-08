@@ -23,10 +23,11 @@ import {
   boardTypeMappings,
   externalTicketLinks,
   tenantMembers,
-  tenantInvitations,
   users,
 } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import type { Env } from '../../env';
+import { hasPendingInvite, invite } from '../kernel/InvitationService';
 import type {
   MigrationStore,
   RunRow,
@@ -55,7 +56,11 @@ function toRun(row: typeof importRuns.$inferSelect): RunRow {
   };
 }
 
-export function createMigrationStore(db: Db): MigrationStore {
+/** `env` invalidates the tenant's cached invitation roster when an import
+ *  invites a person — the store owns the write, so it owns the invalidation.
+ *  Optional because the MCP tool context threads bindings only when it has
+ *  them; see the note on `invalidateInvitations`. */
+export function createMigrationStore(db: Db, env?: Env): MigrationStore {
   return {
     async createRun(input): Promise<RunRow> {
       const [row] = await db.insert(importRuns).values({
@@ -283,9 +288,8 @@ export function createMigrationStore(db: Db): MigrationStore {
     },
 
     async hasMemberOrInvite(tenantId, email): Promise<boolean> {
-      const [invite] = await db.select({ id: tenantInvitations.id }).from(tenantInvitations)
-        .where(and(eq(tenantInvitations.tenantId, tenantId), eq(tenantInvitations.email, email), eq(tenantInvitations.status, 'pending'))).limit(1);
-      if (invite) return true;
+      // One definition of "pending", in the service that owns the primitive.
+      if (await hasPendingInvite(db, tenantId, email)) return true;
       const [member] = await db.select({ id: tenantMembers.id }).from(tenantMembers)
         .innerJoin(users, eq(users.id, tenantMembers.userId))
         .where(and(eq(tenantMembers.tenantId, tenantId), eq(users.email, email))).limit(1);
@@ -293,11 +297,11 @@ export function createMigrationStore(db: Db): MigrationStore {
     },
 
     async insertInvitation(input): Promise<void> {
-      await db.insert(tenantInvitations).values({
+      await invite(db, env, {
         tenantId: input.tenantId,
+        kind: 'tenant',
         email: input.email,
-        invitedByUserId: input.invitedByUserId,
-        status: 'pending',
+        invitedBy: input.invitedByUserId,
       });
     },
 

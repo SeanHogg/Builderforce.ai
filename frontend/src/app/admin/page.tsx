@@ -23,6 +23,7 @@ import NewsletterPanel from '@/components/admin/panels/NewsletterPanel';
 import ReleaseNotesPanel from '@/components/admin/panels/ReleaseNotesPanel';
 import DemoFunnelPanel from '@/components/admin/panels/DemoFunnelPanel';
 import SalesLeadsPanel from '@/components/admin/panels/SalesLeadsPanel';
+import BroadcastsPanel from '@/components/admin/panels/BroadcastsPanel';
 import SalesCommissionsPanel from '@/components/admin/panels/SalesCommissionsPanel';
 import PrivacyPanel from '@/components/admin/panels/PrivacyPanel';
 import PersonasPanel from '@/components/admin/panels/PersonasPanel';
@@ -72,6 +73,7 @@ const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
   releaseNotes: ReleaseNotesPanel,
   demoFunnel: DemoFunnelPanel,
   salesLeads: SalesLeadsPanel,
+  broadcasts: BroadcastsPanel,
   salesCommissions: SalesCommissionsPanel,
   errors: ErrorsPanel,
   emailDeliveries: EmailDeliveriesPanel,

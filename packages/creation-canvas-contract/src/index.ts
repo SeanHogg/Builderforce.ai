@@ -18,6 +18,8 @@ export const CREATION_OBJECT_KINDS = [
   // A marketing campaign and the template it renders — the canvas half of
   // "draft this, then send it to that list".
   'emailCampaign', 'emailTemplate',
+  // A standards-based learning experience authored and completed on the canvas.
+  'course',
 ] as const;
 
 export type CreationObjectKind = typeof CREATION_OBJECT_KINDS[number];

@@ -138,6 +138,7 @@ Public copy describes evidence available today; stronger promises become roadmap
 
 | # | Group | Open items |
 |---|-------|-----------|
+| 0 | [PRD 20 · Consolidated data model](#prd-20--consolidated-data-model--what-the-2026-08-08-pass-did-not-close) | 8 (steps 1–3 + the kernel halves of 6–7 RESOLVED 2026-08-08 → DONE.md; what remains is the data/behaviour move) |
 | 1 | [Cloud Agent Runtime & PR Loop](#1--cloud-agent-runtime--pr-loop) | ~17 (was ~19; reconciled 2026-07-22; +1 executor `never_started` trace 2026-07-28) |
 | 2 | [On-Prem Runtime, Engine & Tooling](#2--on-prem-runtime-engine--tooling) | ~9 |
 | 3 | [LLM Gateway, Routing & Cost](#3--llm-gateway-routing--cost) | ~25 (+1 Kimi runtime-less operation 2026-08-02; Moonshot dual-host, probe diagnostics + Kimi local egress all RESOLVED same day → DONE.md) |
@@ -146,13 +147,106 @@ Public copy describes evidence available today; stronger promises become roadmap
 | 6 | [Workforce, Boards, Kanban & Ceremonies](#6--workforce-boards-kanban--ceremonies) | ~16 (+2 hired.video port 2026-08-07: no Recruiter/HR built-in agent, OKR-store fork risk) |
 | 7 | [Insights, Analytics & Audits](#7--insights-analytics--audits) | ~16 (lane-move actor attribution RESOLVED 2026-07-27 → DONE.md) |
 | 8 | [Reliability — Incidents & Monitoring](#8--reliability--incidents--monitoring) | ~10 |
-| 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | ~22 (all 6 challenge-pipeline residuals RESOLVED 2026-08-06 → DONE.md) (+1 connection-status probe bounds 2026-08-06; the marketing/CRM half of "connectors have no backend" RESOLVED 2026-08-06 by the connector platform → DONE.md, data-db half narrowed and still open; +3 connector-platform deferrals 2026-08-06: OAuth2 flow, YAML specs, call metering; +1 hired.video port 2026-08-07: no HRMS/ATS connector category; +4 connected-mailbox residuals 2026-08-07 — SMS channel, campaign scheduling, inbox push, attachments — while the mailbox/campaign-studio slice shipped → DONE.md) |
+| 9 | [Integrations, Connectors & Workflows](#9--integrations-connectors--workflows) | ~24 (+2 canvas workflow compile residuals 2026-08-08 — runTarget/approvalMode still cosmetic, linear-chain only — while the canvas→executable-workflow slice shipped → DONE.md) (all 6 challenge-pipeline residuals RESOLVED 2026-08-06 → DONE.md) (+1 connection-status probe bounds 2026-08-06; the marketing/CRM half of "connectors have no backend" RESOLVED 2026-08-06 by the connector platform → DONE.md, data-db half narrowed and still open; +3 connector-platform deferrals 2026-08-06: OAuth2 flow, YAML specs, call metering; +1 hired.video port 2026-08-07: no HRMS/ATS connector category; +4 connected-mailbox residuals 2026-08-07 — SMS channel, campaign scheduling, inbox push, attachments — while the mailbox/campaign-studio slice shipped → DONE.md) |
 | 10 | [Marketplace, Talent, Freelance, Knowledge & Canvas](#10--marketplace-talent-freelance-knowledge--canvas) | ~26 (+2 creative-object rendering 2026-08-05; +4 Map object residuals 2026-08-06; +2 canvas touch input & guest-limit wall 2026-08-06; both 2026-08-07 export residuals RESOLVED same day → DONE.md; +1 creative-capability drift (`game` clause RESOLVED 2026-08-07; model3d/podcast still open); +1 Drive/OneDrive scope registration 2026-08-07 while the cloud-files slice + drop-stub shipped → DONE.md; +1 Roblox .rbxlx unverified against Studio 2026-08-07 while the game-target slice shipped → DONE.md; +7 hired.video port 2026-08-07: 8 runtime-less canvas kinds (was 9; `game` RESOLVED 2026-08-07 → DONE.md), no screen/webcam capture, export-registry merge, résumés remote-only, 6 absent product domains, payout stack, phone product; +4 navigation architecture 2026-08-07: canvas-scoped presence, undefined scope rules, three room concepts, dock at consolidated scale; +4 navigation continuity & findability 2026-08-07: orphaned guest drafts, `/create`→dashboard redirect, no command palette / destination registry, `CanvasRouteArtifact` fake-canvas wrapper) |
 | 11 | [Studio (Video/Voice), QA & Mobile](#11--studio-videovoice-qa--mobile) | ~6 |
 | 12 | [VS Code Extension](#12--vs-code-extension) | ~9 (+3 VSIX harness 2026-07-25; +1 ORT runtime deploy 2026-08-06; canvas trimmed-catalog drift RESOLVED 2026-08-06 → DONE.md) |
 | 13 | [Segments, Multi-tenant, Embed & Governance](#13--segments-multi-tenant-embed--governance) | ~9 (custom domain + site backend + site telemetry RESOLVED 2026-08-06 → DONE.md; site-origin handlers + deep-link base + storage reclamation RESOLVED 2026-08-06 → DONE.md; 3 remain: arbitrary server code, per-visitor identity, cert entitlement) |
 | 14 | [Frontend, i18n, Theme & Marketing/SEO](#14--frontend-i18n-theme--marketingseo) | ~21 (+1 distribution channels 2026-08-07 — the engineering half RESOLVED same day → DONE.md, credential/live-env half remains; +2 formatting/RSC 2026-07-26; EvermindConsole stale-query failure + frontend suite flakiness RESOLVED 2026-08-05 → DONE.md; both `CreationCanvas.test.tsx` entries — the 3D-group event-loop block and the worker OOM — RESOLVED 2026-08-07 → DONE.md) |
 | 15 | [Platform — DB, CI/CD, Migrations, Cost & Tech-debt](#15--platform--db-cicd-migrations-cost--tech-debt) | ~21 (silent-catches guard + connector-platform ratchets both RESOLVED 2026-08-06 → DONE.md) (+1 flaky api full-suite vitest 2026-07-31, +9 Drizzle-migration residuals 2026-07-25, +5 missing agentic bounded contexts 2026-07-26 — 3 of 8 SHIPPED → DONE.md, +3 build-guard/permissions 2026-07-26, +4 architecture-pass residuals 2026-07-26; the 8 DDD/SOLID/DRY items all SHIPPED → DONE.md) |
+
+---
+
+
+### PRD 20 · Consolidated data model — what the 2026-08-08 pass did NOT close
+
+> Steps 1, 2, 3 and the kernel halves of 6 and 7 shipped ([DONE.md](./DONE.md)). The target schema
+> is at **362 / 362**, the kernel API and the fifteen domain surfaces are live. Everything below is
+> the part that is a **data or behaviour move against a running system**, not a schema decision —
+> which is exactly the boundary PRD 20 §5 draws between steps 2–3 and steps 4–5.
+
+- **The entity layer covers the tables; the PRODUCT BEHAVIOUR of the two merged products does not
+  exist here yet.** *(2026-08-08, after the adoption gate closed at 0)* Every one of the 245
+  consolidated tables now has a typed, tenant-scoped, cached read/write path
+  (`api/src/application/domains/`) and a surface (`EntityBrowser` on every seat), which is what the
+  adoption meter measures. What that does NOT give is hired.video's and BurnRateOS's *features* on
+  top of those rows: the ATS funnel screens, the ad-manager, the LMS player, the boost checkout
+  flow, the scenario planner — roughly 150 route files in `C:/code/hired/hired.video/api/src/routes`
+  and 404 Prisma models in `C:/code/burnrateos.com/product/api/prisma/schema.prisma` — are still
+  only in their source repos. The generic surface is the floor, not the ceiling: each product
+  behaviour is a per-feature port that decides its own screens and its own invariants, and PRD 19
+  §2's ownership register governs which product wins each. **Not blocked** — it is the remaining
+  volume of PRD 18/19, and it now has somewhere to land.
+- **`marketing_sessions` is mapped to `metric_fact`, and it cannot be** *(found 2026-08-08 while
+  landing migration 0434 — anonymous session + prompt capture)*. `specs/builderforce/data-model/source-to-target.tsv`
+  line 219 files `BF marketing_sessions` under **Growth & marketing** with move `primitive` →
+  `metric_fact`. Two things make that target impossible rather than merely awkward: `metric_facts`
+  declares `tenant_id NOT NULL`, and a marketing session is written **before an account exists**, so
+  there is no tenant to scope it to; and a lead row is an *entity* (opaque visitor id, first-touch
+  attribution, a conversion pointer to `users`, a per-UTC-day allowance counter that is
+  authoritative rather than derived), while `metric_facts` is by its own docstring "a derived number
+  that was given its own DDL". What *can* legitimately become `metric_facts` is the daily aggregate
+  over these rows (`growth.guest_sessions`, `growth.prompts`), not the rows. The same argument
+  applies to `marketing_session_prompts` (0434), which hangs off the same pre-tenant key.
+  **Blocked on an operator decision**, and named as such: correcting the row means changing `move`
+  to `keep`, which takes the distinct-`keep` count from **362 → 363** and requires the matching bump
+  to `EXPECTED.keeps` in `scripts/check-model-coverage.mjs` — i.e. it edits the headline number PRD
+  20 §3 rests on, which the ROADMAP already records as the operator's call ("which of the 25
+  primitives are accepted"). Unblocks: a coverage map that survives its own guard when the growth
+  family is actually migrated, instead of failing at the moment somebody tries to execute this row.
+- **`marketing_sessions` lives in Identity's schema module but belongs to Growth & marketing**
+  *(found 2026-08-08, same pass)*. The coverage map assigns it to Growth; the `pgTable` sits in
+  `api/src/infrastructure/database/schema/identity.ts`. `marketing_session_prompts` (0434) was
+  placed in `growth.ts` — its correct module — so the two halves of one concept are currently split
+  across modules, joined on `visitor_id` rather than by a foreign key (which is why the split costs
+  no schema import in either direction and no `check-domain-boundary` edge). Moving the lead row to
+  `growth.ts` is what closes it, and the cost is a real one worth stating: the row references
+  `users` for `converted_user_id`, so the move would create a **counted `growth -> identity` edge**
+  (today that import brings in only `tenants`, which is exempt as a tenancy anchor). That makes it a
+  PRD 20 §5 step 2 module move, not a change this feature should smuggle in. **Not blocked** —
+  it needs the `users` reference routed through the kernel `object` registry, or the edge accepted
+  deliberately. Unblocks: "one table, one domain" holding for the growth family.
+- **Step 4 — the Prisma→Drizzle codemod has not run** *(PRD 20 §5 step 4 / PRD 19 B0)*. BurnRateOS's
+  404 Prisma models are not yet emitted into the target shape, and 162 of them carry `company_id`
+  with no tenant column, so the codemod must stamp `tenant_id NOT NULL` in the same pass or the 404
+  get touched twice. Now unblocked — the target shape exists to emit *into* rather than a
+  description to interpret, and every target table it lands rows in already has a service and a
+  surface waiting. Next free migration prefix is **0435**. Unblocks: the merge itself.
+- **Step 5 — the 93 legacy tables `check-shape-lint.mjs` still names hold LIVE rows.** The kernel
+  primitives exist and are empty; the per-feature comment/member/share/event/balance tables are
+  still the ones being written to. Each family needs a backfill + a read cutover + a drop, in the
+  order §5 sets out (tokens/share-links/invitations/revisions first — small and self-contained —
+  then the 59-table ledger, then events and connectors following the 0295 and 0410 precedent).
+  **Blocked on nothing but the data move**: it cannot be done in the same pass as writing the target
+  schema, because every one of those tables is read by live traffic and each cutover needs its own
+  verification. Unblocks: shape-lint 93 → 0, and the eight signature-duplication clusters, five of
+  which are legacy pairs that only disappear when one side is dropped.
+- **Step 6 residual — 101 application folders and 197 route files still sit on the old boundary.**
+  The kernel's two services and two route groups are landed and the layering baseline held at 144,
+  but the existing 101/197 are per-feature migrations ONTO that boundary. Each is a behaviour move
+  against live traffic. Exit criteria remain 101 → 16, 197 → 16, layering baseline → 0.
+- **Step 7 residual — 134 `page.tsx` routes still exist beside the fifteen surfaces.** `/seat/<domain>`
+  and the seven kernel components are live; the 134 existing pages are not yet composed from them.
+  Each page migration is a feature behaviour move, not a component build. Exit criteria: 134 → 15
+  surfaces + the canvas.
+- **The 40 domain-SPECIFIC metric keys have no rollup yet.** The registry projection writes
+  `<domain>.items` and `<domain>.events` for every seat (see DONE.md), so no surface ships an empty
+  Trends panel — but the manifest's own keys (`finance.mrr`, `delivery.cycle_time_hours`,
+  `hiring.time_to_hire_days`, …) still need a computation each, as do the five derived-number
+  rollups §3.1 names (`channel_performance`, `site_traffic_daily`, `arr_projections`,
+  `quota_attainment`, `rd_financials_quarterly`). Each is a scheduled aggregate over a table the
+  Step 4/5 data move has not populated yet, which is why it follows rather than blocks. Unblocks:
+  each seat charting the number it actually manages by.
+- **Registration is write-driven for the entity layer and sweep-driven for everything else.**
+  *(narrowed 2026-08-08)* A row created through `/api/<scope>/entities/...` registers into `objects`
+  in the same call, so it is addressable immediately. `projectRegistry()` still converges rows
+  written by the ~197 legacy routes, which do not call `registerObject()` — a ticket created by
+  `taskRoutes` at 10:00 is addressable at the next tick. Closes per family as the Step 5/6 cutovers
+  move those routes onto the entity layer.
+- **`domain-boundary` is at 38, not 0.** The 38 remaining edges are genuine cross-domain reads
+  (`delivery → agents`, `growth → canvas`, `platform → finance`) that need a kernel route or a named
+  view rather than a direct table import. Each is a small refactor; together they are the last of
+  §3's holding rule.
 
 ---
 
@@ -520,6 +614,13 @@ Public copy describes evidence available today; stronger promises become roadmap
 ---
 
 ## 9 · 🔌 Integrations, Connectors & Workflows
+
+### ⌘ Canvas workflow compile — residuals
+
+> The canvas `workflow` object became genuinely executable 2026-08-08: authored `steps` compile to a real definition via `POST /api/workflow-definitions/from-canvas` and Run builds first (see [DONE.md](./DONE.md)). These are the parts deliberately left out of that pass.
+
+- **The canvas `runTarget` and `approvalMode` selectors are still display-only.** `CreationNode.tsx`'s `WorkflowBody` and the workflow inspector both offer `runTarget` (`builderforce` | `campaign-strategist`) and `approvalMode` (`required` | `autonomous`), but neither reaches the compiled definition: `from-canvas` hard-defaults `runTargetRuntime: 'cloud'` (`workflowDefinitionRoutes.ts`) and nothing consults `approvalMode` before `POST /:id/run`. So a canvas that reads "Approval required" runs without an approval gate, and "Campaign Strategist" selects nothing. Fix: map `runTarget` onto the real run-target columns (with a host/cloud picker when a host is bound) and gate `runWorkflow` on `approvalMode === 'required'` through the existing proposal-review path. Until then the two controls are cosmetic and should not be read as configuration.
+- **A compiled canvas workflow is always a linear chain.** `compileCanvasWorkflowSteps` (`api/src/domain/canvasWorkflowSpec.ts`) wires trigger → step → step because an authored list expresses no fan-out; `branch` steps compile but both sides still run (the pre-existing labeled-edge gap in `cloudExecutor.ts`). Authoring parallel or conditional canvas workflows needs labeled edges first.
 
 ### 👔 HRMS / ATS connectors — the category is absent
 

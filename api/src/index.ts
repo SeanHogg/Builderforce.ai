@@ -91,6 +91,8 @@ import { createMarketingRoutes } from './presentation/routes/marketingRoutes';
 import { createGuestRoutes } from './presentation/routes/guestRoutes';
 import { createDemoRoutes } from './presentation/routes/demoRoutes';
 import { GuestChatService } from './application/guest/GuestChatService';
+import { GuestPromptService } from './application/marketing/GuestPromptService';
+import { PlatformBroadcastService } from './application/marketing/PlatformBroadcastService';
 import { MarketingService } from './application/marketing/MarketingService';
 import { createAgentHostRoutes }        from './presentation/routes/agentHostRoutes';
 import { AgentHostRepository }          from './infrastructure/repositories/AgentHostRepository';
@@ -103,6 +105,11 @@ import { createWorkforceRoutes }        from './presentation/routes/workforceRou
 import { createFreelancerRoutes, createEngagementRoutes } from './presentation/routes/freelancerRoutes';
 import { createSalesRoutes } from './presentation/routes/salesRoutes';
 import { createActivityRoutes, createTimecardRoutes } from './presentation/routes/activityRoutes';
+import { createObjectRoutes } from './presentation/routes/objectRoutes';
+import { createDomainRoutes } from './presentation/routes/domainRoutes';
+import { createObjectRegistry } from './application/kernel/ObjectRegistry';
+import { createDomainService } from './application/kernel/DomainService';
+import { createEntityService } from './application/domains/EntityService';
 import { createJobRoutes, createNotificationRoutes } from './presentation/routes/jobRoutes';
 import { createEmailPreferenceRoutes } from './presentation/routes/emailPreferenceRoutes';
 import { createReleaseNoteRoutes } from './presentation/routes/releaseNoteRoutes';
@@ -302,6 +309,8 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   const auditRunner     = new AuditRunner(db, toolService, taskService);
   const marketingService = new MarketingService(db);
   const guestChatService = new GuestChatService(db);
+  const guestPromptService = new GuestPromptService(db);
+  const platformBroadcastService = new PlatformBroadcastService(db);
   const authService     = new AuthService(userRepo, tenantRepo, auditRepo, env.JWT_SECRET);
   const agentService    = new AgentService(agentRepo, skillRepo);
   // RuntimeService.update is the single canonical execution-status transition;
@@ -462,6 +471,20 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/sales', createSalesRoutes(db));
   app.route('/api/engagements', createEngagementRoutes(db));
   app.route('/api/activity', createActivityRoutes(db));
+
+  // ── The kernel, exposed ONCE (PRD 20 §6.3) ────────────────────────────────
+  //
+  // `/api/objects/:id` and its five relations replace the six-to-forty
+  // per-subsystem copies of each: one timeline endpoint, one comment thread, one
+  // member list, one share sheet with one revocation path, one revision history.
+  // `/api/<domain>` is the roster as a route surface — fifteen groups, one per
+  // seat, each answering the same four questions so a surface can be built once.
+  //
+  // Both take an application-layer PORT rather than a database: `src/index.ts` is
+  // outside the presentation layer, so this is where the connection is bound to
+  // the use cases and the route files stay free of `src/infrastructure`.
+  app.route('/api/objects', createObjectRoutes(createObjectRegistry(db, env)));
+  app.route('/api', createDomainRoutes(createDomainService(db, env), createEntityService(db, env)));
   app.route('/api/timecards', createTimecardRoutes());
   // Two-sided marketplace: job postings + proposals (bidding) and the in-app feed.
   app.route('/api/jobs', createJobRoutes());
@@ -493,7 +516,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // scan (freshness gate) + audit runner (re-scan) grounded in the same toolService.
   app.route('/api/rfp', createRfpRoutes(db, toolService, auditRunner));
   app.route('/api/marketing', createMarketingRoutes(marketingService));
-  app.route('/api/guest', createGuestRoutes(guestChatService));
+  app.route('/api/guest', createGuestRoutes(guestChatService, guestPromptService, platformBroadcastService));
   // Sales-cycle demo accounts — public one-click persona demo sessions, funnel
   // telemetry, book-a-demo leads, and the (guarded) deploy-hook reseed.
   app.route('/api/demo', createDemoRoutes());
@@ -753,7 +776,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/board-connections', createBoardConnectionRoutes(db));
   app.route('/api/board-webhooks',    createBoardWebhookRoutes(db));
   // Platform migration / import wizard (Jira/Monday/Rally/GitLab/Bitbucket → BF).
-  app.route('/api/migrations',        createMigrationRoutes(db));
+  app.route('/api/migrations',        createMigrationRoutes(db, env));
   // Product Quality / error observability (tenant JWT) — error groups + fix dispatch.
   app.route('/api/quality',           createQualityRoutes(db, taskService, runtimeService));
   app.route('/api/feedback',          createFeedbackRoutes(db));

@@ -3,6 +3,13 @@ import { Hono } from 'hono';
 import type { Context } from 'hono';
 import { and, desc, eq, gt, inArray, isNull, sql } from 'drizzle-orm';
 import { TenantService } from '../../application/tenant/TenantService';
+import {
+  acceptInvitation,
+  findPendingByEmail,
+  invite,
+  listPending,
+  revokeInvitation,
+} from '../../application/kernel/InvitationService';
 import { TenantRole, TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
@@ -109,15 +116,6 @@ async function invalidateTaskAssignees(env: Env, tenantId: number): Promise<void
   await invalidateCached(env, `task-assignees:tenant:${tenantId}`);
 }
 
-/** Cache key for a tenant's pending-invitation roster (GET /:id/invitations). */
-function invitationsCacheKey(tenantId: number): string {
-  return `tenant-invitations:tenant:${tenantId}`;
-}
-
-async function invalidateInvitations(env: Env, tenantId: number): Promise<void> {
-  await invalidateCached(env, invitationsCacheKey(tenantId));
-}
-
 /**
  * Convert any still-pending invitations addressed to `email` into real
  * memberships for `userId`. Called on login (GET /tenants/mine) so an invite
@@ -138,15 +136,14 @@ async function acceptPendingInvitations(
   const normalized = email.toLowerCase().trim();
   if (!normalized) return;
 
-  const pending = await db
-    .select({
-      id: tenantInvitations.id,
-      tenantId: tenantInvitations.tenantId,
-      role: tenantInvitations.role,
-      invitedByUserId: tenantInvitations.invitedByUserId,
-    })
-    .from(tenantInvitations)
-    .where(and(eq(tenantInvitations.email, normalized), eq(tenantInvitations.status, 'pending')));
+  // One definition of "pending" (kernel `InvitationService`), so a revoked or
+  // expired row cannot be accepted here while the members page shows it gone.
+  const pending = (await findPendingByEmail(db, normalized, 'tenant')).map((row) => ({
+    id: row.id,
+    tenantId: row.tenantId,
+    role: row.role,
+    invitedByUserId: row.invitedBy,
+  }));
 
   // Per-tenant live seat tally, fetched lazily on first use and incremented as we
   // seat invites within this run, so a batch of invites for the same tenant can't
@@ -170,7 +167,7 @@ async function acceptPendingInvitations(
         // frees up or they upgrade) instead of silently auto-accepting past the cap.
         let state = seatState.get(invite.tenantId);
         if (!state) {
-          const cap = await seatCapacityForTenant(db, invite.tenantId);
+          const cap = await seatCapacityForTenant(db, env, invite.tenantId);
           state = { plan: cap.plan, seated: cap.members };
           seatState.set(invite.tenantId, state);
         }
@@ -180,12 +177,8 @@ async function acceptPendingInvitations(
         await tenantService.addMember(invite.tenantId, invite.invitedByUserId, userId, invite.role as TenantRole);
         state.seated += 1;
       }
-      await db
-        .update(tenantInvitations)
-        .set({ status: 'accepted', acceptedAt: new Date() })
-        .where(and(eq(tenantInvitations.id, invite.id), eq(tenantInvitations.tenantId, invite.tenantId)));
+      await acceptInvitation(db, env, { id: invite.id, tenantId: invite.tenantId, inviteeRef: userId });
       await invalidateTaskAssignees(env, invite.tenantId);
-      await invalidateInvitations(env, invite.tenantId);
     } catch (error) {
       // A transient error on one tenant must not block the user's login or the
       // other tenants' invites — leave the row pending so it retries next visit.
@@ -984,30 +977,17 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
       return c.json({ ok: true, status: 'added', tenant: tenant.toPlain(), addedUser: { id: found.id, email: found.email } });
     }
 
-    // No account: upsert the pending invitation (the partial-unique index allows
-    // only one open invite per email, so re-inviting refreshes role + timestamp).
-    const [existing] = await db
-      .select({ id: tenantInvitations.id })
-      .from(tenantInvitations)
-      .where(and(
-        eq(tenantInvitations.tenantId, id),
-        eq(tenantInvitations.email, email),
-        eq(tenantInvitations.status, 'pending'),
-      ))
-      .limit(1);
-
-    if (existing) {
-      await db
-        .update(tenantInvitations)
-        .set({ role, invitedByUserId: actorUserId, createdAt: new Date() })
-        .where(and(eq(tenantInvitations.id, existing.id), eq(tenantInvitations.tenantId, id)));
-    } else {
-      await db
-        .insert(tenantInvitations)
-        .values({ tenantId: id, email, role, invitedByUserId: actorUserId });
-    }
-
-    await invalidateInvitations(c.env as Env, id);
+    // No account: the kernel invitation. `invite()` is find-or-refresh on
+    // (tenant, kind, email), which is what the select-then-insert here used to
+    // approximate — with a race between the two statements — and it invalidates
+    // the tenant's cached roster itself.
+    await invite(db, c.env as Env, {
+      tenantId: id,
+      kind: 'tenant',
+      email,
+      role,
+      invitedBy: actorUserId,
+    });
 
     emitMemberActivity(c, db, 'member.invited', {
       targetId: email, targetLabel: email,
@@ -1056,19 +1036,15 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const callerTenantId = c.get('tenantId') as number;
     if (tenantId !== callerTenantId) return c.json({ error: 'Forbidden' }, 403);
 
-    const invitations = await getOrSetCached(c.env as Env, invitationsCacheKey(tenantId), async () => {
-      const rows = await db
-        .select({
-          id: tenantInvitations.id,
-          email: tenantInvitations.email,
-          role: tenantInvitations.role,
-          createdAt: tenantInvitations.createdAt,
-        })
-        .from(tenantInvitations)
-        .where(and(eq(tenantInvitations.tenantId, tenantId), eq(tenantInvitations.status, 'pending')))
-        .orderBy(desc(tenantInvitations.createdAt));
-      return rows;
-    });
+    // Same cached read the seat guard counts, so the page and the cap can never
+    // disagree. The response shape is unchanged for the frontend.
+    const rows = await listPending(db, c.env as Env, tenantId, 'tenant');
+    const invitations = rows.map((row) => ({
+      id: row.id,
+      email: row.email,
+      role: row.role,
+      createdAt: row.createdAt,
+    }));
 
     return c.json({ invitations });
   });
@@ -1082,16 +1058,8 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const invId = c.req.param('invId');
     if (!invId) return c.json({ error: 'invId is required' }, 400);
 
-    await db
-      .update(tenantInvitations)
-      .set({ status: 'revoked', revokedAt: new Date() })
-      .where(and(
-        eq(tenantInvitations.id, invId),
-        eq(tenantInvitations.tenantId, tenantId),
-        eq(tenantInvitations.status, 'pending'),
-      ));
-
-    await invalidateInvitations(c.env as Env, tenantId);
+    // THE revocation path (§2): one, and it drops the cached roster itself.
+    await revokeInvitation(db, c.env as Env, { id: invId, tenantId });
     return c.json({ ok: true });
   });
 

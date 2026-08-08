@@ -6,7 +6,7 @@ import { BrainPanel } from '@/components/brain/BrainPanel';
 import { takePendingPrompt } from '@/lib/brain';
 import { useAuth } from '@/lib/AuthContext';
 import { creationSessionsApi } from '@/lib/builderforceApi';
-import { createLocalCreationSession } from '@/lib/creationSessions';
+import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 
 /**
  * Brain Storm — the full-page Brain. It renders the exact same <BrainPanel>
@@ -41,7 +41,7 @@ export default function BrainstormPage() {
           const result = await creationSessionsApi.create({ title: legacyPrompt.slice(0, 80), initialPrompt: legacyPrompt });
           if (!stopped) router.replace(`/create/${result.session.id}?from=brainstorm`);
         } else {
-          const localId = createLocalCreationSession(legacyPrompt);
+          const localId = startGuestCreationSession(legacyPrompt, { surface: 'brain' });
           if (!stopped) router.replace(`/create/${localId}?from=brainstorm`);
         }
         return;

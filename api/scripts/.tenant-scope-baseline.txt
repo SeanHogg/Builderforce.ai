@@ -1,12 +1,6 @@
 # Unscoped Drizzle statements against tenant-owned tables, as path:count.
 # Counts may only go DOWN — see scripts/check-tenant-scope.mjs.
 # Regenerate with: node scripts/check-tenant-scope.mjs --update
-# application/backend/index.ts — the TWO statements here are backendByIngressToken()
-# and backendByProject(), the two PUBLIC address resolutions: a webhook ingress token,
-# and a project already identified by the site host. Both run before any tenant is
-# known — the row they return IS the tenant resolution — so there is no predicate to
-# add. Every other read/write in that module is scopedToTenant. Not debt; if this
-# count ever rises, the new statement is.
 application/activity/autonomyWiringAudit.ts:2
 application/activity/ticketLifecycleLedger.ts:4
 application/agent/AgentAssignmentService.ts:1
@@ -51,6 +45,7 @@ application/kanban/attributeRunToManifest.ts:2
 application/kanban/kanbanTemplateService.ts:8
 application/kanban/rosterService.ts:1
 application/kanban/ticketParticipants.ts:8
+application/kernel/ObjectRegistry.ts:1
 application/knowledge/knowledgeMarket.ts:1
 application/llm/projectEvermind.ts:2
 application/llm/projectFacts.ts:1
@@ -64,11 +59,6 @@ application/manager/coordinateTicket.ts:2
 application/manager/runManagerSweep.ts:1
 application/manager/stallWatch.ts:2
 application/manager/triageStage.ts:2
-# application/marketing/templateLibrary.ts — the ONE statement here is
-# readAssetByToken(), the PUBLIC campaign-asset read: it is reached by an
-# unguessable token and nothing else, so no tenant is known at the call site —
-# the row IS the resolution. Every other read/write in that module is
-# scopedToTenant. Not debt; if this count ever rises, the new statement is.
 application/marketing/templateLibrary.ts:1
 application/meetings/meetingIntelligence.ts:3
 application/metrics/collaboration.ts:1
@@ -160,7 +150,7 @@ presentation/routes/specRoutes.ts:1
 presentation/routes/studioVoiceCloneRoutes.ts:6
 presentation/routes/taskRoutes.ts:3
 presentation/routes/vscodeRoutes.ts:1
-presentation/routes/workflowDefinitionRoutes.ts:5
+presentation/routes/workflowDefinitionRoutes.ts:4
 presentation/routes/workflowRoutes.ts:5
 presentation/routes/workflowTriggerRoutes.ts:2
 presentation/routes/workforceRoutes.ts:9

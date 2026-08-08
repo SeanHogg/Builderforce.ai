@@ -9,9 +9,6 @@
  * Renamed from `billing.ts`: billing is one capability of the finance domain, not
  * the domain, and naming the module after the smaller of the two is what left
  * expenses, runway and scenarios with nowhere obvious to go.
- *
- * Merged from `billing.ts` by
- * scripts/merge-schema-modules.mjs (PRD 20 §5 step 2).
  */
 
 import {

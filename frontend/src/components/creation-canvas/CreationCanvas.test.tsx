@@ -865,13 +865,20 @@ describe('CreationCanvas', () => {
     expect(screen.getAllByText('Show which agents are active').length).toBeGreaterThan(0);
   });
 
-  it('runs workflows from the workflow widget instead of the session header', () => {
+  // A local draft cannot execute anything: it is not linked to a runnable
+  // definition and there is no account to own one. Running it used to wait
+  // 1400ms and then report a `delivered` workflow-run from provider
+  // `browser-draft` with `validation: passed` — a success nothing observed. Run
+  // must now surface the real precondition instead of simulating a result.
+  it('runs workflows from the workflow widget, and never fabricates a local run', async () => {
     render(<CreationCanvas sessionId="workflow-widget-run-test" persistence="local" />);
 
     expect(screen.queryByRole('button', { name: 'Run' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Run Fall campaign workflow' }));
 
-    expect(screen.getByText('Draft workflow running locally…')).toBeInTheDocument();
+    expect(await screen.findByText('Save this workflow')).toBeInTheDocument();
+    expect(screen.queryByText('Workflow completed')).not.toBeInTheDocument();
+    expect(screen.queryByText('Draft workflow running locally…')).not.toBeInTheDocument();
   });
 
   it('gates durable guest actions with account creation while preserving local creation', () => {

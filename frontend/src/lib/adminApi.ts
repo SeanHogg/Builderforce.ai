@@ -114,9 +114,7 @@ export interface AdminGuestSession {
   visitorId: string;
   guestChatCount: number;
   guestChatTokens: number;
-  guestChatDay: string | null;
   toolRuns: number;
-  lastToolId: string | null;
   landingPath: string | null;
   referrer: string | null;
   converted: boolean;
@@ -126,7 +124,79 @@ export interface AdminGuestSession {
   firstSeenAt: string;
   lastSeenAt: string;
   isPaid: boolean;
+  /** What they asked for. Derived server-side from `marketing_session_prompts` —
+   *  never a column on the lead row, so it cannot drift from the prompts. */
+  promptCount: number;
+  firstPrompt: string | null;
+  lastPrompt: string | null;
+  lastPromptAt: string | null;
+  lastSurface: string | null;
 }
+
+/** The funnel in five numbers, above the leads list. */
+export interface AdminGuestFunnelSummary {
+  sessions: number;
+  sessionsWithPrompt: number;
+  prompts: number;
+  registered: number;
+  paid: number;
+  conversionPct: number;
+}
+
+export interface AdminGuestSessionsPage {
+  summary: AdminGuestFunnelSummary;
+  sessions: AdminGuestSession[];
+}
+
+/** One prompt in a visitor's history — the drill-in. */
+export interface AdminGuestPrompt {
+  id: string;
+  prompt: string;
+  surface: string;
+  sessionRef: string | null;
+  mode: string | null;
+  createdAt: string;
+}
+
+/** A superadmin message to visitors, and how it performed. */
+export interface AdminBroadcast {
+  id: number;
+  key: string;
+  message: string;
+  tone: 'info' | 'success' | 'warning' | 'critical';
+  ctaLabel: string | null;
+  ctaHref: string | null;
+  dismissible: boolean;
+  status: 'draft' | 'live' | 'archived';
+  audience: { scope: 'all' | 'guest' | 'registered' | 'paid'; visitorIds: string[]; minPrompts: number };
+  startsAt: string | null;
+  endsAt: string | null;
+  createdBy: string | null;
+  createdAt: string;
+  updatedAt: string;
+  impressions: number;
+  clicks: number;
+  dismissals: number;
+  reach: number;
+  clickThroughPct: number;
+}
+
+/** The vocabulary the server offers, so the composer never hard-codes a second copy. */
+export interface AdminBroadcastVocabulary {
+  tones: readonly AdminBroadcast['tone'][];
+  statuses: readonly AdminBroadcast['status'][];
+  scopes: readonly AdminBroadcast['audience']['scope'][];
+  maxVisitorIds: number;
+}
+
+export interface AdminBroadcastPage {
+  broadcasts: AdminBroadcast[];
+  vocabulary: AdminBroadcastVocabulary;
+}
+
+/** The writable half of a broadcast. */
+export type AdminBroadcastInput = Partial<Pick<AdminBroadcast,
+  'message' | 'tone' | 'ctaLabel' | 'ctaHref' | 'dismissible' | 'status' | 'audience' | 'startsAt' | 'endsAt'>>;
 
 export interface AdminCreationSessionInvitation {
   id: string;
@@ -875,9 +945,54 @@ export const adminApi = {
     return res.users;
   },
 
-  async guestSessions(): Promise<AdminGuestSession[]> {
-    const res = await adminRequest<{ sessions: AdminGuestSession[] }>('/api/admin/guest-sessions');
-    return res.sessions;
+  async guestSessions(): Promise<AdminGuestSessionsPage> {
+    return adminRequest<AdminGuestSessionsPage>('/api/admin/guest-sessions');
+  },
+
+  /** One visitor's prompts, newest first. */
+  async guestPrompts(visitorId: string): Promise<AdminGuestPrompt[]> {
+    const res = await adminRequest<{ prompts: AdminGuestPrompt[] }>(
+      `/api/admin/guest-sessions/${encodeURIComponent(visitorId)}`,
+    );
+    return res.prompts;
+  },
+
+  /** Erase everything a visitor typed. Personal data keyed by an opaque visitor
+   *  id, which no account deletion would ever reach — so this is the actioning
+   *  half of a privacy request that names one. Returns how many rows went. */
+  async forgetGuestPrompts(visitorId: string): Promise<number> {
+    const res = await adminRequest<{ erased: number }>(
+      `/api/admin/guest-sessions/${encodeURIComponent(visitorId)}/prompts`,
+      { method: 'DELETE' },
+    );
+    return res.erased;
+  },
+
+  // ── Platform broadcasts ──────────────────────────────────────────────────
+  //
+  // The channel to visitors who have no workspace to reach them through. Writes
+  // publish immediately: the server drops its delivery caches and pushes one
+  // frame to the shared relay room, so an open tab shows the banner rather than
+  // waiting for the next page load.
+
+  async broadcasts(): Promise<AdminBroadcastPage> {
+    return adminRequest<AdminBroadcastPage>('/api/admin/broadcasts');
+  },
+
+  async createBroadcast(input: AdminBroadcastInput): Promise<AdminBroadcast> {
+    const res = await adminRequest<{ broadcast: AdminBroadcast }>('/api/admin/broadcasts', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+    return res.broadcast;
+  },
+
+  async updateBroadcast(id: number, patch: AdminBroadcastInput): Promise<void> {
+    await adminRequest(`/api/admin/broadcasts/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  },
+
+  async deleteBroadcast(id: number): Promise<void> {
+    await adminRequest(`/api/admin/broadcasts/${id}`, { method: 'DELETE' });
   },
 
   async creationSessions(): Promise<AdminCreationSession[]> {

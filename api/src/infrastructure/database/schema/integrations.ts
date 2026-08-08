@@ -10,9 +10,6 @@
  * sealed tokens and a mirrored `expiresAt` — twice, three months apart — which is
  * the duplication `drive_connections = mailbox_connections` names in the
  * signature-duplication baseline.
- *
- * Merged from `drive.ts` + `mailbox.ts` by
- * scripts/merge-schema-modules.mjs (PRD 20 §5 step 2).
  */
 
 import {

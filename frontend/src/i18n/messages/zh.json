@@ -464,7 +464,8 @@
       "agentOps": "智能体运维",
       "sales": "销售中心",
       "challenges": "挑战",
-      "growth": "增长"
+      "growth": "增长",
+      "seat": "团队"
     },
     "tab": {
       "projects": "项目",
@@ -549,8 +550,7 @@
       "memory": "记忆",
       "rehearsal": "预演"
     },
-    "primaryAria": "主导航",
-    "group.growth": "增长"
+    "primaryAria": "主导航"
   },
   "alerts": {
     "title": "告警",
@@ -4424,6 +4424,19 @@
     },
     "eyebrow": "认识 Evermind",
     "tagline": "一款边工作边学习的模型——永不过时",
+    "visual": {
+      "aria": "Evermind 通过四个协作系统接收键控项目更新的实时图示",
+      "kicker": "实时项目记忆",
+      "runtime": "WebGPU / 设备端",
+      "system": "Builderforce / 02",
+      "core": "随工作变化学习",
+      "status": "写入已接受",
+      "key": "project.release.status",
+      "previous": "之前",
+      "current": "当前",
+      "previousValue": "已阻止",
+      "currentValue": "就绪"
+    },
     "title": "Evermind — <grad>Builderforce.ai LLM</grad>",
     "law": {
       "heading": "写穿认知（Write-Through Cognition）",
@@ -8399,7 +8412,8 @@
       "demoFunnel": "演示漏斗",
       "salesLeads": "销售线索",
       "salesCommissions": "销售佣金",
-      "cron": "定时任务"
+      "cron": "定时任务",
+      "broadcasts": "广播"
     },
     "common": {
       "loading": "加载中…",
@@ -8603,7 +8617,7 @@
     },
     "sessions": {
       "title": "采用会话",
-      "subtitle": "匿名 Brain 和免费工具访客，包括账户和付费转化。",
+      "subtitle": "匿名访客、他们的诉求，以及他们走到了哪一步。",
       "count": "{count} 个会话",
       "empty": "未找到访客会话。",
       "visitor": "访客",
@@ -8615,7 +8629,22 @@
       "tokensAndTools": "{tokens} tokens · {tools} 次工具运行",
       "guest": "访客",
       "registered": "已注册",
-      "paid": "已付费"
+      "paid": "已付费",
+      "intent": "他们想要什么",
+      "noPrompt": "未记录提示词",
+      "promptMeta": "{count} 条提示词 - 最近来自 {surface}",
+      "promptRowMeta": "{surface} - {at}",
+      "firstSeenAt": "首次访问 {at}",
+      "drawerTitle": "访客",
+      "drawerMeta": "着陆页 {landing} - 来源 {referrer}",
+      "messageVisitor": "给该访客发消息",
+      "statSessions": "会话数",
+      "statStatedIntent": "已表达诉求",
+      "statPromptsHint": "已采集 {count} 条提示词",
+      "statRegistered": "已注册",
+      "statPaid": "已付费",
+      "statConversion": "提示词转账号",
+      "statConversionHint": "占已表达诉求会话的比例"
     },
     "creationSessions": {
       "title": "创作会话",
@@ -9227,6 +9256,73 @@
         "title": "要强制执行定时任务吗？",
         "dispatch": "执行“{target}”会在所有工作区启动真实的智能体运行（所选任务中有 {count} 个会派发工作）。这会消耗额度，并非演练。",
         "confirmLabel": "立即执行"
+      }
+    },
+    "broadcasts": {
+      "title": "平台广播",
+      "subtitle": "面向尚无工作区、无法通过其他渠道触达的访客发送消息。",
+      "count": "{count} 条广播",
+      "empty": "暂无广播。",
+      "compose": "新建广播",
+      "composeTitle": "新建广播",
+      "editTitle": "编辑广播",
+      "save": "保存",
+      "saving": "保存中...",
+      "edit": "编辑",
+      "goLive": "上线",
+      "archive": "归档",
+      "delete": "删除",
+      "deleteTitle": "删除这条广播？",
+      "deleteMessage": "\"{message}\" 将立即停止展示。已记录的互动数据会保留。",
+      "deleteConfirm": "删除",
+      "messageLabel": "消息内容",
+      "messagePlaceholder": "访客应该看到什么？",
+      "messageCounter": "{used}/500",
+      "messageRequired": "广播必须包含消息内容。",
+      "toneLabel": "语气",
+      "statusLabel": "状态",
+      "scopeLabel": "受众",
+      "minPromptsLabel": "最少提示词数",
+      "minPromptsHint": "仅面向至少提出过这么多次诉求的访客。",
+      "ctaLabelLabel": "按钮文字",
+      "ctaHrefLabel": "按钮链接",
+      "startsAtLabel": "开始时间",
+      "endsAtLabel": "结束时间",
+      "dismissibleLabel": "允许访客关闭",
+      "aimedAtVisitor": "面向访客 {visitorId}",
+      "statLive": "正在展示",
+      "statReach": "触达访客",
+      "statReachHint": "所有广播的去重访客数",
+      "statClicks": "点击数",
+      "statCtr": "点击率",
+      "statCtrHint": "每位触达访客的点击数",
+      "colMessage": "消息",
+      "colAudience": "受众",
+      "colWindow": "时间窗口",
+      "colEngagement": "互动",
+      "colActions": "操作",
+      "audienceVisitors": "指定 {count} 位访客",
+      "audienceMinPrompts": "{count} 条以上提示词",
+      "windowImmediate": "立即生效",
+      "windowOpenEnded": "无结束日期",
+      "engagementReach": "{count} 位访客",
+      "engagementDetail": "{clicks} 次点击 - 点击率 {ctr}% - {dismissals} 次关闭",
+      "tone": {
+        "info": "信息",
+        "success": "成功",
+        "warning": "警告",
+        "critical": "严重"
+      },
+      "status": {
+        "draft": "草稿",
+        "live": "已上线",
+        "archived": "已归档"
+      },
+      "scope": {
+        "all": "所有人",
+        "guest": "匿名访客",
+        "registered": "注册用户",
+        "paid": "付费客户"
       }
     }
   },
@@ -12734,7 +12830,27 @@
       "pdf": "PDF",
       "pptx": "PowerPoint",
       "svg": "SVG",
-      "json": "JSON"
+      "json": "JSON",
+      "scorm": "SCORM 课程包"
+    },
+    "course": {
+      "progress": "已完成 {percent}%",
+      "lessonCount": "已完成 {completed}/{total} 课",
+      "progressLabel": "课程进度",
+      "duration": "{minutes} 分钟",
+      "modules": "课程模块",
+      "module": "学习模块",
+      "minutes": "{count} 分钟",
+      "objective": "学习目标",
+      "practice": "动手实践",
+      "markComplete": "标记本课已完成",
+      "markIncomplete": "标记为未完成",
+      "knowledgeCheck": "知识检查",
+      "correct": "正确。",
+      "tryAgain": "请重试。",
+      "completed": "课程已完成",
+      "inProgress": "学习进行中",
+      "empty": "添加模块以开始本课程。"
     },
     "sessionTitle": "会话标题",
     "saved": "会话已保存",
@@ -12895,7 +13011,8 @@
       "inbox": "收件箱",
       "email": "邮件",
       "emailCampaign": "邮件营销活动",
-      "emailTemplate": "邮件模板"
+      "emailTemplate": "邮件模板",
+      "course": "课程"
     },
     "canvasOutline": "无障碍画布大纲",
     "canvasGestureToggle": "拖动以框选",
@@ -13548,6 +13665,7 @@
     "noticeKnowledgeConnected": "知识已添加并连接到代理",
     "noticeBrainEvaluating": "Brain 正在评估已连接的对象…",
     "noticeRoadmapAdded": "路线图已添加到画布",
+    "noticeLlmCourseAdded": "您的 LLM 课程和结业实验已准备就绪",
     "noticeFeatureSummaryAdded": "已添加功能摘要和原型",
     "noticeEvaluationAdded": "评估已添加到画布",
     "noticeSavingPrd": "正在将已审阅的 PRD 保存到其项目…",
@@ -13646,6 +13764,10 @@
     "templateCategoryMarketplace": "应用市场模板",
     "templateCategoryObjectPack": "对象组合包",
     "template": {
+      "llm-builder-academy": {
+        "name": "LLM 构建学院",
+        "description": "通过课程、实践、评估和可移植的 SCORM 课程包学习完整的 LLM 生命周期。"
+      },
       "sales-command-center": {
         "name": "销售指挥中心",
         "description": "在一个协作画布上完成目标客户定位、外联触达、管道管理、目标设定与辅导。"
@@ -14374,5 +14496,149 @@
       "mutatesWarning": "该操作会产生实际影响 —— 发送消息、拨打电话或划转资金。每次触发此工作流时，它都会在无人值守的情况下执行。",
       "connectionHint": "需要在「集成」中有一个可用的 {name} 连接。在此之前，该节点会安全地失败。"
     }
+  },
+  "kernel": {
+    "timeline": {
+      "loading": "正在加载动态…",
+      "empty": "这里还没有任何动态。",
+      "failed": "无法加载动态。",
+      "someone": "某人"
+    },
+    "comments": {
+      "placeholder": "添加评论…",
+      "post": "发布",
+      "posting": "发布中…",
+      "loading": "正在加载评论…",
+      "empty": "暂无评论。",
+      "resolved": "已解决",
+      "someone": "某人"
+    },
+    "share": {
+      "scopeLabel": "访问权限",
+      "create": "创建链接",
+      "creating": "创建中…",
+      "shownOnce": "请立即复制此链接——系统仅保存其哈希值，无法再次显示。",
+      "loading": "正在加载链接…",
+      "empty": "暂无分享链接。",
+      "revoke": "撤销",
+      "uses": "已使用 {count} 次",
+      "expires": "{date} 过期",
+      "scope": {
+        "view": "可查看",
+        "comment": "可评论",
+        "edit": "可编辑"
+      }
+    },
+    "chart": {
+      "empty": "暂无测量数据。",
+      "ariaLabel": "趋势图，共 {count} 条数据线"
+    },
+    "panel": {
+      "title": "详情",
+      "breadcrumb": "路径导航",
+      "sections": "分区",
+      "untitled": "未命名",
+      "close": "关闭",
+      "noMembers": "还没有成员。",
+      "noRevisions": "暂无版本。",
+      "tab": {
+        "activity": "动态",
+        "comments": "评论",
+        "members": "成员",
+        "shares": "分享",
+        "revisions": "版本"
+      }
+    },
+    "roster": {
+      "label": "团队",
+      "team": "团队",
+      "recents": "最近",
+      "activeNow": "近期活跃",
+      "expand": "展开导航",
+      "collapse": "收起导航",
+      "domain": {
+        "growth": "增长",
+        "delivery": "交付",
+        "agents": "智能体",
+        "hiring": "招聘",
+        "finance": "财务",
+        "revenue": "营收",
+        "commerce": "商务",
+        "identity": "身份",
+        "people": "人事",
+        "platform": "平台",
+        "governance": "治理",
+        "investor": "投资组合",
+        "support": "支持",
+        "canvas": "画布",
+        "integrations": "集成"
+      }
+    },
+    "surface": {
+      "ownedBy": "由{seat}负责",
+      "loading": "加载中…",
+      "noItems": "这里还没有内容。",
+      "panelLabel": "对象详情",
+      "stat": {
+        "items": "条目",
+        "recentEvents": "本周事件",
+        "lastActivity": "最近活动"
+      },
+      "section": {
+        "metrics": "趋势",
+        "items": "该席位所属",
+        "activity": "最近动态",
+        "records": "记录",
+        "kernel": "共享内核"
+      },
+      "blurb": {
+        "growth": "营销活动、落地页、内容以及它们触达的受众。",
+        "delivery": "所有工作单元——任务、史诗、目标、里程碑——统一成一棵树。",
+        "agents": "智能体、运行记录及其背后的模型。",
+        "hiring": "职位发布、申请、面试与入职安排。",
+        "finance": "总账、计划、支出以及基于它们构建的情景。",
+        "revenue": "交易、销售管道、联系人与外联。",
+        "commerce": "商品、订单、预约与外包项目。",
+        "identity": "人员、团队、工作区及其登录方式。",
+        "people": "雇佣关系、学习培训与组织健康状况。",
+        "platform": "监控、仪表板以及平台的运行报告。",
+        "governance": "控制项、发现问题及其证据。",
+        "investor": "公司、产品、尽职调查与验证。",
+        "support": "工单、知识库文章以及客户的反馈。",
+        "canvas": "所有共同创作、分享和协作的内容。",
+        "integrations": "已连接的账户及其同步内容。"
+      },
+      "kernelBlurb": "每个席位共享的二十五个基础组件。没有任何领域拥有它们，也不得分叉。"
+    },
+    "entities": {
+      "tabs": "记录类型",
+      "loading": "加载中…",
+      "noEntities": "此席位尚无记录。",
+      "empty": "暂无记录。",
+      "search": "搜索",
+      "searchBy": "按 {field} 搜索",
+      "searchDisabled": "此记录类型没有可搜索的名称",
+      "new": "新建",
+      "edit": "编辑",
+      "retire": "停用",
+      "actions": "操作",
+      "save": "保存",
+      "saving": "保存中…",
+      "cancel": "取消",
+      "creating": "新建 {entity}",
+      "editing": "编辑 {entity}",
+      "readOnly": "只读 — 这些记录由拥有它们的服务写入。",
+      "withheld": "已隐藏字段：{fields}",
+      "loadFailed": "无法加载这些记录。",
+      "saveFailed": "保存失败。",
+      "previous": "上一页",
+      "next": "下一页",
+      "range": "第 {from}–{to} 条，共 {total} 条"
+    }
+  },
+  "announcements": {
+    "regionLabel": "公告",
+    "dismiss": "关闭",
+    "defaultCta": "了解更多"
   }
 }

@@ -4,6 +4,338 @@
 
 ---
 
+## ✅ RESOLVED 2026-08-08 — PRD 20's adoption gap: 237 consolidated tables had no code path; now 0 do
+
+PRD 20 shipped the target schema at **362 / 362** and then measured the thing a schema-first method
+actually risks — `check-table-adoption.mjs` reported **244 created, 7 with a live code path, 237
+awaiting one**. Declared, migrated, mapped, in-boundary, and read by nothing: to the other
+seventeen guards an abandoned table and a shipped one look identical.
+
+**The answer is one layer, not 237 services.** §0's rule — *a feature may add domain tables, it may
+not add another instance of an existing shape* — applies to the tier above the schema exactly as it
+applies to the schema. 237 hand-written list/get/create/update services would be that duplication
+re-created, plus 237 chances to forget tenant scoping, bounds, caching or redaction.
+
+**What landed** (`api/src/application/domains/`):
+
+- **`entityDefinition.ts`** — reflection over the Drizzle module. Physical name, primary key, tenant
+  column, title, ordering and retirement column are READ from the declaration, never restated.
+  Column redaction is applied at definition time, so a withheld column is absent from the projection
+  and no read or write path can name it.
+- **16 declaration files** (`<scope>/entities.ts`) — every consolidated table declared once, filed
+  under exactly one scope. The kernel's primitives are under their own scope because §2 says no
+  domain may fork one, and filing `ledger_entry` under Finance is that fork performed by a
+  directory. `integrations/entities.ts` is legitimately EMPTY — its one target table is a kernel
+  `connection`, which is §0 working.
+- **`EntityService.ts`** — the generic use cases. Tenant predicate on every read, tenant stamp on
+  every write, bounded limits, version-token cache keys (unbounded keyspace), `objects` registration
+  and an `activity_log` row on every write, soft-retire where the table declares a column for it.
+- **`domainRoutes.ts`** — five handlers at `/api/<scope>/entities/…`, one `EntityError` → status
+  translation, taking the application port so the layering baseline held at 144.
+- **`EntityBrowser.tsx`** — ONE record surface for all 245 tables, mounted by every seat plus a
+  shared-kernel section. The form is GENERATED from the API's field metadata; both themes, fluid to
+  360px, 23 new keys with real translations in all five catalogs.
+- **`registryProjection.ts`** — the projection map now DERIVES its consolidated half from the
+  catalog instead of restating it; the hand-kept half is only the legacy tables and the kernel
+  primitives, which cannot name a seat for themselves.
+
+**Two defects the work surfaced and fixed in the same pass**
+
+1. **Redaction by substring was wrong in both directions.** It withheld `input_tokens`,
+   `token_count` and `color_token` — two usage numbers and a hex colour — which is not "erring
+   toward safety", it is a surface silently serving less than it claims. Now segment-anchored
+   patterns; the six genuinely withheld columns are `secret_enc`, `secret_iv`, `token_hash`
+   (×3), `password_hash`, `guest_token`, `code_hash`.
+2. **Tenant-less did not mean global.** `email_otp_challenges` has no tenant column either, and its
+   rows are one-time codes against email addresses; inferring "no tenant ⇒ everyone may read"
+   would have served them to every tenant. Readability of a tenant-less table is now opt-IN
+   (`global: true`), held to exactly `countries`, `cities` and `stage_lookup` by a test.
+
+**Measured:** `check-table-adoption` **245 created, 245 live, 0 cold** — the ratchet's baseline file
+is now empty and it is a gate. `tableAdoption.test.ts` asserts the aggregate AND pins ten surfaces
+by name, because a count re-arms itself when an unrelated table gets wired. 31 new tests in
+`entityCatalog.test.ts` / `EntityService.test.ts`, every refusal proved against a database proxy
+that throws if it is touched. Full chain green: 18 guards + 5,292 tests.
+
+---
+
+## ✅ RESOLVED 2026-08-08 — `check-pinned-defects` failed the build on an accurate roadmap entry
+
+`cd api && npm test` was RED at guard 17 of 18, so vitest never ran. The register entry for
+`tableAdoption.test.ts` says it is "a plain `it.each`, **not** a pinned defect" — and the guard read
+the word "pinned" on that line as a CLAIM of a pin, then failed because the file has no `it.fails`.
+A guard that fails the build for being accurate teaches people to stop writing the clarifying half
+of the sentence. It is now negation-aware (`not a pinned defect`, `no longer pinned`, `without
+it.fails`), verified in both directions: disclaimers skip, genuine stale claims still fail.
+
+## ✅ RESOLVED 2026-08-08 — The Docker stack could not build, start, or render
+
+`docker compose up --build` had rotted at six independent points. Each one was fatal on its own, so
+they surfaced one at a time; the stack now builds cold and serves. Nothing outside the three
+Docker-only files was touched for the infrastructure half — `Dockerfile.api`/`Dockerfile.frontend`
+are referenced solely by `docker-compose.yml`, the one workflow (`release.yml`) does not mention
+them, and Cloudflare's container is a different file (`api/container/Dockerfile`, per
+`wrangler.toml:109`), so `wrangler deploy` and the GH Action → CF Worker path are unaffected.
+
+**Build-time**
+
+1. **`Dockerfile.api` installed with the wrong package manager.** `api` ships `pnpm-lock.yaml` and no
+   `package-lock.json`, but the image ran `npm install`. npm ignored the lockfile, re-resolved, and
+   floated `wrangler ^4.69.0` to a release whose peerOptional `@cloudflare/workers-types@^5` collides
+   with the `^4` that `api` and `drizzle-orm` pin → `ERESOLVE`, deterministically. Now pnpm +
+   `--frozen-lockfile`, so the container uses the same pinned `wrangler 4.73.0` /
+   `workers-types 4.20260313.1` pair as every other build instead of floating ones.
+2. **`Dockerfile.frontend` stubbed 3 of 7 `link:` targets** and never copied `scripts/`, so the
+   `postinstall` (`node ../scripts/ensure-linked-deps.mjs`) died with `MODULE_NOT_FOUND`. All seven
+   are stubbed as explicit `dir=name` pairs (names are not derivable — `builderforce-embedded`
+   publishes as `@seanhogg/builderforce-embedded`) and `scripts/` is copied.
+
+**Run-time**
+
+3. **`@builderforce/{agent-tools,agent-stall,creation-canvas-contract}` are tsconfig path aliases,
+   not npm deps** — nothing installs them — and `api/`'s build context excluded `../packages`, so
+   esbuild aborted with "Could not resolve @builderforce/agent-tools". The three (all
+   dependency-free) are copied into the image and bind-mounted for parity with the mounted `api/src`.
+4. **`wrangler dev` tried to build the `builderforce-qa-runner` container** and needed a Docker CLI
+   *inside* the container. `--enable-containers=false` is a dev-only opt-out; `wrangler deploy` still
+   builds and ships that container to Cloudflare unchanged.
+5. **`pnpm dev -- --hostname` broke Next.js.** pnpm 10 forwards `--` verbatim, so `next dev` read the
+   next argument as a project directory: *"Invalid project directory: /repo/frontend/--hostname"*.
+   Separator dropped in both the `dev` and `production` stages (the latter carried the same latent bug).
+6. **Compose mounted 3 of the 7 linked packages**, so even a green build left `brain-embedded`
+   (28 importing files), `brain-ui`, `embedded` and `voice` resolving to empty stubs at runtime.
+   All are mounted read-only, plus `creation-canvas-contract` for the frontend — without it every
+   route reaching `CreationCanvas.tsx` failed to compile.
+
+**App bug found while verifying (not Docker-related, and live in production too)**
+
+7. **`nav` carried a flat `"group.growth"` key alongside the nested `nav.group.growth`.** next-intl v4
+   rejects `.` in keys (`INVALID_KEY`), and the throw aborted the RSC stream mid-render — which
+   reaches the browser as a truncated `app/layout.js` chunk (`Uncaught SyntaxError` +
+   `ChunkLoadError`), not as an i18n error. The flat key was the superseded form of a migration that
+   had already added the nested one; values were byte-identical in all five catalogs, so deleting it
+   loses no translation and needs no consumer change (`navGroups.ts` still resolves `group.growth`
+   via nesting). Removed from `{en,zh,es,fr,de}.json`; a walk of all five confirms no dotted keys remain.
+
+Verified: api `/health` 200 (`2026.7.230`) with CORS for `http://localhost:3000`; `/`, `/dashboard`,
+`/create`, `/projects` all 200; `app/layout.js` served intact and parsing as valid JS; zero
+`Module not found` / `INVALID_KEY` / `Failed to compile` across all four services.
+The `/favicon.ico` 404 is the browser's legacy fallback probe, not a defect — `layout.tsx` declares
+PNG icons (`/icon.png`, `/icon-192.png`, `/apple-touch-icon.png`, all 200) per the bare-mark convention.
+
+---
+
+## ✅ RESOLVED 2026-08-08 — Seventeen guards called 244 abandoned tables healthy
+
+Every existing guard judged the consolidated schema by whether it was *well-formed*: declared,
+migrated, mapped to a source table, inside its domain boundary, tenant-scoped. All seventeen were
+green, and all seventeen were blind to the one failure mode a schema-first PRD actually has — a table
+that ships and a code path that never arrives. To those guards an abandoned table and a shipped table
+are indistinguishable, because they differ in nothing the guards look at.
+
+`api/scripts/check-table-adoption.mjs` measures the difference. It reads the consolidation series
+(migrations 0418+, keyed off a prefix number so the next domain migration counts the day it lands),
+resolves each table to its Drizzle export, and asks whether any non-test file imports that export or
+names the table in raw SQL. Comments are stripped and SQL keywords matched case-sensitively before
+counting — an earlier ad-hoc pass reported 10 live tables where prose like "the sweep updates
+settings" was inflating three of them. `npm test` now prints the answer instead of requiring anyone
+to re-derive it:
+
+> `244 created, 7 with a live code path (7 via a Drizzle import, 3 via raw SQL), 237 awaiting one.`
+
+The 237 ratchet shrink-only (`.table-adoption-baseline.txt`), which turns PRD 20 steps 4–7 into a
+number that goes down. Two failures sit outside the ratchet because they are not sequencing calls: a
+migrated table with no `pgTable` declaration (unreachable from typed code), and a parse that returns
+zero tables (a guard that passes vacuously is worse than no guard).
+
+The aggregate alone was not enough. A ratchet only notices things getting worse *in bulk* — unwiring
+`ObjectRegistry` would move `annotations` from live to cold and report it as one line in a list of
+238, reading exactly like someone adding an unwired table. So `src/application/kernel/tableAdoption.test.ts`
+asserts the seven live tables **by name** — a plain `it.each`, not a pinned defect; `pin` is reserved
+vocabulary here for `it.fails`, and `check-pinned-defects.mjs` reads any register line using the word
+beside a `.test.ts` filename as a claim of one. It also cross-checks the names against
+`OBJECT_RELATIONS`, so a new object-panel tab cannot be added without a live table behind it. Verified
+by mutation: adding a known-cold table to that list fails with `× keeps orders wired to a code path`.
+
+The measurement lives in `scripts/lib/tableAdoption.mjs` with a hand-written `.d.mts`, shared by the
+guard and the test so the two cannot disagree about what "live" means — and so the test's assertions
+are typed rather than silently `any`.
+
+**Files:** `api/scripts/check-table-adoption.mjs` · `api/scripts/lib/tableAdoption.{mjs,d.mts}` ·
+`api/scripts/.table-adoption-baseline.txt` · `api/src/application/kernel/tableAdoption.test.ts` ·
+`api/package.json` (`check:table-adoption`, chained 10th of 18). api `2026.7.230`.
+
+---
+
+## ✅ RESOLVED 2026-08-08 — PRD 20: the consolidated data model, the API on it, and the experience on that
+
+[PRD 20](./specs/builderforce/20-prd-consolidated-data-model.md) Steps 1, 2, 3 and the kernel halves
+of 6 and 7. The document's Step 0 (six checks as ratchets) had already landed; everything after it
+was described and unbuilt. It is now built, and the six guards it shipped are what made the build
+honest rather than merely large.
+
+**Step 1 — the model, settled.** All 25 kernel primitives accepted, `tenant_*` over `account_*` by
+precedent, and all twelve §3.3 adjudications taken. One rejection, and it came from a guard rather
+than an opinion: `rendition` was written as a 26th primitive and
+`check-signature-duplication.mjs` scored it **0.60** against `artifacts` — over §2.2's own 0.55
+collapse rule — on the first run. A rendition is an artifact with a `derived_from_id`. **The kernel
+is 25 because the check said so.**
+
+**Step 2 — the target schema. `check-model-coverage.mjs`: 140 / 362 → 362 / 362 (100%).**
+`schema/kernel.ts` holds the 25 primitives, including the one NEW table the whole design rests on:
+`objects`, the registry that turns every polymorphic `(kind, id)` into a real `uuid` foreign key.
+The 222 missing domain targets landed across the 15 domain modules, and the 16 ad-hoc schema modules
+collapsed onto **15 domains + kernel** (`common`→`kernel`, `brain`+`collaboration`→`canvas`,
+`work`+`pmo`+`delivery`→`delivery`, `runtime`+`llm`→`agents`, `billing`→`finance`,
+`drive`+`mailbox`→`integrations`), rewriting every import across `api/src` in one pass.
+
+**The DDL is generated, not transcribed.** `scripts/gen-consolidation-migration.mjs` derives each
+migration from its Drizzle module through the new `scripts/lib/ddlFromDrizzle.mjs`, because
+hand-typing 248 tables twice — once as Drizzle, once as SQL — is the two-sources-of-truth problem
+PRD 20 is about, one layer down. It refuses to emit a table it cannot parse rather than guessing,
+which is the only safe failure mode for a generator whose output is a migration. Migrations
+**0418–0433** + `transactional-migrations/0004`.
+
+**Step 3 — the ratchets moved.** `check-domain-boundary.mjs` **82 → 38**: every module merge deleted
+its own cycles (`brain ↔ collaboration`, `work ↔ runtime`, `identity ↔ billing`), and the two
+categories that were never violations — a read of the kernel, a foreign key to `tenants` — became
+exemptions *by rule* rather than baseline entries. `check-shape-lint.mjs` and
+`check-tenant-column.mjs` gained adjudication registers that carry the REASON in code, where
+`--update` cannot silently drop it.
+
+**Three genuine duplicates were caught by the guard and fixed, not baselined:**
+
+1. `renditions` = `artifacts` (0.60) → folded into `artifacts.derived_from_id`.
+2. `boost_checkouts` = `course_checkouts` (0.60) → both had independently regrown the money half of
+   an `orders` row (amount, currency, status, provider ref, completed_at). Both narrowed to order
+   satellites carrying only what an order cannot: a boost's requested placement window, a course's
+   expiring seat hold.
+3. `email_otp_challenges` = `email_verification_codes` (0.62) → **the same table under two names,
+   one of them in production since migration 0285.** Consolidated into one store with a `purpose`
+   column; rows carried across idempotently, the old table dropped, `EmailVerificationService`
+   repointed and every read scoped by purpose so a newsletter double opt-in can never satisfy an
+   account-activation check. That one is the argument for landing the guard *before* the merge
+   rather than after, with a number attached.
+
+**Step 6 — the kernel exposed once.** `application/kernel/ObjectRegistry.ts` +
+`application/kernel/DomainService.ts` serve `/api/objects/:id` and its five relations (activity,
+annotations, members, shares, revisions) plus `/api/roster` and `/api/<domain>/{summary,items,
+activity,metrics}`. §6.3's line — *every one of those kernel routes exists today between six and
+forty times under different names* — is why this is one route group. The fifteen domain groups are
+ONE Hono router with a validated `:domain`, not fifteen near-identical ones; the per-seat difference
+is `DOMAIN_MANIFEST` data, so a sixteenth seat adds a manifest row and no routing.
+
+Both route files take an application-layer **port** and import no `src/infrastructure` at all, so
+`check-layering.mjs` stayed at 144 instead of growing by two. Every read goes through
+`getOrSetCached` on a key derived from `(tenant, domain, object)` — exactly what §6.3 says the
+kernel makes possible for the first time — and every write ends in an `invalidate…` call.
+
+`resolveShareToken` is the ONE share-link revocation path, replacing the three independent API-key
+revocation paths §7.1 counts: expiry, revocation and use-count are checked in one place, so no
+caller can honour a dead link by forgetting one of the three.
+
+**Step 7 — the experience, on the kernel components.** `frontend/src/components/kernel/`:
+`ObjectTimeline` (one timeline, mounted by both an object panel and a seat surface),
+`ObjectComments` (one thread; all seven `annotation` kinds via one `kind` prop), `ObjectShareSheet`
+(one sheet, one revocation path, token shown exactly once), `MetricChart` (one chart primitive fed
+by one `metric_facts` shape), `ObjectPanel` (one detail surface: `/trail` breadcrumb + five relation
+tabs), `RosterNav`, and `DomainSurface` — **the fifteen domain surfaces as one component**, served
+by one route at `/seat/<domain>`.
+
+`RosterNav` encodes both corrections from the navigation design: the team is always listed because
+it is navigation, only the scope chips are earned because they are state (one exported
+`earned(rung, reached)` decides it — a dimmed CFO is an invitation, a missing CFO is a secret), and
+the collapse seam has ONE definition, with a `ResizeObserver` calling the same `rail()` the toggle
+calls so the breakpoint and the button cannot drift apart.
+
+§7.2 honoured in the same pass: every colour a theme token, `auto-fit`/`minmax` layouts with
+horizontal scroll only inside the chart's own container, and all 83 strings in **all five catalogs
+with real translations** — guarded by a test that fails if a catalog is more than 15% identical to
+English, and by another asserting the api's `DOMAINS`, the client's `DOMAINS` and the five catalogs
+are the same fifteen.
+
+**The registry has a writer, so the surface is live rather than merely built.**
+`application/kernel/registryProjection.ts` runs as a daily sweep (`object-registry`, also
+force-runnable via `POST /api/admin/cron/object-registry`). It registers the platform's twenty
+principal entities into `objects` with one idempotent `INSERT … SELECT … ON CONFLICT DO UPDATE`
+per kind — never a per-row round trip against six-figure tables — skipping any projection whose
+table does not exist yet or carries no `tenant_id`, because guessing a tenant is worse than
+skipping. The same pass writes `<domain>.items` and `<domain>.events` as `metric_facts`, so every
+seat's Trends panel has real numbers on the first tick instead of fifteen empty panels waiting on
+fifteen bespoke rollups. `metricsFor()` is the one helper that unions a seat's own keys with those
+two, asserted by a test.
+
+**Also fixed in this pass** (found, not looked past): a `noUncheckedIndexedAccess` type error in
+`canvasWorkflowSpec.ts` that was failing the build, and two unscoped tenant read-backs in
+`workflowDefinitionRoutes.ts` (`check-tenant-scope.mjs` 5 → 4).
+
+**Green:** `api` 17 guards + 5,227 tests; `frontend` typecheck, lint and suite; both typechecks
+clean.
+
+**Files:** `api/src/infrastructure/database/schema/{kernel,hiring,people,revenue,investor,support}.ts`
+· the 10 merged domain modules · `api/src/application/kernel/*` ·
+`api/src/presentation/routes/{objectRoutes,domainRoutes}.ts` ·
+`api/scripts/{gen-consolidation-migration,merge-schema-modules,append-domain-tables}.mjs` ·
+`api/scripts/lib/ddlFromDrizzle.mjs` · `frontend/src/lib/kernel/kernelApi.ts` ·
+`frontend/src/components/kernel/*` · `frontend/src/app/seat/[domain]/page.tsx` · migrations
+0418–0433 · `transactional-migrations/0004`.
+
+---
+
+## ✅ RESOLVED 2026-08-08 — A canvas workflow was a drawing that reported success
+
+A user asked the Creation Canvas to "build a twilio workflow". They got a card showing four
+configured stages — **Audience · Create campaign · Approve · Publish** — pressed Run twice, saw
+nothing happen, and found two `workflow-run · delivered` rows in the inspector. Three separate
+fabrications produced that:
+
+1. **Invented steps.** `CreationNode.tsx`'s `WorkflowBody` rendered a hardcoded
+   `['Audience','Create campaign','Approve','Publish']` list whenever `data.steps` was empty, and
+   coloured the dots by *array position* (index 0 always "Defined", index 1 always "In progress").
+   A workflow that had never run looked half-complete, and a Twilio request displayed campaign stages.
+2. **A simulated run.** `runWorkflow` on a `local` session waited **1400 ms** and then wrote a
+   deliverable with `status: 'delivered'`, `provider: 'browser-draft'` and `validation: passed`,
+   flipping the chip to **Complete**. Nothing executed.
+3. **No compiler at all.** The canvas `workflow` kind's authored `steps` were free-form JSON rendered
+   as labels and lowered by nothing; the Brain prompt explicitly forbade `builtin_workflows_create`.
+   A Brain-authored workflow could never become executable without a human opening WorkflowBuilder —
+   while Twilio itself had ten working actions in the connector catalog, unreachable from the canvas.
+
+**Shipped — the canvas workflow is now genuinely executable.**
+`api/src/domain/canvasWorkflowSpec.ts` (new) lowers authored steps into a real `WorkflowDefinition`
+using the same node kinds the builder places by hand — a step carrying `connector` + `action` + `input`
+becomes a `connector` node, `prompt` becomes `llm`, `role` becomes `agent`. `POST /api/workflow-definitions/from-canvas`
+compiles it, validating every connector/action against the tenant's **live** catalog, and links the
+node (`resourceId`, `workflowExecutable`). It is deliberately **all-or-nothing**: a step that is not
+runnable comes back as a per-step `issue` (surfaced on the card and in the report) rather than being
+silently dropped into a graph that would run green while omitting what was asked for.
+
+- **Fabricated steps deleted.** Empty workflows show an honest empty state; step status comes from the
+  step, never its position; each step displays the call it makes (`twilio → send_sms`) or "No action set".
+- **Fabricated run deleted.** Run compiles first when unlinked; a local draft opens the account gate
+  instead of simulating success. Nothing reports a result it did not observe.
+- **`connector` added to `WorkflowNodeKind`** + `NODE_HANDLER_ROLES` + `taskTextForNode` — `cloudExecutor`
+  had executed `case 'connector'` for a kind the domain union did not contain.
+- **`builtin_connectors_actions`** MCP tool exposes the real connector/action keys so an integration
+  step is correct on the first attempt; the Brain prompt now requires executable steps and a successful
+  build before claiming a workflow is complete.
+- **Diagnostics rewritten** (`creationCanvasDiagnostics.ts`). The old report said `objects: 2` /
+  `objectKinds: chat:1, workflow:1` — true, useless, and consistent with a working canvas. It now reports
+  each object individually (`authoredSteps: 0`, `runnable: no (definition not linked)`, per-step calls,
+  compile issues), attributes every delivered output to the **provider** that produced it (which is what
+  exposes `browser-draft`), includes the Brain tool trace, reports unsaved/in-flight save state, and uses
+  the shared `windowRows` + `jsonAppendix` spine so elisions are announced instead of silent.
+
+Files: `api/src/domain/canvasWorkflowSpec.ts` (+ test), `api/src/domain/workflowGraph.ts`,
+`api/src/presentation/routes/workflowDefinitionRoutes.ts`, `api/src/application/llm/builtinMcpService.ts`,
+`frontend/src/lib/creationCanvasDiagnostics.ts` (+ test), `frontend/src/lib/apiClient.ts`
+(new `ApiRequestError` carrying `status`/`code`/`details`), `frontend/src/lib/builderforceApi.ts`,
+`frontend/src/lib/creationCanvasAi.ts`, `frontend/src/components/creation-canvas/{CreationNode,CreationCanvas,creationObjectRegistry}.tsx|ts`,
+`CreationCanvas.module.css`, all five i18n catalogs. Residuals (cosmetic `runTarget`/`approvalMode`,
+linear-chain-only compile) are in the Gap Register §9.
+
+---
+
 ## ✅ RESOLVED 2026-08-08 — The data model had no guard against being written twice
 
 Measuring the three-product consolidation ([PRD 20](./specs/builderforce/20-prd-consolidated-data-model.md))

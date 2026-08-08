@@ -549,7 +549,7 @@ export function createBrainRoutes(brainService: BrainService, db: Db): Hono<Hono
     const body = await c.req.json<{ email?: string }>().catch(() => ({} as { email?: string }));
     if (!body.email) return c.json({ error: 'email is required' }, 400);
 
-    const result = await brainService.inviteHuman(id, tenantId, userId, { email: String(body.email) });
+    const result = await brainService.inviteHuman(id, tenantId, userId, { email: String(body.email) }, c.env as Env);
     if ('error' in result) return c.json({ error: result.error }, result.error === 'Chat not found' ? 404 : 400);
 
     // Deliver the invite (best-effort — never fails the invite itself).

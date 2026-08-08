@@ -58,6 +58,13 @@ export interface NavGroup {
 
 export const NAV_GROUPS: NavGroup[] = [
   { id: 'dashboard', labelKey: 'group.dashboard', icon: '🏠', href: '/dashboard', match: ['/dashboard'] },
+  // The roster IS the navigation (PRD 20 §7): fifteen seats, fifteen domains, one
+  // list. ONE destination rather than fifteen sidebar entries — the seats are
+  // chosen inside it, from `/api/roster`, so a sixteenth seat appears without a
+  // change here. `/seat` rather than a bare `/<domain>` because the fifteen names
+  // are ordinary words that would shadow existing routes and silently claim any
+  // future one.
+  { id: 'seat', labelKey: 'group.seat', icon: '🧭', href: '/seat/delivery', match: ['/seat'] },
   // Brainstorm, Workflow Builder, and IDE are creation modes within one canvas.
   // Legacy routes stay matched so old deep links retain a clear active home.
   { id: 'create', labelKey: 'group.create', icon: '✦', href: '/create', match: ['/create', '/brainstorm', '/workflows', '/ide'] },

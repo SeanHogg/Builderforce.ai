@@ -1,3 +1,23 @@
+/**
+ * Schema — Delivery & work, owned by the **Manager** (PRD 20 §3).
+ *
+ * Root entity `work_item`. 123 source tables in → 54 out, 48 of them absorbed by
+ * the kernel. Builderforce contributed 37 of the survivors — it owns this domain
+ * the way hired.video owns hiring.
+ *
+ * Merged from `work.ts`, `pmo.ts` and `delivery.ts` (PRD 20 §5 step 2). Portfolios,
+ * initiatives, objectives, key results, epics, tasks and milestones were split
+ * across three files and 25 tables; they are ONE tree with a `kind`, which is what
+ * kernel `work_items` now holds. `portfolios` = `initiatives` was one of the eight
+ * duplicate-shape clusters this repo carried before any merge (§5 step 0), and
+ * both are `work_items` kinds now.
+ *
+ * The three files imported each other in every direction. An import between two
+ * files that become one file is not a boundary being crossed — it is a boundary
+ * that stopped existing, which is most of how `check-domain-boundary.mjs` went
+ * from 82 edges to 38.
+ */
+
 import {
   AnyPgColumn,
   bigint,
@@ -7,6 +27,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgEnum,
   pgTable,
   primaryKey,
@@ -20,25 +41,6 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
-import { budgets } from './finance';
-import { brainChats, facts } from './canvas';
-import { teams } from './canvas';
-import {
-  AlertMetric,
-  agentTypeEnum,
-  deploymentStatusEnum,
-  projectStatusEnum,
-  reportScheduleEnum,
-  reportTypeEnum,
-  sourceControlProviderEnum,
-  specStatusEnum,
-  taskPriorityEnum,
-  taskTypeEnum,
-  workflowTaskStatusEnum,
-} from './kernel';
-import { securityAudits, sourceControlIntegrations, ticketAudits } from './governance';
-import { onCallMembers, segments, tenants, users } from './identity';
-import { integrationCredentials } from './platform';
 import {
   agentHostDirectories,
   agentHosts,
@@ -53,6 +55,25 @@ import {
   workflowDefinitions,
   workflows,
 } from './agents';
+import { brainChats, facts, teams } from './canvas';
+import { budgets } from './finance';
+import { securityAudits, sourceControlIntegrations, ticketAudits } from './governance';
+import { onCallMembers, segments, tenants, users } from './identity';
+import {
+  AlertMetric,
+  agentTypeEnum,
+  deploymentStatusEnum,
+  objects,
+  projectStatusEnum,
+  reportScheduleEnum,
+  reportTypeEnum,
+  sourceControlProviderEnum,
+  specStatusEnum,
+  taskPriorityEnum,
+  taskTypeEnum,
+  workflowTaskStatusEnum,
+} from './kernel';
+import { integrationCredentials } from './platform';
 
 // ═══ from work.ts ═══
 /**
@@ -2767,4 +2788,331 @@ export const alertEvents = pgTable('alert_events', {
 }, (t) => ({
   byTenantCreated: index('idx_alert_events_tenant_created').on(t.tenantId, t.createdAt),
 }));
+
+// ═══ PRD 20 §5 step 2 — target-schema tables ═══
+//
+// Delivery & work — the Manager's fifteen remaining targets (PRD 20 §3.2).
+//
+// 123 source tables in → 54 out, 48 absorbed by the kernel. The two biggest
+// absorptions are the reason this domain finally has invariants to enforce:
+// `work_items` takes task, epic, story, subtask, objective, key result,
+// initiative, milestone and the scored `feature` into one tree with a `kind`
+// (§3.3), and `runs` takes every execution, attempt and step.
+//
+// `work_items` and `catalog_items` are the Delivery targets the kernel already
+// declares, which is why they are not repeated here — a domain may not fork a
+// kernel primitive (§0).
+//
+// `portfolios` = `initiatives` was one of the eight duplicate-shape clusters this
+// repo carried before any merge (§5 step 0), and both are `work_items` kinds now.
+
+/** A board column. A lane, not a status enum: a project's swimlanes define its
+ *  board, which is the rule migration 0076 already established and the reason a
+ *  `work_items.status` is a free-form varchar. */
+export const kanbanColumns = pgTable('kanban_columns', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull(),
+  boardRef:   varchar('board_ref', { length: 64 }).notNull(),
+  key:        varchar('key', { length: 48 }).notNull(),
+  label:      varchar('label', { length: 160 }).notNull(),
+  position:   integer('position').notNull().default(0),
+  /** WIP limit. Null means unlimited; 0 means the column is closed. */
+  wipLimit:   integer('wip_limit'),
+  /** Whether landing here means the item is done — one definition, so the
+   *  cycle-time rollup and the board badge cannot disagree. */
+  isTerminal: boolean('is_terminal').notNull().default(false),
+  /** Whether an autonomous agent may move items into this lane unattended. */
+  autoRunEnabled: boolean('auto_run_enabled').notNull().default(false),
+  colorToken: varchar('color_token', { length: 48 }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_kanban_columns_key').on(t.tenantId, t.boardRef, t.key),
+]);
+
+/** A commitment coming out of a conversation. Distinct from a `work_items` task:
+ *  an action item is captured mid-discussion with no board, no estimate and no
+ *  lane, and forcing it onto a board at capture time is how it stops being
+ *  captured at all. Promoting one CREATES a work item and records the link. */
+export const actionItems = pgTable('action_items', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  objectId:    uuid('object_id').references(() => objects.id, { onDelete: 'cascade' }),
+  /** Where it was raised — a ceremony, a thread, a document. */
+  sourceRef:   varchar('source_ref', { length: 64 }),
+  title:       varchar('title', { length: 300 }).notNull(),
+  detail:      text('detail'),
+  ownerRef:    varchar('owner_ref', { length: 64 }),
+  dueAt:       timestamp('due_at'),
+  /** 'open' | 'done' | 'promoted' | 'dropped'. */
+  status:      varchar('status', { length: 16 }).notNull().default('open'),
+  promotedWorkItemRef: varchar('promoted_work_item_ref', { length: 64 }),
+  createdBy:   varchar('created_by', { length: 64 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_action_items_owner').on(t.tenantId, t.ownerRef, t.status, t.dueAt),
+]);
+
+/** One step in an approval. The DECISION is `sign_offs`; this is the routing —
+ *  who was asked, in what order, and whether their turn has come. */
+export const approvalActions = pgTable('approval_actions', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  subjectKind: varchar('subject_kind', { length: 32 }).notNull(),
+  subjectRef:  varchar('subject_ref', { length: 64 }).notNull(),
+  approverKind: varchar('approver_kind', { length: 16 }).notNull().default('user'),
+  approverRef: varchar('approver_ref', { length: 64 }).notNull(),
+  step:        integer('step').notNull().default(1),
+  /** 'waiting' | 'active' | 'done' | 'skipped'. */
+  state:       varchar('state', { length: 16 }).notNull().default('waiting'),
+  requestedAt: timestamp('requested_at'),
+  actedAt:     timestamp('acted_at'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_approval_actions_approver').on(t.tenantId, t.subjectKind, t.subjectRef, t.approverRef, t.step),
+]);
+
+/** A recorded approval decision. Immutable: re-approving writes a new row, so
+ *  "who signed this off, and against which version" survives a later change. */
+export const signOffs = pgTable('sign_offs', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  subjectKind: varchar('subject_kind', { length: 32 }).notNull(),
+  subjectRef:  varchar('subject_ref', { length: 64 }).notNull(),
+  /** The `revisions.version` that was signed off, so an edit invalidates it
+   *  visibly rather than silently. */
+  subjectVersion: integer('subject_version'),
+  approverRef: varchar('approver_ref', { length: 64 }).notNull(),
+  /** 'approved' | 'rejected' | 'approved_with_comments'. */
+  decision:    varchar('decision', { length: 32 }).notNull(),
+  comment:     text('comment'),
+  decidedAt:   timestamp('decided_at').notNull().defaultNow(),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_sign_offs_subject').on(t.tenantId, t.subjectKind, t.subjectRef, t.decidedAt),
+]);
+
+/** A release plan. */
+export const releasePlans = pgTable('release_plans', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  objectId:    uuid('object_id').references(() => objects.id, { onDelete: 'cascade' }),
+  projectRef:  varchar('project_ref', { length: 64 }),
+  name:        varchar('name', { length: 200 }).notNull(),
+  version:     varchar('version', { length: 48 }),
+  summary:     text('summary'),
+  targetAt:    timestamp('target_at'),
+  releasedAt:  timestamp('released_at'),
+  /** 'planned' | 'in_progress' | 'frozen' | 'released' | 'rolled_back'. */
+  status:      varchar('status', { length: 16 }).notNull().default('planned'),
+  /** Set when a pre-merge build failure produced a fix ticket rather than a
+   *  silent red build (migration 0196's contract). */
+  blockedByRef: varchar('blocked_by_ref', { length: 64 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_release_plans_name').on(t.tenantId, t.projectRef, t.name),
+]);
+
+/** An estimate on one work item. A row rather than a column because estimates
+ *  are RE-estimated, and comparing the first to the last is the only way to know
+ *  whether a team is getting better at estimating. */
+export const taskEffortEstimates = pgTable('task_effort_estimates', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  workItemRef: varchar('work_item_ref', { length: 64 }).notNull(),
+  /** 'points' | 'hours' | 'tshirt'. */
+  unit:        varchar('unit', { length: 16 }).notNull().default('points'),
+  value:       numeric('value', { precision: 10, scale: 2 }),
+  tshirt:      varchar('tshirt', { length: 8 }),
+  estimatorKind: varchar('estimator_kind', { length: 16 }).notNull().default('user'),
+  estimatorRef: varchar('estimator_ref', { length: 64 }),
+  confidence:  numeric('confidence', { precision: 4, scale: 2 }),
+  estimatedAt: timestamp('estimated_at').notNull().defaultNow(),
+  isCurrent:   boolean('is_current').notNull().default(true),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_task_effort_estimates_item').on(t.tenantId, t.workItemRef, t.estimatedAt),
+]);
+
+/** Time booked against a work item. Distinct from `timesheets` (Finance), which
+ *  is a PERIOD claim for billing; this is the per-item grain a cycle-time
+ *  analysis reads. */
+export const taskTimeEntries = pgTable('task_time_entries', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  workItemRef: varchar('work_item_ref', { length: 64 }).notNull(),
+  workerRef:   varchar('worker_ref', { length: 64 }).notNull(),
+  startedAt:   timestamp('started_at'),
+  endedAt:     timestamp('ended_at'),
+  minutes:     integer('minutes').notNull().default(0),
+  /** 'manual' | 'timer' | 'derived' — derived means inferred from activity, and
+   *  the distinction is what stops inferred time being invoiced. */
+  source:      varchar('source', { length: 12 }).notNull().default('manual'),
+  isBillable:  boolean('is_billable').notNull().default(false),
+  note:        text('note'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_task_time_entries_item').on(t.tenantId, t.workItemRef, t.startedAt),
+  index('idx_task_time_entries_worker').on(t.tenantId, t.workerRef, t.startedAt),
+]);
+
+/** An item on a synchronisation meeting's agenda. */
+export const syncAgendaItems = pgTable('sync_agenda_items', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull(),
+  ceremonyRef: varchar('ceremony_ref', { length: 64 }).notNull(),
+  title:      varchar('title', { length: 300 }).notNull(),
+  detail:     text('detail'),
+  ownerRef:   varchar('owner_ref', { length: 64 }),
+  minutes:    integer('minutes'),
+  position:   integer('position').notNull().default(0),
+  /** 'pending' | 'covered' | 'deferred'. */
+  status:     varchar('status', { length: 16 }).notNull().default('pending'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_sync_agenda_items_pos').on(t.tenantId, t.ceremonyRef, t.position),
+]);
+
+/** How a two-way sync conflict was settled. The importer's cursor is a
+ *  `sync_states` row; this is the per-record adjudication, which has to be
+ *  auditable because it silently discards somebody's edit. */
+export const syncConflictResolutions = pgTable('sync_conflict_resolutions', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull(),
+  connectionId: integer('connection_id'),
+  resource:     varchar('resource', { length: 96 }).notNull(),
+  localRef:     varchar('local_ref', { length: 64 }),
+  remoteRef:    varchar('remote_ref', { length: 160 }),
+  field:        varchar('field', { length: 96 }),
+  localValue:   text('local_value'),
+  remoteValue:  text('remote_value'),
+  /** 'local_wins' | 'remote_wins' | 'merged' | 'manual'. */
+  resolution:   varchar('resolution', { length: 16 }).notNull(),
+  resolvedBy:   varchar('resolved_by', { length: 64 }),
+  resolvedAt:   timestamp('resolved_at').notNull().defaultNow(),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_sync_conflict_resolutions_conn').on(t.tenantId, t.connectionId, t.resolvedAt),
+]);
+
+/** A measured queue in the flow, with where it hurts. Not a `metric_fact`: a
+ *  fact is a number in a series, and this carries the DIAGNOSIS — which stage,
+ *  which cause, what to do — which is the part a number cannot hold. */
+export const bottleneckAnalysis = pgTable('bottleneck_analysis', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  projectRef:  varchar('project_ref', { length: 64 }),
+  stage:       varchar('stage', { length: 64 }).notNull(),
+  periodStart: timestamp('period_start').notNull(),
+  periodEnd:   timestamp('period_end').notNull(),
+  itemsEntered: integer('items_entered').notNull().default(0),
+  itemsExited: integer('items_exited').notNull().default(0),
+  avgWaitHours: numeric('avg_wait_hours', { precision: 10, scale: 2 }),
+  p90WaitHours: numeric('p90_wait_hours', { precision: 10, scale: 2 }),
+  /** 'capacity' | 'dependency' | 'review' | 'external' | 'unclear'. */
+  cause:       varchar('cause', { length: 24 }),
+  recommendation: text('recommendation'),
+  computedAt:  timestamp('computed_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_bottleneck_analysis_period').on(t.tenantId, t.projectRef, t.stage, t.periodStart),
+]);
+
+/** Who has how much room, by period. */
+export const capacityHeatmaps = pgTable('capacity_heatmaps', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull(),
+  subjectKind:  varchar('subject_kind', { length: 16 }).notNull().default('user'),
+  subjectRef:   varchar('subject_ref', { length: 64 }).notNull(),
+  periodStart:  timestamp('period_start').notNull(),
+  periodEnd:    timestamp('period_end').notNull(),
+  capacityHours: numeric('capacity_hours', { precision: 8, scale: 2 }).notNull().default('0'),
+  committedHours: numeric('committed_hours', { precision: 8, scale: 2 }).notNull().default('0'),
+  utilisation:  numeric('utilisation', { precision: 5, scale: 2 }),
+  /** 'under' | 'healthy' | 'at_risk' | 'over' — banded once so every surface
+   *  colours the same cell the same way. */
+  band:         varchar('band', { length: 16 }),
+  computedAt:   timestamp('computed_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_capacity_heatmaps_subject').on(t.tenantId, t.subjectKind, t.subjectRef, t.periodStart),
+]);
+
+/** What a sprint cost and what it returned. The bridge Delivery shares with
+ *  Finance, kept as a row because it is reconciled rather than recomputed. */
+export const sprintFinancialImpact = pgTable('sprint_financial_impact', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  sprintRef:   varchar('sprint_ref', { length: 64 }).notNull(),
+  projectRef:  varchar('project_ref', { length: 64 }),
+  laborCost:   numeric('labor_cost', { precision: 16, scale: 2 }).notNull().default('0'),
+  toolingCost: numeric('tooling_cost', { precision: 16, scale: 2 }).notNull().default('0'),
+  aiCost:      numeric('ai_cost', { precision: 16, scale: 2 }).notNull().default('0'),
+  deliveredValue: numeric('delivered_value', { precision: 16, scale: 2 }),
+  currency:    varchar('currency', { length: 8 }).notNull().default('USD'),
+  computedAt:  timestamp('computed_at').notNull().defaultNow(),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_sprint_financial_impact_sprint').on(t.tenantId, t.sprintRef),
+]);
+
+/** A company inside a portfolio. The portfolio itself is a `work_items` row of
+ *  kind `initiative` — `portfolios` = `initiatives` was a duplicate-shape cluster
+ *  — and this is the membership of a COMPANY in it, which carries an ownership
+ *  stake a kernel `memberships` row does not model. */
+export const portfolioCompanies = pgTable('portfolio_companies', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull(),
+  portfolioRef: varchar('portfolio_ref', { length: 64 }).notNull(),
+  companyRef:   varchar('company_ref', { length: 64 }).notNull(),
+  ownershipPercent: numeric('ownership_percent', { precision: 6, scale: 3 }),
+  investedAmount: numeric('invested_amount', { precision: 18, scale: 2 }),
+  currency:     varchar('currency', { length: 8 }).notNull().default('USD'),
+  /** 'active' | 'exited' | 'written_off'. */
+  status:       varchar('status', { length: 16 }).notNull().default('active'),
+  addedAt:      timestamp('added_at').notNull().defaultNow(),
+  exitedAt:     timestamp('exited_at'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_portfolio_companies_company').on(t.tenantId, t.portfolioRef, t.companyRef),
+]);
+
+/** An ordered entry in a portfolio view. Kept because the ORDER is editorial —
+ *  how the CEO wants the portfolio read — which is not a property of the company
+ *  and not derivable from any of its numbers. */
+export const portfolioItems = pgTable('portfolio_items', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull(),
+  portfolioRef: varchar('portfolio_ref', { length: 64 }).notNull(),
+  itemKind:     varchar('item_kind', { length: 32 }).notNull(),
+  itemRef:      varchar('item_ref', { length: 64 }).notNull(),
+  headline:     varchar('headline', { length: 300 }),
+  position:     integer('position').notNull().default(0),
+  isFeatured:   boolean('is_featured').notNull().default(false),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_portfolio_items_item').on(t.tenantId, t.portfolioRef, t.itemKind, t.itemRef),
+]);
+
+/** An ordered entry on a `lists` row. The list is Revenue's; the ordering
+ *  primitive is shared, which is why this is one table rather than one per
+ *  list scope. */
+export const listItems = pgTable('list_items', {
+  id:        serial('id').primaryKey(),
+  tenantId:  integer('tenant_id').notNull(),
+  listRef:   varchar('list_ref', { length: 64 }).notNull(),
+  itemKind:  varchar('item_kind', { length: 32 }).notNull(),
+  itemRef:   varchar('item_ref', { length: 64 }).notNull(),
+  note:      text('note'),
+  position:  integer('position').notNull().default(0),
+  addedBy:   varchar('added_by', { length: 64 }),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_list_items_item').on(t.tenantId, t.listRef, t.itemKind, t.itemRef),
+]);
 

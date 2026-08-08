@@ -5,7 +5,9 @@ import { reportCaughtError } from '../../application/observability/caughtErrorRe
  * All routes require a WebJWT with sa: true (enforced by superAdminMiddleware).
  *
  * GET  /api/admin/users                — all platform users + tenant counts
- * GET  /api/admin/guest-sessions       — anonymous Brain/tool adoption sessions
+ * GET  /api/admin/guest-sessions       — anonymous leads + the prompts they typed
+ * GET  /api/admin/broadcasts          — platform messages to logged-out visitors
+ * DELETE /api/admin/guest-sessions/:visitorId/prompts — erase one visitor's prompts
  * GET  /api/admin/creation-sessions    — saved Canvases with invitation evidence
  * GET  /api/admin/outcome-metrics      — platform/tenant/project value rollups
  * GET  /api/admin/tenants              — all tenants + member/agentHost counts
@@ -35,6 +37,13 @@ import { countActiveSessionsAndTokens } from '../../application/security/session
 import { getOrSetCached } from '../../infrastructure/cache/readThroughCache';
 import { computePlatformRollup } from '../../application/admin/platformRollup';
 import { getOutcomeValueRollup } from '../../application/admin/outcomeValueRollup';
+import { GuestPromptService } from '../../application/marketing/GuestPromptService';
+import {
+  broadcastVocabulary,
+  PlatformBroadcastService,
+  type BroadcastInput,
+} from '../../application/marketing/PlatformBroadcastService';
+import { isValidVisitorId } from '../../application/marketing/MarketingService';
 import {
   clampErrorLogLimit,
   getErrorLogEntry,
@@ -1233,42 +1242,45 @@ export function createAdminRoutes(): Hono<HonoEnv> {
   });
 
   // -------------------------------------------------------------------------
-  // GET /api/admin/guest-sessions
-  // Anonymous Brain sessions are marketing leads, not auth_user_sessions. Keep
-  // them visible beside the user directory so admins can follow the full
-  // guest -> account -> paid adoption funnel.
+  // GET  /api/admin/guest-sessions             — leads + the intent they typed
+  // GET  /api/admin/guest-sessions/:visitorId  — one lead's prompts, newest first
+  //
+  // An anonymous visitor who types a prompt IS a lead, and this is the only place
+  // the funnel is visible end to end: what they asked for, whether they came back,
+  // whether they signed up, whether they paid. Served by the application service
+  // so the aggregate, its cache and its invalidation live in ONE place rather than
+  // being re-remembered per route (the console and the broadcast targeting read the
+  // same numbers, and they must agree).
   // -------------------------------------------------------------------------
   router.get('/guest-sessions', async (c) => {
+    const service = new GuestPromptService(buildDatabase(c.env));
+    return c.json(await service.listSessionsWithIntent(c.env as Env));
+  });
+
+  router.get('/guest-sessions/:visitorId', async (c) => {
+    const visitorId = c.req.param('visitorId');
+    if (!isValidVisitorId(visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
+    const service = new GuestPromptService(buildDatabase(c.env));
+    return c.json({ prompts: await service.listPromptsForVisitor(visitorId) });
+  });
+
+  // DELETE /api/admin/guest-sessions/:visitorId/prompts
+  //
+  // Erase what a visitor typed. A prompt is free text a person wrote, so it is
+  // personal data — and it is keyed by an opaque visitor id rather than a user
+  // row, so no account deletion or foreign-key cascade would ever reach it. This
+  // is how a privacy request that names a visitor gets ACTIONED instead of only
+  // tracked in `privacy_requests`. Audited, because erasing evidence without a
+  // record of who erased it is the wrong kind of clean.
+  router.delete('/guest-sessions/:visitorId/prompts', async (c) => {
+    const visitorId = c.req.param('visitorId');
+    if (!isValidVisitorId(visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
     const db = buildDatabase(c.env);
-
-    const rows = await db.execute(sql`
-      SELECT
-        ms.id,
-        ms.visitor_id        AS "visitorId",
-        ms.guest_chat_count  AS "guestChatCount",
-        ms.guest_chat_tokens AS "guestChatTokens",
-        ms.guest_chat_day    AS "guestChatDay",
-        ms.tool_runs         AS "toolRuns",
-        ms.last_tool_id      AS "lastToolId",
-        ms.landing_path      AS "landingPath",
-        ms.referrer,
-        ms.converted,
-        ms.converted_user_id AS "convertedUserId",
-        ms.converted_at      AS "convertedAt",
-        ms.first_seen_at     AS "firstSeenAt",
-        ms.last_seen_at      AS "lastSeenAt",
-        u.email              AS "convertedEmail",
-        COALESCE(BOOL_OR(t.plan = 'pro' AND t.billing_status = 'active' AND t.is_demo = false), false) AS "isPaid"
-      FROM marketing_sessions ms
-      LEFT JOIN users u ON u.id = ms.converted_user_id
-      LEFT JOIN tenant_members tm ON tm.user_id = u.id AND tm.is_active = true
-      LEFT JOIN tenants t ON t.id = tm.tenant_id
-      GROUP BY ms.id, u.email
-      ORDER BY ms.last_seen_at DESC
-      LIMIT 500
-    `);
-
-    return c.json({ sessions: rows.rows });
+    const erased = await new GuestPromptService(db).forgetVisitor(c.env as Env, visitorId);
+    await writeAdminAudit(db, 'GUEST_PROMPTS_ERASED', c.get('userId') as string, {
+      metadata: { visitorId, erased },
+    });
+    return c.json({ erased });
   });
 
   // -------------------------------------------------------------------------
@@ -1394,6 +1406,69 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     `);
     if (rows.rows.length === 0) return c.json({ error: 'Lead not found' }, 404);
     return c.json({ lead: rows.rows[0] });
+  });
+
+  // -------------------------------------------------------------------------
+  // Platform broadcasts — /api/admin/broadcasts
+  //
+  // The channel to visitors who have no workspace to reach them through. A lead
+  // who typed a prompt and left has no email and no account, so the campaign
+  // engine (audiences of addresses, verified senders, suppression) cannot touch
+  // them — but they still have an open tab, and this is what puts a message in it.
+  //
+  // GET    /broadcasts      — every platform broadcast + its measured engagement
+  // POST   /broadcasts      — author one
+  // PATCH  /broadcasts/:id  — edit / schedule / take it live / archive it
+  // DELETE /broadcasts/:id  — remove it (engagement survives in activity_log)
+  //
+  // Every write publishes: caches dropped and one `{type:'changed'}` frame to the
+  // shared relay room, so a banner appears in open tabs rather than on next load.
+  // -------------------------------------------------------------------------
+  router.get('/broadcasts', async (c) => {
+    const service = new PlatformBroadcastService(buildDatabase(c.env));
+    return c.json({
+      broadcasts: await service.listForConsole(c.env as Env),
+      vocabulary: broadcastVocabulary,
+    });
+  });
+
+  router.post('/broadcasts', async (c) => {
+    const body = await c.req.json<BroadcastInput>().catch((): BroadcastInput => ({ message: '' }));
+    const db = buildDatabase(c.env);
+    const actorId = c.get('userId') as string;
+    const created = await new PlatformBroadcastService(db).create(c.env as Env, body, actorId);
+    if (!created) return c.json({ error: 'A broadcast needs a message.' }, 400);
+    await writeAdminAudit(db, 'PLATFORM_BROADCAST_CREATED', actorId, {
+      metadata: { broadcastId: created.id, status: created.status, audience: created.audience },
+    });
+    return c.json({ broadcast: created }, 201);
+  });
+
+  router.patch('/broadcasts/:id', async (c) => {
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Invalid broadcast id' }, 400);
+    const body = await c.req.json<BroadcastInput>().catch((): BroadcastInput => ({ message: '' }));
+    const db = buildDatabase(c.env);
+    if (!await new PlatformBroadcastService(db).update(c.env as Env, id, body)) {
+      return c.json({ error: 'Broadcast not found' }, 404);
+    }
+    await writeAdminAudit(db, 'PLATFORM_BROADCAST_UPDATED', c.get('userId') as string, {
+      metadata: { broadcastId: id, patch: body },
+    });
+    return c.json({ ok: true });
+  });
+
+  router.delete('/broadcasts/:id', async (c) => {
+    const id = Number(c.req.param('id'));
+    if (!Number.isInteger(id) || id <= 0) return c.json({ error: 'Invalid broadcast id' }, 400);
+    const db = buildDatabase(c.env);
+    if (!await new PlatformBroadcastService(db).remove(c.env as Env, id)) {
+      return c.json({ error: 'Broadcast not found' }, 404);
+    }
+    await writeAdminAudit(db, 'PLATFORM_BROADCAST_DELETED', c.get('userId') as string, {
+      metadata: { broadcastId: id },
+    });
+    return c.body(null, 204);
   });
 
   // -------------------------------------------------------------------------

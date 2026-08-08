@@ -270,17 +270,15 @@ CREATE TABLE IF NOT EXISTS course_checkouts (
   id SERIAL PRIMARY KEY,
   tenant_id INTEGER NOT NULL,
   course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
-  buyer_ref VARCHAR(64),
-  email VARCHAR(320),
-  amount_cents INTEGER NOT NULL DEFAULT 0,
-  currency VARCHAR(8) NOT NULL DEFAULT 'USD',
-  status VARCHAR(16) NOT NULL DEFAULT 'started',
-  provider_ref VARCHAR(160),
-  completed_at TIMESTAMP,
+  cohort_id INTEGER,
+  order_id INTEGER,
+  seat_held_at TIMESTAMP,
+  seat_hold_expires_at TIMESTAMP,
+  enrollment_id INTEGER,
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS idx_course_checkouts_status ON course_checkouts (tenant_id, status, created_at);
+CREATE INDEX IF NOT EXISTS idx_course_checkouts_hold ON course_checkouts (tenant_id, seat_hold_expires_at);
 
 CREATE TABLE IF NOT EXISTS lms_connectors (
   id SERIAL PRIMARY KEY,

@@ -38,8 +38,9 @@ import { useEffect, useRef, useState } from 'react';
 import { convertVisitor } from '@/lib/marketingApi';
 import { claimGuestRoomIntoAccount } from '@/lib/guestRoomApi';
 import { useOptionalBrainContext } from '@seanhogg/builderforce-brain-embedded';
-import { createLocalCreationSession } from '@/lib/creationSessions';
+import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { CanvasRouteArtifact } from './workspace-canvas/CanvasRouteArtifact';
+import { PlatformAnnouncements } from './announcements/PlatformAnnouncements';
 
 /** Preserve old campaign links while moving prompt-led creation onto Canvas. */
 function LegacyPromptCanvasRedirect() {
@@ -50,7 +51,7 @@ function LegacyPromptCanvasRedirect() {
     if (started.current) return;
     started.current = true;
     const prompt = new URLSearchParams(window.location.search).get('prompt')?.trim() ?? '';
-    router.replace(`/create/${createLocalCreationSession(prompt)}`);
+    router.replace(`/create/${startGuestCreationSession(prompt, { surface: 'brain' })}`);
   }, [router]);
   return <div style={{ minHeight: '60vh', display: 'grid', placeItems: 'center' }}>{t('openingCanvas')}</div>;
 }
@@ -306,6 +307,12 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
             <BrainContextProvider>
               <ReportErrorProvider>
               {content}
+              {/* Superadmin-authored messages to whoever is on the page. Mounted
+                  here rather than in a shell because it must reach BOTH the
+                  logged-out marketing pages and the signed-in app; it decides
+                  its own visibility and renders nothing when this visitor has
+                  no targeted message. */}
+              <PlatformAnnouncements />
               <MarketingConversionTracker />
               <FreelancerRouteGuard />
               <SalesRouteGuard />

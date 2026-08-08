@@ -26,6 +26,7 @@ import type { Env } from './env';
 import { buildDatabase } from './infrastructure/database/connection';
 import type { CronSweepDef } from './application/runtime/cronSweepRunner';
 
+import { projectRegistry } from './application/kernel/registryProjection';
 import { runVendorHealthCron } from './application/llm/vendorHealthCron';
 import { runByoCredentialHealthCron } from './application/llm/byoCredentialHealthCron';
 import { runRetentionPurge } from './application/maintenance/retentionPurge';
@@ -76,6 +77,17 @@ export const CRON_SWEEPS: readonly CronSweepDef[] = [
     run: async ({ env }) => {
       const r = await runVendorHealthCron(env);
       return r.changes.length > 0 ? `changes=${r.changes.length} emailed=${r.emailed}` : null;
+    },
+  },
+  {
+    key: 'object-registry',
+    cadence: 'daily',
+    description:
+      'Register the principal entities into the `objects` registry and write each ' +
+      "seat's daily item/event counts as metric_facts (PRD 20 §2, §7).",
+    run: async ({ env }) => {
+      const r = await projectRegistry(env);
+      return `registered=${r.registered} facts=${r.facts}${r.skipped.length ? ` skipped=${r.skipped.length}` : ''}`;
     },
   },
   {

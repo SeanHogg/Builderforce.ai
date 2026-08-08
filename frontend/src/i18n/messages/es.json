@@ -464,7 +464,8 @@
       "agentOps": "Operación de agentes",
       "sales": "Centro de ventas",
       "challenges": "Desafíos",
-      "growth": "Crecimiento"
+      "growth": "Crecimiento",
+      "seat": "Equipo"
     },
     "tab": {
       "projects": "Proyectos",
@@ -549,8 +550,7 @@
       "memory": "Memoria",
       "rehearsal": "Ensayo"
     },
-    "primaryAria": "Principal",
-    "group.growth": "Crecimiento"
+    "primaryAria": "Principal"
   },
   "alerts": {
     "title": "Alertas",
@@ -4424,6 +4424,19 @@
     },
     "eyebrow": "Conoce Evermind",
     "tagline": "Un modelo que aprende mientras trabaja, y que nunca queda obsoleto",
+    "visual": {
+      "aria": "Diagrama en vivo de Evermind aceptando una actualización de proyecto con clave mediante sus cuatro sistemas cooperativos",
+      "kicker": "Memoria de proyecto en vivo",
+      "runtime": "WebGPU / en el dispositivo",
+      "system": "Builderforce / 02",
+      "core": "Aprende con el trabajo",
+      "status": "Escritura aceptada",
+      "key": "proyecto.release.estado",
+      "previous": "Anterior",
+      "current": "Actual",
+      "previousValue": "Bloqueado",
+      "currentValue": "Listo"
+    },
     "title": "Evermind — el <grad>Builderforce.ai LLM</grad>",
     "law": {
       "heading": "Write-Through Cognition",
@@ -8399,7 +8412,8 @@
       "demoFunnel": "Embudo de demo",
       "salesLeads": "Leads de ventas",
       "salesCommissions": "Comisiones de ventas",
-      "cron": "Tareas programadas"
+      "cron": "Tareas programadas",
+      "broadcasts": "Comunicados"
     },
     "common": {
       "loading": "Cargando…",
@@ -8603,7 +8617,7 @@
     },
     "sessions": {
       "title": "Sesiones de adopción",
-      "subtitle": "Visitantes anónimos de Brain y herramientas gratuitas, incluida la conversión a cuenta y pago.",
+      "subtitle": "Visitantes anónimos, lo que pidieron y hasta dónde llegaron.",
       "count": "{count, plural, one {# sesión} other {# sesiones}}",
       "empty": "No se encontraron sesiones de invitados.",
       "visitor": "Visitante",
@@ -8615,7 +8629,22 @@
       "tokensAndTools": "{tokens} tokens · {tools} usos de herramientas",
       "guest": "invitado",
       "registered": "registrado",
-      "paid": "de pago"
+      "paid": "de pago",
+      "intent": "Qué pidieron",
+      "noPrompt": "Sin prompt registrado",
+      "promptMeta": "{count, plural, one {# prompt} other {# prompts}} - último en {surface}",
+      "promptRowMeta": "{surface} - {at}",
+      "firstSeenAt": "primera visita {at}",
+      "drawerTitle": "Visitante",
+      "drawerMeta": "Página de entrada {landing} - referente {referrer}",
+      "messageVisitor": "Enviar mensaje a este visitante",
+      "statSessions": "Sesiones",
+      "statStatedIntent": "Expresaron una intención",
+      "statPromptsHint": "{count, plural, one {# prompt capturado} other {# prompts capturados}}",
+      "statRegistered": "Registrados",
+      "statPaid": "De pago",
+      "statConversion": "Prompt a cuenta",
+      "statConversionHint": "de las sesiones que expresaron una intención"
     },
     "creationSessions": {
       "title": "Sesiones de creación",
@@ -9227,6 +9256,73 @@
         "title": "¿Forzar una tarea programada?",
         "dispatch": "Ejecutar «{target}» inicia ejecuciones reales de agentes en todos los espacios de trabajo ({count} de las tareas seleccionadas despachan trabajo). Esto consume tokens y no es una simulación.",
         "confirmLabel": "Ejecutar ahora"
+      }
+    },
+    "broadcasts": {
+      "title": "Comunicados de la plataforma",
+      "subtitle": "Mensajes para visitantes que no tienen ningún espacio de trabajo por el que contactarlos.",
+      "count": "{count, plural, one {# comunicado} other {# comunicados}}",
+      "empty": "Todavía no hay comunicados.",
+      "compose": "Nuevo comunicado",
+      "composeTitle": "Nuevo comunicado",
+      "editTitle": "Editar comunicado",
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "edit": "Editar",
+      "goLive": "Publicar",
+      "archive": "Archivar",
+      "delete": "Eliminar",
+      "deleteTitle": "¿Eliminar este comunicado?",
+      "deleteMessage": "\"{message}\" dejará de mostrarse de inmediato. La interacción ya registrada se conserva.",
+      "deleteConfirm": "Eliminar",
+      "messageLabel": "Mensaje",
+      "messagePlaceholder": "¿Qué deberían ver los visitantes?",
+      "messageCounter": "{used}/500",
+      "messageRequired": "Un comunicado necesita un mensaje.",
+      "toneLabel": "Tono",
+      "statusLabel": "Estado",
+      "scopeLabel": "Audiencia",
+      "minPromptsLabel": "Prompts mínimos",
+      "minPromptsHint": "Solo visitantes que hayan pedido algo al menos estas veces.",
+      "ctaLabelLabel": "Texto del botón",
+      "ctaHrefLabel": "Enlace del botón",
+      "startsAtLabel": "Comienza",
+      "endsAtLabel": "Termina",
+      "dismissibleLabel": "Los visitantes pueden descartarlo",
+      "aimedAtVisitor": "Dirigido al visitante {visitorId}",
+      "statLive": "Activos ahora",
+      "statReach": "Visitantes alcanzados",
+      "statReachHint": "visitantes distintos, todos los comunicados",
+      "statClicks": "Clics",
+      "statCtr": "Tasa de clics",
+      "statCtrHint": "clics por visitante alcanzado",
+      "colMessage": "Mensaje",
+      "colAudience": "Audiencia",
+      "colWindow": "Periodo",
+      "colEngagement": "Interacción",
+      "colActions": "Acciones",
+      "audienceVisitors": "{count, plural, one {# visitante indicado} other {# visitantes indicados}}",
+      "audienceMinPrompts": "{count}+ prompts",
+      "windowImmediate": "Activo de inmediato",
+      "windowOpenEnded": "Sin fecha de fin",
+      "engagementReach": "{count, plural, one {# visitante} other {# visitantes}}",
+      "engagementDetail": "{clicks} clics - {ctr}% CTR - {dismissals} descartados",
+      "tone": {
+        "info": "Información",
+        "success": "Éxito",
+        "warning": "Advertencia",
+        "critical": "Crítico"
+      },
+      "status": {
+        "draft": "Borrador",
+        "live": "Activo",
+        "archived": "Archivado"
+      },
+      "scope": {
+        "all": "Todos",
+        "guest": "Visitantes anónimos",
+        "registered": "Usuarios registrados",
+        "paid": "Clientes de pago"
       }
     }
   },
@@ -12734,7 +12830,27 @@
       "pdf": "PDF",
       "pptx": "PowerPoint",
       "svg": "SVG",
-      "json": "JSON"
+      "json": "JSON",
+      "scorm": "Paquete SCORM"
+    },
+    "course": {
+      "progress": "{percent}% completado",
+      "lessonCount": "{completed} de {total} lecciones",
+      "progressLabel": "Progreso del curso",
+      "duration": "{minutes} minutos",
+      "modules": "Módulos del curso",
+      "module": "Módulo de aprendizaje",
+      "minutes": "{count} min",
+      "objective": "Objetivo",
+      "practice": "Práctica",
+      "markComplete": "Marcar lección como completada",
+      "markIncomplete": "Marcar como incompleta",
+      "knowledgeCheck": "Comprobación de conocimientos",
+      "correct": "Correcto.",
+      "tryAgain": "Inténtalo de nuevo.",
+      "completed": "Curso completado",
+      "inProgress": "Aprendizaje en curso",
+      "empty": "Añade módulos para comenzar este curso."
     },
     "sessionTitle": "Título de la sesión",
     "saved": "Sesión guardada",
@@ -12895,7 +13011,8 @@
       "inbox": "Bandeja de entrada",
       "email": "Correo",
       "emailCampaign": "Campaña de correo",
-      "emailTemplate": "Plantilla de correo"
+      "emailTemplate": "Plantilla de correo",
+      "course": "Curso"
     },
     "canvasOutline": "Esquema accesible del lienzo",
     "canvasGestureToggle": "Arrastrar para seleccionar",
@@ -13548,6 +13665,7 @@
     "noticeKnowledgeConnected": "Conocimiento añadido y conectado al agente",
     "noticeBrainEvaluating": "Brain está evaluando los objetos conectados…",
     "noticeRoadmapAdded": "Hoja de ruta añadida al lienzo",
+    "noticeLlmCourseAdded": "Tu curso de LLM y laboratorio final están listos",
     "noticeFeatureSummaryAdded": "Resumen de funciones y maquetas añadidos",
     "noticeEvaluationAdded": "Evaluación añadida al lienzo",
     "noticeSavingPrd": "Guardando el PRD revisado en su proyecto…",
@@ -13646,6 +13764,10 @@
     "templateCategoryMarketplace": "Plantilla del marketplace",
     "templateCategoryObjectPack": "Paquete de objetos",
     "template": {
+      "llm-builder-academy": {
+        "name": "Academia de creación de LLM",
+        "description": "Aprende todo el ciclo de vida de un LLM con lecciones, prácticas, evaluaciones y un paquete SCORM portátil."
+      },
       "sales-command-center": {
         "name": "Centro de mando de ventas",
         "description": "Gestiona segmentación, prospección, pipeline, objetivos y coaching desde un único lienzo colaborativo."
@@ -14374,5 +14496,149 @@
       "mutatesWarning": "Esta acción cambia algo: envía un mensaje, hace una llamada o mueve dinero. Se ejecutará sin supervisión cada vez que se dispare este flujo.",
       "connectionHint": "Necesita una conexión activa de {name} en Integraciones. El nodo falla de forma segura hasta que exista."
     }
+  },
+  "kernel": {
+    "timeline": {
+      "loading": "Cargando actividad…",
+      "empty": "Aquí todavía no ha pasado nada.",
+      "failed": "No se pudo cargar la actividad.",
+      "someone": "Alguien"
+    },
+    "comments": {
+      "placeholder": "Añadir un comentario…",
+      "post": "Publicar",
+      "posting": "Publicando…",
+      "loading": "Cargando comentarios…",
+      "empty": "Aún no hay comentarios.",
+      "resolved": "Resuelto",
+      "someone": "Alguien"
+    },
+    "share": {
+      "scopeLabel": "Acceso",
+      "create": "Crear enlace",
+      "creating": "Creando…",
+      "shownOnce": "Copia este enlace ahora: solo se guarda su hash, así que no se puede volver a mostrar.",
+      "loading": "Cargando enlaces…",
+      "empty": "No hay enlaces para compartir.",
+      "revoke": "Revocar",
+      "uses": "{count} usos",
+      "expires": "caduca el {date}",
+      "scope": {
+        "view": "Puede ver",
+        "comment": "Puede comentar",
+        "edit": "Puede editar"
+      }
+    },
+    "chart": {
+      "empty": "Aún no hay mediciones.",
+      "ariaLabel": "Gráfico de tendencia, {count} series"
+    },
+    "panel": {
+      "title": "Detalles",
+      "breadcrumb": "Ruta de navegación",
+      "sections": "Secciones",
+      "untitled": "Sin título",
+      "close": "Cerrar",
+      "noMembers": "Todavía no hay nadie aquí.",
+      "noRevisions": "Aún no hay versiones.",
+      "tab": {
+        "activity": "Actividad",
+        "comments": "Comentarios",
+        "members": "Miembros",
+        "shares": "Compartir",
+        "revisions": "Versiones"
+      }
+    },
+    "roster": {
+      "label": "Equipo",
+      "team": "Equipo",
+      "recents": "Recientes",
+      "activeNow": "Activo recientemente",
+      "expand": "Expandir navegación",
+      "collapse": "Contraer navegación",
+      "domain": {
+        "growth": "Crecimiento",
+        "delivery": "Entrega",
+        "agents": "Agentes",
+        "hiring": "Contratación",
+        "finance": "Finanzas",
+        "revenue": "Ingresos",
+        "commerce": "Comercio",
+        "identity": "Identidad",
+        "people": "Personas",
+        "platform": "Plataforma",
+        "governance": "Gobernanza",
+        "investor": "Cartera",
+        "support": "Soporte",
+        "canvas": "Lienzo",
+        "integrations": "Integraciones"
+      }
+    },
+    "surface": {
+      "ownedBy": "A cargo de {seat}",
+      "loading": "Cargando…",
+      "noItems": "Aquí todavía no hay nada.",
+      "panelLabel": "Detalles del objeto",
+      "stat": {
+        "items": "Elementos",
+        "recentEvents": "Eventos esta semana",
+        "lastActivity": "Última actividad"
+      },
+      "section": {
+        "metrics": "Tendencias",
+        "items": "A cargo de este puesto",
+        "activity": "Actividad reciente",
+        "records": "Registros",
+        "kernel": "Núcleo compartido"
+      },
+      "blurb": {
+        "growth": "Campañas, páginas de destino, contenido y las audiencias que alcanzan.",
+        "delivery": "Cada unidad de trabajo — tareas, épicas, objetivos, hitos — en un solo árbol.",
+        "agents": "Agentes, ejecuciones y los modelos que hay detrás.",
+        "hiring": "Ofertas, candidaturas, entrevistas y colocaciones.",
+        "finance": "El libro mayor, los planes, los gastos y los escenarios construidos sobre ellos.",
+        "revenue": "Oportunidades, embudos, contactos y prospección.",
+        "commerce": "Publicaciones, pedidos, reservas y encargos.",
+        "identity": "Personas, equipos, espacios de trabajo y cómo inician sesión.",
+        "people": "Empleo, formación y cómo va la organización.",
+        "platform": "Monitores, paneles y lo que informa la plataforma.",
+        "governance": "Controles, hallazgos y las pruebas que los respaldan.",
+        "investor": "Empresas, productos, diligencia debida y validación.",
+        "support": "Tickets, artículos y lo que dicen los clientes.",
+        "canvas": "Todo lo creado, compartido y trabajado en conjunto.",
+        "integrations": "Cuentas conectadas y lo que sincronizan."
+      },
+      "kernelBlurb": "Las veinticinco primitivas que comparten todos los puestos. Ningún dominio las posee ni puede bifurcarlas."
+    },
+    "entities": {
+      "tabs": "Tipos de registro",
+      "loading": "Cargando…",
+      "noEntities": "Este puesto aún no tiene registros.",
+      "empty": "Sin registros.",
+      "search": "Buscar",
+      "searchBy": "Buscar por {field}",
+      "searchDisabled": "Este tipo de registro no tiene un nombre buscable",
+      "new": "Nuevo",
+      "edit": "Editar",
+      "retire": "Retirar",
+      "actions": "Acciones",
+      "save": "Guardar",
+      "saving": "Guardando…",
+      "cancel": "Cancelar",
+      "creating": "Nuevo {entity}",
+      "editing": "Editar {entity}",
+      "readOnly": "Solo lectura: estas filas las escribe el servicio que las gobierna.",
+      "withheld": "Campos ocultos: {fields}",
+      "loadFailed": "No se pudieron cargar estos registros.",
+      "saveFailed": "No se pudo guardar.",
+      "previous": "Anterior",
+      "next": "Siguiente",
+      "range": "{from}–{to} de {total}"
+    }
+  },
+  "announcements": {
+    "regionLabel": "Anuncios",
+    "dismiss": "Descartar",
+    "defaultCta": "Más información"
   }
 }

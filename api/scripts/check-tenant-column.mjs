@@ -35,6 +35,10 @@ const SCOPING_COLUMNS = ['tenant_id', 'segment_id', 'account_id'];
 /**
  * Tables that are genuinely tenant-independent, with the reason recorded.
  *
+ * Two kinds qualify: a GLOBAL CATALOGUE, which is the same rows for every
+ * tenant, and a PRE-TENANT row, which is written before a tenant exists to scope
+ * it to. Both are decisions; neither is an omission.
+ *
  * The baseline is for tables that still need a decision; this is for tables the
  * decision was made about. Keeping them apart matters because `--update`
  * rewrites the baseline and would drop any comment explaining an entry, and a
@@ -42,10 +46,13 @@ const SCOPING_COLUMNS = ['tenant_id', 'segment_id', 'account_id'];
  * customer-data table somebody forgot to scope — which is the exact failure this
  * guard exists to catch.
  */
-const GLOBAL_CATALOGUES = new Map([
+const TENANT_INDEPENDENT = new Map([
   ['cities', 'a geographic catalogue — the same city for every tenant, and the join key for territory and search-by-place.'],
   ['countries', 'ISO country list. Global by definition.'],
   ['stage_lookup', 'the platform-wide company-stage vocabulary a tenant selects FROM; a tenant-owned stage is a `pipeline_stages` row.'],
+  ['email_otp_challenges', 'PRE-TENANT: a signup challenge is issued before the account exists. Scoped by (user_ref, purpose), which is narrower than tenant, not looser. Absorbed `email_verification_codes`, which was baselined here for the same reason.'],
+  ['marketing_sessions', 'PRE-TENANT: an anonymous visitor IS the row, and it is written on their first prompt — before an account, and therefore before a tenant, exists. Scoped by the opaque `visitor_id`, which is narrower than tenant. Moved out of the baseline (0434) because it is a decision, not an omission.'],
+  ['marketing_session_prompts', 'PRE-TENANT: the prompts behind a `marketing_sessions` row, written on the same pre-signup path and scoped by the same `visitor_id` (0434).'],
 ]);
 
 const tables = parseDrizzleTables(srcDir);
@@ -56,7 +63,7 @@ if (tables.size === 0) {
 
 const findings = [];
 for (const [name, cols] of [...tables].sort((a, b) => a[0].localeCompare(b[0]))) {
-  if (SCOPING_COLUMNS.some((c) => cols.has(c)) || GLOBAL_CATALOGUES.has(name)) continue;
+  if (SCOPING_COLUMNS.some((c) => cols.has(c)) || TENANT_INDEPENDENT.has(name)) continue;
   findings.push({
     key: name,
     detail: 'no tenant_id / segment_id / account_id — if this holds customer data, every query against it is unscoped by construction.',

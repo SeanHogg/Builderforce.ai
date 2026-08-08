@@ -70,6 +70,7 @@ import designBuildDebug from '@/content/blog/design-build-debug-one-spatial-work
 import visualTeamRituals from '@/content/blog/visual-team-rituals-humans-and-agents.md';
 import canvasReuseVersioning from '@/content/blog/creation-canvas-templates-frames-branches-checkpoints.md';
 import creationObjectRegistry from '@/content/blog/forty-eight-live-objects-one-creation-canvas.md';
+import llmInteractiveCourse from '@/content/blog/learn-how-to-build-an-llm-interactive-course.md';
 
 export interface BlogPost {
   slug: string;
@@ -132,6 +133,7 @@ function buildPost(slug: string, raw: string): BlogPost {
 
 /** All published blog posts, sorted newest-first. */
 export const BLOG_POSTS: BlogPost[] = [
+  buildPost('learn-how-to-build-an-llm-interactive-course', llmInteractiveCourse),
   buildPost('create-before-you-sign-up', createBeforeSignup),
   buildPost('brain-operates-the-creation-canvas', brainCanvasOperator),
   buildPost('live-data-stories-on-the-creation-canvas', liveDataStories),

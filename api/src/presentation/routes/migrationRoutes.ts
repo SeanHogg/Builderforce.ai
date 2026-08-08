@@ -29,11 +29,11 @@ import { getOrSetCached, getCacheVersion, bumpCacheVersion } from '../../infrast
 
 const MODES: readonly ImportMode[] = ['migrate', 'sync', 'both'];
 
-export function createMigrationRoutes(db: Db): Hono<HonoEnv> {
+export function createMigrationRoutes(db: Db, env: Env): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
   const manager = requireRole(TenantRole.MANAGER);
-  const service = new MigrationService(createMigrationStore(db));
+  const service = new MigrationService(createMigrationStore(db, env));
 
   const verKey = (tenantId: number) => `migrations:${tenantId}`;
   const bump = (c: { env: Env }, tenantId: number) => bumpCacheVersion(c.env, verKey(tenantId));

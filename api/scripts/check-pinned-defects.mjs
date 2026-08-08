@@ -74,10 +74,17 @@ for (const p of pinned) {
 // The other direction, scoped to entries that CLAIM a pin. The register names test files
 // for plenty of innocent reasons ("covered by", "add a case to"); only a line that says
 // it is PINNED is making the claim this check verifies.
+//
+// A DISCLAIMER is not a claim. An entry that says a test is "a plain `it.each`, not a
+// pinned defect" is stating the opposite of what this check verifies, and reading it as a
+// claim fails the build for being accurate — which is how a guard teaches people to stop
+// writing the clarifying half of a sentence.
 const pinnedNames = new Set(pinned.map((p) => p.file));
 const CLAIMS_A_PIN = /\bit\s*\.\s*fails\b|\bpinn?(?:ed|s)\b/i;
+const DISCLAIMS_A_PIN =
+  /\b(?:not|never|no longer|rather than|instead of|without|no)\s+(?:a\s+|an\s+|any\s+)?(?:pinn?(?:ed|s)?\b|it\s*\.\s*fails\b)/i;
 for (const line of roadmap.split(/\r?\n/)) {
-  if (!CLAIMS_A_PIN.test(line)) continue;
+  if (!CLAIMS_A_PIN.test(line) || DISCLAIMS_A_PIN.test(line)) continue;
   for (const name of new Set(line.match(/[A-Za-z0-9._-]+\.test\.ts/g) ?? [])) {
     if (pinnedNames.has(name)) continue;
     if (!testFiles.some((f) => path.basename(f) === name)) continue; // file gone entirely

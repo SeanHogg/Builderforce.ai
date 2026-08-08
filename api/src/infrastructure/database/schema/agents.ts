@@ -7,9 +7,6 @@
  * and the execution that used them are one bounded context — the split ran through
  * the middle of every question worth asking ("why did this run cost that much"),
  * and `work ↔ runtime` was one of the import cycles the boundary guard baselined.
- *
- * Merged from `runtime.ts` + `llm.ts` by
- * scripts/merge-schema-modules.mjs (PRD 20 §5 step 2).
  */
 
 import {

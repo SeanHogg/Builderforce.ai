@@ -2625,18 +2625,18 @@ const CATALOG: BuiltinTool[] = [
       const factory = await buildMigrationProviderFactory(ctx.db, env, ctx.tenantId, str(a.provider), str(a.credentialId));
       if (!factory) throw new Error('Could not load integration credentials');
       const seg = await resolveSegment(ctx.db, ctx.tenantId);
-      const svc = new MigrationService(createMigrationStore(ctx.db));
+      const svc = new MigrationService(createMigrationStore(ctx.db, ctx.env));
       const mode = (['migrate', 'sync', 'both'] as ImportMode[]).includes(a.mode as ImportMode) ? (a.mode as ImportMode) : 'both';
       return svc.startRun({ tenantId: ctx.tenantId, segmentId: seg, provider: str(a.provider), credentialId: str(a.credentialId), mode, createdBy: ctx.userId ?? null }, factory(null));
     },
   },
-  { tool: 'migrations.list', mutates: false, description: 'List migration runs (history) for the workspace.', parameters: obj({}), run: (ctx) => new MigrationService(createMigrationStore(ctx.db)).listRuns(ctx.tenantId) },
-  { tool: 'migrations.get', mutates: false, description: 'Get the full staging snapshot of a migration run (projects, item types, users, staged items).', parameters: obj({ id: S }, ['id']), run: (ctx, a) => new MigrationService(createMigrationStore(ctx.db)).getDetail(str(a.id), ctx.tenantId) },
+  { tool: 'migrations.list', mutates: false, description: 'List migration runs (history) for the workspace.', parameters: obj({}), run: (ctx) => new MigrationService(createMigrationStore(ctx.db, ctx.env)).listRuns(ctx.tenantId) },
+  { tool: 'migrations.get', mutates: false, description: 'Get the full staging snapshot of a migration run (projects, item types, users, staged items).', parameters: obj({ id: S }, ['id']), run: (ctx, a) => new MigrationService(createMigrationStore(ctx.db, ctx.env)).getDetail(str(a.id), ctx.tenantId) },
   {
     tool: 'migrations.set_mappings', mutates: true,
     description: 'Set project (create/map/skip — map several external projects to the same BF project to COMBINE), item-type, user (invite/map/skip) and item-include mappings for a run.',
     parameters: obj({ id: S, projects: { type: 'array' }, types: { type: 'array' }, users: { type: 'array' }, items: { type: 'array' } }, ['id']),
-    run: (ctx, a) => new MigrationService(createMigrationStore(ctx.db)).setMappings(str(a.id), ctx.tenantId, { projects: a.projects as never, types: a.types as never, users: a.users as never, items: a.items as never }),
+    run: (ctx, a) => new MigrationService(createMigrationStore(ctx.db, ctx.env)).setMappings(str(a.id), ctx.tenantId, { projects: a.projects as never, types: a.types as never, users: a.users as never, items: a.items as never }),
   },
   {
     tool: 'migrations.stage', mutates: true,
@@ -2644,7 +2644,7 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ id: S }, ['id']),
     run: async (ctx, a) => {
       const env = requireEnv(ctx);
-      const svc = new MigrationService(createMigrationStore(ctx.db));
+      const svc = new MigrationService(createMigrationStore(ctx.db, ctx.env));
       const detail = await svc.getDetail(str(a.id), ctx.tenantId);
       if (!detail) throw new Error('Migration run not found');
       const factory = await buildMigrationProviderFactory(ctx.db, env, ctx.tenantId, detail.run.provider, detail.run.credentialId);
@@ -2658,7 +2658,7 @@ const CATALOG: BuiltinTool[] = [
     parameters: obj({ id: S }, ['id']),
     run: async (ctx, a) => {
       const env = requireEnv(ctx);
-      const svc = new MigrationService(createMigrationStore(ctx.db));
+      const svc = new MigrationService(createMigrationStore(ctx.db, ctx.env));
       const detail = await svc.getDetail(str(a.id), ctx.tenantId);
       if (!detail) throw new Error('Migration run not found');
       const factory = await buildMigrationProviderFactory(ctx.db, env, ctx.tenantId, detail.run.provider, detail.run.credentialId);
@@ -2670,7 +2670,7 @@ const CATALOG: BuiltinTool[] = [
     tool: 'migrations.rollback', mutates: true,
     description: 'Atomically remove projects, tasks, and sync connections created by a completed migration. Pre-existing mapped projects and unrelated work are preserved.',
     parameters: obj({ id: S }, ['id']),
-    run: (ctx, a) => new MigrationService(createMigrationStore(ctx.db)).rollback(str(a.id), ctx.tenantId),
+    run: (ctx, a) => new MigrationService(createMigrationStore(ctx.db, ctx.env)).rollback(str(a.id), ctx.tenantId),
   },
 
   // ---- Web (server-side fetch) — read an external URL behind the SSRF guard and return its

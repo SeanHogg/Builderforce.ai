@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import BrainBackdrop from '@/components/BrainBackdrop';
 import { ChatInput } from '@/components/ChatInput';
-import { createLocalCreationSession } from '@/lib/creationSessions';
+import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { NEW_CHAT_MODE, type ChatMode } from '@/lib/brain';
 import { useIsMobile } from '@/lib/useIsMobile';
 import styles from './LandingCanvasHero.module.css';
@@ -84,8 +84,12 @@ export function LandingCanvasHero() {
     if (!trimmed) return;
     // Creation starts without an account. The browser draft is claimed by
     // CreationSessionClient once the visitor signs in and has a workspace.
-    const sessionId = createLocalCreationSession(trimmed, chatMode);
-    router.push(`/create/${sessionId}`);
+    // The intent is recorded BEFORE the navigation, by the shared starter.
+    // Everything after this line happens in the browser and then a page later,
+    // so waiting for the canvas's first model call would keep no record at all
+    // of the visitors who bounced on the way — exactly the drop-off worth
+    // knowing about. The capture is `keepalive` and never delays the push.
+    router.push(`/create/${startGuestCreationSession(trimmed, { mode: chatMode, surface: 'landing' })}`);
   }
 
   /** Seed the composer instead of navigating: the board is an invitation. */

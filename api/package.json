@@ -1,6 +1,6 @@
 {
   "name": "builderforce-api",
-  "version": "2026.7.227",
+  "version": "2026.7.231",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",
@@ -28,8 +28,9 @@
     "check:dispatch-budget": "node scripts/check-dispatch-budget.mjs",
     "check:pinned-defects": "node scripts/check-pinned-defects.mjs",
     "check:prompt-tools": "node scripts/check-prompt-tool-names.mjs",
-    "test": "npm run check:schema && npm run check:db-access && npm run check:migrations && npm run check:signature-duplication && npm run check:shape-lint && npm run check:tenant-column && npm run check:polymorphic-fk && npm run check:domain-boundary && npm run check:model-coverage && npm run check:layering && npm run check:tenant-scope && npm run check:tracks && npm run check:source && npm run check:silent-catches && npm run check:dispatch-budget && npm run check:pinned-defects && npm run check:prompt-tools && vitest run",
-    "typecheck:native": "tsgo --noEmit"
+    "test": "npm run check:schema && npm run check:db-access && npm run check:migrations && npm run check:signature-duplication && npm run check:shape-lint && npm run check:tenant-column && npm run check:polymorphic-fk && npm run check:domain-boundary && npm run check:model-coverage && npm run check:table-adoption && npm run check:layering && npm run check:tenant-scope && npm run check:tracks && npm run check:source && npm run check:silent-catches && npm run check:dispatch-budget && npm run check:pinned-defects && npm run check:prompt-tools && vitest run",
+    "typecheck:native": "tsgo --noEmit",
+    "check:table-adoption": "node scripts/check-table-adoption.mjs"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",

@@ -17,6 +17,14 @@ import {
 } from '../../application/guest/guestResearch';
 import { iceServers } from '../../application/meetings/iceServers';
 import { applyMediaPrivacyMode } from '../../domain/meetings/mediaPrivacy';
+import type { GuestPromptService } from '../../application/marketing/GuestPromptService';
+import {
+  BROADCAST_EVENTS,
+  BROADCAST_ROOM,
+  type BroadcastEvent,
+  type PlatformBroadcastService,
+} from '../../application/marketing/PlatformBroadcastService';
+import { relayToRoom } from './realtimeRelay';
 
 /**
  * Guest (logged-out) Brain chat — PUBLIC session, usage and shared-ROOM routes.
@@ -34,6 +42,13 @@ import { applyMediaPrivacyMode } from '../../domain/meetings/mediaPrivacy';
  * payload, so the room's COMBINED turn allowance (the same ten turns one guest
  * gets, spent together) cannot be dodged by editing a request. Room state lives
  * only in the room's Durable Object and evaporates with it — no tenant, no rows.
+ *
+ * `POST /prompt` and `GET /messages` are the two halves of the conversion loop
+ * around all of that: what the visitor asked for on the way in, and what we are
+ * saying to them while they are here. Both are unauthenticated by necessity —
+ * the first fires before a guest token exists, and the second runs on marketing
+ * pages that never mint one — so both are bounded, and neither trusts anything
+ * the caller claims about themselves beyond the opaque `visitorId`.
  */
 const GUEST_TOKEN_TTL_SECONDS = 3600;
 
@@ -50,7 +65,11 @@ interface RoomEntryBody {
   touch?: MarketingTouch;
 }
 
-export function createGuestRoutes(guest: GuestChatService): Hono<HonoEnv> {
+export function createGuestRoutes(
+  guest: GuestChatService,
+  prompts: GuestPromptService,
+  broadcasts: PlatformBroadcastService,
+): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
   /** Resolve the caller's guest identity, requiring membership of `code` when given. */
@@ -108,6 +127,89 @@ export function createGuestRoutes(guest: GuestChatService): Hono<HonoEnv> {
       roomsEnabled: guestRoomsEnabled(c.env as Env),
     });
   });
+
+  // ── Intent capture ─────────────────────────────────────────────────────────
+  //
+  // The landing composer submits HERE before it navigates. It has to: the session
+  // it opens is created in the browser (`createLocalCreationSession`) and the
+  // first model call happens a page later, so waiting for the gateway to harvest
+  // the prompt would lose every visitor who bounced on the way — which is exactly
+  // the drop-off worth measuring. In-session turns are harvested from the gateway
+  // instead (see `handleGuestChat`) and never come through here.
+  //
+  // Unauthenticated on purpose and therefore bounded: a per-visitor and per-IP
+  // daily ceiling inside the service, a length cap in the domain, and nothing
+  // stored but the text and where it was typed.
+  router.post('/prompt', async (c) => {
+    const body = await c.req
+      .json<{ visitorId?: string; prompt?: string; surface?: string; sessionRef?: string; mode?: string; touch?: MarketingTouch }>()
+      .catch((): Record<string, never> => ({}));
+    if (!isValidVisitorId(body.visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
+    const visitorId = body.visitorId;
+
+    // The lead row must exist before the prompt lands, or the very first prompt a
+    // visitor ever types belongs to nobody. Awaited rather than deferred for that
+    // reason — this is the one place the ordering is load-bearing.
+    await guest.ensureLead(visitorId, body.touch).catch((error) => {
+      reportCaughtError(error, { source: 'presentation/routes/guestRoutes.ts', operation: 'recordGuestPrompt' });
+    });
+
+    const result = await prompts.record(c.env as Env, {
+      visitorId,
+      prompt: body.prompt,
+      surface: body.surface,
+      sessionRef: body.sessionRef,
+      mode: body.mode,
+      ip: c.req.header('cf-connecting-ip') ?? c.req.header('x-forwarded-for') ?? null,
+    });
+
+    // 202 for every outcome including the refusals: this is telemetry riding
+    // alongside a navigation, and a visitor who has hit an abuse ceiling must
+    // still get into the product. The status is reported, not enforced.
+    return c.json({ recorded: result.status === 'recorded', status: result.status }, 202);
+  });
+
+  // ── Platform broadcasts ────────────────────────────────────────────────────
+  //
+  // What a superadmin is currently saying to THIS visitor. Targeting is resolved
+  // server-side from their lead row, so the response contains only the messages
+  // they are entitled to and nothing about the rule that selected them.
+
+  router.get('/messages', async (c) => {
+    const visitorId = c.req.query('visitorId');
+    if (!isValidVisitorId(visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
+    return c.json({ messages: await broadcasts.deliverTo(c.env as Env, visitorId) });
+  });
+
+  // Seen / clicked / dismissed. Idempotent per (broadcast, visitor, kind), so a
+  // component that remounts cannot inflate a campaign's reach.
+  router.post('/messages/:id/event', async (c) => {
+    const broadcastId = Number(c.req.param('id'));
+    if (!Number.isInteger(broadcastId) || broadcastId <= 0) return c.json({ error: 'Invalid message id' }, 400);
+    const body = await c.req
+      .json<{ visitorId?: string; kind?: string }>()
+      .catch((): Record<string, never> => ({}));
+    if (!isValidVisitorId(body.visitorId)) return c.json({ error: 'Invalid visitor id' }, 400);
+    if (!BROADCAST_EVENTS.includes(body.kind as BroadcastEvent)) {
+      return c.json({ error: 'Unknown event kind' }, 400);
+    }
+    await broadcasts.recordEvent(c.env as Env, {
+      broadcastId, visitorId: body.visitorId, kind: body.kind as BroadcastEvent,
+    });
+    return c.body(null, 204);
+  });
+
+  /**
+   * The live channel. ONE room for the whole platform, carrying the same
+   * `{type:'changed'}` frame every other realtime surface uses — clients then
+   * re-fetch `GET /messages`, which is where targeting is applied.
+   *
+   * Deliberately open: no message text, no audience and no visitor id crosses
+   * this socket, so there is nothing on it a public listener should not hear.
+   * Making it a targeted per-visitor channel would mean one Durable Object per
+   * anonymous visitor to deliver a single word.
+   */
+  router.get('/messages/ws', (c) => relayToRoom(c, c.env?.SESSION_ROOM, BROADCAST_ROOM));
 
   // ── Research ───────────────────────────────────────────────────────────────
   //

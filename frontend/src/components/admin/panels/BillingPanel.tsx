@@ -62,9 +62,9 @@ export default function BillingPanel() {
         <div>
           <div style={{ marginBottom: 12, fontWeight: 600 }}>Signup discount codes</div>
           <form onSubmit={createDiscount} style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap', marginBottom: 12 }}>
-            <label style={{ fontSize: 12 }}>Code<input className="admin-input" value={newCode} onChange={(e) => setNewCode(e.target.value.toUpperCase())} placeholder="ANNUAL50" style={{ display: 'block', marginTop: 4 }} /></label>
-            <label style={{ fontSize: 12 }}>Percent off<input className="admin-input" type="number" min={1} max={100} value={percentOff} onChange={(e) => setPercentOff(Number(e.target.value))} style={{ display: 'block', marginTop: 4, width: 90 }} /></label>
-            <label style={{ fontSize: 12 }}>Years<input className="admin-input" type="number" min={1} max={20} value={durationYears} onChange={(e) => setDurationYears(Number(e.target.value))} style={{ display: 'block', marginTop: 4, width: 70 }} /></label>
+            <label style={{ fontSize: 12 }}>Code<input className="input" value={newCode} onChange={(e) => setNewCode(e.target.value.toUpperCase())} placeholder="ANNUAL50" style={{ display: 'block', marginTop: 4 }} /></label>
+            <label style={{ fontSize: 12 }}>Percent off<input className="input" type="number" min={1} max={100} value={percentOff} onChange={(e) => setPercentOff(Number(e.target.value))} style={{ display: 'block', marginTop: 4, width: 90 }} /></label>
+            <label style={{ fontSize: 12 }}>Years<input className="input" type="number" min={1} max={20} value={durationYears} onChange={(e) => setDurationYears(Number(e.target.value))} style={{ display: 'block', marginTop: 4, width: 70 }} /></label>
             <button className="btn-primary" type="submit" disabled={savingDiscount || !newCode.trim()}>{savingDiscount ? 'Creating…' : 'Create annual Individual code'}</button>
           </form>
           <div className="table-wrap">

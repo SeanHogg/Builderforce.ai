@@ -14,12 +14,12 @@ import {
   agentAssignments,
   users,
   tenantMembers,
-  tenantInvitations,
 } from '../../infrastructure/database/schema';
 import { ideProxy, explicitModelPreemptsByo, readProxyChoice, codingModelsForPlan, byoAutoSeedModels, type LlmProxyService } from '../llm/LlmProxyService';
 import { compactMessages, buildGatewaySummarizer, CLOUD_COMPACT_DEFAULTS } from '../llm/compactMessages';
 import { classifyReplyAccount, buildReplyProvenance, vendorAccountLabel } from '../llm/replyProvenance';
 import { recordActivity, cloudAgentActor, buildModelActivityMetadata } from '../activity/activityLog';
+import { invite } from '../kernel/InvitationService';
 import { getProjectEvermindHead, recordEvermindServeOutcome } from '../llm/projectEvermind';
 import { isServableText } from '../llm/textCoherence';
 import { learnFromPersistedTurns } from './brainEvermindLearning';
@@ -1661,6 +1661,10 @@ export class BrainService {
     tenantId: number,
     userId: string,
     input: { email: string },
+    /** Needed to invalidate the tenant's cached invitation roster when the
+     *  workspace invite is created — `BrainService` holds a `Db`, not an `Env`,
+     *  so the caller that has one passes it. */
+    env: Env,
   ): Promise<
     | { error: string }
     | { status: 'active' | 'pending'; memberUserId: string | null; email: string; chatTitle: string; already: boolean }
@@ -1708,15 +1712,16 @@ export class BrainService {
       // tenant account on signup (the existing tenant-invite auto-conversion adds
       // them to tenant_members). Once in the tenant, syncPendingMemberships promotes
       // their chat membership to active — completing the join with no extra step.
-      const [tinv] = await this.db.select({ id: tenantInvitations.id })
-        .from(tenantInvitations)
-        .where(and(eq(tenantInvitations.tenantId, tenantId), sql`lower(${tenantInvitations.email}) = ${email}`, eq(tenantInvitations.status, 'pending')))
-        .limit(1);
-      if (!tinv) {
-        await this.db.insert(tenantInvitations).values({
-          tenantId, email, status: 'pending', invitedByUserId: userId,
-        }).onConflictDoNothing();
-      }
+      // Find-or-refresh, in the kernel service that owns the primitive — the
+      // select-then-insert this replaced raced with itself and normalised the
+      // address on the read but not on the write.
+      await invite(this.db, env, {
+        tenantId,
+        kind: 'tenant',
+        email,
+        role: 'developer',
+        invitedBy: userId,
+      });
     }
     return { status: 'pending', memberUserId: null, email, chatTitle: chat.title, already: !!dup };
   }

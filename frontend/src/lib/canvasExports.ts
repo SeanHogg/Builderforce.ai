@@ -17,7 +17,7 @@
 
 import type { CreationObjectKind } from '@builderforce/creation-canvas-contract';
 
-export type CanvasExportAction = 'copy' | 'markdown' | 'html' | 'csv' | 'xlsx' | 'docx' | 'pdf' | 'pptx' | 'svg' | 'json' | 'diagram';
+export type CanvasExportAction = 'copy' | 'markdown' | 'html' | 'csv' | 'xlsx' | 'docx' | 'pdf' | 'pptx' | 'svg' | 'json' | 'diagram' | 'scorm';
 
 export const EXPORT_MIME: Readonly<Record<CanvasExportAction, string>> = {
   copy: 'text/plain', markdown: 'text/markdown', html: 'text/html', csv: 'text/csv', json: 'application/json',
@@ -27,11 +27,12 @@ export const EXPORT_MIME: Readonly<Record<CanvasExportAction, string>> = {
   docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  scorm: 'application/zip',
 };
 
 /** The file extension each action produces. `copy` writes no file. */
 export const EXPORT_EXTENSION: Readonly<Record<Exclude<CanvasExportAction, 'copy' | 'diagram'>, string>> = {
-  markdown: 'md', html: 'html', csv: 'csv', xlsx: 'xlsx', docx: 'docx', pdf: 'pdf', pptx: 'pptx', svg: 'svg', json: 'json',
+  markdown: 'md', html: 'html', csv: 'csv', xlsx: 'xlsx', docx: 'docx', pdf: 'pdf', pptx: 'pptx', svg: 'svg', json: 'json', scorm: 'zip',
 };
 
 /** Exports that are rendered by `/api/exports` rather than written in the
@@ -79,6 +80,7 @@ const EXPORT_ACTIONS: Partial<Record<CreationObjectKind, readonly CanvasExportAc
   pitchScorecard: ['docx', 'pdf', 'markdown', 'copy'],
   pitchQa: ['docx', 'pdf', 'markdown', 'copy'],
   pitchApplication: ['docx', 'pdf', 'markdown', 'copy'],
+  course: ['scorm', 'json'],
 };
 
 const NO_ACTIONS: readonly CanvasExportAction[] = [];

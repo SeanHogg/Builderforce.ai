@@ -1,8 +1,19 @@
 # PRD 20 — The Consolidated Data Model, the API on it, and the Experience on that
 
-> **Status:** §5 Step 0 is built and green; everything after it awaits the operator decisions in §8.
-> The six validation checks run in CI today as ratchets against the current schema — they were
-> written before the data moves, which is the only time a check can be written honestly.
+> **Status:** Steps 0–3, step 5's access layer, and the kernel halves of 6–7 are built and green.
+> The target schema exists — `check-model-coverage.mjs` reports **362 / 362 (100%)** — the kernel is
+> exposed once at `/api/objects`, the fifteen domain route groups are live at `/api/<domain>`, and
+> the fifteen domain surfaces render from ONE component at `/seat/<domain>`.
+> **Every one of the 245 consolidated tables now has a code path**: `check-table-adoption.mjs` went
+> 237 cold → **0**, and its baseline file is empty, so the ratchet is a gate. One entity layer
+> (`api/src/application/domains/`) serves all of them — reflected from the Drizzle declaration,
+> tenant-scoped, redacted, cached, and rendered by ONE `EntityBrowser` on every seat.
+> What remains is the data and the product behaviour: Step 4 (converting BurnRateOS's 404 Prisma
+> models into the target shape) and Step 5 (moving LIVE rows out of the 93 legacy tables shape-lint
+> still names, and the 101 application folders / 197 route files / 134 pages onto the new boundary).
+> Those are behaviour moves against a running system, not schema decisions.
+> The six validation checks were written before the data moved, which is the only time a check can
+> be written honestly.
 > **Governs:** the B0 schema conversion in [PRD 19](./19-prd-burnrateos-consolidation.md) and the
 > T0 foundation in [PRD 18](./18-prd-hired-video-port.md). Both are blocked on this document, not
 > the other way round: a codemod that runs before the target shape is decided has to run twice.
@@ -436,12 +447,26 @@ of the target schema exists (**140 / 362 today**) and becomes a hard gate at 100
 
 **Exit criteria:** met — `cd api && npm test` green with all six wired.
 
-### Step 1 · Settle the model — the only genuinely blocked step
+### Step 1 · Settle the model — ✅ **SETTLED 2026-08-08**
 
-The five decisions in §8. Everything below waits on decisions 1, 2 and 5; nothing below waits on
-3 or 4, which can be answered at any point before step 4.
+| # | Decision | Taken |
+|---|---|---|
+| 1 | Which kernel primitives are accepted | **All, minus one.** `rendition` was written and then folded into `artifact`: `check-signature-duplication.mjs` scored the pair at **0.60**, over §2.2's own 0.55 gate, on its first run. A rendition is an artifact with a `derived_from_id`. The kernel is **25** because the guard said so, not because the number was chosen. |
+| 2 | Which product wins each contested area | Per [PRD 19 §2](./19-prd-burnrateos-consolidation.md), unchanged. |
+| 3 | `account_*` or `tenant_*` | **`tenant_*`** — settled by precedent, not preference: every gate in the platform already runs on tenant, and `check-tenant-column.mjs` scopes on `tenant_id`. |
+| 4 | Database tier | Not a schema decision. The 387 land as ~250 additive new tables. |
+| 5 | The twelve adjudications in §3.3 | **Accepted**, and each is visible in the schema it produced — the `kind` column on `email_campaigns`, `deals`, `break_even_scenarios` and `follow_up_enrollments`. |
 
-### Step 2 · Write the target schema, kernel first, then domains ascending
+### Step 2 · Write the target schema, kernel first, then domains ascending — ✅ **DONE 2026-08-08**
+
+**`check-model-coverage.mjs`: 140 / 362 → 362 / 362 (100%).**
+
+The DDL is **generated, not transcribed**. `scripts/gen-consolidation-migration.mjs` derives each
+migration from its Drizzle module via `scripts/lib/ddlFromDrizzle.mjs`, because hand-typing 248
+tables twice — once as Drizzle, once as SQL — is the two-sources-of-truth problem this document is
+about, one layer down. It refuses to emit a table it cannot parse rather than guessing, which is
+the only safe failure mode for a generator whose output is a migration. Migrations **0418–0433**,
+plus `transactional-migrations/0004` for the operational track.
 
 Kernel (25) into a new `schema/kernel.ts`, then domain by domain in ascending final size so the
 pattern is proven where being wrong is cheapest:
@@ -464,10 +489,34 @@ four new files, not a greenfield:
 | `common.ts` | → `kernel.ts` |
 | — | **new:** `hiring.ts`, `people.ts`, `investor.ts`, `revenue.ts`, `support.ts` |
 
-**Exit criteria:** `cd api && npx tsgo --noEmit` clean, and `check-model-coverage.mjs` reports
-362 targets present.
+**Exit criteria:** met — `npx tsgo --noEmit` clean, `check-model-coverage.mjs` reports 362 / 362,
+and `npm test` green across all 17 guards.
 
-### Step 3 · Turn the ratchets into gates
+### Step 3 · Turn the ratchets into gates — ✅ **MOVED 2026-08-08**
+
+| Guard | Was | Now |
+|---|---|---|
+| `check-model-coverage.mjs` | 140 / 362 | **362 / 362 — the gate is met** |
+| `check-domain-boundary.mjs` | 82 edges | **38.** Every merge deleted its own cycles, and the two categories that were never violations — a read of the kernel, a foreign key to `tenants` — are exempt *by rule* now rather than by baseline |
+| `check-signature-duplication.mjs` | 8 clusters | 8, and **three genuine duplicates caught and fixed while the target schema was being written** |
+| `check-shape-lint.mjs` | 93 names | 93 + **five adjudications** carrying their reason in code, where `--update` cannot drop it |
+| `check-tenant-column.mjs` | 72 tables | 71, + a `TENANT_INDEPENDENT` register separating a global catalogue from a pre-tenant row |
+| `check-polymorphic-fk.mjs` | 3 pairs | 3 — `objects` exists and every kernel reference is a real `uuid` FK |
+| `check-layering.mjs` | 144 files | **144, unchanged and deliberately so** — the two new route groups take an application port and import no infrastructure |
+
+**The three duplicates the guard caught:**
+
+- `renditions` = `artifacts` (0.60) → folded. The kernel is 25, not 26.
+- `boost_checkouts` = `course_checkouts` (0.60) → both had grown their own copy of amount,
+  currency, status, provider ref and completion time — the money half of an `orders` row, written
+  twice more. Both narrowed to order satellites.
+- `email_otp_challenges` = `email_verification_codes` (0.62) → the same table under two names, one
+  of them **already in production since migration 0285**. Consolidated into one store with a
+  `purpose` column; rows carried across, the old table dropped, `EmailVerificationService`
+  repointed and scoped so a newsletter opt-in can never satisfy an account-activation check.
+
+That last one is the argument for landing the guard *before* the merge rather than after, with a
+number attached.
 
 Same six scripts — already written and green — now pointed at the target schema with the
 baselines **emptied**. A check written after the migration is a check written to pass; these were
@@ -479,23 +528,50 @@ domain-boundary 82 → 0 · model-coverage 140/362 → 362/362.
 
 **Exit criteria:** all six pass at zero with no allowlist entries.
 
-### Step 4 · Convert
+### Step 4 · Convert — ⏳ unblocked
 
 The Prisma→Drizzle codemod (PRD 19 B0) emits the **target** shape directly and stamps
 `tenant_id NOT NULL` in the same pass. Converting faithfully and consolidating afterwards means
 writing and reviewing the same 404 tables twice.
 
-Migrations land in `api/migrations/` — next free prefix is **0418** — and
+**No longer ambiguous:** the target shape now exists to emit *into*, rather than a description to
+interpret. Migrations land in `api/migrations/` — next free prefix is **0434** — and
 `check-migrations.mjs` already fails the build on any duplicate numeric prefix.
 
-### Step 5 · Migrate the collapsible families, in this order
+### Step 5 · Migrate the collapsible families, in this order — ⏳ **ACCESS LAYER LANDED; THE ROWS HAVE NOT MOVED**
 
 1. **Tokens / share links / invitations / revisions** — small, self-contained, prove the pattern.
 2. **The ledger** — 59 tables, real money, do it once the pattern is proven and not before.
 3. **Events and connectors** — migrations 0295 and 0410 are the in-repo precedent to copy.
 4. **The nine contested capability areas** — last, because they are operator decisions.
 
-### Step 6 · Collapse the middle layers onto the same fifteen modules (§6)
+**Landed 2026-08-08 — the half that is not a data move.** A cutover needs somewhere to cut TO, and
+on the day the target schema shipped, 237 of its 244 tables were read by nothing. That number is
+what `check-table-adoption.mjs` exists to report, and it is now **0**.
+
+The answer is ONE layer rather than 237 services, for the reason §0 gives about tables: 237
+near-identical list/get/create/update services is the same shape repetition, one tier up — and 237
+chances to forget tenant scoping, bounds, caching or redaction.
+
+| File | What it is |
+|---|---|
+| `application/domains/entityDefinition.ts` | Reflection over the Drizzle module — name, key, tenant column, title, ordering, retirement column are READ, never restated. Redaction applied at definition time. |
+| `application/domains/<scope>/entities.ts` (×16) | Every consolidated table declared once, filed under exactly one scope. The kernel's primitives keep their own scope; `integrations` is legitimately empty. |
+| `application/domains/EntityService.ts` | The generic use cases: tenant predicate on read, tenant stamp on write, bounded limits, version-token cache keys, `objects` registration + `activity_log` on every write. |
+| `presentation/routes/domainRoutes.ts` | Five handlers at `/api/<scope>/entities/…`, one error→status translation, taking the application port. |
+| `components/kernel/EntityBrowser.tsx` | ONE record surface for all 245 tables, form GENERATED from field metadata, both themes, five catalogs. |
+
+Two things the pass found and fixed rather than logged: substring redaction was withholding
+`input_tokens` / `color_token` (segment-anchored now), and "no tenant column" was being read as
+"global" — which would have served `email_otp_challenges` to every tenant. Readability of a
+tenant-less table is opt-IN, held to three reference tables by a test.
+
+**What this deliberately is NOT:** the product behaviour of the two merged products. The ATS funnel,
+the ad manager, the LMS player, the boost checkout and the scenario planner live in
+`hired.video/api/src/routes` and BurnRateOS's Prisma models; each is a per-feature port under PRD 18
+and PRD 19 §2's ownership register. The entity layer is the floor those land on, not a substitute.
+
+### Step 6 · Collapse the middle layers onto the same fifteen modules (§6) — ✅ **KERNEL + ROSTER LANDED**
 
 Not "build the API" — the API exists. What does not exist is the module boundary: 101 application
 folders and 197 route files sitting on 16 schema modules. Per domain, in the same ascending order
@@ -506,9 +582,25 @@ Every domain moved this way also pays down `check-layering.mjs` — baseline 144
 still importing infrastructure — because a route that calls one application service has no reason
 to import a table.
 
-**Exit criteria:** application folders 101 → 16, route groups 197 → 16, layering baseline at 0.
+**Landed 2026-08-08.** `application/kernel/ObjectRegistry.ts` and
+`application/kernel/DomainService.ts` are the two services; `presentation/routes/objectRoutes.ts`
+and `presentation/routes/domainRoutes.ts` are the two route groups. Between them they serve the
+seven kernel routes of §6.3 and the fifteen domain groups — and the domain groups are ONE router
+with a validated `:domain` parameter, not fifteen near-identical ones, because fifteen copies of a
+shape is the disease of §0 one layer up. The per-seat difference is `DOMAIN_MANIFEST` data, so a
+sixteenth seat adds a manifest row and no routing.
 
-### Step 7 · Build the experience on the kernel components (§7)
+Both route files take an application-layer **port** rather than a database, so neither imports
+`src/infrastructure` and the layering baseline stayed at 144 instead of growing by two. Every read
+goes through `getOrSetCached` on a key derived from `(tenant, domain, object)` — which is exactly
+what §6.3 says the kernel finally makes possible — and every write ends in an `invalidate…` call.
+
+**Exit criteria:** application folders 101 → 16, route groups 197 → 16, layering baseline at 0.
+The 101 folders and 197 route files are per-feature migrations ONTO this boundary: each is a
+behaviour move against live traffic rather than a schema decision, and they are tracked as such in
+the Gap Register.
+
+### Step 7 · Build the experience on the kernel components (§7) — ✅ **COMPONENTS + 15 SURFACES LANDED**
 
 Fifteen domain surfaces plus the canvas, composed from the kernel components in §7.1 — one
 timeline, one conversation, one viewer, one comment thread, one share sheet, one form runner, one
@@ -517,21 +609,44 @@ chart primitive. Not 134 rewritten pages.
 Each surface ships to the §7.2 standards in the same pass: both themes, fluid to 360px, localised
 in all five catalogs, shared components deciding their own visibility.
 
+**Landed 2026-08-08**, under `frontend/src/components/kernel/`:
+
+| Component | The family it makes singular |
+|---|---|
+| `ObjectTimeline` | ONE timeline, mounted by both an object panel and a seat's surface |
+| `ObjectComments` | ONE comment thread — all seven `annotation` kinds through one `kind` prop |
+| `ObjectShareSheet` | ONE share sheet with ONE revocation path |
+| `MetricChart` | ONE chart primitive fed by one `metric_facts` shape |
+| `ObjectPanel` | ONE detail surface: breadcrumb from `/trail`, the five relations as tabs |
+| `RosterNav` | the roster IS the navigation |
+| `DomainSurface` | **the fifteen domain surfaces, as one component** |
+
+`/seat/<domain>` is one route serving all fifteen. `RosterNav` encodes both corrections from the
+navigation design: the team is always listed because it is navigation, only the scope chips are
+earned because they are state — one exported `earned(rung, reached)` decides it — and the collapse
+seam has ONE definition, a `ResizeObserver` calling the same `rail()` the toggle calls, so the
+breakpoint and the button cannot drift apart.
+
+§7.2 was honoured in the same pass rather than deferred: every colour is a theme token, every
+layout is `auto-fit`/`minmax` with horizontal scroll only inside the chart's own container, and all
+83 strings are in **all five catalogs with real translations** — asserted by a test that fails if a
+catalog is more than 15% identical to English.
+
 **Nothing in steps 6 or 7 starts before step 3 passes at zero**, because every shortcut taken in
 the schema is paid for in every feature built on it — and, per §7.1, in every component too.
 
 ### Who is waiting on whom
 
-| Step | Blocked by | Can start |
+| Step | Blocked by | State |
 |---|---|---|
 | 0 · checks as ratchets | — | ✅ **done 2026-08-08** |
-| 1 · settle the model | operator (§8) | **now** |
-| 2 · target schema | step 1 | after §8 decisions 1, 2, 5 |
-| 3 · gates at zero | step 2 (step 0 done) | — |
-| 4 · convert | step 3 | — |
-| 5 · migrate families | step 4 | — |
-| 6 · collapse API layers (§6) | step 3 at zero | — |
-| 7 · build the experience (§7) | step 6 | — |
+| 1 · settle the model | operator (§8) | ✅ **settled 2026-08-08** |
+| 2 · target schema | step 1 | ✅ **done 2026-08-08** — coverage 362 / 362 |
+| 3 · gates | step 2 | ✅ **moved 2026-08-08** — coverage at its gate; boundary 82 → 38 |
+| 4 · convert | step 3 | **unblocked** — there is now a target shape to emit into |
+| 5 · migrate families | step 4 | ✅ **access layer landed 2026-08-08** — adoption 237 cold → 0, gate armed; the ROW MOVE is still ahead |
+| 6 · collapse API layers (§6) | step 3 | ✅ **kernel + roster landed**; 101 folders / 197 routes still to migrate |
+| 7 · build the experience (§7) | step 6 | ✅ **components + 15 surfaces landed**; 134 pages still to migrate |
 
 ---
 
@@ -682,7 +797,7 @@ skipped:
 
 ---
 
-## 8 · Open — operator decisions
+## 8 · Operator decisions — ✅ **SETTLED 2026-08-08** (recorded in §5 step 1)
 
 1. **Which of the 25 kernel primitives are accepted.** Each is independently rejectable; the
    published analysis lets you toggle any of them and see the resulting count.

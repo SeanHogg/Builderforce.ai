@@ -464,7 +464,8 @@
       "agentOps": "Ops des agents",
       "sales": "Centre des ventes",
       "challenges": "Défis",
-      "growth": "Croissance"
+      "growth": "Croissance",
+      "seat": "Équipe"
     },
     "tab": {
       "projects": "Projets",
@@ -549,8 +550,7 @@
       "memory": "Mémoire",
       "rehearsal": "Répétition"
     },
-    "primaryAria": "Principale",
-    "group.growth": "Croissance"
+    "primaryAria": "Principale"
   },
   "alerts": {
     "title": "Alertes",
@@ -4424,6 +4424,19 @@
     },
     "eyebrow": "Découvrez Evermind",
     "tagline": "Un modèle qui apprend en travaillant — et qui ne se périme jamais",
+    "visual": {
+      "aria": "Diagramme en direct d'Evermind acceptant une mise à jour de projet indexée via ses quatre systèmes coopératifs",
+      "kicker": "Mémoire de projet en direct",
+      "runtime": "WebGPU / sur l'appareil",
+      "system": "Builderforce / 02",
+      "core": "Apprend avec le travail",
+      "status": "Écriture acceptée",
+      "key": "projet.release.statut",
+      "previous": "Avant",
+      "current": "Actuel",
+      "previousValue": "Bloqué",
+      "currentValue": "Prêt"
+    },
     "title": "Evermind — le <grad>Builderforce.ai LLM</grad>",
     "law": {
       "heading": "Write-Through Cognition",
@@ -8399,7 +8412,8 @@
       "demoFunnel": "Entonnoir démo",
       "salesLeads": "Leads commerciaux",
       "salesCommissions": "Commissions commerciales",
-      "cron": "Tâches planifiées"
+      "cron": "Tâches planifiées",
+      "broadcasts": "Annonces"
     },
     "common": {
       "loading": "Chargement…",
@@ -8602,8 +8616,8 @@
       }
     },
     "sessions": {
-      "title": "Sessions d’adoption",
-      "subtitle": "Visiteurs anonymes de Brain et des outils gratuits, avec conversion en compte et en offre payante.",
+      "title": "Sessions d'adoption",
+      "subtitle": "Visiteurs anonymes, ce qu’ils ont demandé et jusqu’où ils sont allés.",
       "count": "{count, plural, one {# session} other {# sessions}}",
       "empty": "Aucune session invité trouvée.",
       "visitor": "Visiteur",
@@ -8615,7 +8629,22 @@
       "tokensAndTools": "{tokens} jetons · {tools} exécutions d’outils",
       "guest": "invité",
       "registered": "inscrit",
-      "paid": "payant"
+      "paid": "payant",
+      "intent": "Ce qu’ils ont demandé",
+      "noPrompt": "Aucune requête enregistrée",
+      "promptMeta": "{count, plural, one {# requête} other {# requêtes}} - dernière sur {surface}",
+      "promptRowMeta": "{surface} - {at}",
+      "firstSeenAt": "première visite {at}",
+      "drawerTitle": "Visiteur",
+      "drawerMeta": "Page d’entrée {landing} - référent {referrer}",
+      "messageVisitor": "Envoyer un message à ce visiteur",
+      "statSessions": "Sessions",
+      "statStatedIntent": "Ont exprimé une intention",
+      "statPromptsHint": "{count, plural, one {# requête capturée} other {# requêtes capturées}}",
+      "statRegistered": "Inscrits",
+      "statPaid": "Payants",
+      "statConversion": "Requête vers compte",
+      "statConversionHint": "des sessions ayant exprimé une intention"
     },
     "creationSessions": {
       "title": "Sessions de création",
@@ -9227,6 +9256,73 @@
         "title": "Forcer une tâche planifiée ?",
         "dispatch": "Lancer « {target} » démarre de véritables exécutions d’agents dans tous les espaces de travail ({count} des tâches sélectionnées déclenchent du travail). Cela consomme des jetons et n’est pas un essai à blanc.",
         "confirmLabel": "Lancer maintenant"
+      }
+    },
+    "broadcasts": {
+      "title": "Annonces de la plateforme",
+      "subtitle": "Messages destinés aux visiteurs qui n’ont aucun espace de travail par lequel les joindre.",
+      "count": "{count, plural, one {# annonce} other {# annonces}}",
+      "empty": "Aucune annonce pour l’instant.",
+      "compose": "Nouvelle annonce",
+      "composeTitle": "Nouvelle annonce",
+      "editTitle": "Modifier l’annonce",
+      "save": "Enregistrer",
+      "saving": "Enregistrement...",
+      "edit": "Modifier",
+      "goLive": "Publier",
+      "archive": "Archiver",
+      "delete": "Supprimer",
+      "deleteTitle": "Supprimer cette annonce ?",
+      "deleteMessage": "\"{message}\" cessera immédiatement d’être affichée. Les interactions déjà enregistrées sont conservées.",
+      "deleteConfirm": "Supprimer",
+      "messageLabel": "Message",
+      "messagePlaceholder": "Que doivent voir les visiteurs ?",
+      "messageCounter": "{used}/500",
+      "messageRequired": "Une annonce doit contenir un message.",
+      "toneLabel": "Ton",
+      "statusLabel": "Statut",
+      "scopeLabel": "Audience",
+      "minPromptsLabel": "Requêtes minimum",
+      "minPromptsHint": "Uniquement les visiteurs ayant demandé quelque chose au moins ce nombre de fois.",
+      "ctaLabelLabel": "Libellé du bouton",
+      "ctaHrefLabel": "Lien du bouton",
+      "startsAtLabel": "Début",
+      "endsAtLabel": "Fin",
+      "dismissibleLabel": "Les visiteurs peuvent la fermer",
+      "aimedAtVisitor": "Destinée au visiteur {visitorId}",
+      "statLive": "Actives",
+      "statReach": "Visiteurs touchés",
+      "statReachHint": "visiteurs distincts, toutes annonces",
+      "statClicks": "Clics",
+      "statCtr": "Taux de clic",
+      "statCtrHint": "clics par visiteur touché",
+      "colMessage": "Message",
+      "colAudience": "Audience",
+      "colWindow": "Période",
+      "colEngagement": "Interactions",
+      "colActions": "Actions",
+      "audienceVisitors": "{count, plural, one {# visiteur désigné} other {# visiteurs désignés}}",
+      "audienceMinPrompts": "{count}+ requêtes",
+      "windowImmediate": "Active immédiatement",
+      "windowOpenEnded": "Sans date de fin",
+      "engagementReach": "{count, plural, one {# visiteur} other {# visiteurs}}",
+      "engagementDetail": "{clicks} clics - {ctr}% de CTR - {dismissals} fermetures",
+      "tone": {
+        "info": "Information",
+        "success": "Succès",
+        "warning": "Avertissement",
+        "critical": "Critique"
+      },
+      "status": {
+        "draft": "Brouillon",
+        "live": "Active",
+        "archived": "Archivée"
+      },
+      "scope": {
+        "all": "Tout le monde",
+        "guest": "Visiteurs anonymes",
+        "registered": "Utilisateurs inscrits",
+        "paid": "Clients payants"
       }
     }
   },
@@ -12734,7 +12830,27 @@
       "pdf": "PDF",
       "pptx": "PowerPoint",
       "svg": "SVG",
-      "json": "JSON"
+      "json": "JSON",
+      "scorm": "Paquet SCORM"
+    },
+    "course": {
+      "progress": "{percent} % terminé",
+      "lessonCount": "{completed} leçons sur {total}",
+      "progressLabel": "Progression du cours",
+      "duration": "{minutes} minutes",
+      "modules": "Modules du cours",
+      "module": "Module d’apprentissage",
+      "minutes": "{count} min",
+      "objective": "Objectif",
+      "practice": "Exercice pratique",
+      "markComplete": "Marquer comme terminée",
+      "markIncomplete": "Marquer comme non terminée",
+      "knowledgeCheck": "Test de connaissances",
+      "correct": "Correct.",
+      "tryAgain": "Réessayez.",
+      "completed": "Cours terminé",
+      "inProgress": "Apprentissage en cours",
+      "empty": "Ajoutez des modules pour commencer ce cours."
     },
     "sessionTitle": "Titre de la Session",
     "saved": "Session enregistrée",
@@ -12895,7 +13011,8 @@
       "inbox": "Boîte de réception",
       "email": "E-mail",
       "emailCampaign": "Campagne e-mail",
-      "emailTemplate": "Modèle d’e-mail"
+      "emailTemplate": "Modèle d’e-mail",
+      "course": "Cours"
     },
     "canvasOutline": "Plan accessible de la toile",
     "canvasGestureToggle": "Glisser pour sélectionner",
@@ -13548,6 +13665,7 @@
     "noticeKnowledgeConnected": "Connaissance ajoutée et connectée à l’agent",
     "noticeBrainEvaluating": "Brain évalue les objets connectés…",
     "noticeRoadmapAdded": "Feuille de route ajoutée au canevas",
+    "noticeLlmCourseAdded": "Votre cours LLM et votre atelier final sont prêts",
     "noticeFeatureSummaryAdded": "Résumé des fonctionnalités et maquettes ajoutés",
     "noticeEvaluationAdded": "Évaluation ajoutée au canevas",
     "noticeSavingPrd": "Enregistrement du PRD révisé dans son projet…",
@@ -13646,6 +13764,10 @@
     "templateCategoryMarketplace": "Modèle de la marketplace",
     "templateCategoryObjectPack": "Pack d’objets",
     "template": {
+      "llm-builder-academy": {
+        "name": "Académie de création de LLM",
+        "description": "Apprenez tout le cycle de vie d’un LLM avec des leçons, des exercices, des évaluations et un paquet SCORM portable."
+      },
       "sales-command-center": {
         "name": "Centre de commande commercial",
         "description": "Pilotez ciblage, prospection, pipeline, objectifs et coaching depuis un seul canevas collaboratif."
@@ -14374,5 +14496,149 @@
       "mutatesWarning": "Cette action modifie quelque chose : elle envoie un message, passe un appel ou déplace de l'argent. Elle s'exécutera sans surveillance à chaque déclenchement du flux.",
       "connectionHint": "Nécessite une connexion {name} active dans Intégrations. Le nœud échoue en sécurité tant qu'il n'y en a pas."
     }
+  },
+  "kernel": {
+    "timeline": {
+      "loading": "Chargement de l'activité…",
+      "empty": "Rien ne s'est encore passé ici.",
+      "failed": "Impossible de charger l'activité.",
+      "someone": "Quelqu’un"
+    },
+    "comments": {
+      "placeholder": "Ajouter un commentaire…",
+      "post": "Publier",
+      "posting": "Publication…",
+      "loading": "Chargement des commentaires…",
+      "empty": "Aucun commentaire pour le moment.",
+      "resolved": "Résolu",
+      "someone": "Quelqu’un"
+    },
+    "share": {
+      "scopeLabel": "Accès",
+      "create": "Créer un lien",
+      "creating": "Création…",
+      "shownOnce": "Copiez ce lien maintenant : seule son empreinte est conservée, il ne pourra pas être réaffiché.",
+      "loading": "Chargement des liens…",
+      "empty": "Aucun lien de partage.",
+      "revoke": "Révoquer",
+      "uses": "{count} utilisations",
+      "expires": "expire le {date}",
+      "scope": {
+        "view": "Peut consulter",
+        "comment": "Peut commenter",
+        "edit": "Peut modifier"
+      }
+    },
+    "chart": {
+      "empty": "Aucune mesure pour le moment.",
+      "ariaLabel": "Graphique de tendance, {count} séries"
+    },
+    "panel": {
+      "title": "Détails",
+      "breadcrumb": "Fil d'Ariane",
+      "sections": "Sections",
+      "untitled": "Sans titre",
+      "close": "Fermer",
+      "noMembers": "Personne n'est encore ici.",
+      "noRevisions": "Aucune version pour le moment.",
+      "tab": {
+        "activity": "Activité",
+        "comments": "Commentaires",
+        "members": "Membres",
+        "shares": "Partage",
+        "revisions": "Versions"
+      }
+    },
+    "roster": {
+      "label": "Équipe",
+      "team": "Équipe",
+      "recents": "Récents",
+      "activeNow": "Actif récemment",
+      "expand": "Déplier la navigation",
+      "collapse": "Replier la navigation",
+      "domain": {
+        "growth": "Croissance",
+        "delivery": "Livraison",
+        "agents": "Agents",
+        "hiring": "Recrutement",
+        "finance": "Finance",
+        "revenue": "Revenus",
+        "commerce": "Commerce",
+        "identity": "Identité",
+        "people": "Personnel",
+        "platform": "Plateforme",
+        "governance": "Gouvernance",
+        "investor": "Portefeuille",
+        "support": "Support",
+        "canvas": "Canevas",
+        "integrations": "Intégrations"
+      }
+    },
+    "surface": {
+      "ownedBy": "Sous la responsabilité du {seat}",
+      "loading": "Chargement…",
+      "noItems": "Il n'y a encore rien ici.",
+      "panelLabel": "Détails de l'objet",
+      "stat": {
+        "items": "Éléments",
+        "recentEvents": "Événements cette semaine",
+        "lastActivity": "Dernière activité"
+      },
+      "section": {
+        "metrics": "Tendances",
+        "items": "Sous la responsabilité de ce poste",
+        "activity": "Activité récente",
+        "records": "Enregistrements",
+        "kernel": "Noyau partagé"
+      },
+      "blurb": {
+        "growth": "Campagnes, pages de destination, contenus et audiences atteintes.",
+        "delivery": "Chaque unité de travail — tâches, épopées, objectifs, jalons — en un seul arbre.",
+        "agents": "Agents, exécutions et les modèles qui les font tourner.",
+        "hiring": "Offres, candidatures, entretiens et placements.",
+        "finance": "Le grand livre, les plans, les dépenses et les scénarios qui en découlent.",
+        "revenue": "Affaires, pipelines, contacts et prospection.",
+        "commerce": "Annonces, commandes, réservations et missions.",
+        "identity": "Personnes, équipes, espaces de travail et modes de connexion.",
+        "people": "Emploi, formation et santé de l'organisation.",
+        "platform": "Sondes, tableaux de bord et ce que la plateforme rapporte.",
+        "governance": "Contrôles, constats et les preuves qui les étayent.",
+        "investor": "Sociétés, produits, due diligence et validation.",
+        "support": "Tickets, articles et ce que disent les clients.",
+        "canvas": "Tout ce qui est créé, partagé et travaillé ensemble.",
+        "integrations": "Comptes connectés et ce qu’ils synchronisent."
+      },
+      "kernelBlurb": "Les vingt-cinq primitives partagées par tous les postes. Aucun domaine ne les possède ni ne peut les dupliquer."
+    },
+    "entities": {
+      "tabs": "Types d’enregistrement",
+      "loading": "Chargement…",
+      "noEntities": "Ce poste n’a encore aucun enregistrement.",
+      "empty": "Aucun enregistrement.",
+      "search": "Rechercher",
+      "searchBy": "Rechercher par {field}",
+      "searchDisabled": "Ce type d’enregistrement n’a pas de nom cherchable",
+      "new": "Nouveau",
+      "edit": "Modifier",
+      "retire": "Retirer",
+      "actions": "Actions",
+      "save": "Enregistrer",
+      "saving": "Enregistrement…",
+      "cancel": "Annuler",
+      "creating": "Nouveau {entity}",
+      "editing": "Modifier {entity}",
+      "readOnly": "Lecture seule — ces lignes sont écrites par le service qui en est responsable.",
+      "withheld": "Champs masqués : {fields}",
+      "loadFailed": "Impossible de charger ces enregistrements.",
+      "saveFailed": "Impossible d’enregistrer.",
+      "previous": "Précédent",
+      "next": "Suivant",
+      "range": "{from}–{to} sur {total}"
+    }
+  },
+  "announcements": {
+    "regionLabel": "Annonces",
+    "dismiss": "Fermer",
+    "defaultCta": "En savoir plus"
   }
 }

@@ -464,7 +464,8 @@
       "agentOps": "Agenten-Betrieb",
       "sales": "Vertriebs-Hub",
       "challenges": "Challenges",
-      "growth": "Wachstum"
+      "growth": "Wachstum",
+      "seat": "Team"
     },
     "tab": {
       "projects": "Projekte",
@@ -549,8 +550,7 @@
       "memory": "Gedächtnis",
       "rehearsal": "Probelauf"
     },
-    "primaryAria": "Primär",
-    "group.growth": "Wachstum"
+    "primaryAria": "Primär"
   },
   "alerts": {
     "title": "Warnungen",
@@ -4424,6 +4424,19 @@
     },
     "eyebrow": "Lernen Sie Evermind kennen",
     "tagline": "Ein Modell, das beim Arbeiten lernt — und nie veraltet",
+    "visual": {
+      "aria": "Live-Diagramm von Evermind, das ein schlüsselbasiertes Projektupdate durch seine vier kooperierenden Systeme übernimmt",
+      "kicker": "Live-Projektgedächtnis",
+      "runtime": "WebGPU / auf dem Gerät",
+      "system": "Builderforce / 02",
+      "core": "Lernt mit der Arbeit",
+      "status": "Update angenommen",
+      "key": "projekt.release.status",
+      "previous": "Vorher",
+      "current": "Aktuell",
+      "previousValue": "Blockiert",
+      "currentValue": "Bereit"
+    },
     "title": "Evermind — das <grad>Builderforce.ai LLM</grad>",
     "law": {
       "heading": "Write-Through Cognition",
@@ -8399,7 +8412,8 @@
       "demoFunnel": "Demo-Funnel",
       "salesLeads": "Sales-Leads",
       "salesCommissions": "Verkaufsprovisionen",
-      "cron": "Geplante Läufe"
+      "cron": "Geplante Läufe",
+      "broadcasts": "Ankündigungen"
     },
     "common": {
       "loading": "Wird geladen…",
@@ -8602,8 +8616,8 @@
       }
     },
     "sessions": {
-      "title": "Adoptionssitzungen",
-      "subtitle": "Anonyme Brain- und Gratis-Tool-Besucher inklusive Konto- und Bezahlkonvertierung.",
+      "title": "Adoptions-Sessions",
+      "subtitle": "Anonyme Besucher, worum sie gebeten haben und wie weit sie gekommen sind.",
       "count": "{count, plural, one {# Sitzung} other {# Sitzungen}}",
       "empty": "Keine Gastsitzungen gefunden.",
       "visitor": "Besucher",
@@ -8615,7 +8629,22 @@
       "tokensAndTools": "{tokens} Tokens · {tools} Tool-Aufrufe",
       "guest": "Gast",
       "registered": "registriert",
-      "paid": "bezahlt"
+      "paid": "bezahlt",
+      "intent": "Worum sie gebeten haben",
+      "noPrompt": "Kein Prompt erfasst",
+      "promptMeta": "{count, plural, one {# Prompt} other {# Prompts}} - zuletzt über {surface}",
+      "promptRowMeta": "{surface} - {at}",
+      "firstSeenAt": "erster Besuch {at}",
+      "drawerTitle": "Besucher",
+      "drawerMeta": "Einstiegsseite {landing} - Verweis {referrer}",
+      "messageVisitor": "Diesem Besucher schreiben",
+      "statSessions": "Sessions",
+      "statStatedIntent": "Absicht geäußert",
+      "statPromptsHint": "{count, plural, one {# Prompt erfasst} other {# Prompts erfasst}}",
+      "statRegistered": "Registriert",
+      "statPaid": "Zahlend",
+      "statConversion": "Prompt zu Konto",
+      "statConversionHint": "der Sessions mit geäußerter Absicht"
     },
     "creationSessions": {
       "title": "Erstellungssitzungen",
@@ -9227,6 +9256,73 @@
         "title": "Geplanten Lauf erzwingen?",
         "dispatch": "„{target}“ auszuführen startet echte Agenten-Läufe in allen Workspaces ({count} der ausgewählten Läufe verteilen Arbeit). Das verbraucht Tokens und ist kein Probelauf.",
         "confirmLabel": "Jetzt ausführen"
+      }
+    },
+    "broadcasts": {
+      "title": "Plattform-Ankündigungen",
+      "subtitle": "Nachrichten an Besucher, die über keinen Workspace erreichbar sind.",
+      "count": "{count, plural, one {# Ankündigung} other {# Ankündigungen}}",
+      "empty": "Noch keine Ankündigungen.",
+      "compose": "Neue Ankündigung",
+      "composeTitle": "Neue Ankündigung",
+      "editTitle": "Ankündigung bearbeiten",
+      "save": "Speichern",
+      "saving": "Wird gespeichert...",
+      "edit": "Bearbeiten",
+      "goLive": "Veröffentlichen",
+      "archive": "Archivieren",
+      "delete": "Löschen",
+      "deleteTitle": "Diese Ankündigung löschen?",
+      "deleteMessage": "\"{message}\" wird sofort nicht mehr angezeigt. Bereits erfasste Interaktionen bleiben erhalten.",
+      "deleteConfirm": "Löschen",
+      "messageLabel": "Nachricht",
+      "messagePlaceholder": "Was sollen Besucher sehen?",
+      "messageCounter": "{used}/500",
+      "messageRequired": "Eine Ankündigung braucht eine Nachricht.",
+      "toneLabel": "Tonalität",
+      "statusLabel": "Status",
+      "scopeLabel": "Zielgruppe",
+      "minPromptsLabel": "Mindestanzahl Prompts",
+      "minPromptsHint": "Nur Besucher, die mindestens so oft um etwas gebeten haben.",
+      "ctaLabelLabel": "Button-Text",
+      "ctaHrefLabel": "Button-Link",
+      "startsAtLabel": "Beginnt",
+      "endsAtLabel": "Endet",
+      "dismissibleLabel": "Besucher können sie schließen",
+      "aimedAtVisitor": "Gerichtet an Besucher {visitorId}",
+      "statLive": "Aktuell live",
+      "statReach": "Erreichte Besucher",
+      "statReachHint": "eindeutige Besucher, alle Ankündigungen",
+      "statClicks": "Klicks",
+      "statCtr": "Klickrate",
+      "statCtrHint": "Klicks je erreichtem Besucher",
+      "colMessage": "Nachricht",
+      "colAudience": "Zielgruppe",
+      "colWindow": "Zeitraum",
+      "colEngagement": "Interaktion",
+      "colActions": "Aktionen",
+      "audienceVisitors": "{count, plural, one {# benannter Besucher} other {# benannte Besucher}}",
+      "audienceMinPrompts": "{count}+ Prompts",
+      "windowImmediate": "Sofort live",
+      "windowOpenEnded": "Kein Enddatum",
+      "engagementReach": "{count, plural, one {# Besucher} other {# Besucher}}",
+      "engagementDetail": "{clicks} Klicks - {ctr}% CTR - {dismissals} geschlossen",
+      "tone": {
+        "info": "Info",
+        "success": "Erfolg",
+        "warning": "Warnung",
+        "critical": "Kritisch"
+      },
+      "status": {
+        "draft": "Entwurf",
+        "live": "Live",
+        "archived": "Archiviert"
+      },
+      "scope": {
+        "all": "Alle",
+        "guest": "Anonyme Besucher",
+        "registered": "Registrierte Nutzer",
+        "paid": "Zahlende Kunden"
       }
     }
   },
@@ -12734,7 +12830,27 @@
       "pdf": "PDF",
       "pptx": "PowerPoint",
       "svg": "SVG",
-      "json": "JSON"
+      "json": "JSON",
+      "scorm": "SCORM-Paket"
+    },
+    "course": {
+      "progress": "{percent} % abgeschlossen",
+      "lessonCount": "{completed} von {total} Lektionen",
+      "progressLabel": "Kursfortschritt",
+      "duration": "{minutes} Minuten",
+      "modules": "Kursmodule",
+      "module": "Lernmodul",
+      "minutes": "{count} Min.",
+      "objective": "Lernziel",
+      "practice": "Praktische Übung",
+      "markComplete": "Lektion abschließen",
+      "markIncomplete": "Als unvollständig markieren",
+      "knowledgeCheck": "Wissenstest",
+      "correct": "Richtig.",
+      "tryAgain": "Noch einmal.",
+      "completed": "Kurs abgeschlossen",
+      "inProgress": "Lernen läuft",
+      "empty": "Fügen Sie Module hinzu, um den Kurs zu beginnen."
     },
     "sessionTitle": "Sessiontitel",
     "saved": "Session gespeichert",
@@ -12895,7 +13011,8 @@
       "inbox": "Posteingang",
       "email": "E-Mail",
       "emailCampaign": "E-Mail-Kampagne",
-      "emailTemplate": "E-Mail-Vorlage"
+      "emailTemplate": "E-Mail-Vorlage",
+      "course": "Kurs"
     },
     "canvasOutline": "Barrierefreie Leinwandübersicht",
     "canvasGestureToggle": "Ziehen zum Auswählen",
@@ -13548,6 +13665,7 @@
     "noticeKnowledgeConnected": "Wissen hinzugefügt und mit dem Agenten verbunden",
     "noticeBrainEvaluating": "Brain wertet die verbundenen Objekte aus…",
     "noticeRoadmapAdded": "Roadmap zum Canvas hinzugefügt",
+    "noticeLlmCourseAdded": "Ihr LLM-Kurs und Abschlusslabor sind bereit",
     "noticeFeatureSummaryAdded": "Funktionsübersicht und Mockups hinzugefügt",
     "noticeEvaluationAdded": "Bewertung zum Canvas hinzugefügt",
     "noticeSavingPrd": "Geprüftes PRD wird im Projekt gespeichert…",
@@ -13646,6 +13764,10 @@
     "templateCategoryMarketplace": "Marketplace-Vorlage",
     "templateCategoryObjectPack": "Objektpaket",
     "template": {
+      "llm-builder-academy": {
+        "name": "LLM Builder Academy",
+        "description": "Lernen Sie den gesamten LLM-Lebenszyklus mit Lektionen, Übungen, Tests und einem portablen SCORM-Paket."
+      },
       "sales-command-center": {
         "name": "Vertriebs-Kommandozentrale",
         "description": "Zielgruppen, Ansprache, Pipeline, Ziele und Coaching auf einer gemeinsamen Arbeitsfläche steuern."
@@ -14374,5 +14496,149 @@
       "mutatesWarning": "Diese Aktion verändert etwas – sie sendet eine Nachricht, tätigt einen Anruf oder bewegt Geld. Sie läuft bei jedem Auslösen dieses Workflows unbeaufsichtigt.",
       "connectionHint": "Benötigt eine aktive {name}-Verbindung unter Integrationen. Bis dahin schlägt der Knoten bewusst fehl."
     }
+  },
+  "kernel": {
+    "timeline": {
+      "loading": "Aktivität wird geladen…",
+      "empty": "Hier ist noch nichts passiert.",
+      "failed": "Aktivität konnte nicht geladen werden.",
+      "someone": "Jemand"
+    },
+    "comments": {
+      "placeholder": "Kommentar hinzufügen…",
+      "post": "Senden",
+      "posting": "Wird gesendet…",
+      "loading": "Kommentare werden geladen…",
+      "empty": "Noch keine Kommentare.",
+      "resolved": "Erledigt",
+      "someone": "Jemand"
+    },
+    "share": {
+      "scopeLabel": "Zugriff",
+      "create": "Link erstellen",
+      "creating": "Wird erstellt…",
+      "shownOnce": "Kopiere diesen Link jetzt — gespeichert wird nur sein Hash, er kann nicht erneut angezeigt werden.",
+      "loading": "Links werden geladen…",
+      "empty": "Keine Freigabelinks.",
+      "revoke": "Widerrufen",
+      "uses": "{count} Aufrufe",
+      "expires": "läuft am {date} ab",
+      "scope": {
+        "view": "Darf ansehen",
+        "comment": "Darf kommentieren",
+        "edit": "Darf bearbeiten"
+      }
+    },
+    "chart": {
+      "empty": "Noch keine Messwerte.",
+      "ariaLabel": "Trenddiagramm, {count} Reihen"
+    },
+    "panel": {
+      "title": "Details",
+      "breadcrumb": "Navigationspfad",
+      "sections": "Bereiche",
+      "untitled": "Ohne Titel",
+      "close": "Schließen",
+      "noMembers": "Hier ist noch niemand.",
+      "noRevisions": "Noch keine Versionen.",
+      "tab": {
+        "activity": "Aktivität",
+        "comments": "Kommentare",
+        "members": "Mitglieder",
+        "shares": "Freigabe",
+        "revisions": "Versionen"
+      }
+    },
+    "roster": {
+      "label": "Team",
+      "team": "Team",
+      "recents": "Zuletzt",
+      "activeNow": "Kürzlich aktiv",
+      "expand": "Navigation ausklappen",
+      "collapse": "Navigation einklappen",
+      "domain": {
+        "growth": "Wachstum",
+        "delivery": "Lieferung",
+        "agents": "Agenten",
+        "hiring": "Recruiting",
+        "finance": "Finanzen",
+        "revenue": "Umsatz",
+        "commerce": "Handel",
+        "identity": "Identität",
+        "people": "Personal",
+        "platform": "Plattform",
+        "governance": "Governance",
+        "investor": "Portfolio",
+        "support": "Support",
+        "canvas": "Canvas",
+        "integrations": "Integrationen"
+      }
+    },
+    "surface": {
+      "ownedBy": "Verantwortet von {seat}",
+      "loading": "Wird geladen…",
+      "noItems": "Hier gibt es noch nichts.",
+      "panelLabel": "Objektdetails",
+      "stat": {
+        "items": "Einträge",
+        "recentEvents": "Ereignisse diese Woche",
+        "lastActivity": "Letzte Aktivität"
+      },
+      "section": {
+        "metrics": "Trends",
+        "items": "Diesem Sitz zugeordnet",
+        "activity": "Letzte Aktivität",
+        "records": "Datensätze",
+        "kernel": "Gemeinsamer Kern"
+      },
+      "blurb": {
+        "growth": "Kampagnen, Landingpages, Inhalte und die Zielgruppen, die sie erreichen.",
+        "delivery": "Jede Arbeitseinheit — Aufgaben, Epics, Ziele, Meilensteine — in einem Baum.",
+        "agents": "Agenten, Läufe und die Modelle dahinter.",
+        "hiring": "Stellenanzeigen, Bewerbungen, Interviews und Vermittlungen.",
+        "finance": "Das Hauptbuch, Pläne, Ausgaben und die darauf aufbauenden Szenarien.",
+        "revenue": "Deals, Pipelines, Kontakte und Ansprache.",
+        "commerce": "Angebote, Bestellungen, Buchungen und Aufträge.",
+        "identity": "Personen, Teams, Arbeitsbereiche und wie sie sich anmelden.",
+        "people": "Beschäftigung, Lernen und wie es der Organisation geht.",
+        "platform": "Monitore, Dashboards und was die Plattform meldet.",
+        "governance": "Kontrollen, Feststellungen und die Nachweise dazu.",
+        "investor": "Unternehmen, Produkte, Due Diligence und Validierung.",
+        "support": "Tickets, Artikel und was Kundinnen und Kunden sagen.",
+        "canvas": "Alles, was gemeinsam erstellt, geteilt und bearbeitet wird.",
+        "integrations": "Verbundene Konten und was sie synchronisieren."
+      },
+      "kernelBlurb": "Die 25 Primitive, die alle Rollen teilen. Keine Domäne besitzt sie, keine darf sie abspalten."
+    },
+    "entities": {
+      "tabs": "Datensatztypen",
+      "loading": "Wird geladen…",
+      "noEntities": "Diese Rolle hat noch keine Datensätze.",
+      "empty": "Keine Datensätze.",
+      "search": "Suchen",
+      "searchBy": "Nach {field} suchen",
+      "searchDisabled": "Dieser Datensatztyp hat keinen durchsuchbaren Namen",
+      "new": "Neu",
+      "edit": "Bearbeiten",
+      "retire": "Stilllegen",
+      "actions": "Aktionen",
+      "save": "Speichern",
+      "saving": "Wird gespeichert…",
+      "cancel": "Abbrechen",
+      "creating": "Neu: {entity}",
+      "editing": "{entity} bearbeiten",
+      "readOnly": "Schreibgeschützt — diese Zeilen schreibt der Dienst, dem sie gehören.",
+      "withheld": "Zurückgehaltene Felder: {fields}",
+      "loadFailed": "Diese Datensätze konnten nicht geladen werden.",
+      "saveFailed": "Speichern fehlgeschlagen.",
+      "previous": "Zurück",
+      "next": "Weiter",
+      "range": "{from}–{to} von {total}"
+    }
+  },
+  "announcements": {
+    "regionLabel": "Ankündigungen",
+    "dismiss": "Schließen",
+    "defaultCta": "Mehr erfahren"
   }
 }

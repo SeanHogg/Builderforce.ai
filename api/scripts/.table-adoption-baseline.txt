@@ -1,0 +1,4 @@
+# Tables created by PRD 20 migrations 0418+ that nothing reads or writes yet (PRD 20 §5 steps 6-7).
+# Shrinks as each domain feature is migrated onto the target schema. It must never grow silently.
+# Regenerate: node scripts/check-table-adoption.mjs --update
+

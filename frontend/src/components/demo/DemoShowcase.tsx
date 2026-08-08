@@ -12,13 +12,13 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { startDemoSession, DEMO_PERSONAS, type DemoPersona } from '@/lib/demoApi';
 
-/** Per-persona accent + emoji — presentation only; copy comes from i18n. */
+/** Compact product-area marks — presentation only; copy comes from i18n. */
 const PERSONA_META: Record<DemoPersona, { icon: string; accent: string }> = {
-  'ai-team': { icon: '🤖', accent: 'var(--accent, #4d9eff)' },
-  insights: { icon: '📊', accent: 'var(--cyan-bright, #00e5cc)' },
-  pmo: { icon: '🗂️', accent: '#a78bfa' },
-  talent: { icon: '🧑‍💻', accent: '#f59e0b' },
-  governance: { icon: '🛡️', accent: '#34d399' },
+  'ai-team': { icon: 'AI', accent: 'var(--coral-bright)' },
+  insights: { icon: 'BI', accent: 'var(--cyan-bright)' },
+  pmo: { icon: 'PM', accent: 'var(--coral-bright)' },
+  talent: { icon: 'HR', accent: 'var(--cyan-bright)' },
+  governance: { icon: 'GV', accent: 'var(--coral-bright)' },
 };
 
 export function DemoShowcase() {
@@ -85,37 +85,41 @@ export function DemoShowcase() {
 }
 
 const styles = `
-  .demo-showcase-inner { max-width: 1200px; margin: 0 auto; padding: 40px 24px 72px; }
+  .demo-showcase { border-top: 1px solid var(--border-subtle); }
+  .demo-showcase-inner { max-width: 1160px; margin: 0 auto; padding: clamp(76px,9vw,120px) 24px; }
   .demo-showcase-lead {
     max-width: 720px; margin: 8px auto 0; text-align: center;
     font-size: 16px; line-height: 1.6; color: var(--text-secondary, #aab3c5);
   }
   .demo-showcase-grid {
-    display: grid; gap: 18px; margin-top: 28px;
+    display: grid; gap: 16px; margin-top: 36px;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   }
   .demo-card {
     display: flex; flex-direction: column; gap: 8px; text-align: left; cursor: pointer;
-    padding: 22px; border-radius: 16px; font-family: inherit;
-    background: var(--surface-card, rgba(255,255,255,0.03));
-    border: 1px solid var(--border, rgba(255,255,255,0.12));
-    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    position: relative; overflow: hidden; padding: 26px; border-radius: 14px; font-family: inherit;
+    background: var(--surface-card-strong);
+    border: 1px solid var(--border-subtle);
+    box-shadow: 0 1px 0 var(--surface-inset-highlight);
+    transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
   }
   .demo-card:hover:not(:disabled) {
     transform: translateY(-3px);
     border-color: var(--card-accent);
-    box-shadow: 0 12px 32px rgba(0,0,0,0.25);
+    box-shadow: 0 18px 44px var(--shadow-coral-soft);
   }
   .demo-card:focus-visible { outline: 2px solid var(--card-accent); outline-offset: 2px; }
   .demo-card:disabled { cursor: default; opacity: 0.85; }
   .demo-card-icon {
-    width: 46px; height: 46px; display: grid; place-items: center; font-size: 24px;
-    border-radius: 12px; background: color-mix(in srgb, var(--card-accent) 16%, transparent);
+    width: 42px; height: 42px; display: grid; place-items: center; margin-bottom: 18px;
+    border: 1px solid color-mix(in srgb, var(--card-accent) 35%, var(--border-subtle));
+    border-radius: 10px; background: color-mix(in srgb, var(--card-accent) 12%, transparent);
+    color: var(--card-accent); font: 750 11px/1 var(--font-mono); letter-spacing: .06em;
   }
-  .demo-card-title { margin: 6px 0 0; font-size: 17px; font-weight: 700; color: var(--text-primary, #f0f4ff); }
+  .demo-card-title { margin: 6px 0 0; font-size: 16px; font-weight: 680; color: var(--text-primary); }
   .demo-card-audience { margin: 0; font-size: 12.5px; font-weight: 600; letter-spacing: 0.02em; color: var(--card-accent); text-transform: uppercase; }
-  .demo-card-desc { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text-secondary, #aab3c5); flex: 1 1 auto; }
+  .demo-card-desc { margin: 0; font-size: 14px; line-height: 1.6; color: var(--text-secondary); flex: 1 1 auto; }
   .demo-card-cta { margin-top: 8px; font-size: 14px; font-weight: 700; color: var(--card-accent); }
-  .demo-showcase-error { margin: 16px auto 0; text-align: center; color: #ff6b6b; font-size: 14px; }
-  .demo-showcase-note { margin: 18px auto 0; text-align: center; font-size: 13px; color: var(--text-tertiary, #7c869c); }
+  .demo-showcase-error { margin: 16px auto 0; text-align: center; color: var(--error-text); font-size: 14px; }
+  .demo-showcase-note { margin: 18px auto 0; text-align: center; font-size: 13px; color: var(--text-muted); }
 `;

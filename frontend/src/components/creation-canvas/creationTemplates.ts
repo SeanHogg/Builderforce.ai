@@ -1,4 +1,5 @@
-import type { CreationObjectKind } from './types';
+import type { CreationNodeData, CreationObjectKind } from './types';
+import { buildLlmCourse, COURSE_EXPORT_STANDARDS } from '@/lib/courseLms';
 
 export interface CreationTemplate {
   id: string;
@@ -9,7 +10,7 @@ export interface CreationTemplate {
   name: string;
   description: string;
   category: 'Marketplace template' | 'Object pack';
-  objects: Array<{ kind: CreationObjectKind; title?: string; x: number; y: number }>;
+  objects: Array<{ kind: CreationObjectKind; title?: string; x: number; y: number; data?: Partial<CreationNodeData> }>;
   connections?: Array<{ source: number; target: number; label: string }>;
 }
 
@@ -19,6 +20,21 @@ export interface CreationTemplate {
  * resource a user attaches after placing the pack.
  */
 export const CREATION_TEMPLATES: readonly CreationTemplate[] = [
+  {
+    id: 'llm-builder-academy', name: 'LLM Builder Academy', category: 'Marketplace template',
+    description: 'Learn the full LLM lifecycle through lessons, practice, assessments, and a portable SCORM package.',
+    objects: [
+      { kind: 'course', title: 'Build an LLM', x: 0, y: 0, data: { course: buildLlmCourse(), exportStandards: COURSE_EXPORT_STANDARDS } },
+      { kind: 'dataset', title: 'Training corpus lab', x: 560, y: 0, data: { status: 'Practice workspace', subtitle: 'Inspect provenance, quality, deduplication, and splits.' } },
+      { kind: 'code', title: 'Tokenizer & training notebook', x: 560, y: 330, data: { status: 'Practice workspace', language: 'python', code: '# Add tokenizer and training experiments here\n' } },
+      { kind: 'evaluation', title: 'LLM release scorecard', x: 0, y: 520, data: { status: 'Knowledge checks', criteria: ['Capability', 'Safety', 'Robustness', 'Latency', 'Cost'] } },
+      { kind: 'llm', title: 'Model blueprint', x: 1120, y: 160, data: { status: 'Capstone', model: 'decoder-only transformer', instructions: 'Document architecture, training budget, evaluation evidence, and release controls.' } },
+    ],
+    connections: [
+      { source: 0, target: 1, label: 'practice' }, { source: 0, target: 2, label: 'practice' },
+      { source: 1, target: 4, label: 'trains' }, { source: 2, target: 4, label: 'implements' }, { source: 4, target: 3, label: 'evaluates' },
+    ],
+  },
   {
     id: 'sales-command-center', name: 'Sales command center', category: 'Marketplace template',
     description: 'Run targeting, outreach, pipeline management, goals, and coaching from one collaborative canvas.',

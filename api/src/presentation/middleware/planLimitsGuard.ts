@@ -17,10 +17,10 @@ import {
   tenants,
   agentHosts,
   tenantMembers,
-  tenantInvitations,
   projects,
 } from '../../infrastructure/database/schema';
 import { canAddAgentHost, canAddProject, canAddSeat, getLimits } from '../../domain/tenant/PlanLimits';
+import { countPending } from '../../application/kernel/InvitationService';
 import { resolveEffectivePlan } from '../../domain/tenant/effectivePlan';
 import { tenantHasSuperadminMember } from '../../application/llm/tenantTokenAvailability';
 import { TenantPlan, TenantBillingStatus } from '../../domain/shared/types';
@@ -40,13 +40,15 @@ interface LimitError {
  */
 export async function seatCapacityForTenant(
   db: Db,
+  env: Env,
   tenantId: number,
 ): Promise<{ plan: TenantPlan; maxSeats: number; members: number; pendingInvites: number }> {
   const plan = await getTenantPlan(db, tenantId);
   const [[memberRow], [inviteRow]] = await Promise.all([
     db.select({ total: count() }).from(tenantMembers).where(eq(tenantMembers.tenantId, tenantId)),
-    db.select({ total: count() }).from(tenantInvitations)
-      .where(and(eq(tenantInvitations.tenantId, tenantId), eq(tenantInvitations.status, 'pending'))),
+    // The SAME cached read the members page lists from, so a seat cap and the
+    // roster it is derived from can never disagree about what "pending" means.
+    countPending(db, env, tenantId, 'tenant').then((total) => [{ total }]),
   ]);
   return {
     plan,
@@ -73,14 +75,14 @@ async function getTenantPlan(db: Db, tenantId: number): Promise<TenantPlan> {
   });
 }
 
-export function buildPlanLimitsGuard(db: Db, env?: Env) {
+export function buildPlanLimitsGuard(db: Db, env: Env) {
   // A tenant with an active superadmin member is unlimited — the SAME operator
   // bypass the token-cap and cloud-run-count gates use ({@link tenantHasSuperadminMember}),
   // now extended to the plan resource caps (seats, projects, agent hosts) so an
   // operator/white-label account is never blocked by a plan limit. Best-effort:
   // any lookup failure falls through to the normal plan gate.
   const bypass = (tenantId: number): Promise<boolean> =>
-    env ? tenantHasSuperadminMember(db, tenantId, env) : Promise.resolve(false);
+    tenantHasSuperadminMember(db, tenantId, env);
   return {
     /** Returns an error payload if the tenant has reached their agentHost limit, otherwise null. */
     async checkAgentHostLimit(tenantId: number): Promise<LimitError | null> {
@@ -124,7 +126,7 @@ export function buildPlanLimitsGuard(db: Db, env?: Env) {
      *  all auto-accept past the limit on signup (see {@link seatCapacityForTenant}). */
     async checkSeatLimit(tenantId: number): Promise<LimitError | null> {
       if (await bypass(tenantId)) return null;
-      const { plan, maxSeats, members, pendingInvites } = await seatCapacityForTenant(db, tenantId);
+      const { plan, maxSeats, members, pendingInvites } = await seatCapacityForTenant(db, env, tenantId);
       const current = members + pendingInvites;
       if (canAddSeat(plan, current)) return null;
       return {

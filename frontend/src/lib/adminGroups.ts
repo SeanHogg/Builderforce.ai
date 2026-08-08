@@ -66,6 +66,7 @@ export const ADMIN_GROUP_META: AdminGroupMeta[] = [
     { id: '', subKey: 'billing', icon: '💳' },
     { id: 'newsletter', subKey: 'newsletter', icon: '✉️' },
     { id: 'releaseNotes', subKey: 'releaseNotes', icon: '📣' },
+    { id: 'broadcasts', subKey: 'broadcasts', icon: '📢' },
     { id: 'demoFunnel', subKey: 'demoFunnel', icon: '🎬' },
     { id: 'salesLeads', subKey: 'salesLeads', icon: '📇' },
     { id: 'sales-commissions', subKey: 'salesCommissions', icon: '％' },

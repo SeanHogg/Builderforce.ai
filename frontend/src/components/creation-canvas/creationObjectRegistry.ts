@@ -3,6 +3,7 @@ import { CREATION_CONNECTION_KINDS, type CreationConnectionKind } from '@builder
 import { MAX_TABULAR_COLUMNS } from '@/lib/canvasTabularData';
 import { DEFAULT_MODALITY } from '@/lib/modality';
 import { DEFAULT_PITCH_COMPETITION_ID } from '@/lib/pitchCompetition';
+import { buildLlmCourse, COURSE_EXPORT_STANDARDS } from '@/lib/courseLms';
 
 export type CreationObjectGroup = 'Build' | 'Data' | 'Knowledge' | 'Insights' | 'Work' | 'Pitch' | 'People' | 'Agents' | 'Models' | 'Collaborate' | 'Integrations';
 
@@ -57,6 +58,7 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'terminal', label: 'Terminal output', icon: '>_', group: 'Build', createData: () => ({ kind: 'terminal', title: 'Terminal output', status: 'Review for secrets' }) },
   { kind: 'service', label: 'Local service', icon: '◎', group: 'Build', createData: () => ({ kind: 'service', title: 'Local service', status: 'Preview from VS Code' }) },
   { kind: 'llm', label: 'LLM', icon: '◉', group: 'Models', createData: () => ({ kind: 'llm', title: 'Language model', status: 'Blueprint', model: 'gpt-4o' }) },
+  { kind: 'course', label: 'Course', icon: '▰', group: 'Knowledge', createData: () => ({ kind: 'course', title: 'Build an LLM', status: 'Ready to learn', subtitle: 'A hands-on, standards-based learning path.', course: buildLlmCourse(), exportStandards: COURSE_EXPORT_STANDARDS }) },
   { kind: 'project', label: 'Project', icon: '▦', group: 'Work', createData: () => ({ kind: 'project', title: 'BuilderForce launch', status: 'Not linked', subtitle: 'Search for a canonical project in the inspector.' }) },
   { kind: 'salesPipeline', label: 'Sales pipeline', icon: '↗', group: 'Work', createData: () => ({ kind: 'salesPipeline', title: 'Sales pipeline', status: 'Live', stages: ['new', 'contacted', 'qualified', 'meeting', 'proposal', 'won'] }) },
   { kind: 'salesCampaign', label: 'Sales campaign', icon: '◎', group: 'Work', createData: () => ({ kind: 'salesCampaign', title: 'New campaign', status: 'Draft' }) },
@@ -144,6 +146,7 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   // `email` object so it survives the next refresh.
   inbox: ['refresh', 'filter', 'pin'], email: ['reply', 'open'],
   emailCampaign: ['draft', 'send'], emailTemplate: ['edit', 'apply'],
+  course: ['learn', 'export'],
 };
 
 const MUTABLE_FIELDS = {
@@ -182,6 +185,7 @@ const MUTABLE_FIELDS = {
   terminal: ['content', 'exitCode'],
   service: ['content', 'url', 'port', 'viewport', 'pageTitle'],
   llm: ['content', 'model', 'instructions', 'parameters'],
+  course: ['content', 'course', 'exportStandards'],
   project: ['content', 'projectLens', 'sources', 'qualityScore', 'qualityLabel', 'qualityHeadline', 'diagnosticCount', 'gapCount', 'diagnostics', 'recommendations', 'qualityUpdatedAt'],
   salesPipeline: ['content', 'ownerUserId', 'stages', 'pipelineCounts', 'recommendations', 'sources'],
   salesContact: ['content', 'ownerUserId', 'contactId', 'email', 'company', 'market', 'stage', 'lastTouchAt'],
@@ -317,6 +321,7 @@ const CONTEXT_FIELDS = [
   // it through the template tools rather than reading it out of the snapshot.
   'audienceId', 'audienceName', 'transport', 'recipients', 'failed', 'opened', 'clicked', 'blockers',
   'mergeFields', 'assetId', 'logoUrl',
+  'course', 'exportStandards',
 ] as const;
 const SENSITIVE_CONTEXT_KEY = /(?:secret|token|password|credential|authorization|api.?key|cookie)/i;
 const DEFAULT_CONTEXT_ARRAY_LIMIT = 25;

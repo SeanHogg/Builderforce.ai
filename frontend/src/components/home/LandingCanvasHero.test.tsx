@@ -5,9 +5,12 @@ import { LandingCanvasHero } from './LandingCanvasHero';
 const push = vi.fn();
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push }) }));
 
-const createLocalCreationSession = vi.fn(() => 'local-session-1');
-vi.mock('@/lib/creationSessions', () => ({
-  createLocalCreationSession: (...args: unknown[]) => createLocalCreationSession(...(args as [])),
+/** The hero starts a session through the SHARED starter, which both creates the
+ *  local draft and records the visitor's intent — mocked here so the assertions
+ *  can see both halves without a network call. */
+const startGuestCreationSession = vi.fn(() => 'local-session-1');
+vi.mock('@/lib/guestPromptCapture', () => ({
+  startGuestCreationSession: (...args: unknown[]) => startGuestCreationSession(...(args as [])),
 }));
 
 /** The real composer pulls in the shared prompt package; this stands in for it. */
@@ -54,7 +57,7 @@ function stubViewport(narrow: boolean) {
 describe('LandingCanvasHero', () => {
   beforeEach(() => {
     push.mockClear();
-    createLocalCreationSession.mockClear();
+    startGuestCreationSession.mockClear();
     stubViewport(false);
   });
 
@@ -72,8 +75,13 @@ describe('LandingCanvasHero', () => {
     fireEvent.click(screen.getByText('send'));
 
     // The armed mode rides into the guest session — the composer's `/` menu is the
-    // only place a visitor can set it, and it must survive the hand-off.
-    expect(createLocalCreationSession).toHaveBeenCalledWith('Build me a pricing page', 'work');
+    // only place a visitor can set it, and it must survive the hand-off — and the
+    // prompt is recorded as `landing` intent BEFORE the navigation, which is the
+    // whole reason bounced visitors are no longer invisible.
+    expect(startGuestCreationSession).toHaveBeenCalledWith(
+      'Build me a pricing page',
+      { mode: 'work', surface: 'landing' },
+    );
     expect(push).toHaveBeenCalledWith('/create/local-session-1');
   });
 
@@ -82,6 +90,8 @@ describe('LandingCanvasHero', () => {
     await waitFor(() => expect(screen.getByText('Q3 pipeline.csv')).toBeInTheDocument());
     fireEvent.click(screen.getByText('send'));
     expect(push).not.toHaveBeenCalled();
+    // Nothing typed is not intent — an empty submit must not create a lead.
+    expect(startGuestCreationSession).not.toHaveBeenCalled();
   });
 
   it('seeds the composer from a board object instead of navigating away', async () => {

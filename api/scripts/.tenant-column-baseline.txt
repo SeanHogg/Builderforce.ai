@@ -22,7 +22,6 @@ developer_api_keys
 discount_codes
 email_delivery_failures
 email_preferences
-email_verification_codes
 error_collector_integrations
 error_group_users
 freelancer_messages
@@ -39,7 +38,6 @@ legal_documents
 llm_failover_log
 llm_health_probes
 magic_link_tokens
-marketing_sessions
 marketing_tool_runs
 marketplace_purchases
 marketplace_skill_likes

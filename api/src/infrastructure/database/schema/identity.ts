@@ -38,7 +38,7 @@ import { sql } from 'drizzle-orm';
 import { budgets } from './finance';
 import { brainChats } from './canvas';
 import { contributors, devTeams, meetings, teamVelocity, teams } from './canvas';
-import { authTokenTypeEnum, legalDocumentTypeEnum, memberAvailabilityStatusEnum, memberExperienceLevelEnum, memberProfileSyncSourceEnum, segmentStatusEnum, teamMemberKindEnum, tenantIsolationModeEnum, tenantKindEnum, tenantRoleEnum, tenantStatusEnum } from './kernel';
+import { authTokenTypeEnum, legalDocumentTypeEnum, memberAvailabilityStatusEnum, memberExperienceLevelEnum, memberProfileSyncSourceEnum, objects, segmentStatusEnum, teamMemberKindEnum, tenantIsolationModeEnum, tenantKindEnum, tenantRoleEnum, tenantStatusEnum } from './kernel';
 import { errorGroups, onCallRotations } from './delivery';
 import { marketplacePersonas } from './agents';
 import { agentHosts, agents, importRuns, skills, toolRuns } from './agents';
@@ -1050,6 +1050,13 @@ export const marketingSessions = pgTable('marketing_sessions', {
   byLastSeen: index('idx_marketing_sessions_last_seen').on(t.lastSeenAt),
 }));
 
+// NOTE: the prompts BEHIND a `marketing_sessions` row live in `growth.ts`, not
+// here — `source-to-target.tsv` assigns marketing to the Growth & marketing
+// domain, and a new table belongs in its own domain's module even while the
+// lead row it hangs off is still parked in Identity (see the Gap Register entry
+// on that drift). The two are joined on `visitor_id`, not by a foreign key, so
+// the split costs no schema import in either direction.
+
 
 /** An ordered participant of an on-call rotation. memberRef is assignee-encoded:
  *  'u:<userId>' | 'c:<agentRef>' | 'contact:<businessContactId>'. */
@@ -1154,3 +1161,376 @@ export const tenantOpenRouterConnections = pgTable('tenant_openrouter_connection
   createdAt:       timestamp('created_at').notNull().defaultNow(),
   updatedAt:       timestamp('updated_at').notNull().defaultNow(),
 });
+
+// ═══ PRD 20 §5 step 2 — target-schema tables ═══
+//
+// Identity & tenancy — the platform's fifteen remaining targets (PRD 20 §3.2).
+//
+// 123 source tables in → 23 out: 56 absorbed by the kernel, 3 by the canvas, 38
+// merged into a sibling — the largest "merged into a sibling" count in the model,
+// because identity is where every product had grown its own near-duplicate of the
+// same three nouns.
+//
+// Three flattening moves ran here (§3.2):
+//   · FACET — `company_crm` was one row per company split by which screen read
+//     it. It is columns on `companies` (Investor) now.
+//   · KIND-SPLIT — `auth_user_sessions` = `extension_sessions` = `sessions`
+//     shared user_id, user_agent and ip_address. One `sessions` with a `kind`.
+//     `extension_sessions` survives as a NARROW row keyed to it, because the VS
+//     Code extension carries workspace state a browser session does not.
+//   · THIN — `team_projects` was ≤3 payload columns: an ordered join row, which
+//     is a kernel `relations` row with a position.
+//
+// Decision 3 of §8 is settled here by precedent rather than by rename: this repo
+// already uses `tenant_*` in 17 places against BurnRateOS's 11 `account_*`, and
+// every gate in the platform runs on tenant. `tenant_` wins.
+
+/**
+ * A session, of any kind.
+ *
+ * The kind-split collapse: `auth_user_sessions`, `extension_sessions` and
+ * `sessions` shared `user_id`, `user_agent` and `ip_address` and differed only in
+ * which surface created them.
+ */
+export const sessions = pgTable('sessions', {
+  id:          uuid('id').primaryKey().defaultRandom(),
+  tenantId:    integer('tenant_id'),
+  userId:      varchar('user_id', { length: 64 }).notNull(),
+  /** 'web' | 'extension' | 'cli' | 'mobile' | 'api'. The column that replaced
+   *  two tables. */
+  kind:        varchar('kind', { length: 16 }).notNull().default('web'),
+  tokenHash:   varchar('token_hash', { length: 64 }).notNull(),
+  userAgent:   varchar('user_agent', { length: 500 }),
+  ipAddress:   varchar('ip_address', { length: 45 }),
+  /** Denormalised for the session list, which is one of the two surfaces
+   *  `SessionList` renders — the other being /security. */
+  deviceLabel: varchar('device_label', { length: 160 }),
+  location:    varchar('location', { length: 160 }),
+  lastSeenAt:  timestamp('last_seen_at'),
+  expiresAt:   timestamp('expires_at'),
+  revokedAt:   timestamp('revoked_at'),
+  revokedBy:   varchar('revoked_by', { length: 64 }),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_sessions_token').on(t.tokenHash),
+  index('idx_sessions_user').on(t.tenantId, t.userId, t.revokedAt),
+]);
+
+/** The workspace state a VS Code session carries that a browser session does
+ *  not. A narrow satellite of `sessions` rather than a second session table:
+ *  subtype payload goes in a typed row, never null-padded onto the union (§2.2). */
+export const extensionSessions = pgTable('extension_sessions', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id'),
+  sessionId:     uuid('session_id').references(() => sessions.id, { onDelete: 'cascade' }),
+  extensionVersion: varchar('extension_version', { length: 32 }),
+  vscodeVersion: varchar('vscode_version', { length: 32 }),
+  workspaceName: varchar('workspace_name', { length: 255 }),
+  workspaceHash: varchar('workspace_hash', { length: 64 }),
+  repoRemote:    varchar('repo_remote', { length: 500 }),
+  branch:        varchar('branch', { length: 255 }),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+  updatedAt:     timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_extension_sessions_session').on(t.sessionId),
+]);
+
+/** A grant of access to one workspace. Distinct from a kernel `memberships` row
+ *  because a workspace grant carries a filesystem SCOPE — which paths the holder
+ *  may read — and a membership carries a role. */
+export const workspaceGrants = pgTable('workspace_grants', {
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull(),
+  workspaceRef: varchar('workspace_ref', { length: 64 }).notNull(),
+  granteeKind:  varchar('grantee_kind', { length: 16 }).notNull().default('user'),
+  granteeRef:   varchar('grantee_ref', { length: 64 }).notNull(),
+  /** 'read' | 'write' | 'admin'. */
+  access:       varchar('access', { length: 16 }).notNull().default('read'),
+  /** Path globs. A grant without a scope is a grant over everything, which is
+   *  what makes this column non-optional in practice even though it is nullable. */
+  pathScope:    jsonb('path_scope'),
+  grantedBy:    varchar('granted_by', { length: 64 }),
+  expiresAt:    timestamp('expires_at'),
+  revokedAt:    timestamp('revoked_at'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_workspace_grants_grantee').on(t.tenantId, t.workspaceRef, t.granteeKind, t.granteeRef),
+]);
+
+/** ISO countries. A global catalogue, declared as one in
+ *  `check-tenant-column.mjs` rather than left to look like an oversight. */
+export const countries = pgTable('countries', {
+  id:         serial('id').primaryKey(),
+  code:       varchar('code', { length: 2 }).notNull(),
+  code3:      varchar('code3', { length: 3 }),
+  name:       varchar('name', { length: 120 }).notNull(),
+  region:     varchar('region', { length: 64 }),
+  currency:   varchar('currency', { length: 8 }),
+  callingCode: varchar('calling_code', { length: 8 }),
+  /** Whether the platform sells here — a compliance answer, not a geography one. */
+  isSupported: boolean('is_supported').notNull().default(true),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_countries_code').on(t.code),
+]);
+
+/** The platform-wide company-stage vocabulary a tenant selects FROM. A tenant's
+ *  own stages are `pipeline_stages` rows; this is the shared axis that makes two
+ *  tenants' "Series A" the same thing. */
+export const stageLookup = pgTable('stage_lookup', {
+  id:          serial('id').primaryKey(),
+  key:         varchar('key', { length: 48 }).notNull(),
+  label:       varchar('label', { length: 120 }).notNull(),
+  category:    varchar('category', { length: 32 }).notNull().default('company'),
+  position:    integer('position').notNull().default(0),
+  description: text('description'),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_stage_lookup_key').on(t.category, t.key),
+]);
+
+/** When somebody is free. Read by booking, by interviews and by ceremonies —
+ *  which is exactly why it is ONE table rather than three per-feature ones. */
+export const availabilitySlots = pgTable('availability_slots', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull(),
+  ownerRef:   varchar('owner_ref', { length: 64 }).notNull(),
+  /** 'recurring' | 'one_off' | 'block'. A block is unavailability, which is the
+   *  same shape with the sign flipped rather than a second table. */
+  kind:       varchar('kind', { length: 16 }).notNull().default('recurring'),
+  /** 0–6, Sunday-first. Null for a one-off. */
+  weekday:    integer('weekday'),
+  startsAt:   timestamp('starts_at'),
+  endsAt:     timestamp('ends_at'),
+  startMinute: integer('start_minute'),
+  endMinute:  integer('end_minute'),
+  timezone:   varchar('timezone', { length: 64 }).notNull().default('UTC'),
+  /** The calendar this was synced from, if any. */
+  connectionId: integer('connection_id'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_availability_slots_owner').on(t.tenantId, t.ownerRef, t.kind),
+]);
+
+/** A named onboarding flow. */
+export const onboardingFlows = pgTable('onboarding_flows', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id'),
+  key:         varchar('key', { length: 64 }).notNull(),
+  name:        varchar('name', { length: 200 }).notNull(),
+  /** Which arrival it serves: 'signup' | 'invite' | 'hire' | 'employee' |
+   *  'freelancer'. */
+  audience:    varchar('audience', { length: 32 }).notNull().default('signup'),
+  description: text('description'),
+  isDefault:   boolean('is_default').notNull().default(false),
+  enabled:     boolean('enabled').notNull().default(true),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_onboarding_flows_key').on(t.tenantId, t.key),
+]);
+
+/** A checklist within a flow. */
+export const onboardingChecklists = pgTable('onboarding_checklists', {
+  id:        serial('id').primaryKey(),
+  tenantId:  integer('tenant_id'),
+  flowId:    integer('flow_id').references(() => onboardingFlows.id, { onDelete: 'cascade' }),
+  name:      varchar('name', { length: 200 }).notNull(),
+  summary:   text('summary'),
+  position:  integer('position').notNull().default(0),
+  /** Whether the shell may proceed without it. Progressive disclosure gates
+   *  state, never capability — a required step blocks, an optional one nudges. */
+  isRequired: boolean('is_required').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_onboarding_checklists_pos').on(t.flowId, t.position),
+]);
+
+/** A step on a checklist. */
+export const onboardingTasks = pgTable('onboarding_tasks', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id'),
+  checklistId: integer('checklist_id').references(() => onboardingChecklists.id, { onDelete: 'cascade' }),
+  key:         varchar('key', { length: 64 }).notNull(),
+  title:       varchar('title', { length: 300 }).notNull(),
+  description: text('description'),
+  /** Where the step sends you. A route, so the CTA carries intent into the
+   *  session rather than dropping the user on a dashboard. */
+  actionHref:  varchar('action_href', { length: 500 }),
+  /** How completion is detected: 'manual' | 'event' | 'query'. */
+  completionKind: varchar('completion_kind', { length: 16 }).notNull().default('manual'),
+  completionRule: jsonb('completion_rule'),
+  position:    integer('position').notNull().default(0),
+  isRequired:  boolean('is_required').notNull().default(false),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_onboarding_tasks_key').on(t.checklistId, t.key),
+]);
+
+/** How far one person got. */
+export const onboardingProgress = pgTable('onboarding_progress', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull(),
+  flowId:     integer('flow_id').references(() => onboardingFlows.id, { onDelete: 'cascade' }),
+  taskId:     integer('task_id').references(() => onboardingTasks.id, { onDelete: 'cascade' }),
+  subjectRef: varchar('subject_ref', { length: 64 }).notNull(),
+  /** 'pending' | 'in_progress' | 'done' | 'skipped'. */
+  status:     varchar('status', { length: 16 }).notNull().default('pending'),
+  completedAt: timestamp('completed_at'),
+  skippedReason: varchar('skipped_reason', { length: 200 }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_onboarding_progress_subject').on(t.tenantId, t.taskId, t.subjectRef),
+  index('idx_onboarding_progress_flow').on(t.tenantId, t.flowId, t.subjectRef),
+]);
+
+/** Somebody waiting for the platform to open in their region. */
+export const regionWaitlist = pgTable('region_waitlist', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id'),
+  email:      varchar('email', { length: 320 }).notNull(),
+  country:    varchar('country', { length: 2 }),
+  region:     varchar('region', { length: 120 }),
+  source:     varchar('source', { length: 64 }),
+  /** 'waiting' | 'invited' | 'joined' | 'declined'. */
+  status:     varchar('status', { length: 16 }).notNull().default('waiting'),
+  invitedAt:  timestamp('invited_at'),
+  joinedAt:   timestamp('joined_at'),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_region_waitlist_email').on(t.email, t.country),
+]);
+
+/** A badge somebody holds. The badge's DEFINITION is `badges` (People); this is
+ *  the award, which has its own moment and its own evidence. */
+export const userBadges = pgTable('user_badges', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull(),
+  userRef:    varchar('user_ref', { length: 64 }).notNull(),
+  badgeKey:   varchar('badge_key', { length: 64 }).notNull(),
+  awardedBy:  varchar('awarded_by', { length: 64 }),
+  evidence:   jsonb('evidence'),
+  awardedAt:  timestamp('awarded_at').notNull().defaultNow(),
+  revokedAt:  timestamp('revoked_at'),
+  /** Whether it shows on a public profile — an opt-in, like for-hire status. */
+  isPublic:   boolean('is_public').notNull().default(true),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_user_badges_badge').on(t.tenantId, t.userRef, t.badgeKey),
+]);
+
+/** One person's use of one licensed stock asset. Metered against the licence's
+ *  per-seat cap, which is why it is a row rather than a counter. */
+export const userStockMediaUsage = pgTable('user_stock_media_usage', {
+  id:          serial('id').primaryKey(),
+  tenantId:    integer('tenant_id').notNull(),
+  userRef:     varchar('user_ref', { length: 64 }).notNull(),
+  stockAssetId: integer('stock_asset_id'),
+  /** The `artifacts` row the asset was copied into. */
+  artifactId:  uuid('artifact_id'),
+  usedAt:      timestamp('used_at').notNull().defaultNow(),
+  costCents:   integer('cost_cents').notNull().default(0),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_user_stock_media_usage_user').on(t.tenantId, t.userRef, t.usedAt),
+]);
+
+/** A tenant's acceptance of terms, as an ORGANISATION rather than a person.
+ *  Separate from `legal_document_acceptances` (Governance) on the same grounds
+ *  that separate a party from a party role: the signatory is a person, the
+ *  bound entity is the tenant, and an audit needs both. */
+export const userTermsAgreements = pgTable('user_terms_agreements', {
+  id:            serial('id').primaryKey(),
+  tenantId:      integer('tenant_id').notNull(),
+  signatoryRef:  varchar('signatory_ref', { length: 64 }).notNull(),
+  documentKind:  varchar('document_kind', { length: 32 }).notNull(),
+  documentVersion: varchar('document_version', { length: 32 }).notNull(),
+  signatoryTitle: varchar('signatory_title', { length: 160 }),
+  legalEntityName: varchar('legal_entity_name', { length: 255 }),
+  agreedAt:      timestamp('agreed_at').notNull().defaultNow(),
+  supersededAt:  timestamp('superseded_at'),
+  createdAt:     timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_user_terms_agreements_version').on(t.tenantId, t.documentKind, t.documentVersion),
+]);
+
+/** A discussion pinned to a working session. Not a `threads` row: this is the
+ *  session's AGENDA of topics, each of which opens a thread — the topic outlives
+ *  the conversation and can be carried into the next session. */
+export const sessionDiscussions = pgTable('session_discussions', {
+  id:         serial('id').primaryKey(),
+  tenantId:   integer('tenant_id').notNull(),
+  objectId:   uuid('object_id').references(() => objects.id, { onDelete: 'cascade' }),
+  sessionRef: varchar('session_ref', { length: 64 }).notNull(),
+  topic:      varchar('topic', { length: 300 }).notNull(),
+  /** The `threads` row opened for it, once somebody says something. */
+  threadId:   uuid('thread_id'),
+  raisedBy:   varchar('raised_by', { length: 64 }),
+  /** 'open' | 'discussed' | 'deferred' | 'closed'. */
+  status:     varchar('status', { length: 16 }).notNull().default('open'),
+  position:   integer('position').notNull().default(0),
+  /** Set when the topic is carried into a later session rather than dropped. */
+  carriedToRef: varchar('carried_to_ref', { length: 64 }),
+  createdAt:  timestamp('created_at').notNull().defaultNow(),
+  updatedAt:  timestamp('updated_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_session_discussions_session').on(t.tenantId, t.sessionRef, t.position),
+]);
+
+/**
+ * The ONE one-time email code store.
+ *
+ * `check-signature-duplication.mjs` scored the new `email_otp_challenges`
+ * against the existing `email_verification_codes` at **0.62** — over the 0.55
+ * gate — and it was right: they were the same table. One was issued at password
+ * signup to prove ownership of an address (migration 0285), the other for a
+ * newsletter double opt-in and a gated download. Same code, same hash-only
+ * storage, same expiry, same attempt cap, same single-use rule; the only
+ * difference was which feature asked.
+ *
+ * So `email_verification_codes` is gone and `purpose` is a column — the §0 rule
+ * applied to a table that already existed, rather than only to the new one.
+ * Migration 0433 carries its rows across and drops it.
+ *
+ * FILED IN IDENTITY, NOT GROWTH. The coverage map put `email_otp_challenges` in
+ * Growth because a marketing double opt-in is what BurnRateOS used it for. It is
+ * an authentication primitive: it gates account activation, so it belongs to the
+ * seat that owns identity. PRD 20 §9 records this class of correction explicitly
+ * — the domain classifier carries about 5% noise and `admin_impersonation_sessions`
+ * landing in Growth is the example it gives.
+ *
+ * NO TENANT COLUMN, deliberately, and the predecessor had none either. A signup
+ * challenge is issued BEFORE the account exists, so there is no tenant to scope
+ * it to; the scope is (userRef, purpose), which is narrower than tenant rather
+ * than looser. `check-tenant-column.mjs` records that as a decision.
+ *
+ * The raw code is NEVER persisted, only its SHA-256 hash.
+ */
+export const emailOtpChallenges = pgTable('email_otp_challenges', {
+  id:          serial('id').primaryKey(),
+  /** 'signup_verification' | 'subscribe' | 'gated_download' | 'email_change' —
+   *  the column that replaced the second table. */
+  purpose:     varchar('purpose', { length: 48 }).notNull().default('signup_verification'),
+  email:       varchar('email', { length: 320 }).notNull(),
+  /** users.id when the challenge belongs to an account. Null for an anonymous
+   *  marketing opt-in, which has an address and nothing else. */
+  userRef:     varchar('user_ref', { length: 64 }),
+  codeHash:    varchar('code_hash', { length: 64 }).notNull(),
+  attempts:    integer('attempts').notNull().default(0),
+  maxAttempts: integer('max_attempts').notNull().default(5),
+  /** Set on success AND on supersession — only the newest outstanding challenge
+   *  can verify, and a provider rejection retires the row it created. */
+  consumedAt:  timestamp('consumed_at'),
+  expiresAt:   timestamp('expires_at').notNull(),
+  createdAt:   timestamp('created_at').notNull().defaultNow(),
+}, (t) => [
+  index('idx_email_otp_challenges_user').on(t.userRef, t.consumedAt, t.createdAt),
+  index('idx_email_otp_challenges_email').on(t.email, t.purpose, t.expiresAt),
+]);

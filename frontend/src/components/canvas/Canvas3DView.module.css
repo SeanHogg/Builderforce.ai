@@ -23,7 +23,7 @@
   flex-direction: column;
   overflow: hidden;
   background:
-    radial-gradient(120% 90% at 50% 8%, color-mix(in srgb, var(--canvas-blue, #3978f6) 12%, transparent) 0%, transparent 62%),
+    radial-gradient(120% 90% at 50% 8%, color-mix(in srgb, var(--canvas-accent) 12%, transparent) 0%, transparent 62%),
     var(--canvas-board, var(--bg-deep, #f7faff));
   color: var(--canvas-ink, var(--text-primary, #152033));
 }
@@ -43,7 +43,7 @@
 .viewport[data-gesture='orbit'] { cursor: grabbing; }
 .viewport[data-gesture='pan'] { cursor: move; }
 .viewport[data-gesture='move'] { cursor: grabbing; }
-.viewport:focus-visible { outline: 2px solid var(--canvas-blue, #3978f6); outline-offset: -2px; }
+.viewport:focus-visible { outline: 2px solid var(--canvas-accent); outline-offset: -2px; }
 
 /* The camera the scene is projected through. Panning transforms THIS element —
    outside the perspective it owns — so travel is a plain screen-space slide and
@@ -78,12 +78,12 @@
   position: absolute;
   top: 0;
   left: 0;
-  border: 1px solid color-mix(in srgb, var(--canvas-blue, #3978f6) 26%, transparent);
+  border: 1px solid color-mix(in srgb, var(--canvas-accent) 26%, transparent);
   border-radius: 26px;
   background:
-    linear-gradient(color-mix(in srgb, var(--canvas-blue, #3978f6) 7%, transparent), transparent 70%),
-    repeating-linear-gradient(0deg, color-mix(in srgb, var(--canvas-blue, #3978f6) 9%, transparent) 0 1px, transparent 1px 120px),
-    repeating-linear-gradient(90deg, color-mix(in srgb, var(--canvas-blue, #3978f6) 9%, transparent) 0 1px, transparent 1px 120px);
+    linear-gradient(color-mix(in srgb, var(--canvas-accent) 7%, transparent), transparent 70%),
+    repeating-linear-gradient(0deg, color-mix(in srgb, var(--canvas-accent) 9%, transparent) 0 1px, transparent 1px 120px),
+    repeating-linear-gradient(90deg, color-mix(in srgb, var(--canvas-accent) 9%, transparent) 0 1px, transparent 1px 120px);
   transform-style: preserve-3d;
   pointer-events: none;
 }
@@ -115,7 +115,7 @@
   pointer-events: none;
 }
 
-.link[data-spans='true'] { background: color-mix(in srgb, var(--canvas-blue, #3978f6) 72%, transparent); height: 4px; margin-top: -2px; }
+.link[data-spans='true'] { background: color-mix(in srgb, var(--canvas-accent) 72%, transparent); height: 4px; margin-top: -2px; }
 
 /* An object lifted off its plane keeps a line back to it: without one, a card
    floating in open space reads as being somewhere it is not. */
@@ -127,7 +127,7 @@
   margin-top: -1px;
   background: repeating-linear-gradient(
     90deg,
-    color-mix(in srgb, var(--canvas-blue, #3978f6) 58%, transparent) 0 10px,
+    color-mix(in srgb, var(--canvas-accent) 58%, transparent) 0 10px,
     transparent 10px 20px
   );
   transform-origin: 0 50%;
@@ -144,7 +144,7 @@
   box-sizing: border-box;
   padding: 22px 24px;
   border: 1px solid var(--canvas-line, var(--border-subtle, #d9e2ee));
-  border-top: 5px solid var(--canvas-3d-accent, var(--canvas-blue, #3978f6));
+  border-top: 5px solid var(--canvas-3d-accent, var(--canvas-accent));
   border-radius: 18px;
   background: var(--canvas-panel, var(--bg-elevated, #fff));
   box-shadow: 0 40px 90px var(--canvas-shadow, rgba(0, 0, 0, .28));
@@ -166,11 +166,11 @@
 .viewport[data-gesture='move'] .card[data-movable='true'] { cursor: grabbing; }
 
 .card:hover,
-.card:focus-visible { border-color: var(--canvas-3d-accent, var(--canvas-blue, #3978f6)); outline: none; }
+.card:focus-visible { border-color: var(--canvas-3d-accent, var(--canvas-accent)); outline: none; }
 
 .card[data-selected='true'] {
-  border-color: var(--canvas-3d-accent, var(--canvas-blue, #3978f6));
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--canvas-3d-accent, #3978f6) 46%, transparent), 0 40px 90px var(--canvas-shadow, rgba(0, 0, 0, .28));
+  border-color: var(--canvas-3d-accent, var(--canvas-accent));
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--canvas-3d-accent, var(--canvas-accent)) 46%, transparent), 0 40px 90px var(--canvas-shadow, rgba(0, 0, 0, .28));
 }
 
 .cardHead { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -182,8 +182,8 @@
   flex: none;
   place-items: center;
   border-radius: 12px;
-  background: color-mix(in srgb, var(--canvas-3d-accent, #3978f6) 16%, var(--canvas-panel, #fff));
-  color: var(--canvas-3d-accent, var(--canvas-blue, #3978f6));
+  background: color-mix(in srgb, var(--canvas-3d-accent, var(--canvas-accent)) 16%, var(--canvas-panel, #fff));
+  color: var(--canvas-3d-accent, var(--canvas-accent));
   font-size: 24px;
   font-style: normal;
 }
@@ -208,7 +208,7 @@
   object-fit: contain;
   border: 1px solid var(--canvas-line, var(--border-subtle, #d9e2ee));
   border-radius: 12px;
-  background: color-mix(in srgb, var(--canvas-3d-accent, #3978f6) 10%, var(--canvas-panel, #fff));
+  background: color-mix(in srgb, var(--canvas-3d-accent, var(--canvas-accent)) 10%, var(--canvas-panel, #fff));
 }
 
 /* A mesh redrawn from its own triangles is a view FROM the camera, so it has to
@@ -237,8 +237,8 @@
   margin-top: auto;
   padding: 5px 12px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--canvas-3d-accent, #3978f6) 14%, transparent);
-  color: var(--canvas-3d-accent, var(--canvas-blue, #3978f6));
+  background: color-mix(in srgb, var(--canvas-3d-accent, var(--canvas-accent)) 14%, transparent);
+  color: var(--canvas-3d-accent, var(--canvas-accent));
   font-size: 17px;
   font-weight: 700;
 }

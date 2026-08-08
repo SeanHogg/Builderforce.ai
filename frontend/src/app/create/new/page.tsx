@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { creationSessionsApi } from '@/lib/builderforceApi';
-import { createLocalCreationSession } from '@/lib/creationSessions';
+import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { getActiveGuestRoom } from '@/lib/guestRoomApi';
 import { GuestRoomJoinCard } from '@/components/guest/GuestRoomJoinCard';
 
@@ -27,6 +27,7 @@ export default function NewCreationSessionPage() {
   const started = useRef(false);
   const [message, setMessage] = useState('');
   const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [initialPrompt, setInitialPrompt] = useState('');
   const [checkedInvite, setCheckedInvite] = useState(false);
 
   // Read the invite BEFORE deciding what this page is: a room link must not be
@@ -34,7 +35,11 @@ export default function NewCreationSessionPage() {
   useEffect(() => {
     let code: string | null = null;
     try {
-      code = new URLSearchParams(window.location.search).get('room')?.trim() || null;
+      const params = new URLSearchParams(window.location.search);
+      code = params.get('room')?.trim() || null;
+      // Blog and product CTAs can start a real generated canvas. Keep the prompt
+      // through this redirect rather than leaving the learner on a blank board.
+      setInitialPrompt(params.get('prompt')?.trim().slice(0, 4_000) || '');
     } catch {
       code = null; // no URL access — fall through to the ordinary new-canvas path
     }
@@ -48,16 +53,16 @@ export default function NewCreationSessionPage() {
     started.current = true;
     setMessage(t('creatingCanvas'));
     if (!isAuthenticated || !hasTenant) {
-      router.replace(`/create/${createLocalCreationSession('')}`);
+      router.replace(`/create/${startGuestCreationSession(initialPrompt)}`);
       return;
     }
-    void creationSessionsApi.create({ title: 'Untitled session' })
+    void creationSessionsApi.create({ title: initialPrompt ? 'Build an LLM' : 'Untitled session', ...(initialPrompt ? { initialPrompt } : {}) })
       .then(({ session }) => router.replace(`/create/${session.id}`))
       .catch(() => {
         setMessage(t('startingOnDevice'));
-        router.replace(`/create/${createLocalCreationSession('')}`);
+        router.replace(`/create/${startGuestCreationSession(initialPrompt)}`);
       });
-  }, [checkedInvite, hasTenant, inviteCode, isAuthenticated, router, t]);
+  }, [checkedInvite, hasTenant, initialPrompt, inviteCode, isAuthenticated, router, t]);
 
   if (inviteCode) {
     return (
@@ -65,7 +70,7 @@ export default function NewCreationSessionPage() {
         <GuestRoomJoinCard
           code={inviteCode}
           blurb={t('sharedJoinBlurb')}
-          onJoined={() => router.replace(`/create/${createLocalCreationSession('')}`)}
+          onJoined={() => router.replace(`/create/${startGuestCreationSession('')}`)}
         />
       </main>
     );

@@ -366,25 +366,32 @@ export const courseCertificates = pgTable('course_certificates', {
   uniqueIndex('uq_course_certificates_serial').on(t.serial),
 ]);
 
-/** A paid enrolment in flight. Distinct from the enrolment because a checkout
- *  can fail, be refunded, or never complete — and an abandoned checkout is a
- *  marketing fact, not a learning one. */
+/**
+ * A seat reservation on a paid course.
+ *
+ * Narrowed to an ORDER SATELLITE for the same reason as `boost_checkouts` — the
+ * two scored 0.60 on column signature, which is what happens when two features
+ * each re-model the money half of an `orders` row. `orderId` points at it.
+ *
+ * What survives is the part learning owns: a paid seat is HELD before it is
+ * paid for (a cohort has a capacity), and the hold has to expire on its own or
+ * the cohort silently fills with abandoned checkouts.
+ */
 export const courseCheckouts = pgTable('course_checkouts', {
-  id:          serial('id').primaryKey(),
-  tenantId:    integer('tenant_id').notNull(),
-  courseId:    integer('course_id').references(() => courses.id, { onDelete: 'cascade' }),
-  buyerRef:    varchar('buyer_ref', { length: 64 }),
-  email:       varchar('email', { length: 320 }),
-  amountCents: integer('amount_cents').notNull().default(0),
-  currency:    varchar('currency', { length: 8 }).notNull().default('USD'),
-  /** 'started' | 'paid' | 'failed' | 'refunded' | 'abandoned'. */
-  status:      varchar('status', { length: 16 }).notNull().default('started'),
-  providerRef: varchar('provider_ref', { length: 160 }),
-  completedAt: timestamp('completed_at'),
-  createdAt:   timestamp('created_at').notNull().defaultNow(),
-  updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+  id:           serial('id').primaryKey(),
+  tenantId:     integer('tenant_id').notNull(),
+  courseId:     integer('course_id').references(() => courses.id, { onDelete: 'cascade' }),
+  cohortId:     integer('cohort_id'),
+  /** The `orders` row that carries amount, currency, provider and status. */
+  orderId:      integer('order_id'),
+  seatHeldAt:   timestamp('seat_held_at'),
+  seatHoldExpiresAt: timestamp('seat_hold_expires_at'),
+  /** Set when the paid seat became a real enrolment. */
+  enrollmentId: integer('enrollment_id'),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+  updatedAt:    timestamp('updated_at').notNull().defaultNow(),
 }, (t) => [
-  index('idx_course_checkouts_status').on(t.tenantId, t.status, t.createdAt),
+  index('idx_course_checkouts_hold').on(t.tenantId, t.seatHoldExpiresAt),
 ]);
 
 /** An external LMS this tenant publishes into. The OAuth grant is a

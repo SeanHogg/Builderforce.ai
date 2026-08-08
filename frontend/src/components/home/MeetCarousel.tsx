@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { HomeButton } from './HomePatterns';
 
 type TitleDesc = { title: string; desc: string };
 type RoleDesc = { role: string; desc: string };
@@ -159,8 +160,8 @@ export function MeetCarousel() {
                     </div>
                   ))}
                   <div className="meet-create-actions">
-                    <Link href="/create/new" className="lp-btn-primary">{t('home.createCanvas.startCta')} →</Link>
-                    <Link href="/creation-canvas" className="lp-btn-secondary">{t('home.createCanvas.exploreCta')}</Link>
+                    <HomeButton href="/create/new" primary arrow>{t('home.createCanvas.startCta')}</HomeButton>
+                    <HomeButton href="/creation-canvas">{t('home.createCanvas.exploreCta')}</HomeButton>
                   </div>
                 </div>
 
@@ -205,14 +206,45 @@ export function MeetCarousel() {
               </div>
 
               <div className="meet-evermind-body">
-                <div className="meet-evermind-list">
-                  {(t.raw('evermind.architecture.pillars') as TitleDesc[]).map((pillar, index) => (
-                    <div className="meet-evermind-item" key={pillar.title}>
-                      <span>0{index + 1}</span>
-                      <div><h3>{pillar.title}</h3><p>{pillar.desc}</p></div>
+                <figure className="meet-evermind-visual" aria-label={t('evermind.visual.aria')}>
+                  <figcaption className="meet-evermind-visual-head">
+                    <span><i aria-hidden="true" /> {t('evermind.visual.kicker')}</span>
+                    <strong>{t('evermind.visual.runtime')}</strong>
+                  </figcaption>
+
+                  <div className="meet-evermind-map">
+                    <svg className="meet-evermind-connections" viewBox="0 0 720 320" preserveAspectRatio="none" aria-hidden="true">
+                      <path d="M184 160 C238 160 254 160 292 160" />
+                      <path d="M360 84 C360 111 360 119 360 132" />
+                      <path d="M360 236 C360 218 360 207 360 190" />
+                      <path d="M536 160 C486 160 468 160 428 160" />
+                    </svg>
+
+                    {(t.raw('evermind.architecture.pillars') as TitleDesc[]).map((pillar, index) => (
+                      <div className={`meet-evermind-pod is-pod-${index + 1}`} key={pillar.title}>
+                        <span>0{index + 1}</span>
+                        <strong>{pillar.title}</strong>
+                      </div>
+                    ))}
+
+                    <div className="meet-evermind-core">
+                      <div className="meet-evermind-orbits" aria-hidden="true"><i /><i /><i /></div>
+                      <div className="meet-evermind-core-copy">
+                        <small>{t('evermind.visual.system')}</small>
+                        <strong>Evermind</strong>
+                        <span>{t('evermind.visual.core')}</span>
+                      </div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+
+                  <div className="meet-evermind-write">
+                    <span className="meet-evermind-write-status"><i aria-hidden="true" /> {t('evermind.visual.status')}</span>
+                    <code>{t('evermind.visual.key')}</code>
+                    <span className="meet-evermind-old"><small>{t('evermind.visual.previous')}</small> {t('evermind.visual.previousValue')}</span>
+                    <b aria-hidden="true">→</b>
+                    <span className="meet-evermind-new"><small>{t('evermind.visual.current')}</small> {t('evermind.visual.currentValue')}</span>
+                  </div>
+                </figure>
                 <aside className="meet-evermind-aside">
                   <span className="meet-aside-label">{t('home.carousel.evermindDifference')}</span>
                   {(t.raw('evermind.edges.items') as { label: string; desc: string }[]).map((edge) => (
@@ -353,11 +385,51 @@ export function MeetCarousel() {
         .meet-evermind-panel { background:linear-gradient(120deg,var(--surface-card-strong),color-mix(in srgb,var(--surface-card-strong) 88%,var(--cyan-bright))); }
         .meet-evermind-panel::before { background:var(--cyan-bright); }
         .meet-evermind-panel::after { content:'EM'; position:absolute; right:30px; bottom:-60px; color:color-mix(in srgb,var(--cyan-bright) 6%,transparent); font:800 17rem/1 var(--font-display); letter-spacing:-.09em; pointer-events:none; }
-        .meet-evermind-body { position:relative; z-index:1; display:grid; grid-template-columns:minmax(0,1.45fr) minmax(240px,.55fr); gap:clamp(24px,3vw,44px); align-items:start; }
-        .meet-evermind-list { display:grid; grid-template-columns:1fr 1fr; border-top:1px solid var(--border-subtle); border-left:1px solid var(--border-subtle); }
-        .meet-evermind-item { display:grid; grid-template-columns:34px 1fr; gap:14px; padding:20px 18px; border-right:1px solid var(--border-subtle); border-bottom:1px solid var(--border-subtle); }
-        .meet-evermind-item > span,.meet-principle > span,.meet-role > span { color:var(--cyan-bright); font:600 .66rem/1.5 var(--font-display); letter-spacing:.08em; }
-        .meet-evermind-item p,.meet-principle p { margin:0; font-size:.78rem; line-height:1.55; }
+        .meet-evermind-body { position:relative; z-index:1; display:grid; grid-template-columns:minmax(0,1.55fr) minmax(220px,.45fr); gap:clamp(24px,3vw,44px); align-items:start; }
+        .meet-evermind-visual { min-width:0; margin:0; overflow:hidden; border:1px solid var(--border-subtle); border-radius:18px; background:color-mix(in srgb,var(--bg-surface) 72%,transparent); box-shadow:inset 0 1px 0 var(--surface-inset-highlight),0 20px 50px color-mix(in srgb,var(--cyan-bright) 8%,transparent); }
+        .meet-evermind-visual-head { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:13px 16px; border-bottom:1px solid var(--border-subtle); color:var(--text-muted); font:600 .61rem/1 var(--font-display); letter-spacing:.13em; }
+        .meet-evermind-visual-head span { display:flex; align-items:center; gap:8px; }
+        .meet-evermind-visual-head i,.meet-evermind-write-status i { width:6px; height:6px; border-radius:50%; background:var(--cyan-bright); box-shadow:0 0 0 4px color-mix(in srgb,var(--cyan-bright) 14%,transparent),0 0 16px var(--cyan-bright); animation:evermind-live 2.2s ease-in-out infinite; }
+        .meet-evermind-visual-head strong { color:var(--cyan-bright); font:inherit; white-space:nowrap; }
+        .meet-evermind-map { position:relative; height:320px; background-image:linear-gradient(color-mix(in srgb,var(--cyan-bright) 5%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--cyan-bright) 5%,transparent) 1px,transparent 1px); background-size:28px 28px; }
+        .meet-evermind-connections { position:absolute; inset:0; width:100%; height:100%; overflow:visible; }
+        .meet-evermind-connections path { fill:none; stroke:color-mix(in srgb,var(--cyan-bright) 42%,var(--border-subtle)); stroke-width:1.2; stroke-dasharray:5 7; animation:evermind-flow 9s linear infinite; }
+        .meet-evermind-pod { position:absolute; z-index:2; display:grid; grid-template-columns:24px 1fr; align-items:center; gap:8px; width:164px; min-height:54px; padding:10px 12px; border:1px solid color-mix(in srgb,var(--cyan-bright) 28%,var(--border-subtle)); border-radius:11px; background:color-mix(in srgb,var(--surface-card-strong) 92%,transparent); box-shadow:0 10px 28px color-mix(in srgb,var(--cyan-bright) 8%,transparent); }
+        .meet-evermind-pod > span,.meet-principle > span,.meet-role > span { color:var(--cyan-bright); font:600 .61rem/1.5 var(--font-display); letter-spacing:.08em; }
+        .meet-evermind-pod > strong { color:var(--text-primary); font:600 .69rem/1.35 var(--font-display); }
+        .meet-evermind-pod::after { content:''; position:absolute; width:5px; height:5px; border:2px solid var(--cyan-bright); border-radius:50%; background:var(--bg-surface); }
+        .meet-evermind-pod.is-pod-1 { left:18px; top:133px; }
+        .meet-evermind-pod.is-pod-1::after { right:-4px; top:50%; transform:translateY(-50%); }
+        .meet-evermind-pod.is-pod-2 { left:50%; top:18px; transform:translateX(-50%); }
+        .meet-evermind-pod.is-pod-2::after { left:50%; bottom:-4px; transform:translateX(-50%); }
+        .meet-evermind-pod.is-pod-3 { left:50%; bottom:18px; transform:translateX(-50%); }
+        .meet-evermind-pod.is-pod-3::after { left:50%; top:-4px; transform:translateX(-50%); }
+        .meet-evermind-pod.is-pod-4 { right:18px; top:133px; }
+        .meet-evermind-pod.is-pod-4::after { left:-4px; top:50%; transform:translateY(-50%); }
+        .meet-evermind-core { position:absolute; z-index:3; left:50%; top:50%; width:126px; height:126px; display:grid; place-items:center; transform:translate(-50%,-50%); }
+        .meet-evermind-orbits,.meet-evermind-orbits i { position:absolute; inset:0; border:1px solid color-mix(in srgb,var(--cyan-bright) 32%,transparent); border-radius:50%; }
+        .meet-evermind-orbits { animation:evermind-spin 18s linear infinite; box-shadow:inset 0 0 38px color-mix(in srgb,var(--cyan-bright) 11%,transparent),0 0 35px color-mix(in srgb,var(--cyan-bright) 10%,transparent); }
+        .meet-evermind-orbits::before,.meet-evermind-orbits::after { content:''; position:absolute; width:8px; height:8px; border-radius:50%; background:var(--cyan-bright); box-shadow:0 0 14px var(--cyan-bright); }
+        .meet-evermind-orbits::before { left:12px; top:18px; }
+        .meet-evermind-orbits::after { right:8px; bottom:28px; }
+        .meet-evermind-orbits i:nth-child(1) { inset:9px; border-style:dashed; }
+        .meet-evermind-orbits i:nth-child(2) { inset:20px; background:radial-gradient(circle,color-mix(in srgb,var(--cyan-bright) 20%,transparent),transparent 68%); }
+        .meet-evermind-orbits i:nth-child(3) { inset:36px; border:0; background:var(--cyan-bright); box-shadow:0 0 32px color-mix(in srgb,var(--cyan-bright) 55%,transparent); opacity:.14; }
+        .meet-evermind-core-copy { position:relative; z-index:2; display:flex; flex-direction:column; align-items:center; text-align:center; }
+        .meet-evermind-core-copy small { color:var(--cyan-bright); font:600 .5rem/1 var(--font-display); letter-spacing:.1em; }
+        .meet-evermind-core-copy strong { margin:7px 0 4px; color:var(--text-primary); font:700 1.05rem/1 var(--font-display); letter-spacing:-.025em; }
+        .meet-evermind-core-copy span { max-width:76px; color:var(--text-muted); font:500 .55rem/1.25 var(--font-display); }
+        .meet-evermind-write { display:grid; grid-template-columns:auto minmax(110px,1fr) auto 14px auto; gap:12px; align-items:center; padding:13px 16px; border-top:1px solid var(--border-subtle); background:color-mix(in srgb,var(--cyan-bright) 5%,transparent); }
+        .meet-evermind-write-status { display:flex; align-items:center; gap:8px; color:var(--cyan-bright); font:650 .57rem/1 var(--font-display); letter-spacing:.08em; white-space:nowrap; }
+        .meet-evermind-write code { overflow:hidden; color:var(--text-muted); font-size:.65rem; text-overflow:ellipsis; white-space:nowrap; }
+        .meet-evermind-write > b { color:var(--cyan-bright); font-weight:500; }
+        .meet-evermind-old,.meet-evermind-new { display:grid; gap:3px; color:var(--text-secondary); font:600 .65rem/1 var(--font-display); }
+        .meet-evermind-old { text-decoration:line-through; opacity:.55; }
+        .meet-evermind-new { color:var(--text-primary); }
+        .meet-evermind-old small,.meet-evermind-new small { color:var(--text-muted); font-size:.49rem; letter-spacing:.1em; text-decoration:none; text-transform:uppercase; }
+        @keyframes evermind-flow { to { stroke-dashoffset:-120; } }
+        @keyframes evermind-spin { to { transform:rotate(360deg); } }
+        @keyframes evermind-live { 50% { opacity:.45; box-shadow:0 0 0 7px transparent,0 0 8px var(--cyan-bright); } }
         .meet-evermind-aside { padding-left:24px; border-left:1px solid var(--border-subtle); }
         .meet-aside-label { display:block; margin-bottom:10px; color:var(--text-muted); font:600 .64rem/1 var(--font-display); letter-spacing:.14em; text-transform:uppercase; }
         .meet-edge { padding:14px 0; border-bottom:1px solid var(--border-subtle); }
@@ -419,11 +491,17 @@ export function MeetCarousel() {
           .meet-slide .section-title { font-size:1.28rem; line-height:1.25; }
           .meet-slide-lead { font-size:.86rem; }
           .meet-create-actions { margin-top:18px; }
-          .meet-create-actions .lp-btn-primary,.meet-create-actions .lp-btn-secondary { flex:1 1 100%; justify-content:center; padding:13px 20px; }
+          .meet-create-actions a { flex:1 1 100%; }
           .meet-create-board { padding:13px; }
           .meet-create-flow { gap:6px 8px; font-size:.68rem; }
-          .meet-evermind-list { grid-template-columns:1fr; border-left:0; }
-          .meet-evermind-item { padding:16px 0; border-right:0; }
+          .meet-evermind-map { height:auto; display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:18px; }
+          .meet-evermind-connections { display:none; }
+          .meet-evermind-core { position:relative; left:auto; top:auto; order:-1; grid-column:1/-1; width:126px; height:126px; margin:2px auto 8px; transform:none; }
+          .meet-evermind-pod { position:relative; inset:auto!important; width:auto; min-height:62px; transform:none!important; }
+          .meet-evermind-pod::after { display:none; }
+          .meet-evermind-write { grid-template-columns:1fr auto 14px auto; }
+          .meet-evermind-write-status { grid-column:1/-1; }
+          .meet-evermind-write code { min-width:0; }
           .meet-role-heading,.meet-role { grid-template-columns:1fr; gap:4px; }
           .meet-role > span { display:none; }
           .meet-role-view { padding:18px 16px; }
@@ -443,6 +521,7 @@ export function MeetCarousel() {
           .meet-slide { transition:opacity .01s, visibility 0s .01s; transform:none; }
           .meet-slide.is-active { transition:opacity .01s, visibility 0s 0s; }
           .meet-carousel-nav button > i b { animation:none; }
+          .meet-evermind-connections path,.meet-evermind-orbits,.meet-evermind-visual-head i,.meet-evermind-write-status i { animation:none; }
         }
       `}</style>
     </section>

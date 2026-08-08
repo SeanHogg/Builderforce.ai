@@ -181,83 +181,110 @@
   --bf-font-mono: var(--font-mono);
 }
 
-/* ── Light theme overrides ── */
+/* ── Light theme overrides — "Warm stock, teal ink" ──
+   The light palette is NOT a transposition of the dark one. Dark builds depth out
+   of glow (blue bloom on a near-black ground); on paper that reads as a smudge, so
+   light builds depth out of SHADE instead:
+
+   1. A real elevation scale. The page ground is a warm stock (#f4f1ec), the board
+      sits above it (#fdfcfa) and cards are pure white — three distinguishable
+      steps, where the old palette had three tokens holding one white.
+   2. Neutral, downward shadows. Every `--shadow-*` here is warm-grey at low alpha,
+      never the accent hue. Accent-coloured shadow is a dark-mode mechanic.
+   3. The accent order flips: TEAL leads (`--coral-*`, this codebase's primary
+      accent slot) and blue becomes the secondary signal (`--cyan-*`). Warm ground
+      + cool ink is what makes the two separate; a blue-on-blue-white does not.
+
+   Because the accent slots swap hue by theme, never hardcode #3b82f6 / #0f766e at
+   a call site — go through --accent / --coral-* / --cyan-* so both themes follow. */
 html[data-theme='light'] {
-  --bg-deep: #fcfeff;
-  --bg-surface: #ffffff;
-  --bg-elevated: #f5f9ff;
+  /* Elevation scale: stock ground → board → white card */
+  --bg-deep: #f4f1ec;
+  --bg-surface: #fdfcfa;
+  --bg-elevated: #ffffff;
 
-  --coral-bright: #3b82f6;
-  --coral-mid: #2563eb;
-  --coral-dark: #1e40af;
+  /* Primary accent slot: teal ink */
+  --coral-bright: #0f766e;
+  --coral-mid: #0b5f58;
+  --coral-dark: #134e4a;
 
-  --cyan-bright: #008f87;
-  --cyan-mid: #00766e;
-  --cyan-glow: rgba(0, 143, 135, 0.24);
+  /* Secondary signal slot: draft blue */
+  --cyan-bright: #1d4ed8;
+  --cyan-mid: #1e40af;
+  --cyan-glow: rgba(29, 78, 216, 0.22);
 
-  --text-primary: #0b1220;
-  --text-secondary: #2e405c;
-  --text-muted: #5f7290;
+  /* Warm-biased near-black ink */
+  --text-primary: #1c1917;
+  --text-secondary: #4f463d;
+  --text-muted: #736961;
 
-  --border-subtle: rgba(15, 23, 42, 0.16);
-  --border-accent: rgba(59, 130, 246, 0.34);
+  /* Rules are warm brown-grey, not slate — they must sit ON the stock, not fight it */
+  --border-subtle: rgba(60, 48, 36, 0.14);
+  --border-accent: rgba(15, 118, 110, 0.32);
 
-  --surface-card: rgba(255, 255, 255, 0.88);
-  --surface-card-strong: rgba(255, 255, 255, 0.95);
-  --surface-overlay: rgba(160, 174, 194, 0.26);
-  --panel-overlay-bg: rgba(15, 23, 42, 0.2);
+  --surface-card: rgba(255, 255, 255, 0.9);
+  --surface-card-strong: rgba(255, 255, 255, 0.97);
+  --surface-overlay: rgba(60, 48, 36, 0.1);
+  --panel-overlay-bg: rgba(28, 25, 23, 0.28);
   --panel-drawer-bg: #ffffff;
-  --surface-interactive: rgba(15, 23, 42, 0.1);
-  --surface-interactive-hover: rgba(15, 23, 42, 0.16);
-  --surface-cyan-soft: rgba(0, 143, 135, 0.16);
-  --surface-coral-soft: rgba(59, 130, 246, 0.16);
-  --surface-inset-highlight: rgba(15, 23, 42, 0.06);
+  --surface-interactive: rgba(60, 48, 36, 0.07);
+  --surface-interactive-hover: rgba(60, 48, 36, 0.13);
+  --surface-cyan-soft: rgba(29, 78, 216, 0.1);
+  --surface-coral-soft: rgba(15, 118, 110, 0.11);
+  --surface-inset-highlight: rgba(60, 48, 36, 0.05);
 
-  --shadow-coral-soft: rgba(59, 130, 246, 0.19);
-  --shadow-coral-mid: rgba(59, 130, 246, 0.27);
-  --shadow-coral-strong: rgba(59, 130, 246, 0.33);
-  --shadow-cyan-soft: rgba(0, 143, 135, 0.22);
+  /* Shade, not glow: neutral warm shadow at every strength. */
+  --shadow-coral-soft: rgba(60, 48, 36, 0.07);
+  --shadow-coral-mid: rgba(60, 48, 36, 0.12);
+  --shadow-coral-strong: rgba(60, 48, 36, 0.18);
+  --shadow-cyan-soft: rgba(60, 48, 36, 0.08);
 
-  --hero-title-start: #1e40af;
-  --hero-title-end: #3b82f6;
-  --logo-glow: rgba(59, 130, 246, 0.2);
-  --logo-glow-hover: rgba(0, 143, 135, 0.35);
+  --hero-title-start: #1c1917;
+  --hero-title-end: #1d4ed8;
+  --logo-glow: rgba(15, 118, 110, 0.18);
+  --logo-glow-hover: rgba(29, 78, 216, 0.3);
+  --logo-gradient-start: #0f766e;
+  --logo-gradient-end: #134e4a;
 
   --newsletter-gradient: linear-gradient(135deg,
-      rgba(59, 130, 246, 0.11) 0%,
+      rgba(15, 118, 110, 0.09) 0%,
       rgba(255, 255, 255, 0.98) 52%,
-      rgba(0, 143, 135, 0.12) 100%);
+      rgba(29, 78, 216, 0.07) 100%);
 
   --bg: var(--bg-deep);
   --bg-base: var(--bg-surface);
-  --bg-hover: rgba(0, 0, 0, 0.06);
-  --chrome: rgba(252, 254, 255, 0.92);
-  --chrome-strong: rgba(252, 254, 255, 0.98);
+  --bg-hover: rgba(60, 48, 36, 0.06);
+  /* Chrome is a shade LIGHTER than the stock ground, so the nav reads as a sheet
+     over the page instead of dissolving into it (the old --chrome was the ground). */
+  --chrome: rgba(251, 250, 247, 0.92);
+  --chrome-strong: rgba(251, 250, 247, 0.98);
 
-  /* Chat input bar (light theme) */
-  --chat-input-bg: rgba(248, 250, 252, 0.98);
-  --chat-input-border: rgba(15, 23, 42, 0.12);
-  --chat-input-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  /* Chat input bar (light theme): white card on stock, warm shade beneath */
+  --chat-input-bg: #ffffff;
+  --chat-input-border: rgba(60, 48, 36, 0.16);
+  --chat-input-shadow: 0 1px 2px rgba(60, 48, 36, 0.06), 0 10px 24px rgba(60, 48, 36, 0.1);
 
-  /* Semantic: error / success (light theme) */
-  --error: #dc2626;
-  --error-text: #b91c1c;
-  --error-bg: rgba(239, 68, 68, 0.12);
-  --error-border: rgba(239, 68, 68, 0.4);
-  --success: #16a34a;
-  --success-text: #15803d;
-  --success-bg: rgba(34, 197, 94, 0.12);
-  --warning: #d97706;
-  --warning-text: #b45309;
-  --warning-bg: rgba(245, 158, 11, 0.14);
-  --warning-border: rgba(245, 158, 11, 0.4);
-  /* danger-* alias the light `error-*` values above; info-* darken for white surfaces. */
-  --info: #2563eb;
-  --info-text: #1e40af;
-  --info-bg: rgba(59, 130, 246, 0.12);
-  --info-border: rgba(59, 130, 246, 0.35);
+  /* Semantic: error / success (light theme). Re-checked against a WARM ground —
+     each hue is pulled toward its warm-neutral neighbour so none of them reads as
+     a cool sticker dropped onto cream. */
+  --error: #b91c1c;
+  --error-text: #991b1b;
+  --error-bg: rgba(185, 28, 28, 0.1);
+  --error-border: rgba(185, 28, 28, 0.35);
+  --success: #15803d;
+  --success-text: #166534;
+  --success-bg: rgba(21, 128, 61, 0.11);
+  --warning: #b45309;
+  --warning-text: #92400e;
+  --warning-bg: rgba(180, 83, 9, 0.12);
+  --warning-border: rgba(180, 83, 9, 0.38);
+  /* danger-* alias the light `error-*` values above; info-* uses the blue signal. */
+  --info: #1d4ed8;
+  --info-text: #1e3a8a;
+  --info-bg: rgba(29, 78, 216, 0.1);
+  --info-border: rgba(29, 78, 216, 0.32);
   --text-on-accent: #fff;
-  --badge-unread: #6366f1;
+  --badge-unread: #4f46e5;
 }
 
 /* Touch: restore comfortable tap targets on coarse pointers. The compact metrics
@@ -358,10 +385,13 @@ textarea {
   font-family: inherit;
 }
 
+/* Warm stock, warmed further at the top corners — teal then blue, both at a
+   whisper. The tints must stay under the stock's own warmth or the ground turns
+   grey and the elevation step to the board disappears. */
 html[data-theme='light'] body {
   background:
-    radial-gradient(1200px circle at 12% -10%, rgba(59, 130, 246, 0.05), transparent 58%),
-    radial-gradient(900px circle at 88% -12%, rgba(0, 143, 135, 0.05), transparent 56%),
+    radial-gradient(1200px circle at 12% -10%, rgba(15, 118, 110, 0.05), transparent 58%),
+    radial-gradient(900px circle at 88% -12%, rgba(29, 78, 216, 0.04), transparent 56%),
     var(--bg-deep);
 }
 
@@ -434,46 +464,10 @@ html[data-theme='light'] .stars {
 /* ============================================================
    QuickStart interactive install block (copied from BuilderForce AgentsLink)
    ============================================================ */
-.quickstart-skin {
-  --bg-deep: #050810;
-  --bg-elevated: #111827;
-  --coral-bright: #4d9eff;
-  --coral-dark: #1e40af;
-  --cyan-bright: #00e5cc;
-  --text-primary: #f0f4ff;
-  --text-secondary: #8892b0;
-  --text-muted: #5a6480;
-  --border-subtle: rgba(136, 146, 176, 0.15);
-  --surface-overlay: rgba(0, 0, 0, 0.3);
-  --surface-interactive: rgba(255, 255, 255, 0.1);
-  --surface-interactive-hover: rgba(255, 255, 255, 0.2);
-  --surface-cyan-soft: rgba(0, 229, 204, 0.15);
-  --surface-coral-soft: rgba(77, 158, 255, 0.15);
-  --shadow-coral-mid: rgba(77, 158, 255, 0.25);
-  --shadow-coral-strong: rgba(77, 158, 255, 0.35);
-  --font-display: var(--font-sans);
-  --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
-}
-
-:root[data-theme="light"] .quickstart-skin {
-  --bg-deep: #fcfeff;
-  --bg-elevated: #f5f9ff;
-  --coral-bright: #3b82f6;
-  --coral-dark: #1e40af;
-  --cyan-bright: #008f87;
-  --text-primary: #0b1220;
-  --text-secondary: #2e405c;
-  --text-muted: #5f7290;
-  --border-subtle: rgba(15, 23, 42, 0.16);
-  --surface-overlay: rgba(160, 174, 194, 0.26);
-  --surface-interactive: rgba(15, 23, 42, 0.1);
-  --surface-interactive-hover: rgba(15, 23, 42, 0.16);
-  --surface-cyan-soft: rgba(0, 143, 135, 0.16);
-  --surface-coral-soft: rgba(59, 130, 246, 0.16);
-  --shadow-coral-mid: rgba(59, 130, 246, 0.27);
-  --shadow-coral-strong: rgba(59, 130, 246, 0.33);
-}
-
+/* The skin used to carry its OWN copy of the palette (a dark block plus a
+   :root[data-theme="light"] override) — a second source of truth that silently
+   drifted the moment the real light palette changed. It now inherits the theme
+   tokens, which already flip per theme. Do not re-declare them here. */
 .quickstart-skin {
   display: block;
   max-width: 1100px;
@@ -1587,6 +1581,15 @@ html[data-theme='light'] .nebula {
 .input:focus { outline: none; border-color: var(--border-accent); }
 .input::placeholder { color: var(--text-muted); }
 textarea.input { resize: vertical; line-height: 1.5; }
+/* A native <option> is painted by the OS dropdown, NOT by the <select> that owns
+   it — it inherits neither the control's background nor its colour. On a dark
+   theme that leaves dark-on-dark (or, on Windows, white-on-white) options in an
+   otherwise correct control. Every `.input` select gets an opaque pair of its
+   own, so the fix lands once instead of per form. See [[native-select-option-contrast]]. */
+select.input option {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
 
 .label {
   display: block;
