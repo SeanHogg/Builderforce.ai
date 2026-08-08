@@ -103,12 +103,22 @@ export function ExecutionTimelineChart({ tracks, colorForKey }: ExecutionTimelin
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
+    // Debounce ResizeObserver callbacks to prevent "ResizeObserver loop completed
+    // with undelivered notifications" errors.
+    let rafId: number | null = null;
     const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width;
-      if (w && w > 0) setWidth(w);
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        const w = entries[0]?.contentRect.width;
+        if (w && w > 0) setWidth(w);
+      });
     });
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      ro.disconnect();
+    };
   }, []);
 
   const { laid, bands, rows } = useMemo(() => layout(tracks), [tracks]);
