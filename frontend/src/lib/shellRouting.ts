@@ -30,6 +30,22 @@ const PUBLIC_SHELL_PREFIXES = ['/legal', '/product', '/blog', '/tutorials', '/ag
 
 export type ShellKind = 'none' | 'footer' | 'public' | 'app';
 
+export type GuestBrainstormEntry = 'resolving' | 'room' | 'legacy';
+
+/**
+ * Decide the logged-out /brainstorm entry without racing URL discovery.
+ *
+ * The invite code is `undefined` for the server render and first hydrated frame,
+ * `null` once the browser has confirmed there is no invite, and a string for an
+ * invite. Treating the unresolved frame as legacy used to mount the creation-
+ * canvas redirect before the effect could read `?room=`, dropping fresh and
+ * incognito invitees out of the shared room.
+ */
+export function classifyGuestBrainstormEntry(inviteCode: string | null | undefined): GuestBrainstormEntry {
+  if (inviteCode === undefined) return 'resolving';
+  return inviteCode ? 'room' : 'legacy';
+}
+
 /**
  * Classify the shell chrome for a path.
  * Order matters: no-chrome → footer-only → public-marketing → (default) app.

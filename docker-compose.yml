@@ -129,6 +129,11 @@ services:
     environment:
       NEXT_PUBLIC_WORKER_URL: http://localhost:8787
       NEXT_PUBLIC_API_URL: http://localhost:8787
+      # Auth, guest rooms, their WebSocket relay, and meeting ICE all use the
+      # canonical auth/API origin. Without this, a localhost UI silently talks to
+      # the production API (the auth module's safe production fallback), so local
+      # room creation and video signaling are split across environments.
+      NEXT_PUBLIC_AUTH_API_URL: http://localhost:8787
     ports:
       - "3000:3000"
     volumes:

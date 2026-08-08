@@ -76,6 +76,7 @@ export function CanvasStage() {
         initialFocusId={active.focusId}
         initialShareOpen={active.shareOpen}
         initialPresent={active.present}
+        initialModelComparisonIds={active.modelComparisonIds}
       />
     </div>
   );

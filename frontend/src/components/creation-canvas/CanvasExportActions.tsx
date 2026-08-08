@@ -54,6 +54,34 @@ export function canvasExportActionsFor(data: CreationNodeData): readonly CanvasE
   return exportActionsFor(data.kind).filter((action) => AVAILABILITY[action]?.(data) ?? true);
 }
 
+/**
+ * One glyph per format, declared beside the formats themselves.
+ *
+ * A row of five identically-shaped text buttons ("PowerPoint · PDF · Markdown ·
+ * Copy") reads as a paragraph, not as controls: everything is the same weight,
+ * so nothing is findable at a glance and the row has to be READ every time. A
+ * leading glyph gives each button a distinct silhouette, which is what makes a
+ * familiar action reachable without reading.
+ *
+ * The glyph is decorative and additive — the text label stays, because an icon
+ * alone would make "docx vs pdf vs markdown" a memory test, and it is marked
+ * `aria-hidden` so a screen reader still hears exactly the format name.
+ */
+const EXPORT_ICON: Readonly<Record<CanvasExportAction, string>> = {
+  copy: '⧉',
+  markdown: '↓',
+  html: '</>',
+  csv: '▤',
+  xlsx: '▦',
+  docx: '▤',
+  pdf: '▤',
+  pptx: '▥',
+  svg: '◇',
+  json: '{}',
+  diagram: '◈',
+  scorm: '◉',
+};
+
 export interface CanvasExportActionsProps {
   data: CreationNodeData;
   onExport: (action: CanvasExportAction) => void;
@@ -79,6 +107,6 @@ export function CanvasExportActions({ data, onExport, className }: CanvasExportA
       key={action}
       type="button"
       onClick={(event) => { event.stopPropagation(); onExport(action); }}
-    >{label(action)}</button>)}
+    ><span className={styles.cardActionIcon} aria-hidden="true">{EXPORT_ICON[action]}</span>{label(action)}</button>)}
   </div>;
 }

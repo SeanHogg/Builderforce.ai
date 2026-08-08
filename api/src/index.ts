@@ -472,6 +472,12 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/engagements', createEngagementRoutes(db));
   app.route('/api/activity', createActivityRoutes(db));
 
+  // Anonymous guest routes must precede the generic `/api/:domain/...` router
+  // below. That router installs auth middleware at its mount root, so registering
+  // it first intercepts `/api/guest/*` before route-shape validation and turns
+  // room creation, invite joins, and WebSocket upgrades into tenant-auth 401s.
+  app.route('/api/guest', createGuestRoutes(guestChatService, guestPromptService, platformBroadcastService));
+
   // ── The kernel, exposed ONCE (PRD 20 §6.3) ────────────────────────────────
   //
   // `/api/objects/:id` and its five relations replace the six-to-forty
@@ -516,7 +522,6 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // scan (freshness gate) + audit runner (re-scan) grounded in the same toolService.
   app.route('/api/rfp', createRfpRoutes(db, toolService, auditRunner));
   app.route('/api/marketing', createMarketingRoutes(marketingService));
-  app.route('/api/guest', createGuestRoutes(guestChatService, guestPromptService, platformBroadcastService));
   // Sales-cycle demo accounts — public one-click persona demo sessions, funnel
   // telemetry, book-a-demo leads, and the (guarded) deploy-hook reseed.
   app.route('/api/demo', createDemoRoutes());

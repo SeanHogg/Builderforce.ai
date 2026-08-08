@@ -4,6 +4,7 @@ import type { CreationGraphInput } from '@/lib/builderforceApi';
 import { NEW_CHAT_MODE, normalizeChatMode, type ChatMode } from '@/lib/brain';
 
 export const LOCAL_CREATION_PREFIX = 'local-';
+const LOCAL_TOOL_CREATION_PREFIX = `${LOCAL_CREATION_PREFIX}tool-`;
 const STORAGE_PREFIX = 'builderforce:create:';
 /**
  * Index of every account-less canvas this browser holds.
@@ -75,6 +76,14 @@ function writeIndex(entries: LocalCreationEntry[]): void {
 /** Upsert one draft into the index, newest first. */
 function indexLocalCreationSession(sessionId: string, title: string, updatedAt: string): void {
   const rest = readIndex().filter((entry) => entry.sessionId !== sessionId);
+  // Catalog-tool canvases are URL-owned surfaces, not user-created drafts. If
+  // they entered the draft index, ResumeWorkBridge would claim one into the
+  // tenant on every signed-in visit and the canvas switcher would fill with
+  // implementation-detail boards the user never created.
+  if (sessionId.startsWith(LOCAL_TOOL_CREATION_PREFIX)) {
+    writeIndex(rest);
+    return;
+  }
   writeIndex([{ sessionId, title, updatedAt }, ...rest]);
 }
 
@@ -95,6 +104,7 @@ export function listLocalCreationSessions(): LocalCreationEntry[] {
       const key = localStorage.key(position);
       if (!key?.startsWith(`${STORAGE_PREFIX}${LOCAL_CREATION_PREFIX}`)) continue;
       const sessionId = key.slice(STORAGE_PREFIX.length);
+      if (sessionId.startsWith(LOCAL_TOOL_CREATION_PREFIX)) continue;
       if (indexed.has(sessionId)) continue;
       const snapshot = readLocalCreationSession(sessionId);
       if (snapshot) indexed.set(sessionId, { sessionId, title: snapshot.title, updatedAt: snapshot.updatedAt });
@@ -104,6 +114,7 @@ export function listLocalCreationSessions(): LocalCreationEntry[] {
   }
 
   const live = [...indexed.values()]
+    .filter((entry) => !entry.sessionId.startsWith(LOCAL_TOOL_CREATION_PREFIX))
     .filter((entry) => localStorage.getItem(creationStorageKey(entry.sessionId)) != null)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   writeIndex(live);
@@ -149,6 +160,50 @@ export function createLocalCreationSession(prompt: string, mode: ChatMode = NEW_
   };
   writeLocalCreationSession(sessionId, snapshot);
   return sessionId;
+}
+
+/**
+ * Open a catalog tool as a real canvas object while keeping the public tool URL.
+ *
+ * Tool canvases are stable per browser + tool. Reopening `/tools/<id>` therefore
+ * returns to the answers and result already on the board instead of manufacturing
+ * another disposable page (or another draft in the canvas switcher) per click.
+ */
+export function ensureLocalToolCreationSession(tool: { id: string; name: string; about: string; icon: string }): { sessionId: string; focusId: string } {
+  const sessionId = `${LOCAL_TOOL_CREATION_PREFIX}${encodeURIComponent(tool.id)}`;
+  const saved = readLocalCreationSession(sessionId);
+  const existingTool = saved?.nodes.find((node) => node.data.toolId === tool.id);
+  if (saved && existingTool) {
+    // Rewriting through the canonical writer also removes an index row created
+    // by an older build before tool canvases were excluded from the draft list.
+    writeLocalCreationSession(sessionId, saved);
+    return { sessionId, focusId: existingTool.id };
+  }
+
+  const now = new Date().toISOString();
+  const focusId = `tool:${tool.id}`;
+  writeLocalCreationSession(sessionId, {
+    version: 1,
+    title: tool.name,
+    updatedAt: now,
+    nodes: [{
+      id: focusId,
+      type: 'creation',
+      position: { x: 120, y: 80 },
+      style: { width: 760 },
+      data: {
+        kind: 'diagnostics',
+        title: tool.name,
+        subtitle: tool.about,
+        toolId: tool.id,
+        toolIcon: tool.icon,
+        toolInput: {},
+      },
+    }],
+    edges: [],
+    viewport: { x: 36, y: 32, zoom: 0.9 },
+  });
+  return { sessionId, focusId };
 }
 
 /**

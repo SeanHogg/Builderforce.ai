@@ -57,6 +57,8 @@ export interface Canvas3DViewProps<T extends Canvas3DNode> {
   onMove?: (moves: readonly Canvas3DMove[]) => void;
   /** Leave 3D. The visible control lives on the canvas rail; this is the Escape key. */
   onExit: () => void;
+  /** Initial layer strategy for purpose-built scenes such as model comparisons. */
+  initialDepthMode?: Canvas3DDepthMode;
 }
 
 /** Pointer travel, in pixels, past which a gesture is a drag and not a click. */
@@ -139,10 +141,11 @@ export function Canvas3DView<T extends Canvas3DNode>({
   onSelect,
   onMove,
   onExit,
+  initialDepthMode = 'flow',
 }: Canvas3DViewProps<T>) {
   const t = useTranslations('canvasCommands');
   const [orbit, setOrbit] = useState<Canvas3DOrbit>(CANVAS_3D_DEFAULT_ORBIT);
-  const [depthMode, setDepthMode] = useState<Canvas3DDepthMode>('flow');
+  const [depthMode, setDepthMode] = useState<Canvas3DDepthMode>(initialDepthMode);
   const [layersVisible, setLayersVisible] = useState(true);
   const [gestureKind, setGestureKind] = useState<Gesture['kind'] | null>(null);
   const viewportRef = useRef<HTMLDivElement | null>(null);

@@ -1,3 +1,87 @@
+## ✅ RESOLVED 2026-08-08 — The canvas becomes the session: stage, dock, live room, and a Brain that cannot claim your file is missing
+
+*Navigation architecture "The Session Is The Anchor" (v3 · reconciled with PRD 19), phases 4–5 — plus four defects reported from a live board.*
+
+**The board is mounted once and kept.** `/create/[sessionId]` no longer renders the
+canvas; it registers it (`lib/canvas/ActiveCanvasContext.tsx`) and the shell mounts
+`components/canvas/CanvasStage.tsx`. Opening a page no longer tears down the board, its
+in-flight Brain turn, or the presence poll. Hidden with `visibility` rather than
+`display` so React Flow keeps its measured viewport and a return does not silently move
+the board. **One deliberate deviation from the design doc:** switching to a DIFFERENT
+canvas still remounts (the stage keys on the session id) — the canvas holds ~50 pieces of
+per-board state whose only reset path is a mount, so a keyless swap would carry board A's
+revision counter and save baseline into board B and the first debounce would push A's
+graph over B.
+
+**Pages open beside the board.** `lib/workbenchPolicy.ts` classifies every route
+`stage | workbench | standalone` (pure, table-tested); `components/workspace/Workbench.tsx`
+is the resizable dock (pointer + keyboard resize, persisted width, full-screen under
+900px). Costs nothing for anyone who has not opened a canvas — with no board there is
+nothing to keep, so the page takes the screen exactly as before.
+
+**The call outlives the navigation.** `lib/live/LiveSessionContext.tsx` is a shell-level
+provider owning the room, members, follow, present-mode, camera and screen; `LiveBar` +
+`LiveSessionChip` are its surfaces. `presentMode`/`followingUserId` moved out of
+`CreationCanvas` (local fallbacks retained for surfaces with no provider). Tenant is the
+only axis that drops a room, enforced as an invariant in the provider rather than only at
+the switcher.
+
+**One capture layer, many sinks.** `lib/mediaCapture.ts` (+ `useDisplayCapture`,
+`useCameraCapture`) owns acquisition, permission classification and track-stop cleanup.
+`getDisplayMedia` now exists at all — screen share publishes over the existing mesh via
+`replaceTrack` (no renegotiation) with an `m-share` frame so peers know they are watching
+a screen. Both prior `getUserMedia` call sites (`useMediaRoom`, `captureAudio`) migrated;
+no second acquisition remains.
+
+**Scope rules are written down.** `lib/canvasScopePolicy.ts` states all four axes in one
+pure function — tenant = identity (close the board, leave the room after a confirm),
+company + project = filters (board stays with an out-of-scope chip, room untouched),
+canvas = a swap. Previously undefined behaviour: both silently kept rendering.
+
+### The four reported defects
+
+1. **The Brain told a user a file was not on their canvas while it was on their canvas.**
+   Root cause: the turn snapshot carried only the SCOPED objects with nothing saying the
+   view was partial, and `canvas_read_snapshot` — the one escape hatch, whose description
+   promised "every object" — was scoped too, so checking CONFIRMED the false picture. The
+   model then asked the user to upload a file they had already uploaded. Fixed in
+   `lib/canvasContextSnapshot.ts`: every turn now carries a complete identity-only
+   `boardInventory` plus a `scopeNote` that forbids absence claims; `canvas_read_snapshot`
+   returns the whole board; a new `canvas_read_object` looks an object up by id, title or
+   file name with extension-tolerant matching (the reported miss was `.htm` vs `.html`).
+2. **A dropped `.html` file rendered as raw markup and was unreadable to the agent.**
+   `.htm`/`.html` matched `CODE_FILE`, so a sales guide became a Code object showing
+   `<!doctype html>…` — and because a Code object is not a document, `canvas_read_document`
+   could not read it either. An HTML *document* now converts through `htmlToMarkdown` into
+   an ordinary Document (raw markup kept on `sourceHtml` for lossless export); a *fragment*
+   stays code.
+3. **Diagnostics could only describe the end state, and tracked nothing the user did.** It
+   reported `objects: 4` and agreed with whatever the screen showed. New
+   `lib/canvasActionJournal.ts` is a bounded session journal of what the person and the
+   agent DID, with durations and outcomes. The report gained **Gaps** (stated first, as
+   findings), **Timings** (p50/max/pending/failed by label), **Actions**, and
+   `objectsVisibleToTurn` — the number whose absence let a scoped answer read as a
+   statement about the whole board. Captured: file imports (with the object kind each
+   BECAME), Brain turns (with the scope they ran against), every tool/MCP call, undo/redo,
+   scope changes, and every board mutation. Board mutations are derived at the history
+   checkpoint via `describeGraphChange` rather than instrumented per handler — the palette,
+   a drag, a delete, an inspector edit and an applied AI proposal all settle there, so
+   object add/delete/edit and connection add/delete are covered by construction, including
+   for mutation paths added later.
+4. **Export rows read as a paragraph.** One `EXPORT_ICON` map beside the formats gives each
+   button a distinct silhouette; the glyph is `aria-hidden`, so accessible names are
+   unchanged.
+
+**Also fixed in passing:** `TensionBeat.module.css` referenced an undeclared `--bg-page`,
+which painted near-black text on coral in both themes and kept the design-token guard red
+(one red guard hides the rest). Now `--text-on-accent`; guard green at 242 tokens.
+
+**Verification:** tsgo clean · design-token guard green · 51 lib tests + 246 canvas/workspace
+component tests passing, including new table tests for the scope policy, the route buckets,
+the board inventory (written against the reported transcript), the journal, and HTML import.
+All new UI localized in en/zh/es/fr/de.
+
+
 # Builderforce.ai — Done / Completed
 
 > Record of completed, shipped, and resolved work, moved out of [ROADMAP.md](./ROADMAP.md) (which tracks only outstanding TODO/In-Progress/Partial items). Entries are condensed to *what shipped + when + key migration/files*; `git log` is the full audit trail. Open follow-ups for any feature below live in the roadmap.

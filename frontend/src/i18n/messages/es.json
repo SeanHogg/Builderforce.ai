@@ -7922,7 +7922,7 @@
       "button": "Comparar",
       "maxTitle": "Se pueden comparar hasta {max} modelos",
       "addTitle": "Añadir a la comparación",
-      "compareAria": "Comparar {name}"
+      "compareAria": "Comparar {name}", "promptLabel": "Ejecutar un prompt en cada modelo seleccionado", "promptPlaceholder": "Introduce el prompt exacto que quieres comparar…", "needPromptTitle": "Introduce un prompt para ejecutar", "executeTitle": "Ejecutar el prompt con cada modelo seleccionado en Canvas", "executeButton": "Comparar ejecución en Canvas", "specsButton": "Comparar especificaciones"
     }
   },
   "talent": {
@@ -11997,6 +11997,37 @@
     "switchToLight": "Cambiar al modo claro",
     "switchToDark": "Cambiar al modo oscuro"
   },
+  "tutorials": {
+    "seo": { "title": "Tutoriales guiados por IA y cursos interactivos", "description": "Aprende emprendimiento, reclutamiento, producto, marketing, liderazgo, finanzas, software, IA y más en un LMS adaptativo sobre Creation Canvas.", "ogTitle": "Aprende con un profesor de IA en Creation Canvas" },
+    "eyebrow": "Aprendizaje hecho para ti",
+    "title": "Elige un tema. Crea tu curso. Conoce a tu profesor de IA.",
+    "lead": "Cada tutorial abre un Creation Canvas privado, crea un curso LMS interactivo e incorpora al chat un profesor de IA especialista que guía tu práctica y adapta cada lección.",
+    "howItWorks": "Cómo funcionan los tutoriales interactivos",
+    "steps": [
+      { "title": "Elige una dirección", "description": "Empieza con un tema práctico o trae cualquier objetivo de aprendizaje propio." },
+      { "title": "Canvas crea el LMS", "description": "Brain crea módulos, lecciones, ejercicios, evaluaciones, progreso y un proyecto final." },
+      { "title": "Aprende con un especialista", "description": "Un profesor de IA adecuado al tema entra en tu chat, comprueba tu comprensión y adapta el camino." }
+    ],
+    "catalogTitle": "¿Qué quieres aprender?",
+    "catalogLead": "Elige un punto de partida. Tu curso se genera según tus objetivos y experiencia, por lo que cada ruta de aprendizaje puede ser distinta.",
+    "teacherLabel": "Profesor: {agent}",
+    "startCourse": "Crear mi curso",
+    "customTitle": "¿Quieres aprender otra cosa?",
+    "customLead": "Desde negociación y oratoria hasta jardinería, diseño, historia o un tema que solo tú puedas nombrar: Canvas puede convertirlo en un curso y asignarte el profesor de IA adecuado.",
+    "customCta": "Diseñar un curso propio",
+    "customPrompt": "Quiero aprender un tema de mi elección. Primero pregúntame qué quiero aprender, por qué me importa, mi experiencia actual, el ritmo que prefiero y el resultado que deseo. Después crea en el Canvas un curso LMS interactivo completo con módulos, lecciones, ejercicios, evaluaciones, seguimiento del progreso y un proyecto final práctico. Crea un agente profesor de IA especialista apropiado y conéctalo al curso y al chat de Brain para que se una a la conversación. Empieza a enseñar paso a paso, adáptate a mis respuestas y comprueba mi comprensión. No te limites a describir el curso; crea el curso y el agente profesor en el Canvas.",
+    "coursePrompt": "Crea en el Canvas un curso LMS interactivo completo que me enseñe {topic}. Centra el curso en {focus}. Incluye módulos estructurados, lecciones, ejercicios prácticos, evaluaciones, seguimiento del progreso y un proyecto final práctico. Crea un agente profesor de IA especialista llamado {agent}, dale instrucciones docentes expertas para este tema y conéctalo tanto al curso como al chat de Brain para que se una a nuestra conversación. Empieza preguntando por mi nivel de experiencia y mi objetivo; luego enseña paso a paso, adáptate a mis respuestas, ofrece comentarios útiles y comprueba mi comprensión. No te limites a describir un plan de estudios; crea el objeto de curso y el agente profesor en el Canvas.",
+    "topics": {
+      "entrepreneurship": { "title": "Emprendimiento", "summary": "Convierte una idea en un negocio probado mediante descubrimiento de clientes, posicionamiento, modelo de negocio y un plan de lanzamiento creíble.", "agent": "Coach de Emprendimiento", "focus": "encontrar un problema real del cliente, validar demanda, elegir un modelo de negocio, precios, salida al mercado, fundamentos de financiación y un plan de lanzamiento viable", "outcomes": ["Validar una idea", "Crear un modelo", "Planear el lanzamiento"] },
+      "recruiting": { "title": "Reclutamiento y Contratación", "summary": "Aprende a definir puestos, encontrar buenos candidatos, hacer entrevistas justas y cerrar la contratación correcta.", "agent": "Socio de Talento", "focus": "planificación de plantilla, perfiles de puesto, búsqueda inclusiva, entrevistas estructuradas, selección basada en evidencia, experiencia del candidato y cierre", "outcomes": ["Crear un perfil", "Entrevistar con rigor", "Decidir con evidencia"] },
+      "product": { "title": "Gestión de Producto", "summary": "Pasa del problema del usuario a la estrategia, evidencia de descubrimiento, hoja de ruta priorizada y resultados medibles.", "agent": "Mentor de Producto", "focus": "descubrimiento de clientes, estrategia de producto, mapa de oportunidades, priorización, hojas de ruta, experimentos, métricas y alineación", "outcomes": ["Descubrir necesidades", "Priorizar resultados", "Crear una hoja de ruta"] },
+      "marketing": { "title": "Marketing y Crecimiento", "summary": "Define audiencia, mensaje, canales, experimentos y un sistema de medición que acumule aprendizaje.", "agent": "Estratega de Crecimiento", "focus": "investigación de audiencia, posicionamiento, mensajes, contenido, canales de adquisición, conversión, retención, experimentos y métricas", "outcomes": ["Aclarar posición", "Diseñar campañas", "Medir crecimiento"] },
+      "leadership": { "title": "Liderazgo y Gestión", "summary": "Practica cómo marcar dirección, desarrollar personas, manejar conflictos, delegar y crear equipos responsables.", "agent": "Coach de Liderazgo", "focus": "estilos de liderazgo, objetivos, delegación, feedback, coaching, conversaciones difíciles, decisiones, salud del equipo y responsabilidad", "outcomes": ["Liderar con claridad", "Desarrollar personas", "Resolver conflictos"] },
+      "finance": { "title": "Finanzas para Decidir", "summary": "Comprende estados financieros, flujo de caja, presupuestos, economía unitaria, previsiones y decisiones de inversión.", "agent": "Tutor de Finanzas", "focus": "estados financieros, flujo de caja, presupuestos, previsiones, economía unitaria, escenarios, fundamentos de valoración y asignación de capital", "outcomes": ["Leer los números", "Crear una previsión", "Evaluar alternativas"] },
+      "softwareAi": { "title": "Software e IA", "summary": "Aprende cómo diseñar, construir, evaluar, proteger y lanzar de forma responsable sistemas modernos de software e IA.", "agent": "Instructor de Ingeniería de IA", "focus": "arquitectura, APIs, datos, pruebas, seguridad, aplicaciones LLM, prompting, recuperación, agentes, evaluaciones y despliegue responsable", "outcomes": ["Diseñar un sistema", "Construir con IA", "Evaluar calidad"] },
+      "career": { "title": "Crecimiento Profesional", "summary": "Conecta tus fortalezas con una dirección, cierra brechas, comunica tu valor y ejecuta un plan práctico.", "agent": "Coach Profesional", "focus": "fortalezas, opciones profesionales, brechas de habilidades, evidencia de portafolio, networking, entrevistas, negociación y un plan de desarrollo de 90 días", "outcomes": ["Elegir dirección", "Mostrar tu valor", "Planear 90 días"] }
+    }
+  },
   "media": {
     "seo": {
       "title": "Kit de medios — Presentación de ventas y material de marketing",
@@ -12461,6 +12492,7 @@
     "note": "Elige un método de instalación, copia el comando y ejecútalo en tu terminal."
   },
   "creationCanvas": {
+    "comparison": { "promptTitle": "Prompt compartido de comparación", "sharedPrompt": "Se ejecuta sin cambios en cada modelo seleccionado", "responseFrom": "Respuesta generada por {model}", "executing": "Ejecutando", "executingWith": "Ejecutando este prompt con {model}…", "executesWith": "se ejecuta con {model}", "runningCount": "Ejecutando {count} modelos seleccionados…", "completed": "Completado", "failed": "La ejecución falló", "emptyOutput": "El modelo no devolvió ningún resultado.", "finished": "Comparación de modelos finalizada.", "modelLayer": "Modelo · {model}", "promptLayer": "Prompt compartido" },
     "group": {
       "Build": "Construcción",
       "Data": "Datos",

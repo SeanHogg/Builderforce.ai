@@ -8,6 +8,7 @@ import { creationSessionsApi } from '@/lib/builderforceApi';
 import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { getActiveGuestRoom } from '@/lib/guestRoomApi';
 import { GuestRoomJoinCard } from '@/components/guest/GuestRoomJoinCard';
+import { modelComparisonCanvasHref, readModelComparison } from '@/lib/modelComparisonRequest';
 
 export const runtime = 'edge';
 
@@ -28,6 +29,7 @@ export default function NewCreationSessionPage() {
   const [message, setMessage] = useState('');
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [initialPrompt, setInitialPrompt] = useState('');
+  const [modelComparisonIds, setModelComparisonIds] = useState<string[]>([]);
   const [checkedInvite, setCheckedInvite] = useState(false);
 
   // Read the invite BEFORE deciding what this page is: a room link must not be
@@ -40,6 +42,7 @@ export default function NewCreationSessionPage() {
       // Blog and product CTAs can start a real generated canvas. Keep the prompt
       // through this redirect rather than leaving the learner on a blank board.
       setInitialPrompt(params.get('prompt')?.trim().slice(0, 4_000) || '');
+      setModelComparisonIds(readModelComparison(params));
     } catch {
       code = null; // no URL access — fall through to the ordinary new-canvas path
     }
@@ -53,16 +56,20 @@ export default function NewCreationSessionPage() {
     started.current = true;
     setMessage(t('creatingCanvas'));
     if (!isAuthenticated || !hasTenant) {
-      router.replace(`/create/${startGuestCreationSession(initialPrompt)}`);
+      const id = startGuestCreationSession(initialPrompt);
+      router.replace(modelComparisonCanvasHref(id, modelComparisonIds));
       return;
     }
-    void creationSessionsApi.create({ title: initialPrompt ? 'Build an LLM' : 'Untitled session', ...(initialPrompt ? { initialPrompt } : {}) })
-      .then(({ session }) => router.replace(`/create/${session.id}`))
+    void creationSessionsApi.create({ title: initialPrompt.trim().slice(0, 80) || 'Untitled session', ...(initialPrompt ? { initialPrompt } : {}) })
+      .then(({ session }) => {
+        router.replace(modelComparisonCanvasHref(session.id, modelComparisonIds));
+      })
       .catch(() => {
         setMessage(t('startingOnDevice'));
-        router.replace(`/create/${startGuestCreationSession(initialPrompt)}`);
+        const id = startGuestCreationSession(initialPrompt);
+        router.replace(modelComparisonCanvasHref(id, modelComparisonIds));
       });
-  }, [checkedInvite, hasTenant, initialPrompt, inviteCode, isAuthenticated, router, t]);
+  }, [checkedInvite, hasTenant, initialPrompt, inviteCode, isAuthenticated, modelComparisonIds, router, t]);
 
   if (inviteCode) {
     return (

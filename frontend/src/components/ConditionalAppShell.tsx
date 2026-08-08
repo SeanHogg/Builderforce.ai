@@ -33,7 +33,7 @@ import { ProjectScopeProvider } from '@/lib/ProjectScopeContext';
 import { useAuth } from '@/lib/AuthContext';
 import { useIsFreelancer, useIsSalesAssociate } from '@/lib/rbac';
 import { findActiveGroup, isFreelancerAllowedPath, isSalesAllowedPath } from '@/lib/navGroups';
-import { classifyShell } from '@/lib/shellRouting';
+import { classifyGuestBrainstormEntry, classifyShell } from '@/lib/shellRouting';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { convertVisitor } from '@/lib/marketingApi';
@@ -68,9 +68,12 @@ function LegacyPromptCanvasRedirect() {
  * Reading on mount is enough — the shell is client-rendered and an invite link is
  * always a fresh navigation.
  */
-function useGuestInviteCode(): string | null {
+function useGuestInviteCode(): string | null | undefined {
   const pathname = usePathname() || '';
-  const [code, setCode] = useState<string | null>(null);
+  // `undefined` means the client has not inspected the URL yet. It is distinct
+  // from a confirmed `null`: mounting the legacy redirect during this first
+  // frame can discard an invite before the effect below reads it.
+  const [code, setCode] = useState<string | null | undefined>(undefined);
   useEffect(() => {
     try {
       setCode(new URLSearchParams(window.location.search).get('room')?.trim() || null);
@@ -138,10 +141,12 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
     // teaser; it runs inside the guest-configured BrainProvider (see AppBrainShell).
     // Every other app route still shows the per-route teaser + login CTA.
     if (pathname.startsWith('/brainstorm')) {
+      const entry = classifyGuestBrainstormEntry(guestRoomCode);
       // `?room=` is a guest INVITE link — the landing surface for a shared free
       // session. It must render the guest room, not bounce through the legacy
       // prompt→canvas redirect, which would drop the code and the invitee with it.
-      if (guestRoomCode) {
+      if (entry === 'resolving') return <MarketingShell>{null}</MarketingShell>;
+      if (entry === 'room' && guestRoomCode) {
         return <MarketingShell><GuestBrainPanel variant="page" inviteCode={guestRoomCode} /></MarketingShell>;
       }
       return <MarketingShell><LegacyPromptCanvasRedirect /></MarketingShell>;

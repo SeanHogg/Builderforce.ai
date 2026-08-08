@@ -2,6 +2,7 @@ import {
   capText, environmentLines, jsonAppendix, line, windowRows,
   type DiagnosticsContext,
 } from './diagnosticsReport';
+import { journalGaps, summarizeTimings, type CanvasAction } from './canvasActionJournal';
 
 /**
  * The Creation Canvas handover report.
@@ -69,11 +70,23 @@ export type CreationCanvasDiagnosticsInput = {
   timeline: Array<{ role: string; body: string; createdAt: string }>;
   brain: { scope: string; thinking: boolean; proposedChangeCount: number; actionCount: number };
   trace?: CreationCanvasDiagnosticsTraceEvent[];
+  /**
+   * What the person and the agent actually DID, with durations. The report could
+   * previously only describe the end state, so it agreed with whatever the
+   * screen was already showing — see `canvasActionJournal`.
+   */
+  actions?: CanvasAction[];
+  /** How many objects the last Brain turn could actually see. A turn scoped to a
+   *  selection answering a question about "the canvas" is the failure mode this
+   *  number exists to expose. */
+  scopedObjectCount?: number;
 };
 
 const TIMELINE_HEAD = 4;
 const TIMELINE_TAIL = 16;
 const TRACE_HEAD = 4;
+const ACTION_HEAD = 6;
+const ACTION_TAIL = 40;
 const TRACE_TAIL = 20;
 
 function str(value: unknown): string {
@@ -177,10 +190,27 @@ export function buildCreationCanvasDiagnosticsReport(
     capText(message.body, 1_000),
   ]);
 
+  const actions = input.actions ?? [];
+  const scopedObjectCount = input.scopedObjectCount ?? input.objects.length;
+  const gaps = journalGaps(actions, {
+    objectCount: input.objects.length,
+    scope: input.brain.scope,
+    scopedObjectCount,
+  });
+  const timings = summarizeTimings(actions);
+  const timingRows = timings.map((row) => `  ${row.label} · n=${row.count}${row.pending ? ` · pending=${row.pending}` : ''}${row.failed ? ` · FAILED=${row.failed}` : ''} · p50=${row.p50Ms == null ? 'n/a' : `${row.p50Ms}ms`} · max=${row.maxMs == null ? 'n/a' : `${row.maxMs}ms`}`);
+  const actionRows = actions.map((action) => `[${action.at}] ${action.kind}/${action.label}${action.durationMs == null ? ' (never completed)' : ` ${action.durationMs}ms`}${action.ok === false ? ' FAILED' : ''}${action.detail ? ` — ${capText(action.detail, 200)}` : ''}`);
+
   const body = [
     `# Creation Canvas diagnostics — ${input.title}`,
     '',
     ...environmentLines(context, [['sessionId', input.sessionId], ['persistence', input.persistence], ['role', input.role]]),
+    '',
+    // GAPS FIRST. A reader opens a report with a question, and a wall of state
+    // they have to interpret is how a report gets skimmed and dismissed. Anything
+    // the journal can already prove is stated as a finding, at the top.
+    '-- Gaps --',
+    ...(gaps.length ? gaps.map((gap) => `  • ${gap}`) : ['  (none detected)']),
     '',
     '-- Session state --',
     line('revision', input.revision),
@@ -206,8 +236,19 @@ export function buildCreationCanvasDiagnosticsReport(
     '-- Delivered outputs (provider-attributed) --',
     ...(deliverables.length ? deliverables : ['(none)']),
     '',
+    '-- Timings --',
+    ...(timingRows.length ? timingRows : ['  (no timed actions recorded)']),
+    '',
+    `-- Actions (${actions.length}) --`,
+    ...(actionRows.length
+      ? windowRows(actionRows, { head: ACTION_HEAD, tail: ACTION_TAIL, note: (elided) => [`… ${elided} earlier actions elided …`] })
+      : ['  (none recorded)']),
+    '',
     '-- Canvas Brain --',
     line('scope', input.brain.scope),
+    // The number whose absence let a scoped turn's answer read as a statement
+    // about the whole board.
+    line('objectsVisibleToTurn', `${scopedObjectCount} of ${input.objects.length}`),
     line('thinking', input.brain.thinking),
     line('availableCanvasActions', input.brain.actionCount),
     line('proposedChangesAwaitingReview', input.brain.proposedChangeCount),
@@ -233,8 +274,8 @@ export function buildCreationCanvasDiagnosticsReport(
     '',
     // Re-parseable payload; drops the transcript first when the budget is tight,
     // since it is the one block already rendered in full above.
-    ...jsonAppendix(text.length, { objects: input.objects, trace, timeline: input.timeline }, {
-      compact: () => ({ objects: input.objects, trace }),
+    ...jsonAppendix(text.length, { objects: input.objects, trace, actions, timeline: input.timeline }, {
+      compact: () => ({ objects: input.objects, trace, actions }),
       note: '(transcript omitted to stay within the paste budget — it is rendered above)',
     }),
   ].join('\n');

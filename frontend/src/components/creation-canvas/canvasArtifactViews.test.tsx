@@ -40,6 +40,29 @@ const nodeProps = {
 const renderNode = (data: CreationNodeData, overrides: Partial<React.ComponentProps<typeof CreationNode>> = {}) =>
   render(<CreationNode {...nodeProps} data={data} {...overrides} />);
 
+/**
+ * The formats a card offers, by ACCESSIBLE NAME.
+ *
+ * Each button carries a decorative leading glyph so the row has distinct
+ * silhouettes rather than reading as a paragraph of identical text buttons. The
+ * glyph is `aria-hidden`, so it is not part of the button's name — and this
+ * reads the name rather than raw `textContent` so the assertions stay about what
+ * a person (or a screen reader) is actually offered.
+ */
+function exportFormats(data: CreationNodeData): string[] {
+  const { unmount } = renderNode(data, { onExport: vi.fn() });
+  const group = screen.queryByRole('group', { name: 'Download' });
+  const labels = group
+    ? within(group).getAllByRole('button').map((button) => [...button.childNodes]
+        .filter((node) => !(node instanceof HTMLElement && node.getAttribute('aria-hidden') === 'true'))
+        .map((node) => node.textContent ?? '')
+        .join('')
+        .trim())
+    : [];
+  unmount();
+  return labels;
+}
+
 describe('document objects render the document', () => {
   it('renders headings, lists, and tables instead of one flat paragraph', () => {
     renderNode({
@@ -239,48 +262,41 @@ describe('a document is written and taken away from its own card', () => {
  * diagram had no way off the board in the format their own tool opens.
  */
 describe('every artifact leaves the board in its own native format', () => {
-  const formats = (data: CreationNodeData) => {
-    const { unmount } = renderNode(data, { onExport: vi.fn() });
-    const group = screen.queryByRole('group', { name: 'Download' });
-    const labels = group ? within(group).getAllByRole('button').map((button) => button.textContent) : [];
-    unmount();
-    return labels;
-  };
 
   it('offers a deck as PowerPoint before anything else', () => {
-    expect(formats({ kind: 'slides', title: 'Q3 review', markdown: '## Growth\n\n- EMEA up 12%\n\n## Risks\n\n- Churn' }))
+    expect(exportFormats({ kind: 'slides', title: 'Q3 review', markdown: '## Growth\n\n- EMEA up 12%\n\n## Risks\n\n- Churn' }))
       .toEqual(['PowerPoint', 'PDF', 'Markdown', 'Copy']);
   });
 
   it('offers a sheet as Excel before CSV', () => {
-    expect(formats({ kind: 'spreadsheet', title: 'Pricing', columns: ['Plan', 'Price'], rows: [{ Plan: 'Pro', Price: 40 }] }))
+    expect(exportFormats({ kind: 'spreadsheet', title: 'Pricing', columns: ['Plan', 'Price'], rows: [{ Plan: 'Pro', Price: 40 }] }))
       .toEqual(['Excel', 'CSV']);
   });
 
   it('offers a diagram in its own notation, plus SVG', () => {
-    expect(formats({ kind: 'diagram', title: 'Flow', diagram: 'graph TD;A-->B;' }))
+    expect(exportFormats({ kind: 'diagram', title: 'Flow', diagram: 'graph TD;A-->B;' }))
       .toEqual(['Mermaid', 'SVG', 'PDF', 'Copy']);
   });
 
   it('names the notation the diagram is actually written in', () => {
-    expect(formats({ kind: 'diagram', title: 'Flow', diagram: '<mxfile><diagram/></mxfile>' })[0]).toBe('Draw.io');
+    expect(exportFormats({ kind: 'diagram', title: 'Flow', diagram: '<mxfile><diagram/></mxfile>' })[0]).toBe('Draw.io');
   });
 
   it('offers a document as Word before PDF or Markdown', () => {
-    expect(formats({ kind: 'document', title: 'Analysis', markdown: '# Analysis' }))
+    expect(exportFormats({ kind: 'document', title: 'Analysis', markdown: '# Analysis' }))
       .toEqual(['Word', 'PDF', 'Markdown', 'Copy']);
   });
 
   it('offers nothing for an object that is not a file', () => {
-    expect(formats({ kind: 'agent', title: 'Researcher' })).toEqual([]);
+    expect(exportFormats({ kind: 'agent', title: 'Researcher' })).toEqual([]);
   });
 
   it('drops a format the object cannot currently fill', () => {
     // A sheet with no rows yet has no columns to write, so Excel and CSV are
     // absent rather than present-and-failing.
-    expect(formats({ kind: 'spreadsheet', title: 'Empty' })).toEqual([]);
+    expect(exportFormats({ kind: 'spreadsheet', title: 'Empty' })).toEqual([]);
     // A deck whose outline has not been written yet cannot render slides.
-    expect(formats({ kind: 'slides', title: 'Untitled deck' })).toEqual(['Markdown', 'Copy']);
+    expect(exportFormats({ kind: 'slides', title: 'Untitled deck' })).toEqual(['Markdown', 'Copy']);
   });
 
   it('asks the board to export the format that was clicked', () => {
@@ -299,31 +315,24 @@ describe('every artifact leaves the board in its own native format', () => {
 describe('drawn and written artifacts fill the formats the contract promises', () => {
   const drawing = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40"><rect width="80" height="40"/></svg>');
 
-  const formats = (data: CreationNodeData) => {
-    const { unmount } = renderNode(data, { onExport: vi.fn() });
-    const group = screen.queryByRole('group', { name: 'Download' });
-    const labels = group ? within(group).getAllByRole('button').map((button) => button.textContent) : [];
-    unmount();
-    return labels;
-  };
 
   it('offers a resume as Word, PDF and HTML — every form a recruiter asks for', () => {
-    expect(formats({ kind: 'resume', title: 'CV', markdown: '# Jane\n\n## Experience' }))
+    expect(exportFormats({ kind: 'resume', title: 'CV', markdown: '# Jane\n\n## Experience' }))
       .toEqual(['Word', 'PDF', 'HTML', 'Markdown', 'Copy']);
   });
 
   it('offers a drawn CAD profile as SVG and PDF', () => {
-    expect(formats({ kind: 'cad', title: 'Bracket', thumbnailUrl: drawing })).toEqual(['SVG', 'PDF']);
+    expect(exportFormats({ kind: 'cad', title: 'Bracket', thumbnailUrl: drawing })).toEqual(['SVG', 'PDF']);
   });
 
   it('offers a rendered comic as PDF', () => {
-    expect(formats({ kind: 'comic', title: 'Strip', thumbnailUrl: 'https://example.com/strip.png' })).toEqual(['PDF']);
+    expect(exportFormats({ kind: 'comic', title: 'Strip', thumbnailUrl: 'https://example.com/strip.png' })).toEqual(['PDF']);
   });
 
   it('offers nothing for a drawn kind that has not been generated yet', () => {
     // Promising a PDF of a picture that does not exist is the defect these close.
-    expect(formats({ kind: 'cad', title: 'Bracket' })).toEqual([]);
-    expect(formats({ kind: 'comic', title: 'Strip' })).toEqual([]);
+    expect(exportFormats({ kind: 'cad', title: 'Bracket' })).toEqual([]);
+    expect(exportFormats({ kind: 'comic', title: 'Strip' })).toEqual([]);
   });
 });
 

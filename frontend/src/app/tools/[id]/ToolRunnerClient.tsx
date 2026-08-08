@@ -29,7 +29,16 @@ const btnSubtle: React.CSSProperties = {
   background: 'transparent', color: 'var(--accent)', border: '1px solid var(--accent)', cursor: 'pointer', whiteSpace: 'nowrap',
 };
 
-export default function ToolRunnerClient({ toolId }: { toolId: string }) {
+export interface ToolRunnerClientProps {
+  toolId: string;
+  embedded?: boolean;
+  initialInput?: Record<string, number>;
+  initialResult?: ToolResult | null;
+  onInputChange?: (input: Record<string, number>) => void;
+  onRunComplete?: (input: Record<string, number>, result: ToolResult) => void;
+}
+
+export default function ToolRunnerClient({ toolId, embedded = false, initialInput, initialResult = null, onInputChange, onRunComplete }: ToolRunnerClientProps) {
   const t = useTranslations('tools');
   const searchParams = useSearchParams();
   // Attribute the run to a project: the global TopBar scope param `?project=` wins,
@@ -43,8 +52,8 @@ export default function ToolRunnerClient({ toolId }: { toolId: string }) {
     ? Number(projectIdParam)
     : (scope?.currentProjectId ?? null);
   const [def, setDef] = useState<ToolDefinition | null>(null);
-  const [input, setInput] = useState<Record<string, number>>({});
-  const [result, setResult] = useState<ToolResult | null>(null);
+  const [input, setInput] = useState<Record<string, number>>(initialInput ?? {});
+  const [result, setResult] = useState<ToolResult | null>(initialResult);
   const [error, setError] = useState<string | null>(null);
   const [computing, setComputing] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -56,11 +65,20 @@ export default function ToolRunnerClient({ toolId }: { toolId: string }) {
 
   useEffect(() => {
     toolsApi.get(toolId)
-      .then((d) => { setDef(d); setInput(defaultInput(d)); })
+      .then((d) => {
+        setDef(d);
+        setInput(initialInput && Object.keys(initialInput).length ? initialInput : defaultInput(d));
+      })
       .catch((e: Error) => setError(e.message));
   }, [toolId]);
 
-  const setVal = (id: string, v: number) => { setInput((s) => ({ ...s, [id]: v })); setResult(null); setSaveState('idle'); };
+  const setVal = (id: string, v: number) => {
+    const next = { ...input, [id]: v };
+    setInput(next);
+    onInputChange?.(next);
+    setResult(null);
+    setSaveState('idle');
+  };
 
   const run = async () => {
     if (!def) return;
@@ -68,6 +86,7 @@ export default function ToolRunnerClient({ toolId }: { toolId: string }) {
     try {
       const res = await toolsApi.compute(toolId, input);
       setResult(res);
+      onRunComplete?.(input, res);
       // Track anonymous runs as marketing leads so a returning visitor can re-see
       // their result and we can target them with a sign-up. Authed users are known.
       if (!isAuthed) trackToolRun(toolId, input, res);
@@ -95,8 +114,8 @@ export default function ToolRunnerClient({ toolId }: { toolId: string }) {
   const answeredAny = Object.keys(input).length > 0;
 
   return (
-    <div style={wrap}>
-      <header style={{ marginBottom: 20 }}>
+    <div className={embedded ? 'nodrag nowheel' : undefined} style={embedded ? undefined : wrap}>
+      {!embedded && <header style={{ marginBottom: 20 }}>
         <Link href="/tools" style={{ fontSize: 12, color: 'var(--accent)', textDecoration: 'none' }}>← {t('allTools')}</Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '10px 0 4px' }}>
           <span style={{ fontSize: 26 }}>{def.icon}</span>
@@ -109,10 +128,12 @@ export default function ToolRunnerClient({ toolId }: { toolId: string }) {
         {projectId != null && (
           <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent)', margin: '6px 0 0' }}>{t('scoringProject')}</p>
         )}
-      </header>
+      </header>}
+
+      {embedded && <p style={{ fontSize: 13, color: 'var(--canvas-ink-soft)', margin: '0 0 14px' }}>{def.about}</p>}
 
       {/* Returning visitor — replay their prior result + a targeted sign-up CTA. */}
-      <ReturningVisitorBanner toolId={toolId} />
+      {!embedded && <ReturningVisitorBanner toolId={toolId} />}
 
       {/* Mode toggle — only for tools that also have a "from your data" provider */}
       {def.hasDataDriven && (

@@ -7922,7 +7922,7 @@
       "button": "Vergleichen",
       "maxTitle": "Es können bis zu {max} Modelle verglichen werden",
       "addTitle": "Zum Vergleich hinzufügen",
-      "compareAria": "{name} vergleichen"
+      "compareAria": "{name} vergleichen", "promptLabel": "Einen Prompt mit allen ausgewählten Modellen ausführen", "promptPlaceholder": "Den exakt zu vergleichenden Prompt eingeben…", "needPromptTitle": "Prompt zur Ausführung eingeben", "executeTitle": "Prompt mit allen ausgewählten Modellen im Canvas ausführen", "executeButton": "Ausführung im Canvas vergleichen", "specsButton": "Spezifikationen vergleichen"
     }
   },
   "talent": {
@@ -11997,6 +11997,37 @@
     "switchToLight": "Zum hellen Modus wechseln",
     "switchToDark": "Zum dunklen Modus wechseln"
   },
+  "tutorials": {
+    "seo": { "title": "KI-geführte Tutorials und interaktive Kurse", "description": "Lerne Unternehmertum, Recruiting, Produkt, Marketing, Führung, Finanzen, Software, KI und mehr in einem adaptiven LMS auf dem Creation Canvas.", "ogTitle": "Lerne mit einem KI-Lehrer auf dem Creation Canvas" },
+    "eyebrow": "Lernen, das sich nach dir richtet",
+    "title": "Wähle ein Thema. Baue deinen Kurs. Triff deinen KI-Lehrer.",
+    "lead": "Jedes Tutorial öffnet einen privaten Creation Canvas, erstellt einen interaktiven LMS-Kurs und holt einen spezialisierten KI-Lehrer in den Chat, der deine Übungen begleitet und jede Lektion anpasst.",
+    "howItWorks": "So funktionieren interaktive Tutorials",
+    "steps": [
+      { "title": "Wähle eine Richtung", "description": "Beginne mit einem praktischen Thema oder bringe dein eigenes Lernziel mit." },
+      { "title": "Canvas baut das LMS", "description": "Brain erstellt Module, Lektionen, Übungen, Bewertungen, Fortschritt und ein Abschlussprojekt." },
+      { "title": "Lerne mit einem Spezialisten", "description": "Ein passender KI-Lehrer tritt deinem Chat bei, prüft dein Verständnis und passt den Weg an." }
+    ],
+    "catalogTitle": "Was möchtest du lernen?",
+    "catalogLead": "Wähle einen Ausgangspunkt. Dein Kurs wird für deine Ziele und Erfahrungen erstellt, sodass jeder Lernweg anders sein kann.",
+    "teacherLabel": "Lehrer: {agent}",
+    "startCourse": "Meinen Kurs erstellen",
+    "customTitle": "Möchtest du etwas anderes lernen?",
+    "customLead": "Von Verhandlung und Rhetorik bis Gartenarbeit, Design, Geschichte oder einem Thema, das nur du benennen kannst: Canvas formt daraus einen Kurs und findet den richtigen KI-Lehrer.",
+    "customCta": "Eigenen Kurs gestalten",
+    "customPrompt": "Ich möchte ein Thema meiner Wahl lernen. Frage mich zuerst, was ich lernen will, warum es mir wichtig ist, welche Erfahrung ich habe, welches Tempo ich bevorzuge und welches Ergebnis ich erreichen möchte. Erstelle dann auf dem Canvas einen vollständigen interaktiven LMS-Kurs mit Modulen, Lektionen, Übungen, Bewertungen, Fortschrittsanzeige und einem praktischen Abschlussprojekt. Erstelle einen passenden spezialisierten KI-Lehrer-Agenten und verbinde ihn mit dem Kurs und dem Brain-Chat, damit der Lehrer am Gespräch teilnimmt. Beginne Schritt für Schritt zu unterrichten, passe dich meinen Antworten an und prüfe mein Verständnis. Beschreibe den Kurs nicht nur, sondern erstelle Kurs und Lehrer-Agent auf dem Canvas.",
+    "coursePrompt": "Erstelle auf dem Canvas einen vollständigen interaktiven LMS-Kurs, der mir {topic} beibringt. Konzentriere den Kurs auf {focus}. Füge strukturierte Module, Lektionen, praktische Übungen, Bewertungen, Fortschrittsanzeige und ein praktisches Abschlussprojekt hinzu. Erstelle einen spezialisierten KI-Lehrer-Agenten namens {agent}, gib ihm fachkundige Lehranweisungen für dieses Thema und verbinde ihn sowohl mit dem Kurs als auch mit dem Brain-Chat, damit der Lehrer an unserem Gespräch teilnimmt. Frage zunächst nach meiner Erfahrung und meinem Ziel, unterrichte dann Schritt für Schritt, passe dich meinen Antworten an, gib nützliches Feedback und prüfe mein Verständnis. Beschreibe nicht nur einen Lehrplan, sondern erstelle das Kursobjekt und den Lehrer-Agenten auf dem Canvas.",
+    "topics": {
+      "entrepreneurship": { "title": "Unternehmertum", "summary": "Verwandle eine Idee durch Kundenerkundung, Positionierung, Geschäftsmodell und einen glaubwürdigen Startplan in ein getestetes Unternehmen.", "agent": "Gründungscoach", "focus": "ein echtes Kundenproblem finden, Nachfrage validieren, Geschäftsmodell, Preisgestaltung, Markteintritt, Grundlagen der Finanzierung und einen umsetzbaren Startplan", "outcomes": ["Idee validieren", "Geschäftsmodell bauen", "Start planen"] },
+      "recruiting": { "title": "Recruiting und Einstellung", "summary": "Lerne, Rollen zu definieren, starke Kandidaten zu finden, faire Interviews zu führen und die richtige Person zu gewinnen.", "agent": "Talent-Partner", "focus": "Personalplanung, Rollen-Scorecards, inklusive Suche, strukturierte Interviews, evidenzbasierte Auswahl, Candidate Experience und Abschluss", "outcomes": ["Scorecard schreiben", "Einheitlich interviewen", "Mit Belegen entscheiden"] },
+      "product": { "title": "Produktmanagement", "summary": "Gehe vom Nutzerproblem zu Produktstrategie, Erkenntnissen, priorisierter Roadmap und messbaren Ergebnissen.", "agent": "Produktmentor", "focus": "Kundenerkundung, Produktstrategie, Opportunity Mapping, Priorisierung, Roadmaps, Experimente, Kennzahlen und Stakeholder-Abstimmung", "outcomes": ["Bedürfnisse entdecken", "Ergebnisse priorisieren", "Roadmap gestalten"] },
+      "marketing": { "title": "Marketing und Wachstum", "summary": "Entwickle Zielgruppe, Botschaft, Kanalstrategie, Experimente und ein Messsystem, das Lernen verstärkt.", "agent": "Wachstumsstratege", "focus": "Zielgruppenforschung, Positionierung, Botschaften, Inhalte, Akquisekanäle, Conversion, Bindung, Experimente und Wachstumskennzahlen", "outcomes": ["Positionierung klären", "Kampagnen gestalten", "Wachstum messen"] },
+      "leadership": { "title": "Führung und Management", "summary": "Übe Richtung zu geben, Menschen zu coachen, Konflikte zu lösen, gut zu delegieren und verantwortliche Teams aufzubauen.", "agent": "Führungscoach", "focus": "Führungsstile, Ziele, Delegation, Feedback, Coaching, schwierige Gespräche, Entscheidungen, Teamgesundheit und Verantwortung", "outcomes": ["Klar führen", "Wirksam coachen", "Konflikte meistern"] },
+      "finance": { "title": "Finanzen für Entscheider", "summary": "Verstehe Abschlüsse, Cashflow, Budgets, Unit Economics, Prognosen und Investitionsabwägungen.", "agent": "Finanzlehrer", "focus": "Finanzberichte, Cashflow, Budgetierung, Prognosen, Unit Economics, Szenarioanalyse, Bewertungsgrundlagen und Kapitalallokation", "outcomes": ["Zahlen lesen", "Prognose bauen", "Abwägungen bewerten"] },
+      "softwareAi": { "title": "Software und KI", "summary": "Lerne, wie moderne Software- und KI-Systeme entworfen, gebaut, bewertet, gesichert und verantwortungsvoll ausgeliefert werden.", "agent": "KI-Engineering-Lehrer", "focus": "Softwarearchitektur, APIs, Daten, Tests, Sicherheit, LLM-Anwendungen, Prompting, Retrieval, Agenten, Evaluationen und verantwortungsvolle Bereitstellung", "outcomes": ["System entwerfen", "Mit KI bauen", "Qualität bewerten"] },
+      "career": { "title": "Karriereentwicklung", "summary": "Verbinde deine Stärken mit einer Richtung, schließe Kompetenzlücken, zeige deinen Wert und setze einen Wachstumsplan um.", "agent": "Karrierecoach", "focus": "Stärken, Karriereoptionen, Kompetenzlücken, Portfolio-Belege, Networking, Interviews, Verhandlung und einen 90-Tage-Entwicklungsplan", "outcomes": ["Richtung wählen", "Wert zeigen", "90 Tage planen"] }
+    }
+  },
   "media": {
     "seo": {
       "title": "Medien-Kit — Vertriebspräsentation & Marketingmaterial",
@@ -12461,6 +12492,7 @@
     "note": "Wähle eine Installationsmethode, kopiere den Befehl und führe ihn im Terminal aus."
   },
   "creationCanvas": {
+    "comparison": { "promptTitle": "Gemeinsamer Vergleichsprompt", "sharedPrompt": "Läuft unverändert auf jedem ausgewählten Modell", "responseFrom": "Von {model} erzeugte Antwort", "executing": "Wird ausgeführt", "executingWith": "Dieser Prompt wird mit {model} ausgeführt…", "executesWith": "wird mit {model} ausgeführt", "runningCount": "{count} ausgewählte Modelle werden ausgeführt…", "completed": "Abgeschlossen", "failed": "Ausführung fehlgeschlagen", "emptyOutput": "Das Modell hat keine Ausgabe zurückgegeben.", "finished": "Modellvergleich abgeschlossen.", "modelLayer": "Modell · {model}", "promptLayer": "Gemeinsamer Prompt" },
     "group": {
       "Build": "Erstellen",
       "Data": "Daten",

@@ -26,6 +26,8 @@ export interface ActiveCanvas {
   shareOpen: boolean;
   /** Arrive in presentation mode (`?present=1`). */
   present: boolean;
+  /** Models explicitly selected for a prompt comparison launched from Marketplace. */
+  modelComparisonIds: string[];
 }
 
 export interface ActiveCanvasValue {
@@ -78,6 +80,8 @@ export function ActiveCanvasProvider({
         && current.focusId === canvas.focusId
         && current.shareOpen === canvas.shareOpen
         && current.present === canvas.present
+        && current.modelComparisonIds.length === canvas.modelComparisonIds.length
+        && current.modelComparisonIds.every((id, index) => id === canvas.modelComparisonIds[index])
       ) return current;
       return canvas;
     });

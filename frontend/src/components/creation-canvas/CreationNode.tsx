@@ -35,6 +35,8 @@ import { CanvasExportActions } from './CanvasExportActions';
 import { drawioLabelLines, drawioShapePolygon, parseDrawioXml, resolveDrawioXml, type DrawioGraph } from '@/lib/drawioDiagram';
 import { MermaidDiagram } from '@/components/MermaidDiagram';
 import { COURSE_EXPORT_STANDARDS, courseFromNode, courseProgress } from '@/lib/courseLms';
+import ToolRunnerClient from '@/app/tools/[id]/ToolRunnerClient';
+import type { ToolResult } from '@/lib/tools';
 
 export type CreationFlowNode = Node<CreationNodeData, 'creation'>;
 
@@ -1164,6 +1166,34 @@ function DiagnosticsBody({ data }: { data: CreationNodeData }) {
   </div>;
 }
 
+function CanvasToolBody({ id, data, onEditData }: { id: string; data: CreationNodeData; onEditData?: (nodeId: string, patch: Partial<CreationNodeData>) => void }) {
+  const toolId = typeof data.toolId === 'string' ? data.toolId : '';
+  const initialInput = asRecord(data.toolInput, {}) as Record<string, number>;
+  const initialResult = data.toolResult && typeof data.toolResult === 'object' ? data.toolResult as ToolResult : null;
+  if (!toolId) return null;
+
+  return <ToolRunnerClient
+    toolId={toolId}
+    embedded
+    initialInput={initialInput}
+    initialResult={initialResult}
+    onInputChange={(input) => onEditData?.(id, { toolInput: input, toolResult: null })}
+    onRunComplete={(input, result) => onEditData?.(id, {
+      toolInput: input,
+      toolResult: result,
+      result,
+      status: result.scoreLabel || result.headline,
+      qualityScore: result.score,
+      qualityLabel: result.scoreLabel,
+      qualityHeadline: result.headline,
+      summary: result.summary,
+      recommendations: result.recommendations,
+      results: result.metrics.map((metric) => ({ title: metric.label, result: metric.value, detail: metric.hint })),
+      gapCount: result.recommendations.length,
+    })}
+  />;
+}
+
 function EvermindBody({ data }: { data: CreationNodeData }) {
   const t = useTranslations('creationCanvas.node');
   const version = typeof data.evermindVersion === 'number' ? data.evermindVersion : 0;
@@ -1753,7 +1783,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
       <Handle type="target" position={Position.Left} className={styles.handle} />
       <header className={styles.nodeHeader}>
         {typeof data.pipelineStep === 'number' && <span className={styles.pipelineStepBadge}>{data.pipelineStep}</span>}
-        <span className={styles.nodeIcon}>{creationObjectDefinition(data.kind).icon}</span>
+        <span className={styles.nodeIcon}>{typeof data.toolIcon === 'string' ? data.toolIcon : creationObjectDefinition(data.kind).icon}</span>
         <strong>{data.title}</strong>
         {data.status && <span className={styles.status}>{data.status}</span>}
         {data.kind === 'workflow' && onRun && <button
@@ -1777,7 +1807,9 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {(data.kind === 'dashboard' || data.kind === 'chart' || data.kind === 'report') && <DashboardBody data={data} />}
         {data.kind === 'map' && <MapBody data={data} />}
         {data.kind === 'evaluation' && <EvaluationBody data={data} onOpen={() => onOpenDetails?.(id, 'evaluation')} />}
-        {data.kind === 'diagnostics' && <DiagnosticsBody data={data} />}
+        {data.kind === 'diagnostics' && (typeof data.toolId === 'string'
+          ? <CanvasToolBody id={id} data={data} onEditData={onEditData} />
+          : <DiagnosticsBody data={data} />)}
         {data.kind === 'agent' && <AgentBody data={data} onOpen={(focus) => onOpenDetails?.(id, focus)} />}
         {data.kind === 'staff' && <><div className={styles.personRow}><span className={styles.avatar} style={{ background: data.accent }}>{data.title.slice(0, 1)}</span><b>{data.role}</b><span className={styles.presence} /></div><small>{t('currentFocus')}</small><p>{data.focus}</p></>}
         {data.kind === 'chat' && <BrainObjectBody nodeId={id} data={data} />}

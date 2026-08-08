@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import JsonLd from '@/components/JsonLd';
 import { pageMetadata } from '@/lib/seo';
 import { routeMarketingSchema } from '@/lib/structured-data';
-import ToolRunnerClient from './ToolRunnerClient';
+import ToolCanvasClient from './ToolCanvasClient';
 
 export const runtime = 'edge';
 
@@ -33,7 +33,7 @@ export default async function ToolRunnerPage({ params }: { params: Promise<{ id:
           description: `Free ${humanize(id)} diagnostic — instant rating and an improvement plan.`,
         })}
       />
-      <ToolRunnerClient toolId={id} />
+      <ToolCanvasClient toolId={id} />
     </>
   );
 }

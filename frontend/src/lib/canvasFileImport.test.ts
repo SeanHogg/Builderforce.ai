@@ -152,3 +152,35 @@ describe('importCanvasFile', () => {
     expect(Object.values(imported.objects[0]!.data).some((value) => typeof value === 'string' && /[A-Z][a-z]+ [a-z]+/.test(value) && !value.includes('('))).toBe(false);
   });
 });
+
+describe('HTML files land as documents, not as source code', () => {
+  const t: ImportTranslator = (key, values) => (values ? `${key}:${JSON.stringify(values)}` : key);
+
+  it('reads a saved HTML page as a readable document', async () => {
+    const html = '<!doctype html><html><head><title>Sales Discovery Guide</title></head>'
+      + '<body><h1>Sales Discovery Guide</h1><p>Use this guide to understand the buyer.</p></body></html>';
+    const file = new File([html], 'Builderforce-Sales-Discovery-Guide.htm', { type: 'text/html' });
+    const result = await importCanvasFile(file, t);
+    expect(result.objects).toHaveLength(1);
+    // The reported failure: this arrived as `code` and showed raw markup.
+    expect(result.objects[0]!.kind).toBe('document');
+    expect(result.objects[0]!.data.sourceFormat).toBe('HTML');
+    expect(result.objects[0]!.data.documentTitle).toBe('Sales Discovery Guide');
+    expect(String(result.objects[0]!.data.markdown ?? result.objects[0]!.data.content)).toContain('Sales Discovery Guide');
+    // The exact markup survives, so an HTML export is still lossless.
+    expect(String(result.objects[0]!.data.sourceHtml)).toContain('<!doctype html>');
+  });
+
+  it('leaves an HTML FRAGMENT as code', async () => {
+    const file = new File(['<div class="row"><span>ok</span></div>'], 'snippet.html', { type: 'text/html' });
+    const result = await importCanvasFile(file, t);
+    expect(result.objects[0]!.kind).toBe('code');
+    expect(result.objects[0]!.data.language).toBe('html');
+  });
+
+  it('still treats real source files as code', async () => {
+    const file = new File(['export const a = 1;\n'], 'a.ts', { type: 'text/plain' });
+    const result = await importCanvasFile(file, t);
+    expect(result.objects[0]!.kind).toBe('code');
+  });
+});

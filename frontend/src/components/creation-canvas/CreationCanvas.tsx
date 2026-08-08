@@ -73,6 +73,7 @@ import { canvasInteractionProps, type CanvasGesture } from './canvasPointerMode'
 import { importCanvasFile, type ImportTranslator } from '@/lib/canvasFileImport';
 import { boardInventory, findInInventory, scopeNote } from '@/lib/canvasContextSnapshot';
 import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
+import { createCanvasJournal, describeGraphChange } from '@/lib/canvasActionJournal';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 import { appendImageToDrawioCanvas, createDrawioImageCanvas, drawingDataUrl, type DrawioImageAsset } from '@/lib/drawioImageCanvas';
 import { WorkflowBuilder } from '@/components/workflow-builder/WorkflowBuilder';
@@ -113,6 +114,8 @@ import { gamePayloadFrom } from '@/lib/gameTargets';
 import { useLocalizedModalities, useModalityCopy } from '@/lib/useModalityCopy';
 import type { ProjectModality } from '@/lib/modality';
 import { buildLlmCourse, buildScormPackage, courseFromNode } from '@/lib/courseLms';
+import { executeModelComparison } from '@/lib/modelComparison';
+import { normalizeModelComparisonIds } from '@/lib/modelComparisonRequest';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
@@ -430,7 +433,7 @@ export function projectEvermindNodePatch(head: ProjectEvermindHead, activity: Pr
   };
 }
 
-function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialPresent = false }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialPresent?: boolean }) {
+function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialPresent = false, initialModelComparisonIds = [] }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialPresent?: boolean; initialModelComparisonIds?: readonly string[] }) {
   const t = useTranslations('creationCanvas');
   /**
    * A shipped pack's name and blurb are product copy, so they come from the
@@ -493,7 +496,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * floating over it — two live views of the same objects would compete for the
    * same pointer, and the point of the mode is to read depth without distraction.
    */
-  const threeD = useCanvasThreeD();
+  const comparisonModelIds = useMemo(() => normalizeModelComparisonIds(initialModelComparisonIds), [initialModelComparisonIds]);
+  const threeD = useCanvasThreeD(comparisonModelIds.length >= 2);
   const [shareOpen, setShareOpen] = useState(initialShareOpen);
   const [accountGate, setAccountGate] = useState<AccountGate | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -523,6 +527,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * keep the board working on surfaces with no session provider (the embed tree,
    * and the tests, which mount the canvas bare).
    */
+  /**
+   * The action journal for THIS board — see `canvasActionJournal`. A ref rather
+   * than state: recording an action must never re-render the canvas, or the act
+   * of observing the board would change what is being observed.
+   */
+  const journal = useRef(createCanvasJournal());
+
   const liveSession = useOptionalLiveSession();
   const [localPresentMode, setLocalPresentMode] = useState(initialPresent);
   const presentMode = liveSession ? liveSession.presentMode : localPresentMode;
@@ -720,6 +731,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const drawingPoints = useRef<Array<{ x: number; y: number }>>([]);
   const canvasClipboard = useRef<{ nodes: CreationFlowNode[]; edges: Edge[] } | null>(null);
   const initialPromptSubmitted = useRef(false);
+  const modelComparisonStarted = useRef(false);
   const autoApplyRef = useRef(false);
   const mobileViewportFitted = useRef(false);
 
@@ -1275,6 +1287,29 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const scopedNodes = useMemo(() => nodes.filter((node) => scopedNodeIds.has(node.id)), [nodes, scopedNodeIds]);
 
   /**
+   * WHAT THE PERSON WAS LOOKING AT WHEN THEY ASKED.
+   *
+   * Scope and selection decide how much of the board a Brain turn can see, and
+   * the reported failure — "I don't see that file anywhere on the canvas", said
+   * about a file that was on the canvas — happened because the turn ran against
+   * ONE selected object. Neither the scope nor the selection that produced an
+   * answer was recorded anywhere, so the report could not show the reader the
+   * one fact that explained it. Recorded on CHANGE rather than per render, so
+   * the journal reads as a sequence of decisions rather than a render log.
+   */
+  const scopeSignature = `${resolvedScopeMode}:${scopedNodeIds.size}/${nodes.length}`;
+  const lastScopeSignature = useRef(scopeSignature);
+  useEffect(() => {
+    if (lastScopeSignature.current === scopeSignature) return;
+    lastScopeSignature.current = scopeSignature;
+    journal.current.record({
+      kind: 'user',
+      label: 'scope.change',
+      detail: `${resolvedScopeMode} · ${scopedNodeIds.size} of ${nodes.length} object(s) visible to Brain`,
+    });
+  }, [nodes.length, resolvedScopeMode, scopeSignature, scopedNodeIds.size]);
+
+  /**
    * The board is the source of truth for WHO IS ON IT; the shell is the source of
    * truth for who is on the CALL. Publishing the roster upward is what lets the
    * live bar show one set of people instead of the board and the room each
@@ -1421,6 +1456,17 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     const handle = window.setTimeout(() => {
       if (historyBaseline.current == null) historyBaseline.current = next;
       else if (historyBaseline.current !== next) {
+        // Every board mutation — palette, drag, delete, inspector edit, an AI
+        // proposal being applied, an undo — settles HERE, so this is the one
+        // place that can record what the person did without a dozen handlers
+        // each remembering to. See `describeGraphChange`.
+        try {
+          const change = describeGraphChange(
+            JSON.parse(historyBaseline.current) as { nodes: CreationFlowNode[]; edges: Edge[] },
+            { nodes, edges },
+          );
+          if (change) journal.current.record({ kind: 'user', label: change.label, detail: change.detail });
+        } catch { /* the journal must never be able to break the history stack */ }
         undoStack.current = [...undoStack.current.slice(-49), historyBaseline.current];
         historyBaseline.current = next;
         redoStack.current = [];
@@ -1438,11 +1484,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [setEdges, setNodes]);
 
   const undo = useCallback(() => {
-    const prior = undoStack.current.pop(); if (!prior) { setNotice(t('noticeNothingToUndo')); return; }
+    const prior = undoStack.current.pop(); if (!prior) { journal.current.record({ kind: 'user', label: 'undo', ok: false, detail: 'nothing to undo' }); setNotice(t('noticeNothingToUndo')); return; }
+    journal.current.record({ kind: 'user', label: 'undo' });
     redoStack.current.push(JSON.stringify({ nodes, edges })); restoreGraphState(prior); setNotice(t('noticeChangeUndone'));
   }, [edges, nodes, restoreGraphState]);
   const redo = useCallback(() => {
-    const next = redoStack.current.pop(); if (!next) { setNotice(t('noticeNothingToRedo')); return; }
+    const next = redoStack.current.pop(); if (!next) { journal.current.record({ kind: 'user', label: 'redo', ok: false, detail: 'nothing to redo' }); setNotice(t('noticeNothingToRedo')); return; }
+    journal.current.record({ kind: 'user', label: 'redo' });
     undoStack.current.push(JSON.stringify({ nodes, edges })); restoreGraphState(next); setNotice(t('noticeChangeRedone'));
   }, [edges, nodes, restoreGraphState]);
 
@@ -1808,10 +1856,16 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     let suggestion = '';
     for (const [index, file] of accepted.entries()) {
       const stub = stubs[index]!;
+      // Dropping four files and getting four cards is the moment a person stops
+      // being able to explain what happened — so the journal records each one,
+      // with the kind it BECAME. "guide.htm → attachment" is the single line that
+      // explains why the agent could not read it.
+      const importDone = journal.current.begin('user', 'file.import', `${file.name} · ${Math.max(1, Math.round(file.size / 1024))}KB`);
       try {
         const imported = await importCanvasFile(file, importLabel);
         const [first, ...rest] = imported.objects;
         if (!first) throw new Error('The file produced no object');
+        importDone({ ok: true, detail: `→ ${imported.objects.map((object) => object.kind).join(', ')}` });
         // The stub BECOMES the artifact — same id, same position — so the card a
         // person is already looking at fills in rather than being replaced by a
         // second one somewhere else on the board.
@@ -1832,7 +1886,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         objectKinds.push(first.kind, ...rest.map((object) => object.kind));
         notices.push(imported.notice);
         if (!suggestion) suggestion = imported.suggestedPrompt;
-      } catch {
+      } catch (error) {
+        importDone({ ok: false, detail: `unreadable — ${error instanceof Error ? error.message : 'import failed'}` });
         setNodes((current) => current.map((node) => node.id === stub.id
           ? { ...node, data: { ...node.data, status: importLabel('statusUnreadable'), importPending: false } as CreationNodeData }
           : node));
@@ -3251,11 +3306,29 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             recall: (query: string) => recallProjectEvermind(evermindProjectId, query).catch(() => null),
             learn: (answer: string, question: string) => teachProjectEvermindFromText(evermindProjectId, answer, question),
           } } : {}),
-          onTrace: (event) => setBrainTrace((current) => [...current, event]),
+          onTrace: (event) => {
+            // Every tool and MCP call, as it happens. The trace already existed
+            // for display; journalling it is what puts the CALLS beside the
+            // timings and the user's actions in one ordered record.
+            journal.current.record({
+              kind: 'tool', label: event.label, at: event.ts,
+              ...(event.isError === true ? { ok: false } : {}),
+              ...(event.category ? { detail: event.category } : {}),
+            });
+            setBrainTrace((current) => [...current, event]);
+          },
           conversation: groupConversation,
         });
       };
+      // The turn, start to finish — including the SCOPE it ran against, which is
+      // the fact that explained the reported "I don't see that file" answer and
+      // which nothing was recording.
+      const turnDone = journal.current.begin(
+        'turn', 'brain.turn',
+        `scope=${resolvedScopeMode} (${scopedNodes.length}/${nodes.length} objects) · ${request.slice(0, 80)}`,
+      );
       void runGroupTurn().then((answer) => {
+        turnDone({ ok: true, detail: `${proposalBuffer.current.length} proposed change(s)` });
         const changes = [...proposalBuffer.current];
         const shouldAutoApply = changes.length > 0 && (autoApplyRef.current || canvasChangesCanAutoApply(changes));
         if (answer.trim()) {
@@ -3280,6 +3353,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         if (persistence === 'server') void creationSessionsApi.recordOutcome(sessionId, { correlationId: requestMessageId, action: 'prompt.evaluate', phase: 'succeeded', actorType: 'brain', durationMs: performance.now() - promptStartedAt, metricKey: 'artifacts_proposed', metricValue: changes.length, unit: 'count' }).catch(() => undefined);
       }).catch((error) => {
         const detail = describeTurnError(error, 'noticeBrainFailed');
+        turnDone({ ok: false, detail });
         appendTimeline('system', detail, { scope: resolvedScopeMode, objectIds: [...scopedNodeIds], error: true }, `${requestMessageId}:error`);
         setThinking(false);
         setActiveAgentIds(new Set());
@@ -3329,13 +3403,95 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [appendTimeline, canvasActions, confirm, currentUserId, describeTurnError, effectiveSelectedIds, edges, evermindProjectId, members, memoryEnabled, modelSelection, nodes, persistence, prompt, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId, sessionMode, setEdges, setNodes, t, thinking, timeline, title]);
 
   useEffect(() => {
+    if (!hydrated.current || modelComparisonStarted.current || comparisonModelIds.length < 2) return;
+    const initial = timeline.find((message) => message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:'));
+    if (!initial?.body.trim()) return;
+    const completed = nodes.filter((node) => node.data.comparisonPrompt === initial.body && node.data.comparisonState === 'completed');
+    if (comparisonModelIds.every((model) => completed.some((node) => node.data.comparisonModel === model))) {
+      modelComparisonStarted.current = true;
+      return;
+    }
+
+    modelComparisonStarted.current = true;
+    initialPromptSubmitted.current = true;
+    const promptId = `comparison-prompt:${sessionId}`;
+    const resultIds = new Map(comparisonModelIds.map((model, index) => [model, `comparison-result:${index}:${sessionId}`]));
+    const promptNode: CreationFlowNode = {
+      id: promptId,
+      type: 'creation',
+      position: { x: 100, y: 180 },
+      data: {
+        kind: 'chat',
+        title: t('comparison.promptTitle'),
+        subtitle: initial.body,
+        status: t('comparison.sharedPrompt'),
+        comparisonPrompt: initial.body,
+      },
+    };
+    const resultNodes: CreationFlowNode[] = comparisonModelIds.map((model, index) => ({
+      id: resultIds.get(model)!,
+      type: 'creation',
+      position: { x: 620, y: 60 + index * 280 },
+      data: {
+        kind: 'document',
+        title: model,
+        subtitle: t('comparison.responseFrom', { model }),
+        status: t('comparison.executing'),
+        model,
+        comparisonModel: model,
+        comparisonPrompt: initial.body,
+        comparisonState: 'running',
+        markdown: t('comparison.executingWith', { model }),
+      },
+    }));
+    setNodes([promptNode, ...resultNodes]);
+    setEdges(comparisonModelIds.map((model) => ({
+      id: `comparison-edge:${resultIds.get(model)}`,
+      source: promptId,
+      target: resultIds.get(model)!,
+      type: 'smoothstep',
+      label: t('comparison.executesWith', { model }),
+      animated: true,
+    })));
+    setNotice(t('comparison.runningCount', { count: comparisonModelIds.length }));
+
+    void Promise.all(comparisonModelIds.map(async (model) => {
+      try {
+        const output = await executeModelComparison({ prompt: initial.body, model, persistence });
+        setNodes((current) => current.map((node) => node.id === resultIds.get(model) ? {
+          ...node,
+          data: {
+            ...node.data,
+            status: t('comparison.completed'),
+            comparisonState: 'completed',
+            markdown: output || t('comparison.emptyOutput'),
+          },
+        } : node));
+      } catch (error) {
+        setNodes((current) => current.map((node) => node.id === resultIds.get(model) ? {
+          ...node,
+          data: {
+            ...node.data,
+            status: t('comparison.failed'),
+            comparisonState: 'failed',
+            markdown: describeTurnError(error, 'noticeBrainFailed'),
+          },
+        } : node));
+      }
+    })).then(() => {
+      setNotice(t('comparison.finished'));
+    });
+  }, [comparisonModelIds, describeTurnError, nodes, persistence, sessionId, setEdges, setNodes, t, timeline]);
+
+  useEffect(() => {
+    if (comparisonModelIds.length >= 2) return;
     if (!hydrated.current || initialPromptSubmitted.current || thinking) return;
     const initial = timeline.find((message) => message.clientMessageId.startsWith('initial:') || message.clientMessageId.startsWith('claim:'));
     if (!initial || timeline.some((message) => message.messageRole === 'assistant')) return;
     initialPromptSubmitted.current = true;
     setPrompt(initial.body);
     evaluateCanvas(initial.body);
-  }, [thinking, timeline, evaluateCanvas]);
+  }, [comparisonModelIds.length, thinking, timeline, evaluateCanvas]);
 
   const applyProposedChanges = useCallback(async () => {
     const selected = proposedChanges.filter((change) => acceptedProposalIds.has(change.id));
@@ -4066,10 +4222,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const threeDNodes = useMemo(() => renderedNodes.filter((node) => node.hidden !== true), [renderedNodes]);
   const describeThreeD = useCallback((node: CreationFlowNode): Canvas3DDescriptor => {
     const definition = creationObjectDefinition(node.data.kind);
+    const comparisonModel = typeof node.data.comparisonModel === 'string' ? node.data.comparisonModel : '';
+    const comparisonPrompt = typeof node.data.comparisonPrompt === 'string' && !comparisonModel;
     return {
       label: node.data.title || t(`object.${node.data.kind}`),
       sublabel: node.data.status || node.data.subtitle,
-      group: t(`group.${definition.group}`),
+      group: comparisonModel
+        ? t('comparison.modelLayer', { model: comparisonModel })
+        : comparisonPrompt ? t('comparison.promptLayer') : t(`group.${definition.group}`),
       icon: definition.icon,
       accent: typeof node.data.accent === 'string' ? node.data.accent : minimapColor(node),
       // A generated object carries a picture of what it produced — a rendered
@@ -4166,7 +4326,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       ok: event.isError === true ? false : null,
       detail: [event.args === undefined ? '' : `args=${safeTraceJson(event.args)}`, event.result === undefined ? '' : `result=${safeTraceJson(event.result)}`].filter(Boolean).join(' '),
     })),
-  }, await captureDiagnosticsContext()), [allMembers.length, brainTrace, canvasActions.length, edges.length, effectiveSelectedIds, nodes, pendingInvitations.length, persistence, proposedChanges.length, realtimeState, resolvedScopeMode, sessionId, sessionRole, thinking, timeline, title]);
+    // What the person and the agent DID, with durations — the evidence that lets
+    // the report explain how the board got into the state it is in, rather than
+    // only restating that state back to whoever is already looking at it.
+    actions: journal.current.entries(),
+    // How much of the board the last turn could actually see. A turn scoped to a
+    // selection is why "I don't see that file anywhere on the canvas" could be
+    // said about a file that was on the canvas.
+    scopedObjectCount: scopedNodes.length,
+  }, await captureDiagnosticsContext()), [allMembers.length, brainTrace, canvasActions.length, edges.length, effectiveSelectedIds, nodes, pendingInvitations.length, persistence, proposedChanges.length, realtimeState, resolvedScopeMode, scopedNodes.length, sessionId, sessionRole, thinking, timeline, title]);
 
   /**
    * The diagnostics control does the whole job in one click: the report is on the
@@ -4558,6 +4726,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onSelect={selectThreeDObject}
           onMove={canEdit ? moveThreeDObjects : undefined}
           onExit={threeD.exit}
+          initialDepthMode={comparisonModelIds.length >= 2 ? 'group' : 'flow'}
         />}
 
         <RemoteCursors members={members} currentUserId={currentUserId} instance={flowRef.current} container={flowWrapRef.current} />
@@ -5458,8 +5627,8 @@ function ActivityInspector({ sessionId, objectId, persistence, role, members }: 
   </div>;
 }
 
-export function CreationCanvas({ sessionId, persistence = 'server', initialFocusId, initialShareOpen, initialPresent }: { sessionId: string; persistence?: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialPresent?: boolean }) {
+export function CreationCanvas({ sessionId, persistence = 'server', initialFocusId, initialShareOpen, initialPresent, initialModelComparisonIds }: { sessionId: string; persistence?: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialPresent?: boolean; initialModelComparisonIds?: readonly string[] }) {
   // The 3D scene publishes its view commands to the canvas rail rather than
   // carrying a toolbar of its own, so both live under one provider.
-  return <ReactFlowProvider><Canvas3DControlsProvider><CanvasInner sessionId={sessionId} persistence={persistence} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialPresent={initialPresent} /></Canvas3DControlsProvider></ReactFlowProvider>;
+  return <ReactFlowProvider><Canvas3DControlsProvider><CanvasInner sessionId={sessionId} persistence={persistence} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialPresent={initialPresent} initialModelComparisonIds={initialModelComparisonIds} /></Canvas3DControlsProvider></ReactFlowProvider>;
 }

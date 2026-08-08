@@ -83,8 +83,8 @@ export interface CanvasThreeDState {
  * lives here once. A canvas still owns what its objects LOOK like in the space
  * (its `describe` adapter) — only the switching is shared.
  */
-export function useCanvasThreeD(): CanvasThreeDState {
-  const [active, setActive] = useState(false);
+export function useCanvasThreeD(initialActive = false): CanvasThreeDState {
+  const [active, setActive] = useState(initialActive);
   const toggle = useCallback(() => setActive((current) => !current), []);
   const exit = useCallback(() => setActive(false), []);
   return useMemo(

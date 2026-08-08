@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createLocalCreationSession, creationGraphFromSnapshot, creationStorageKey, listLocalCreationSessions, readLocalCreationSession, removeLocalCreationSession, writeLocalCreationSession } from './creationSessions';
+import { createLocalCreationSession, creationGraphFromSnapshot, creationStorageKey, ensureLocalToolCreationSession, listLocalCreationSessions, readLocalCreationSession, removeLocalCreationSession, writeLocalCreationSession } from './creationSessions';
 import type { CreationFlowNode } from '@/components/creation-canvas/CreationNode';
 
 describe('creationGraphFromSnapshot', () => {
@@ -44,6 +44,29 @@ describe('local Creation Session conversation', () => {
     localStorage.setItem(creationStorageKey(id), JSON.stringify(session));
     expect(readLocalCreationSession(id)?.nodes.some((node) => node.data.kind === 'chat')).toBe(false);
     expect(readLocalCreationSession(id)?.timeline?.[0]?.body).toBe('Compare these projects');
+  });
+});
+
+describe('local tool canvas', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('places a catalog tool on a stable, focused canvas', () => {
+    const tool = { id: 'ai-dev-maturity', name: 'AI Development Maturity', about: 'Assess delivery maturity.', icon: '◆' };
+    const first = ensureLocalToolCreationSession(tool);
+    const snapshot = readLocalCreationSession(first.sessionId);
+
+    expect(first).toEqual({ sessionId: 'local-tool-ai-dev-maturity', focusId: 'tool:ai-dev-maturity' });
+    expect(snapshot?.nodes).toHaveLength(1);
+    expect(snapshot?.nodes[0]).toMatchObject({
+      id: first.focusId,
+      data: { kind: 'diagnostics', toolId: tool.id, title: tool.name },
+    });
+    expect(listLocalCreationSessions()).toEqual([]);
+
+    snapshot!.nodes[0]!.data.toolResult = { headline: 'Level 3' };
+    writeLocalCreationSession(first.sessionId, snapshot!);
+    expect(ensureLocalToolCreationSession(tool)).toEqual(first);
+    expect(readLocalCreationSession(first.sessionId)?.nodes[0]?.data.toolResult).toEqual({ headline: 'Level 3' });
   });
 });
 

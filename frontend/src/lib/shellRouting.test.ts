@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { classifyShell } from './shellRouting';
+import { classifyGuestBrainstormEntry, classifyShell } from './shellRouting';
+
+describe('classifyGuestBrainstormEntry', () => {
+  it('does not mount the legacy redirect before the browser resolves ?room=', () => {
+    expect(classifyGuestBrainstormEntry(undefined)).toBe('resolving');
+    expect(classifyGuestBrainstormEntry('dzqnn3qc9h23')).toBe('room');
+    expect(classifyGuestBrainstormEntry(null)).toBe('legacy');
+  });
+});
 
 describe('classifyShell — app-shell deny-list model [1557]', () => {
   it('renders full-screen routes with no chrome', () => {

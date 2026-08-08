@@ -126,7 +126,11 @@
 .realEndpoint {
   border-color: var(--coral-bright);
   background: var(--coral-bright);
-  color: var(--bg-page, #08101e);
+  /* Text ON the coral fill. `--bg-page` is not a declared token, so in the theme
+     where the literal fallback applied this read as near-black on coral in BOTH
+     themes — including the one where the page is light. `--text-on-accent` is the
+     token that exists for exactly this: legible against an accent fill. */
+  color: var(--text-on-accent);
 }
 
 .realEndpoint small {

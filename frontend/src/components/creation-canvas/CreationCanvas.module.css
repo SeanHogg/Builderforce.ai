@@ -1636,6 +1636,7 @@
    present their downloads the same way a document does. */
 .cardActions { display:flex; flex-wrap:wrap; gap:4px; }
 .cardActions button {
+  display:inline-flex; align-items:center; gap:4px;
   min-height:22px; padding:3px 9px;
   border:1px solid var(--canvas-line,#e3ddd3); border-radius:6px;
   background:var(--canvas-widget-surface,#fff); color:var(--canvas-ink,#1c1917);
@@ -1648,6 +1649,11 @@
 /* The same row read at panel scale. A card is zoomed with the board and can be
    compact; the inspector is fixed-size UI and its controls must stay tappable. */
 .panelActions.panelActions button { min-height:30px; padding:6px 11px; font-size:12px; }
+/* The leading glyph gives each format a distinct silhouette so a familiar action
+   is reachable without reading the row. Muted so it reads as a marker, not as a
+   second label competing with the format name. */
+.cardActionIcon { font-size:1.05em; line-height:1; opacity:.75; }
+.panelActions.panelActions .cardActionIcon { font-size:1.1em; }
 
 .docEditor { display:grid; gap:5px; min-height:0; }
 .docToolbar {

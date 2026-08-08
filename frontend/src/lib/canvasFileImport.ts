@@ -10,6 +10,7 @@
  */
 import { isTabularFile, parseTabularText, profileTabular, type TabularSource } from './canvasTabularData';
 import { fileExtension, fileStem } from './canvasDocuments';
+import { htmlToMarkdown } from './richText';
 import {
   MAX_PARSEABLE_BYTES, PAGE_BREAK_MARKER, readDocx, readPdf, readPptx, readXlsx, rtfToText,
   type OfficeSlide, type WorkbookSheet,
@@ -32,6 +33,26 @@ const LANGUAGE_BY_EXTENSION: Readonly<Record<string, string>> = {
   yaml: 'yaml', yml: 'yaml', toml: 'toml', ini: 'ini', xml: 'xml', css: 'css', scss: 'scss',
   html: 'html', htm: 'html', json5: 'json',
 };
+
+/**
+ * A whole page rather than a snippet. `<html>`, a doctype or a `<body>` are the
+ * structural markers a fragment does not carry; a `<title>` alone is enough for
+ * the "saved from a browser" case that omits the doctype.
+ */
+export function isHtmlDocument(source: string): boolean {
+  const head = source.slice(0, 4_000);
+  return /<!doctype\s+html/i.test(head)
+    || /<html[\s>]/i.test(head)
+    || /<body[\s>]/i.test(head)
+    || /<title[\s>]/i.test(head);
+}
+
+/** The page's own `<title>`, which is nearly always better than the file name. */
+export function htmlDocumentTitle(source: string): string | null {
+  const match = /<title[^>]*>([\s\S]{1,300}?)<\/title>/i.exec(source.slice(0, 8_000));
+  const title = match?.[1]?.replace(/\s+/g, ' ').trim();
+  return title || null;
+}
 
 export type ImportTranslator = (key: string, values?: Record<string, string | number>) => string;
 
@@ -407,6 +428,38 @@ async function deriveObjects(file: File, t: ImportTranslator): Promise<ImportedC
       subtitle: t('documentShape', { words: source.split(/\s+/).length.toLocaleString() }),
     })];
   }
+  /**
+   * An HTML DOCUMENT is a document, not source code.
+   *
+   * `.htm`/`.html` matched CODE_FILE, so a sales guide dropped on the board
+   * landed as a Code object showing `<!doctype html><html><head><meta charset…`
+   * — the person saw their document as a wall of markup, and because a Code
+   * object is not a document, `canvas_read_document` could not read it either.
+   * So the file was both unreadable to the human and invisible to the agent they
+   * asked about it.
+   *
+   * Converted through the same `htmlToMarkdown` the rich-text editor uses, it
+   * becomes an ordinary Document: readable on the card, and read page-by-page by
+   * the Brain like any other. The raw markup is kept on `sourceHtml` so nothing
+   * is lost and an HTML export is still exact.
+   *
+   * A FRAGMENT (a snippet with no document structure) stays code — pasting a
+   * `<div>` into a board is a code gesture, and turning it into prose would be
+   * the opposite mistake.
+   */
+  if (!oversized && /^html?$/i.test(extension) && isHtmlDocument(source)) {
+    const markdown = htmlToMarkdown(source);
+    if (markdown.trim()) {
+      return [documentObject(file, markdown, t, {
+        sourceFormat: 'HTML',
+        outputFormat: 'HTML',
+        sourceHtml: source.slice(0, MAX_PARSEABLE_BYTES),
+        ...(htmlDocumentTitle(source) ? { documentTitle: htmlDocumentTitle(source)! } : {}),
+        subtitle: t('documentShape', { words: markdown.split(/\s+/).length.toLocaleString() }),
+      })];
+    }
+  }
+
   const text = source.slice(0, MAX_FILE_PREVIEW_CHARS);
 
   if (CODE_FILE.test(file.name)) {

@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { contrastText } from '@/lib/contrastText';
@@ -17,8 +18,9 @@ import {
   tierColor,
   type ModelRecord,
 } from '@/lib/modelCatalog';
+import { appendModelComparison, MAX_MODEL_COMPARISON } from '@/lib/modelComparisonRequest';
 
-const MAX_COMPARE = 3;
+const MAX_COMPARE = MAX_MODEL_COMPARISON;
 
 type TierFilter = 'all' | 'free' | 'paid' | 'builderforce';
 type PriceLimit = 'any' | '1' | '5' | '10' | '25' | '50';
@@ -223,13 +225,16 @@ function CompareTray({
   onRemove,
   onClear,
   onCompare,
+  onExecute,
 }: {
   selected: ModelRecord[];
   onRemove: (id: string) => void;
   onClear: () => void;
   onCompare: () => void;
+  onExecute: (prompt: string) => void;
 }) {
   const t = useTranslations('models');
+  const [prompt, setPrompt] = useState('');
   if (selected.length === 0) return null;
   return (
     <div
@@ -272,15 +277,28 @@ function CompareTray({
         ))}
       </div>
       <div style={{ padding: 10, borderTop: '1px solid var(--border-subtle)' }}>
+        <label style={{ display: 'grid', gap: 6, marginBottom: 8, fontSize: 12, color: 'var(--text-secondary)' }}>
+          {t('compare.promptLabel')}
+          <textarea
+            value={prompt}
+            onChange={(event) => setPrompt(event.target.value)}
+            placeholder={t('compare.promptPlaceholder')}
+            rows={3}
+            style={{ width: '100%', resize: 'vertical', borderRadius: 8, border: '1px solid var(--border-subtle)', background: 'var(--bg-base)', color: 'var(--text-primary)', padding: 9, font: 'inherit' }}
+          />
+        </label>
         <button
           type="button"
-          onClick={onCompare}
-          disabled={selected.length < 2}
+          onClick={() => onExecute(prompt)}
+          disabled={selected.length < 2 || !prompt.trim()}
           className="btn btn-primary"
-          style={{ width: '100%', padding: '10px 0', opacity: selected.length < 2 ? 0.5 : 1 }}
-          title={selected.length < 2 ? t('compare.needTwoTitle') : t('compare.compareTitle')}
+          style={{ width: '100%', padding: '10px 0', opacity: selected.length < 2 || !prompt.trim() ? 0.5 : 1 }}
+          title={selected.length < 2 ? t('compare.needTwoTitle') : !prompt.trim() ? t('compare.needPromptTitle') : t('compare.executeTitle')}
         >
-          {t('compare.button')}
+          {t('compare.executeButton')}
+        </button>
+        <button type="button" onClick={onCompare} disabled={selected.length < 2} className="btn btn-secondary" style={{ width: '100%', padding: '8px 0', marginTop: 8 }}>
+          {t('compare.specsButton')}
         </button>
       </div>
     </div>
@@ -365,6 +383,7 @@ function ModelCard({
 
 export function ModelsExplorer({ search, viewMode }: { search: string; viewMode: ViewMode }) {
   const t = useTranslations('models');
+  const router = useRouter();
   const [models, setModels] = useState<ModelRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -596,6 +615,10 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
         onRemove={(id) => setSelectedIds((prev) => prev.filter((x) => x !== id))}
         onClear={() => setSelectedIds([])}
         onCompare={() => setCompareOpen(true)}
+        onExecute={(prompt) => {
+          const params = appendModelComparison(new URLSearchParams({ prompt: prompt.trim() }), selectedModels.map((model) => model.id));
+          router.push(`/create/new?${params.toString()}`);
+        }}
       />
 
       {/* Comparison table slide-out (wide) */}
