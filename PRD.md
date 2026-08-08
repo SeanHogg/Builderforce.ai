@@ -1,125 +1,165 @@
-> **PRD** — drafted by Kevin BA/PM/PO (Durable) · task #295
-> _Each agent that updates this PRD signs its change below._
+# Product Requirements Document: Cross-Project Health Dashboard
 
-# PRD: Guided (Interactive) and Bulk (Import) Input Modes
+> **PRD** — drafted by Ada (Sr. Product Mgr) · task #146
+> _Each agent that updates this PRD signs its change below._
 
 ## Problem & Goal
 
-Users need flexibility in how they provide data and configuration inputs to the system. Currently, a single rigid entry point forces all users through the same flow regardless of their context, technical proficiency, or volume of data. Power users and integrators are blocked from automating high-volume operations, while new or occasional users lack structured guidance through complex inputs.
+**Problem:** Leadership has no single, at-a-glance view of health across all projects in the portfolio. Status signals — completion, blockers, risk, and recommended next actions — are scattered across different tools or missing entirely. This slows decision‑making and causes risks to go unnoticed until they escalate.
 
-**Goal:** Implement two first-class input modes — a **Guided (Interactive) Mode** for step-by-step assisted entry and a **Bulk (Import) Mode** for high-volume, file-based or programmatic ingestion — so that all user segments can work efficiently within a single product surface.
-
----
+**Goal:** Deliver a cross‑project health dashboard that consolidates the status of all 5 portfolio projects into one scannable view. Each project gets a one‑page health card with Red/Amber/Green status, completion metrics, key blockers, risk level, and a concrete recommended next action. An above‑the‑fold portfolio snapshot summarises overall health and surfaces the top‑3 priority actions.
 
 ## Target Users / ICP Roles
 
-| Role | Primary Mode | Context |
-|---|---|---|
-| End User / Operator | Guided | Occasional, low-volume input; benefits from validation prompts and contextual help |
-| Power User | Both | Switches between modes depending on task size |
-| Data Administrator | Bulk | Manages large datasets; imports from external systems or spreadsheets |
-| Developer / Integrator | Bulk | Automates ingestion via file uploads or API-driven import pipelines |
-| Product Manager / Analyst | Guided | Creates one-off configurations or reviews inputs interactively |
-
----
+- **Engineering Leads / VPs** — portfolio pulse for executive reviews.
+- **Program Managers / TPMs** — triaging risk, identifying stuck projects, preparing status reports.
+- **Product Owners** — understanding cross‑team dependencies and flagging blockages.
+- **Delivery Managers / Scrum Masters** — tracking project momentum and blockers.
 
 ## Scope
 
 ### In Scope
 
-- Guided Mode: multi-step interactive form/wizard flow with inline validation, contextual help, and progress indicators
-- Bulk Mode: file-based import (CSV, JSON, XLSX) with template download, field mapping, validation summary, and error reporting
-- Unified data schema enforced across both modes
-- Pre-import preview and dry-run capability in Bulk Mode
-- Post-submission confirmation and summary for both modes
-- Error handling and recovery paths in both modes
-- Mode-selection entry point accessible from the primary action surface
+- A committed, version‑controlled Markdown artifact (`CROSS-PROJECT-HEALTH-DASHBOARD.md`) at the repository root, generated from the latest board data.
+- Five per‑project health cards, each containing: project name, status, completion %, RAG indicator with rationale, task summary, key blocker, risk level, and recommended next action.
+- An above‑the‑fold Portfolio Snapshot: total projects, RAG colour‑coded counts, overall portfolio health status, and top‑3 priority actions.
+- A documented RAG rules table defining the trigger conditions for Red, Amber, and Green.
+- A timestamp on every generated report so freshness is verifiable.
+- The dashboard component (`CrossProjectHealthDashboard.tsx`) and its data source (`portfolioHealthData.tsx`) that produce the artifact.
 
 ### Out of Scope
 
-- Real-time streaming ingestion or webhook-based input
-- API-only bulk endpoints (covered separately in API PRD)
-- Automated scheduling or recurring imports
-- Machine-learning-assisted field suggestions beyond basic format validation
-- Editing or deleting records post-submission (covered by record management PRD)
+- Real‑time streaming or websocket‑based updates; the artifact is a point‑in‑time snapshot.
+- Interactive filtering, drill‑down, or customisation of cards (V1 is read‑only and fixed‑layout).
+- Backend API or database schema changes.
+- Modifying underlying project management tools or workflows.
+- Alerting, notification, or escalation triggers (future iteration).
+- Historical trend lines or time‑series views.
 
 ---
 
 ## Functional Requirements
 
-### FR-1 — Mode Selection
+### FR‑1: One‑Page Health Card Per Project
 
-- **FR-1.1** The system must present a clear mode-selection step (or toggle) at the entry point, allowing users to choose between Guided and Bulk modes before beginning input.
-- **FR-1.2** The selected mode must be persisted for the duration of the session and surfaced in the UI header/breadcrumb.
-- **FR-1.3** Users must be able to switch modes before final submission without losing previously entered valid data where a mapping is possible.
+Each project MUST render a health card with the following elements:
 
----
+| Element | Description |
+|---------|-------------|
+| **Project Name** | Unique project identifier (e.g. "BuilderForce.AI") |
+| **Overall Status** | Human‑readable label: On Track, At Risk, Blocked, or On Hold — derived from RAG + completion context |
+| **Completion %** | Numeric 0–100 shown as a horizontal progress bar with percentage label |
+| **RAG Indicator** | Traffic‑light icon (🔴 Red / 🟡 Amber / 🟢 Green) with a short text rationale (≤140 chars) explaining why the colour was assigned |
+| **Task Summary** | Concise summary, e.g. "13 of 19 tasks done (68%)" or "No tasks created" |
+| **Key Blocker** | Single most critical blocker, if any; otherwise "None" |
+| **Risk Level** | Enum: High / Medium / Low with a one‑line rationale |
+| **Recommended Next Action** | Clear, actionable step the responsible person should take |
 
-### FR-2 — Guided (Interactive) Mode
+### FR‑2: Completion % Progress Bar
 
-- **FR-2.1** The flow must be broken into discrete, named steps rendered as a linear wizard with a visible progress indicator (e.g., step X of N).
-- **FR-2.2** Each step must expose only the fields relevant to that step; users must not be shown the full form at once unless they explicitly request an expanded view.
-- **FR-2.3** Inline, real-time field validation must trigger on blur and on attempted step advancement, surfacing human-readable error messages adjacent to the offending field.
-- **FR-2.4** Contextual help text or tooltips must be available for every required field and for any field with a non-obvious format requirement.
-- **FR-2.5** Users must be able to navigate backward to previous steps without losing data entered in subsequent steps.
-- **FR-2.6** A review/summary step must be presented before final submission, displaying all entered values with inline edit links per section.
-- **FR-2.7** On successful submission, a confirmation screen must display a unique reference ID and a summary of the created/updated record(s).
+- Calculated as: `(completed tasks) / (total tasks) × 100`
+- Displayed as a segmented bar, colour‑coded:
+  - &lt; 30% → red
+  - 30–70% → amber
+  - &gt; 70% → green
+- If total tasks = 0, bar is empty and shows "0%" or "N/A".
 
----
+### FR‑3: RAG Indicator Logic & Rationale
 
-### FR-3 — Bulk (Import) Mode
+| Colour | Trigger Conditions (any one true) |
+|--------|----------------------------------|
+| 🔴 **Red** | Build broken (latest CI failed); 0% progress with tasks defined; empty project (no tasks); stalled backlog (&gt;10 tasks stuck for &gt;X days); on‑hold status |
+| 🟡 **Amber** | Completion 30–70% without passing all acceptance tests; some failing tests but build passing; at risk due to incomplete localisation/blockers |
+| 🟢 **Green** | &gt;70% completion and all critical checks passing |
 
-- **FR-3.1** The system must provide a downloadable import template in at least CSV and XLSX formats, pre-populated with correct column headers and one example data row.
-- **FR-3.2** Users must be able to upload files via drag-and-drop or a file-browser picker; supported formats are CSV, JSON, and XLSX.
-- **FR-3.3** Maximum supported file size must be 50 MB; files exceeding this limit must be rejected at upload time with a clear error message.
-- **FR-3.4** After upload, the system must display a field-mapping interface allowing users to confirm or adjust the mapping between source columns and target schema fields.
-- **FR-3.5** A dry-run (pre-import validation) must execute automatically after field mapping is confirmed, before any data is committed.
-- **FR-3.6** The dry-run results must be presented as a structured validation report showing: total rows detected, count of valid rows, count of rows with errors, and a paginated list of row-level errors with column reference and plain-language description.
-- **FR-3.7** Users must be able to download an error report (CSV) detailing all failed rows with error reasons.
-- **FR-3.8** Users must choose to either (a) import only the valid rows and skip errored rows, or (b) abort the import and fix the source file.
-- **FR-3.9** On successful import completion, a confirmation screen must display the total records imported, total skipped, and a downloadable import summary report.
-- **FR-3.10** The system must process imports asynchronously for files containing more than 500 rows, providing a progress indicator and notifying the user via in-app notification (and email if configured) when processing completes.
+- Rationale text is auto‑generated from the dominant condition, e.g. "Build broken (CI failure)", "40 backlog items stalled", "3 failing tests".
 
----
+### FR‑4: Portfolio Snapshot (Above the Fold)
 
-### FR-4 — Shared / Cross-Mode Requirements
+The dashboard MUST include a snapshot section at the top containing:
 
-- **FR-4.1** Both modes must enforce the identical data validation ruleset derived from the canonical data schema.
-- **FR-4.2** Both modes must support undo/cancel at any point before final submission, with a confirmation dialog warning of data loss.
-- **FR-4.3** All submission events (success and failure) must be logged to the audit trail with user ID, timestamp, mode used, and record count.
-- **FR-4.4** Both modes must be fully accessible per WCAG 2.1 AA standards (keyboard navigable, screen-reader compatible, sufficient color contrast).
-- **FR-4.5** Both modes must be responsive and usable on viewport widths from 768 px upward.
+- **Total project count:** 5
+- **Status breakdown** with labelled counts: 🟢 Green: N, 🟡 Amber: N, 🔴 Red: N
+- **Overall portfolio health indicator:** derived from the worst project status (e.g. "RED" if any project is Red)
+- **Priority Actions** (ordered list, top‑3):
+  1. Fix Hired.Video build
+  2. Kickoff RumbleDating
+  3. Define or archive pattysnob.com
+
+### FR‑5: Data Freshness & Timestamp
+
+- Every generated report MUST carry a generation timestamp in the header (ISO 8601 or human‑readable UTC).
+- Data sources are project boards; the snapshot reflects board state at generation time.
+- The report is regenerated whenever underlying project data changes.
+
+### FR‑6: Detailed Analysis of 5 Projects
+
+The dashboard MUST analyse and surface status for all five portfolio projects:
+
+| Project | Status | Completion | Key Concern |
+|---------|--------|-----------|-------------|
+| **BuilderForce.AI** | Active | ~68% (13/19 done) | 3 failing tests, blocked/stuck items |
+| **Hired.Video** | Active | ~11% | Build broken, French localisation gaps |
+| **RumbleDating** | Active | 0% (0/40 started) | Stalled — all 40 tasks in backlog |
+| **BurnRateOS** | On Hold | 0% (0/9 started) | Deprioritised; needs re‑engagement date |
+| **pattysnob.com** | Active | N/A (0 tasks) | Empty project shell — no scope or tasks |
+
+For each project the card must surface: status, completion %, risk level, key blocker, and recommended next action.
 
 ---
 
 ## Acceptance Criteria
 
-| ID | Criterion | Verification Method |
-|---|---|---|
-| AC-1 | Mode selector is visible on the entry point screen and routes user to the correct flow | Manual / E2E test |
-| AC-2 | Guided Mode wizard displays step progress and blocks advancement on validation failure | E2E test |
-| AC-3 | All Guided Mode fields surface inline errors within 300 ms of blur | Automated UI test |
-| AC-4 | Review step in Guided Mode lists all entered values with functional edit links | Manual / E2E test |
-| AC-5 | Bulk Mode accepts CSV, JSON, XLSX; rejects unsupported formats and files > 50 MB with correct error messaging | Automated + manual test |
-| AC-6 | Template download produces a file with correct headers and one example row | Automated test |
-| AC-7 | Field-mapping interface renders after upload and persists user adjustments | E2E test |
-| AC-8 | Dry-run report accurately reflects row-level validation results against a known test fixture | Automated test with fixture data |
-| AC-9 | Error report download contains all failed rows with error reasons in CSV format | Automated test |
-| AC-10 | Imports > 500 rows are processed asynchronously; user receives in-app notification on completion | Integration test |
-| AC-11 | Audit log entry created for every submission attempt (both modes) with required metadata fields | Automated / log assertion test |
-| AC-12 | Both modes pass WCAG 2.1 AA audit (zero critical violations) | Automated axe-core scan + manual keyboard test |
-| AC-13 | Switching modes before submission retains mappable field data | E2E test |
-| AC-14 | Cancelling at any step in either mode does not persist partial data | E2E test |
+| ID | Criterion |
+|----|-----------|
+| **AC‑1** | One health card rendered per project — all 5 cards present. |
+| **AC‑2** | Each card shows a Red / Amber / Green status indicator matching the RAG rules in FR‑3. |
+| **AC‑3** | Completion % is visible on every card, including 0% and N/A cases. |
+| **AC‑4** | Every card names one primary key blocker (or "None" when none exists). |
+| **AC‑5** | Every card includes one concrete, time‑bound recommended next action. |
+| **AC‑6** | Portfolio Snapshot section renders above the fold with total count, RAG breakdown, overall health, and top‑3 actions. |
+| **AC‑7** | Top‑3 portfolio actions are listed exactly as: (1) Fix Hired.Video build, (2) Kickoff RumbleDating, (3) Define or archive pattysnob.com. |
+| **AC‑8** | Every generated report carries a generation timestamp. |
+| **AC‑9** | RAG colours are applied consistently across all cards and match the documented trigger rules. |
+| **AC‑10** | The artifact is scannable in ≤30 seconds — one glance per project. |
 
 ---
 
-## Out of Scope
+## RAG Status Rules (Applied)
 
-- API-only or SDK-driven bulk ingestion endpoints
-- Webhook or event-stream based real-time input
-- Scheduled or recurring automated imports
-- Post-submission record editing (handled by record management module)
-- AI/ML-assisted auto-mapping or data enrichment
-- Mobile viewports below 768 px width
-- Multi-file batch uploads in a single import session
-- Localization / i18n beyond English in the initial release
+| Colour | Conditions | Projects in This Colour |
+|--------|-----------|--------------------------|
+| 🟢 Green | &gt;70% completion, no blockers, all checks passing | _(none — all projects have blockers or are stalled)_ |
+| 🟡 Amber | Active with known blockers (failing tests, on‑hold with defined re‑engagement) | BuilderForce.AI, BurnRateOS |
+| 🔴 Red | Build broken, 0% complete with active status, no tasks defined | Hired.Video, RumbleDating, pattysnob.com |
+
+---
+
+## Assumptions & Constraints
+
+- The dashboard reflects a **point‑in‑time snapshot** generated from current board state; it is not a live dashboard.
+- Project completion % is derived from `(done tasks) / (total tasks)` on each project board. Numbers may differ from sub‑portfolio metrics that weigh story points differently.
+- The "On Hold" status (BurnRateOS) is treated as Amber under FR‑3 when the hold is intentional and documented; it is Red when no re‑engagement date exists.
+- The top‑3 priority actions are derived from the most critical blockers across the portfolio and are reviewed with each regeneration.
+
+---
+
+## Requirements
+
+_Owned by the business-analyst — to be authored._
+
+## Design
+
+_Owned by the architect — to be authored._
+
+## Implementation Notes
+
+_Owned by the developer — to be authored._
+
+## Review
+
+_Owned by the code-reviewer — to be authored._
+
+## Test Evidence
+
+_Owned by the qa-tester — to be authored._
