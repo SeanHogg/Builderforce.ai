@@ -94,16 +94,147 @@
   margin-top: clamp(10px, 2vw, 20px);
 }
 
+/*
+ * The board carries two chrome bands — a session bar on top and the team roster
+ * along the bottom — so it reads as a live room with people in it rather than an
+ * illustration of one. Both survive the blur as distinct horizontal bands, which
+ * is the point: the silhouette has to say "session" before anything is legible.
+ * Heights are declared once here and consumed by `.field` and `.promptWrap`, so
+ * the composer lane and the object field can never drift out of the band.
+ */
 .board {
+  --board-chrome: 38px;
+  --board-team: 44px;
+  --board-composer-lane: 118px;
+
   position: relative;
   overflow: hidden;
-  height: clamp(390px, 54vh, 540px);
+  height: clamp(420px, 56vh, 560px);
   border: 1px solid var(--border-subtle);
-  border-radius: 20px;
+  border-radius: var(--radius-xl);
   background-color: var(--bg-surface);
   background-image: radial-gradient(var(--border-subtle) 1px, transparent 1px);
   background-size: 22px 22px;
   box-shadow: 0 24px 60px var(--shadow-coral-soft), inset 0 1px 0 var(--surface-inset-highlight);
+}
+
+/* ── Session bar: live dot, what this board is, who is on it ── */
+.chrome {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: var(--board-chrome);
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-sunken);
+}
+.liveDot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .liveDot { animation: heroPulse 2.2s ease-in-out infinite; }
+}
+.chromeTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.facepile {
+  flex: none;
+  display: flex;
+}
+.face {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--bg-surface);
+  border-radius: 50%;
+  background: var(--surface-interactive);
+  color: var(--text-secondary);
+  font-size: 0.48rem;
+  font-weight: 700;
+  font-style: normal;
+}
+.face + .face { margin-left: -6px; }
+.face:nth-child(1) { background: var(--coral-bright); color: var(--bg-surface); }
+.face:nth-child(2) { background: var(--violet-bright); color: var(--bg-surface); }
+.face:nth-child(3) { background: var(--amber-bright); color: var(--bg-surface); }
+
+/* ── Team roster: the always-on agents, where the product puts them ── */
+.team {
+  position: absolute;
+  inset: auto 0 0;
+  z-index: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--board-team);
+  padding: 0 14px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+.teamLabel {
+  flex: none;
+  margin-right: 4px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  font-weight: 600;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+.teamChip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 11px 4px 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: border-color 0.22s, box-shadow 0.22s;
+}
+.teamChip:hover,
+.teamChip:focus-visible {
+  border-color: var(--border-accent);
+}
+.teamChipSelected {
+  position: relative;
+  z-index: 2;
+  border-color: var(--coral-bright);
+  box-shadow: 0 10px 26px var(--shadow-coral-mid);
+}
+.teamAvatar {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--coral-bright), var(--cyan-bright));
+  color: var(--bg-surface);
+  font-size: 0.46rem;
+  font-weight: 700;
+  font-style: normal;
 }
 
 /* The veil blurs whatever is behind it while its mask cuts a soft lens around
@@ -139,7 +270,7 @@
  */
 .field {
   position: absolute;
-  inset: 0 0 152px;
+  inset: var(--board-chrome) 0 calc(var(--board-team) + var(--board-composer-lane));
 }
 
 .wires {
@@ -170,7 +301,7 @@
   width: clamp(150px, 15vw, 196px);
   padding: 11px 13px;
   border: 1px solid var(--border-subtle);
-  border-radius: 13px;
+  border-radius: var(--radius-lg);
   /* --bg-elevated, not --surface-card-strong: the board ground is --bg-surface,
      which is pure white in light mode, so a translucent white card would wash
      out against it. This reads as a distinct card in BOTH themes. */
@@ -197,12 +328,20 @@
   .node { transition: border-color 0.22s; }
   .node:hover, .node:focus-visible { transform: none; }
 }
+/* The one agent on the board is tinted rather than merely labelled — an agent is
+   a teammate, so it should read as a different KIND of object at a glance, and at
+   blur the tint is the only thing that still carries that. */
+.nodeAgent {
+  border-color: var(--border-accent);
+  background: linear-gradient(180deg, var(--surface-coral-soft), var(--bg-elevated) 62%);
+}
+
 .nodeKind {
   display: block;
   margin-bottom: 5px;
   color: var(--cyan-bright);
-  font-family: var(--font-display);
-  font-size: 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
   font-weight: 700;
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -268,42 +407,22 @@
 .promptWrap {
   position: absolute;
   left: 50%;
-  bottom: 20px;
+  /* Rides above the team roster rather than over it — the roster is part of the
+     board's chrome, so the composer's exclusive lane starts where it ends. */
+  bottom: calc(var(--board-team) + 16px);
   transform: translateX(-50%);
   z-index: 3;
   width: min(600px, calc(100% - 40px));
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 0;
 }
 .prompt {
   width: 100%;
   --prompt-panel-bg: var(--bg-elevated);
   --prompt-panel-border: var(--border-accent);
   --prompt-panel-shadow: 0 18px 44px var(--shadow-coral-mid), inset 0 1px 0 var(--surface-inset-highlight);
-}
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-}
-.chip {
-  padding: 6px 13px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
-  font-size: 0.78rem;
-  cursor: pointer;
-  transition: border-color 0.2s, color 0.2s, background 0.2s;
-}
-.chip:hover,
-.chip:focus-visible {
-  border-color: var(--border-accent);
-  background: var(--surface-interactive);
-  color: var(--text-primary);
 }
 
 /* ── Guest reassurance + scroll affordance ── */
@@ -407,7 +526,4 @@
   --prompt-panel-border: var(--border-accent);
   --prompt-panel-shadow: 0 18px 44px rgba(0, 0, 0, 0.45), inset 0 1px 0 var(--surface-inset-highlight);
   backdrop-filter: blur(14px);
-}
-.heroBrain .chip {
-  backdrop-filter: blur(10px);
 }

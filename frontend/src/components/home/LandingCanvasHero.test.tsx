@@ -35,9 +35,21 @@ const OBJECTS = [
   { kind: 'Research', title: 'Customer interviews', detail: '12 calls', prefill: 'Synthesize the interviews' },
   { kind: 'Prototype', title: 'Renewal portal', detail: 'Ready to test', prefill: 'Build the prototype' },
 ];
+/** The always-on roster along the bottom of the board — agents are teammates. */
+const TEAM = [
+  { short: 'CM', name: 'CMO', prefill: 'Bring the CMO in to plan this campaign' },
+  { short: 'CF', name: 'CFO', prefill: 'Bring the CFO in to forecast the budget' },
+  { short: 'CT', name: 'CTO', prefill: 'Bring the CTO in to review the ship path' },
+];
+
 const raw: Record<string, unknown> = {
   'canvas.objects': OBJECTS,
-  heroExamples: ['A pricing page', 'A campaign workflow'],
+  'canvas.team': TEAM,
+  'canvas.presenceInitials': ['SH', 'JR', 'TK'],
+  items: [
+    { label: 'Mobile app design', prompt: 'Design a mobile app with its key screens and user flow.' },
+    { label: 'Slides', prompt: 'Create a polished slide deck.' },
+  ],
 };
 
 vi.mock('next-intl', () => ({
@@ -106,6 +118,49 @@ describe('LandingCanvasHero', () => {
     expect(screen.getByLabelText('heroPromptPlaceholder')).toHaveValue('Review the pipeline');
     expect(screen.getByText('Revenue analyst').closest('button')).toHaveAttribute('aria-pressed', 'true');
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it('seeds the composer from an always-on teammate and clears the object selection', async () => {
+    render(<LandingCanvasHero />);
+    await waitFor(() => expect(screen.getByText('Revenue analyst')).toBeInTheDocument());
+
+    // Objects and teammates share ONE selection, so seeding from the roster has to
+    // release whichever object was pressed — two parallel selections would let the
+    // board claim two things seeded the same composer.
+    fireEvent.click(screen.getByText('Revenue analyst'));
+    expect(screen.getByText('Revenue analyst').closest('button')).toHaveAttribute('aria-pressed', 'true');
+
+    fireEvent.click(screen.getByText('CFO'));
+
+    expect(screen.getByLabelText('heroPromptPlaceholder')).toHaveValue('Bring the CFO in to forecast the budget');
+    expect(screen.getByText('CFO').closest('button')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Revenue analyst').closest('button')).toHaveAttribute('aria-pressed', 'false');
+    // The roster is an invitation, not a link — it must never navigate.
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it('shows the always-on roster and the session presence on the board', async () => {
+    render(<LandingCanvasHero />);
+    await screen.findByText('Q3 pipeline.csv');
+
+    for (const mate of TEAM) expect(screen.getByText(mate.name)).toBeInTheDocument();
+    expect(screen.getByText('canvas.alwaysOn')).toBeInTheDocument();
+    expect(screen.getByLabelText('canvas.presenceAria')).toBeInTheDocument();
+    expect(screen.getByText('canvas.sessionTitle')).toBeInTheDocument();
+  });
+
+  it('expands supported use cases below the homepage prompt and seeds the selected prompt', async () => {
+    render(<LandingCanvasHero />);
+    await screen.findByText('Q3 pipeline.csv');
+
+    const tab = screen.getByRole('button', { name: /tabLabel/ });
+    expect(tab).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(tab);
+    expect(tab).toHaveAttribute('aria-expanded', 'true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mobile app design' }));
+    expect(screen.getByLabelText('heroPromptPlaceholder')).toHaveValue('Design a mobile app with its key screens and user flow.');
+    expect(tab).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('reveals the board from the prompt and resets interactions on an outside click', async () => {

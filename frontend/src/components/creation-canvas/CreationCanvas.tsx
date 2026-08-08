@@ -88,6 +88,7 @@ import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useChatModelOptions } from '@/lib/useLlmModels';
 import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
+import { PromptUseCasePicker } from '@/components/PromptUseCasePicker';
 import { NEW_CHAT_MODE, normalizeChatMode, type ChatMode } from '@/lib/brain';
 import { runCanonicalCanvasGroupTurn } from '@/lib/creationAgentChat';
 import { buildBrowserCreativeArtifact, buildWebsiteAssets, creationDeliverables, creativeBrief, creativeMeshGeometry, creativePreviewImageUrl, evermindMediaArtifact, generateEvermindMedia, generateServerCreativeArtifact, mediaFrameDataUrl, navigableArtifactUrl, withCreationDeliverable, EVERMIND_CREATIVE_KINDS, SERVER_CREATIVE_KINDS, type CreationDeliverable, type CreativeArtifact } from '@/lib/creationDeliverables';
@@ -4465,38 +4466,41 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * of the Brain surface: it stays put and stays reachable whether Brain is inline in
    * its Object, docked to either edge, or closed entirely.
    */
-  const composer = !presentMode && <ChatInput
-    className={styles.composer}
-    value={prompt}
-    onChange={setPrompt}
-    onSubmit={evaluateCanvas}
-    placeholder={t('askBrain')}
-    submitLabel={t('sendBrain')}
-    disabled={thinking}
-    rows={1}
-    submitOnEnter
-    contextControls={<>
-      <label className={styles.scopeChip}>⌁ <span className="sr-only">{t('brainScope')}</span><select aria-label={t('brainScope')} value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">{t('entireCanvas')}</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? t('selectedObjects', { count: effectiveSelectedIds.length }) : t('selectedObject')}</option><option value="connected" disabled={!effectiveSelectedIds.length}>{t('connectedScope')}</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>{t('currentFrame')}</option></select></label>
-    </>}
-    onAttach={attachCanvasArtifact}
-    onAddContext={openPalette}
-    autoMode={autoApply}
-    onAutoModeChange={setAutoApplyMode}
-    modelSelection={modelSelection}
-    modelOptions={canvasModelOptions}
-    onModelSelectionChange={setModelSelection}
-    canChooseModel={canChooseModel}
+  const composer = !presentMode && <div className={styles.composerDock}>
+    <PromptUseCasePicker placement="top" onSelect={setPrompt} />
+    <ChatInput
+      className={styles.composer}
+      value={prompt}
+      onChange={setPrompt}
+      onSubmit={evaluateCanvas}
+      placeholder={t('askBrain')}
+      submitLabel={t('sendBrain')}
+      disabled={thinking}
+      rows={1}
+      submitOnEnter
+      contextControls={<>
+        <label className={styles.scopeChip}>⌁ <span className="sr-only">{t('brainScope')}</span><select aria-label={t('brainScope')} value={scopeMode} onChange={(event) => setScopeMode(event.target.value as typeof scopeMode)}><option value="auto">{scopeLabel}</option><option value="canvas">{t('entireCanvas')}</option><option value="selection" disabled={!effectiveSelectedIds.length}>{effectiveSelectedIds.length > 1 ? t('selectedObjects', { count: effectiveSelectedIds.length }) : t('selectedObject')}</option><option value="connected" disabled={!effectiveSelectedIds.length}>{t('connectedScope')}</option><option value="frame" disabled={selectedNode?.data.kind !== 'frame'}>{t('currentFrame')}</option></select></label>
+      </>}
+      onAttach={attachCanvasArtifact}
+      onAddContext={openPalette}
+      autoMode={autoApply}
+      onAutoModeChange={setAutoApplyMode}
+      modelSelection={modelSelection}
+      modelOptions={canvasModelOptions}
+      onModelSelectionChange={setModelSelection}
+      canChooseModel={canChooseModel}
     // Mode and memory live in the `/` menu now — on a phone this row had grown to
     // eight unlabelled circles, and the two settings that actually decide what a turn
     // does were the two hardest to read. The menu's trigger names the armed mode, so
     // nothing has to be opened to see whether this turn can dispatch work.
-    chatMode={sessionMode}
-    onChatModeChange={setSessionMode}
-    memoryEnabled={memoryEnabled}
-    onMemoryChange={setMemoryMode}
-    memoryUnavailableReason={evermindProjectId == null || persistence !== 'server' ? t('memoryNeedsProject') : undefined}
-    showVoice
-  />;
+      chatMode={sessionMode}
+      onChatModeChange={setSessionMode}
+      memoryEnabled={memoryEnabled}
+      onMemoryChange={setMemoryMode}
+      memoryUnavailableReason={evermindProjectId == null || persistence !== 'server' ? t('memoryNeedsProject') : undefined}
+      showVoice
+    />
+  </div>;
 
   return (
     <div

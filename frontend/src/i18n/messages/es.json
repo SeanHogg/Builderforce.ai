@@ -5508,6 +5508,24 @@
       }
     }
   },
+  "promptUseCases": {
+    "tabLabel": "Elegir un punto de partida",
+    "heading": "¿Qué quieres crear?",
+    "items": [
+      { "label": "En blanco", "prompt": "Empieza con un lienzo en blanco y ayúdame a dar forma a mi idea." },
+      { "label": "Diseño de app móvil", "prompt": "Diseña una aplicación móvil con sus pantallas clave y el flujo de usuario." },
+      { "label": "Presentación", "prompt": "Crea una presentación pulida con una narrativa clara y una dirección visual." },
+      { "label": "Documento", "prompt": "Redacta un documento estructurado que esté listo para revisar y compartir." },
+      { "label": "Wireframe", "prompt": "Crea un wireframe que muestre el diseño y las interacciones principales." },
+      { "label": "Animación", "prompt": "Crea un concepto de animación con guion gráfico, ritmo y estilo visual." },
+      { "label": "Maquetas de UI", "prompt": "Crea maquetas de UI de alta fidelidad para la experiencia principal del producto." },
+      { "label": "Currículum", "prompt": "Crea un currículum profesional con una jerarquía clara y logros sólidos." },
+      { "label": "Objeto 3D", "prompt": "Crea un concepto de objeto 3D con forma, materiales y vistas de presentación." },
+      { "label": "Investigación", "prompt": "Investiga este tema y sintetiza los hallazgos en conclusiones prácticas." },
+      { "label": "Correo HTML", "prompt": "Diseña un correo HTML adaptable con contenido y llamadas a la acción claros." },
+      { "label": "Color + tipografía", "prompt": "Crea una paleta accesible y una combinación tipográfica con pautas de uso." }
+    ]
+  },
   "home": {
     "heroBadge": "Lienzo · Personas + agentes de IA",
     "heroTitle": "Cualquier idea se hace <em>real.</em>",
@@ -5515,16 +5533,21 @@
     "heroPromptPlaceholder": "¿Qué quieres crear?",
     "heroPromptAria": "Describe lo que quieres crear",
     "heroGetStarted": "Empezar a crear",
-    "heroExamples": [
-      "Diseña una campaña y su página de destino",
-      "Visualiza comentarios y diseña las funciones principales",
-      "Crea, evalúa y entrega un agente de atención al cliente"
-    ],
     "canvas": {
       "boardAria": "Lienzo de creación de ejemplo: objetos conectados desde los que puedes empezar",
       "objectAction": "Empezar desde este objeto: {title}",
       "agentInitials": "AN",
       "agentPresence": "En vivo · asignable",
+      "sessionTitle": "Lanzar campaña · sesión en vivo",
+      "presenceAria": "Tres personas en esta sesión",
+      "presenceInitials": ["SH", "JR", "TK"],
+      "alwaysOn": "Siempre activos",
+      "teammateAction": "Traer a {name} a este lienzo",
+      "team": [
+        { "short": "CM", "name": "CMO", "prefill": "Trae al CMO para planificar esta campaña y su página de destino" },
+        { "short": "CF", "name": "CFO", "prefill": "Trae al CFO para prever el presupuesto de esta campaña" },
+        { "short": "CT", "name": "CTO", "prefill": "Trae al CTO para revisar cómo esto llega a producción" }
+      ],
       "guestNote": "Un lienzo real. Nada sale de este dispositivo hasta que inicies sesión.",
       "narrowNote": "Ábrelo en una pantalla más grande para ver el lienzo completo.",
       "objects": [

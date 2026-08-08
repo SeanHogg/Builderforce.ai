@@ -882,7 +882,8 @@
    It shifts by exactly the width a docked Brain reserved, so it stays centred on
    whatever board is left — and it never moves when Brain floats, docks, or closes.
    The 300px reserve keeps it clear of the zoom rail and the minimap. */
-.composer { position:absolute; z-index:16; bottom:16px; left:calc(50% + (var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)) / 2); transform:translateX(-50%); box-sizing:border-box; width:min(700px, max(320px, calc(100% - 600px - var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)))); --chat-ctl-size:32px; --prompt-panel-gap:4px; --prompt-panel-action-gap:6px; --prompt-panel-pad-y:8px; --prompt-panel-pad-x:10px; --prompt-panel-radius:14px; --prompt-panel-bg:var(--canvas-brain-surface); --prompt-panel-border:var(--canvas-brain-border); --prompt-panel-shadow:none; --chat-input-text:var(--canvas-ink); --chat-input-icon:var(--canvas-muted); --chat-input-bg:var(--canvas-brain-header); --chat-input-border:var(--canvas-brain-border); }
+.composerDock { position:absolute; z-index:16; bottom:16px; left:calc(50% + (var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)) / 2); transform:translateX(-50%); box-sizing:border-box; width:min(700px, max(320px, calc(100% - 600px - var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)))); display:flex; flex-direction:column; align-items:center; --prompt-panel-bg:var(--canvas-brain-surface); --prompt-panel-border:var(--canvas-brain-border); }
+.composer { width:100%; --chat-ctl-size:32px; --prompt-panel-gap:4px; --prompt-panel-action-gap:6px; --prompt-panel-pad-y:8px; --prompt-panel-pad-x:10px; --prompt-panel-radius:14px; --prompt-panel-bg:var(--canvas-brain-surface); --prompt-panel-border:var(--canvas-brain-border); --prompt-panel-shadow:none; --chat-input-text:var(--canvas-ink); --chat-input-icon:var(--canvas-muted); --chat-input-bg:var(--canvas-brain-header); --chat-input-border:var(--canvas-brain-border); }
 .composer textarea { box-sizing:border-box; height:34px; min-height:34px; padding:4px 2px; font-size:14px; line-height:1.35; }
 .composer:global(.bf-prompt-panel__actions) { flex-wrap:nowrap!important; width:100%; overflow:visible; }
 .composer:global(.bf-chat-auto-mode) { width:32px; min-width:32px; padding:0!important; justify-content:center; }
@@ -1115,7 +1116,7 @@
   .palette { width:195px; }
   /* Narrower side panels leave a narrower centre; the prompt stays centred but
      stops short of the palette and the inspector rather than sliding under them. */
-  .composer { width:min(520px, max(280px, calc(100% - 520px - var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)))); }
+  .composerDock { width:min(520px, max(280px, calc(100% - 520px - var(--brain-dock-left, 0px) - var(--brain-dock-right, 0px)))); }
 }
 @media (max-width:760px) {
   .canvasShell { flex:1; height:100%; min-height:0; }
@@ -1150,7 +1151,8 @@
   .canvasShell[data-fullscreen='true'] .flowWrap { height:calc(100% - 50px); }
   .inspectorResizeHandle,.inspectorHeaderActions button:first-child { display:none; }
   /* The prompt is still the bottom-of-the-page fixture, just edge to edge. */
-  .composer { left:8px; right:8px; bottom:8px; width:auto; min-width:0; transform:none; --prompt-panel-action-gap:4px; }
+  .composerDock { left:8px; right:8px; bottom:8px; width:auto; min-width:0; transform:none; }
+  .composer { --prompt-panel-action-gap:4px; }
   .scopeChip { min-width:48px; max-width:110px; flex:1 1 84px; padding:4px 5px; overflow:hidden; }
   .scopeChip select { width:100%; max-width:none; }
   .composer:global(.bf-model-picker) [role='dialog'] { left:-40px!important; }

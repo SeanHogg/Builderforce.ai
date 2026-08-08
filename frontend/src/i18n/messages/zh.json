@@ -5508,6 +5508,24 @@
       }
     }
   },
+  "promptUseCases": {
+    "tabLabel": "选择起点",
+    "heading": "想要创建什么？",
+    "items": [
+      { "label": "空白画布", "prompt": "从空白画布开始，帮助我完善想法。" },
+      { "label": "移动应用设计", "prompt": "设计一款移动应用，包括关键页面和用户流程。" },
+      { "label": "演示文稿", "prompt": "创建一份叙事清晰、视觉方向明确的精美演示文稿。" },
+      { "label": "文档", "prompt": "起草一份结构清晰、可供审阅和分享的文档。" },
+      { "label": "线框图", "prompt": "创建展示主要布局和交互方式的线框图。" },
+      { "label": "动画", "prompt": "创建包含故事板、节奏和视觉风格的动画方案。" },
+      { "label": "UI 模型", "prompt": "为核心产品体验创建高保真 UI 模型。" },
+      { "label": "简历", "prompt": "创建一份层次清晰、突出重要成就的专业简历。" },
+      { "label": "3D 对象", "prompt": "创建包含形态、材质和展示视图的 3D 对象方案。" },
+      { "label": "研究", "prompt": "研究该主题并将结果整理为可执行的洞察。" },
+      { "label": "HTML 邮件", "prompt": "设计一封内容和行动号召清晰的响应式 HTML 邮件。" },
+      { "label": "配色 + 字体", "prompt": "创建符合无障碍要求的配色和字体组合，并提供使用指南。" }
+    ]
+  },
   "home": {
     "heroBadge": "画布 · 人类 + AI 智能体",
     "heroTitle": "每个想法都变成<em>现实。</em>",
@@ -5515,16 +5533,21 @@
     "heroPromptPlaceholder": "你想创造什么？",
     "heroPromptAria": "描述你想创造的内容",
     "heroGetStarted": "开始创作",
-    "heroExamples": [
-      "设计营销活动及其落地页",
-      "可视化客户反馈并制作热门功能原型",
-      "构建、评估并交付客户支持智能体"
-    ],
     "canvas": {
       "boardAria": "创作画布示例——可直接作为起点的关联对象",
       "objectAction": "从这个对象开始：{title}",
       "agentInitials": "收益",
       "agentPresence": "在线 · 可指派",
+      "sessionTitle": "启动营销活动 · 实时会话",
+      "presenceAria": "三人正在此会话中",
+      "presenceInitials": ["SH", "JR", "TK"],
+      "alwaysOn": "随时在线",
+      "teammateAction": "邀请 {name} 加入此画布",
+      "team": [
+        { "short": "CM", "name": "CMO", "prefill": "邀请 CMO 来规划这次营销活动及其落地页" },
+        { "short": "CF", "name": "CFO", "prefill": "邀请 CFO 来预测这次营销活动的预算" },
+        { "short": "CT", "name": "CTO", "prefill": "邀请 CTO 来评审如何将其发布到生产环境" }
+      ],
       "guestNote": "这是一块真实的画布。在你登录之前，内容不会离开本设备。",
       "narrowNote": "在更大的屏幕上打开可使用完整画布。",
       "objects": [

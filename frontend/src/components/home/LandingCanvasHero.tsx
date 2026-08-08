@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import BrainBackdrop from '@/components/BrainBackdrop';
 import { ChatInput } from '@/components/ChatInput';
+import { PromptUseCasePicker } from '@/components/PromptUseCasePicker';
 import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { NEW_CHAT_MODE, type ChatMode } from '@/lib/brain';
 import { useIsMobile } from '@/lib/useIsMobile';
@@ -61,11 +62,26 @@ const SPARK_BARS = ['38%', '62%', '88%', '47%', '71%', '96%'];
 
 type CanvasObjectCopy = { kind: string; title: string; detail: string; prefill: string };
 
+/**
+ * A teammate in the board's footer roster. The C-suite agents are TEAM MEMBERS
+ * who are always available, not navigation — so the preview shows them where the
+ * product shows them (along the bottom of the canvas, beside the people you
+ * invited) rather than implying they are a menu somewhere.
+ */
+type CanvasTeammateCopy = { short: string; name: string; prefill: string };
+
+/**
+ * What a click on the board seeded. Both the objects and the footer roster seed
+ * the composer identically, so they share one selection shape rather than two
+ * parallel `selectedX` states that could drift out of sync.
+ */
+type Seeded = { group: 'object' | 'teammate'; index: number };
+
 export function LandingCanvasHero() {
   const router = useRouter();
   const t = useTranslations('home');
   const [prompt, setPrompt] = useState('');
-  const [selectedObject, setSelectedObject] = useState<number | null>(null);
+  const [seeded, setSeeded] = useState<Seeded | null>(null);
   const [canvasRevealed, setCanvasRevealed] = useState(false);
   const [lensActive, setLensActive] = useState(false);
   const boardRef = useRef<HTMLDivElement>(null);
@@ -85,11 +101,13 @@ export function LandingCanvasHero() {
   const showBrain = mounted && isNarrow;
 
   const objects = t.raw('canvas.objects') as CanvasObjectCopy[];
+  const teammates = t.raw('canvas.team') as CanvasTeammateCopy[];
+  const presenceInitials = t.raw('canvas.presenceInitials') as string[];
 
   useEffect(() => {
     function resetWhenClickingOutside(event: PointerEvent) {
       if (boardRef.current?.contains(event.target as Node)) return;
-      setSelectedObject(null);
+      setSeeded(null);
       setCanvasRevealed(false);
       setLensActive(false);
     }
@@ -112,11 +130,14 @@ export function LandingCanvasHero() {
   }
 
   /** Seed the composer instead of navigating: the board is an invitation. */
-  function seedPrompt(text: string, index: number) {
+  function seedPrompt(text: string, group: Seeded['group'], index: number) {
     setPrompt(text);
-    setSelectedObject(index);
+    setSeeded({ group, index });
     setCanvasRevealed(false);
   }
+
+  const isSeeded = (group: Seeded['group'], index: number) =>
+    seeded?.group === group && seeded.index === index;
 
   function moveLens(event: React.PointerEvent<HTMLDivElement>) {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -128,7 +149,7 @@ export function LandingCanvasHero() {
   function resetFromCanvasBackground(event: React.PointerEvent<HTMLDivElement>) {
     const target = event.target as HTMLElement;
     if (target.closest('[data-canvas-object], [data-canvas-prompt]')) return;
-    setSelectedObject(null);
+    setSeeded(null);
     setCanvasRevealed(false);
   }
 
@@ -172,6 +193,19 @@ export function LandingCanvasHero() {
               onPointerLeave={() => setLensActive(false)}
               onPointerDown={resetFromCanvasBackground}
             >
+              {/* Session bar — the board is a live room with people in it, not a
+                  static illustration. Sits under the veil so it blurs with the
+                  rest of the board. */}
+              <div className={styles.chrome}>
+                <span className={styles.liveDot} aria-hidden="true" />
+                <span className={styles.chromeTitle}>{t('canvas.sessionTitle')}</span>
+                <span className={styles.facepile} aria-label={t('canvas.presenceAria')}>
+                  {presenceInitials.map((initials) => (
+                    <em key={initials} className={styles.face}>{initials}</em>
+                  ))}
+                </span>
+              </div>
+
               <div className={styles.field}>
                 <svg
                   className={styles.wires}
@@ -191,11 +225,15 @@ export function LandingCanvasHero() {
                   <button
                     key={object.title}
                     type="button"
-                    className={`${styles.node}${selectedObject === index ? ` ${styles.nodeSelected}` : ''}`}
+                    className={[
+                      styles.node,
+                      index === AGENT_INDEX ? styles.nodeAgent : '',
+                      isSeeded('object', index) ? styles.nodeSelected : '',
+                    ].filter(Boolean).join(' ')}
                     style={OBJECT_LAYOUT[index]?.style}
-                    onClick={() => seedPrompt(object.prefill, index)}
+                    onClick={() => seedPrompt(object.prefill, 'object', index)}
                     aria-label={t('canvas.objectAction', { title: object.title })}
-                    aria-pressed={selectedObject === index}
+                    aria-pressed={isSeeded('object', index)}
                     data-canvas-object
                   >
                     <span className={styles.nodeKind}>{object.kind}</span>
@@ -214,6 +252,28 @@ export function LandingCanvasHero() {
                         <span className={styles.whoLabel}>{t('canvas.agentPresence')}</span>
                       </span>
                     )}
+                  </button>
+                ))}
+              </div>
+
+              {/* The roster. The C-suite agents are teammates who are always
+                  available, so they sit along the bottom beside the people you
+                  invited — and clicking one seeds the composer with what it would
+                  be brought in to do, the same invitation the objects make. */}
+              <div className={styles.team}>
+                <span className={styles.teamLabel}>{t('canvas.alwaysOn')}</span>
+                {teammates.map((mate, index) => (
+                  <button
+                    key={mate.short}
+                    type="button"
+                    className={`${styles.teamChip}${isSeeded('teammate', index) ? ` ${styles.teamChipSelected}` : ''}`}
+                    onClick={() => seedPrompt(mate.prefill, 'teammate', index)}
+                    aria-label={t('canvas.teammateAction', { name: mate.name })}
+                    aria-pressed={isSeeded('teammate', index)}
+                    data-canvas-object
+                  >
+                    <em className={styles.teamAvatar} aria-hidden="true">{mate.short}</em>
+                    {mate.name}
                   </button>
                 ))}
               </div>
@@ -260,7 +320,6 @@ function Composer({ value, onChange, onSubmit, chatMode, onChatModeChange, onEng
   onEngage: () => void;
 }) {
   const t = useTranslations('home');
-  const examples = t.raw('heroExamples') as string[];
   return (
     <div
       className={styles.promptWrap}
@@ -282,13 +341,7 @@ function Composer({ value, onChange, onSubmit, chatMode, onChatModeChange, onEng
         chatMode={chatMode}
         onChatModeChange={onChatModeChange}
       />
-      <div className={styles.chips}>
-        {examples.map((example) => (
-          <button key={example} type="button" className={styles.chip} onClick={() => onChange(example)}>
-            {example}
-          </button>
-        ))}
-      </div>
+      <PromptUseCasePicker placement="bottom" onSelect={onChange} />
     </div>
   );
 }
