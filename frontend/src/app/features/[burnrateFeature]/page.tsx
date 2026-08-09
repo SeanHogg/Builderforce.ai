@@ -3,6 +3,8 @@ import { getTranslations } from 'next-intl/server';
 import BurnrateDomainPage, { type BurnrateDomainCopy, type BurnrateSharedCopy } from '@/components/marketing/BurnrateDomainPage';
 import { BURNRATE_FOUNDATIONS } from '@/lib/burnrateCatalog';
 
+export const runtime = 'edge';
+
 export function generateStaticParams() {
   return BURNRATE_FOUNDATIONS.filter((domain) => domain.marketingHref.startsWith('/features/')).map((domain) => ({ burnrateFeature: domain.marketingHref.split('/').at(-1) }));
 }

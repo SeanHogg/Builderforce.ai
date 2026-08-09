@@ -4,6 +4,8 @@ import { BURNRATE_FOUNDATIONS, BURNRATE_PRODUCT_DOMAINS } from '@/lib/burnrateCa
 import type { BurnrateDomainCopy } from '@/components/marketing/BurnrateDomainPage';
 import { Icon } from '@/components/ui/Icon';
 
+export const runtime = 'edge';
+
 export default async function FeaturesPage() {
   const t = await getTranslations('burnrateMarketing');
   const renderEntries = (entries: typeof BURNRATE_PRODUCT_DOMAINS) => entries.map((domain) => {

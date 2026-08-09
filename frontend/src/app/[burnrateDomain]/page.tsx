@@ -3,6 +3,8 @@ import { getTranslations } from 'next-intl/server';
 import BurnrateDomainPage, { type BurnrateDomainCopy, type BurnrateSharedCopy } from '@/components/marketing/BurnrateDomainPage';
 import { BURNRATE_PRODUCT_DOMAINS, burnrateDomainBySlug } from '@/lib/burnrateCatalog';
 
+export const runtime = 'edge';
+
 export function generateStaticParams() {
   return BURNRATE_PRODUCT_DOMAINS.map((domain) => ({ burnrateDomain: domain.marketingHref.slice(1) }));
 }
