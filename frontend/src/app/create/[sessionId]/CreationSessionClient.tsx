@@ -9,6 +9,17 @@ import { claimLocalDraft, rememberLastCanvas } from '@/lib/pendingWork';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 import { readModelComparison } from '@/lib/modelComparisonRequest';
 
+const BUILD_TICKET_KINDS = new Set(['portfolio', 'objective', 'initiative', 'roadmap', 'spec', 'epic', 'gap', 'task']);
+
+function buildTicket(raw: string | null): { kind: string; ref: string } | null {
+  if (!raw) return null;
+  const separator = raw.indexOf(':');
+  if (separator <= 0) return null;
+  const kind = raw.slice(0, separator);
+  const ref = raw.slice(separator + 1);
+  return ref && BUILD_TICKET_KINDS.has(kind) ? { kind, ref } : null;
+}
+
 export default function CreationSessionClient({ sessionId }: { sessionId: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -21,6 +32,9 @@ export default function CreationSessionClient({ sessionId }: { sessionId: string
   const focusId = searchParams.get('focus');
   const shareOpen = searchParams.get('share') === '1';
   const buildOpen = searchParams.get('build') === '1';
+  const buildChatId = Number(searchParams.get('chat')) || null;
+  const buildTicketValue = searchParams.get('ticket');
+  const buildTicketLink = useMemo(() => buildTicket(buildTicketValue), [buildTicketValue]);
   const prompt = searchParams.get('prompt');
   const present = searchParams.get('present') === '1';
   const modelComparisonIds = useMemo(() => readModelComparison(searchParams), [searchParams]);
@@ -37,8 +51,8 @@ export default function CreationSessionClient({ sessionId }: { sessionId: string
   const registerCanvas = canvas?.open;
   useEffect(() => {
     if (!registerCanvas) return;
-    registerCanvas({ sessionId, persistence: local ? 'local' : 'server', focusId, shareOpen, buildOpen, prompt, present, modelComparisonIds });
-  }, [buildOpen, focusId, local, modelComparisonIds, present, prompt, registerCanvas, sessionId, shareOpen]);
+    registerCanvas({ sessionId, persistence: local ? 'local' : 'server', focusId, shareOpen, buildOpen, buildChatId, buildTicket: buildTicketLink, prompt, present, modelComparisonIds });
+  }, [buildChatId, buildOpen, buildTicketLink, focusId, local, modelComparisonIds, present, prompt, registerCanvas, sessionId, shareOpen]);
 
   // Claiming itself lives in `lib/pendingWork` — this route and the shell-level
   // <ResumeWorkBridge> both call the same coalesced function, so whichever gets

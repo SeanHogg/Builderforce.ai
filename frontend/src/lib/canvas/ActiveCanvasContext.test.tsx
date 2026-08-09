@@ -8,6 +8,8 @@ const board = (sessionId: string): ActiveCanvas => ({
   focusId: null,
   shareOpen: false,
   buildOpen: false,
+  buildChatId: null,
+  buildTicket: null,
   prompt: null,
   present: false,
   modelComparisonIds: [],

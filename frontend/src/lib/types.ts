@@ -109,7 +109,7 @@ export interface FileEntry {
  * An IDE project (0224) — the buildable artifact you open in the IDE. A
  * first-class child of a Project: many can hang off one container Project
  * (`containerProjectId`, optional + reassignable). Backed by a hidden storage
- * project; you open it at `/ide/{storageProjectPublicId}`.
+ * project; you open its Builder object at `/create/build/{storageProjectPublicId}`.
  */
 export interface IdeProject {
   id: number;

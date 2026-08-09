@@ -40,6 +40,7 @@ import { COURSE_EXPORT_STANDARDS, courseFromNode, courseProgress } from '@/lib/c
 import ToolRunnerClient from '@/app/tools/[id]/ToolRunnerClient';
 import type { ToolResult } from '@/lib/tools';
 import { canvasTourDesignFromNode } from '@/lib/onboarding/canvasTourDesign';
+import { websitePagesFrom, websiteThemeFrom, type WebsiteSection } from './websiteWysiwyg';
 
 export type CreationFlowNode = Node<CreationNodeData, 'creation'>;
 
@@ -492,28 +493,47 @@ function WorkflowBody({ data }: { data: CreationNodeData }) {
   );
 }
 
-function WebsiteBody({ data }: { data: CreationNodeData }) {
+function WebsiteSectionBody({ section, accent }: { section: WebsiteSection; accent: string }) {
+  if (section.kind === 'hero') return <section className={styles.wysiwygHero}>
+    <div>{section.eyebrow && <small>{section.eyebrow}</small>}<h3>{section.heading}</h3>{section.body && <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.body}</ReactMarkdown>}<span>{section.cta && <button style={{ background: accent }}>{section.cta}</button>}{section.secondaryCta && <button className={styles.wysiwygSecondary}>{section.secondaryCta}</button>}</span></div>
+    <div className={styles.wysiwygArt} style={{ color: accent }}><i /><i /><i /></div>
+  </section>;
+  if (section.kind === 'features') return <section className={styles.wysiwygSection}><h4>{section.heading}</h4>{section.body && <p>{section.body}</p>}<div className={styles.wysiwygFeatures}>{section.items?.map((item, index) => <article key={`${item.title}-${index}`}><i style={{ color: accent }}>{String(index + 1).padStart(2, '0')}</i><strong>{item.title}</strong><p>{item.body}</p></article>)}</div></section>;
+  if (section.kind === 'stats') return <section className={styles.wysiwygStats}>{section.items?.map((item, index) => <span key={`${item.label}-${index}`}><strong style={{ color: accent }}>{item.value}</strong><small>{item.label}</small></span>)}</section>;
+  if (section.kind === 'testimonial') return <section className={styles.wysiwygQuote}><blockquote>“{section.quote || section.body}”</blockquote>{section.author && <cite>{section.author}</cite>}</section>;
+  if (section.kind === 'cta') return <section className={styles.wysiwygCta} style={{ background: accent }}><h4>{section.heading}</h4>{section.body && <p>{section.body}</p>}{section.cta && <button>{section.cta}</button>}</section>;
+  return <section className={styles.wysiwygSection}><h4>{section.heading}</h4>{section.body && <ReactMarkdown remarkPlugins={[remarkGfm]}>{section.body}</ReactMarkdown>}</section>;
+}
+
+function WebsiteBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch: Partial<CreationNodeData>) => void }) {
   const t = useTranslations('creationCanvas.node');
-  const headline = typeof data.websiteHeadline === 'string' ? data.websiteHeadline : t('websiteHeadline');
-  const description = typeof data.websiteBody === 'string' ? data.websiteBody : t('websiteBody');
-  const cta = typeof data.websiteCta === 'string' ? data.websiteCta : t('websiteCta');
-  const accent = typeof data.websiteAccent === 'string' ? data.websiteAccent : 'var(--coral-bright)';
+  const pages = websitePagesFrom(data);
+  const theme = websiteThemeFrom(data);
+  const [localPageId, setLocalPageId] = useState(String(data.activeWebsitePageId || pages[0]?.id || ''));
+  useEffect(() => { if (data.activeWebsitePageId) setLocalPageId(String(data.activeWebsitePageId)); }, [data.activeWebsitePageId]);
+  const activePage = pages.find((page) => page.id === localPageId) || pages[0];
+  const accent = theme.accent || 'var(--coral-bright)';
   const viewport = data.viewport === 'mobile' || data.viewport === 'tablet' ? data.viewport : 'desktop';
+  if (!activePage) {
+    const headline = typeof data.websiteHeadline === 'string' ? data.websiteHeadline : data.title;
+    const description = typeof data.websiteBody === 'string' ? data.websiteBody : typeof data.content === 'string' ? data.content : data.subtitle || '';
+    const cta = typeof data.websiteCta === 'string' ? data.websiteCta : t('websiteCta');
+    return <div className={styles.websitePreview} data-viewport={viewport} data-theme="minimal">
+      <div className={styles.siteNav}><strong>{data.title}</strong><span /> </div>
+      <section className={styles.wysiwygHero}><div><h3>{headline}</h3>{description && <ReactMarkdown remarkPlugins={[remarkGfm]}>{description}</ReactMarkdown>}<span><button style={{ background: accent }}>{cta}</button></span></div></section>
+    </div>;
+  }
   return (
-    <div className={styles.websitePreview} data-viewport={viewport}>
-      <div className={styles.siteNav}><strong>{data.title}</strong><span>{t('siteNav')}</span><button style={{ background: accent }}>{t('getStarted')}</button></div>
-      <div className={styles.siteHero}>
-        <div><h3>{headline}</h3><div className={styles.websiteMarkdown}><ReactMarkdown remarkPlugins={[remarkGfm]}>{description}</ReactMarkdown></div><button style={{ background: accent }}>{cta}</button></div>
-        <div className={styles.heroArt} style={{ color: accent }}>{data.title.slice(0, 2).toUpperCase()}</div>
-      </div>
-      <div className={styles.siteBenefits}><span>{t('freeShipping')}</span><span>{t('easyReturns')}</span><span>{t('secureCheckout')}</span></div>
+    <div className={styles.websitePreview} data-viewport={viewport} data-theme={theme.style} style={{ '--site-bg': theme.background, '--site-fg': theme.foreground } as CSSProperties}>
+      <nav className={`${styles.siteNav} nodrag nowheel`}><strong>{data.title}</strong><span>{pages.map((page) => <button key={page.id} type="button" data-active={page.id === activePage.id} onClick={(event) => { event.stopPropagation(); setLocalPageId(page.id); onEdit?.({ activeWebsitePageId: page.id }); }}>{page.name}</button>)}</span>{activePage.sections.find((section) => section.kind === 'hero')?.cta && <button style={{ background: accent }}>{activePage.sections.find((section) => section.kind === 'hero')?.cta}</button>}</nav>
+      {activePage.sections.map((section) => <WebsiteSectionBody key={section.id} section={section} accent={accent} />)}
     </div>
   );
 }
 
 /**
- * Builder tile — the canvas face of a real IDE project. It reports the binding
- * (type, workspace state, published URL) and leaves every capability to the IDE
+ * Builder tile — the Canvas face of a real build. It reports the binding
+ * (type, workspace state, published URL) and leaves every capability to Builder
  * surface the inspector opens, so nothing here duplicates the builder itself.
  */
 function BuildBody({ data }: { data: CreationNodeData }) {
@@ -1833,7 +1853,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
       <div className={styles.nodeBody}>
         {typeof data.pipelineStep === 'number' && <div className={styles.pipelineNodeGuide} data-start={data.pipelineStart === true ? 'true' : 'false'}><b>{data.pipelineStart === true ? t('startHere') : t('stepOfFive', { step: data.pipelineStep })}</b><span>{String(data.pipelineInstruction || t('pipelineFallback'))}</span></div>}
         {data.kind === 'workflow' && <WorkflowBody data={data} />}
-        {(data.kind === 'website' || data.kind === 'prototype') && <WebsiteBody data={data} />}
+        {(data.kind === 'website' || data.kind === 'prototype') && <WebsiteBody data={data} {...(onEditData ? { onEdit: (patch) => onEditData(id, patch) } : {})} />}
         {data.kind === 'guidedTour' && <GuidedTourBody data={data} />}
         {data.kind === 'build' && <BuildBody data={data} />}
         {WEB_PAGE_KINDS.has(data.kind) && <CanvasWebPage

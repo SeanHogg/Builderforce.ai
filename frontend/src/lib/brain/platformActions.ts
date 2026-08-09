@@ -10,7 +10,7 @@
  * uses, so both brains share one tool set and no capability is declared twice.
  *
  * What remains here is only what the server CANNOT do: move the user's browser.
- * `navigate_to` / `open_project` open a page or the IDE; `open_migration_panel`
+ * `navigate_to` / `open_project` open a page or Canvas; `open_migration_panel`
  * raises a local UI panel via a window event. These have no server equivalent, so
  * they stay as native client actions. (History: this file used to also mirror
  * ~210 data capabilities that duplicated the catalog; every one was covered by the
@@ -43,12 +43,13 @@ function f<T = unknown>(args: Json, key: string): T {
 const STATIC_ROUTES: Record<string, string> = {
   dashboard: '/dashboard',
   projects: '/projects',
-  ide: '/ide',
-  ide_dashboard: '/ide/dashboard',
-  brainstorm: '/brainstorm',
+  // Legacy action keys remain accepted for saved prompts, but all resolve to Canvas.
+  ide: '/create?filter=build',
+  ide_dashboard: '/create?filter=build',
+  brainstorm: '/create/new',
   tasks: '/projects?tab=tasks',
   workflows: '/workflows',
-  workflow_builder: '/workflows/builder',
+  workflow_builder: '/create?filter=workflow',
   workforce: '/workforce',
   agents: '/agents',
   agent_skills: '/agents/skills',
@@ -84,7 +85,7 @@ const DYNAMIC_ROUTES: Record<string, (id: string | number) => string> = {
   // The Tasks board scoped to one project — where a freshly-created task is
   // visible. NOT `/projects/{id}` (that redirects into the IDE).
   project_tasks: (id) => `/projects?tab=tasks&project=${id}`,
-  ide_project: (id) => `/ide/${id}`,
+  ide_project: (id) => `/create/build/${id}`,
   content_item: (id) => `/content-manager/${id}`,
   persona: (id) => `/personas/${id}`,
   skill: (id) => `/skills/${id}`,
@@ -131,19 +132,20 @@ export function buildPlatformActions(ctx: PlatformActionContext): BrainAction[] 
     },
   };
 
-  // Convenience: open a project straight in the IDE ("launch it").
+  // Convenience: focus a project's Builder object on Canvas ("launch it").
   const open_project: BrainAction = {
     name: 'open_project',
-    description: 'Open a project in the IDE (use this to "launch" a project after creating it).',
-    parameters: obj({ id: { ...N, description: 'Project id' }, chatId: { ...N, description: 'Optional Brain chat id to carry into the IDE.' } }, ['id']),
+    description: 'Open a project Builder on the Creation Canvas (use this to "launch" a project after creating it).',
+    parameters: obj({ id: { ...N, description: 'Project id' }, chatId: { ...N, description: 'Optional Brain chat id to carry into the Builder workspace.' } }, ['id']),
     mutates: false,
     run: (args) => {
       const a = args as Json;
       const id = f(a, 'id');
       if (id == null) return { error: 'A project id is required.' };
       const chatId = f<number | undefined>(a, 'chatId');
-      ctx.navigate(`/ide/${id}${chatId != null ? `?chat=${chatId}` : ''}`);
-      return { opened: `/ide/${id}` };
+      const path = `/create/build/${id}${chatId != null ? `?chat=${chatId}` : ''}`;
+      ctx.navigate(path);
+      return { opened: `/create/build/${id}` };
     },
   };
 

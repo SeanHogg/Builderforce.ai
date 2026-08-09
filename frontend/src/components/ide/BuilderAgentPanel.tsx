@@ -8,14 +8,14 @@ import { AgentExecutionPanel } from '@/components/agent/AgentExecutionPanel';
 import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
 
 /**
- * IdeAgentPanel — run a cloud agent / AI prompt against this project from inside
+ * BuilderAgentPanel — run a cloud agent / AI prompt against this project from inside
  * the Designer, exactly like the VS Code plugin: pick (or create from a prompt) a
  * task, dispatch via the shared run pipeline, and watch Output + Changes live.
  *
  * Reuses the task→execution machinery wholesale (RunAgentControl + AgentExecutionPanel)
- * so the IDE never forks the agent loop — the same branch/PR/Changes flow as the board.
+ * so Builder never forks the agent loop — the same branch/PR/Changes flow as the board.
  */
-export function IdeAgentPanel({ projectId }: { projectId: number }) {
+export function BuilderAgentPanel({ projectId }: { projectId: number }) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [hosts, setHosts] = useState<AgentHost[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);

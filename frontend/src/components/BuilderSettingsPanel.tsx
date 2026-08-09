@@ -5,20 +5,20 @@ import { SourceControlContent } from './sourcecontrol/SourceControlContent';
 import { RepoSyncControl } from './ide/RepoSyncControl';
 
 /**
- * IDE settings slide-out (opened from the header cog). Today it hosts the
+ * Builder settings slide-out (opened from the header cog). Today it hosts the
  * project's source-control configuration — the repositories the Designer's
  * coding agent can read and open pull requests against. Kept separate from the
  * Project Details panel so repo setup is one click away while building.
  */
-export interface IdeSettingsPanelProps {
+export interface BuilderSettingsPanelProps {
   open: boolean;
   onClose: () => void;
   projectId: number;
-  /** Called after a repo is imported, so the IDE can refresh its file tree. */
+  /** Called after a repo is imported, so Builder can refresh its file tree. */
   onImported?: () => void;
 }
 
-export function IdeSettingsPanel({ open, onClose, projectId, onImported }: IdeSettingsPanelProps) {
+export function BuilderSettingsPanel({ open, onClose, projectId, onImported }: BuilderSettingsPanelProps) {
   if (!open) return null;
 
   return (

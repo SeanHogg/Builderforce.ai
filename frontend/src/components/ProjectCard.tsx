@@ -34,10 +34,8 @@ export interface ProjectCardProps {
   onDelete?: (project: Project) => void;
   /** Show the delete icon. Defaults to true when onDelete is provided. */
   showDeleteButton?: boolean;
-  /** Override the 💻 IDE button action. Defaults to opening the project in the
-   *  editor (`/ide/<id>`); the Projects page overrides this to route through the
-   *  IDE dashboard scoped to the project. */
-  onOpenIde?: (project: Project) => void;
+  /** Override the Builder action. Defaults to opening the project on Canvas. */
+  onOpenBuilder?: (project: Project) => void;
   /** Latest per-diagnostic scores (SOC 2, Quality, …) for this project, from the
    *  workspace rollup. Rendered as a compact score strip; omit/empty hides it. */
   diagnostics?: ProjectDiagnosticSummary[];
@@ -61,13 +59,13 @@ export function ProjectCard({
   onAssignedAgentClick,
   onDelete,
   showDeleteButton = !!onDelete,
-  onOpenIde,
+  onOpenBuilder,
   diagnostics,
   connections,
 }: ProjectCardProps) {
   const t = useTranslations('projectCard');
   const openProjectChat = useOpenProjectChat();
-  const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
+  const openBuilder = onOpenBuilder ?? ((p: Project) => { window.location.href = `/create/build/${p.publicId ?? p.id}`; });
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (onCardClick && e.key === 'Enter') {
       e.preventDefault();
@@ -234,9 +232,9 @@ export function ProjectCard({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              openIde(project);
+              openBuilder(project);
             }}
-            aria-label={t('openIde')}
+            aria-label={t('openBuilder')}
             style={iconButtonStyle}
           >
             <span style={{ fontSize: 18 }} aria-hidden><Icon source="💻" size="1em" /></span>

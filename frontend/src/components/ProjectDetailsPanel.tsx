@@ -742,14 +742,14 @@ export function ProjectDetailsPanel({
                 </div>
               </div>
 
-              {/* Open in the full IDE workspace. */}
+              {/* Open the project's Builder workspace on Canvas. */}
               <div style={cardStyle}>
                 <div style={{ fontWeight: 600, marginBottom: 10 }}>{t('workspaceTitle')}</div>
                 <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
                   {t('workspaceDesc')}
                 </p>
-                <Link href={`/ide/${project.publicId ?? project.id}`} style={{ fontSize: 13, color: 'var(--coral-bright)', marginTop: 8, display: 'inline-block' }}>
-                  {t('openInIde')} →
+                <Link href={`/create/build/${project.publicId ?? project.id}`} style={{ fontSize: 13, color: 'var(--coral-bright)', marginTop: 8, display: 'inline-block' }}>
+                  {t('openInBuilder')} →
                 </Link>
               </div>
             </div>

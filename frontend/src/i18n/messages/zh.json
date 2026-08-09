@@ -642,7 +642,7 @@
   "projectCard": {
     "details": "详情",
     "taskBoard": "任务看板",
-    "openIde": "在 Builder 中打开",
+    "openBuilder": "在 Builder 中打开",
     "deleteProject": "删除项目",
     "agentLabel": "智能体：",
     "tasks": "{count, plural, other {# 个任务}}",
@@ -2823,7 +2823,7 @@
     "integrationKeys": "项目集成密钥",
     "workspaceTitle": "工作区",
     "workspaceDesc": "此项目的工作区和文件系统。打开 Builder 以编辑文件。",
-    "openInIde": "在 Builder 中打开",
+    "openInBuilder": "在 Builder 中打开",
     "dueDateLabel": "截止日期",
     "dueDateHint": "设置项目截止日期。留空则使用最晚的任务截止日期。",
     "deadline": "截止时间",
@@ -4451,7 +4451,7 @@
     "viewWorkflows": "查看工作流",
     "workflows": "工作流",
     "workflowsWithCount": "工作流（{count}）",
-    "openIde": "在 Builder 中打开",
+    "openBuilder": "在 Builder 中打开",
     "delete": "删除",
     "openChat": "打开项目聊天",
     "connections": "连接"
@@ -4801,7 +4801,7 @@
       "longDesc": "一个以嵌入为键的缓存会在新提示词与已回答过的提示词含义相同时复用此前的答案，因此前沿模型绝不会为同一项工作被计费两次。两个层级：一个免费的设备本地层（SSM 嵌入，运行于你的浏览器和每个智能体中），外加一个共享网关层——因此 Web 应用中的一次缓存命中也能为你的智能体节省 token。"
     },
     {
-      "title": "完整 IDE 工作区",
+      "title": "Canvas Builder 工作区",
       "shortDesc": "Monaco 编辑器、终端、AI 对话——集于一体。",
       "longDesc": "Monaco 编辑器、终端、AI 对话、文件浏览器——你在一个协作式项目工作区中所需的一切。"
     },
@@ -6438,7 +6438,7 @@
             "desc": "用平实的语言描述你的需求；Brain 会将其转化为项目、数据集和智能体。"
           },
           {
-            "title": "IDE 工作区",
+            "title": "Canvas Builder 工作区",
             "desc": "Monaco 编辑器、终端、AI 聊天与文件浏览器，集于一个协作式项目工作区。"
           },
           {
@@ -6462,7 +6462,7 @@
           },
           {
             "title": "项目 / 任务",
-            "desc": "将工作组织进项目工作区 — 每个工作区都配有完整的 IDE、智能体和任务看板 — 随后在看板、表格、日历或甘特视图中规划、分配并观察任务在你的智能体团队中流转。"
+            "desc": "将工作组织进项目工作区 — 每个工作区都配有 Canvas Builder、智能体和任务看板 — 随后在看板、表格、日历或甘特视图中规划、分配并观察任务在你的智能体团队中流转。"
           },
           {
             "title": "规划主线与组合",
@@ -6933,7 +6933,7 @@
     "assignChatToProjectAria": "将会话分配到项目",
     "addProject": "+ 项目",
     "workflowsArrow": "工作流 →",
-    "openInIde": "在 Builder 中打开 →",
+    "openInBuilder": "在 Builder 中打开 →",
     "brainModality": "Brain — {modality}",
     "brainAs": "以 {name} 身份运行的 Brain",
     "upgrade": "升级",
@@ -7296,7 +7296,7 @@
     "targetsHint": "此项目为其贡献学习的所有 Evermind。",
     "targetsEmpty": "尚未为此项目解析出任何 Evermind。",
     "targetSelfBadge": "本项目",
-    "targetBuildBadge": "IDE 构建",
+    "targetBuildBadge": "Canvas 构建",
     "targetSeeded": "v{version}",
     "targetUnseeded": "未初始化",
     "targetInferenceOn": "推理",

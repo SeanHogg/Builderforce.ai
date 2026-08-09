@@ -9,9 +9,9 @@ import type { FileEntry, Project } from '@/lib/types';
 import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 
 /**
- * The full IDE surface, mounted inside the Creation Canvas.
+ * The full Builder workspace, mounted inside the Creation Canvas.
  *
- * Every IDE project capability lives in `<BuilderWorkspace>` — file explorer, code editor,
+ * Every build capability lives in `<BuilderWorkspace>` — file explorer, code editor,
  * WebContainer dev server + live preview, quality checks, terminal, site/agent
  * publish, training, agent state, and the per-modality studios (video, Evermind,
  * fine-tune, voice). Rather than reimplementing any of that on the canvas, a
@@ -22,14 +22,16 @@ import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 const BuilderWorkspace = dynamic(() => import('@/components/BuilderWorkspace').then((m) => m.BuilderWorkspace), { ssr: false });
 
 interface CanvasBuildPanelProps {
-  /** Backing storage project id of the bound IDE project. */
+  /** Backing storage project id of the bound Canvas build. */
   storageProjectId: number;
   onClose: () => void;
-  /** Renaming inside the IDE renames the canvas object too. */
+  /** Renaming inside Builder renames the Canvas object too. */
   onProjectRenamed?: (name: string) => void;
+  initialChatId?: number | null;
+  initialTicket?: { kind: string; ref: string };
 }
 
-export function CanvasBuildPanel({ storageProjectId, onClose, onProjectRenamed }: CanvasBuildPanelProps) {
+export function CanvasBuildPanel({ storageProjectId, onClose, onProjectRenamed, initialChatId, initialTicket }: CanvasBuildPanelProps) {
   const t = useTranslations('creationCanvas.build');
   const [project, setProject] = useState<Project | null>(null);
   const [files, setFiles] = useState<FileEntry[]>([]);
@@ -75,6 +77,8 @@ export function CanvasBuildPanel({ storageProjectId, onClose, onProjectRenamed }
           <BuilderWorkspace
             project={project}
             initialFiles={files}
+            initialChatId={initialChatId}
+            initialTicket={initialTicket}
             onProjectUpdate={(updated) => {
               setProject(updated);
               onProjectRenamed?.(updated.name);

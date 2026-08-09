@@ -1014,6 +1014,32 @@ describe('CreationCanvas', () => {
     expect(screen.getByText('Start building')).toHaveStyle({ background: '#d946ef' });
   });
 
+  it('renders authored WYSIWYG pages instead of the fixed ecommerce mock', () => {
+    const onEditData = vi.fn();
+    render(<CreationNode
+      id="acme-site" type="creation" selected={false} dragging={false} zIndex={0}
+      selectable deletable draggable isConnectable positionAbsoluteX={0} positionAbsoluteY={0}
+      onEditData={onEditData}
+      data={{ kind: 'website', title: 'Acme Analytics', websiteTheme: { style: 'technical', accent: '#28c9b7' }, pages: [
+        { id: 'home', name: 'Home', path: '/', sections: [
+          { id: 'hero', kind: 'hero', eyebrow: 'Operational intelligence', heading: 'Turn operational data into confident decisions', body: 'One decision layer for every operator.', cta: 'Book a demo' },
+          { id: 'features', kind: 'features', heading: 'Clarity at operating speed', items: [{ title: 'Live signals', body: 'See risk while there is time to act.' }] },
+        ] },
+        { id: 'about', name: 'About', path: '/about', sections: [
+          { id: 'about-hero', kind: 'hero', heading: 'Built for operators', body: 'We turn noisy systems into clear decisions.', cta: 'Meet the team' },
+          { id: 'principles', kind: 'content', heading: 'Our principles', body: 'Evidence before instinct.' },
+        ] },
+      ] }}
+    />);
+
+    expect(screen.getByText('Turn operational data into confident decisions')).toBeInTheDocument();
+    expect(screen.getByText('Live signals')).toBeInTheDocument();
+    expect(screen.queryByText('Free shipping')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'About' }));
+    expect(screen.getByText('Built for operators')).toBeInTheDocument();
+    expect(onEditData).toHaveBeenCalledWith('acme-site', { activeWebsitePageId: 'about' });
+  });
+
   it('resizes website viewport presets and renders supporting copy as Markdown', () => {
     render(<CreationCanvas sessionId="website-responsive-test" persistence="local" />);
     fireEvent.click(screen.getAllByText('Campaign landing page')[0]!);

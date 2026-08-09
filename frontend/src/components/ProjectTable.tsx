@@ -30,8 +30,8 @@ export interface ProjectTableProps {
    *  the Architecture button opens 'prds' / 'integrations'. A row that can open
    *  details gets the Architecture button — same rule as {@link ProjectCard}. */
   onDetailsClick?: (project: Project, tab?: ProjectPanelTab) => void;
-  /** Override the 💻 IDE action. Defaults to opening the project editor (`/ide/<id>`). */
-  onOpenIde?: (project: Project) => void;
+  /** Override the Builder action. Defaults to opening the project on Canvas. */
+  onOpenBuilder?: (project: Project) => void;
   /** Click the assigned agent name → parent opens the agent panel. */
   onAssignedAgentClick?: (assignedAgentHost: { id: number; name: string }) => void;
   /** Show a delete action; called once the user confirms in the dialog. */
@@ -58,7 +58,7 @@ const iconButtonStyle: React.CSSProperties = {
 /**
  * Tabular project list — the List view counterpart to {@link ProjectCard}. Both
  * the Dashboard and Projects/Tasks pages render this so the row actions (Details,
- * Task board, IDE, Architecture, Workflows, Delete) can't drift between surfaces.
+ * Task board, Builder, Architecture, Workflows, Delete) can't drift between surfaces.
  * Delete is self-contained (per-row {@link DeleteProjectDialog}), mirroring the card.
  */
 export function ProjectTable({
@@ -66,7 +66,7 @@ export function ProjectTable({
   diagnosticsByProject,
   connectionsByProject,
   onDetailsClick,
-  onOpenIde,
+  onOpenBuilder,
   onAssignedAgentClick,
   onDelete,
 }: ProjectTableProps) {
@@ -74,7 +74,7 @@ export function ProjectTable({
   const router = useRouter();
   const openProjectChat = useOpenProjectChat();
   const [confirmProject, setConfirmProject] = useState<Project | null>(null);
-  const openIde = onOpenIde ?? ((p: Project) => { window.location.href = `/ide/${p.publicId ?? p.id}`; });
+  const openBuilder = onOpenBuilder ?? ((p: Project) => { window.location.href = `/create/build/${p.publicId ?? p.id}`; });
 
   return (
     <div style={tableWrapStyle}>
@@ -208,9 +208,9 @@ export function ProjectTable({
                   </button>
                   <button
                     type="button"
-                    onClick={() => openIde(project)}
-                    aria-label={t('openIde')}
-                    title={t('openIde')}
+                    onClick={() => openBuilder(project)}
+                    aria-label={t('openBuilder')}
+                    title={t('openBuilder')}
                     style={iconButtonStyle}
                   >
                     <span style={{ fontSize: 18 }} aria-hidden><Icon source="💻" size="1em" /></span>

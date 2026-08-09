@@ -661,7 +661,7 @@
   "projectCard": {
     "details": "Details",
     "taskBoard": "Task board",
-    "openIde": "Open in Builder",
+    "openBuilder": "Open in Builder",
     "deleteProject": "Delete project",
     "agentLabel": "Agent:",
     "tasks": "{count, plural, one {# task} other {# tasks}}",
@@ -2842,7 +2842,7 @@
     "integrationKeys": "Project integration keys",
     "workspaceTitle": "Workspace",
     "workspaceDesc": "Workspace and file system for this project. Open the Builder to edit files.",
-    "openInIde": "Open in Builder",
+    "openInBuilder": "Open in Builder",
     "dueDateLabel": "Due date",
     "dueDateHint": "Set a project deadline. Leave empty to use the latest task due date.",
     "deadline": "Deadline",
@@ -4470,7 +4470,7 @@
     "viewWorkflows": "View workflows",
     "workflows": "Workflows",
     "workflowsWithCount": "Workflows ({count})",
-    "openIde": "Open in Builder",
+    "openBuilder": "Open in Builder",
     "delete": "Delete",
     "openChat": "Open project chat",
     "connections": "Connections"
@@ -4820,7 +4820,7 @@
       "longDesc": "An embedding-keyed cache reuses a prior answer when a new prompt means the same thing as one already answered, so the frontier model is never billed twice for the same work. Two tiers: a free on-device layer (SSM embeddings, in your browser and in each agent) plus a shared gateway layer — so a cache hit in the web app saves tokens for your agents too."
     },
     {
-      "title": "Full IDE Workspace",
+      "title": "Canvas Builder Workspace",
       "shortDesc": "Monaco editor, terminal, preview, and AI chat in one engineering workspace.",
       "longDesc": "Monaco editor, terminal, AI chat, file explorer — everything you need in one collaborative project workspace."
     },
@@ -6482,7 +6482,7 @@
           },
           {
             "title": "Projects / Tasks",
-            "desc": "Organize work into project workspaces — each with a full IDE, agents, and a task board — then plan, assign, and watch tasks flow across your agent workforce in board, table, calendar, or Gantt views."
+            "desc": "Organize work into project workspaces — each with a Canvas Builder, agents, and a task board — then plan, assign, and watch tasks flow across your agent workforce in board, table, calendar, or Gantt views."
           },
           {
             "title": "Planning Spine & Portfolio",
@@ -6955,7 +6955,7 @@
     "assignChatToProjectAria": "Assign chat to project",
     "addProject": "+ Project",
     "workflowsArrow": "Workflows →",
-    "openInIde": "Open in Builder →",
+    "openInBuilder": "Open in Builder →",
     "brainModality": "Brain — {modality}",
     "brainAs": "Brain as {name}",
     "upgrade": "Upgrade",
@@ -7316,7 +7316,7 @@
     "targetsHint": "Every Evermind this project contributes learning to.",
     "targetsEmpty": "No Everminds resolved for this project yet.",
     "targetSelfBadge": "This project",
-    "targetBuildBadge": "IDE build",
+    "targetBuildBadge": "Canvas build",
     "targetSeeded": "v{version}",
     "targetUnseeded": "not seeded",
     "targetInferenceOn": "inference",

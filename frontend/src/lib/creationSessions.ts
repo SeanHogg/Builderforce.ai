@@ -140,7 +140,11 @@ export function createLocalCreationSession(prompt: string, mode: ChatMode = NEW_
     edges.push({ id: crypto.randomUUID(), source: nodeId, target: id, type: 'smoothstep', label: 'creates' });
     return id;
   };
-  if (/website|landing page|web app|prototype/.test(lower)) addIntent('website', title, 570, 80);
+  // Do not pre-seed Website/Prototype requests with an empty visual shell. The
+  // old shell rendered the same ecommerce fallback for every prompt, then sat
+  // beside the genuinely authored object Brain produced. Website creation now
+  // enters through the AI tool contract, which rejects anything without real
+  // WYSIWYG pages and sections.
   if (/workflow|campaign|automation|process/.test(lower)) addIntent('workflow', `${title} workflow`, 570, 390);
   if (/data|dataset|csv|spreadsheet|report|dashboard|chart/.test(lower)) {
     const datasetId = addIntent('dataset', 'Imported data', 570, 120);

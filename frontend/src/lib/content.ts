@@ -1355,7 +1355,7 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
     blurb: 'Coordinate work across agents, workflows, and a mesh of remote AgentHosts.',
     surfaces: [
       { icon: '🔀', title: 'Workflow Execution', desc: 'Compose and run repeatable, approval-gated workflows as live objects inside Creation Sessions.', href: '/create' },
-      { icon: '▦', title: 'Projects / Tasks', desc: 'Organize work into project workspaces — each with a full IDE, agents, and a task board — then plan, assign, and watch tasks flow across your agent workforce in board, table, calendar, or Gantt views.', href: '/projects' },
+      { icon: '▦', title: 'Projects / Tasks', desc: 'Organize work into project workspaces — each with a Canvas Builder, agents, and a task board — then plan, assign, and watch tasks flow across your agent workforce in board, table, calendar, or Gantt views.', href: '/projects' },
       { icon: '🗺️', title: 'Planning Spine & Portfolio', desc: 'One dated hierarchy — portfolio → initiative → epic → task with OKRs at any level — where every leaf\'s cost rolls up to each ancestor and is split CAPEX vs OPEX on a single Gantt. Plan, deliver, and account for work in one place.', href: '/projects?tab=portfolio' },
       { icon: '🔗', title: 'Board Connectors', desc: 'Two-way sync with Jira, Linear, monday, Asana, ClickUp, ServiceNow, Freshservice, Sentry, PagerDuty, and GitHub — orchestrate across the trackers you already run, with no migration.', href: '/projects?tab=connections' },
       { icon: '🕸️', title: 'Workforce Mesh', desc: 'Discover and dispatch work across local and remote AgentHosts — capacity sharing across machines and tenants.', href: '/workforce' },

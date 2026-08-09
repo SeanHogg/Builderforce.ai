@@ -21,11 +21,8 @@ describe('classifyRoute', () => {
     expect(classifyRoute('/tasks')).toBe('workbench');
   });
 
-  it('keeps compatibility routes in the shell and full-surface project editors alone', () => {
-    expect(classifyRoute('/ide/42')).toBe('workbench');
+  it('keeps full-surface project editors alone', () => {
     expect(classifyRoute('/projects/7')).toBe('standalone');
-    // Both IDE routes immediately adapt into Creation Canvas.
-    expect(classifyRoute('/ide/dashboard')).toBe('workbench');
   });
 
   it('never claims a route outside the operator shell', () => {
@@ -45,7 +42,7 @@ describe('panelOpen', () => {
 
   it('stays closed on the stage itself and on standalone routes', () => {
     expect(panelOpen('/create/c_8fa2', true)).toBe(false);
-    expect(panelOpen('/ide/42', true)).toBe(true);
+    expect(panelOpen('/projects/7', true)).toBe(false);
   });
 });
 

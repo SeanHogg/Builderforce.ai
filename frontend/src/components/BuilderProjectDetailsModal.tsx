@@ -11,14 +11,14 @@ import type { IdeProject, IdeContainerOption } from '@/lib/types';
 import { Icon } from '@/components/ui/Icon';
 
 /**
- * IDE project details — rename and (re)assign the parent Project.
+ * Builder project details — rename and (re)assign the parent Project.
  *
- * The optional-parent decision means an IDE project can be created ungrouped and
+ * The optional-parent decision means a build can be created ungrouped and
  * later associated with a Project here, or moved between Projects. Saves via
  * PATCH /api/ide-projects/:id and hands the updated row back to the caller so the
  * dashboard list refreshes without a full reload.
  */
-export function IdeProjectDetailsModal({
+export function BuilderProjectDetailsModal({
   ideProject,
   onClose,
   onSaved,

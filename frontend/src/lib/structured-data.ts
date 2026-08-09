@@ -432,7 +432,7 @@ export function projectsTasksSchema() {
     {
       name: 'Projects',
       description:
-        'Collaborative AI project workspaces — each with a full in-browser IDE, files, assigned agents, and workflows. View projects as cards, a table, a calendar, or a Gantt timeline.',
+        'Collaborative AI project workspaces — each with a Canvas Builder, files, assigned agents, and workflows. View projects as cards, a table, a calendar, or a Gantt timeline.',
     },
     {
       name: 'Tasks',
@@ -671,7 +671,7 @@ export function breadcrumbSchema(items: { name: string; url: string }[]) {
  * JSON-LD for a logged-out feature route teaser (RouteMarketing): the
  * Builderforce SoftwareApplication scoped to that feature, an optional FAQPage,
  * and a breadcrumb. Gives the per-feature marketing pages (/brainstorm,
- * /training, /ide, …) real structured data for SEO/GEO even though they render
+ * /training, /create, …) real structured data for SEO/GEO even though they render
  * client-side. `path` is the route (e.g. '/brainstorm').
  */
 export function routeMarketingSchema(opts: {

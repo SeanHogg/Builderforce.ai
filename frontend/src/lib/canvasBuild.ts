@@ -1,8 +1,8 @@
 /**
- * Builder objects on the Creation Canvas — the IDE project binding.
+ * Builder objects on the Creation Canvas — the legacy build-record binding.
  *
- * A `build` Canvas object IS an IDE project (0224): the same first-class child
- * entity the IDE dashboard creates, seeded server-side with the starter template
+ * A `build` Canvas object owns the existing build record (historically named
+ * `IdeProject` in the API), seeded server-side with the starter template
  * its modality selects (`api/src/application/project/projectTemplate.ts`). The
  * canvas stores only the binding; every capability — file tree, editor, dev
  * server, checks, terminal, publish, train, state — comes from mounting the one
@@ -19,7 +19,7 @@ import { DEFAULT_MODALITY, getModality, type ProjectModality } from '@/lib/modal
 import type { IdeProject } from '@/lib/types';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
 
-/** `resourceId` prefix that marks a canvas object as bound to an IDE project. */
+/** Legacy `resourceId` prefix for a Canvas Builder binding. */
 export const BUILD_RESOURCE_PREFIX = 'ideProject:';
 
 /** The binding a bound Builder object carries. */
@@ -27,7 +27,7 @@ export interface CanvasBuildBinding {
   ideProjectId: number;
   /** The backing storage project — what `<BuilderWorkspace>` and the file APIs address. */
   storageProjectId: number;
-  /** Public id for the `/ide/:publicId` deep link. */
+  /** Public storage-project id for the `/create/build/:publicId` deep link. */
   storageProjectPublicId: string;
   modality: ProjectModality;
 }
@@ -59,7 +59,7 @@ export function canvasBuildBinding(data: CreationNodeData): CanvasBuildBinding |
   };
 }
 
-/** The patch that binds a created IDE project onto its canvas object. */
+/** Bind a created legacy build record onto its Canvas object. */
 export function canvasBuildPatch(ide: IdeProject): Partial<CreationNodeData> {
   return {
     title: ide.name,
@@ -84,9 +84,9 @@ export function canvasBuildModality(data: CreationNodeData): ProjectModality {
 }
 
 /**
- * Create the IDE project backing a Builder object. The API seeds the starter
+ * Create the legacy build record backing a Builder object. The API seeds the starter
  * template for the chosen modality, so the workspace opens runnable rather than
- * empty — the behaviour the IDE dashboard's type chooser has always had.
+ * empty. The historical API/type names remain until the persistence migration.
  */
 export async function createCanvasBuild(input: {
   title: string;

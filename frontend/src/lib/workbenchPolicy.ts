@@ -37,8 +37,7 @@ const STAGE_PATTERNS: RegExp[] = [
 
 /**
  * App-shell routes that still own the whole screen. A single Project keeps its
- * dedicated editor for now. The former IDE route is only a compatibility
- * adapter; its workspace is opened by the Builder object on the canvas.
+ * dedicated editor for now; build workspaces are opened from Canvas objects.
  */
 const FULL_WIDTH_PATTERNS: RegExp[] = [
   /^\/projects\/[^/]+$/,

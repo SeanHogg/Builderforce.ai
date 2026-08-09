@@ -76,6 +76,31 @@ describe('runCreationCanvasAi', () => {
     expect(firstRequest.messages[1].content).toContain('add an Agent with that role\'s perspective');
     expect(firstRequest.messages[1].content).toContain('connect it to the Agent with canvas_connect_objects');
     expect(firstRequest.messages[1].content).toContain('never ask the user what "this" means');
+    expect(firstRequest.messages[1].content).toContain('fields.pages containing real page objects');
+    expect(firstRequest.messages[1].content).toContain('Never rely on default ecommerce copy');
+  });
+
+  it('recovers a prose-only selected Website refinement and executes the update', async () => {
+    const update = vi.fn(() => ({ ok: true, proposed: true, objectId: 'site-1' }));
+    const pages = [{ id: 'home', name: 'Home', path: '/', sections: [
+      { id: 'hero', kind: 'hero', heading: 'Turn operational data into confident decisions', body: 'Acme Analytics gives operators clarity.', cta: 'Book a demo' },
+      { id: 'features', kind: 'features', heading: 'Decide sooner', items: [{ title: 'Live signals', body: 'See risk early.' }] },
+    ] }];
+    mocks.streamChatCompletion
+      .mockResolvedValueOnce({ text: 'I will update the website with that content.', toolCalls: [] })
+      .mockResolvedValueOnce({ text: '', toolCalls: [{ id: 'update-site', name: 'canvas_update_object', args: JSON.stringify({ objectId: 'site-1', fields: { pages, websiteTheme: { style: 'technical', accent: '#28c9b7' } } }) }] })
+      .mockResolvedValueOnce({ text: 'I updated the selected website with the Acme content and navigation.', toolCalls: [] });
+
+    const answer = await runCreationCanvasAi({
+      prompt: 'Use Home, About, Services, and Contact and change the headline for Acme Analytics.',
+      canvasSnapshot: JSON.stringify({ scope: 'selection', selectedObjectIds: ['site-1'], objects: [{ id: 'site-1', kind: 'website', title: 'Acme', mutableFields: ['pages', 'websiteTheme'] }] }),
+      persistence: 'local',
+      canvasActions: [{ name: 'canvas_update_object', description: 'Update', parameters: { type: 'object' }, mutates: true, run: update }],
+    });
+
+    expect(update).toHaveBeenCalledWith({ objectId: 'site-1', fields: { pages, websiteTheme: { style: 'technical', accent: '#28c9b7' } } });
+    expect(answer).toContain('updated the selected website');
+    expect(mocks.streamChatCompletion.mock.calls[1][0].messages.some((message: { content: string }) => message.content.includes('prior response described or discussed'))).toBe(true);
   });
 
   it('recovers an actionless C-suite teammate response and executes the canvas request', async () => {

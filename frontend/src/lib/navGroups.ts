@@ -65,9 +65,8 @@ export const NAV_GROUPS: NavGroup[] = [
   // are ordinary words that would shadow existing routes and silently claim any
   // future one.
   { id: 'seat', labelKey: 'group.seat', icon: '🧭', href: '/seat/delivery', match: ['/seat'] },
-  // Brainstorm, Workflow Builder, and IDE are creation modes within one canvas.
-  // Legacy routes stay matched so old deep links retain a clear active home.
-  { id: 'create', labelKey: 'group.create', icon: '✦', href: '/create', match: ['/create', '/brainstorm', '/workflows', '/ide'] },
+  // Every creation mode lives in Canvas. Middleware redirects legacy entry URLs.
+  { id: 'create', labelKey: 'group.create', icon: '✦', href: '/create', match: ['/create', '/brainstorm', '/workflows'] },
   // Its own destination rather than a tab of Create: this is the front door for
   // "paste a brief, get a working system", which starts from a piece of text
   // rather than from a canvas, and ends in a project the other destinations then
@@ -246,7 +245,7 @@ export const NAV_GROUPS: NavGroup[] = [
 
 /**
  * The RESTRICTED navigation for a freelancer / gig account (users.account_type =
- * 'freelancer'). A for-hire worker never sees the IDE, Brain, projects, insights,
+ * 'freelancer'). A for-hire worker never sees Canvas, Brain, projects, insights,
  * etc. — only their for-hire profile, the gigs they can bid on / are engaged with,
  * their timecard, and account settings. Kept as its own list (not a filter of the
  * builder nav) because it is a deliberately different, minimal destination set.
@@ -319,7 +318,7 @@ export function isFreelancerAllowedPath(pathname: string): boolean {
   return FREELANCER_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-/** Longest-prefix match so /ide/dashboard resolves to IDE, /settings/api-keys to Settings, etc. */
+/** Longest-prefix match so /create/build resolves to Canvas, /settings/api-keys to Settings, etc. */
 export function findActiveGroup(pathname: string): NavGroup | undefined {
   let best: NavGroup | undefined;
   let bestLen = -1;

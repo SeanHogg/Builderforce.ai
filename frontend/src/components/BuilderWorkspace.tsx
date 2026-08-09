@@ -14,12 +14,12 @@ import { Icon } from '@/components/ui/Icon';
 import { EvermindStudioPanel } from './EvermindStudioPanel';
 import { FinetuneStudioPanel } from './FinetuneStudioPanel';
 import { PreviewFrame } from './PreviewFrame';
-import { IdeProjectsSlideOutPanel } from './ide/IdeProjectsSlideOutPanel';
+import { BuilderProjectsSlideOutPanel } from './ide/BuilderProjectsSlideOutPanel';
 import { BrainPanel } from './brain/BrainPanel';
 import { TeamChatButton } from './brain/TeamChatButton';
-import { IdeSettingsPanel } from './IdeSettingsPanel';
+import { BuilderSettingsPanel } from './BuilderSettingsPanel';
 import { useConfirm } from '@/components/ConfirmProvider';
-import { IdeAgentPanel } from './ide/IdeAgentPanel';
+import { BuilderAgentPanel } from './ide/BuilderAgentPanel';
 import { DevicePreview } from './ide/DevicePreview';
 import { MobileDevicePanel } from './ide/MobileDevicePanel';
 import { useWebContainer } from '@/hooks/useWebContainer';
@@ -48,7 +48,7 @@ interface IDEProps {
   onProjectUpdate?: (project: Project) => void;
   /** Open the project details slide-out panel. */
   onOpenProjectDetails?: () => void;
-  /** When opening from "Open in IDE" with a chat, select this project chat on load. */
+  /** When opening Builder with a chat, select this project chat on load. */
   initialChatId?: number | null;
   /** One-shot prompt auto-sent into the Brain panel on load (Project 360 seed). */
   initialPrompt?: string;
@@ -77,7 +77,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   const t = useTranslations('ide');
   const tc = useTranslations('common');
   const confirm = useConfirm();
-  // The IDE is scoped to its project's type: modality is fixed at creation, not
+  // Builder is scoped to its project's type: modality is fixed at creation, not
   // switchable in-session, so it's derived (and clamped) rather than state.
   const modalityDef = getModality(project.modality);
   const modality: ProjectModality = modalityDef.id;
@@ -154,8 +154,8 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   // calls voice.synth() and the center/right panels render its state.
   const voice = useVoiceStudio({ enabled: modality === 'voice', storageProjectId: projectIdNum });
 
-  // Task 2: Boot WebContainer and spawn an interactive shell immediately on IDE load.
-  // This makes the terminal live from the moment the IDE opens, not just after clicking Run.
+  // Boot WebContainer and spawn an interactive shell immediately on Builder load.
+  // This makes the terminal live from the moment Builder opens, not just after clicking Run.
   useEffect(() => {
     if (shellStartedRef.current) return;
     shellStartedRef.current = true;
@@ -498,7 +498,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
 
   /**
    * Run the project's quality checks inside the WebContainer — real, in-browser
-   * validation of the code the IDE/agent produced. Mounts + installs (reusing the
+   * validation of the code Builder/the agent produced. Mounts + installs (reusing the
    * install cache), then runs type-check, lint and build from the project's own
    * package.json scripts (skipping any it doesn't define). Surfaces a pass/fail
    * summary the Run button reads to warn before serving a broken preview.
@@ -616,7 +616,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
   }, [project.id]);
 
   // --- Brain integration ----------------------------------------------------
-  // The IDE's AI lives in the global Brain drawer. The IDE exposes its
+  // Builder's AI lives in the global Brain drawer. Builder exposes its
   // capabilities as MCP-style actions the Brain can call via tool-calling, and
   // publishes ambient context (project, modality, open file) the Brain reads.
   const brainCtx = useBrainContext();
@@ -650,7 +650,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
     return { ok: true };
   }, [project.id, refreshFiles, openFiles, previewUrl, writeFileToContainer]);
 
-  // Latest IDE state for action handlers, so the registered action array stays
+  // Latest Builder state for action handlers, so the registered action array stays
   // stable (no re-registration churn) while `run()` reads current values.
   const liveRef = useRef({ activeFile, modality, applyCodeToActiveFile, createProjectFile, projectIdNum, setVoiceText: voice.setText });
   liveRef.current = { activeFile, modality, applyCodeToActiveFile, createProjectFile, projectIdNum, setVoiceText: voice.setText };
@@ -1014,7 +1014,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
         {/* Team Chat — the project's group conversation (humans + agents) */}
         {Number.isFinite(projectIdNum) && <TeamChatButton projectId={projectIdNum} />}
 
-        {/* Modality label — the IDE is scoped to this project's type (set at
+        {/* Modality label — Builder is scoped to this project's type (set at
             creation), so it's shown, not switchable. */}
         <span
           title={t('modalityProject', { label: modalityCopy.label })}
@@ -1117,13 +1117,13 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
         })()}
       </div>
 
-      <IdeProjectsSlideOutPanel
+      <BuilderProjectsSlideOutPanel
         open={projectsPanelOpen}
         onClose={() => setProjectsPanelOpen(false)}
         currentStorageProjectId={typeof project.id === 'number' ? project.id : Number(project.id)}
       />
 
-      <IdeSettingsPanel
+      <BuilderSettingsPanel
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         projectId={projectIdNum}
@@ -1165,7 +1165,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
 
       {/* Main content. In Designer and Voice the agent lives in the left panel
           (the shared <BrainPanel> wired to this project's brain actions); other
-          modalities use the global floating Brain drawer. Either way the IDE
+          modalities use the global floating Brain drawer. Either way Builder
           registers the same actions, so the agent can create/apply files or set
           the narration lines. */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -1475,7 +1475,7 @@ export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpe
               />
             </div>
             <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'agent' ? 'visible' : 'hidden', pointerEvents: rightTab === 'agent' ? 'auto' : 'none' }}>
-              {rightTab === 'agent' && <IdeAgentPanel projectId={project.id} />}
+              {rightTab === 'agent' && <BuilderAgentPanel projectId={project.id} />}
             </div>
             <div style={{ position: 'absolute', inset: 0, visibility: rightTab === 'train' ? 'visible' : 'hidden', pointerEvents: rightTab === 'train' ? 'auto' : 'none' }}>
               <AITrainingPanel

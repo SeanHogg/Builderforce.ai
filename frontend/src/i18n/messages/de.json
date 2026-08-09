@@ -642,7 +642,7 @@
   "projectCard": {
     "details": "Details",
     "taskBoard": "Aufgabenboard",
-    "openIde": "In der Builder öffnen",
+    "openBuilder": "In der Builder öffnen",
     "deleteProject": "Projekt löschen",
     "agentLabel": "Agent:",
     "tasks": "{count, plural, one {# Aufgabe} other {# Aufgaben}}",
@@ -2823,7 +2823,7 @@
     "integrationKeys": "Projekt-Integrationsschlüssel",
     "workspaceTitle": "Arbeitsbereich",
     "workspaceDesc": "Arbeitsbereich und Dateisystem für dieses Projekt. Öffnen Sie die Builder, um Dateien zu bearbeiten.",
-    "openInIde": "In Builder öffnen",
+    "openInBuilder": "In Builder öffnen",
     "dueDateLabel": "Fälligkeitsdatum",
     "dueDateHint": "Lege eine Projektfrist fest. Leer lassen, um das späteste Aufgaben-Fälligkeitsdatum zu verwenden.",
     "deadline": "Frist",
@@ -4451,7 +4451,7 @@
     "viewWorkflows": "Workflows anzeigen",
     "workflows": "Workflows",
     "workflowsWithCount": "Workflows ({count})",
-    "openIde": "Im Builder öffnen",
+    "openBuilder": "Im Builder öffnen",
     "delete": "Löschen",
     "openChat": "Projekt-Chat öffnen",
     "connections": "Verbindungen"
@@ -4801,7 +4801,7 @@
       "longDesc": "Ein Embedding-basierter Cache verwendet eine frühere Antwort wieder, wenn ein neuer Prompt dasselbe bedeutet wie ein bereits beantworteter, sodass dem Frontier-Modell dieselbe Arbeit nie zweimal in Rechnung gestellt wird. Zwei Stufen: eine kostenlose On-Device-Schicht (SSM-Embeddings, in Ihrem Browser und in jedem Agenten) plus eine gemeinsame Gateway-Schicht – sodass ein Cache-Treffer in der Web-App auch Ihren Agenten Tokens spart."
     },
     {
-      "title": "Vollständiger IDE-Workspace",
+      "title": "Canvas-Builder-Workspace",
       "shortDesc": "Monaco-Editor, Terminal, KI-Chat – alles in einem.",
       "longDesc": "Monaco-Editor, Terminal, KI-Chat, Datei-Explorer – alles, was Sie brauchen, in einem kollaborativen Projekt-Workspace."
     },
@@ -6438,7 +6438,7 @@
             "desc": "Beschreiben Sie Ihren Bedarf in natürlicher Sprache; das Brain verwandelt ihn in Projekte, Datensätze und Agenten."
           },
           {
-            "title": "IDE-Workspace",
+            "title": "Canvas-Builder-Workspace",
             "desc": "Monaco-Editor, Terminal, KI-Chat und Datei-Explorer in einem kollaborativen Projekt-Workspace."
           },
           {
@@ -6462,7 +6462,7 @@
           },
           {
             "title": "Projekte / Aufgaben",
-            "desc": "Organisieren Sie Arbeit in Projekt-Workspaces — jeder mit einer vollständigen IDE, Agenten und einem Aufgaben-Board — und planen, verteilen und verfolgen Sie dann, wie Aufgaben in Board-, Tabellen-, Kalender- oder Gantt-Ansichten durch Ihre Agenten-Belegschaft fließen."
+            "desc": "Organisieren Sie Arbeit in Projekt-Workspaces — jeder mit einem Canvas Builder, Agenten und einem Aufgaben-Board — und planen, verteilen und verfolgen Sie dann, wie Aufgaben in Board-, Tabellen-, Kalender- oder Gantt-Ansichten durch Ihre Agenten-Belegschaft fließen."
           },
           {
             "title": "Planning Spine & Portfolio",
@@ -6933,7 +6933,7 @@
     "assignChatToProjectAria": "Chat einem Projekt zuweisen",
     "addProject": "+ Projekt",
     "workflowsArrow": "Workflows →",
-    "openInIde": "In der Builder öffnen →",
+    "openInBuilder": "In der Builder öffnen →",
     "brainModality": "Brain — {modality}",
     "brainAs": "Brain als {name}",
     "upgrade": "Upgrade",
@@ -7296,7 +7296,7 @@
     "targetsHint": "Alle Everminds, zu denen dieses Projekt Lernen beiträgt.",
     "targetsEmpty": "Für dieses Projekt wurden noch keine Everminds aufgelöst.",
     "targetSelfBadge": "Dieses Projekt",
-    "targetBuildBadge": "IDE-Build",
+    "targetBuildBadge": "Canvas-Build",
     "targetSeeded": "v{version}",
     "targetUnseeded": "nicht initialisiert",
     "targetInferenceOn": "Inferenz",

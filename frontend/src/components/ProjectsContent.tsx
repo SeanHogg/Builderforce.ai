@@ -370,7 +370,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
               connections={connectionsByProject.get(project.id)}
               onCardClick={(p) => openDetails(p)}
               onDetailsClick={openDetails}
-              onOpenIde={(p) => router.push(`/ide/dashboard?project=${p.id}`)}
+              onOpenBuilder={(p) => router.push(`/create?filter=build&project=${p.id}`)}
               showDetailsButton
               onAssignedAgentClick={(ac) => {
                 const agentHost = agentHostList.find((c) => c.id === ac.id);
@@ -398,7 +398,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
           diagnosticsByProject={diagnosticsByProject}
           connectionsByProject={connectionsByProject}
           onDetailsClick={openDetails}
-          onOpenIde={(p) => router.push(`/ide/dashboard?project=${p.id}`)}
+          onOpenBuilder={(p) => router.push(`/create?filter=build&project=${p.id}`)}
           onAssignedAgentClick={(ac) => {
             const agentHost = agentHostList.find((c) => c.id === ac.id);
             if (agentHost) setSelectedAgentHost(agentHost);

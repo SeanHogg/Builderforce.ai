@@ -68,6 +68,12 @@ describe('local tool canvas', () => {
     expect(ensureLocalToolCreationSession(tool)).toEqual(first);
     expect(readLocalCreationSession(first.sessionId)?.nodes[0]?.data.toolResult).toEqual({ headline: 'Level 3' });
   });
+
+  it('does not pre-seed website prompts with the generic ecommerce shell', () => {
+    const id = createLocalCreationSession('Design and build a responsive website');
+    const session = readLocalCreationSession(id);
+    expect(session?.nodes.map((node) => node.data.kind)).toEqual(['chat']);
+  });
 });
 
 describe('local Creation Session index', () => {

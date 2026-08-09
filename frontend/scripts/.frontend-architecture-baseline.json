@@ -16,7 +16,7 @@
     "components/brain/BrainPanel.tsx",
     "components/creation-canvas/CreationCanvas.tsx",
     "components/creation-canvas/CreationNode.tsx",
-    "components/IDENew.tsx",
+    "components/BuilderWorkspace.tsx",
     "components/manager/ManagerContent.tsx",
     "components/ObservabilityContent.tsx",
     "components/ProviderKeysSettings.tsx",

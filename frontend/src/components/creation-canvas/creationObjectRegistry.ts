@@ -130,7 +130,7 @@ const CAPABILITIES: Partial<Record<CreationObjectKind, string>> = {
 const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   workflow: ['edit', 'build', 'run'], website: ['edit', 'preview', 'publish'], prototype: ['edit', 'preview'],
   // Opening the Builder IS the adapter: run, checks, terminal and publish all
-  // happen inside the IDE surface it mounts, so they are not advertised here as
+  // happen inside the Builder surface it mounts, so they are not advertised here as
   // separate canvas-side actions that nothing implements.
   build: ['open'],
   dataset: ['import', 'profile', 'visualize', 'plot'], chart: ['refresh', 'drill'], dashboard: ['refresh', 'drill'], map: ['refresh', 'drill'],
@@ -160,11 +160,11 @@ const MUTABLE_FIELDS = {
   // object to a real, runnable tenant resource is the compile endpoint's job,
   // not something an LLM patch may assert.
   workflow: ['content', 'steps', 'approvalMode', 'runTarget'],
-  website: ['content', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteAccent', 'viewport', 'pages', 'subdomain', 'url', 'siteUrl', 'pathUrl'],
-  // A Builder object owns a real IDE project: the workspace scaffold lives in R2
-  // and the whole IDE surface (files, editor, dev server, checks, publish) opens
-  // on the canvas. `modality` picks the starter template the same way the IDE
-  // dashboard's type chooser does — see [[ide-projects-child-entity]].
+  website: ['content', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteAccent', 'websiteTheme', 'activeWebsitePageId', 'viewport', 'pages', 'subdomain', 'url', 'siteUrl', 'pathUrl'],
+  // A Builder object owns a real workspace: the scaffold lives in R2 and the
+  // whole Builder surface (files, editor, dev server, checks, publish) opens on
+  // Canvas. `modality` picks its starter template. The `ideProjectId` field is a
+  // legacy persistence name retained until that data contract is migrated.
   build: ['content', 'modality', 'template', 'ideProjectId', 'storageProjectId', 'storageProjectPublicId', 'containerProjectId', 'fileCount', 'previewUrl', 'subdomain', 'url', 'siteUrl', 'pathUrl'],
   chat: ['content', 'aiResponse', 'messages', 'trace'],
   dataset: ['content', 'columns', 'rows', 'sampleRows', 'rowCount', 'profile', 'summary', 'fileName', 'mimeType'],
@@ -179,7 +179,7 @@ const MUTABLE_FIELDS = {
   projectComparison: ['content', 'projects', 'sources', 'fetchedAt', 'recommendations'],
   roadmap: ['content', 'items', 'milestones', 'sources'],
   note: ['content', 'markdown'],
-  prototype: ['content', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteAccent', 'viewport', 'pages'],
+  prototype: ['content', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteAccent', 'websiteTheme', 'activeWebsitePageId', 'viewport', 'pages'],
   code: ['content', 'code', 'language', 'path'],
   browser: ['content', 'url', 'viewport', 'pageTitle'],
   repository: ['content', 'url', 'branch'],
@@ -308,7 +308,7 @@ const CONTEXT_FIELDS = [
   'mapPoints', 'mapTitle', 'mapValueLabel', 'mapRegion', 'mapRegionName', 'mapAttribution',
   'projects', 'sources', 'items', 'summary', 'participants', 'evermindVersion',
   'contributions', 'inferenceEnabled', 'teacherModel', 'viewport', 'content', 'markdown',
-  'steps', 'websiteHeadline', 'websiteBody', 'websiteCta', 'pages', 'kpis', 'verdict',
+  'steps', 'websiteHeadline', 'websiteBody', 'websiteCta', 'websiteTheme', 'activeWebsitePageId', 'pages', 'kpis', 'verdict',
   'modality', 'template', 'ideProjectId', 'storageProjectId', 'fileCount', 'previewUrl',
   'gaps', 'recommendations', 'milestones', 'code', 'language', 'path', 'url', 'branch',
   'diagnostics', 'findings', 'checks', 'results', 'result', 'nextSteps', 'actions', 'remediation',

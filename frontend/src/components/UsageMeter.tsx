@@ -68,7 +68,7 @@ const METER_ICON: Record<MeterSnapshot['key'], string> = {
  */
 const METER_CONFIG_HREF: Record<MeterSnapshot['key'], string> = {
   ai_tokens: '/settings/integrations',
-  cloud_runs: '/ide/dashboard',
+  cloud_runs: '/create?filter=build',
   ingestion: '/settings/integrations',
   error_events: '/quality?tab=collectors',
   outbound_fetches: '/insights/finance',

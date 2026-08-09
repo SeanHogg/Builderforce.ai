@@ -1,45 +1,35 @@
 'use client';
 
-export const runtime = 'edge';
-
 import { useEffect } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { fetchIdeProjectByStorage, fetchProject } from '@/lib/api';
 import { creationSessionsApi } from '@/lib/builderforceApi';
 
-/**
- * Compatibility adapter for old IDE deep links.
- *
- * The IDE is no longer a page. Resolve its storage-project URL to the canonical
- * IDE project, open the project's Builder object in a Creation Session, and ask
- * the canvas to open that object's workspace immediately.
- */
-export default function IDECanvasRedirect() {
-  const params = useParams<{ id: string }>();
+/** Resolve a legacy storage-project reference into its Builder object on Canvas. */
+export function BuildCanvasRedirect({ projectRef }: { projectRef: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    const id = params?.id;
-    if (!id) return;
+    if (!projectRef) return;
     let cancelled = false;
-
-    void fetchProject(id)
+    void fetchProject(projectRef)
       .then((project) => fetchIdeProjectByStorage(project.id))
       .then((build) => creationSessionsApi.openIdeProject(build.id))
       .then((opened) => {
         if (cancelled) return;
         const next = new URLSearchParams({ focus: opened.objectId, build: '1' });
-        const prompt = searchParams.get('prompt');
-        if (prompt) next.set('prompt', prompt);
+        for (const key of ['prompt', 'chat', 'ticket'] as const) {
+          const value = searchParams.get(key);
+          if (value) next.set(key, value);
+        }
         router.replace(`/create/${opened.sessionId}?${next.toString()}`);
       })
       .catch(() => {
         if (!cancelled) router.replace('/create?filter=build');
       });
-
     return () => { cancelled = true; };
-  }, [params, router, searchParams]);
+  }, [projectRef, router, searchParams]);
 
   return null;
 }

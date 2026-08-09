@@ -11,23 +11,23 @@ import { LOCALES, DEFAULT_LOCALE, LOCALE_COOKIE, type Locale } from '@/i18n/conf
  *
  * WEB-TOKEN required: /tenants (tenant selector → login when logged out).
  *
- * Feature routes (/dashboard, /ide, /projects, /training, /tasks, /workforce,
+ * Feature routes (/dashboard, /create, /projects, /training, /tasks, /workforce,
  *   /chats, /brainstorm, /content-manager, /skills, /personas, /approvals,
  *   /security, /settings, /debug, …): when logged OUT we let the
  *   request through so the client renders a marketing teaser + login/CTA
  *   (RouteMarketing) rather than redirecting; signed-in-but-no-tenant → /tenants.
  */
-// Cross-origin isolation for the in-browser IDE. WebContainer needs
+// Cross-origin isolation for Canvas Builder workspaces. WebContainer needs
 // `self.crossOriginIsolated === true` to transfer a SharedArrayBuffer to its
-// worker; that requires COOP:same-origin + COEP:credentialless on the IDE
+// worker; that requires COOP:same-origin + COEP:credentialless on the Canvas
 // document. public/_headers + next.config.js set these for static/prerendered
 // routes, but @cloudflare/next-on-pages applies _headers ONLY to static assets
 // and does NOT reliably emit next.config headers() for dynamically-rendered
-// (SSR) routes. `/ide/[id]` is SSR (it fetches the project), so it slipped
+// (SSR) routes. `/create/[sessionId]` is SSR, so it can slip
 // through both and booted un-isolated — failing with "not cross-origin
 // isolated". Middleware runs in the Worker for matched routes and DOES apply to
-// the SSR response, so we set the headers here for the IDE routes. Scoped to
-// /ide on purpose: blanket credentialless on /embed/* or auth-popup routes can
+// the SSR response, so we set the headers here for Canvas routes. Scoped to
+// creation sessions on purpose: blanket credentialless on /embed/* or auth-popup routes can
 // break credentialed cross-origin frames.
 const COI_HEADERS: Record<string, string> = {
   'Cross-Origin-Opener-Policy': 'same-origin',
@@ -35,11 +35,11 @@ const COI_HEADERS: Record<string, string> = {
 };
 // The WebContainer connect handshake tab is the INVERSE of COI: it must NOT be
 // cross-origin isolated, or COOP:same-origin severs the postMessage/opener
-// bridge back to the IDE (setupConnect → "This page must have an opener. You
+// bridge back to the Canvas Builder (setupConnect → "This page must have an opener. You
 // must serve it with appropriate headers"). next.config + public/_headers also
 // declare this, but @cloudflare/next-on-pages doesn't reliably apply either to a
 // dynamically-rendered route — and /webcontainer/connect/[id] is SSR — so set it
-// here, exactly as we do for the SSR /ide route. Keep all three in sync.
+// here, exactly as we do for the SSR Canvas route. Keep all three in sync.
 const NO_ISOLATION_HEADERS: Record<string, string> = {
   'Cross-Origin-Opener-Policy': 'unsafe-none',
   'Cross-Origin-Embedder-Policy': 'unsafe-none',
@@ -88,7 +88,24 @@ export function middleware(request: NextRequest) {
     return withHeaders(NextResponse.next(), NO_ISOLATION_HEADERS);
   }
 
-  const needsCoi = pathname === '/ide' || pathname.startsWith('/ide/');
+  // The former editor product surface is retired. Preserve published deep links without
+  // mounting a second UI: every route resolves directly into Creation Canvas.
+  if (pathname === '/ide' || pathname === '/ide/dashboard') {
+    const url = request.nextUrl.clone();
+    url.pathname = '/create';
+    url.searchParams.set('filter', 'build');
+    return NextResponse.redirect(url);
+  }
+  if (pathname.startsWith('/ide/')) {
+    const projectRef = pathname.slice('/ide/'.length).split('/')[0];
+    const url = request.nextUrl.clone();
+    url.pathname = `/create/build/${projectRef}`;
+    return NextResponse.redirect(url);
+  }
+
+  const needsCoi = (
+    pathname.startsWith('/create/') && !pathname.startsWith('/create/invitations/')
+  );
 
   // Embedded surfaces (/embed/*) are framed cross-origin by host apps (e.g.
   // BurnRateOS). They authenticate via postMessage (not cookies), so we must NOT
@@ -178,7 +195,7 @@ export function middleware(request: NextRequest) {
     return ensureLocaleCookie(request, needsCoi ? withHeaders(NextResponse.next(), COI_HEADERS) : NextResponse.next());
   }
 
-  return ensureLocaleCookie(request, NextResponse.next());
+  return ensureLocaleCookie(request, needsCoi ? withHeaders(NextResponse.next(), COI_HEADERS) : NextResponse.next());
 }
 
 export const config = {
@@ -189,6 +206,7 @@ export const config = {
     '/logs/:path*',
     '/timeline/:path*',
     '/dashboard/:path*',
+    '/create/:path*',
     '/ide',
     '/ide/:path*',
     '/tenants/:path*',

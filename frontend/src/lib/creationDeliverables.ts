@@ -2,6 +2,7 @@ import { apiRequest } from './apiClient';
 import { dxfPreviewSvg, meshFormatFromHint, stlPreviewSvg, svgDataUrl, type MeshFormat } from './creativeGeometry';
 import { gamePosterDataUrl } from './gamePoster';
 import type { CreationNodeData } from '@/components/creation-canvas/types';
+import { websitePagesFrom, websiteThemeFrom, type WebsiteSection } from '@/components/creation-canvas/websiteWysiwyg';
 
 export type CreationDeliverableStatus = 'running' | 'delivered' | 'failed';
 
@@ -410,10 +411,36 @@ export function evermindMediaArtifact(
 /** Build a complete, dependency-free site from an authored Website object. */
 export function buildWebsiteAssets(data: CreationNodeData): Array<{ path: string; data: Uint8Array }> {
   const title = escapeHtml(data.title || 'Created with Builderforce');
+  const pages = websitePagesFrom(data);
+  const theme = websiteThemeFrom(data);
   const headline = escapeHtml(data.websiteHeadline || data.title || 'Bring your idea to life');
   const body = escapeHtml(data.websiteBody || data.content || data.subtitle || 'Created collaboratively in Builderforce.');
   const cta = escapeHtml(data.websiteCta || 'Get started');
-  const accent = safeColor(data.websiteAccent);
+  const accent = safeColor(theme.accent || data.websiteAccent);
+  const background = safeColor(theme.background || '#f7f4ef');
+  const foreground = safeColor(theme.foreground || '#171717');
+  const sectionHtml = (section: WebsiteSection): string => {
+    const heading = section.heading ? `<h2>${escapeHtml(section.heading)}</h2>` : '';
+    const copy = section.body ? `<p>${escapeHtml(section.body)}</p>` : '';
+    if (section.kind === 'hero') return `<section class="hero"><div>${section.eyebrow ? `<small>${escapeHtml(section.eyebrow)}</small>` : ''}<h1>${escapeHtml(section.heading)}</h1>${copy}<span>${section.cta ? `<a class="cta" href="#contact">${escapeHtml(section.cta)}</a>` : ''}${section.secondaryCta ? `<a class="secondary" href="#content">${escapeHtml(section.secondaryCta)}</a>` : ''}</span></div><aside aria-hidden="true"><i></i><i></i><i></i></aside></section>`;
+    if (section.kind === 'features') return `<section class="content" id="content">${heading}${copy}<div class="features">${(section.items || []).map((item, index) => `<article><b>${String(index + 1).padStart(2, '0')}</b><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.body)}</p></article>`).join('')}</div></section>`;
+    if (section.kind === 'stats') return `<section class="stats">${(section.items || []).map((item) => `<span><strong>${escapeHtml(item.value)}</strong><small>${escapeHtml(item.label)}</small></span>`).join('')}</section>`;
+    if (section.kind === 'testimonial') return `<section class="quote"><blockquote>“${escapeHtml(section.quote || section.body)}”</blockquote>${section.author ? `<cite>${escapeHtml(section.author)}</cite>` : ''}</section>`;
+    if (section.kind === 'cta') return `<section class="final" id="contact">${heading}${copy}${section.cta ? `<a href="mailto:hello@example.com">${escapeHtml(section.cta)}</a>` : ''}</section>`;
+    return `<section class="content">${heading}${copy}</section>`;
+  };
+  if (pages.length) {
+    const encoder = new TextEncoder();
+    const nav = pages.map((page) => `<a href="${page.path === '/' ? '/' : `${page.path.replace(/\/$/, '')}/`}">${escapeHtml(page.name)}</a>`).join('');
+    const assets = pages.map((page, index) => {
+      const pageTitle = `${escapeHtml(page.name)} · ${title}`;
+      const description = page.sections.find((section) => section.body)?.body || data.content || data.subtitle || data.title;
+      const html = `<!doctype html><html lang="en" data-theme="${theme.style}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${pageTitle}</title><meta name="description" content="${escapeHtml(String(description).slice(0, 155))}"><link rel="stylesheet" href="${index === 0 ? '' : '../'}styles.css"></head><body><nav><strong>${title}</strong><span>${nav}</span></nav><main>${page.sections.map(sectionHtml).join('')}</main><footer>${title}</footer></body></html>`;
+      return { path: index === 0 ? 'index.html' : `${page.path.replace(/^\/+|\/+$/g, '') || page.id}/index.html`, data: encoder.encode(html) };
+    });
+    const css = `:root{font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:${foreground};background:${background};--accent:${accent}}*{box-sizing:border-box}body{margin:0;background:${background};color:${foreground}}nav{height:72px;padding:0 clamp(24px,6vw,88px);display:flex;align-items:center;gap:32px;border-bottom:1px solid color-mix(in srgb,${foreground} 12%,transparent)}nav span{display:flex;justify-content:flex-end;gap:22px;flex:1}nav a{color:inherit;text-decoration:none}.hero{min-height:72vh;padding:clamp(48px,9vw,128px) clamp(24px,8vw,120px);display:grid;grid-template-columns:minmax(0,1.2fr) minmax(240px,.8fr);gap:8vw;align-items:center;background:linear-gradient(125deg,color-mix(in srgb,${background} 90%,white),color-mix(in srgb,${background} 72%,${foreground}))}.hero small{color:var(--accent);font-weight:800;letter-spacing:.16em;text-transform:uppercase}.hero h1{max-width:14ch;font-size:clamp(48px,7.5vw,108px);line-height:.92;letter-spacing:-.06em;margin:14px 0 24px}.hero p,.content>p{font-size:clamp(17px,2vw,24px);line-height:1.6;opacity:.68;max-width:720px}.hero span{display:flex;gap:12px;margin-top:28px}.hero a,.final a{display:inline-block;padding:14px 22px;border-radius:999px;background:var(--accent);color:white;text-decoration:none;font-weight:750}.hero .secondary{background:transparent;color:inherit;border:1px solid currentColor}.hero aside{height:400px;display:grid;grid-template-columns:1fr 1fr;gap:12px;transform:rotate(-2deg)}.hero aside i{display:block;border-radius:70px 12px 48px 12px;background:var(--accent);opacity:.65}.hero aside i:first-child{grid-row:1/3;opacity:.22}.content{padding:clamp(64px,8vw,120px) clamp(24px,8vw,120px)}.content h2,.final h2{font-size:clamp(36px,5vw,72px);letter-spacing:-.045em;line-height:1;max-width:16ch}.features{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:48px}.features article{padding:28px;border:1px solid color-mix(in srgb,${foreground} 13%,transparent);border-radius:18px}.features b{color:var(--accent)}.features p{opacity:.62;line-height:1.55}.stats{display:grid;grid-template-columns:repeat(3,1fr);padding:0 clamp(24px,8vw,120px) 80px}.stats span{display:grid;text-align:center}.stats strong{color:var(--accent);font-size:clamp(38px,5vw,70px)}.quote{padding:100px 24px;text-align:center;background:color-mix(in srgb,${background} 82%,white)}blockquote{font:600 clamp(28px,4vw,54px)/1.2 Georgia,serif;max-width:24ch;margin:0 auto 20px}.final{padding:clamp(70px,10vw,140px) clamp(24px,8vw,120px);background:var(--accent);color:white}.final a{background:white;color:${foreground}}footer{padding:28px clamp(24px,6vw,88px);opacity:.55}html[data-theme=bold] .hero{background:${foreground};color:${background}}html[data-theme=minimal] .hero{grid-template-columns:1fr}html[data-theme=minimal] .hero aside{display:none}@media(max-width:760px){nav span{display:none}.hero{grid-template-columns:1fr}.hero aside{height:260px}.features,.stats{grid-template-columns:1fr}}`;
+    return [...assets, { path: 'styles.css', data: encoder.encode(css) }];
+  }
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title><meta name="description" content="${body.slice(0, 155)}"><link rel="stylesheet" href="styles.css"></head>

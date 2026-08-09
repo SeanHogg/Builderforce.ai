@@ -123,6 +123,7 @@ import { buildLlmCourse, buildScormPackage, courseFromNode } from '@/lib/courseL
 import { executeModelComparison } from '@/lib/modelComparison';
 import { normalizeModelComparisonIds } from '@/lib/modelComparisonRequest';
 import { signInHref } from '@/lib/auth';
+import { authoredWebsiteProblem, patchWebsiteHero, websiteHeroFrom } from './websiteWysiwyg';
 
 const Canvas3DView = dynamic(
   () => import('@/components/canvas/Canvas3DView')
@@ -197,6 +198,25 @@ const CONNECTED_CANVAS_ACTIONS: Partial<Record<CreationObjectKind, readonly stri
   image: ['generate', 'preview', 'export', 'convert-to-drawio'], drawing: ['convert-to-drawio'], animation: ['generate', 'preview', 'export'], podcast: ['generate', 'preview', 'export'],
   comic: ['generate', 'preview', 'export'], game: ['generate', 'preview', 'export'], cad: ['generate', 'preview', 'export'], model3d: ['generate', 'preview', 'export'],
   resume: ['generate', 'preview', 'export'], template: ['browse', 'apply'],
+};
+const WEBSITE_SECTION_SCHEMA = {
+  type: 'object', required: ['id', 'kind'], additionalProperties: false,
+  properties: {
+    id: { type: 'string' }, kind: { type: 'string', enum: ['hero', 'features', 'content', 'stats', 'testimonial', 'cta'] },
+    eyebrow: { type: 'string' }, heading: { type: 'string' }, body: { type: 'string' }, cta: { type: 'string' }, secondaryCta: { type: 'string' },
+    quote: { type: 'string' }, author: { type: 'string' },
+    items: { type: 'array', items: { type: 'object', additionalProperties: false, properties: { title: { type: 'string' }, body: { type: 'string' }, value: { type: 'string' }, label: { type: 'string' } } } },
+  },
+};
+const WEBSITE_PAGES_SCHEMA = {
+  type: 'array', minItems: 1, maxItems: 8, items: {
+    type: 'object', required: ['id', 'name', 'path', 'sections'], additionalProperties: false,
+    properties: { id: { type: 'string' }, name: { type: 'string' }, path: { type: 'string' }, sections: { type: 'array', minItems: 2, maxItems: 12, items: WEBSITE_SECTION_SCHEMA } },
+  },
+};
+const WEBSITE_THEME_SCHEMA = {
+  type: 'object', required: ['style'], additionalProperties: false,
+  properties: { style: { type: 'string', enum: ['editorial', 'bold', 'minimal', 'soft', 'technical'] }, background: { type: 'string' }, foreground: { type: 'string' }, accent: { type: 'string' } },
 };
 const CREATIVE_GENERATOR_KINDS = new Set<CreationObjectKind>(['image', 'animation', 'podcast', 'comic', 'game', 'cad', 'model3d', 'resume', 'template']);
 const CREATIVE_OUTPUTS = Object.fromEntries(CREATIVE_CAPABILITIES.map((capability) => [capability.kind, capability.outputs])) as Partial<Record<CreationObjectKind, readonly string[]>>;
@@ -494,7 +514,7 @@ export function projectEvermindNodePatch(head: ProjectEvermindHead, activity: Pr
   };
 }
 
-function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialBuildOpen = false, initialPrompt, initialPresent = false, initialModelComparisonIds = [], stageActive = true }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
+function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialBuildOpen = false, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent = false, initialModelComparisonIds = [], stageActive = true }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
   const t = useTranslations('creationCanvas');
   /**
    * A shipped pack's name and blurb are product copy, so they come from the
@@ -626,7 +646,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [mergeReview, setMergeReview] = useState<MergeReview | null>(null);
   const [workflowFocus, setWorkflowFocus] = useState<{ nodeId: string; definitionId: string | null } | null>(null);
   const [trainingFocus, setTrainingFocus] = useState<{ nodeId: string; projectId: number | string; localOnly: boolean } | null>(null);
-  // The Builder object whose IDE workspace is open on top of the board.
+  // The Builder object whose workspace is open on top of the board.
   const [buildFocus, setBuildFocus] = useState<{ nodeId: string; storageProjectId: number } | null>(null);
   /** The game object whose ship-to-device panel is open, by node id. */
   const [gameFocus, setGameFocus] = useState<string | null>(null);
@@ -1909,7 +1929,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
   }, [canEdit, localizedTourDefaults, sessionId, setNodes, t, timeline]);
 
-  // The shell recorder writes through the canonical IDE workspace store, then
+  // The shell recorder writes through the canonical Builder workspace store, then
   // announces the durable artifact to the board that started it. Hidden cached
   // boards hear the same event but ignore a different session id.
   useEffect(() => {
@@ -3111,7 +3131,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       properties: {
         kind: { type: 'string', enum: CREATION_OBJECT_REGISTRY.map((definition) => definition.kind) },
         title: { type: 'string' }, subtitle: { type: 'string' }, status: { type: 'string' },
-        fields: { type: 'object', description: 'Type-specific authored content. Unknown or sensitive fields are rejected. For courses, course must match the declared nested schema. For guidedTour objects, author the complete reusable onboarding contract in tour.', properties: { course: COURSE_AUTHORING_SCHEMA, tour: GUIDED_TOUR_AUTHORING_SCHEMA }, additionalProperties: true },
+        fields: { type: 'object', description: 'Type-specific authored content. Unknown or sensitive fields are rejected. Website and prototype objects require complete WYSIWYG pages and an authored theme; never create a titled shell. For courses, course must match the declared nested schema. For guidedTour objects, author the complete reusable onboarding contract in tour.', properties: { course: COURSE_AUTHORING_SCHEMA, tour: GUIDED_TOUR_AUTHORING_SCHEMA, pages: WEBSITE_PAGES_SCHEMA, websiteTheme: WEBSITE_THEME_SCHEMA }, additionalProperties: true },
         x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' },
       },
     },
@@ -3140,6 +3160,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (args.kind === 'course' && !(authored.course as { modules?: unknown } | undefined)?.modules) {
         return { error: `A generated course must include the authored curriculum in fields.course as ${COURSE_AUTHORING_CONTRACT}. Without it the object would show the sample "Build an LLM" curriculum under your title.` };
       }
+      if (args.kind === 'website' || args.kind === 'prototype') {
+        const problem = authoredWebsiteProblem(authored);
+        if (problem) return { error: `${problem} Do not create an empty website shell or rely on renderer defaults.` };
+      }
       node.data = { ...node.data, ...authored, title: typeof authored.title === 'string' && authored.title.trim() ? authored.title.slice(0, 160) : node.data.title };
       const width = Number(args.width); const height = Number(args.height);
       if (Number.isFinite(width) || Number.isFinite(height)) node.style = { width: Number.isFinite(width) ? Math.max(240, Math.min(width, 2_400)) : undefined, height: Number.isFinite(height) ? Math.max(130, Math.min(height, 1_800)) : undefined };
@@ -3158,6 +3182,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       if (!args.objectId || !target) return { error: 'Object not found' };
       const patch = sanitizeCreationObjectPatch(target.data.kind, args.fields);
       if (!Object.keys(patch).length) return { error: `No supported fields supplied. Mutable fields: ${creationObjectDefinition(target.data.kind).mutableFields.join(', ')}` };
+      if (target.data.kind === 'website' || target.data.kind === 'prototype') {
+        const problem = authoredWebsiteProblem({ ...target.data, ...patch });
+        if (problem) return { error: `${problem} Update this object with its complete WYSIWYG page structure.` };
+      }
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'object.update', label: `Update ${args.objectId}`, objectId: args.objectId, patch });
       return { ok: true, proposed: true, objectId: args.objectId, updatedFields: Object.keys(patch) };
     },
@@ -3684,10 +3712,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   useEffect(() => {
     const request = initialPrompt?.trim();
     if (!request || !hydrated.current || initialPromptSubmitted.current || thinking) return;
+    if (initialFocusId && selectedId !== initialFocusId) return;
     initialPromptSubmitted.current = true;
     setPrompt(request);
     evaluateCanvas(request);
-  }, [evaluateCanvas, initialPrompt, nodes, thinking]);
+  }, [evaluateCanvas, initialFocusId, initialPrompt, selectedId, thinking]);
 
   const applyProposedChanges = useCallback(async () => {
     const selected = proposedChanges.filter((change) => acceptedProposalIds.has(change.id));
@@ -3983,9 +4012,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [edges, nodes, persistence, requireAccount, selectedNode, sessionId, setNodes]);
 
   /**
-   * Open a Builder object's IDE workspace on the board, creating the backing IDE
-   * project first when the object is not bound yet. Creation goes through the
-   * same `/api/ide-projects` route the IDE dashboard uses, so the workspace is
+   * Open a Builder object's workspace on the board, creating its backing legacy
+   * build record first when the object is not bound yet. Creation goes through
+   * the existing `/api/ide-projects` compatibility route, so the workspace is
    * seeded with its modality's starter template and opens runnable — the
    * in-browser website/app builder, on the canvas.
    */
@@ -4015,7 +4044,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       .finally(() => setCreatingBuild(false));
   }, [creatingBuild, edges, nodes, persistence, requireAccount, selectedNode, setNodes, t]);
 
-  /** Bind a Builder object to an IDE project that already exists, instead of
+  /** Bind a Builder object to a legacy build record that already exists, instead of
    *  provisioning a second workspace for work that is already under way. */
   const attachBuild = useCallback((nodeId: string, ide: IdeProject) => {
     setNodes((current) => current.map((node) => node.id === nodeId ? { ...node, data: { ...node.data, ...canvasBuildPatch(ide) } } : node));
@@ -4024,9 +4053,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   }, [setNodes, t]);
 
   /**
-   * Delete the IDE project a Builder object provisioned, and return the object to
+   * Delete the build record a Builder object provisioned, and return the object to
    * its unbound state. Removing the OBJECT deliberately leaves the workspace alone
-   * — an IDE project is a first-class child of a Project and outlives the session
+   * — a build record is a first-class child of a Project and outlives the session
    * that spawned it — so this is the explicit way to discard the files too.
    */
   const deleteBuildWorkspace = useCallback(async (nodeId: string) => {
@@ -4992,6 +5021,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <div className={styles.buildFocusBody}>
             <CanvasBuildPanel
               storageProjectId={buildFocus.storageProjectId}
+              initialChatId={initialBuildChatId}
+              initialTicket={initialBuildTicket ?? undefined}
               onClose={() => setBuildFocus(null)}
               onProjectRenamed={(name) => setNodes((current) => current.map((node) => node.id === buildFocus.nodeId ? { ...node, data: { ...node.data, title: name } } : node))}
             />
@@ -5157,6 +5188,8 @@ function GuidedTourInspector({ node, nodes, onChange }: { node: CreationFlowNode
 function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onEditWorkflow, onBuildWorkflow, onSaveAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDrawio, onExportArtifact }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onEditWorkflow: () => void; onBuildWorkflow: () => void; onSaveAgent: () => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onConvertDrawio: (diagramId?: string) => string; onExportArtifact: (action: CanvasExportAction) => Promise<string> }) {
   const t = useTranslations('creationCanvas');
   const kind = node.data.kind;
+  const onWebsiteChange = (patch: Partial<CreationNodeData>) => onChange(patchWebsiteHero(node.data, patch));
+  const websiteHero = websiteHeroFrom(node.data);
   const [tab, setTab] = useState<'details' | 'activity'>('details');
   const [accessStatus, setAccessStatus] = useState('');
   const [actionStatus, setActionStatus] = useState('');
@@ -5332,7 +5365,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
         <p className={styles.inspectorHint}>{deliveryAgent?.data.resourceId ? t('deliveryConnectedHint') : t('deliveryPendingHint')}</p>
       </section>}
       {kind === 'staff' && <><label>{t('role')}<input value={node.data.role || ''} onChange={(event) => onChange({ role: event.target.value })} /></label><label>{t('currentFocus')}<textarea value={node.data.focus || ''} onChange={(event) => onChange({ focus: event.target.value })} rows={4} /></label></>}
-      {(kind === 'website' || kind === 'prototype') && <><label>{t('headline')}<input value={typeof node.data.websiteHeadline === 'string' ? node.data.websiteHeadline : 'Fall in love with every look'} onChange={(event) => onChange({ websiteHeadline: event.target.value })} /></label><label>{t('supportingCopy')}<textarea rows={3} value={typeof node.data.websiteBody === 'string' ? node.data.websiteBody : 'New arrivals for the season ahead.'} onChange={(event) => onChange({ websiteBody: event.target.value })} /></label><label>{t('callToAction')}<input value={typeof node.data.websiteCta === 'string' ? node.data.websiteCta : 'Shop the collection'} onChange={(event) => onChange({ websiteCta: event.target.value })} /></label><label>{t('accentColor')}<input type="color" value={typeof node.data.websiteAccent === 'string' ? node.data.websiteAccent : AUTHORED_WEBSITE_ACCENT} onChange={(event) => onChange({ websiteAccent: event.target.value })} /></label><label>{t('viewport')}<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onWebsiteViewportChange(event.target.value as 'desktop' | 'tablet' | 'mobile')}><option value="desktop">{t('viewportDesktop')}</option><option value="tablet">{t('viewportTablet')}</option><option value="mobile">{t('viewportMobile')}</option></select></label>{kind === 'website' && <><label>{t('subdomain')}<input value={typeof node.data.subdomain === 'string' ? node.data.subdomain : ''} placeholder={t('subdomainPlaceholder')} onChange={(event) => onChange({ subdomain: event.target.value })} /></label><button type="button" className={styles.fullButton} onClick={onPublishWebsite}>{t('publishWebsite')}</button>{typeof node.data.siteUrl === 'string' && <a href={node.data.siteUrl} target="_blank" rel="noreferrer">{t('openPublishedSite')}</a>}<button type="button" className={styles.secondaryFullButton} onClick={onBuildWebsiteWithCode}>{t('build.websiteWithCode')}</button><p className={styles.inspectorHint}>{t('build.websiteWithCodeHint')}</p></>}<p className={styles.inspectorHint}>{t('websiteLiveHint')}</p></>}
+      {(kind === 'website' || kind === 'prototype') && <><label>{t('headline')}<input value={websiteHero.heading} onChange={(event) => onWebsiteChange({ websiteHeadline: event.target.value })} /></label><label>{t('supportingCopy')}<textarea rows={3} value={websiteHero.body} onChange={(event) => onWebsiteChange({ websiteBody: event.target.value })} /></label><label>{t('callToAction')}<input value={websiteHero.cta} onChange={(event) => onWebsiteChange({ websiteCta: event.target.value })} /></label><label>{t('accentColor')}<input type="color" value={typeof node.data.websiteAccent === 'string' ? node.data.websiteAccent : AUTHORED_WEBSITE_ACCENT} onChange={(event) => onChange({ websiteAccent: event.target.value, websiteTheme: { ...(typeof node.data.websiteTheme === 'object' && node.data.websiteTheme ? node.data.websiteTheme as Record<string, unknown> : {}), accent: event.target.value } })} /></label><label>{t('viewport')}<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onWebsiteViewportChange(event.target.value as 'desktop' | 'tablet' | 'mobile')}><option value="desktop">{t('viewportDesktop')}</option><option value="tablet">{t('viewportTablet')}</option><option value="mobile">{t('viewportMobile')}</option></select></label>{kind === 'website' && <><label>{t('subdomain')}<input value={typeof node.data.subdomain === 'string' ? node.data.subdomain : ''} placeholder={t('subdomainPlaceholder')} onChange={(event) => onChange({ subdomain: event.target.value })} /></label><button type="button" className={styles.fullButton} onClick={onPublishWebsite}>{t('publishWebsite')}</button>{typeof node.data.siteUrl === 'string' && <a href={node.data.siteUrl} target="_blank" rel="noreferrer">{t('openPublishedSite')}</a>}<button type="button" className={styles.secondaryFullButton} onClick={onBuildWebsiteWithCode}>{t('build.websiteWithCode')}</button><p className={styles.inspectorHint}>{t('build.websiteWithCodeHint')}</p></>}<p className={styles.inspectorHint}>{t('websiteLiveHint')}</p></>}
       {kind === 'guidedTour' && <GuidedTourInspector node={node} nodes={nodes} onChange={onChange} />}
       {kind === 'build' && <BuildInspectorSection node={node} editable={editable} creating={creatingBuild} persistence={persistence} onChange={onChange} onOpenBuild={onOpenBuild} onAttachBuild={onAttachBuild} onDeleteBuildWorkspace={onDeleteBuildWorkspace} />}
       {kind === 'video' && <><label>{t('prompt')}<textarea rows={5} value={typeof node.data.prompt === 'string' ? node.data.prompt : ''} onChange={(event) => onChange({ prompt: event.target.value })} placeholder={t('videoPromptPlaceholder')} /></label><label>{t('publishedEvermindModel')}<input value={typeof node.data.modelSlug === 'string' ? node.data.modelSlug : ''} onChange={(event) => onChange({ modelSlug: event.target.value })} placeholder={t('mediaModelPlaceholder')} /></label><label>{t('frames')}<input type="number" min="1" max="64" value={typeof node.data.maxFrames === 'number' ? node.data.maxFrames : 16} onChange={(event) => onChange({ maxFrames: Math.max(1, Math.min(64, Number(event.target.value) || 16)) })} /></label><button type="button" className={styles.fullButton} onClick={onGenerateVideo}>{t('generateVideo')}</button>{typeof node.data.videoUrl === 'string' && <img src={node.data.videoUrl} alt={t('videoFirstFrame')} style={{ width: '100%', borderRadius: 'var(--radius-lg)' }} />}</>}
@@ -5689,9 +5722,9 @@ function PitchInspector({ node, editable, onChange }: {
 /**
  * Builder inspector — pick what to build, then open the workspace.
  *
- * The type list is the IDE's own modality registry, so the Canvas offers exactly
- * the project types the IDE does and each one seeds its own starter template.
- * Type is fixed once the workspace exists, matching the IDE (a project's modality
+ * The type list is Builder's modality registry, so Canvas offers every supported
+ * project type and each one seeds its own starter template.
+ * Type is fixed once the workspace exists (a project's modality
  * is set at creation, not switched mid-session).
  */
 function BuildInspectorSection({ node, editable, creating, persistence, onChange, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace }: {
@@ -5891,8 +5924,8 @@ function ActivityInspector({ sessionId, objectId, persistence, role, members }: 
   </div>;
 }
 
-export function CreationCanvas({ sessionId, persistence = 'server', initialFocusId, initialShareOpen, initialBuildOpen, initialPrompt, initialPresent, initialModelComparisonIds, stageActive = true }: { sessionId: string; persistence?: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
+export function CreationCanvas({ sessionId, persistence = 'server', initialFocusId, initialShareOpen, initialBuildOpen, initialBuildChatId, initialBuildTicket, initialPrompt, initialPresent, initialModelComparisonIds, stageActive = true }: { sessionId: string; persistence?: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialBuildChatId?: number | null; initialBuildTicket?: { kind: string; ref: string } | null; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
   // The 3D scene publishes its view commands to the canvas rail rather than
   // carrying a toolbar of its own, so both live under one provider.
-  return <ReactFlowProvider><Canvas3DControlsProvider><CanvasInner sessionId={sessionId} persistence={persistence} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialBuildOpen={initialBuildOpen} initialPrompt={initialPrompt} initialPresent={initialPresent} initialModelComparisonIds={initialModelComparisonIds} stageActive={stageActive} /></Canvas3DControlsProvider></ReactFlowProvider>;
+  return <ReactFlowProvider><Canvas3DControlsProvider><CanvasInner sessionId={sessionId} persistence={persistence} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialBuildOpen={initialBuildOpen} initialBuildChatId={initialBuildChatId} initialBuildTicket={initialBuildTicket} initialPrompt={initialPrompt} initialPresent={initialPresent} initialModelComparisonIds={initialModelComparisonIds} stageActive={stageActive} /></Canvas3DControlsProvider></ReactFlowProvider>;
 }

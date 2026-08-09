@@ -6,15 +6,15 @@ import { ideRepoApi, type RepoSyncStatus } from '@/lib/api';
 import { integrationsApi, type IntegrationCredential } from '@/lib/builderforceApi';
 
 /**
- * RepoSyncControl — the IDE's repo bridge UI. R2 is always the working store; this
+ * RepoSyncControl — Builder's repo bridge UI. R2 is always the working store; this
  * adds optional git sync on top:
  *   • No repo linked → "Create repo" (clean remote repo + push the workspace) or a
  *     hint to connect an existing repo below.
  *   • Repo linked → "Import from repo" (pull files into the workspace) and
  *     "Commit & open PR" (push workspace edits back).
  *
- * Lives above SourceControlContent in the IDE settings panel. `onChanged` refreshes
- * the IDE file tree after an import.
+ * Lives above SourceControlContent in Builder settings. `onChanged` refreshes
+ * the Builder file tree after an import.
  */
 const btn: React.CSSProperties = {
   padding: '7px 12px', fontSize: 13, fontWeight: 600, borderRadius: 'var(--radius-md)', cursor: 'pointer',
@@ -106,7 +106,7 @@ export function RepoSyncControl({ projectId, onChanged }: { projectId: number; o
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-            No repo linked — your files live in the IDE workspace. Create a clean repo to go live, or connect an existing one below.
+            No repo linked — your files live in the Canvas Builder workspace. Create a clean repo to go live, or connect an existing one below.
           </div>
           {!showCreate ? (
             <button type="button" style={btnPrimary} onClick={() => setShowCreate(true)}>+ Create repo</button>

@@ -642,7 +642,7 @@
   "projectCard": {
     "details": "Détails",
     "taskBoard": "Tableau des tâches",
-    "openIde": "Ouvrir dans l’Builder",
+    "openBuilder": "Ouvrir dans l’Builder",
     "deleteProject": "Supprimer le projet",
     "agentLabel": "Agent :",
     "tasks": "{count, plural, one {# tâche} other {# tâches}}",
@@ -2823,7 +2823,7 @@
     "integrationKeys": "Clés d'intégration du projet",
     "workspaceTitle": "Espace de travail",
     "workspaceDesc": "Espace de travail et système de fichiers de ce projet. Ouvrez l'Builder pour modifier les fichiers.",
-    "openInIde": "Ouvrir dans l'Builder",
+    "openInBuilder": "Ouvrir dans l'Builder",
     "dueDateLabel": "Date d’échéance",
     "dueDateHint": "Définissez une échéance de projet. Laissez vide pour utiliser la dernière date d’échéance des tâches.",
     "deadline": "Échéance",
@@ -4451,7 +4451,7 @@
     "viewWorkflows": "Voir les workflows",
     "workflows": "Workflows",
     "workflowsWithCount": "Workflows ({count})",
-    "openIde": "Ouvrir dans l'Builder",
+    "openBuilder": "Ouvrir dans l'Builder",
     "delete": "Supprimer",
     "openChat": "Ouvrir le chat du projet",
     "connections": "Connexions"
@@ -4801,7 +4801,7 @@
       "longDesc": "Un cache indexé par embeddings réutilise une réponse antérieure lorsqu'une nouvelle invite signifie la même chose qu'une déjà traitée, de sorte que le modèle de pointe n'est jamais facturé deux fois pour le même travail. Deux niveaux : une couche gratuite sur l'appareil (embeddings SSM, dans votre navigateur et dans chaque agent) plus une couche de passerelle partagée — ainsi un succès de cache dans l'application web économise aussi des jetons pour vos agents."
     },
     {
-      "title": "Espace de travail IDE complet",
+      "title": "Espace Canvas Builder",
       "shortDesc": "Éditeur Monaco, terminal, chat IA — tout-en-un.",
       "longDesc": "Éditeur Monaco, terminal, chat IA, explorateur de fichiers — tout ce dont vous avez besoin dans un seul espace de travail de projet collaboratif."
     },
@@ -6438,7 +6438,7 @@
             "desc": "Décrivez ce dont vous avez besoin en langage naturel ; le Brain le transforme en projets, jeux de données et agents."
           },
           {
-            "title": "Espace de travail IDE",
+            "title": "Espace Canvas Builder",
             "desc": "Éditeur Monaco, terminal, chat IA et explorateur de fichiers réunis dans un espace de travail de projet collaboratif."
           },
           {
@@ -6462,7 +6462,7 @@
           },
           {
             "title": "Projets / tâches",
-            "desc": "Organisez le travail en espaces de travail de projet — chacun doté d'un IDE complet, d'agents et d'un tableau de tâches — puis planifiez, attribuez et suivez le flux des tâches au sein de votre main-d'œuvre d'agents en vues tableau, table, calendrier ou Gantt."
+            "desc": "Organisez le travail en espaces de projet — chacun doté de Canvas Builder, d'agents et d'un tableau de tâches — puis planifiez, attribuez et suivez le flux des tâches au sein de votre main-d'œuvre d'agents en vues tableau, table, calendrier ou Gantt."
           },
           {
             "title": "Colonne vertébrale de planification & portefeuille",
@@ -6933,7 +6933,7 @@
     "assignChatToProjectAria": "Attribuer la discussion au projet",
     "addProject": "+ Projet",
     "workflowsArrow": "Flux de travail →",
-    "openInIde": "Ouvrir dans l'Builder →",
+    "openInBuilder": "Ouvrir dans l'Builder →",
     "brainModality": "Brain — {modality}",
     "brainAs": "Brain en tant que {name}",
     "upgrade": "Mettre à niveau",
@@ -7296,7 +7296,7 @@
     "targetsHint": "Tous les Evermind auxquels ce projet contribue son apprentissage.",
     "targetsEmpty": "Aucun Evermind résolu pour ce projet pour l'instant.",
     "targetSelfBadge": "Ce projet",
-    "targetBuildBadge": "Build IDE",
+    "targetBuildBadge": "Build Canvas",
     "targetSeeded": "v{version}",
     "targetUnseeded": "non initialisé",
     "targetInferenceOn": "inférence",

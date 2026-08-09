@@ -7,20 +7,21 @@ import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { listIdeProjects, deleteIdeProject } from '@/lib/api';
 import { persistLastProjectId } from '@/lib/auth';
+import { creationSessionsApi } from '@/lib/builderforceApi';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import type { IdeProject } from '@/lib/types';
-import { IdeProjectCard } from '@/components/IdeProjectCard';
-import { IdeProjectDetailsModal } from '@/components/IdeProjectDetailsModal';
+import { BuilderProjectCard } from '@/components/BuilderProjectCard';
+import { BuilderProjectDetailsModal } from '@/components/BuilderProjectDetailsModal';
 
 /**
- * Self-contained IDE-projects list — owns its own fetch, open/delete/details
+ * Self-contained Canvas-build list — owns its own fetch, open/delete/details
  * wiring, and empty state, mirroring the ProjectsContent convention so it can be
- * dropped into the dashboard IDE tab AND anywhere else without prop-drilling. It
+ * dropped into the build dashboard AND anywhere else without prop-drilling. It
  * follows the global project scope: a selected project narrows to that parent's
- * IDE projects. Pass `limit` for a preview and `viewAllHref` for a "View all"
+ * builds. Pass `limit` for a preview and `viewAllHref` for a "View all"
  * link.
  */
-export function IdeProjectsContent({
+export function BuilderProjectsContent({
   limit,
   viewAllHref,
   onCount,
@@ -30,9 +31,9 @@ export function IdeProjectsContent({
   limit?: number;
   viewAllHref?: string;
   onCount?: (count: number) => void;
-  /** Storage-project id of the currently-open IDE project — ringed in the list. */
+  /** Storage-project id of the currently-open Canvas build — ringed in the list. */
   highlightStorageProjectId?: number;
-  /** Called after navigating into an IDE project (lets a host slide-out close). */
+  /** Called after navigating into a build (lets a host slide-out close). */
   onNavigate?: () => void;
 }) {
   const router = useRouter();
@@ -60,10 +61,15 @@ export function IdeProjectsContent({
 
   useEffect(() => { onCount?.(scoped.length); }, [scoped.length, onCount]);
 
-  const openIde = (p: IdeProject) => {
+  const openBuilder = async (p: IdeProject) => {
     persistLastProjectId(String(p.storageProjectId));
-    router.push(`/ide/${p.storageProjectPublicId}`);
-    onNavigate?.();
+    try {
+      const opened = await creationSessionsApi.openIdeProject(p.id);
+      router.push(`/create/${opened.sessionId}?focus=${opened.objectId}&build=1`);
+      onNavigate?.();
+    } catch {
+      router.push('/create?filter=build');
+    }
   };
 
   const handleDelete = async (p: IdeProject) => {
@@ -95,7 +101,7 @@ export function IdeProjectsContent({
           {currentProjectId != null ? t('noProjectsFilter') : t('noProjectsYet')}
         </p>
         <Link
-          href="/ide/dashboard"
+          href="/create?filter=build"
           style={{
             display: 'inline-block',
             padding: '8px 16px',
@@ -135,9 +141,9 @@ export function IdeProjectsContent({
                 : undefined
             }
           >
-            <IdeProjectCard
+            <BuilderProjectCard
               ideProject={p}
-              onOpen={openIde}
+              onOpen={openBuilder}
               onDetails={setDetailsFor}
               onDelete={handleDelete}
             />
@@ -153,7 +159,7 @@ export function IdeProjectsContent({
       )}
 
       {detailsFor && (
-        <IdeProjectDetailsModal
+        <BuilderProjectDetailsModal
           ideProject={detailsFor}
           onClose={() => setDetailsFor(null)}
           onSaved={(updated) => {

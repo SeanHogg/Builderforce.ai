@@ -6,12 +6,12 @@ import type { IdeProject } from '@/lib/types';
 import { Icon } from '@/components/ui/Icon';
 
 /**
- * Card for a single IDE project (0224) on the IDE dashboard. Self-contained:
+ * Card for a single Canvas build (backed by the legacy `IdeProject` record).
  * renders its own modality glyph, parent-Project chip, and Open / Details /
  * Delete actions. Opening (card body or Open) launches the backing storage
- * project's IDE; Details opens the rename + reassign-parent modal.
+ * project's Builder; Details opens the rename + reassign-parent modal.
  */
-export function IdeProjectCard({
+export function BuilderProjectCard({
   ideProject,
   onOpen,
   onDetails,

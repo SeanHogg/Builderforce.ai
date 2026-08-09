@@ -88,6 +88,8 @@ export function CanvasStage() {
               initialFocusId={board.focusId}
               initialShareOpen={board.shareOpen}
               initialBuildOpen={board.buildOpen}
+              initialBuildChatId={board.buildChatId}
+              initialBuildTicket={board.buildTicket}
               initialPrompt={board.prompt}
               initialPresent={board.present}
               initialModelComparisonIds={board.modelComparisonIds}

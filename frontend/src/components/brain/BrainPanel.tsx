@@ -1871,7 +1871,7 @@ function ConversationHeader({ chat, projects, projectName, onAssign, onNewProjec
           <>
             <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)' }}>{projectName(chat.projectId)}</span>
             <Link href={`/workflows?project=${chat.projectId}`} style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-secondary)', textDecoration: 'none', padding: '4px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>{tBrain('workflowsArrow')}</Link>
-            <Link href={`/ide/${chat.projectId}?chat=${chat.id}`} style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--coral-bright)', textDecoration: 'none', padding: '4px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--coral-bright)' }}>{tBrain('openInIde')}</Link>
+            <Link href={`/create/build/${chat.projectId}?chat=${chat.id}`} style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--coral-bright)', textDecoration: 'none', padding: '4px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--coral-bright)' }}>{tBrain('openInBuilder')}</Link>
           </>
         )}
       </div>

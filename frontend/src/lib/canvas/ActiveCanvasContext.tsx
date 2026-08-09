@@ -26,6 +26,10 @@ export interface ActiveCanvas {
   shareOpen: boolean;
   /** Open a focused Builder object's workspace on arrival (`?build=1`). */
   buildOpen: boolean;
+  /** Project conversation selected by a legacy Builder deep link. */
+  buildChatId: number | null;
+  /** Work item selected by a legacy Builder deep link. */
+  buildTicket: { kind: string; ref: string } | null;
   /** One-shot Brain prompt carried by a legacy creation deep link. */
   prompt: string | null;
   /** Arrive in presentation mode (`?present=1`). */
@@ -91,6 +95,9 @@ export function ActiveCanvasProvider({
         && current.focusId === canvas.focusId
         && current.shareOpen === canvas.shareOpen
         && current.buildOpen === canvas.buildOpen
+        && current.buildChatId === canvas.buildChatId
+        && current.buildTicket?.kind === canvas.buildTicket?.kind
+        && current.buildTicket?.ref === canvas.buildTicket?.ref
         && current.prompt === canvas.prompt
         && current.present === canvas.present
         && current.modelComparisonIds.length === canvas.modelComparisonIds.length

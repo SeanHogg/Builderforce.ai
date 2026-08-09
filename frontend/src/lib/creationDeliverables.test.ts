@@ -11,6 +11,22 @@ describe('creation deliverables', () => {
     expect(html).not.toContain('<Launch>');
   });
 
+  it('publishes every authored WYSIWYG page and its requested content', () => {
+    const assets = buildWebsiteAssets({ kind: 'website', title: 'Acme Analytics', websiteTheme: { style: 'technical', accent: '#28c9b7' }, pages: [
+      { id: 'home', name: 'Home', path: '/', sections: [
+        { id: 'hero', kind: 'hero', heading: 'Turn operational data into confident decisions', body: 'One decision layer for operators.', cta: 'Book a demo' },
+        { id: 'stats', kind: 'stats', items: [{ value: '42%', label: 'faster decisions' }] },
+      ] },
+      { id: 'about', name: 'About', path: '/about', sections: [
+        { id: 'hero', kind: 'hero', heading: 'Built for operators', body: 'Evidence before instinct.', cta: 'Meet the team' },
+        { id: 'content', kind: 'content', heading: 'Why Acme', body: 'Clear signals, accountable action.' },
+      ] },
+    ] });
+    expect(assets.map((asset) => asset.path)).toEqual(['index.html', 'about/index.html', 'styles.css']);
+    expect(new TextDecoder().decode(assets[0]!.data)).toContain('Turn operational data into confident decisions');
+    expect(new TextDecoder().decode(assets[1]!.data)).toContain('Built for operators');
+  });
+
   it('replaces an in-flight manifest entry with its terminal result', () => {
     const started = { id: 'delivery-1', action: 'publish', artifactKind: 'website', status: 'running' as const, createdAt: '2026-08-04T00:00:00.000Z' };
     const completed = { ...started, status: 'delivered' as const, completedAt: '2026-08-04T00:00:01.000Z', url: 'https://example.test' };

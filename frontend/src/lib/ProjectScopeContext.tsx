@@ -113,7 +113,7 @@ export function ProjectScopeProvider({ children }: { children: React.ReactNode }
   }, [tenantId]);
 
   // Adopt an explicit `?project=` deep-link when navigating between pages
-  // (e.g. a "View workflows" / "Open IDE" button on a project). We only ever
+  // (e.g. a "View workflows" / "Open Builder" button on a project). We only ever
   // ADOPT a param that is present — a plain navigation to a page without it
   // keeps the current selection rather than resetting to all-projects. Keyed on
   // pathname so it fires on cross-page navigation; same-page changes are driven

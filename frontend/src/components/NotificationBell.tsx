@@ -64,7 +64,7 @@ export default function NotificationBell() {
     setOpen(false);
     // Chat invites / mentions carry the chat id — deep-link into it.
     if (n.kind === 'chat_invite' || n.kind === 'chat_mention') {
-      router.push(`/ide/dashboard?chat=${encodeURIComponent(n.ref)}`);
+      router.push(`/brainstorm?chat=${encodeURIComponent(n.ref)}`);
     } else if (n.ref.startsWith('/')) {
       // Notifications that carry a ready-made in-app path (e.g. audit_complete →
       // the project's diagnostics report) navigate straight there.

@@ -26,6 +26,8 @@ const board: ActiveCanvas = {
   focusId: null,
   shareOpen: false,
   buildOpen: false,
+  buildChatId: null,
+  buildTicket: null,
   prompt: null,
   present: false,
   modelComparisonIds: [],
@@ -85,8 +87,6 @@ describe('PRD 21 §6.1 — the stage survives a navigation', () => {
     for (const route of ['/settings', '/workforce', '/insights/delivery', '/quality', '/knowledge']) {
       expect(panelOpen(route, true)).toBe(true);
     }
-    // The old IDE URL is now only a compatibility adapter into a Builder object.
-    expect(panelOpen('/ide/42', true)).toBe(true);
     expect(panelOpen('/projects/7', true)).toBe(false);
   });
 });
