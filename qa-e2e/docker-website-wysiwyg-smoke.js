@@ -143,6 +143,8 @@ function authoredWebsite(saved) {
     assert(secondText.includes('Book a demo'), 'Follow-up did not apply the requested CTA.');
     for (const name of ['Home', 'About', 'Services', 'Contact']) assert(secondText.includes(name), `Follow-up is missing the ${name} page.`);
     assert(!JSON.stringify(second.timeline).includes('did not actually make one'), 'Brain reported a non-mutating canvas change.');
+    await page.getByRole('button', { name: 'About', exact: true }).click();
+    await page.getByText('About — Acme Analytics', { exact: true }).waitFor({ state: 'visible', timeout: 5000 });
 
     await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 });
     await dismissIfVisible(page.getByRole('button', { name: /necessary only/i }), 5000);
@@ -150,6 +152,11 @@ function authoredWebsite(saved) {
     const persistedWebsite = authoredWebsite(persisted);
     assert(persistedWebsite.id === secondWebsite.id, 'Reload did not preserve the edited website object.');
     assert(JSON.stringify(persistedWebsite.data.pages) === JSON.stringify(secondWebsite.data.pages), 'Website pages did not persist across reload.');
+    await dismissIfVisible(page.getByRole('button', { name: 'Focus', exact: true }), 5000);
+    await dismissIfVisible(page.getByRole('button', { name: 'Close inspector', exact: true }), 5000);
+    await dismissIfVisible(page.getByRole('button', { name: 'Close palette', exact: true }), 5000);
+    await dismissIfVisible(page.getByRole('button', { name: 'Close Brain chat', exact: true }), 5000);
+    await page.waitForTimeout(1000);
     await page.screenshot({ path: 'docker-website-wysiwyg-followup.png', fullPage: true });
 
     console.log(JSON.stringify({
