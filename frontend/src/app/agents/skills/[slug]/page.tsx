@@ -1,3 +1,4 @@
+import { Icon } from '@/components/ui/Icon';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -63,7 +64,7 @@ export default async function SkillDetailPage({
       )}
 
       <div className="cc-skill-detail-stats">
-        {typeof skill.likes === 'number' && <span>♥ {skill.likes} likes</span>}
+        {typeof skill.likes === 'number' && <span><Icon source="♥" size="1em" /> {skill.likes} likes</span>}
         {typeof skill.downloads === 'number' && <span>↓ {skill.downloads} downloads</span>}
       </div>
 

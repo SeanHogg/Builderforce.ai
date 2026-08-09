@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Task } from '@/lib/builderforceApi';
@@ -44,7 +45,7 @@ function EpicCard({
       title={epic.title}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span aria-hidden>🗂️</span>
+        <span aria-hidden><Icon source="🗂️" size="1em" /></span>
         <span
           style={{
             fontSize: 13,

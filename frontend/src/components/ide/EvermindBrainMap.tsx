@@ -329,7 +329,7 @@ export function EvermindBrainMap({
             <g className="ev-core">
               <circle cx={CORE.x} cy={CORE.y} r={CORE_R + 8} fill="var(--ev-core)" fillOpacity={0.12} />
               <circle cx={CORE.x} cy={CORE.y} r={CORE_R} fill="var(--ev-core)" fillOpacity={seeded ? 0.9 : 0.3} />
-              <text x={CORE.x} y={CORE.y - 2} textAnchor="middle" className="ev-core-emoji" fontSize={24}>🧠</text>
+              <text x={CORE.x} y={CORE.y - 2} textAnchor="middle" className="ev-core-emoji" fontSize={24}></text>
               <text x={CORE.x} y={CORE.y + 19} textAnchor="middle" className="ev-core-label">{t('coreLabel')}</text>
             </g>
           </svg>

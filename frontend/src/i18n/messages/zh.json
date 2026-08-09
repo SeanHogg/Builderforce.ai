@@ -487,6 +487,7 @@
       "settings": "通用",
       "security": "安全",
       "billing": "账单",
+      "pricing": "定价",
       "tenant": "工作区",
       "apiKeys": "API 密钥",
       "sops": "作业程序",
@@ -562,6 +563,9 @@
     "subtitle": "为平台指标定义阈值告警。每日扫描会评估每条规则，并在触发时通过 Slack 和电子邮件通知您的团队。",
     "loading": "加载中…",
     "days": "{n} 天",
+    "pricing": {
+      "title": "已发布定价", "description": "编辑定价页面和可复用定价卡片的草稿。草稿在发布前保持私密。", "publishedAt": "上次发布时间：{date}", "currency": "货币", "managedHost": "托管 AgentHost / 月", "name": "方案名称", "descriptionLabel": "说明", "monthly": "月价", "yearly": "年价", "suffix": "价格后缀", "minimumSeats": "最低席位数", "features": "包含功能 — 每行一项", "excluded": "不包含功能 — 每行一项", "ctaLabel": "按钮文字", "ctaHref": "按钮目标", "saveDraft": "保存草稿", "saving": "正在保存…", "publish": "发布定价", "publishing": "正在发布…", "draftSaved": "草稿已保存；公开定价未更改。"
+    },
     "common": {
       "delete": "删除"
     },
@@ -12513,7 +12517,10 @@
     "linkBlog": "博客",
     "linkLiveDemo": "实时演示",
     "linkSignIn": "登录",
-    "linkGetStarted": "开始使用"
+    "linkGetStarted": "开始使用",
+    "cookies": "Cookie 设置",
+    "subprocessors": "子处理方",
+    "accessibility": "无障碍访问"
   },
   "beta": {
     "crumb": "产品更新",
@@ -13588,6 +13595,7 @@
       "guidedTour": "引导式导览"
     },
     "tourBuilder": {
+      "defaultObjectTitle": "产品引导导览", "defaultOfferTitle": "欢迎使用，要快速了解一下吗？", "defaultOfferBody": "通过几个简短步骤了解基本功能。您可以随时退出导览。", "defaultStartLabel": "开始导览", "defaultCancelLabel": "暂时不要", "defaultStep1Title": "帮助用户熟悉界面", "defaultStep1Body": "说明第一个重要区域及其作用。", "defaultStep2Title": "展示关键操作", "defaultStep2Body": "突出显示可帮助用户继续操作的功能。",
       "closePreview": "关闭导览预览", "stepOf": "第 {current} 步，共 {total} 步", "targetConnected": "已连接目标", "targetNeeded": "请选择目标对象", "back": "返回", "finish": "完成", "next": "下一步", "offer": "导览邀请",
       "stepCount": "{count} 个步骤", "visitCount": "访问 {count} 次后显示", "escapeEnabled": "已启用退出通道",
       "settings": "引导式导览设置", "settingsHint": "设计一个可选择加入的导览，并将每个步骤连接到要突出显示的画布对象。", "draftSteps": "草稿 · {count} 个步骤", "offerTitle": "邀请标题", "offerBody": "邀请说明", "version": "导览版本", "minimumVisits": "显示前访问次数", "blurBackground": "邀请时模糊背景", "escapeHatch": "始终提供关闭和 Escape", "steps": "导览步骤", "addStep": "添加步骤", "newStepTitle": "新导览步骤", "stepTitle": "步骤标题", "stepBody": "步骤说明", "targetObject": "要突出显示的对象", "chooseTarget": "选择对象", "removeStep": "删除步骤"

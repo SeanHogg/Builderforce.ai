@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
@@ -357,7 +358,8 @@ function BlockBody({
     case 'file':
       return block.url ? (
         <a href={block.url} target="_blank" rel="noreferrer" style={{ color: 'var(--accent, var(--info))', fontSize: 13, margin: 'auto', textAlign: 'center', wordBreak: 'break-all' }}>
-          📎 {block.name || block.url}
+          
+          <Icon source="📎" size="1em" /> {block.name || block.url}
         </a>
       ) : readOnly ? (
         <div style={{ color: 'var(--text-muted)', fontSize: 12, margin: 'auto' }}>{t('noFile')}</div>
@@ -371,7 +373,8 @@ function BlockBody({
     case 'embed':
       return block.documentId ? (
         <Link href={`/knowledge/${block.documentId}`} style={{ color: 'var(--accent, var(--info))', fontSize: 13, margin: 'auto', textAlign: 'center' }}>
-          📄 {block.title || t('openEmbeddedDoc')}
+          
+          <Icon source="📄" size="1em" /> {block.title || t('openEmbeddedDoc')}
         </Link>
       ) : readOnly ? (
         <div style={{ color: 'var(--text-muted)', fontSize: 12, margin: 'auto' }}>{t('noEmbed')}</div>

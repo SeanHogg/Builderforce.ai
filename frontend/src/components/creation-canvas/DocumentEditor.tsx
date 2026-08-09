@@ -17,6 +17,7 @@
  * writer all keep reading the one document they always did.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import styles from './CreationCanvas.module.css';
@@ -248,7 +249,7 @@ export function DocumentEditor({ markdown, label, onCommit }: DocumentEditorProp
         >{entry.glyph}</button>)}
       </div>
       <div className={styles.docToolGroup}>
-        <button type="button" aria-expanded={linkOpen} onMouseDown={hold} onClick={openLink} aria-label={t('link')} title={t('link')}>🔗</button>
+        <button type="button" aria-expanded={linkOpen} onMouseDown={hold} onClick={openLink} aria-label={t('link')} title={t('link')}><Icon source="🔗" size="1em" /></button>
         <button type="button" onMouseDown={hold} onClick={() => run('insertHorizontalRule')} aria-label={t('rule')} title={t('rule')}>―</button>
         <button type="button" onMouseDown={hold} onClick={() => run('removeFormat')} aria-label={t('clearFormatting')} title={t('clearFormatting')}>⌫</button>
       </div>

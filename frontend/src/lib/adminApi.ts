@@ -9,8 +9,15 @@ import type { LlmModelStatus, VendorId } from './builderforceApi';
 import type { PsychometricProfile } from './psychometric';
 import type { FeedbackQueue, FeedbackStatus } from './feedbackApi';
 import type { ReleaseNoteStage } from './releaseNotesApi';
+import type { PublicPricingContract, PublicPricingPlan } from './publicPricing';
 
 export type { LlmModelStatus, VendorId };
+
+export interface AdminPricingDocument {
+  currency: string;
+  managedAgentHostMonthly: number;
+  plans: PublicPricingPlan[];
+}
 
 // ---------------------------------------------------------------------------
 // Types (mirror api/admin routes)
@@ -930,6 +937,15 @@ async function adminRequest<T>(path: string, opts: RequestOptions = {}): Promise
 // ---------------------------------------------------------------------------
 
 export const adminApi = {
+  async pricing(): Promise<{ draft: AdminPricingDocument; published: PublicPricingContract }> {
+    return adminRequest('/api/admin/pricing');
+  },
+  async savePricingDraft(draft: AdminPricingDocument): Promise<{ draft: AdminPricingDocument }> {
+    return adminRequest('/api/admin/pricing/draft', { method: 'PUT', body: JSON.stringify(draft) });
+  },
+  async publishPricing(): Promise<{ published: PublicPricingContract }> {
+    return adminRequest('/api/admin/pricing/publish', { method: 'POST', body: JSON.stringify({}) });
+  },
   /**
    * Cross-tenant product feedback — the dogfooding inbox. Returns the SAME row
    * shape as the tenant-side queue (`feedbackApi.queue`), so both render through

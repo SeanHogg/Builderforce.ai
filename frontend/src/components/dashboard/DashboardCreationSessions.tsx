@@ -10,6 +10,7 @@ import type { IdeProject, Project, PublishedAgent } from '@/lib/types';
 import { useLocalizedModalities } from '@/lib/useModalityCopy';
 import { getModality } from '@/lib/modality';
 import styles from './DashboardCreationSessions.module.css';
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * A session tile is coloured by the KIND of object it holds, and the board's
@@ -79,7 +80,7 @@ export function DashboardCreationLauncher() {
         </div>
         <div className={styles.typeGrid} aria-label="Create by type">
           {modalities.map((modality) => <button key={modality.id} type="button" disabled={creating || sessionLimitReached || !!modality.comingSoon} onClick={() => void startTemplate(modality.label, modalityStarterPrompt(modality.id, modality.label, modality.tagline))} className={styles.typeCard}>
-            <span className={styles.typeIcon} aria-hidden>{modality.icon}</span>
+            <span className={styles.typeIcon} aria-hidden><Icon source={modality.icon} size={20} /></span>
             <span className={styles.cardCopy}><strong>{modality.label}</strong><span>{modality.tagline}</span></span>
             <span className={styles.cardAction} aria-hidden>{modality.comingSoon ? 'Coming soon' : 'Create'} <b>→</b></span>
           </button>)}
@@ -93,7 +94,7 @@ export function DashboardCreationLauncher() {
         </div>
         <div className={styles.templateGrid} aria-label="Guided templates">
           {CANVAS_STARTERS.map((starter) => { const label = t(starter.labelKey); const description = t(starter.descriptionKey); return <button key={starter.id} type="button" disabled={creating || sessionLimitReached} onClick={() => void startTemplate(label, description)} className={styles.templateCard}>
-            <span className={styles.templateIcon} aria-hidden>{starter.icon}</span>
+            <span className={styles.templateIcon} aria-hidden><Icon source={starter.icon} size={20} /></span>
             <span className={styles.cardCopy}><strong>{label}</strong><span>{description}</span></span>
             <span className={styles.templateAction}>Use template <b aria-hidden>→</b></span>
           </button>; })}
@@ -248,7 +249,7 @@ export function DashboardCreationSessions() {
       <div aria-label="Creation library" data-view={libraryView} style={{ display: 'grid', gridTemplateColumns: libraryView === 'card' ? 'repeat(auto-fill, minmax(260px, 1fr))' : '1fr', gap: libraryView === 'card' ? 16 : 8 }}>
         {renderSessionItems(visible)}
         {resourceItems.map((item) => <button key={item.key} type="button" onClick={() => void item.open()} style={{ minHeight: libraryView === 'card' ? 132 : 70, display: 'grid', gridTemplateColumns: libraryView === 'list' ? '42px minmax(0, 1fr) auto' : '1fr', alignItems: 'center', gap: libraryView === 'list' ? 12 : 0, padding: libraryView === 'list' ? '12px 16px' : 15, textAlign: 'left', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', background: 'var(--surface-raised)', color: 'var(--text-primary)', cursor: 'pointer' }}>
-          <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: libraryView === 'list' ? 36 : 'auto', height: libraryView === 'list' ? 36 : 'auto', borderRadius: 'var(--radius-md)', background: libraryView === 'list' ? 'var(--surface-sunken)' : 'transparent', fontSize: 22 }}>{item.icon}</span>
+          <span aria-hidden style={{ display: 'grid', placeItems: 'center', width: libraryView === 'list' ? 36 : 'auto', height: libraryView === 'list' ? 36 : 'auto', borderRadius: 'var(--radius-md)', background: libraryView === 'list' ? 'var(--surface-sunken)' : 'transparent' }}><Icon source={item.icon} size={22} /></span>
           <span style={{ minWidth: 0 }}><strong style={{ display: 'block', marginTop: libraryView === 'card' ? 8 : 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.title}</strong><span style={{ display: 'block', marginTop: 4, color: 'var(--text-secondary)', fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.meta}</span></span>
           {libraryView === 'list' && <span aria-hidden style={{ color: 'var(--text-muted)', fontSize: 18 }}>›</span>}
         </button>)}

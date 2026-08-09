@@ -8,6 +8,7 @@ import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { knowledgeApi, type KnowledgeTemplate, type DocType } from '@/lib/knowledgeApi';
 import { emptyCanvas, serializeCanvas } from '@/components/canvas/canvasModel';
 import { useCreateKnowledge } from '../useCreateKnowledge';
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * Template gallery — the Google-Docs-style replacement for the old create modal.
@@ -151,7 +152,7 @@ function TemplateCard({
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 22 }}>{icon}</span>
+        <span><Icon source={icon} size={22} /></span>
         {badge && (
           <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--surface-2)', color: 'var(--text-muted)', fontWeight: 600 }}>
             {badge}

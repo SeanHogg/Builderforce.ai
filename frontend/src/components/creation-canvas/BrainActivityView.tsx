@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
@@ -125,16 +126,18 @@ export function brainActivityLine(live: BrainActivityLive | null): string | null
  * The rendered signal. `strip` is the dock footer (full width, own top border);
  * `inline` is the compact card shown inside the Brain Object on the board.
  *
- * Only the strip announces: two live regions narrating the same run would read the
- * turn out twice to a screen reader.
+ * Only the canvas-global composer signal announces. The dock and Object repeat the
+ * same visual state without making a screen reader narrate every phase twice.
  */
-export function BrainActivityBar({ state, variant = 'strip' }: { state: BrainActivityState; variant?: 'strip' | 'inline' }) {
+export type BrainActivityVariant = 'strip' | 'inline' | 'composer';
+
+export function BrainActivityBar({ state, variant = 'strip' }: { state: BrainActivityState; variant?: BrainActivityVariant }) {
   const live = state.live;
-  const announce = variant === 'strip' ? { role: 'status', 'aria-live': 'polite' as const } : {};
+  const announce = variant === 'composer' ? { role: 'status', 'aria-live': 'polite' as const } : {};
   if (live) {
     return (
       <div className={styles.brainActivity} data-variant={variant} data-state="running" {...announce}>
-        <span className={styles.brainActivitySpark} aria-hidden>✳</span>
+        <span className={styles.brainActivitySpark} aria-hidden><Icon source="✳" size="1em" /></span>
         <b>{live.label}</b>
         {live.detail && <small>{live.detail}</small>}
         <em>{live.meta}</em>
@@ -160,7 +163,7 @@ export function BrainActivityIndicator({
   running: boolean;
   trace: readonly BrainTraceEvent[];
   startedAt?: number | null;
-  variant?: 'strip' | 'inline';
+  variant?: BrainActivityVariant;
 }) {
   const state = useBrainActivity(running, trace, startedAt);
   return <BrainActivityBar state={state} variant={variant} />;

@@ -487,6 +487,7 @@
       "settings": "General",
       "security": "Seguridad",
       "billing": "Facturación",
+      "pricing": "Precios",
       "tenant": "Espacios de trabajo",
       "apiKeys": "Claves API",
       "sops": "SOP",
@@ -562,6 +563,9 @@
     "subtitle": "Define alertas de umbral sobre métricas de la plataforma. Un barrido diario evalúa cada regla y notifica a tu equipo por Slack y correo cuando se activa.",
     "loading": "Cargando…",
     "days": "{n} días",
+    "pricing": {
+      "title": "Precios publicados", "description": "Edita el borrador de la página y las tarjetas de precios. Los borradores son privados hasta que se publican.", "publishedAt": "Última publicación: {date}", "currency": "Moneda", "managedHost": "AgentHost gestionado / mes", "name": "Nombre del plan", "descriptionLabel": "Descripción", "monthly": "Precio mensual", "yearly": "Precio anual", "suffix": "Sufijo del precio", "minimumSeats": "Asientos mínimos", "features": "Funciones incluidas — una por línea", "excluded": "Funciones excluidas — una por línea", "ctaLabel": "Texto del botón", "ctaHref": "Destino del botón", "saveDraft": "Guardar borrador", "saving": "Guardando…", "publish": "Publicar precios", "publishing": "Publicando…", "draftSaved": "Borrador guardado; los precios públicos no cambiaron."
+    },
     "common": {
       "delete": "Eliminar"
     },
@@ -12513,7 +12517,10 @@
     "linkBlog": "Blog",
     "linkLiveDemo": "Demo en vivo",
     "linkSignIn": "Iniciar sesión",
-    "linkGetStarted": "Empezar"
+    "linkGetStarted": "Empezar",
+    "cookies": "Cookies",
+    "subprocessors": "Subencargados",
+    "accessibility": "Accesibilidad"
   },
   "beta": {
     "crumb": "Actualización de producto",
@@ -13588,6 +13595,7 @@
       "guidedTour": "Visita guiada"
     },
     "tourBuilder": {
+      "defaultObjectTitle": "Visita de incorporación al producto", "defaultOfferTitle": "Te damos la bienvenida. ¿Quieres una visita rápida?", "defaultOfferBody": "Aprende lo esencial en unos pocos pasos. Puedes salir de la visita en cualquier momento.", "defaultStartLabel": "Iniciar visita", "defaultCancelLabel": "Ahora no", "defaultStep1Title": "Orientar al usuario", "defaultStep1Body": "Explica la primera área importante y por qué es relevante.", "defaultStep2Title": "Mostrar la acción clave", "defaultStep2Body": "Destaca la acción que ayuda al usuario a avanzar.",
       "closePreview": "Cerrar vista previa", "stepOf": "{current} de {total}", "targetConnected": "Objetivo conectado", "targetNeeded": "Elige un objeto objetivo", "back": "Atrás", "finish": "Finalizar", "next": "Siguiente", "offer": "Oferta de visita",
       "stepCount": "{count, plural, one {# paso} other {# pasos}}", "visitCount": "Ofrecer tras {count, plural, one {# visita} other {# visitas}}", "escapeEnabled": "Salida activada",
       "settings": "Ajustes de la visita guiada", "settingsHint": "Diseña una visita opcional y conecta cada paso con el objeto del Lienzo que debe destacar.", "draftSteps": "Borrador · {count} pasos", "offerTitle": "Título de la oferta", "offerBody": "Descripción de la oferta", "version": "Versión de la visita", "minimumVisits": "Visitas antes de ofrecer", "blurBackground": "Desenfocar el fondo de la oferta", "escapeHatch": "Ofrecer siempre cerrar y Escape", "steps": "Pasos de la visita", "addStep": "Añadir paso", "newStepTitle": "Nuevo paso", "stepTitle": "Título del paso", "stepBody": "Descripción del paso", "targetObject": "Objeto que destacar", "chooseTarget": "Elige un objeto", "removeStep": "Eliminar paso"

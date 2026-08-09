@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -18,7 +19,7 @@ export default function TrainingRedirectPage() {
   return (
     <div className="min-h-screen bg-gray-950 text-white flex items-center justify-center">
       <div className="text-center">
-        <div className="text-4xl mb-4 animate-pulse">🧠</div>
+        <div className="text-4xl mb-4 animate-pulse"><Icon source="🧠" size="1em" /></div>
         <p className="text-gray-400">Redirecting to your projects…</p>
         <p className="text-gray-600 text-sm mt-2">
           AI Model Training is available inside each project workspace.

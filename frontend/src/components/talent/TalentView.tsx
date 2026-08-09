@@ -7,6 +7,7 @@
  * alongside the rest of the workforce. Renders its own inner sub-tab bar; the outer
  * page owns the section title. Keeps the `hires`/`freelancer` i18n namespaces.
  */
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import NotificationsPanel from '@/components/freelance/NotificationsPanel';
@@ -253,7 +254,7 @@ export function TalentView() {
                     <div style={{ display: 'flex', gap: 4 }}>
                       {[1, 2, 3, 4, 5].map((n) => (
                         <button key={n} type="button" onClick={() => setReviewForm((r) => ({ ...r, rating: n }))} aria-label={`${n}`}
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: n <= reviewForm.rating ? 'var(--warning-text, var(--warning))' : 'var(--border-subtle)' }}>★</button>
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 22, color: n <= reviewForm.rating ? 'var(--warning-text, var(--warning))' : 'var(--border-subtle)' }}><Icon source="★" size="1em" /></button>
                       ))}
                     </div>
                     <textarea style={{ ...input, minHeight: 56, resize: 'vertical' }} placeholder={t('reviewComment')} value={reviewForm.comment} onChange={(ev) => setReviewForm((r) => ({ ...r, comment: ev.target.value }))} />

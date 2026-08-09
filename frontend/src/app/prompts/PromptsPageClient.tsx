@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 
 import { useCallback, useEffect, useState } from 'react';
@@ -172,7 +173,7 @@ export default function PromptsPage() {
             <button key={p.id} onClick={() => openDetail(p)} style={{ ...card, textAlign: 'left', cursor: 'pointer' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
                 <span style={{ fontWeight: 700, fontSize: 'var(--font-size-body)' }}>{p.title}</span>
-                {p.isFeatured && <span title={t('featured')}>⭐</span>}
+                {p.isFeatured && <span title={t('featured')}><Icon source="⭐" size="1em" /></span>}
               </div>
               {p.description && <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', margin: '0 0 10px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{p.description}</p>}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
@@ -180,8 +181,8 @@ export default function PromptsPage() {
                 {p.tags.slice(0, 3).map((tag) => <span key={tag} className="badge badge-gray">#{tag}</span>)}
               </div>
               <div style={{ display: 'flex', gap: 14, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
-                <span>▶ {t('usesCount', { n: p.usageCount })}</span>
-                <span>★ {p.starCount}</span>
+                <span><Icon source="▶" size="1em" /> {t('usesCount', { n: p.usageCount })}</span>
+                <span><Icon source="★" size="1em" /> {p.starCount}</span>
                 {p.authorName && <span>{t('byAuthor', { name: p.authorName })}</span>}
               </div>
             </button>
@@ -218,7 +219,7 @@ export default function PromptsPage() {
                     <td style={{ ...tdStyle, fontWeight: 600 }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         {p.title}
-                        {p.isFeatured && <span title={t('featured')}>⭐</span>}
+                        {p.isFeatured && <span title={t('featured')}><Icon source="⭐" size="1em" /></span>}
                       </span>
                     </td>
                     <td style={tdMutedStyle}>{p.category ?? '—'}</td>
@@ -356,8 +357,8 @@ function PromptDetail({ prompt, isAuthed, onClose, onUse }: { prompt: PromptPubl
         )}
 
         <div style={{ display: 'flex', gap: 16, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 16 }}>
-          <span>▶ {t('usesCount', { n: prompt.usageCount })}</span>
-          <span>★ {prompt.starCount}</span>
+          <span><Icon source="▶" size="1em" /> {t('usesCount', { n: prompt.usageCount })}</span>
+          <span><Icon source="★" size="1em" /> {prompt.starCount}</span>
           {prompt.authorName && <span>{t('byAuthor', { name: prompt.authorName })}</span>}
         </div>
       </div>

@@ -23,6 +23,7 @@
  * whenever `!hasTenant`, inside a BrainProvider configured with guestBrainConfig.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
@@ -270,7 +271,7 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
     <div className={`gb-root ${isPage ? 'gb-page' : 'gb-docked'}`}>
       {/* Header */}
       <div className="gb-header">
-        <span className="gb-brand">🧠 {t('brand')}</span>
+        <span className="gb-brand"><Icon source="🧠" size="1em" /> {t('brand')}</span>
         <div className="gb-header-right">
           <Link href="/register" className="gb-signup-link">{t('signUpFree')}</Link>
           {onClose && (
@@ -312,7 +313,7 @@ export function GuestBrainPanel({ variant, initialPrompt, inviteCode, onClose }:
           <div className="gb-messages">
             {visibleMessages.length === 0 && !conv.streamingText && (
               <div className="gb-empty">
-                <div className="gb-empty-emoji">💡</div>
+                <div className="gb-empty-emoji"><Icon source="💡" size="1em" /></div>
                 <div className="gb-empty-title">{inRoom ? tRoom('emptyTitle') : t('emptyTitle')}</div>
                 <div className="gb-empty-body">{inRoom ? tRoom('emptyBody') : t('emptyBody')}</div>
                 <BrainCapabilityPicker
@@ -460,7 +461,7 @@ function GuestCapWall({
 }) {
   return (
     <div className="gb-wall">
-      <div className="gb-wall-emoji">🚀</div>
+      <div className="gb-wall-emoji"><Icon source="🚀" size="1em" /></div>
       <div className="gb-wall-title">{t('wallTitle')}</div>
       <div className="gb-wall-body">{shared ? tRoom('wallBody', { count: limit }) : t('wallBody', { count: limit })}</div>
       <div className="gb-wall-actions">
@@ -484,7 +485,7 @@ function GuestCapWall({
 function GuestDisabledCTA({ t }: { t: ReturnType<typeof useTranslations> }) {
   return (
     <div className="gb-disabled">
-      <div className="gb-empty-emoji">🧠</div>
+      <div className="gb-empty-emoji"><Icon source="🧠" size="1em" /></div>
       <div className="gb-empty-title">{t('meetTitle')}</div>
       <div className="gb-empty-body">{t('meetBody')}</div>
       <div className="gb-wall-actions">

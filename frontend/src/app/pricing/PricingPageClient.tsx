@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
@@ -15,6 +15,7 @@ import { CardOnFile } from '@/components/llm/CardOnFile';
 import { pricingSchema } from '@/lib/structured-data';
 import { getRetainedDiscountCode, retainDiscountCode } from '@/lib/discountCode';
 import styles from './pricing.module.css';
+import { fetchPublicPricing, type PublicPricingContract, type PublicPricingPlan } from '@/lib/publicPricing';
 
 type Plan = 'free' | 'pro' | 'teams';
 
@@ -35,17 +36,6 @@ interface Subscription {
   };
 }
 
-interface PublicPricingContract {
-  pricing: Subscription['pricing'] & { currency: string };
-  generatedFrom: 'TenantService.PRICING + PLAN_LIMITS';
-  featureAvailability: Array<{
-    key: string;
-    free: boolean;
-    pro: boolean;
-    teams: boolean;
-  }>;
-}
-
 function PlanBadge({ plan }: { plan: Plan }) {
   const t = useTranslations('planBadge.tier');
   const labels: Record<Plan, string> = { free: t('free'), pro: t('pro'), teams: t('teams') };
@@ -61,11 +51,13 @@ function CheckIcon({ checked }: { checked: boolean }) {
  * higher tier, or nothing for the Free base tier. Decides its own visibility so
  * the column header and the table footer stay in sync from one definition.
  */
-function PlanCta({ plan, effectivePlan, onUpgrade, isAnon }: {
+function PlanCta({ plan, effectivePlan, onUpgrade, isAnon, label, href }: {
   plan: Plan;
   effectivePlan: Plan;
   onUpgrade: (target: 'pro' | 'teams') => void;
   isAnon?: boolean;
+  label?: string;
+  href?: string;
 }) {
   const t = useTranslations('pricing');
   const tierT = useTranslations('planBadge.tier');
@@ -78,12 +70,15 @@ function PlanCta({ plan, effectivePlan, onUpgrade, isAnon }: {
   if (plan === 'free') {
     if (isAnon) {
       return (
-        <a href="/register" className={styles.planButton} data-plan="free">
-          {t('ctaGetStarted')}
+        <a href={href ?? '/register'} className={styles.planButton} data-plan="free">
+          {label ?? t('ctaGetStarted')}
         </a>
       );
     }
     return null; // Free is the base tier — downgrade lives in the Current Plan card.
+  }
+  if (isAnon && label && href) {
+    return <a href={href} className={styles.planButton} data-plan={plan}>{label}</a>;
   }
   return (
     <button type="button" onClick={() => onUpgrade(plan)} className={styles.planButton} data-plan={plan}>
@@ -94,6 +89,7 @@ function PlanCta({ plan, effectivePlan, onUpgrade, isAnon }: {
 
 export default function PricingPageClient() {
   const t = useTranslations('pricing');
+  const locale = useLocale();
   const tierT = useTranslations('planBadge.tier');
   const confirm = useConfirm();
   const { tenant } = useAuth();
@@ -138,11 +134,7 @@ export default function PricingPageClient() {
 
   useEffect(() => {
     let active = true;
-    fetch(`${AUTH_API_URL}/api/tenants/pricing`)
-      .then(async (response) => {
-        if (!response.ok) throw new Error(`${response.status}`);
-        return response.json() as Promise<PublicPricingContract>;
-      })
+    fetchPublicPricing()
       .then((contract) => { if (active) setPublicPricing(contract); })
       .catch((cause) => {
         if (active) setError(t('errorPricingContract', { reason: cause instanceof Error ? cause.message : String(cause) }));
@@ -270,26 +262,14 @@ export default function PricingPageClient() {
       : t('teamsCostNoteMonth', { perSeat: teamMonthly, total: teamMonthly * seats })
     : null;
 
-  const featureLabels = t.raw('planFeatures') as string[];
-  const planCards: Array<{ plan: Plan; price: string; note: string; features: number[] }> = [
-    { plan: 'free', price: t('priceFree'), note: t('anonBannerDesc'), features: [0, 3, 5] },
-    {
-      plan: 'pro',
-      price: proMonthly != null ? t('priceProMonthly', { price: proMonthly }) : '—',
-      note: pricing ? t('cycleYearlyWithSaving', { cycle: t('cycleYearlyCap'), saving: t('saveCycle', { pct: pricing.pro.yearlySavingsPercent }) }) : '',
-      features: [1, 4, 6, 8],
-    },
-    {
-      plan: 'teams',
-      price: teamMonthly != null ? t('priceTeamsMonthly', { price: teamMonthly }) : '—',
-      note: t('teamsVolumeNote', { min: teamMinSeats }),
-      features: [2, 4, 7, 11, 12],
-    },
-  ];
+  const configuredPlans = publicPricing?.plans ?? [];
+  const planById = (id: Plan): PublicPricingPlan | undefined => configuredPlans.find((plan) => plan.id === id);
+  const comparisonFeatures = Array.from(new Set(configuredPlans.flatMap((plan) => [...plan.features, ...plan.excluded])));
+  const formatPrice = (price: number) => new Intl.NumberFormat(locale, { style: 'currency', currency: publicPricing?.currency ?? 'USD', maximumFractionDigits: 0 }).format(price);
 
   return (
     <>
-    <JsonLd data={pricingSchema(publicPricing?.pricing)} />
+    <JsonLd data={pricingSchema(publicPricing ?? undefined)} />
     <PageContainer width="full" style={{ padding: 0 }}>
     <main className={styles.page}>
       <section className={styles.hero}>
@@ -299,10 +279,10 @@ export default function PricingPageClient() {
           <p className={styles.lede}>{isAnon ? t('subtitleAnon') : t('subtitleConsole')}</p>
         </div>
         <div className={styles.heroPanel}>
-          <span className={styles.heroPanelLabel}>{t('anonBannerTitle')}</span>
+          <span className={styles.heroPanelLabel}>{planById('free')?.name ?? t('anonBannerTitle')}</span>
           <h2>{t('priceFree')}</h2>
-          <p>{t('anonBannerDesc')}</p>
-          <a href="/register" className={styles.primaryButton}>{t('anonBannerCta')}</a>
+          <p>{planById('free')?.description ?? t('anonBannerDesc')}</p>
+          <a href={planById('free')?.ctaHref ?? '/register'} className={styles.primaryButton}>{planById('free')?.ctaLabel ?? t('anonBannerCta')}</a>
         </div>
       </section>
 
@@ -385,22 +365,26 @@ export default function PricingPageClient() {
 
           <section className={styles.section}>
             <div className={styles.planGrid}>
-              {planCards.map(({ plan, price, note, features }) => (
+              {configuredPlans.map((configured) => {
+                const plan = configured.id;
+                const price = configured.monthly === 0 ? formatPrice(0) : `${formatPrice(configured.monthly)}${configured.priceSuffix}`;
+                return (
                 <article key={plan} className={styles.planCard} data-featured={plan === 'pro'}>
                   <div className={styles.planCardTop}>
-                    <h3>{tierT(plan)}</h3>
+                    <h3>{configured.name}</h3>
                     {effectivePlan === plan && !isAnon && <PlanBadge plan={plan} />}
                   </div>
                   <div className={styles.price}>{price}</div>
-                  <p className={styles.priceNote}>{note}</p>
+                  <p className={styles.priceNote}>{configured.description}</p>
                   <ul className={styles.featureList}>
-                    {features.map((index) => <li key={index}>{featureLabels[index]}</li>)}
+                    {configured.features.map((feature) => <li key={feature}>{feature}</li>)}
+                    {configured.excluded.map((feature) => <li key={feature} style={{ opacity: 0.6 }}>— {feature}</li>)}
                   </ul>
                   <div className={styles.planCardAction}>
-                    <PlanCta plan={plan} effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} />
+                    <PlanCta plan={plan} effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} label={configured.ctaLabel} href={configured.ctaHref} />
                   </div>
                 </article>
-              ))}
+              );})}
             </div>
           </section>
 
@@ -496,27 +480,25 @@ export default function PricingPageClient() {
                   <tr>
                     <th>{t('colFeature')}</th>
                     <th>
-                      {tierT('free')}<br /><span style={{ fontWeight: 400, fontSize: 'var(--font-size-eyebrow)' }}>{t('priceFree')}</span>
+                      {planById('free')?.name ?? tierT('free')}<br /><span style={{ fontWeight: 400, fontSize: 'var(--font-size-eyebrow)' }}>{t('priceFree')}</span>
                     </th>
                     <th>
-                      {tierT('pro')}<br /><span style={{ fontWeight: 400, fontSize: 'var(--font-size-eyebrow)' }}>{proMonthly != null ? t('priceProMonthly', { price: proMonthly }) : '—'}</span>
+                      {planById('pro')?.name ?? tierT('pro')}<br /><span style={{ fontWeight: 400, fontSize: 'var(--font-size-eyebrow)' }}>{proMonthly != null ? t('priceProMonthly', { price: proMonthly }) : '—'}</span>
                     </th>
                     <th>
-                      {tierT('teams')}<br /><span style={{ fontWeight: 400, fontSize: 'var(--font-size-eyebrow)' }}>{teamMonthly != null ? t('priceTeamsMonthly', { price: teamMonthly }) : '—'}</span>
+                      {planById('teams')?.name ?? tierT('teams')}<br /><span style={{ fontWeight: 400, fontSize: 'var(--font-size-eyebrow)' }}>{teamMonthly != null ? t('priceTeamsMonthly', { price: teamMonthly }) : '—'}</span>
                       <br /><span style={{ fontWeight: 400, fontSize: 'var(--font-size-field-label)', color: 'var(--text-muted)' }}>{t('teamsVolumeNote', { min: teamMinSeats })}</span>
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(t.raw('planFeatures') as string[]).map((label, i) => {
-                    const flags = publicPricing?.featureAvailability[i];
-                    if (!flags) return null;
+                  {comparisonFeatures.map((label) => {
                     return (
-                    <tr key={i}>
+                    <tr key={label}>
                       <td>{label}</td>
-                      <td><CheckIcon checked={flags.free} /></td>
-                      <td><CheckIcon checked={flags.pro} /></td>
-                      <td><CheckIcon checked={flags.teams} /></td>
+                      <td><CheckIcon checked={planById('free')?.features.includes(label) === true} /></td>
+                      <td><CheckIcon checked={planById('pro')?.features.includes(label) === true} /></td>
+                      <td><CheckIcon checked={planById('teams')?.features.includes(label) === true} /></td>
                     </tr>
                   );})}
                 </tbody>
@@ -524,13 +506,13 @@ export default function PricingPageClient() {
                   <tr>
                     <td />
                     <td>
-                      <PlanCta plan="free" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} />
+                      <PlanCta plan="free" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} label={planById('free')?.ctaLabel} href={planById('free')?.ctaHref} />
                     </td>
                     <td>
-                      <PlanCta plan="pro" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} />
+                      <PlanCta plan="pro" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} label={planById('pro')?.ctaLabel} href={planById('pro')?.ctaHref} />
                     </td>
                     <td>
-                      <PlanCta plan="teams" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} />
+                      <PlanCta plan="teams" effectivePlan={effectivePlan} onUpgrade={openUpgrade} isAnon={isAnon} label={planById('teams')?.ctaLabel} href={planById('teams')?.ctaHref} />
                     </td>
                   </tr>
                 </tfoot>

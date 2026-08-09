@@ -95,15 +95,20 @@ export function useBetaPrograms(): UseBetaPrograms {
   const token = getStoredWebToken();
 
   useEffect(() => {
-    // No session, no betas — and no request. Whatever the previous person in
-    // this tab had loaded goes with them.
-    if (!token) {
-      if (state.owner !== null || state.loaded) publish(EMPTY);
-      return undefined;
-    }
+    // Subscribe BEFORE deciding anything: the sign-out path below clears the
+    // store, and a view that had not subscribed yet would keep rendering the
+    // previous person's banner until something unrelated re-rendered it.
     subscribers.add(setLocal);
-    if (state.owner !== null && state.owner !== token) publish(EMPTY);
-    void loadOnce(token);
+    setLocal(state); // catch any change between this render and this effect
+
+    if (!token) {
+      // No session, no betas — and no request. Whatever the previous person in
+      // this tab had loaded goes with them.
+      if (state !== EMPTY) publish(EMPTY);
+    } else {
+      if (state.owner !== null && state.owner !== token) publish(EMPTY);
+      void loadOnce(token);
+    }
     return () => { subscribers.delete(setLocal); };
   }, [token]);
 

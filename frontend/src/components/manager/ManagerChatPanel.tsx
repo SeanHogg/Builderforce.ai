@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useTranslations, useFormatter } from 'next-intl';
 import { ChatMessageContent } from '@/components/ChatMessageContent';
@@ -232,7 +233,7 @@ export function ManagerChatPanel({ projectId, compact = false, onAsk, initialQue
   const header = (
     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span aria-hidden>🧭</span>
+        <span aria-hidden><Icon source="🧭" size="1em" /></span>
         <span style={sectionTitleStyle}>{t('title')}</span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>

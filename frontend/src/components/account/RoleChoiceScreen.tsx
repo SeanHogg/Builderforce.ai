@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { REGISTER_MARKETING } from '@/lib/content';
 import MarketingVisual from './MarketingVisual';
 import AccountTypeChooser, { type AccountType } from './AccountTypeChooser';
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * Full-screen, blocking role chooser shown by the onboarding gate to an account
@@ -111,7 +112,7 @@ export default function RoleChoiceScreen({
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
               {marketing.bullets.slice(0, 4).map((b) => (
                 <li key={b.title} style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                  <span style={{ flexShrink: 0 }} aria-hidden>{b.icon}</span>
+                  <span style={{ flexShrink: 0 }} aria-hidden><Icon source={b.icon} size={18} /></span>
                   <span><strong style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{b.title}</strong> — {b.desc}</span>
                 </li>
               ))}

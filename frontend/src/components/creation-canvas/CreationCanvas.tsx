@@ -29,6 +29,7 @@ import { CanvasDrivePanel } from './CanvasDrivePanel';
 import { CanvasHostActions } from './CanvasHostActions';
 import { canvasNavigate, canvasSurface, canvasWebOrigin, type CanvasHostCapture } from '@/lib/canvasHost';
 import { BrainDock } from './BrainDock';
+import { BrainActivityIndicator } from './BrainActivityView';
 import { brainDockReservedWidth, brainDockWidth, DEFAULT_BRAIN_DOCK_PREFERENCES, readBrainDockPreferences, writeBrainDockPreferences, type BrainDockMode, type BrainDockPreferences } from './brainDockPreferences';
 import { BrainSurfaceProvider, type BrainSurfaceContextValue } from './brainSurfaceContext';
 import { useToast } from '@/components/ToastProvider';
@@ -78,6 +79,7 @@ import { boardInventory, findInInventory, scopeNote } from '@/lib/canvasContextS
 import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
 import { createCanvasJournal, describeGraphChange } from '@/lib/canvasActionJournal';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
+import { Icon } from '@/components/ui/Icon';
 import { appendImageToDrawioCanvas, createDrawioImageCanvas, drawingDataUrl, type DrawioImageAsset } from '@/lib/drawioImageCanvas';
 import { WorkflowBuilder } from '@/components/workflow-builder/WorkflowBuilder';
 import { VoiceOutput } from '@/components/ide/VoiceOutput';
@@ -90,7 +92,7 @@ import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove
 import { useConfirm } from '@/components/ConfirmProvider';
 import { SectionTour, type SectionTourStep } from '@/components/onboarding/SectionTour';
 import { useSectionTour } from '@/components/onboarding/useSectionTour';
-import { canvasTourDesignFromNode, type CanvasTourDesign } from '@/lib/onboarding/canvasTourDesign';
+import { canvasTourDesignFromNode, defaultCanvasTourDesign, type CanvasTourDesign } from '@/lib/onboarding/canvasTourDesign';
 import { useChatModelOptions } from '@/lib/useLlmModels';
 import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
 import { PromptUseCasePicker } from '@/components/PromptUseCasePicker';
@@ -714,6 +716,21 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [allMembers, setAllMembers] = useState<CreationSessionDetail['members']>([]);
   const [pendingInvitations, setPendingInvitations] = useState<CreationSessionInvitation[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const localizedTourDefaults = useCallback((): Partial<CreationNodeData> => {
+    const base = defaultCanvasTourDesign();
+    const tour: CanvasTourDesign = {
+      ...base,
+      offerTitle: t('tourBuilder.defaultOfferTitle'),
+      offerBody: t('tourBuilder.defaultOfferBody'),
+      startLabel: t('tourBuilder.defaultStartLabel'),
+      cancelLabel: t('tourBuilder.defaultCancelLabel'),
+      steps: [
+        { ...base.steps[0]!, title: t('tourBuilder.defaultStep1Title'), body: t('tourBuilder.defaultStep1Body') },
+        { ...base.steps[1]!, title: t('tourBuilder.defaultStep2Title'), body: t('tourBuilder.defaultStep2Body') },
+      ],
+    };
+    return { title: t('tourBuilder.defaultObjectTitle'), status: t('tourBuilder.draftSteps', { count: tour.steps.length }), tour };
+  }, [t]);
   const tourSteps = useMemo<SectionTourStep[]>(() => Array.from({ length: 6 }, (_, index) => ({
     title: t(`tourTitle${index + 1}` as 'tourTitle1'),
     body: t(`tourBody${index + 1}` as 'tourBody1'),
@@ -760,7 +777,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [outcomeMetricsError, setOutcomeMetricsError] = useState<string | null>(null);
   const [proposedChanges, setProposedChanges] = useState<ProposedCanvasChange[]>([]);
   const [acceptedProposalIds, setAcceptedProposalIds] = useState<Set<string>>(new Set());
-  const [autoApply, setAutoApply] = useState(false);
+  const [autoApply, setAutoApply] = useState(true);
   const [autoApplyPending, setAutoApplyPending] = useState(false);
   /** Conversation vs execution for this session (0409). Hydrated from the loaded
    *  session below; `setSessionMode` is the writer that also persists it. */
@@ -813,7 +830,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const canvasClipboard = useRef<{ nodes: CreationFlowNode[]; edges: Edge[] } | null>(null);
   const initialPromptSubmitted = useRef(false);
   const modelComparisonStarted = useRef(false);
-  const autoApplyRef = useRef(false);
+  const autoApplyRef = useRef(true);
   const mobileViewportFitted = useRef(false);
 
   useEffect(() => {
@@ -1873,13 +1890,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
     const position = flowRef.current?.screenToFlowPosition({ x: window.innerWidth / 2, y: window.innerHeight / 2 }) ?? { x: 500, y: 300 };
     const node = newNode(kind, position);
+    if (kind === 'guidedTour') node.data = { ...node.data, ...localizedTourDefaults() };
     if (kind === 'chat') node.data = { ...node.data, messages: timeline.map((message) => ({ role: message.messageRole, content: message.body, createdAt: message.createdAt })) };
     if (data) node.data = { ...node.data, ...data };
     setNodes((current) => [...current, node]);
     setSelectedId(node.id); setSelectedIds([node.id]);
     setNotice(t('objectAdded', { title: node.data.title }));
     trackActivity('creation_object_added', { sessionId, metadata: { clientSurface: canvasSurface(), objectKinds: [kind] } });
-  }, [canEdit, sessionId, setNodes, t, timeline]);
+  }, [canEdit, localizedTourDefaults, sessionId, setNodes, t, timeline]);
 
   // The shell recorder writes through the canonical IDE workspace store, then
   // announces the durable artifact to the board that started it. Hidden cached
@@ -2553,9 +2571,10 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     }
     if (!kind || !point) return;
     const node = newNode(kind, point);
+    if (kind === 'guidedTour') node.data = { ...node.data, ...localizedTourDefaults() };
     setNodes((current) => [...current, node]);
     setSelectedId(node.id); setSelectedIds([node.id]);
-  }, [addFilesToCanvas, canEdit, setNodes, t]);
+  }, [addFilesToCanvas, canEdit, localizedTourDefaults, setNodes, t]);
 
   /** Convert an uploaded image/freehand drawing into a real, portable draw.io
    * file, or append it as a new editable cell to an existing one. The diagram
@@ -3097,6 +3116,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       const stagedNodes = proposalBuffer.current.flatMap((change) => change.type === 'object.add' ? [change.node] : []);
       const narrowViewport = typeof window !== 'undefined' && window.innerWidth <= 760;
       const node = newNode(args.kind, nextCanvasObjectPosition([...nodes, ...stagedNodes], args, narrowViewport, args.kind));
+      if (args.kind === 'guidedTour') node.data = { ...node.data, ...localizedTourDefaults() };
       const authored = sanitizeCreationObjectPatch(args.kind, { ...((args.fields && typeof args.fields === 'object') ? args.fields : {}), title: args.title, subtitle: args.subtitle, status: args.status });
       if (args.kind === 'drawing' && (!Array.isArray(authored.points) || authored.points.length < 2)) {
         return { error: 'A generated drawing must include at least two renderable {x,y} points. Add authored points or use a chart with chartLabels and chartValues.' };
@@ -3265,7 +3285,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       proposalBuffer.current.push({ id: crypto.randomUUID(), type: 'connection.delete', label: `Delete connection ${connectionId}`, connectionId });
       return { ok: true, proposed: true, connectionId };
     },
-  }], [canEdit, convertObjectToDrawio, edges, effectiveSelectedIds, nodes, persistence, prompt, requireAccount, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId]);
+  }], [canEdit, convertObjectToDrawio, edges, effectiveSelectedIds, localizedTourDefaults, nodes, persistence, prompt, requireAccount, resolvedScopeMode, scopedEdges, scopedNodeIds, scopedNodes, sessionId]);
 
   const addAgentKnowledge = useCallback((agentId: string, content: string) => {
     const agent = nodes.find((node) => node.id === agentId && node.data.kind === 'agent');
@@ -4608,6 +4628,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    */
   const composer = !presentMode && <div className={styles.composerDock} data-tour="creation-brain-dock">
     <PromptUseCasePicker placement="top" onSelect={setPrompt} />
+    {/* Keep the settled receipt mounted after the run. Token consumption used
+        to disappear at the exact moment the answer arrived because this whole
+        component was conditional on `thinking`. */}
+    <BrainActivityIndicator
+      running={thinking}
+      trace={brainTrace}
+      startedAt={brainRunStartedAt}
+      variant="composer"
+    />
     <ChatInput
       className={styles.composer}
       value={prompt}
@@ -4675,13 +4704,13 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             <button className={styles.secondaryButton} onClick={undo} aria-label={t('undoCanvasChange')}>↶</button>
             <button className={styles.secondaryButton} onClick={redo} aria-label={t('redoCanvasChange')}>↷</button>
           </div>
-          <button className={styles.secondaryButton} aria-expanded={outcomeMetricsOpen} aria-label={t('viewOutcomeMetrics')} title={t('outcomeMetricsTitle')} onClick={openOutcomeMetrics}>↗</button>
+          <button className={styles.secondaryButton} aria-expanded={outcomeMetricsOpen} aria-label={t('viewOutcomeMetrics')} title={t('outcomeMetricsTitle')} onClick={openOutcomeMetrics}><Icon source="↗" size="1em" /></button>
           {/* Full screen survives the phone layout (hence `mobileAction`): a small
               screen is where trading the app chrome for board is worth the most,
               and the ⛶ / ⤡ glyphs it used to draw are exactly the characters a
               phone font is most likely to render as a blank box. */}
           <button className={`${styles.secondaryButton} ${styles.iconAction} ${styles.mobileAction}`} aria-pressed={fullscreen} aria-label={fullscreen ? t('exitFullScreen') : t('fullScreen')} title={fullscreen ? t('exitFullScreen') : t('fullScreen')} onClick={toggleFullscreen}>{fullscreen ? <ExitFullscreenIcon /> : <FullscreenIcon />}</button>
-          <button className={`${styles.secondaryButton} ${styles.iconAction}`} aria-expanded={diagnosticsOpen} aria-label={t('openDiagnostics')} title={t('openDiagnostics')} onClick={() => void openDiagnostics()}>⚠</button>
+          <button className={`${styles.secondaryButton} ${styles.iconAction}`} aria-expanded={diagnosticsOpen} aria-label={t('openDiagnostics')} title={t('openDiagnostics')} onClick={() => void openDiagnostics()}><Icon source="⚠" size="1em" /></button>
           <button className={`${styles.secondaryButton} ${styles.mobileAction}`} aria-expanded={moreOpen} aria-label={t('moreActions')} onClick={() => { setMoreOpen((value) => !value); setShareOpen(false); }}>•••</button>
           {/* A local canvas opens the SAME share menu a saved one does. It used to
               open a sign-up gate, which answered a question nobody asked: they
@@ -4693,7 +4722,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             <button onClick={() => { setTemplateOpen(true); setMoreOpen(false); }}><span aria-hidden>▦</span>{t('templates')}</button>
             <button onClick={() => { setConversationOpen((value) => !value); setMoreOpen(false); }}><span aria-hidden>◌</span>{t('conversation')}</button>
             <button aria-pressed={drawingMode} onClick={() => { setDrawingMode((value) => !value); setMoreOpen(false); }}><span aria-hidden>⌁</span>{drawingMode ? t('stopDrawing') : t('draw')}</button>
-            <button onClick={() => { setPresentMode((value) => !value); setMoreOpen(false); }}><span aria-hidden>▶</span>{presentMode ? t('exitPresentation') : t('present')}</button>
+            <button onClick={() => { setPresentMode((value) => !value); setMoreOpen(false); }}><span aria-hidden><Icon source="▶" size="1em" /></span>{presentMode ? t('exitPresentation') : t('present')}</button>
             <span className={styles.moreMenuHeading}>{t('sessionTools')}</span>
             <button onClick={() => { openHistory(); setMoreOpen(false); }}><span aria-hidden>↶</span>{t('history')}</button>
             <button onClick={() => { exportSession(); setMoreOpen(false); }}><span aria-hidden>↓</span>{t('exportCanvas')}</button>
@@ -4745,7 +4774,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       {accountGate && <div className={styles.accountGateBackdrop} role="presentation">
         <section className={styles.accountGate} role="dialog" aria-modal="true" aria-labelledby="canvas-account-gate-title">
           <button type="button" className={styles.accountGateClose} aria-label={t('closeAccountPrompt')} onClick={() => setAccountGate(null)}>×</button>
-          <span className={styles.accountGateIcon} aria-hidden>✦</span>
+          <span className={styles.accountGateIcon} aria-hidden><Icon name="sparkles" size={20} /></span>
           <small>{t('keepMomentum')}</small>
           <h2 id="canvas-account-gate-title">{accountGate.title}</h2>
           <p>{accountGate.description}</p>
@@ -4928,9 +4957,9 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
                   user nothing about what pressing it does, and silently changes
                   every time an object is added to the group. */}
               <button type="button" className={styles.paletteSectionToggle} aria-expanded={!collapsed} aria-controls={regionId} aria-label={t(collapsed ? 'expandPaletteGroup' : 'collapsePaletteGroup', { group: t(`group.${group.group}`) })} onClick={() => setCollapsedPaletteGroups((current) => { const next = new Set(current); if (next.has(group.group)) next.delete(group.group); else next.add(group.group); return next; })}>
-                <span className={styles.paletteGroupIcon} aria-hidden>{PALETTE_GROUP_ICONS[group.group]}</span><strong>{t(`group.${group.group}`)}</strong><small>{group.items.length}</small><span className={styles.paletteChevron} aria-hidden>{collapsed ? '›' : '⌄'}</span>
+                <span className={styles.paletteGroupIcon} aria-hidden><Icon source={PALETTE_GROUP_ICONS[group.group]} size={18} /></span><strong>{t(`group.${group.group}`)}</strong><small>{group.items.length}</small><span className={styles.paletteChevron} aria-hidden><Icon name={collapsed ? 'chevron-right' : 'chevron-down'} size={15} /></span>
               </button>
-              {!collapsed && <div id={regionId} className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} aria-label={t(`object.${item.kind}`)} disabled={!canEdit} draggable={canEdit} onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addAtCenter(item.kind)}><span>{item.icon}</span>{t(`object.${item.kind}`)}</button>)}</div>}
+              {!collapsed && <div id={regionId} className={styles.paletteGrid}>{group.items.map((item) => <button key={item.kind} aria-label={t(`object.${item.kind}`)} disabled={!canEdit} draggable={canEdit} onDragStart={(event) => { event.dataTransfer.setData(DND_MIME, item.kind); event.dataTransfer.effectAllowed = 'copy'; }} onClick={() => addAtCenter(item.kind)}><span><Icon source={item.icon} size={20} /></span>{t(`object.${item.kind}`)}</button>)}</div>}
             </section>;
           })}</div>
         </aside>}
@@ -4979,7 +5008,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         {historyOpen && <aside className={styles.historyPanel}><header><div><strong>{t('versionHistory')}</strong><small>{t('versionHistoryHint')}</small></div><button onClick={() => setHistoryOpen(false)} aria-label={t('closeHistory')}>×</button></header>{persistence === 'local' ? <p>{t('historyLocalOnly')}</p> : <><button className={styles.primaryButton} onClick={createCheckpoint} disabled={!canEdit}>{t('nameCheckpoint')}</button><div>{history.length ? history.map((snapshot) => <button key={snapshot.revision} onClick={() => restoreRevision(snapshot.revision)} disabled={!canEdit}><b>{snapshot.label || t('revisionLabel', { revision: snapshot.revision })}</b><span>{t('revisionMeta', { revision: snapshot.revision, at: new Date(snapshot.createdAt).toLocaleString() })}</span></button>) : <p>{t('noRevisions')}</p>}</div></>}</aside>}
         {outcomeMetricsOpen && <aside className={`${styles.historyPanel} ${styles.outcomeMetricsPanel}`} aria-label={t('sessionOutcomeMetrics')}>
           <header><div><strong>{t('ideaToDelivery')}</strong><small>{outcomeMetrics ? t('sessionVsTenant', { count: outcomeMetrics.sampleSize }) : t('valueGenerated')}</small></div><button onClick={() => setOutcomeMetricsOpen(false)} aria-label={t('closeOutcomeMetrics')}>×</button></header>
-          {persistence === 'local' ? <div className={styles.outcomeEmpty}><span aria-hidden>↗</span><strong>{t('saveForBaseline')}</strong><p>{t('saveForBaselineHint')}</p><button className={styles.primaryButton} onClick={() => requireAccount('metrics', t('gateMetricsTitle'), t('gateMetricsBody'))}>{t('saveAndMeasure')}</button></div> : outcomeMetricsLoading ? <p role="status">{t('calculatingValue')}</p> : outcomeMetricsError ? <div className={styles.outcomeEmpty}><strong>{t('metricsUnavailable')}</strong><p>{outcomeMetricsError}</p><button className={styles.secondaryButton} onClick={openOutcomeMetrics}>{t('retry')}</button></div> : outcomeMetrics ? <div className={styles.outcomeMetricList}>{outcomeMetrics.metrics.map((metric) => {
+          {persistence === 'local' ? <div className={styles.outcomeEmpty}><span aria-hidden><Icon source="↗" size="1em" /></span><strong>{t('saveForBaseline')}</strong><p>{t('saveForBaselineHint')}</p><button className={styles.primaryButton} onClick={() => requireAccount('metrics', t('gateMetricsTitle'), t('gateMetricsBody'))}>{t('saveAndMeasure')}</button></div> : outcomeMetricsLoading ? <p role="status">{t('calculatingValue')}</p> : outcomeMetricsError ? <div className={styles.outcomeEmpty}><strong>{t('metricsUnavailable')}</strong><p>{outcomeMetricsError}</p><button className={styles.secondaryButton} onClick={openOutcomeMetrics}>{t('retry')}</button></div> : outcomeMetrics ? <div className={styles.outcomeMetricList}>{outcomeMetrics.metrics.map((metric) => {
             const comparable = metric.current != null && metric.baseline != null;
             const delta = comparable ? metric.current! - metric.baseline! : null;
             const improving = delta == null ? null : metric.direction === 'higher' ? delta >= 0 : false;
@@ -5673,7 +5702,7 @@ function BuildInspectorSection({ node, editable, creating, persistence, onChange
         disabled={!editable || !!binding || creating}
         onChange={(event) => onChange({ modality: event.target.value as ProjectModality })}
       >
-        {modalities.map((modality) => <option key={modality.id} value={modality.id} disabled={!!modality.comingSoon}>{modality.icon} {modality.label}</option>)}
+        {modalities.map((modality) => <option key={modality.id} value={modality.id} disabled={!!modality.comingSoon}>{modality.label}</option>)}
       </select>
     </label>
     <p className={styles.inspectorHint}>{binding ? t('typeLockedHint') : active.tagline}</p>

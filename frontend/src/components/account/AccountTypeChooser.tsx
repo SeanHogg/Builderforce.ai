@@ -1,6 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { Icon } from '@/components/ui/Icon';
 
 export type AccountType = 'standard' | 'freelancer' | 'sales';
 
@@ -42,7 +43,7 @@ export default function AccountTypeChooser({
               transition: 'border-color 0.2s, box-shadow 0.2s, background 0.2s',
             }}
           >
-            <div style={{ fontSize: '1.1rem', marginBottom: 4 }} aria-hidden>{opt.icon}</div>
+            <div style={{ marginBottom: 4 }} aria-hidden><Icon source={opt.icon} size={22} /></div>
             <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>{opt.title}</div>
             <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 2 }}>{opt.sub}</div>
           </button>

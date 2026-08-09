@@ -18,6 +18,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
 import { DEVICE_PRESETS, getDevicePreset, DEFAULT_DEVICE_ID } from '@/lib/devicePresets';
+import { Icon } from '@/components/ui/Icon';
 
 interface DevicePreviewProps {
   /** Dev-server URL, or undefined before the first successful run. */
@@ -122,7 +123,7 @@ export function DevicePreview({ url, onOpenDevicePanel }: DevicePreviewProps) {
             fontFamily: 'var(--font-display)',
           }}
         >
-          <span aria-hidden>📱</span>
+          <span aria-hidden><Icon source="📱" size="1em" /></span>
           {t('device.tryOnDevice')}
         </button>
       </div>
@@ -187,7 +188,7 @@ export function DevicePreview({ url, onOpenDevicePanel }: DevicePreviewProps) {
                     textAlign: 'center', background: 'var(--bg-elevated)', color: 'var(--text-muted)',
                   }}
                 >
-                  <span style={{ fontSize: 40 }} aria-hidden>📱</span>
+                  <span style={{ fontSize: 40 }} aria-hidden><Icon source="📱" size="1em" /></span>
                   <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)', fontWeight: 600 }}>
                     {t('device.emptyTitle')}
                   </p>
@@ -239,7 +240,7 @@ function ToolbarButton({ onClick, label, icon, disabled }: {
         cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
       }}
     >
-      <span aria-hidden>{icon}</span>
+      <span aria-hidden><Icon source={icon} size={17} /></span>
     </button>
   );
 }

@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import type { ProjectDiagnosticSummary } from '@/lib/tools';
 import { diagnosticScoreColor, orderDiagnostics } from '@/lib/diagnosticScore';
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * ProjectDiagnosticsStrip — the SINGLE surface for showing the diagnostics a
@@ -93,7 +94,7 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
             : d.gapCount > 0 ? { color: 'var(--coral-bright)', title: gapText(d) } : null;
           const chip = (
             <>
-              <span aria-hidden style={{ fontSize: 13 }}>{d.icon}</span>
+              <span aria-hidden><Icon source={d.icon} size={14} /></span>
               <span style={{ fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>
                 {d.score == null ? '—' : d.score.toFixed(1)}
               </span>
@@ -141,7 +142,7 @@ export function ProjectDiagnosticsStrip({ diagnostics, variant = 'chips', onOpen
               <MiniGauge score={d.score} label={d.scoreLabel} />
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0, width: '100%' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0, maxWidth: '100%' }}>
-                  <span aria-hidden style={{ fontSize: 14 }}>{d.icon}</span>
+                  <span aria-hidden><Icon source={d.icon} size={15} /></span>
                   <span style={{
                     fontSize: 12, fontWeight: 700, color: 'var(--text-primary)',
                     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',

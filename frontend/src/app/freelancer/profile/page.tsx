@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
@@ -180,7 +181,7 @@ export default function FreelancerProfilePage() {
           <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>{t('profile.title')}</h1>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>{t('profile.subtitle')}</p>
         </div>
-        <button type="button" onClick={() => setPreviewOpen(true)} className="ui-button ui-button--secondary ui-button--sm">👁 {t('profile.preview')}</button>
+        <button type="button" onClick={() => setPreviewOpen(true)} className="ui-button ui-button--secondary ui-button--sm"><Icon source="👁" size="1em" /> {t('profile.preview')}</button>
       </div>
 
       <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))' }}>
@@ -325,7 +326,7 @@ export default function FreelancerProfilePage() {
               </button>
             )}
           </div>
-          {profile.resumeFilename && <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}>📄 {profile.resumeFilename}</p>}
+          {profile.resumeFilename && <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0 }}><Icon source="📄" size="1em" /> {profile.resumeFilename}</p>}
           {autofilled && <p style={{ fontSize: 12, color: 'rgba(34,197,94,0.9)', margin: 0 }}>{t('profile.autofilled')}</p>}
 
           {embedUrl ? (

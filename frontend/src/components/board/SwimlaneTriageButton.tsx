@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState, useCallback, type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import { tasksApi, type AutoRunDiagnostic, type AutoRunReason } from '@/lib/builderforceApi';
@@ -166,7 +167,8 @@ export function SwimlaneTriageButton({ tasks, isActive, onDispatched }: Props) {
   return (
     <div style={{ position: 'relative' }}>
       <button type="button" style={btnStyle} onClick={toggle} aria-expanded={open} title={t('title')}>
-        ⚑ {t('button')} {candidates.length}
+        
+        <Icon source="⚑" size="1em" /> {t('button')} {candidates.length}
       </button>
 
       {open && (

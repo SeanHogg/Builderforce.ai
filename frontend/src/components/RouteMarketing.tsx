@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl';
 import { getRouteMarketing, isNoindexTeaserRoute } from '@/lib/routeMarketing';
 import { PRODUCT_SECTIONS } from '@/lib/content';
 import { routeMarketingSchema } from '@/lib/structured-data';
-import { ButtonLink, Surface, surfaceClassName } from '@/components/ui';
+import { ButtonLink, Icon, Surface, surfaceClassName } from '@/components/ui';
 import JsonLd from './JsonLd';
 import RelatedArticles from './blog/RelatedArticles';
 import { signInHref } from '@/lib/auth';
@@ -67,7 +67,7 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
       />
 
       <section className={surfaceClassName({ tone: 'raised', padding: 'lg' }, 'rm-hero')}>
-        <div className="rm-icon" aria-hidden="true">{m.icon}</div>
+        <div className="rm-icon" aria-hidden="true"><Icon source={m.icon} size={28} /></div>
         <h1 className="ui-text-page-title rm-title">{m.title}</h1>
         <p className="rm-desc">{m.description}</p>
         <p className="ui-text-small rm-sub">{t('subtitle', { surface: m.title })}</p>
@@ -117,7 +117,7 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
               href={`/product#${s.id}`}
               className={surfaceClassName({ tone: 'raised', interactive: true }, 'rm-card')}
             >
-              <div className="rm-card-icon" aria-hidden="true">{s.icon}</div>
+              <div className="rm-card-icon" aria-hidden="true"><Icon source={s.icon} size={24} /></div>
               <div className="ui-text-card-title">{s.title}</div>
               <div className="ui-text-small rm-card-blurb">{s.blurb}</div>
             </Link>

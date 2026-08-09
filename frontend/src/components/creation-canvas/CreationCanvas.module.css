@@ -1170,6 +1170,12 @@
 .brainActivity[data-variant='inline'] { gap:6px; padding:6px 8px; border:1px solid var(--canvas-brain-border); border-radius:var(--radius-md); font-size:9px; }
 .brainActivity[data-variant='inline'] small,.brainActivity[data-variant='inline'] em { font-size:8px; }
 .brainActivity[data-variant='inline'] .brainActivitySpark { font-size:10px; }
+/* Canvas-global working receipt. It sits at the person's point of attention — the
+   composer — so Brain cannot appear idle merely because its Object is off-screen. */
+.brainActivity[data-variant='composer'] { box-sizing:border-box; width:max-content; max-width:100%; margin:0 0 8px; padding:8px 14px; border:1px solid color-mix(in srgb,var(--canvas-brain-accent) 62%,var(--canvas-brain-border)); border-radius:var(--radius-full); background:color-mix(in srgb,var(--canvas-brain-accent) 16%,var(--canvas-brain-surface)); box-shadow:0 8px 24px var(--canvas-shadow); font-size:11px; }
+.brainActivity[data-variant='composer'] small { font-size:10px; }
+.brainActivity[data-variant='composer'] em { font-size:10px; font-variant-numeric:tabular-nums; }
+.brainActivity[data-variant='composer'] .brainActivitySpark { font-size:14px; }
 .brainActivity[data-state='running'] .brainActivitySpark { animation:brainSpark 1.1s ease-in-out infinite; }
 .brainActivity[data-state='running'] b { background:linear-gradient(90deg,var(--canvas-muted) 0%,var(--canvas-ink) 45%,var(--canvas-muted) 90%); background-size:220% 100%; -webkit-background-clip:text; background-clip:text; color:transparent; animation:brainShimmer 1.9s linear infinite; }
 .brainActivity[data-state='settled'] .brainActivitySpark { color:#2bb879; }

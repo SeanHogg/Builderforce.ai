@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { Icon } from '@/components/ui/Icon';
 import styles from './CreationCanvas.module.css';
 import { formatBytes, type CanvasFile, type CanvasFileCategory } from '@/lib/canvasDocuments';
 
@@ -71,7 +72,7 @@ export function CanvasFilesPanel({
               <button type="button" className={styles.fileOpen} onClick={() => onOpen(file.nodeId)} title={t('openOnCanvas')}>
                 {file.previewImageUrl
                   ? <img src={file.previewImageUrl} alt="" aria-hidden />
-                  : <span className={styles.fileIcon} aria-hidden>{CATEGORY_ICON[file.category]}</span>}
+                  : <span className={styles.fileIcon} aria-hidden><Icon source={CATEGORY_ICON[file.category]} size={18} /></span>}
                 <span className={styles.fileText}>
                   <b>{file.name}</b>
                   <small>

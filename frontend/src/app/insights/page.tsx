@@ -13,6 +13,7 @@
  * widgets whose cards can be pinned back here. Pin a card → it shows up here.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -161,7 +162,7 @@ export default function InsightsHomePage() {
       content: <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {error && <div style={{ color: 'var(--danger)', fontSize: 13 }}>{error}</div>}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          <button type="button" style={tabStyle(view === 'me')} onClick={() => setView('me')}>📌 {t('home.myDashboard')}</button>
+          <button type="button" style={tabStyle(view === 'me')} onClick={() => setView('me')}><Icon source="📌" size="1em" /> {t('home.myDashboard')}</button>
           {dashboards.map((d) => <button key={d.id} type="button" style={tabStyle(view === d.id)} onClick={() => setView(d.id)}>{d.name}</button>)}
           <RoleGate capability="dashboards.manage">
             <span style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}>

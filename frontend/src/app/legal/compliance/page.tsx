@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server';
 import Link from 'next/link';
 import { CompliancePage } from '@/components/legal/CompliancePage';
 import styles from './page.module.css';
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * Route, glyph, and the catalog key its label comes from.
@@ -36,7 +37,7 @@ export default async function ComplianceCenter() {
       <nav className={styles.grid} aria-label={t('resourcesHeading')}>
         {resources.map((resource) => (
           <Link className={styles.card} href={resource.href} key={resource.href}>
-            <span className={styles.icon} aria-hidden="true">{resource.icon}</span>
+            <span className={styles.icon} aria-hidden="true"><Icon source={resource.icon} size={22} /></span>
             <span className={styles.cardCopy}>
               <strong>{t(`nav.${resource.key}`)}</strong>
               <span>{t(`center.details.${resource.key}`)}</span>

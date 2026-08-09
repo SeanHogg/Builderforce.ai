@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -243,7 +244,8 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <h2 style={h2Style}>{t('bulkUploadTitle')}</h2>
           <button type="button" onClick={handleDownloadTemplate} style={linkBtnStyle}>
-            ⬇ {t('bulkDownloadTemplate')}
+            
+            <Icon source="⬇" size="1em" /> {t('bulkDownloadTemplate')}
           </button>
         </div>
 
@@ -267,7 +269,7 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
           aria-label={t('bulkUploadAria')}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click(); }}
         >
-          <div style={{ fontSize: 40, marginBottom: 12 }} aria-hidden="true">📁</div>
+          <div style={{ fontSize: 40, marginBottom: 12 }} aria-hidden="true"><Icon source="📁" size="1em" /></div>
           <p style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 8px' }}>
             {t('bulkDropzoneTitle')}
           </p>
@@ -437,7 +439,8 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
         {hasErrors && (
           <div style={{ marginBottom: 20 }}>
             <button type="button" onClick={handleDownloadErrorReport} style={linkBtnStyle}>
-              ⬇ {t('bulkDownloadErrorReport')}
+              
+              <Icon source="⬇" size="1em" /> {t('bulkDownloadErrorReport')}
             </button>
           </div>
         )}
@@ -492,7 +495,7 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
   if (step === 'importing') {
     return (
       <div style={{ ...cardStyle, textAlign: 'center' }}>
-        <div style={{ fontSize: 40, marginBottom: 16 }} aria-hidden="true">⏳</div>
+        <div style={{ fontSize: 40, marginBottom: 16 }} aria-hidden="true"><Icon source="⏳" size="1em" /></div>
         <h2 style={h2Style}>{t('bulkImportingTitle')}</h2>
         <div style={{
           width: '100%', height: 8, background: 'var(--border-subtle)', borderRadius: 'var(--radius-sm)',
@@ -527,7 +530,8 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
         {/* FR-3.9: downloadable summary report */}
         <div style={{ marginBottom: 24 }}>
           <button type="button" onClick={handleDownloadSummary} style={linkBtnStyle}>
-            ⬇ {t('bulkDownloadSummary')}
+            
+            <Icon source="⬇" size="1em" /> {t('bulkDownloadSummary')}
           </button>
         </div>
 

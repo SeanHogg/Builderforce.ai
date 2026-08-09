@@ -3,6 +3,7 @@ import Link from 'next/link';
 import FeatureCard from '../FeatureCard';
 import { NODE_KINDS, NODE_GROUPS } from '@/components/workflow-builder/nodeKinds';
 import { INTEGRATIONS, INTEGRATION_CATEGORIES, integrationIcon } from '@/components/workflow-builder/integrations';
+import { Icon } from '@/components/ui/Icon';
 
 export const metadata: Metadata = {
   title: 'Agentic Workflow Builder — Builderforce.ai',
@@ -115,7 +116,7 @@ export default function WorkflowBuilderMarketingPage() {
                       borderLeft: `3px solid ${m.accent}`, borderRadius: 'var(--radius-lg)',
                     }}
                   >
-                    <span style={{ fontSize: 'var(--font-size-card-title)', lineHeight: 1 }}>{m.icon}</span>
+                    <Icon source={m.icon} size={20} />
                     <div>
                       <div style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-primary)' }}>{m.label}</div>
                       <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 3, lineHeight: 1.45 }}>{m.blurb}</div>
@@ -139,11 +140,11 @@ export default function WorkflowBuilderMarketingPage() {
               return (
                 <div key={cat.id} style={{ padding: '14px 16px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderLeft: `3px solid ${cat.accent}`, borderRadius: 'var(--radius-lg)' }}>
                   <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
-                    <span style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-primary)' }}>{cat.icon} {cat.label}</span>
+                    <span style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-primary)' }}><Icon source={cat.icon} size={17} /> {cat.label}</span>
                     <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: cat.accent }}>{items.length}</span>
                   </div>
                   <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 6, lineHeight: 1.5 }}>
-                    {items.slice(0, 8).map((i) => `${integrationIcon(i)} ${i.label}`).join(' · ')}
+                    {items.slice(0, 8).map((i) => i.label).join(' · ')}
                     {items.length > 8 ? ` +${items.length - 8} more` : ''}
                   </div>
                 </div>

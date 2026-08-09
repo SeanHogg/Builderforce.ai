@@ -10,6 +10,7 @@
  * without prop-drilling.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -115,7 +116,8 @@ export function FloatingBrain() {
             title={tLauncher('title')}
             className="brain-launcher"
           >
-            🧠
+            
+            <Icon source="🧠" size="1em" />
             {counts.awaiting > 0 ? (
               <span
                 className="brain-launcher-badge"

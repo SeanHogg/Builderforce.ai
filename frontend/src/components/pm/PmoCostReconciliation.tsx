@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { pmoApi, type CostClass, type SpineNode, type SpineResult } from '@/lib/builderforceApi';
@@ -106,7 +107,7 @@ export function PmoCostReconciliation() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 240, flex: 1, paddingLeft: n.depth * 14, overflow: 'hidden' }}>
                   <span style={{ fontSize: '0.72rem' }} title={t(`kind.${n.kind}`)}>{KIND_ICON[n.kind]}</span>
                   <span title={n.title} style={{ fontSize: '0.82rem', fontWeight: n.kind === 'task' ? 400 : 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.title}</span>
-                  {inheritedConflict && <span style={{ color: 'var(--coral-bright)', fontWeight: 700 }} title={t('anomalyTip', { declared: t(n.declaredCostClass ?? 'unclassified'), inherited: t(n.inheritedCostClass ?? 'unclassified') })}>⚠</span>}
+                  {inheritedConflict && <span style={{ color: 'var(--coral-bright)', fontWeight: 700 }} title={t('anomalyTip', { declared: t(n.declaredCostClass ?? 'unclassified'), inherited: t(n.inheritedCostClass ?? 'unclassified') })}><Icon source="⚠" size="1em" /></span>}
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 150 }}>

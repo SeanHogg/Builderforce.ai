@@ -487,6 +487,7 @@
       "settings": "Général",
       "security": "Sécurité",
       "billing": "Facturation",
+      "pricing": "Tarifs",
       "tenant": "Espaces de travail",
       "apiKeys": "Clés API",
       "sops": "Procédures",
@@ -562,6 +563,9 @@
     "subtitle": "Définissez des alertes de seuil sur les métriques de la plateforme. Un balayage quotidien évalue chaque règle et notifie votre équipe via Slack et e-mail lorsqu'elle se déclenche.",
     "loading": "Chargement…",
     "days": "{n} jours",
+    "pricing": {
+      "title": "Tarifs publiés", "description": "Modifiez le brouillon de la page et des cartes tarifaires. Il reste privé jusqu’à sa publication.", "publishedAt": "Dernière publication : {date}", "currency": "Devise", "managedHost": "AgentHost géré / mois", "name": "Nom du forfait", "descriptionLabel": "Description", "monthly": "Prix mensuel", "yearly": "Prix annuel", "suffix": "Suffixe du prix", "minimumSeats": "Nombre minimum de sièges", "features": "Fonctionnalités incluses — une par ligne", "excluded": "Fonctionnalités exclues — une par ligne", "ctaLabel": "Libellé du bouton", "ctaHref": "Destination du bouton", "saveDraft": "Enregistrer le brouillon", "saving": "Enregistrement…", "publish": "Publier les tarifs", "publishing": "Publication…", "draftSaved": "Brouillon enregistré ; les tarifs publics sont inchangés."
+    },
     "common": {
       "delete": "Supprimer"
     },
@@ -12513,7 +12517,10 @@
     "linkBlog": "Blog",
     "linkLiveDemo": "Démo en direct",
     "linkSignIn": "Se connecter",
-    "linkGetStarted": "Commencer"
+    "linkGetStarted": "Commencer",
+    "cookies": "Cookies",
+    "subprocessors": "Sous-traitants",
+    "accessibility": "Accessibilité"
   },
   "beta": {
     "crumb": "Mise à jour produit",
@@ -13588,6 +13595,7 @@
       "guidedTour": "Visite guidée"
     },
     "tourBuilder": {
+      "defaultObjectTitle": "Visite d’intégration au produit", "defaultOfferTitle": "Bienvenue — souhaitez-vous une visite rapide ?", "defaultOfferBody": "Découvrez l’essentiel en quelques étapes rapides. Vous pouvez quitter la visite à tout moment.", "defaultStartLabel": "Commencer la visite", "defaultCancelLabel": "Pas maintenant", "defaultStep1Title": "Orienter l’utilisateur", "defaultStep1Body": "Expliquez la première zone importante et pourquoi elle compte.", "defaultStep2Title": "Présenter l’action principale", "defaultStep2Body": "Mettez en évidence l’action qui aide l’utilisateur à progresser.",
       "closePreview": "Fermer l’aperçu", "stepOf": "{current} sur {total}", "targetConnected": "Cible connectée", "targetNeeded": "Choisissez un objet cible", "back": "Retour", "finish": "Terminer", "next": "Suivant", "offer": "Proposition de visite",
       "stepCount": "{count, plural, one {# étape} other {# étapes}}", "visitCount": "Proposer après {count, plural, one {# visite} other {# visites}}", "escapeEnabled": "Sortie activée",
       "settings": "Paramètres de la visite guidée", "settingsHint": "Concevez une visite facultative, puis reliez chaque étape à l’objet du Canvas à mettre en évidence.", "draftSteps": "Brouillon · {count} étapes", "offerTitle": "Titre de la proposition", "offerBody": "Description de la proposition", "version": "Version de la visite", "minimumVisits": "Visites avant proposition", "blurBackground": "Flouter l’arrière-plan de la proposition", "escapeHatch": "Toujours proposer Fermer et Échap", "steps": "Étapes de la visite", "addStep": "Ajouter une étape", "newStepTitle": "Nouvelle étape", "stepTitle": "Titre de l’étape", "stepBody": "Description de l’étape", "targetObject": "Objet à mettre en évidence", "chooseTarget": "Choisir un objet", "removeStep": "Supprimer l’étape"

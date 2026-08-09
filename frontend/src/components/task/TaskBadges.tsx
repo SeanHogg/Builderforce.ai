@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useTranslations } from 'next-intl';
 import type { Task } from '@/lib/builderforceApi';
 import { taskTypeBadgeClass, taskTypeLabelKey } from '@/lib/taskType';
@@ -91,7 +92,8 @@ export function TaskBadges({
             background: 'var(--danger-bg)', color: 'var(--danger-text)', fontWeight: 700,
           }}
         >
-          ⚑ {tBoard('audit.flagged')}
+          
+          <Icon source="⚑" size="1em" /> {tBoard('audit.flagged')}
         </span>
       )}
       {participants && participants.required > 0 && (
@@ -103,7 +105,8 @@ export function TaskBadges({
             color: participants.percent >= 100 ? 'var(--success-text)' : 'var(--text-secondary)',
           }}
         >
-          ✅ {participants.completed}/{participants.required}
+          
+          <Icon source="✅" size="1em" /> {participants.completed}/{participants.required}
         </span>
       )}
       {task.businessValue != null && (
@@ -122,7 +125,8 @@ export function TaskBadges({
           title={tBoard('prdBadgeTitle', { count: task.specCount })}
           style={{ ...chip, background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}
         >
-          📄 PRD{task.specCount > 1 ? ` ×${task.specCount}` : ''}
+          
+          <Icon source="📄" size="1em" /> PRD{task.specCount > 1 ? ` ×${task.specCount}` : ''}
         </span>
       ) : null}
     </>

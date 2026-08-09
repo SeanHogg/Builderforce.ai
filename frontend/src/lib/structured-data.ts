@@ -517,14 +517,16 @@ export function compareSchema() {
 /** Pricing page: Product with Offers + FAQ + BreadcrumbList */
 export function pricingSchema(pricing?: {
   currency: string;
-  pro: { monthly: number };
-  teams: { perSeatMonthly: number; minimumSeats: number };
+  plans: Array<{ id: 'free' | 'pro' | 'teams'; name: string; monthly: number; minimumSeats: number; ctaHref: string }>;
 }) {
-  const offers = pricing ? [
-    { '@type': 'Offer', name: 'Free', price: '0', priceCurrency: pricing.currency, url: `${BRAND.url}/register` },
-    { '@type': 'Offer', name: 'Pro', price: String(pricing.pro.monthly), priceCurrency: pricing.currency, url: `${BRAND.url}/pricing?upgrade=pro` },
-    { '@type': 'Offer', name: `Teams (${pricing.teams.minimumSeats}-seat minimum)`, price: String(pricing.teams.perSeatMonthly), priceCurrency: pricing.currency, url: `${BRAND.url}/pricing?upgrade=teams` },
-  ] : undefined;
+  const offers = pricing?.plans.map((plan) => ({
+    '@type': 'Offer',
+    name: plan.name,
+    price: String(plan.monthly),
+    priceCurrency: pricing.currency,
+    url: `${BRAND.url}${plan.ctaHref}`,
+    ...(plan.minimumSeats > 1 ? { eligibleQuantity: { '@type': 'QuantitativeValue', minValue: plan.minimumSeats } } : {}),
+  }));
   return {
     '@context': 'https://schema.org',
     '@graph': [

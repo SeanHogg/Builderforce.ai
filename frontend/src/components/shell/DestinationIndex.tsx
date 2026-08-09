@@ -23,6 +23,7 @@
 
 import Link from 'next/link';
 import type { CSSProperties, ReactNode } from 'react';
+import { Icon } from '@/components/ui/Icon';
 
 /** Above this many items a horizontal bar stops being navigable — §6.3's rule. */
 export const INDEX_ROW_LIMIT = 6;
@@ -80,7 +81,7 @@ export function DestinationIndex({
         lastGroup = item.group;
         const body = (
           <>
-            {item.icon && <span aria-hidden="true" style={{ fontSize: 14 }}>{item.icon}</span>}
+            {item.icon && <Icon source={item.icon} size={16} />}
             <span>{item.label}</span>
             {item.badge}
           </>

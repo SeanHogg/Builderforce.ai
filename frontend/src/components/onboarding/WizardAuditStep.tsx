@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { toolsApi, securityAgentApi } from '@/lib/builderforceApi';
 import type { SystemAuditSummary } from '@/lib/tools';
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * Onboarding step: kick off system-level audits (SOC 2, Architecture, Quality,
@@ -153,7 +154,7 @@ export function WizardAuditStep({ projectId }: { projectId: number }) {
                 cursor: running ? 'default' : 'pointer',
               }}
             >
-              <span style={{ fontSize: 22, lineHeight: 1 }}>{a.icon}</span>
+              <span><Icon source={a.icon} size={22} /></span>
               <span style={{ flex: 1 }}>
                 <span style={{ display: 'block', fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>{a.name}</span>
                 <span style={{ display: 'block', fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>{a.blurb}</span>

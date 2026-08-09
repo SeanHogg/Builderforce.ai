@@ -61,6 +61,14 @@ export interface PromptOptionsMemory {
   unavailableReason?: string;
 }
 
+/** Whether tool and canvas actions run without a separate approval prompt. */
+export interface PromptOptionsAutoMode {
+  enabled: boolean;
+  onChange: (on: boolean) => void;
+  /** What enabling this setting means on the current host. */
+  description?: string;
+}
+
 /**
  * The two actions that act on the CONVERSATION rather than on the next turn:
  * consolidate it into a compact summary, or fork that summary into a new chat.
@@ -94,6 +102,7 @@ export interface PromptOptionsMenuProps {
   disabled?: boolean;
   mode?: PromptOptionsMode;
   memory?: PromptOptionsMemory;
+  autoMode?: PromptOptionsAutoMode;
   /** Consolidate / fork this chat. Omit on a surface with no chat behind it. */
   session?: PromptOptionsSession;
   effort?: Effort;
@@ -113,7 +122,8 @@ const EFFORT_ICON: Record<Effort, string> = { quick: '🏃', balanced: '⚖️',
 
 /**
  * The composer's `/` control: everything that shapes the NEXT TURN — the mode it
- * runs in, whether it remembers, run shaping (effort, thinking), the model in use
+ * runs in, whether it remembers, whether actions auto-apply, run shaping (effort,
+ * thinking), the model in use
  * and the model picker, plus account settings. One affordance, shared by every
  * BuilderForce prompt surface (web Brain, Creation Canvas, the VS Code webview).
  *
@@ -130,6 +140,7 @@ export function PromptOptionsMenu({
   disabled = false,
   mode,
   memory,
+  autoMode,
   session,
   effort,
   onEffortChange,
@@ -170,7 +181,7 @@ export function PromptOptionsMenu({
   const visible = useMemo(() => filterModelItems(items, labels, query, filter), [items, labels, query, filter]);
 
   // Nothing wired ⇒ no control (the component decides its own visibility).
-  if (!mode && !memory && !session && !onEffortChange && !onThinkingChange && !model && !onAccountSettings) return null;
+  if (!mode && !memory && !autoMode && !session && !onEffortChange && !onThinkingChange && !model && !onAccountSettings) return null;
 
   const canChoose = model?.canChoose !== false;
   const activeKey = model ? activeModelKey(model.selection) : '';
@@ -253,9 +264,30 @@ export function PromptOptionsMenu({
             </>
           )}
 
-          {onEffortChange && (
+          {autoMode && (
             <>
               {(mode || memory) && <div className="bf-pmenu__sep" />}
+              <button
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={autoMode.enabled}
+                className={`bf-pmenu__item${autoMode.enabled ? ' is-active' : ''}`}
+                onClick={() => autoMode.onChange(!autoMode.enabled)}
+              >
+                <span className="bf-pmenu__ico" aria-hidden="true">⚡</span>
+                <span className="bf-pmenu__lbl">
+                  {labels.autoMode}
+                  <span className="bf-pmenu__desc">{autoMode.description ?? labels.autoModeHint}</span>
+                </span>
+                <span className="bf-pmenu__hint">{autoMode.enabled ? labels.on : labels.off}</span>
+                <span className="bf-pmenu__check" aria-hidden="true">{autoMode.enabled ? '✓' : ''}</span>
+              </button>
+            </>
+          )}
+
+          {onEffortChange && (
+            <>
+              {(mode || memory || autoMode) && <div className="bf-pmenu__sep" />}
               <div className="bf-pmenu__group">{labels.effort}</div>
               {EFFORT_LEVELS.map((level) => (
                 <button
@@ -279,7 +311,7 @@ export function PromptOptionsMenu({
 
           {onThinkingChange && (
             <>
-              {(mode || memory || onEffortChange) && <div className="bf-pmenu__sep" />}
+              {(mode || memory || autoMode || onEffortChange) && <div className="bf-pmenu__sep" />}
               <button
                 type="button"
                 role="menuitemcheckbox"
@@ -300,7 +332,7 @@ export function PromptOptionsMenu({
 
           {model && inUse && (
             <>
-              {(mode || memory || onEffortChange || onThinkingChange) && <div className="bf-pmenu__sep" />}
+              {(mode || memory || autoMode || onEffortChange || onThinkingChange) && <div className="bf-pmenu__sep" />}
               <div className="bf-pmenu__group">{labels.model}</div>
               <div className="bf-pmenu__info">
                 <span className="bf-pmenu__ico" aria-hidden="true">🧠</span>

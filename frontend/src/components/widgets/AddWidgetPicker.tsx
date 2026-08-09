@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
@@ -59,7 +60,7 @@ function WidgetRow({ id, titleKey, capability }: { id: string; titleKey: string;
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '8px 10px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: pins.isPinned(id) ? 'var(--bg-elevated)' : 'transparent' }}>
       <span style={{ fontSize: '0.86rem', color: 'var(--text-primary)' }}>{t(`title.${titleKey}`)}</span>
-      {allowed ? <PinButton widgetKey={id} /> : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>🔒</span>}
+      {allowed ? <PinButton widgetKey={id} /> : <span style={{ fontSize: 12, color: 'var(--text-muted)' }}><Icon source="🔒" size="1em" /></span>}
     </div>
   );
 }

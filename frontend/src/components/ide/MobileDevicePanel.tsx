@@ -10,6 +10,7 @@
  * so plainly and points at the Publish tab rather than showing a dead code.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
@@ -117,7 +118,7 @@ export function MobileDevicePanel({ open, onClose, projectId, onGoToPublish }: M
               background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
             }}
           >
-            <span style={{ fontSize: 32 }} aria-hidden>🚀</span>
+            <span style={{ fontSize: 32 }} aria-hidden><Icon source="🚀" size="1em" /></span>
             <p style={{ margin: 0, fontSize: 14, fontWeight: 600 }}>{t('device.notPublishedTitle')}</p>
             <p style={{ margin: 0, fontSize: 13, lineHeight: 1.55, color: 'var(--text-secondary)' }}>
               {t('device.notPublishedBody')}

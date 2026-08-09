@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { type CSSProperties } from 'react';
 import { useTranslations } from 'next-intl';
 import { getWidget } from '@/lib/widgets/registry';
@@ -68,8 +69,8 @@ export function ReorderableWidgetGrid({ ids, days }: { ids: string[]; days: numb
                 aria-label={t('reorder.drag')}
                 style={{ ...handleBtn, cursor: 'grab' }}
               >⠿</span>
-              <button type="button" style={handleBtn} disabled={i === 0} onClick={() => drag.nudge(id, -1)} aria-label={t('reorder.moveLeft')} title={t('reorder.moveLeft')}>◀</button>
-              <button type="button" style={handleBtn} disabled={i === known.length - 1} onClick={() => drag.nudge(id, 1)} aria-label={t('reorder.moveRight')} title={t('reorder.moveRight')}>▶</button>
+              <button type="button" style={handleBtn} disabled={i === 0} onClick={() => drag.nudge(id, -1)} aria-label={t('reorder.moveLeft')} title={t('reorder.moveLeft')}><Icon source="◀" size="1em" /></button>
+              <button type="button" style={handleBtn} disabled={i === known.length - 1} onClick={() => drag.nudge(id, 1)} aria-label={t('reorder.moveRight')} title={t('reorder.moveRight')}><Icon source="▶" size="1em" /></button>
             </div>
             <WidgetCard def={def} days={days} />
           </div>

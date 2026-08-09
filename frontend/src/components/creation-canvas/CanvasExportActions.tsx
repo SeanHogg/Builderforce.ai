@@ -18,6 +18,7 @@
 
 import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
+import { Icon } from '@/components/ui/Icon';
 import styles from './CreationCanvas.module.css';
 import type { CreationNodeData } from './types';
 import { exportActionsFor, type CanvasExportAction } from '@/lib/canvasExports';
@@ -107,6 +108,6 @@ export function CanvasExportActions({ data, onExport, className }: CanvasExportA
       key={action}
       type="button"
       onClick={(event) => { event.stopPropagation(); onExport(action); }}
-    ><span className={styles.cardActionIcon} aria-hidden="true">{EXPORT_ICON[action]}</span>{label(action)}</button>)}
+    ><span className={styles.cardActionIcon} aria-hidden="true"><Icon source={EXPORT_ICON[action]} size={17} /></span>{label(action)}</button>)}
   </div>;
 }

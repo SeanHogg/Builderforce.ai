@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
@@ -227,11 +228,11 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
             ))}
           </div>
           <button type="button" onClick={() => setTranscriptOpen((o) => !o)} aria-pressed={transcriptOpen} style={headerBtn(transcriptOpen)}>
-            <span aria-hidden>📝</span>{t('transcript')}
+            <span aria-hidden><Icon source="📝" size="1em" /></span>{t('transcript')}
           </button>
           {chatId != null && (
             <button type="button" onClick={() => setChatOpen((o) => !o)} aria-pressed={chatOpen} style={headerBtn(chatOpen)}>
-              <span aria-hidden>💬</span>{t('chatPanel')}
+              <span aria-hidden><Icon source="💬" size="1em" /></span>{t('chatPanel')}
             </button>
           )}
           <button
@@ -282,7 +283,7 @@ export function MeetingRoom({ meetingId, onClose }: { meetingId: string; onClose
                     disabled={agentBusy.has(a.ref)}
                     style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 'var(--radius-full)', cursor: agentBusy.has(a.ref) ? 'default' : 'pointer', background: 'var(--bg-elevated)', color: 'var(--text-primary)', border: '1px solid var(--border-subtle)', opacity: agentBusy.has(a.ref) ? 0.6 : 1, display: 'inline-flex', alignItems: 'center', gap: 6 }}
                   >
-                    <span aria-hidden>🗣</span>{agentBusy.has(a.ref) ? t('agentThinking', { name: a.name }) : t('askForUpdate', { name: a.name })}
+                    <span aria-hidden><Icon source="🗣" size="1em" /></span>{agentBusy.has(a.ref) ? t('agentThinking', { name: a.name }) : t('askForUpdate', { name: a.name })}
                   </button>
                 ))}
               </div>

@@ -727,11 +727,13 @@ describe('CreationCanvas', () => {
     expect(screen.getByRole('log', { name: 'Brain chat history' })).toHaveAttribute('tabindex', '0');
     const microphone = screen.getByRole('button', { name: 'Dictate' });
     expect(microphone.querySelector('svg')).toBeInTheDocument();
-    const autoApply = screen.getByRole('button', { name: 'Auto mode' });
-    expect(autoApply).toHaveAttribute('aria-pressed', 'false');
+    const options = screen.getByRole('button', { name: /^Options/ });
+    fireEvent.click(options);
+    const autoApply = screen.getByRole('menuitemcheckbox', { name: /Auto mode/ });
+    expect(autoApply).toHaveAttribute('aria-checked', 'true');
     fireEvent.click(autoApply);
-    expect(autoApply).toHaveAttribute('aria-pressed', 'true');
-    expect(localStorage.getItem('brain.autoApprove')).toBe('1');
+    expect(autoApply).toHaveAttribute('aria-checked', 'false');
+    expect(localStorage.getItem('brain.autoApprove')).toBe('0');
 
     fireEvent.click(screen.getByRole('tab', { name: 'Context' }));
     expect(screen.getByRole('heading', { name: 'Agents' })).toBeInTheDocument();
@@ -862,14 +864,18 @@ describe('CreationCanvas', () => {
     expect(JSON.parse(localStorage.getItem('builderforce:create:brain-dock')!)).toMatchObject({ showExecutionDetail: true });
   });
 
-  it('opens the Brain chat as soon as a prompt is submitted', () => {
-    render(<CreationCanvas sessionId="composer-opens-brain-test" persistence="local" />);
+  it('opens the Brain chat and shows canvas-global working feedback as soon as a prompt is submitted', () => {
+    const { container } = render(<CreationCanvas sessionId="composer-opens-brain-test" persistence="local" />);
 
     fireEvent.change(screen.getByLabelText('Ask Brain about this canvas'), { target: { value: 'Show which agents are active' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send to Brain' }));
 
     expect(screen.getByRole('log', { name: 'Brain chat history' })).toBeInTheDocument();
     expect(screen.getAllByText('Show which agents are active').length).toBeGreaterThan(0);
+    const working = container.querySelector('[data-variant="composer"][data-state="running"]');
+    expect(working).toBeInTheDocument();
+    expect(working).toHaveTextContent('Thinking…');
+    expect(working).toHaveTextContent(/\d+s/);
   });
 
   // A local draft cannot execute anything: it is not linked to a runnable

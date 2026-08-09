@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -331,7 +332,7 @@ export function SourceControlContent({
                   {r.defaultBranch && <span style={{ color: 'var(--text-muted)' }}> · {r.defaultBranch}</span>}
                   {r.isDefault && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--coral-bright)' }}>{t('defaultBadge')}</span>}
                   {r.credentialId
-                    ? <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}>🔑 {credName(r.credentialId) ?? t('key')}</span>
+                    ? <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--text-muted)' }}><Icon source="🔑" size="1em" /> {credName(r.credentialId) ?? t('key')}</span>
                     : <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--danger)' }}>{t('noKey')}</span>}
                 </span>
                 {result && (

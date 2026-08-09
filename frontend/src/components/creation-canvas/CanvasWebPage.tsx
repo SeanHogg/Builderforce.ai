@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CreationNodeData } from './types';
@@ -156,7 +157,7 @@ export function CanvasWebPage({ data, onEdit }: CanvasWebPageProps) {
           aria-label={t('openInNewTab')}
           title={t('openInNewTab')}
           onClick={(event) => event.stopPropagation()}
-        >↗</a>}
+        ><Icon source="↗" size="1em" /></a>}
       </div>
 
       {!url && <div className={styles.webPageEmpty}><strong>{t('emptyTitle')}</strong><p>{t('emptyHint')}</p></div>}

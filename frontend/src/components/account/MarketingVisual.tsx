@@ -77,7 +77,7 @@ export default function MarketingVisual({ variant }: { variant: 'standard' | 'fr
         {/* Central hub (your agent) */}
         <circle cx="160" cy="75" r="30" fill="var(--coral-bright)" opacity="0.15" />
         <circle cx="160" cy="75" r="24" fill="var(--coral-bright)" />
-        <text x="160" y="81" textAnchor="middle" fontSize="20">🚀</text>
+        <text x="160" y="81" textAnchor="middle" fontSize="20"></text>
       </svg>
     </div>
   );

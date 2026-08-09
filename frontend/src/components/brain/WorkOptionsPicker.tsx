@@ -17,6 +17,7 @@
  */
 
 import { useTranslations } from 'next-intl';
+import { Icon } from '@/components/ui/Icon';
 import { workOptions, type ChatMode, type WorkOptionId } from '@/lib/brain';
 
 export interface WorkOptionsPickerProps {
@@ -63,7 +64,7 @@ export function WorkOptionsPicker({ mode, onPick, disabled }: WorkOptionsPickerP
               textAlign: 'left',
             }}
           >
-            <span aria-hidden style={{ fontSize: 18, lineHeight: 1.2, flexShrink: 0 }}>{option.icon}</span>
+            <span aria-hidden style={{ flexShrink: 0 }}><Icon source={option.icon} size={20} /></span>
             <span style={{ minWidth: 0 }}>
               <span style={{ display: 'block', fontSize: 13, fontWeight: 600 }}>{t(`${option.id}.label`)}</span>
               <span style={{ display: 'block', fontSize: 11, marginTop: 2, color: 'var(--text-muted)', overflowWrap: 'anywhere' }}>

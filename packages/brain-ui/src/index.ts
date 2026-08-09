@@ -41,6 +41,7 @@ export type { PromptPanelProps } from './PromptPanel';
 export { PromptOptionsMenu } from './promptOptions/PromptOptionsMenu';
 export type {
   PromptOptionsMemory,
+  PromptOptionsAutoMode,
   PromptOptionsMenuProps,
   PromptOptionsMode,
   PromptOptionsModeChoice,

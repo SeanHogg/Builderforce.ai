@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { CeremonySession, CeremonyParticipant } from '@/lib/builderforceApi';
@@ -83,7 +84,8 @@ export function StandupControls({
       </span>
       {speaker && (
         <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-          🎤 <strong style={{ color: 'var(--text-primary)' }}>{speaker.memberName}</strong>
+          
+          <Icon source="🎤" size="1em" /> <strong style={{ color: 'var(--text-primary)' }}>{speaker.memberName}</strong>
           <span style={{ marginLeft: 6, fontFamily: 'var(--font-mono)', color: remainingMs != null && remainingMs <= 10000 ? 'var(--error)' : 'var(--text-muted)' }}>
             {remainingMs != null ? formatDuration(Math.max(0, remainingMs)) : formatDuration(turnMs)}
           </span>

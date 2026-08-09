@@ -7,6 +7,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
 import { persistLastProjectId, signInHref } from '@/lib/auth';
 import { Select } from '@/components/Select';
+import { Icon } from '@/components/ui/Icon';
 import {
   listIdeProjects,
   createIdeProject,
@@ -255,7 +256,7 @@ export default function IDEDashboardPage() {
                   onMouseLeave={disabled ? undefined : (e) => { e.currentTarget.style.borderColor = ''; }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 28 }} aria-hidden>{m.icon}</span>
+                    <span aria-hidden><Icon source={m.icon} size={28} /></span>
                     <span style={{ fontSize: '1.05rem', fontWeight: 700 }}>{m.label}</span>
                     {disabled && (
                       <span style={{ fontSize: 11, color: 'var(--text-muted)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', padding: '1px 6px' }}>{t('soon')}</span>
@@ -278,7 +279,7 @@ export default function IDEDashboardPage() {
                 {localizedModalities.map((m) => (
                   <FilterChip
                     key={m.id}
-                    label={`${m.icon} ${m.label}`}
+                    label={m.label}
                     active={typeParam === m.id}
                     onClick={() => {
                       const next = new URLSearchParams(searchParams.toString());
@@ -314,7 +315,7 @@ export default function IDEDashboardPage() {
             <div style={{ color: 'var(--text-muted)', padding: 24 }}>{t('loadingProjects')}</div>
           ) : filtered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 48, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)' }}>
-              <div style={{ fontSize: 56, marginBottom: 16 }}>🚀</div>
+              <div style={{ fontSize: 56, marginBottom: 16 }}><Icon source="🚀" size="1em" /></div>
               <p style={{ color: 'var(--text-secondary)' }}>
                 {currentProjectId != null || typeParam ? t('noProjectsFilter') : t('noProjectsYet')}
               </p>
@@ -362,7 +363,7 @@ export default function IDEDashboardPage() {
             <form onSubmit={submitCreate} className="space-y-4">
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {localizedModalities.filter((m) => !m.comingSoon).map((m) => (
-                  <FilterChip key={m.id} label={`${m.icon} ${m.label}`} active={createType === m.id} onClick={() => setCreateType(m.id)} />
+                  <FilterChip key={m.id} label={m.label} active={createType === m.id} onClick={() => setCreateType(m.id)} />
                 ))}
               </div>
               <div>
@@ -399,7 +400,7 @@ export default function IDEDashboardPage() {
                             opacity: noModels ? 0.55 : 1,
                           }}
                         >
-                          <span aria-hidden style={{ fontSize: 20, lineHeight: 1 }}>{r.icon}</span>
+                          <span aria-hidden><Icon source={r.icon} size={20} /></span>
                           <span style={{ flex: 1, minWidth: 0 }}>
                             <span style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                               <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{t(r.nameKey)}</span>
@@ -494,7 +495,7 @@ function IdeProjectTable({ items, onOpen, onDetails, onDelete }: {
                   <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}</span>
                   <span style={{ marginLeft: 8, fontFamily: 'monospace', fontSize: 11, color: 'var(--text-muted)' }}>{p.storageProjectKey}</span>
                 </td>
-                <td style={td}>{m.icon} {m.label}</td>
+                <td style={td}><Icon source={m.icon} size={17} /> {m.label}</td>
                 <td style={{ ...td, color: p.containerName ? 'var(--text-secondary)' : 'var(--text-muted)' }}>{p.containerName ?? t('ungrouped')}</td>
                 <td style={{ ...td, textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
                   <button type="button" onClick={() => onOpen(p)} style={linkBtn}>{t('open')}</button>

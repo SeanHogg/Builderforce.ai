@@ -123,7 +123,7 @@ export function ConnectorNodeFields({ config, setConfig, patchConfig }: Props) {
           </option>
           {catalog?.map((c) => (
             <option key={c.key} value={c.key} style={optionStyle}>
-              {c.icon} {c.name}
+              {c.name}
             </option>
           ))}
         </Select>

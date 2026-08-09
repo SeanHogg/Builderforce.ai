@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
@@ -54,7 +55,7 @@ export function CanvasBuildPanel({ storageProjectId, onClose, onProjectRenamed }
     <div style={{ flex: 1, minHeight: 0, minWidth: 0, display: 'flex', flexDirection: 'column', background: 'var(--bg-deep)', color: 'var(--text-primary)' }}>
       {error ? (
         <div role="alert" style={{ display: 'grid', gap: 12, justifyItems: 'center', alignContent: 'center', flex: 1, padding: 24, textAlign: 'center' }}>
-          <span aria-hidden style={{ fontSize: '2rem' }}>⚠️</span>
+          <span aria-hidden style={{ fontSize: '2rem' }}><Icon source="⚠️" size="1em" /></span>
           <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{error}</p>
           <button
             type="button"
@@ -66,7 +67,7 @@ export function CanvasBuildPanel({ storageProjectId, onClose, onProjectRenamed }
         </div>
       ) : !project ? (
         <div style={{ display: 'grid', gap: 12, justifyItems: 'center', alignContent: 'center', flex: 1, padding: 24, color: 'var(--text-secondary)' }}>
-          <span aria-hidden style={{ fontSize: '2rem' }}>⚡</span>
+          <span aria-hidden style={{ fontSize: '2rem' }}><Icon source="⚡" size="1em" /></span>
           <p style={{ margin: 0, fontSize: '0.9rem' }}>{t('loading')}</p>
         </div>
       ) : (

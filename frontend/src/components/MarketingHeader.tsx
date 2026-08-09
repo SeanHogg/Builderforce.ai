@@ -8,6 +8,7 @@ import { ThemeToggleButton } from '@/app/ThemeProvider';
 import { PRODUCT_SECTIONS, RESOURCE_NAV_LINKS } from '@/lib/content';
 import { isNavItemActive } from '@/lib/nav';
 import { useMobileNav } from '@/lib/useMobileNav';
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * Horizontal top-of-page navigation for marketing / public pages (logged-out
@@ -54,11 +55,11 @@ function ProductMenu({ onNavigate }: { onNavigate?: () => void }) {
       {PRODUCT_SECTIONS.map((section) => (
         <div key={section.id} className="mh-mega-col">
           <Link href={`/product#${section.id}`} className="mh-mega-head" onClick={onNavigate}>
-            <span aria-hidden="true">{section.icon}</span> {section.title}
+            <Icon source={section.icon} size={17} /> {section.title}
           </Link>
           {section.surfaces.map((s) => (
             <Link key={s.title} href={s.href} className="mh-mega-link" onClick={onNavigate}>
-              <span className="mh-mega-link-icon" aria-hidden="true">{s.icon}</span>
+              <span className="mh-mega-link-icon" aria-hidden="true"><Icon source={s.icon} size={18} /></span>
               <span>{s.title}</span>
             </Link>
           ))}
@@ -149,7 +150,7 @@ export default function MarketingHeader() {
           <div className="mh-drawer-group-label">{t('product')}</div>
           {PRODUCT_SECTIONS.map((section) => (
             <Link key={section.id} href={`/product#${section.id}`} className="mh-drawer-link mh-drawer-sub" onClick={closeNav}>
-              <span aria-hidden="true">{section.icon}</span> {section.title}
+              <Icon source={section.icon} size={17} /> {section.title}
             </Link>
           ))}
         </div>

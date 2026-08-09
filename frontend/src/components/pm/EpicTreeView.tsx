@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { tasksApi, type Task } from '@/lib/builderforceApi';
@@ -83,7 +84,8 @@ function EpicTable({ tasks, t, tCommon, onEdit }: { tasks: Task[]; t: ReturnType
                   title={t('editEpic')}
                 >
                   <td style={{ ...tdStyle, fontWeight: 700 }}>
-                    📦 {epic.key} · {epic.title}{' '}
+                    
+                    <Icon source="📦" size="1em" /> {epic.key} · {epic.title}{' '}
                     <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>({kids.length})</span>
                   </td>
                   <td style={tdStyle}><StatusPill value={epic.status} /></td>

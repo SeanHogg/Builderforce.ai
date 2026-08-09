@@ -8,6 +8,7 @@
  * calls `voice.synth()`. State is owned by the IDE's useVoiceStudio hook.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { MicRecorder, type PcmAudio } from '@/lib/captureAudio';
@@ -56,7 +57,8 @@ export function VoiceConfigPanel({ voice, projectId }: { voice: VoiceStudio; pro
 
       {voice.error && (
         <div style={{ ...section, background: 'rgba(239,68,68,0.12)', color: 'var(--error-text)' }}>
-          ⚠ {voice.error}{' '}
+          
+          <Icon source="⚠" size="1em" /> {voice.error}{' '}
           <button onClick={() => void voice.reload()} style={{ ...ghostBtn, marginLeft: 6 }}>{t('retry')}</button>
         </div>
       )}

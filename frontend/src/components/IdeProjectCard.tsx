@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { useModalityCopy } from '@/lib/useModalityCopy';
 import type { IdeProject } from '@/lib/types';
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * Card for a single IDE project (0224) on the IDE dashboard. Self-contained:
@@ -46,7 +47,7 @@ export function IdeProjectCard({
     >
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-          <span style={{ fontSize: 22 }} aria-hidden>{m.icon}</span>
+          <span aria-hidden><Icon source={m.icon} size={22} /></span>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {ideProject.name}

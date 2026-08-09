@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { calendarApi, type CalendarConnectionInfo } from '@/lib/builderforceApi';
@@ -84,7 +85,7 @@ export function CalendarConnectionsCard({ returnPath = '/meetings' }: { returnPa
                 fontSize: 13, fontWeight: 600, opacity: busy === p ? 0.6 : 1,
               }}
             >
-              <span aria-hidden style={{ fontSize: 15 }}>📅</span>
+              <span aria-hidden style={{ fontSize: 15 }}><Icon source="📅" size="1em" /></span>
               {t('connectProvider', { provider: PROVIDER_LABEL[p] ?? p })}
             </button>
           ))}

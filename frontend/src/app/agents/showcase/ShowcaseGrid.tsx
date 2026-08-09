@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useMemo, useState } from 'react';
 import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { tableWrapStyle, tableStyle, theadRowStyle, thStyle, trStyle, tdStyle, tdMutedStyle } from '@/components/dataTableStyles';
@@ -75,7 +76,7 @@ export default function ShowcaseGrid({
                 <tr key={t.id} style={trStyle}>
                   <td style={tdStyle}><strong>@{t.author}</strong></td>
                   <td style={tdMutedStyle}>{t.quote}</td>
-                  <td style={tdMutedStyle}>♥ {t.likes}</td>
+                  <td style={tdMutedStyle}><Icon source="♥" size="1em" /> {t.likes}</td>
                   <td style={{ ...tdStyle, textAlign: 'right' }}>
                     <a
                       href={`https://x.com/${t.author}/status/${t.id}`}
@@ -106,7 +107,7 @@ export default function ShowcaseGrid({
                 <img src={`https://unavatar.io/x/${t.author}`} alt={t.author} className="cc-avatar" loading="lazy" />
                 <div className="cc-author-info">
                   <span className="cc-author-name">@{t.author}</span>
-                  <span className="cc-likes">♥ {t.likes}</span>
+                  <span className="cc-likes"><Icon source="♥" size="1em" /> {t.likes}</span>
                 </div>
               </div>
               <p className="cc-tweet-quote">{t.quote}</p>

@@ -8,6 +8,7 @@ import type { BuilderNodeData } from './BuilderNode';
 import { integrationForConfig, integrationIcon } from './integrations';
 import { ConnectorNodeFields } from './ConnectorNodeFields';
 import type { WorkflowTriggerInfo } from '@/lib/builderforceApi';
+import { Icon } from '@/components/ui/Icon';
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -87,7 +88,7 @@ export function NodeConfigPanel({ node, onChange, onDelete, triggerInfo }: Props
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, height: '100%', overflowY: 'auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontSize: 'var(--font-size-card-title)' }}>{integ ? integrationIcon(integ) : meta?.icon}</span>
+        <span><Icon source={integ ? integrationIcon(integ) : meta?.icon} size={20} /></span>
         <div>
           <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)' }}>{integ?.label ?? meta?.label}</div>
           <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{integ?.description ?? meta?.blurb}</div>

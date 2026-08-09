@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { BLOG_POSTS } from '@/lib/blogData';
@@ -150,7 +151,7 @@ export default function BlogPageClient() {
       <div className="blog-page">
         {/* ── Hero ── */}
         <div className="blog-hero">
-          <div className="blog-hero-badge">📝 {t('badge')}</div>
+          <div className="blog-hero-badge"><Icon source="📝" size="1em" /> {t('badge')}</div>
           <h1 className="blog-hero-title">Builderforce Blog</h1>
           <p className="blog-hero-desc">{t('desc')}</p>
         </div>

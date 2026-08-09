@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
@@ -92,10 +93,10 @@ export function LiveBar() {
         )}
 
         <button type="button" className={styles.ctl} data-on={live.micOn ? '1' : '0'} onClick={live.toggleMic} aria-pressed={live.micOn}>
-          <span aria-hidden="true">🎤</span>{live.micOn ? t('mic') : t('micOff')}
+          <span aria-hidden="true"><Icon source="🎤" size="1em" /></span>{live.micOn ? t('mic') : t('micOff')}
         </button>
         <button type="button" className={styles.ctl} data-on={live.camOn ? '1' : '0'} onClick={live.toggleCam} aria-pressed={live.camOn}>
-          <span aria-hidden="true">📷</span>{live.camOn ? t('camera') : t('cameraOff')}
+          <span aria-hidden="true"><Icon source="📷" size="1em" /></span>{live.camOn ? t('camera') : t('cameraOff')}
         </button>
         {/* Self-gating on browser support: a control that can only ever fail is
             worse than an absent one. */}
@@ -107,7 +108,7 @@ export function LiveBar() {
             onClick={() => void live.toggleShare()}
             aria-pressed={live.sharing}
           >
-            <span aria-hidden="true">🖥</span>{live.sharing ? t('stopPresenting') : t('presentScreen')}
+            <span aria-hidden="true"><Icon source="🖥" size="1em" /></span>{live.sharing ? t('stopPresenting') : t('presentScreen')}
           </button>
         )}
         {live.canRecord && (
@@ -129,7 +130,7 @@ export function LiveBar() {
           onClick={() => live.setPresentMode(!live.presentMode)}
           aria-pressed={live.presentMode}
         >
-          <span aria-hidden="true">▶</span>{live.presentMode ? t('exitPresentation') : t('present')}
+          <span aria-hidden="true"><Icon source="▶" size="1em" /></span>{live.presentMode ? t('exitPresentation') : t('present')}
         </button>
 
         <span className={styles.grow} />

@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useTranslations, useFormatter } from 'next-intl';
 import Link from 'next/link';
@@ -118,7 +119,7 @@ export function ManagerTodayDigest({ projectId }: ManagerTodayDigestProps) {
   const header = (
     <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span aria-hidden>📣</span>
+        <span aria-hidden><Icon source="📣" size="1em" /></span>
         <span style={sectionTitleStyle}>{t('title')}</span>
       </div>
       {data && (

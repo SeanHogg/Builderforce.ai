@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 
 import { useMemo, useState } from 'react';
@@ -164,7 +165,7 @@ export default function SkillsBrowser({ skills }: { skills: Skill[] }) {
                 </div>
               )}
               <div className="cc-skill-stats">
-                {typeof s.likes === 'number' && <span>♥ {s.likes}</span>}
+                {typeof s.likes === 'number' && <span><Icon source="♥" size="1em" /> {s.likes}</span>}
                 {typeof s.downloads === 'number' && <span>↓ {s.downloads}</span>}
               </div>
             </article>

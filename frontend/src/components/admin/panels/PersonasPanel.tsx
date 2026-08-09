@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi, type AdminPlatformPersona } from '@/lib/adminApi';
@@ -219,7 +220,7 @@ export default function PersonasPanel() {
             ) : (
               platformPersonas.map((p) => (
                 <tr key={p.id}>
-                  <td style={{ fontWeight: 600 }}>🎭 {p.name}</td>
+                  <td style={{ fontWeight: 600 }}><Icon source="🎭" size="1em" /> {p.name}</td>
                   <td>{p.voice ?? '—'}</td>
                   <td>
                     <span className="badge" style={{ background: 'var(--accent-subtle)', color: 'var(--accent)', fontSize: 10, textTransform: 'uppercase' }}>{p.source}</span>

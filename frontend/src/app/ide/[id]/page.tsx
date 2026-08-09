@@ -2,6 +2,7 @@
 
 export const runtime = 'edge';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -132,7 +133,7 @@ export default function IDEPage() {
         background: 'var(--bg-deep)', color: 'var(--text-secondary)',
         gap: 16, fontFamily: 'var(--font-display)',
       }}>
-        <div style={{ fontSize: '2.5rem', animation: 'pulse 1.5s ease-in-out infinite' }}>⚡</div>
+        <div style={{ fontSize: '2.5rem', animation: 'pulse 1.5s ease-in-out infinite' }}><Icon source="⚡" size="1em" /></div>
         <p>{t('loading')}</p>
       </div>
     );
@@ -146,7 +147,7 @@ export default function IDEPage() {
         background: 'var(--bg-deep)', color: 'var(--text-primary)',
         gap: 12, textAlign: 'center', fontFamily: 'var(--font-display)',
       }}>
-        <div style={{ fontSize: '4rem', marginBottom: 8 }}>🔍</div>
+        <div style={{ fontSize: '4rem', marginBottom: 8 }}><Icon source="🔍" size="1em" /></div>
         <h1 style={{ fontSize: '2.5rem', fontWeight: 700, color: 'var(--coral-bright)' }}>404</h1>
         <p style={{ color: 'var(--text-secondary)', fontSize: '1.05rem' }}>{t('notFound')}</p>
         <button
@@ -173,7 +174,7 @@ export default function IDEPage() {
         background: 'var(--bg-deep)', color: 'var(--text-primary)',
         gap: 12, textAlign: 'center', padding: 24, fontFamily: 'var(--font-display)',
       }}>
-        <div style={{ fontSize: '3rem' }}>⚠️</div>
+        <div style={{ fontSize: '3rem' }}><Icon source="⚠️" size="1em" /></div>
         <h2 style={{ fontSize: '1.4rem', fontWeight: 700 }}>{t('loadError')}</h2>
         <pre style={{
           background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',

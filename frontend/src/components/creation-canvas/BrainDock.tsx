@@ -7,6 +7,7 @@ import '@seanhogg/builderforce-brain-ui/styles.css';
 import type { BrainMessage, BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
 import { ChatTicketsPanel } from '@/components/brain/ChatTicketsPanel';
 import { useCanvas3DControls } from '@/components/canvas/canvas3dControls';
+import { Icon } from '@/components/ui/Icon';
 import type { Edge } from '@xyflow/react';
 import styles from './CreationCanvas.module.css';
 import { creationObjectDefinition } from './creationObjectRegistry';
@@ -331,7 +332,7 @@ export function BrainContextPanel({ node, nodes, edges }: { node: CreationFlowNo
 
   const roster = (items: CreationFlowNode[], empty: string) => items.length
     ? <div className={styles.brainAssociationList}>{items.map((item) => <div key={item.id}>
-      <span aria-hidden>{creationObjectDefinition(item.data.kind).icon}</span>
+      <span aria-hidden><Icon source={creationObjectDefinition(item.data.kind).icon} size={18} /></span>
       <p><b>{item.data.title}</b><small>{item.data.status || creationObjectDefinition(item.data.kind).label}</small></p>
     </div>)}</div>
     : <p className={styles.brainEmpty}>{empty}</p>;

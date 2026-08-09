@@ -78,7 +78,7 @@ export function DevexDashboard() {
         return (
           <PmCard
             key={id}
-            title={`${def.icon} ${t(def.titleKey)}`}
+            title={t(def.titleKey)}
             action={<DrillButton label={t('viewReport')} onClick={() => open(id)} />}
           >
             <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: '-6px 0 14px' }}>{t(def.descKey)}</p>

@@ -8,6 +8,7 @@ import { useModalityCopy } from '@/lib/useModalityCopy';
 import { listIdeContainers, updateIdeProject } from '@/lib/api';
 import { workflowDefinitions, type WorkflowDefinitionSummary } from '@/lib/builderforceApi';
 import type { IdeProject, IdeContainerOption } from '@/lib/types';
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * IDE project details — rename and (re)assign the parent Project.
@@ -124,7 +125,7 @@ export function IdeProjectDetailsModal({
       open
       onClose={onClose}
       width="min(480px, 96vw)"
-      title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span aria-hidden>{m.icon}</span> {t('ideProjectSettings')}</span>}
+      title={<span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span aria-hidden><Icon source={m.icon} size={20} /></span> {t('ideProjectSettings')}</span>}
     >
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
         <p style={{ color: 'var(--text-secondary)', fontSize: 13, margin: 0 }}>

@@ -60,6 +60,7 @@ import {
   releaseDiscountReservation,
   reserveDiscount,
 } from '../../application/tenant/discountCodeService';
+import { getPublishedPricing } from '../../application/tenant/pricingConfiguration';
 
 /** Best-effort audit emit for a membership mutation (invite / add), attributed to
  *  the acting manager. Off the response path; never throws. */
@@ -198,9 +199,15 @@ function forbidCrossTenant(c: Context<HonoEnv>, id: number): Response | undefine
 export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
-  // Public, content-free plan contract. Marketing and checkout read the same
-  // prices and entitlements that server-side billing guards enforce.
-  router.get('/pricing', (c) => c.json(TenantService.publicPricingContract()));
+  // Public published plan contract shared by every marketing pricing surface.
+  router.get('/pricing', async (c) => {
+    const contract = await getPublishedPricing(db, c.env as Env);
+    const etag = `W/\"pricing-${contract.publishedAt}\"`;
+    if (c.req.header('if-none-match') === etag) return c.body(null, 304);
+    c.header('Cache-Control', 'public, max-age=300, stale-while-revalidate=86400');
+    c.header('ETag', etag);
+    return c.json(contract);
+  });
 
   // GET /api/tenants/mine  – WebJWT required; returns tenants the caller belongs to
   // Used by the tenant picker immediately after login (before a tenant JWT exists)

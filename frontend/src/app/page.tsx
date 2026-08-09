@@ -1,14 +1,13 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { useTranslations } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
 import { STATS } from '@/lib/content';
 import QuickStart from '@/components/QuickStart';
 import { DemoShowcase } from '@/components/demo/DemoShowcase';
-import { AUTH_API_URL } from '@/lib/auth';
+import { fetchPublicPricing, type PublicPricingPlan } from '@/lib/publicPricing';
 import { LandingCanvasHero } from '@/components/home/LandingCanvasHero';
 import { MeetCarousel } from '@/components/home/MeetCarousel';
 import { TensionBeat } from '@/components/home/TensionBeat';
@@ -26,19 +25,6 @@ import {
 
 type StatLabel = { label: string };
 type FaqItem = { question: string; answer: string };
-type PricingTeaser = {
-  id: 'free' | 'pro' | 'teams';
-  name: string;
-  perks: string[];
-  cta: string;
-};
-
-const PRICING_HREFS: Record<PricingTeaser['id'], string> = {
-  free: '/register',
-  pro: '/pricing?upgrade=pro',
-  teams: '/book-demo',
-};
-
 /**
  * The homepage is one argument, told in order.
  *
@@ -62,15 +48,14 @@ const PRICING_HREFS: Record<PricingTeaser['id'], string> = {
  */
 export default function LandingPage() {
   const t = useTranslations();
-  const [publicPlanPrices, setPublicPlanPrices] = useState<{ pro: number } | null>(null);
+  const locale = useLocale();
+  const [publicPlans, setPublicPlans] = useState<PublicPricingPlan[]>([]);
+  const [pricingCurrency, setPricingCurrency] = useState('USD');
 
   useEffect(() => {
     let active = true;
-    fetch(`${AUTH_API_URL}/api/tenants/pricing`)
-      .then((response) => response.ok ? response.json() : Promise.reject(new Error(`${response.status}`)))
-      .then((contract: { pricing: { pro: { monthly: number } } }) => {
-        if (active) setPublicPlanPrices({ pro: contract.pricing.pro.monthly });
-      })
+    fetchPublicPricing()
+      .then((contract) => { if (active) { setPublicPlans(contract.plans); setPricingCurrency(contract.currency); } })
       .catch(() => { /* Pricing CTA remains available; never invent a fallback price. */ });
     return () => { active = false; };
   }, []);
@@ -111,22 +96,19 @@ export default function LandingPage() {
         <HomeSection id="pricing">
           <HomeSectionHeader eyebrow={t('home.pricingHeading')} title={t('home.pricingTitle')} />
           <div className={styles.pricingPlans}>
-            {(t.raw('home.pricingTeaser') as PricingTeaser[]).map((plan) => (
+            {publicPlans.map((plan) => (
               <HomeCard
                 key={plan.id}
                 className={`${styles.pricingCard} ${plan.id === 'pro' ? styles.pricingCardFeatured : ''}`}
               >
                 <CardTitle>{plan.name}</CardTitle>
                 <div className={styles.price}>
-                  {plan.id === 'free' && <><span>$0</span><small>{t('home.pricePerMonth')}</small></>}
-                  {plan.id === 'pro' && (publicPlanPrices
-                    ? <><span>${publicPlanPrices.pro}</span><small>{t('home.pricePerMonth')}</small></>
-                    : <Link href="/pricing">{t('home.currentPricing')}</Link>)}
-                  {plan.id === 'teams' && <span>{t('home.customPricing')}</span>}
+                  <span>{new Intl.NumberFormat(locale, { style: 'currency', currency: pricingCurrency, maximumFractionDigits: 0 }).format(plan.monthly)}</span><small>{plan.priceSuffix}</small>
                 </div>
-                <ul className={styles.perks}>{plan.perks.map((perk) => <li className={styles.perk} key={perk}>{perk}</li>)}</ul>
+                <p>{plan.description}</p>
+                <ul className={styles.perks}>{plan.features.map((perk) => <li className={styles.perk} key={perk}>{perk}</li>)}</ul>
                 <div className={styles.pricingCta}>
-                  <HomeButton href={PRICING_HREFS[plan.id]} primary={plan.id === 'pro'}>{plan.cta}</HomeButton>
+                  <HomeButton href={plan.ctaHref} primary={plan.highlighted}>{plan.ctaLabel}</HomeButton>
                 </div>
               </HomeCard>
             ))}

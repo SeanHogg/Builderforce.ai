@@ -14,6 +14,7 @@
  * nothing until the project has a seeded Evermind. Themed + localized.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { getProjectEvermindHead, type ProjectEvermindHead } from '@/lib/projectEvermindApi';
@@ -48,7 +49,7 @@ export function EvermindStatusBadge({ projectId }: { projectId: number | null })
         background: 'var(--bg-elevated)', color: 'var(--text-secondary)', whiteSpace: 'nowrap', cursor: 'help',
       }}
     >
-      <span aria-hidden>🧠</span>
+      <span aria-hidden><Icon source="🧠" size="1em" /></span>
       <span>{t('label')} v{head.version}</span>
       <span aria-hidden style={{ width: 6, height: 6, borderRadius: 'var(--radius-full)', background: tone }} />
       <span style={{ color: tone }}>{stateLabel}</span>

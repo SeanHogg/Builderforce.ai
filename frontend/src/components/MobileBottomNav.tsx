@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { useIsFreelancer, useIsSalesAssociate } from '@/lib/rbac';
 import { isNavItemActive, type NavMatch } from '@/lib/nav';
 import MascotIcon from './MascotIcon';
+import { Icon } from '@/components/ui/Icon';
 
 interface BottomItem extends NavMatch {
   /** i18n key under the `nav` namespace (resolved in the component). */
@@ -103,7 +104,7 @@ export default function MobileBottomNav() {
             // the sidebar nav ids / TourAnchor (e.g. /workforce → "workforce").
             data-tour={item.href.replace(/^\//, '').split('/')[0]}
           >
-            <span className="mbn-icon" aria-hidden="true">{item.icon}</span>
+            <span className="mbn-icon" aria-hidden="true"><Icon source={item.icon} size={21} /></span>
             <span className="mbn-label">{t(item.labelKey)}</span>
           </Link>
         );

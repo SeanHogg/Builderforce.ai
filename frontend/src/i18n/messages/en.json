@@ -487,6 +487,7 @@
       "settings": "General",
       "security": "Security",
       "billing": "Billing",
+      "pricing": "Pricing",
       "tenant": "Workspaces",
       "apiKeys": "API Keys",
       "sops": "SOPs",
@@ -562,6 +563,28 @@
     "subtitle": "Define threshold alerts on platform metrics. A daily sweep evaluates each rule and notifies your team via Slack and email when it trips.",
     "loading": "Loading…",
     "days": "{n} days",
+    "pricing": {
+      "title": "Published pricing",
+      "description": "Edit the draft used by the pricing page and reusable pricing cards. Draft saves stay private until Publish.",
+      "publishedAt": "Last published: {date}",
+      "currency": "Currency",
+      "managedHost": "Managed AgentHost / month",
+      "name": "Plan name",
+      "descriptionLabel": "Description",
+      "monthly": "Monthly price",
+      "yearly": "Yearly price",
+      "suffix": "Price suffix",
+      "minimumSeats": "Minimum seats",
+      "features": "Included features — one per line",
+      "excluded": "Excluded features — one per line",
+      "ctaLabel": "Button label",
+      "ctaHref": "Button destination",
+      "saveDraft": "Save draft",
+      "saving": "Saving…",
+      "publish": "Publish pricing",
+      "publishing": "Publishing…",
+      "draftSaved": "Draft saved; public pricing is unchanged."
+    },
     "common": {
       "delete": "Delete"
     },
@@ -12514,7 +12537,10 @@
     "linkBlog": "Blog",
     "linkLiveDemo": "Live Demo",
     "linkSignIn": "Sign In",
-    "linkGetStarted": "Get Started"
+    "linkGetStarted": "Get Started",
+    "cookies": "Cookies",
+    "subprocessors": "Subprocessors",
+    "accessibility": "Accessibility"
   },
   "beta": {
     "crumb": "Product update",
@@ -13589,6 +13615,7 @@
       "guidedTour": "Guided tour"
     },
     "tourBuilder": {
+      "defaultObjectTitle": "Product onboarding tour", "defaultOfferTitle": "Welcome — want a quick tour?", "defaultOfferBody": "Learn the essentials in a few short steps. You can leave at any time.", "defaultStartLabel": "Start tour", "defaultCancelLabel": "Not now", "defaultStep1Title": "Orient the user", "defaultStep1Body": "Explain the first important area and why it matters.", "defaultStep2Title": "Show the key action", "defaultStep2Body": "Highlight the action that helps the user make progress.",
       "closePreview": "Close tour preview", "stepOf": "{current} of {total}", "targetConnected": "Target connected", "targetNeeded": "Choose a target object", "back": "Back", "finish": "Finish", "next": "Next", "offer": "Tour offer",
       "stepCount": "{count, plural, one {# step} other {# steps}}", "visitCount": "Offer after {count, plural, one {# visit} other {# visits}}", "escapeEnabled": "Escape enabled",
       "settings": "Guided tour settings", "settingsHint": "Design an opt-in tour, then connect each step to the Canvas object it should highlight.", "draftSteps": "Draft · {count} steps", "offerTitle": "Offer title", "offerBody": "Offer description", "version": "Tour version", "minimumVisits": "Visits before offer", "blurBackground": "Blur the background on the offer", "escapeHatch": "Always provide close and Escape", "steps": "Tour steps", "addStep": "Add step", "newStepTitle": "New tour step", "stepTitle": "Step title", "stepBody": "Step description", "targetObject": "Object to highlight", "chooseTarget": "Choose an object", "removeStep": "Remove step"

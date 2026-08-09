@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
@@ -102,7 +103,7 @@ export default function EmailVerificationStep({ email, onVerified, onChangeEmail
       boxShadow: '0 16px 48px var(--shadow-coral-soft)',
     }}>
       <div style={{ textAlign: 'center', marginBottom: 24 }}>
-        <div style={{ fontSize: '2rem', marginBottom: 8 }} aria-hidden>✉️</div>
+        <div style={{ fontSize: '2rem', marginBottom: 8 }} aria-hidden><Icon source="✉️" size="1em" /></div>
         <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.35rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>
           {t('title')}
         </h2>

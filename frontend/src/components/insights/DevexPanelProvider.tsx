@@ -52,7 +52,7 @@ export function DevexPanelProvider({ children }: { children: ReactNode }) {
         open={def != null}
         onClose={close}
         width={def?.width}
-        title={def ? `${def.icon} ${t(def.titleKey)}` : undefined}
+        title={def ? t(def.titleKey) : undefined}
         tabs={tabs}
         activeTabId={active ?? undefined}
         onTabChange={(id) => setActive(id as DevexPanelId)}

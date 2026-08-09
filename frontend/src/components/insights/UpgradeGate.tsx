@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { isPlanLimitError } from '@/lib/planLimitError';
@@ -30,7 +31,7 @@ export function UpgradeGate({ error, fallback = null }: { error: unknown; fallba
         background: 'var(--surface-sunken, rgba(37,99,235,0.06))',
       }}
     >
-      <span style={{ fontSize: '1.4rem' }} aria-hidden>🔒</span>
+      <span style={{ fontSize: '1.4rem' }} aria-hidden><Icon source="🔒" size="1em" /></span>
       <div style={{ fontWeight: 700, fontSize: '0.98rem', color: 'var(--text-primary)' }}>{t('upgrade.title')}</div>
       <p style={{ margin: 0, fontSize: '0.86rem', color: 'var(--text-secondary)', maxWidth: 460 }}>
         {t('upgrade.body', { plan: error.currentPlan })}

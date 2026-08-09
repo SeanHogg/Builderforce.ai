@@ -6,6 +6,7 @@ import RelatedArticles from '@/components/blog/RelatedArticles';
 import { Soc2AuditVisual } from '@/components/marketing/Soc2AuditVisual';
 import { soc2Schema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
+import { Icon } from '@/components/ui/Icon';
 
 export const runtime = 'edge';
 
@@ -162,7 +163,7 @@ export default async function Soc2Page() {
             <div className="s2-grid family">
               {audits.map((a, i) => (
                 <div key={i} className="s2-card">
-                  <span className="s2-audit-icon">{a.icon}</span>
+                  <span className="s2-audit-icon"><Icon source={a.icon} size={24} /></span>
                   <h3 className="s2-audit-name">{a.name}</h3>
                   <p className="s2-audit-desc">{a.desc}</p>
                 </div>

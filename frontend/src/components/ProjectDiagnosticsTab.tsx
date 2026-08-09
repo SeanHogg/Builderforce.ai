@@ -7,6 +7,7 @@ import { toolsApi } from '@/lib/builderforceApi';
 import { runArchitectureAnalysis } from '@/lib/api';
 import { DiagnosticsResultsPanel } from '@/components/DiagnosticsResultsPanel';
 import type { ProjectScore, ToolSummary, SystemAuditSummary } from '@/lib/tools';
+import { Icon } from '@/components/ui/Icon';
 
 /** The architecture analysis is just another diagnostic — a run-only one (it
  *  kicks off the repo analysis rather than navigating to the tool runner). */
@@ -149,7 +150,7 @@ export function ProjectDiagnosticsTab({ projectId, initialAuditId }: { projectId
             const diag = score?.diagnostics.find((d) => d.toolId === row.id);
             return (
               <div key={row.id} style={rowStyle}>
-                <span style={{ fontSize: 18 }}>{row.icon}</span>
+                <span><Icon source={row.icon} size={20} /></span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{row.name}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

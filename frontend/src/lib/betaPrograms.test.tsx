@@ -37,9 +37,14 @@ const loaded = (overrides: Partial<typeof BETA> = {}) => ({
   bannerBetaId: 'b1',
 });
 
+// The store is module-level and deliberately survives a remount — it is keyed to
+// the SESSION, not the component. So each test signs in as a different person
+// rather than reaching for a reset hook that production has no use for.
+let session = 0;
+
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.getStoredWebToken.mockReturnValue('token-a');
+  mocks.getStoredWebToken.mockReturnValue(`token-${++session}`);
   mocks.fetchBetaPrograms.mockResolvedValue(loaded());
 });
 
@@ -85,6 +90,7 @@ describe('useBetaPrograms', () => {
   });
 
   it('drops the previous person\'s standing when the session changes', async () => {
+    mocks.getStoredWebToken.mockReturnValue('token-a');
     const first = renderHook(() => useBetaPrograms());
     await waitFor(() => expect(first.result.current.banner?.id).toBe('b1'));
     first.unmount();

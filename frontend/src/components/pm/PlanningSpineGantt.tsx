@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { pmoApi, type SpineNode, type SpineResult } from '@/lib/builderforceApi';
@@ -185,7 +186,7 @@ export function PlanningSpineGantt() {
           {t('opex')}: {formatUsd(tot.opexUsd)}
         </span>
         {data.anomalyCount > 0 && (
-          <span style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>⚠ {t('anomalies', { count: data.anomalyCount })}</span>
+          <span style={{ color: 'var(--coral-bright)', fontWeight: 600 }}><Icon source="⚠" size="1em" /> {t('anomalies', { count: data.anomalyCount })}</span>
         )}
         <span style={{ marginLeft: 'auto', color: 'var(--text-muted)' }}>{t('estimateNote')}</span>
         <button type="button" onClick={exportCsv}
@@ -268,8 +269,8 @@ export function PlanningSpineGantt() {
                       <span title={node.title} style={{ fontSize: '0.8rem', fontWeight: node.kind === 'task' ? 400 : 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {node.title}
                       </span>
-                      {node.anomaly && <span title={t('anomalyTip')} style={{ color: 'var(--coral-bright)', flexShrink: 0 }}>⚠</span>}
-                      {!node.anomaly && node.hasDescendantAnomaly && <span title={t('descendantAnomalyTip')} style={{ color: 'var(--warning)', flexShrink: 0, fontSize: '0.7rem' }}>⚠</span>}
+                      {node.anomaly && <span title={t('anomalyTip')} style={{ color: 'var(--coral-bright)', flexShrink: 0 }}><Icon source="⚠" size="1em" /></span>}
+                      {!node.anomaly && node.hasDescendantAnomaly && <span title={t('descendantAnomalyTip')} style={{ color: 'var(--warning)', flexShrink: 0, fontSize: '0.7rem' }}><Icon source="⚠" size="1em" /></span>}
                       {node.cost.totalUsd > 0 && (
                         <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: '0.7rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{formatUsd(node.cost.totalUsd)}</span>
                       )}

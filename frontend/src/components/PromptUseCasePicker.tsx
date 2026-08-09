@@ -3,6 +3,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import styles from './PromptUseCasePicker.module.css';
+import { Icon } from '@/components/ui/Icon';
 
 type PromptUseCase = { category: string; label: string; prompt: string };
 
@@ -76,7 +77,7 @@ export function PromptUseCasePicker({ placement, onSelect }: {
               <div className={styles.grid}>
                 {entries.map(({ item, index }) => (
                   <button key={item.label} type="button" className={styles.item} tabIndex={open ? 0 : -1} onClick={() => { onSelect(item.prompt); setOpen(false); setQuery(''); }}>
-                    <span className={styles.icon} aria-hidden="true">{USE_CASE_ICONS[index % USE_CASE_ICONS.length]}</span>
+                    <span className={styles.icon} aria-hidden="true"><Icon source={USE_CASE_ICONS[index % USE_CASE_ICONS.length]} size={18} /></span>
                     <span>{item.label}</span>
                   </button>
                 ))}

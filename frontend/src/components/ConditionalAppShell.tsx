@@ -43,6 +43,7 @@ import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { ResumeWorkBridge } from './workspace/ResumeWorkBridge';
 import { LastBoardBridge } from './workspace/LastBoardBridge';
 import { PlatformAnnouncements } from './announcements/PlatformAnnouncements';
+import { ProductUpdatesHost } from './releaseNotes/ProductUpdatesHost';
 import { LiveSessionProvider } from '@/lib/live/LiveSessionContext';
 import { ActiveCanvasProvider, shellHostsCanvasStage } from '@/lib/canvas/ActiveCanvasContext';
 import { LiveBar } from './live/LiveBar';
@@ -347,6 +348,10 @@ function AppBrainShell({ children, qualityErrorApiKey, qualityEndpoint }: {
                   its own visibility and renders nothing when this visitor has
                   no targeted message. */}
               <PlatformAnnouncements />
+              {/* The changelog, mounted once for every route — the footer version
+                  and the sidebar version both open THIS panel, and it owns the
+                  `?whatsnew=1` deep link the release-digest email sends. */}
+              <ProductUpdatesHost />
               <MarketingConversionTracker />
               {/* Claims every account-less canvas this browser holds the moment a
                   tenant exists, and offers the way back. Driven by the local-draft

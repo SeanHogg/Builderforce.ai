@@ -152,6 +152,7 @@ import {
 import { evaluateCronGate, signalPendingWork } from '../../application/runtime/cronWorkSignal';
 import { createTickDispatchBudget } from '../../application/runtime/tickDispatchBudget';
 import { API_VERSION } from '../../version';
+import { getPricingDraft, publishPricing, savePricingDraft } from '../../application/tenant/pricingConfiguration';
 
 /**
  * Coerce a `platform_modules.permissions` value into `string[]`.
@@ -346,6 +347,28 @@ export function createAdminRoutes(): Hono<HonoEnv> {
 
   // All admin routes require superadmin WebJWT
   router.use('*', superAdminMiddleware);
+
+  router.get('/pricing', async (c) => c.json(await getPricingDraft(buildDatabase(c.env))));
+
+  // Draft saves never touch the public cache. Only the explicit publication
+  // boundary below can make content visible and invalidate cached responses.
+  router.put('/pricing/draft', async (c) => {
+    try {
+      return c.json({ draft: await savePricingDraft(buildDatabase(c.env), await c.req.json()) });
+    } catch (error) {
+      return c.json({ error: error instanceof Error ? error.message : 'Invalid pricing configuration' }, 400);
+    }
+  });
+
+  router.post('/pricing/publish', async (c) => {
+    const db = buildDatabase(c.env);
+    const actorId = c.get('userId') as string;
+    const published = await publishPricing(db, c.env as Env, actorId);
+    await writeAdminAudit(db, 'PLATFORM_PRICING_PUBLISHED', actorId, {
+      metadata: { currency: published.currency, publishedAt: published.publishedAt },
+    });
+    return c.json({ published });
+  });
 
   // -------------------------------------------------------------------------
   // GET /api/admin/legal/current

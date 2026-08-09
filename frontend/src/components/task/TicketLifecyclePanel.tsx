@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
@@ -597,7 +598,8 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                                   maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                                 }}
                               >
-                                ▶ {e.dispatchedBy}
+                                
+                                <Icon source="▶" size="1em" /> {e.dispatchedBy}
                               </span>
                             )}
                           </div>

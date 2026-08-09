@@ -8,6 +8,7 @@
  * this component only renders what the green Run (Generate) button produced.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { NarrationResult } from '@/lib/voiceEngine';
@@ -57,7 +58,7 @@ export function VoiceOutput({
           background: 'rgba(234,179,8,0.1)', border: '1px solid var(--yellow-bright)',
           color: 'var(--warning-text)', borderRadius: 'var(--radius-lg)', padding: '20px 24px',
         }}>
-          <div style={{ fontSize: 'var(--font-size-section)', marginBottom: 8 }}>⚠</div>
+          <div style={{ fontSize: 'var(--font-size-section)', marginBottom: 8 }}><Icon source="⚠" size="1em" /></div>
           <p style={{ fontWeight: 600, marginBottom: 4 }}>{t('synthUnavailable')}</p>
           <p style={{ fontSize: 'var(--font-size-body)', opacity: 0.9 }}>{unavailable}</p>
         </div>
@@ -68,7 +69,7 @@ export function VoiceOutput({
   if (busy) {
     return (
       <div style={wrap}>
-        <div style={{ fontSize: 'var(--font-size-page-title)', marginBottom: 14, animation: 'pulse 1.5s ease-in-out infinite' }}>🎙</div>
+        <div style={{ fontSize: 'var(--font-size-page-title)', marginBottom: 14, animation: 'pulse 1.5s ease-in-out infinite' }}><Icon source="🎙" size="1em" /></div>
         <p style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-display)' }}>{t('generatingSpeech')}</p>
       </div>
     );
@@ -77,7 +78,7 @@ export function VoiceOutput({
   if (!result || !audioUrl) {
     return (
       <div style={wrap}>
-        <div style={{ fontSize: 'var(--font-size-page-title)', marginBottom: 14, opacity: 0.7 }}>🔊</div>
+        <div style={{ fontSize: 'var(--font-size-page-title)', marginBottom: 14, opacity: 0.7 }}><Icon source="🔊" size="1em" /></div>
         <p style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-display)', fontWeight: 600 }}>
           {t('pressRun')}
         </p>

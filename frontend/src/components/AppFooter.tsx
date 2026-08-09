@@ -1,13 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useLegalDocs } from './legal/useLegalDocs';
 import LegalDocModal, { type LegalModalType } from './legal/LegalDocModal';
-import WhatsNewPanel from './WhatsNewPanel';
+import { openProductUpdates } from '@/lib/productUpdates';
 import { FOOTER_COLUMNS, BRAND, STATS } from '@/lib/content';
 
 /**
@@ -27,15 +26,7 @@ import { FOOTER_COLUMNS, BRAND, STATS } from '@/lib/content';
 export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | 'full' }) {
   const { appVersion, apiVersion, legal, termsVersion, privacyVersion } = useLegalDocs();
   const t = useTranslations('footer');
-  const searchParams = useSearchParams();
   const [modalType, setModalType] = useState<LegalModalType | null>(null);
-  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
-
-  // Deep link from the weekly release-digest email CTA (`?whatsnew=1`) opens the
-  // panel straight away, so a reader lands on exactly what the mail announced.
-  useEffect(() => {
-    if (searchParams?.get('whatsnew') === '1') setWhatsNewOpen(true);
-  }, [searchParams]);
 
   // Version + legal strip. Rendered under the copyright credit in the marketing
   // (`full`) footer; rendered as its own bottom row in the slim (`legal`) footer.
@@ -43,16 +34,16 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
     <div className="global-footer-inner">
       <button
         type="button"
-        onClick={() => setWhatsNewOpen(true)}
+        onClick={openProductUpdates}
         className="global-footer-link"
         title={t('whatsNewHint')}
       >
         UI {appVersion} · API {apiVersion ?? '…'}
       </button>
       <div className="global-footer-links">
-        <button type="button" onClick={() => window.dispatchEvent(new Event('builderforce:cookie-preferences'))} className="global-footer-link">Cookies</button>
-        <Link href="/legal/subprocessors" className="global-footer-link">Subprocessors</Link>
-        <Link href="/legal/accessibility" className="global-footer-link">Accessibility</Link>
+        <button type="button" onClick={() => window.dispatchEvent(new Event('builderforce:cookie-preferences'))} className="global-footer-link">{t('cookies')}</button>
+        <Link href="/legal/subprocessors" className="global-footer-link">{t('subprocessors')}</Link>
+        <Link href="/legal/accessibility" className="global-footer-link">{t('accessibility')}</Link>
         <button
           type="button"
           onClick={() => setModalType('terms')}
@@ -119,7 +110,6 @@ export default function AppFooter({ variant = 'legal' }: { variant?: 'legal' | '
       </footer>
 
       <LegalDocModal type={modalType} legal={legal} onClose={() => setModalType(null)} />
-      <WhatsNewPanel open={whatsNewOpen} onClose={() => setWhatsNewOpen(false)} />
     </>
   );
 }

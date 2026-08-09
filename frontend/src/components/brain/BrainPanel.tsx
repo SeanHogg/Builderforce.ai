@@ -8,6 +8,7 @@
  * is chrome (two-column page vs. collapsible drawer).
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
@@ -1451,7 +1452,7 @@ export function BrainPanel({
       )}
       {chats.activeChatId == null ? (
         <div className={isPage ? 'bs-empty' : undefined} style={isPage ? undefined : { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--text-muted)', padding: 24, textAlign: 'center' }}>
-          <div style={{ fontSize: 'var(--font-size-page-title)' }}>🧠</div>
+          <div style={{ fontSize: 'var(--font-size-page-title)' }}><Icon source="🧠" size="1em" /></div>
           <div style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 500, color: 'var(--text-primary)' }}>{tBrain('brainTitle')}</div>
           <div style={{ fontSize: 'var(--font-size-small)' }}>{tBrain(chatMode === 'work' ? 'emptyHintWork' : 'emptyHint')}</div>
           {/* The mode goes ABOVE the composer, at full size: it decides what the very
@@ -1490,7 +1491,8 @@ export function BrainPanel({
               onClick={() => { void startNewChat(); setInput(tBrain('onboardMePrompt')); setComposerFocusToken((n) => n + 1); }}
               style={{ padding: '10px 18px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'transparent', color: 'var(--coral-bright)', border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-lg)', cursor: 'pointer' }}
             >
-              ✨ {tBrain('onboardMe')}
+              
+              <Icon source="✨" size="1em" /> {tBrain('onboardMe')}
             </button>
           </div>
           <div style={{ width: '100%', maxWidth: 720, marginTop: 12 }}>{promptComposer}</div>
@@ -1572,7 +1574,7 @@ export function BrainPanel({
             {conv.uploading && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 4 }}>{tBrain('uploading')}</div>}
             {queuedMessages.length > 0 && (
               <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span aria-hidden>⏳</span>
+                <span aria-hidden><Icon source="⏳" size="1em" /></span>
                 {tBrain('queuedCount', { count: queuedMessages.length })}
               </div>
             )}
@@ -1637,7 +1639,7 @@ export function BrainPanel({
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-base)' }}>
       <div style={{ flexShrink: 0, padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-        <span style={{ fontWeight: 600, fontSize: 'var(--font-size-body)', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>🧠 {tBrain('brainTitle')}</span>
+        <span style={{ fontWeight: 600, fontSize: 'var(--font-size-body)', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}><Icon source="🧠" size="1em" /> {tBrain('brainTitle')}</span>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
           {/* Plan + remaining allowance (see the page header). */}
           <PlanBadge />
@@ -1751,7 +1753,8 @@ function ToolConfirmBar({ req, onDecide, onApproveAll }: { req: { name: string; 
       style={{ marginBottom: 8, padding: '10px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--coral-bright)', background: 'var(--bg-elevated)' }}
     >
       <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-primary)', marginBottom: 6 }}>
-        ⚠️ {tBrain.rich('wantsTo', { action: label, b: (chunks) => <strong>{chunks}</strong> })}
+        
+        <Icon source="⚠️" size="1em" /> {tBrain.rich('wantsTo', { action: label, b: (chunks) => <strong>{chunks}</strong> })}
       </div>
       {preview && preview !== '{}' && (
         <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)', fontFamily: 'monospace', wordBreak: 'break-all', marginBottom: 8 }}>{preview}</div>

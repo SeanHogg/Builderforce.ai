@@ -6,6 +6,7 @@ import RelatedArticles from '@/components/blog/RelatedArticles';
 import { compareSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
 import { COMPARE } from '@/lib/content';
+import { Icon } from '@/components/ui/Icon';
 
 export const runtime = 'edge';
 
@@ -101,7 +102,7 @@ export default async function ComparePage() {
           <div className="cmp-pillars">
             {pillars.map((p, i) => (
               <div key={p.title} className="cmp-pillar">
-                <div className="cmp-pillar-icon">{COMPARE.pillars[i]?.icon}</div>
+                <div className="cmp-pillar-icon"><Icon source={COMPARE.pillars[i]?.icon} size={28} /></div>
                 <h2 className="cmp-pillar-title">{p.title}</h2>
                 <p className="cmp-pillar-desc">{p.desc}</p>
               </div>
@@ -127,8 +128,8 @@ export default async function ComparePage() {
               <h2 className="cmp-cta-title">{t('compare.ctaTitle')}</h2>
               <p className="cmp-cta-desc">{t('compare.ctaDesc')}</p>
               <div className="cmp-actions">
-                <Link href="/register" className="cmp-btn-primary">⚡ {t('marketing.ctaGetStartedFree')}</Link>
-                <Link href="/product" className="cmp-btn-secondary">👀 {t('compare.ctaTourPlatform')}</Link>
+          <Link href="/register" className="cmp-btn-primary"><Icon name="automation" size={17} /> {t('marketing.ctaGetStartedFree')}</Link>
+          <Link href="/product" className="cmp-btn-secondary"><Icon name="search" size={17} /> {t('compare.ctaTourPlatform')}</Link>
               </div>
             </div>
           </section>

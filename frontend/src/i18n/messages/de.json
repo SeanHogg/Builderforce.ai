@@ -487,6 +487,7 @@
       "settings": "Allgemein",
       "security": "Sicherheit",
       "billing": "Abrechnung",
+      "pricing": "Preise",
       "tenant": "Arbeitsbereiche",
       "apiKeys": "API-Schlüssel",
       "sops": "SOPs",
@@ -562,6 +563,9 @@
     "subtitle": "Definieren Sie Schwellenwert-Warnungen für Plattform-Metriken. Ein täglicher Durchlauf wertet jede Regel aus und benachrichtigt Ihr Team per Slack und E-Mail, wenn sie auslöst.",
     "loading": "Wird geladen…",
     "days": "{n} Tage",
+    "pricing": {
+      "title": "Veröffentlichte Preise", "description": "Bearbeiten Sie den Entwurf für die Preisseite und Preiskarten. Entwürfe bleiben bis zur Veröffentlichung privat.", "publishedAt": "Zuletzt veröffentlicht: {date}", "currency": "Währung", "managedHost": "Verwalteter AgentHost / Monat", "name": "Tarifname", "descriptionLabel": "Beschreibung", "monthly": "Monatspreis", "yearly": "Jahrespreis", "suffix": "Preiszusatz", "minimumSeats": "Mindestplätze", "features": "Enthaltene Funktionen — eine pro Zeile", "excluded": "Ausgeschlossene Funktionen — eine pro Zeile", "ctaLabel": "Schaltflächentext", "ctaHref": "Schaltflächenziel", "saveDraft": "Entwurf speichern", "saving": "Wird gespeichert…", "publish": "Preise veröffentlichen", "publishing": "Wird veröffentlicht…", "draftSaved": "Entwurf gespeichert; öffentliche Preise sind unverändert."
+    },
     "common": {
       "delete": "Löschen"
     },
@@ -12513,7 +12517,10 @@
     "linkBlog": "Blog",
     "linkLiveDemo": "Live-Demo",
     "linkSignIn": "Anmelden",
-    "linkGetStarted": "Loslegen"
+    "linkGetStarted": "Loslegen",
+    "cookies": "Cookies",
+    "subprocessors": "Unterauftragsverarbeiter",
+    "accessibility": "Barrierefreiheit"
   },
   "beta": {
     "crumb": "Produkt-Update",
@@ -13588,6 +13595,7 @@
       "guidedTour": "Geführte Tour"
     },
     "tourBuilder": {
+      "defaultObjectTitle": "Produkteinführung", "defaultOfferTitle": "Willkommen – möchten Sie eine kurze Tour?", "defaultOfferBody": "Lernen Sie das Wesentliche in wenigen kurzen Schritten kennen. Sie können die Tour jederzeit verlassen.", "defaultStartLabel": "Tour starten", "defaultCancelLabel": "Nicht jetzt", "defaultStep1Title": "Orientierung geben", "defaultStep1Body": "Erklären Sie den ersten wichtigen Bereich und warum er relevant ist.", "defaultStep2Title": "Die wichtigste Aktion zeigen", "defaultStep2Body": "Heben Sie die Aktion hervor, mit der Nutzende Fortschritte erzielen.",
       "closePreview": "Tourvorschau schließen", "stepOf": "{current} von {total}", "targetConnected": "Ziel verbunden", "targetNeeded": "Zielobjekt auswählen", "back": "Zurück", "finish": "Fertig", "next": "Weiter", "offer": "Tourangebot",
       "stepCount": "{count, plural, one {# Schritt} other {# Schritte}}", "visitCount": "Nach {count, plural, one {# Besuch} other {# Besuchen}} anbieten", "escapeEnabled": "Abbruch aktiviert",
       "settings": "Einstellungen der geführten Tour", "settingsHint": "Entwerfen Sie eine optionale Tour und verbinden Sie jeden Schritt mit dem hervorzuhebenden Canvas-Objekt.", "draftSteps": "Entwurf · {count} Schritte", "offerTitle": "Titel des Angebots", "offerBody": "Beschreibung des Angebots", "version": "Tourversion", "minimumVisits": "Besuche vor dem Angebot", "blurBackground": "Hintergrund beim Angebot weichzeichnen", "escapeHatch": "Schließen und Escape immer anbieten", "steps": "Tourschritte", "addStep": "Schritt hinzufügen", "newStepTitle": "Neuer Tourschritt", "stepTitle": "Schritttitel", "stepBody": "Schrittbeschreibung", "targetObject": "Hervorzuhebendes Objekt", "chooseTarget": "Objekt auswählen", "removeStep": "Schritt entfernen"

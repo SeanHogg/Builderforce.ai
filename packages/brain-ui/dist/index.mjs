@@ -955,6 +955,8 @@ var DEFAULT_PROMPT_OPTIONS_LABELS = {
   options: "Options",
   mode: "Mode",
   memory: "Memory",
+  autoMode: "Auto mode",
+  autoModeHint: "Auto-approve actions without asking",
   conversation: "Conversation",
   consolidate: "Consolidate",
   consolidating: "Consolidating\u2026",
@@ -1000,6 +1002,7 @@ function PromptOptionsMenu({
   disabled = false,
   mode,
   memory,
+  autoMode,
   session,
   effort,
   onEffortChange,
@@ -1041,7 +1044,7 @@ function PromptOptionsMenu({
     [items]
   );
   const visible = useMemo4(() => filterModelItems(items, labels, query, filter), [items, labels, query, filter]);
-  if (!mode && !memory && !session && !onEffortChange && !onThinkingChange && !model && !onAccountSettings) return null;
+  if (!mode && !memory && !autoMode && !session && !onEffortChange && !onThinkingChange && !model && !onAccountSettings) return null;
   const canChoose = model?.canChoose !== false;
   const activeKey = model ? activeModelKey(model.selection) : "";
   const activeMode = mode?.choices.find((choice) => choice.value === mode.value);
@@ -1124,8 +1127,30 @@ function PromptOptionsMenu({
           }
         )
       ] }),
-      onEffortChange && /* @__PURE__ */ jsxs7(Fragment3, { children: [
+      autoMode && /* @__PURE__ */ jsxs7(Fragment3, { children: [
         (mode || memory) && /* @__PURE__ */ jsx7("div", { className: "bf-pmenu__sep" }),
+        /* @__PURE__ */ jsxs7(
+          "button",
+          {
+            type: "button",
+            role: "menuitemcheckbox",
+            "aria-checked": autoMode.enabled,
+            className: `bf-pmenu__item${autoMode.enabled ? " is-active" : ""}`,
+            onClick: () => autoMode.onChange(!autoMode.enabled),
+            children: [
+              /* @__PURE__ */ jsx7("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u26A1" }),
+              /* @__PURE__ */ jsxs7("span", { className: "bf-pmenu__lbl", children: [
+                labels.autoMode,
+                /* @__PURE__ */ jsx7("span", { className: "bf-pmenu__desc", children: autoMode.description ?? labels.autoModeHint })
+              ] }),
+              /* @__PURE__ */ jsx7("span", { className: "bf-pmenu__hint", children: autoMode.enabled ? labels.on : labels.off }),
+              /* @__PURE__ */ jsx7("span", { className: "bf-pmenu__check", "aria-hidden": "true", children: autoMode.enabled ? "\u2713" : "" })
+            ]
+          }
+        )
+      ] }),
+      onEffortChange && /* @__PURE__ */ jsxs7(Fragment3, { children: [
+        (mode || memory || autoMode) && /* @__PURE__ */ jsx7("div", { className: "bf-pmenu__sep" }),
         /* @__PURE__ */ jsx7("div", { className: "bf-pmenu__group", children: labels.effort }),
         EFFORT_LEVELS.map((level) => /* @__PURE__ */ jsxs7(
           "button",
@@ -1148,7 +1173,7 @@ function PromptOptionsMenu({
         ))
       ] }),
       onThinkingChange && /* @__PURE__ */ jsxs7(Fragment3, { children: [
-        (mode || memory || onEffortChange) && /* @__PURE__ */ jsx7("div", { className: "bf-pmenu__sep" }),
+        (mode || memory || autoMode || onEffortChange) && /* @__PURE__ */ jsx7("div", { className: "bf-pmenu__sep" }),
         /* @__PURE__ */ jsxs7(
           "button",
           {
@@ -1170,7 +1195,7 @@ function PromptOptionsMenu({
         )
       ] }),
       model && inUse && /* @__PURE__ */ jsxs7(Fragment3, { children: [
-        (mode || memory || onEffortChange || onThinkingChange) && /* @__PURE__ */ jsx7("div", { className: "bf-pmenu__sep" }),
+        (mode || memory || autoMode || onEffortChange || onThinkingChange) && /* @__PURE__ */ jsx7("div", { className: "bf-pmenu__sep" }),
         /* @__PURE__ */ jsx7("div", { className: "bf-pmenu__group", children: labels.model }),
         /* @__PURE__ */ jsxs7("div", { className: "bf-pmenu__info", children: [
           /* @__PURE__ */ jsx7("span", { className: "bf-pmenu__ico", "aria-hidden": "true", children: "\u{1F9E0}" }),

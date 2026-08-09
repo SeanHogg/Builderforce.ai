@@ -8,6 +8,7 @@ import { PromptPanel, PromptOptionsMenu, useMentionAutocomplete, type ChatModelO
 import { effortProfile, type DirectedRecipient } from '@seanhogg/builderforce-brain-embedded';
 import { CHAT_MODES, CHAT_MODE_ICON, type BrainEffort, type ChatMode } from '@/lib/brain';
 import { PlanBadge } from '@/components/PlanBadge';
+import { Icon } from '@/components/ui/Icon';
 export type { ChatModelOptions, ChatModelSelection } from '@seanhogg/builderforce-brain-ui';
 
 /** Browser Web Speech API (not in all TS libs). */
@@ -105,7 +106,7 @@ export interface ChatInputProps {
   forking?: boolean;
   onConsolidate?: () => void;
   onFork?: () => void;
-  /** When set, an "Auto mode" pill toggles this (auto-approve tool actions). */
+  /** When set, the `/` options menu toggles auto-approval of tool actions. */
   autoMode?: boolean;
   onAutoModeChange?: (on: boolean) => void;
   /** Show brain storm (ideation) icon — link to /brainstorm or callback. */
@@ -228,15 +229,6 @@ function SendArrowIcon() {
   );
 }
 
-/** Lightning bolt (auto mode) */
-function BoltIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M13 2 4 14h6l-1 8 9-12h-6l1-8z" />
-    </svg>
-  );
-}
-
 const menuPopStyle: React.CSSProperties = {
   position: 'absolute',
   bottom: 'calc(100% + 8px)',
@@ -316,10 +308,10 @@ function MenuRow({ icon, label, hint, active, onClick }: {
   };
   const body = (
     <>
-      <span aria-hidden style={{ width: 18, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
+      <span aria-hidden style={{ width: 18, textAlign: 'center', flexShrink: 0 }}><Icon source={icon} size={18} /></span>
       <span style={{ flex: 1, minWidth: 0 }}>{label}</span>
       {hint != null && <span style={{ fontSize: 'var(--font-size-field-label)', textTransform: 'uppercase', letterSpacing: '0.04em', color: 'var(--text-muted)' }}>{hint}</span>}
-      {active && <span aria-hidden style={{ color: 'var(--coral-bright)', width: 12 }}>✓</span>}
+      {active && <span aria-hidden style={{ color: 'var(--coral-bright)', width: 12 }}><Icon name="check" size={14} /></span>}
     </>
   );
   const shared = { style, role: 'menuitem' as const, onMouseEnter: () => setHover(true), onMouseLeave: () => setHover(false) };
@@ -418,6 +410,8 @@ export function ChatInput({
     options: t('options'),
     mode: tModes('pickerAria'),
     memory: t('memory'),
+    autoMode: t('autoMode'),
+    autoModeHint: t('autoModeHint'),
     conversation: t('conversation'),
     consolidate: t('consolidate'),
     consolidating: t('consolidating'),
@@ -659,7 +653,7 @@ export function ChatInput({
               style={{ display: 'none' }}
             />
             {/* `+` becomes a Claude-style menu: Upload, Add context, Browse the web. */}
-            <ComposerMenu title={t('add')} disabled={disabled} trigger={<span style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 300, lineHeight: 1 }}>+</span>}>
+            <ComposerMenu title={t('add')} disabled={disabled} trigger={<Icon name="plus" size={19} />}>
               {(close) => (
                 <>
                   <MenuRow icon="💻" label={t('upload')} onClick={() => { close(); handleAttachClick(); }} />
@@ -686,6 +680,7 @@ export function ChatInput({
               disabled={disabled}
               mode={chatMode && onChatModeChange ? { value: chatMode, onChange: (next) => onChatModeChange(next as ChatMode), choices: modeChoices } : undefined}
               memory={onMemoryChange ? { enabled: !!memoryEnabled, onChange: onMemoryChange, unavailableReason: memoryUnavailableReason, describe: describeMemory } : undefined}
+              autoMode={onAutoModeChange ? { enabled: !!autoMode, onChange: onAutoModeChange, description: t('autoModeHint') } : undefined}
               session={onConsolidate && onFork ? { canConsolidate, consolidating, forking, onConsolidate, onFork } : undefined}
               effort={effort}
               onEffortChange={onEffortChange}
@@ -699,33 +694,6 @@ export function ChatInput({
               onAccountSettings={accountSettingsHref ? () => router.push(accountSettingsHref) : undefined}
             />
             {contextControls}
-            {onAutoModeChange && (
-          <button
-            type="button"
-            className="bf-chat-auto-mode"
-            onClick={() => onAutoModeChange(!autoMode)}
-            disabled={disabled}
-            title={t('autoModeHint')}
-            aria-pressed={!!autoMode}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              flexShrink: 0,
-              height: 'var(--chat-ctl-size, 32px)',
-              padding: '0 10px',
-              borderRadius: 'var(--radius-full)',
-              fontSize: 'var(--font-size-small)',
-              cursor: disabled ? 'not-allowed' : 'pointer',
-              border: `1px solid ${autoMode ? 'var(--coral-bright)' : 'var(--chat-input-border)'}`,
-              background: autoMode ? 'var(--surface-coral-soft, rgba(244,114,110,0.12))' : 'transparent',
-              color: autoMode ? 'var(--coral-bright)' : 'var(--text-muted)',
-            }}
-          >
-            <BoltIcon />
-            <span>{t('autoMode')}</span>
-          </button>
-            )}
             {/* Which plan is funding this chat (and, when metered, what allowance is
                 left) — the same chip, in the same place, as the VS Code composer.
                 Self-gating: it renders nothing without a tenant session, so the

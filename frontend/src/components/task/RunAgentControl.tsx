@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 
 import Link from 'next/link';
@@ -177,7 +178,7 @@ export function RunAgentControl({ task, agentHosts, onRan, onAwaitingApproval }:
       {error && <div style={{ fontSize: 12, color: 'var(--danger)', marginTop: 6 }}>{error}</div>}
       {repoStatus && (!repoStatus.bound || !repoStatus.hasCredential) && (
         <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 8, padding: '8px 10px', background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)' }}>
-          <span style={{ color: 'var(--warning, var(--warning))', fontWeight: 600 }}>⚠ {t('noWritableRepo')} </span>
+          <span style={{ color: 'var(--warning, var(--warning))', fontWeight: 600 }}><Icon source="⚠" size="1em" /> {t('noWritableRepo')} </span>
           {repoStatus.bound ? t('repoNoCredential') : t('repoUnbound')}{' '}
           <Link href={`/projects/${task.projectId}`} style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>{t('openProjectSourceControl')}</Link>
         </div>

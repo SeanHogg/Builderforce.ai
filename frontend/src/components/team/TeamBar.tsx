@@ -38,6 +38,7 @@ import {
   type TeammatePayload,
 } from '@/lib/team/teammate';
 import { ButtonLink } from '@/components/ui';
+import { isStageRoute } from '@/lib/workbenchPolicy';
 import styles from './TeamBar.module.css';
 
 /** Identity survives compression; a title does not — the same rule `RosterNav`
@@ -56,16 +57,17 @@ const payloadOf = (member: TeamRosterMember): TeammatePayload => ({
   role: member.role,
 });
 
-function TeammateChip({ member }: { member: TeamRosterMember }) {
+function TeammateChip({ member, locallyAvailable = false }: { member: TeamRosterMember; locallyAvailable?: boolean }) {
   const t = useTranslations('team');
   const [dragging, setDragging] = useState(false);
+  const locked = member.locked && !locallyAvailable;
 
   const join = useCallback(() => {
-    if (member.locked) return;
+    if (locked) return;
     requestTeammateJoin(payloadOf(member));
-  }, [member]);
+  }, [locked, member]);
 
-  const label = member.locked
+  const label = locked
     ? t('chipLocked', { name: member.name })
     : t('chipJoin', { name: member.name, role: member.role ?? t('roleTeammate') });
 
@@ -77,8 +79,8 @@ function TeammateChip({ member }: { member: TeamRosterMember }) {
       data-dragging={dragging ? 'true' : 'false'}
       // The drag and the keypress are the same action; `onClick` covers `Enter`
       // and `Space` on a native button, which is the parity §3.3 requires.
-      draggable={!member.locked}
-      disabled={member.locked}
+      draggable={!locked}
+      disabled={locked}
       onClick={join}
       onDragStart={(event) => {
         event.dataTransfer.setData(TEAMMATE_DND_MIME, serializeTeammate(payloadOf(member)));
@@ -113,7 +115,7 @@ export function TeamBar() {
   // Creation Canvas owns sharing in its session bar, including account-free
   // guest links. Repeating an account-backed workforce invite in this footer is
   // both a duplicate action and, for local canvases, a contradiction.
-  const canvasOwnsInvites = pathname.startsWith('/create/');
+  const canvasOwnsInvites = isStageRoute(pathname);
   const invite = hasTenant
     ? { href: '/workforce', label: t('invite') }
     : { href: signInHref(pathname), label: t('inviteSignedOut') };
@@ -124,14 +126,14 @@ export function TeamBar() {
         <div className={styles.group}>
           <span className={styles.eyebrow}>{t('alwaysOn')}</span>
           <div className={styles.chips}>
-            {alwaysOn.map((member) => <TeammateChip key={member.id} member={member} />)}
+            {alwaysOn.map((member) => <TeammateChip key={member.id} member={member} locallyAvailable={canvasOwnsInvites} />)}
           </div>
         </div>
       )}
       <div className={styles.group}>
         <span className={styles.eyebrow}>{t('team')}</span>
         <div className={styles.chips}>
-          {team.map((member) => <TeammateChip key={member.id} member={member} />)}
+          {team.map((member) => <TeammateChip key={member.id} member={member} locallyAvailable={canvasOwnsInvites} />)}
         </div>
         {!canvasOwnsInvites && <ButtonLink href={invite.href} variant="ghost" size="sm" className={styles.invite}>
           {invite.label}

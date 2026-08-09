@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -229,14 +230,14 @@ export default function SkillsPage() {
           <SkillAssignmentsContent scope="tenant" scopeId={tenantNum} />
         ) : (
           <div className="empty-state">
-            <div className="empty-state-icon">🔗</div>
+            <div className="empty-state-icon"><Icon source="🔗" size="1em" /></div>
             <div className="empty-state-title">{t('noTenant')}</div>
           </div>
         )
       ) : tab === 'my-skills' ? (
         userSkills.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-icon">🛠️</div>
+            <div className="empty-state-icon"><Icon source="🛠️" size="1em" /></div>
             <div className="empty-state-title">{t('noCustomTitle')}</div>
             <div className="empty-state-sub">{t('noCustomSub')}</div>
             <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setCreateOpen(true)}>{t('newSkillShort')}</button>
@@ -334,7 +335,7 @@ export default function SkillsPage() {
                       {s.description && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '8px 0' }}>{s.description}</div>}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: 'var(--muted)', margin: '4px 0 8px' }}>
                         <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={() => toggleLike(s.slug)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
-                        <span>⬇️ {stat.installs}</span>
+                        <span><Icon source="⬇️" size="1em" /> {stat.installs}</span>
                         {s.author && <span>{t('byAuthor', { author: s.author })}</span>}
                       </div>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -375,7 +376,7 @@ export default function SkillsPage() {
                         </td>
                         <td style={{ ...tdMutedStyle, whiteSpace: 'nowrap' }}>
                           <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={() => toggleLike(s.slug)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
-                          <span style={{ marginLeft: 10, fontSize: 11 }}>⬇️ {stat.installs}</span>
+                          <span style={{ marginLeft: 10, fontSize: 11 }}><Icon source="⬇️" size="1em" /> {stat.installs}</span>
                         </td>
                         <td style={tdStyle}>
                           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>

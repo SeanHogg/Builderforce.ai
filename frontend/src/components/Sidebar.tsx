@@ -12,6 +12,7 @@ import SidebarLegalMenu from './legal/SidebarLegalMenu';
 import SessionList from './SessionList';
 import UsageMeter from './UsageMeter';
 import { NavIcon } from './navigation/NavIcon';
+import { isStageRoute } from '@/lib/workbenchPolicy';
 
 /**
  * The left panel (PRD 21 §3.2).
@@ -95,7 +96,6 @@ function GroupLink({ group, active, onNavigate, t, badge = 0, locked = false, lo
 export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname() || '';
   const t = useTranslations('nav');
-  const tc = useTranslations('common');
   const ts = useTranslations('sessions');
   const { user, isAuthenticated } = useAuth();
 
@@ -157,8 +157,11 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
                 active={activeGroupId === g.id}
                 onNavigate={onMobileClose}
                 t={t}
-                locked={!isAuthenticated}
-                lockHint={tc('signInToOpen', { label: t(g.labelKey) })}
+                // A local Canvas is the product, not a teaser. Its destination
+                // rail stays navigable while signed out; the destination's
+                // durable Create/Save action owns the account gate. Outside a
+                // Canvas, app destinations retain the normal auth boundary.
+                locked={!isAuthenticated && !isStageRoute(pathname)}
               />
             ))}
           </div>

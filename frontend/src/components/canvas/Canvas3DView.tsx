@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react';
 import { useTranslations } from 'next-intl';
+import { Icon } from '@/components/ui/Icon';
 import {
   CANVAS_3D_DEFAULT_ORBIT,
   CANVAS_3D_DEPTH_MODES,
@@ -619,7 +620,7 @@ export function Canvas3DView<T extends Canvas3DNode>({
                 }}
               >
                 <span className={styles.cardHead}>
-                  {card.icon && <i aria-hidden>{card.icon}</i>}
+                  {card.icon && <i aria-hidden><Icon source={card.icon} size={18} /></i>}
                   <b>{card.label}</b>
                 </span>
                 {(solid ?? card.preview) && <img

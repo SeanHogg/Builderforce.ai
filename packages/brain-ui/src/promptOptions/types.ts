@@ -35,6 +35,10 @@ export interface PromptOptionsLabels extends ModelChoiceLabels {
   mode: string;
   /** Section heading + row label for persistent project memory. */
   memory: string;
+  /** Auto-approve canvas/tool actions for the next turn. */
+  autoMode: string;
+  /** Explains that Auto mode executes actions without a confirmation step. */
+  autoModeHint: string;
   /** Section heading for the actions that act on the CHAT itself (consolidate, fork). */
   conversation: string;
   consolidate: string;
@@ -72,6 +76,8 @@ export const DEFAULT_PROMPT_OPTIONS_LABELS: PromptOptionsLabels = {
   options: 'Options',
   mode: 'Mode',
   memory: 'Memory',
+  autoMode: 'Auto mode',
+  autoModeHint: 'Auto-approve actions without asking',
   conversation: 'Conversation',
   consolidate: 'Consolidate',
   consolidating: 'Consolidating…',

@@ -36,6 +36,7 @@ import AuditLogPanel from '@/components/admin/panels/AuditLogPanel';
 import ErrorsPanel from '@/components/admin/panels/ErrorsPanel';
 import TokenPanel from '@/components/admin/panels/TokenPanel';
 import FeedbackPanel from '@/components/admin/panels/FeedbackPanel';
+import PricingPanel from '@/components/admin/panels/PricingPanel';
 import OutcomeMetricsPanel from '@/components/admin/panels/OutcomeMetricsPanel';
 import EmailDeliveriesPanel from '@/components/admin/panels/EmailDeliveriesPanel';
 import { signInHref } from '@/lib/auth';
@@ -71,6 +72,7 @@ const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
   legal: LegalPanel,
   privacy: PrivacyPanel,
   billing: BillingPanel,
+  pricing: PricingPanel,
   newsletter: NewsletterPanel,
   releaseNotes: ReleaseNotesPanel,
   demoFunnel: DemoFunnelPanel,

@@ -8,6 +8,7 @@ import ModelApiSamples from '@/components/ModelApiSamples';
 import { evermindSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
 import { EVERMIND } from '@/lib/content';
+import { Icon } from '@/components/ui/Icon';
 
 export const runtime = 'edge';
 
@@ -169,7 +170,7 @@ export default async function EvermindPage() {
                   the brain animation (bolt.new-clean). */}
               <p className="ev-sub">{t('evermind.tagline')}.</p>
               <div className="ev-actions">
-                <Link href="/register" className="ev-btn-primary">⚡ {t('marketing.ctaStartBuildingFree')}</Link>
+          <Link href="/register" className="ev-btn-primary"><Icon name="automation" size={17} /> {t('marketing.ctaStartBuildingFree')}</Link>
                 <Link href="/product" className="ev-btn-secondary">{t('marketing.ctaTourPlatform')} →</Link>
               </div>
             </div>
@@ -201,7 +202,7 @@ export default async function EvermindPage() {
             <div className="ev-grid">
               {pillars.map((p, i) => (
                 <div key={p.title} className="ev-card">
-                  <span className="ev-card-icon">{EVERMIND.pillars[i]?.icon}</span>
+                  <span className="ev-card-icon"><Icon source={EVERMIND.pillars[i]?.icon} size={26} /></span>
                   <h3 className="ev-card-title">{p.title}</h3>
                   <p className="ev-card-desc">{p.desc}</p>
                 </div>
@@ -349,7 +350,7 @@ export default async function EvermindPage() {
               <h2 className="ev-cta-title">{t('evermind.cta.title')}</h2>
               <p className="ev-cta-desc">{t('evermind.cta.desc')}</p>
               <div className="ev-actions" style={{ justifyContent: 'center' }}>
-                <Link href="/register" className="ev-btn-primary">⚡ {t('marketing.ctaGetStartedFree')}</Link>
+          <Link href="/register" className="ev-btn-primary"><Icon name="automation" size={17} /> {t('marketing.ctaGetStartedFree')}</Link>
                 <Link href="/pricing" className="ev-btn-secondary">{t('marketing.ctaSeePricing')} →</Link>
               </div>
             </div>

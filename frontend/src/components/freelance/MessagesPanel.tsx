@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
@@ -206,7 +207,8 @@ export function MessagesPanel({ open, onClose, side, context }: {
                       {m.hasAttachment && (
                         <button type="button" onClick={() => void openAttachment(m)}
                           style={{ marginTop: m.body ? 6 : 0, display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-small)', fontWeight: 600, background: mine ? 'rgba(255,255,255,0.2)' : 'var(--bg-base)', color: mine ? 'var(--text-on-accent)' : 'var(--coral-bright)', border: 'none', borderRadius: 'var(--radius-md)', padding: '4px 8px', cursor: 'pointer' }}>
-                          📎 {m.attachmentName ?? t('attachment')}
+                          
+                          <Icon source="📎" size="1em" /> {m.attachmentName ?? t('attachment')}
                         </button>
                       )}
                     </div>
@@ -220,13 +222,15 @@ export function MessagesPanel({ open, onClose, side, context }: {
             <div style={{ borderTop: '1px solid var(--border-subtle)', padding: 12, flexShrink: 0 }}>
               {file && (
                 <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  📎 {file.name}
+                  
+                  <Icon source="📎" size="1em" /> {file.name}
                   <button type="button" onClick={() => setFile(null)} style={{ background: 'none', border: 'none', color: 'var(--danger)', cursor: 'pointer', fontSize: 'var(--font-size-small)' }}>{t('remove')}</button>
                 </div>
               )}
               <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
                 <label style={{ flexShrink: 0, cursor: 'pointer', fontSize: 'var(--font-size-card-title)', color: 'var(--text-muted)', padding: '6px 4px' }} title={t('attach')}>
-                  📎
+                  
+                  <Icon source="📎" size="1em" />
                   <input type="file" style={{ display: 'none' }} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
                 </label>
                 <textarea

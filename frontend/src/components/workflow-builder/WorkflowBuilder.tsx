@@ -2,6 +2,7 @@
 
 import { Select } from '@/components/Select';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { Icon } from '@/components/ui/Icon';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -526,9 +527,9 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
           onChange={(e) => { const f = e.target.files?.[0]; if (f) void importYaml(f); e.target.value = ''; }}
         />
         {hasBuild && (
-          <button type="button" style={btnPrimary} disabled={busy} onClick={() => setBuildOpen(true)} title={t('builderBuildTitle')}>🧠 {t('builderBuild')}</button>
+          <button type="button" style={btnPrimary} disabled={busy} onClick={() => setBuildOpen(true)} title={t('builderBuildTitle')}><Icon source="🧠" size="1em" /> {t('builderBuild')}</button>
         )}
-        <button type="button" style={hasBuild ? btnSubtle : btnPrimary} disabled={busy} onClick={() => void run()}>▶ {t('builderRun')}</button>
+        <button type="button" style={hasBuild ? btnSubtle : btnPrimary} disabled={busy} onClick={() => void run()}><Icon source="▶" size="1em" /> {t('builderRun')}</button>
         {status && <span style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>{status}</span>}
       </div>
 
@@ -568,7 +569,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
                     title={m.blurb}
                     style={paletteItemStyle(m.accent)}
                   >
-                    <span>{m.icon}</span> {m.label}
+                    <Icon source={m.icon} size={18} /> {m.label}
                   </button>
                 ))}
               </div>
@@ -581,7 +582,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
             if (!items.length) return null;
             return (
               <div key={cat.id} style={{ marginBottom: 12 }}>
-                <div style={groupLabelStyle}>{cat.icon} {cat.label}</div>
+                <div style={groupLabelStyle}><Icon source={cat.icon} size={16} /> {cat.label}</div>
                 {items.map((i) => (
                   <button
                     key={i.id}
@@ -592,7 +593,7 @@ export function WorkflowBuilder({ definitionId, initialProjectId = null, embedde
                     title={i.description}
                     style={paletteItemStyle(integrationAccent(i.category))}
                   >
-                    <span>{integrationIcon(i)}</span> {i.label}
+                    <Icon source={integrationIcon(i)} size={18} /> {i.label}
                   </button>
                 ))}
               </div>

@@ -16,6 +16,7 @@
  * switching sources back and forth never re-pulls.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
@@ -136,7 +137,7 @@ export function RepoContextPicker({ sources, onPick, onClose }: {
               onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--bg-elevated)'; }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
             >
-              <span aria-hidden style={{ flexShrink: 0 }}>📄</span>
+              <span aria-hidden style={{ flexShrink: 0 }}><Icon source="📄" size="1em" /></span>
               <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.path}</span>
             </button>
           ))}

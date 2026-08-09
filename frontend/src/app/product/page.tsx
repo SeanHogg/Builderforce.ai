@@ -16,6 +16,7 @@ import {
 import { productSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
 import { STATS, PRODUCT_SECTIONS, PRODUCT_CAPABILITY_PROOF, PRODUCT_CAPABILITY_OPERATIONS, INTEGRATION_CAPABILITY_PROOF, WORKFLOW_PROOF_DEMOS } from '@/lib/content';
+import { Icon } from '@/components/ui/Icon';
 
 export const runtime = 'edge';
 
@@ -206,7 +207,7 @@ export default async function ProductPage() {
                     const operations = canonical ? PRODUCT_CAPABILITY_OPERATIONS[canonical.title] : undefined;
                     return (
                       <Link key={surface.title} href={canonical?.href ?? '#'} className="pp-card">
-                        <span className="pp-card-icon">{canonical?.icon}</span>
+                        <span className="pp-card-icon"><Icon source={canonical?.icon} size={24} /></span>
                         <h3 className="pp-card-title">{surface.title}</h3>
                         {proof ? (
                           <span className="pp-card-proof">
@@ -263,7 +264,7 @@ export default async function ProductPage() {
               <h2 className="pp-cta-title">{t('product.ctaTitle')}</h2>
               <p className="pp-cta-desc">{t('product.ctaDesc')}</p>
               <div className="pp-actions">
-                <Link href="/register" className="pp-btn-primary">⚡ {t('marketing.ctaGetStartedFree')}</Link>
+          <Link href="/register" className="pp-btn-primary"><Icon name="automation" size={17} /> {t('marketing.ctaGetStartedFree')}</Link>
                 <Link href="/creation-canvas" className="pp-btn-secondary">✦ {t('product.ctaBrowseWorkforce')}</Link>
               </div>
             </div>

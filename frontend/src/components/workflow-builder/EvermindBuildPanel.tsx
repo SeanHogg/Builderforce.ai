@@ -24,6 +24,7 @@ import {
 import { seedProjectEvermindFromArtifact } from '@/lib/projectEvermindApi';
 import { buildSparkline } from '@/lib/sparkline';
 import { downloadBlob } from '@/lib/download';
+import { Icon } from '@/components/ui/Icon';
 
 interface Props {
   open: boolean;
@@ -155,7 +156,7 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
                     return (
                       <div key={r.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', padding: '7px 10px' }}>
                         <span aria-hidden style={{ flexShrink: 0, width: 18, height: 18, borderRadius: 'var(--radius-sm)', background: tone.bg, color: tone.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 'var(--font-size-eyebrow)', fontWeight: 700 }}>
-                          {tone.icon}
+                          <Icon source={tone.icon} size={15} />
                         </span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, justifyContent: 'space-between' }}>
@@ -205,7 +206,7 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
                 </div>
                 {artifactB64 ? (
                   <>
-                    <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}>📦 {t('artifactReady')}</div>
+                    <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-secondary)' }}><Icon source="📦" size="1em" /> {t('artifactReady')}</div>
                     {seededVersion != null && (
                       <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--success, var(--success))' }}>✓ {t('seeded', { version: seededVersion })}</div>
                     )}
@@ -228,7 +229,8 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
                         onClick={download}
                         style={{ padding: '7px 14px', fontSize: 'var(--font-size-small)', fontWeight: 600, background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', cursor: 'pointer' }}
                       >
-                        ⬇ {t('download')}
+                        
+                        <Icon source="⬇" size="1em" /> {t('download')}
                       </button>
                     </div>
                     {projectId == null && <div style={{ fontSize: 'var(--font-size-eyebrow)', color: 'var(--text-muted)' }}>{t('seedNeedsProject')}</div>}
@@ -243,7 +245,8 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
 
         {error && (
           <div role="alert" style={{ fontSize: 'var(--font-size-small)', color: 'var(--error-text)', background: 'var(--error-bg, rgba(239,68,68,0.12))', border: '1px solid var(--error-border)', borderRadius: 'var(--radius-md)', padding: '8px 12px' }}>
-            ⚠ {error}
+            
+            <Icon source="⚠" size="1em" /> {error}
           </div>
         )}
       </div>

@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Select } from '@/components/Select';
 import { RoleGate } from '@/components/RoleGate';
 import { DestinationIndex, type IndexItem } from '@/components/shell/DestinationIndex';
+import { Icon } from '@/components/ui/Icon';
 import { usePermission } from '@/lib/rbac';
 import {
   ManagerAutonomyControls, ManagerEffectiveSummary, ManagerKillSwitch,
@@ -381,7 +382,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span aria-hidden>🧭</span> {t('title')}
+            <span aria-hidden><Icon source="🧭" size="1em" /></span> {t('title')}
           </h1>
           <p style={{ margin: '6px 0 0', ...mutedStyle, maxWidth: 640 }}>{t('subtitle')}</p>
           <p style={{ margin: '4px 0 0', ...mutedStyle }}>
@@ -432,7 +433,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
             background: 'var(--danger-bg, rgba(220, 38, 38, 0.08))',
           }}
         >
-          <span aria-hidden style={{ fontSize: '1.1rem', lineHeight: '1.3rem' }}>🚫</span>
+          <span aria-hidden style={{ fontSize: '1.1rem', lineHeight: '1.3rem' }}><Icon source="🚫" size="1em" /></span>
           <div style={{ flex: 1, minWidth: 200 }}>
             <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--danger-text)' }}>
               {t('notConfigured.title')}
@@ -461,7 +462,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
             background: 'var(--warning-bg, rgba(180, 83, 9, 0.08))',
           }}
         >
-          <span aria-hidden style={{ fontSize: '1.1rem', lineHeight: '1.3rem' }}>⏸️</span>
+          <span aria-hidden style={{ fontSize: '1.1rem', lineHeight: '1.3rem' }}><Icon source="⏸️" size="1em" /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--warning-text)' }}>
               {t('autonomyPaused.title')}
@@ -548,12 +549,14 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
         )}
         {(stats.unscored > 0 || stats.unranked > 0) && (
           <div style={{ marginTop: 12, fontSize: '0.8rem', color: 'var(--warning-text)' }}>
-            💡 {t('insightNudge', { unscored: stats.unscored, unranked: stats.unranked })}
+            
+            <Icon source="💡" size="1em" /> {t('insightNudge', { unscored: stats.unscored, unranked: stats.unranked })}
           </div>
         )}
         {stats.flagged > 0 && (
           <div style={{ marginTop: 8, fontSize: '0.8rem', color: 'var(--warning-text)' }}>
-            🚩 {t('coverageNudge', { flagged: stats.flagged })}
+            
+            <Icon source="🚩" size="1em" /> {t('coverageNudge', { flagged: stats.flagged })}
           </div>
         )}
       </div>
@@ -754,7 +757,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
                       border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-base)',
                     }}
                   >
-                    <span aria-hidden style={{ flexShrink: 0 }}>🎯</span>
+                    <span aria-hidden style={{ flexShrink: 0 }}><Icon source="🎯" size="1em" /></span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)' }}>{d.directive}</div>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -1036,7 +1039,7 @@ function RunTaskRow({ task, statusLabel, owner, systemOwnerLabel, when }: {
 function ActivityRow({ action, typeLabel, when }: { action: ManagerAction; typeLabel: string; when: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '8px 0', borderBottom: '1px solid var(--border-subtle)' }}>
-      <span aria-hidden style={{ flexShrink: 0, fontSize: '1rem', lineHeight: '1.3rem' }}>{managerActionIcon(action.actionType)}</span>
+      <span aria-hidden style={{ flexShrink: 0 }}><Icon source={managerActionIcon(action.actionType)} size={18} /></span>
       <div style={{ flex: 1, minWidth: 0 }}>
         {action.taskId != null && (
           <Link

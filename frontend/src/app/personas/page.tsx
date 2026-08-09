@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -322,14 +323,14 @@ export default function PersonasPage() {
           <PersonaAssignmentsContent scope="tenant" scopeId={tenantNum} />
         ) : (
           <div className="empty-state">
-            <div className="empty-state-icon">🔗</div>
+            <div className="empty-state-icon"><Icon source="🔗" size="1em" /></div>
             <div className="empty-state-title">{t('noTenant')}</div>
           </div>
         )
       ) : tab === 'my-personas' ? (
         userPersonas.length === 0 ? (
           <div className="empty-state">
-            <div className="empty-state-icon">🎭</div>
+            <div className="empty-state-icon"><Icon source="🎭" size="1em" /></div>
             <div className="empty-state-title">{t('noCustomTitle')}</div>
             <div className="empty-state-sub">{t('noCustomSub')}</div>
             <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} onClick={() => setCreateOpen(true)}>{t('newPersonaShort')}</button>
@@ -342,7 +343,7 @@ export default function PersonasPage() {
                 <div style={{ padding: p.image ? 12 : 0 }}>
                   <div className="card-header">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <span style={{ fontSize: 20 }}>🎭</span>
+                      <span style={{ fontSize: 20 }}><Icon source="🎭" size="1em" /></span>
                       <div>
                         <div className="card-title">{p.name}</div>
                         <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
@@ -381,7 +382,7 @@ export default function PersonasPage() {
                 {userPersonas.map((p) => (
                   <tr key={p.id} style={trStyle}>
                     <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                      <span style={{ marginRight: 6 }}>🎭</span>{p.name}
+                      <span style={{ marginRight: 6 }}><Icon source="🎭" size="1em" /></span>{p.name}
                       {p.shared && <span className="badge badge-green" style={{ marginLeft: 6 }}>{t('shared')}</span>}
                     </td>
                     <td style={tdMutedStyle}>{p.description || '—'}</td>
@@ -430,7 +431,7 @@ export default function PersonasPage() {
                     <div style={{ padding: p.image ? 12 : 0 }} onClick={() => setExpanded(isOpen ? null : p.name)}>
                       <div className="card-header">
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={{ fontSize: 20 }}>🎭</span>
+                          <span style={{ fontSize: 20 }}><Icon source="🎭" size="1em" /></span>
                           <div>
                             <div className="card-title">{p.name}</div>
                             <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
@@ -443,7 +444,7 @@ export default function PersonasPage() {
                       {p.description && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, margin: '8px 0' }}>{p.description}</div>}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: 'var(--muted)', margin: '4px 0 8px' }}>
                         <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={(e) => { e.stopPropagation(); toggleLike(p.name); }}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
-                        <span title={t('installsTitle')}>⬇️ {stat.installs}</span>
+                        <span title={t('installsTitle')}><Icon source="⬇️" size="1em" /> {stat.installs}</span>
                         {p.author && <span>{t('byAuthor', { author: p.author })}</span>}
                       </div>
                       {isOpen && (
@@ -507,7 +508,7 @@ export default function PersonasPage() {
                     return (
                       <tr key={p.name} style={trStyle}>
                         <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                          <span style={{ marginRight: 6 }}>🎭</span>{p.name}
+                          <span style={{ marginRight: 6 }}><Icon source="🎭" size="1em" /></span>{p.name}
                         </td>
                         <td style={tdMutedStyle}>{p.description || '—'}</td>
                         <td style={tdMutedStyle}>
@@ -518,7 +519,7 @@ export default function PersonasPage() {
                         </td>
                         <td style={{ ...tdMutedStyle, whiteSpace: 'nowrap' }}>
                           <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 11, color: stat.liked ? 'var(--error)' : 'var(--muted)' }} title={stat.liked ? t('unlike') : t('like')} onClick={() => toggleLike(p.name)}>{stat.liked ? '❤️' : '🤍'} {stat.likes}</button>
-                          <span style={{ marginLeft: 10, fontSize: 11 }}>⬇️ {stat.installs}</span>
+                          <span style={{ marginLeft: 10, fontSize: 11 }}><Icon source="⬇️" size="1em" /> {stat.installs}</span>
                         </td>
                         <td style={tdStyle}>
                           <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>

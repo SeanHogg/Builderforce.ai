@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 import Link from 'next/link';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
@@ -626,7 +627,7 @@ export default function MarketplacePageClient() {
         <div style={{ maxWidth: 560, margin: '0 auto' }}>
           {!isAuthenticated ? (
             <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 32, textAlign: 'center' }}>
-              <div style={{ fontSize: 'var(--font-size-page-title)', marginBottom: 12 }}>🚀</div>
+              <div style={{ fontSize: 'var(--font-size-page-title)', marginBottom: 12 }}><Icon source="🚀" size="1em" /></div>
               <div style={{ fontWeight: 700, fontSize: 'var(--font-size-card-title)', marginBottom: 8 }}>{tm('publish.becomePublisher')}</div>
               <p style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginBottom: 24, maxWidth: 380, margin: '0 auto 24px' }}>
                 {tm('publish.publisherBlurb')}
@@ -810,7 +811,7 @@ export default function MarketplacePageClient() {
                   return (
                   <tr key={agent.id} style={trStyle}>
                     <td style={tdStyle}>
-                      <span style={{ marginRight: 6 }}>👤</span>
+                      <span style={{ marginRight: 6 }}><Icon source="👤" size="1em" /></span>
                       <strong style={{ color: 'var(--text-strong)' }}>{agent.name}</strong>
                     </td>
                     <td style={tdMutedStyle}>{agent.title || tm('action.workforceAgent')}</td>
@@ -928,7 +929,7 @@ export default function MarketplacePageClient() {
                       >
                         {stat.liked ? '❤️' : '🤍'} {stat.likes}
                       </button>
-                      <span style={{ marginLeft: 10 }} title={tm('action.installsTitle')}>⬇️ {stat.installs}</span>
+                      <span style={{ marginLeft: 10 }} title={tm('action.installsTitle')}><Icon source="⬇️" size="1em" /> {stat.installs}</span>
                       {isInstalled && <span style={{ marginLeft: 10 }}>✓</span>}
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>
@@ -1077,7 +1078,7 @@ export default function MarketplacePageClient() {
                     >
                       {stat.liked ? '❤️' : '🤍'} {stat.likes}
                     </button>
-                    <span title={tm('action.installsTitle')}>⬇️ {stat.installs}</span>
+                    <span title={tm('action.installsTitle')}><Icon source="⬇️" size="1em" /> {stat.installs}</span>
                     {isInstalled && <span>✓ {tm('installed')}</span>}
                   </div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', flex: '1 1 auto' }}>

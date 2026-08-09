@@ -2,6 +2,7 @@
 
 export const runtime = 'edge';
 
+import { Icon } from '@/components/ui/Icon';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
@@ -131,7 +132,7 @@ export default function SkillDetailPage() {
           <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 13, color: stats?.liked ? 'var(--error)' : 'var(--muted)' }} onClick={toggleLike}>
             {stats?.liked ? '❤️' : '🤍'} {stats?.likes ?? 0} likes
           </button>
-          <span style={{ fontSize: 13, color: 'var(--muted)' }}>⬇️ {stats?.installs ?? 0} installs</span>
+          <span style={{ fontSize: 13, color: 'var(--muted)' }}><Icon source="⬇️" size="1em" /> {stats?.installs ?? 0} installs</span>
           <ArtifactAssigner artifactType="skill" artifactSlug={skill.slug} artifactName={skill.name} />
           <button type="button" className={`btn btn-sm ${installed ? 'btn-secondary' : 'btn-primary'}`} disabled={!hasAgentHosts} onClick={toggleInstall}>
             {!hasAgentHosts ? 'Register agentHost first' : installed ? 'Uninstall' : 'Install'}

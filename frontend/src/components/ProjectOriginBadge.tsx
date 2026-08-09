@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * ProjectOriginBadge — a small pill marking where a project was born. Self-gating:
@@ -30,7 +31,7 @@ export function ProjectOriginBadge({ origin, style }: { origin?: string | null; 
         ...style,
       }}
     >
-      <span aria-hidden>{badge.icon}</span>
+      <span aria-hidden><Icon source={badge.icon} size={14} /></span>
       {t(badge.labelKey)}
     </span>
   );

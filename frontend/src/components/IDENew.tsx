@@ -10,6 +10,7 @@ import { AITrainingPanel } from './AITrainingPanel';
 import { AgentPublishPanel } from './AgentPublishPanel';
 import { SitePublishPanel } from './SitePublishPanel';
 import { AgentStateViewer } from './AgentStateViewer';
+import { Icon } from '@/components/ui/Icon';
 import { EvermindStudioPanel } from './EvermindStudioPanel';
 import { FinetuneStudioPanel } from './FinetuneStudioPanel';
 import { PreviewFrame } from './PreviewFrame';
@@ -1023,7 +1024,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)',
           }}
         >
-          <span>{modalityCopy.icon}</span>
+          <span><Icon source={modalityCopy.icon} size={20} /></span>
           {modalityCopy.label}
         </span>
 

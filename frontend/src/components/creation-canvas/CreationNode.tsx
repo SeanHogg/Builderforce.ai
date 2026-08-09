@@ -14,6 +14,7 @@ import { creationObjectDefinition } from './creationObjectRegistry';
 import { BrainActivityBar, brainActivityLine, useBrainActivity } from './BrainActivityView';
 import { BrainSurfaceActions, BrainSurfaceBody } from './BrainDock';
 import { useBrainSurface } from './brainSurfaceContext';
+import { Icon } from '@/components/ui/Icon';
 import { highlightToneFor, profileTabular, tabularFromObject, workbookSheets, type TabularCell, type TabularHighlightRule } from '@/lib/canvasTabularData';
 import { outlinePaths, projectMap, sanitizeGeoBounds, sanitizeMapPoints } from '@/lib/canvasGeo';
 import { creativePreviewImageUrl } from '@/lib/creationDeliverables';
@@ -163,7 +164,7 @@ function CreativeStudioBody({ data }: { data: CreationNodeData }) {
   const output = textValue(data.outputFormat, data.kind === 'resume' ? 'PDF / DOCX' : t('chooseOnExport'));
   const thumbnail = creativePreviewImageUrl(data);
   return <div className={styles.creativeStudioBody}>
-    {thumbnail ? <img src={thumbnail} alt={t('previewAlt', { title: data.title })} /> : <div className={styles.creativeStudioPreview} aria-hidden="true"><span>{creationObjectDefinition(data.kind).icon}</span><i /><i /><i /></div>}
+    {thumbnail ? <img src={thumbnail} alt={t('previewAlt', { title: data.title })} /> : <div className={styles.creativeStudioPreview} aria-hidden="true"><span><Icon source={creationObjectDefinition(data.kind).icon} size={24} /></span><i /><i /><i /></div>}
     <AuthoredContent data={data} fallback={t('creativeFallback')} />
     <div className={styles.widgetSettings}>
       <span><small>{t('studio')}</small><b>{mediaKind.replaceAll('_', ' ')}</b></span>
@@ -523,7 +524,7 @@ function BuildBody({ data }: { data: CreationNodeData }) {
   return (
     <div className={styles.buildBody}>
       <div className={styles.buildType}>
-        <span aria-hidden>{modality.icon}</span>
+        <span aria-hidden><Icon source={modality.icon} size={18} /></span>
         <strong>{modality.label}</strong>
         <em data-bound={binding ? 'true' : 'false'}>{binding ? t('tileReady') : t('tileNotCreated')}</em>
       </div>
@@ -1298,7 +1299,7 @@ function EvermindBody({ data }: { data: CreationNodeData }) {
           <EvermindRegion x={155} y={148} r={13} className={styles.regionHypothalamus} label={t('regionHypothalamus')} small />
           <EvermindRegion x={220} y={140} r={13} className={styles.regionThalamus} label={t('regionThalamus')} small />
           <EvermindRegion x={272} y={112} r={13} className={styles.regionBasal} label={t('regionBasal')} small />
-          <g className={styles.evermindCore}><circle cx="160" cy="88" r="25" /><circle cx="160" cy="88" r="19" /><text x="160" y="86" textAnchor="middle">🧠</text><text x="160" y="99" textAnchor="middle">{EVERMIND_BRAND}</text></g>
+          <g className={styles.evermindCore}><circle cx="160" cy="88" r="25" /><circle cx="160" cy="88" r="19" /><text x="160" y="86" textAnchor="middle"></text><text x="160" y="99" textAnchor="middle">{EVERMIND_BRAND}</text></g>
           {fittedLearnings.map((item, index) => <circle key={`neo-${item.id}`} className={styles.evermindKnowledgeNode} cx={122 + (index % 3) * 17} cy={18 + Math.floor(index / 3) * 12} r={3 + Math.min(item.weight, 3) / 2}><title>{item.kind === 'delta' ? t('weightDelta') : item.prompt || t('fittedLearning')}</title></circle>)}
           {textLearnings.map((item, index) => <circle key={`hip-${item.id}`} className={styles.evermindMemoryNode} cx={280 + (index % 2) * 11} cy={43 + Math.floor(index / 2) * 13} r={3 + Math.min(item.weight, 3) / 2}><title>{item.prompt || item.text || t('learnedTextTitle')}</title></circle>)}
           {!recent.length && <text className={styles.evermindDormantLabel} x="160" y="123" textAnchor="middle">{t('growMap')}</text>}
@@ -1621,7 +1622,7 @@ function GameBody({ data }: { data: CreationNodeData }) {
     return <div className={styles.creativeStudioBody}>
       {poster
         ? <img src={poster} alt={t('previewAlt', { title: data.title })} />
-        : <div className={styles.creativeStudioPreview} aria-hidden="true"><span>{creationObjectDefinition(data.kind).icon}</span><i /><i /><i /></div>}
+        : <div className={styles.creativeStudioPreview} aria-hidden="true"><span><Icon source={creationObjectDefinition(data.kind).icon} size={24} /></span><i /><i /><i /></div>}
       <AuthoredContent data={data} fallback={t('gameNotGenerated')} />
       <div className={styles.pills}><span>{t('gameGenerateFirst')}</span></div>
     </div>;
@@ -1645,7 +1646,7 @@ function GameBody({ data }: { data: CreationNodeData }) {
           onClick={(event) => { event.stopPropagation(); setPlaying(true); }}
           style={poster ? { backgroundImage: `url("${poster}")` } : undefined}
         >
-          <span className={styles.gamePlayBadge} aria-hidden="true">▶</span>
+          <span className={styles.gamePlayBadge} aria-hidden="true"><Icon source="▶" size="1em" /></span>
           <span className={styles.srOnly}>{t('gamePlay')}</span>
         </button>}
     </div>
@@ -1817,7 +1818,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
       <Handle type="target" position={Position.Left} className={styles.handle} />
       <header className={styles.nodeHeader}>
         {typeof data.pipelineStep === 'number' && <span className={styles.pipelineStepBadge}>{data.pipelineStep}</span>}
-        <span className={styles.nodeIcon}>{typeof data.toolIcon === 'string' ? data.toolIcon : creationObjectDefinition(data.kind).icon}</span>
+        <span className={styles.nodeIcon}><Icon source={typeof data.toolIcon === 'string' ? data.toolIcon : creationObjectDefinition(data.kind).icon} size={18} /></span>
         <strong>{data.title}</strong>
         {data.status && <span className={styles.status}>{data.status}</span>}
         {data.kind === 'workflow' && onRun && <button

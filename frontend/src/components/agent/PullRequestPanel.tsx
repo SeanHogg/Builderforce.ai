@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { Select } from '@/components/Select';
 import {
@@ -64,7 +65,7 @@ function BuildStatus({ status, error, phase, showValidating }: {
         <span style={{ color: 'var(--text-muted)' }}>{phase === 'pre-merge' ? 'PR build:' : 'Build:'}</span>
         {status === 'success' && <Badge label="passing" color={CHECK_COLOR.success} />}
         {status === 'failure' && <Badge label="failing" color={CHECK_COLOR.failure} />}
-        {validating && <span style={{ color: 'var(--text-muted)' }}>⏳ validating…</span>}
+        {validating && <span style={{ color: 'var(--text-muted)' }}><Icon source="⏳" size="1em" /> validating…</span>}
         {status === 'failure' && (
           <span style={{ color: 'var(--warning)' }}>
             {phase === 'pre-merge'
@@ -217,7 +218,7 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
             {merging ? 'Merging…' : 'Approve & Merge'}
           </button>
           {mergeBlockReason && <span style={{ fontSize: 12, color: 'var(--danger)' }}>{mergeBlockReason}</span>}
-          {!mergeBlockReason && checksRed && <span style={{ fontSize: 12, color: 'var(--warning)' }}>⚠ CI is {checks}. Repository rules may block merging until required checks pass.</span>}
+          {!mergeBlockReason && checksRed && <span style={{ fontSize: 12, color: 'var(--warning)' }}><Icon source="⚠" size="1em" /> CI is {checks}. Repository rules may block merging until required checks pass.</span>}
         </div>
       )}
 
@@ -235,7 +236,7 @@ export function PullRequestPanel({ taskId, onMerged }: { taskId: number; onMerge
 
       {pr.url && (
         <a href={pr.url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: 12, fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-          Open on {pr.provider === 'github' ? 'GitHub' : pr.provider} ↗
+          Open on {pr.provider === 'github' ? 'GitHub' : pr.provider}  <Icon source="↗" size="1em" />
         </a>
       )}
     </div>

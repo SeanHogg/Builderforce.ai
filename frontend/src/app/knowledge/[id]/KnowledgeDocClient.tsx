@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -425,7 +426,8 @@ function SharePanel({
           alignItems: 'center',
         }}
       >
-        👥 {t('share')}
+        
+        <Icon source="👥" size="1em" /> {t('share')}
         {collaborators.length > 0 && (
           <span style={{ ...badge, background: 'var(--surface-2)', color: 'var(--text-muted)' }}>
             {collaborators.length}
@@ -715,7 +717,8 @@ function AiAssist({
           fontWeight: 600,
         }}
       >
-        ✨ {t('aiAssist')} {open ? '▾' : '▸'}
+        
+        <Icon source="✨" size="1em" /> {t('aiAssist')} {open ? '▾' : '▸'}
       </button>
       {open && (
         <div style={{ padding: 16, paddingTop: 0 }}>
@@ -828,7 +831,8 @@ function AnalyzePanel({
           fontWeight: 600,
         }}
       >
-        🔍 {t('analyzeTitle')} {open ? '▾' : '▸'}
+        
+        <Icon source="🔍" size="1em" /> {t('analyzeTitle')} {open ? '▾' : '▸'}
       </button>
       {open && (
         <div style={{ padding: 16, paddingTop: 0 }}>
@@ -1018,7 +1022,7 @@ function ListingControl({ docId, t }: { docId: string; t: ReturnType<typeof useT
         flexWrap: 'wrap',
       }}
     >
-      <span style={{ fontSize: 13, fontWeight: 600 }}>🏪 {t('marketplaceTitle')}</span>
+      <span style={{ fontSize: 13, fontWeight: 600 }}><Icon source="🏪" size="1em" /> {t('marketplaceTitle')}</span>
       {listing ? (
         <>
           <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
@@ -1150,7 +1154,8 @@ function TrainingPanel({ docId, t }: { docId: string; t: ReturnType<typeof useTr
         onClick={() => setOpen((o) => !o)}
         style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', fontWeight: 600, fontSize: 16, padding: 0 }}
       >
-        🎓 {t('trainingAndAudit')} {open ? '▾' : '▸'}
+        
+        <Icon source="🎓" size="1em" /> {t('trainingAndAudit')} {open ? '▾' : '▸'}
       </button>
       {open && (
         <div style={{ marginTop: 14, display: 'grid', gap: 18 }}>

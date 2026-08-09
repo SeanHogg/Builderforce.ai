@@ -10,6 +10,7 @@ import {
 } from '@/lib/canvasHost';
 import type { CreationFlowNode } from './CreationNode';
 import styles from './CreationCanvas.module.css';
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * The editor-only actions in the Canvas session bar.
@@ -85,7 +86,7 @@ export function CanvasHostActions({
           aria-busy={busy === action.id}
           onClick={() => void run(action.id)}
         >
-          <span aria-hidden>{action.icon}</span>
+          <span aria-hidden><Icon source={action.icon} size={18} /></span>
         </button>
       ))}
       {path && (
@@ -96,7 +97,7 @@ export function CanvasHostActions({
           title={t('openInEditor')}
           onClick={() => host.openFile(path, range)}
         >
-          <span aria-hidden>↗</span>
+          <span aria-hidden><Icon source="↗" size="1em" /></span>
         </button>
       )}
     </div>

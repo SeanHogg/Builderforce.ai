@@ -19,6 +19,7 @@
  * Themed + localized; the `--ev-*` region hues cascade from the `.ev-studio` ancestor.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useFormatter, useTranslations } from 'next-intl';
@@ -101,7 +102,7 @@ export function EvermindLearnings({
         {recallMode ? (
           <>
             <button type="button" onClick={() => setHighlight(null)} style={filterChip}>
-              <span aria-hidden style={{ opacity: 0.8 }}>🎯</span>
+              <span aria-hidden style={{ opacity: 0.8 }}><Icon source="🎯" size="1em" /></span>
               {t('recallFor', { prompt: highlight!.prompt })}
               <span aria-hidden style={{ marginLeft: 2, opacity: 0.7 }}>✕</span>
             </button>

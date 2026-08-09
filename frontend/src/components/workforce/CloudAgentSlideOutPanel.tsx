@@ -1,6 +1,7 @@
 'use client';
 
 import { Select } from '@/components/Select';
+import { Icon } from '@/components/ui/Icon';
 
 import { useState, useEffect, useCallback } from 'react';
 import {
@@ -250,7 +251,7 @@ export function CloudAgentSlideOutPanel({
               ) : (
                 assignedRoles.map((r) => (
                   <span key={r.assignmentId} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 'var(--font-size-eyebrow)', fontWeight: 600, padding: '2px 8px', borderRadius: 'var(--radius-full)', background: 'var(--surface-coral-soft)', color: 'var(--coral-bright)' }}>
-                    {r.icon && <span aria-hidden>{r.icon}</span>}{r.name}
+                    {r.icon && <span aria-hidden><Icon source={r.icon} size={14} /></span>}{r.name}
                   </span>
                 ))
               )}

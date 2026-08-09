@@ -8,6 +8,7 @@ import { useDestinations } from '@/lib/destinations/useDestinations';
 import { rankDestinations, type Ranked } from '@/lib/destinations/registry';
 import { destinationHref, type GatedDestination } from '@/lib/destinations/useDestinations';
 import styles from './CommandPalette.module.css';
+import { Icon } from '@/components/ui/Icon';
 
 const PLAN_LABEL: Record<string, string> = { free: 'Free', pro: 'Pro', teams: 'Teams' };
 
@@ -108,7 +109,7 @@ export function CommandPalette() {
         aria-label={tp('openAria')}
         title={tp('openAria')}
       >
-        <span aria-hidden="true">⌕</span>
+        <Icon name="search" size={18} />
         <span>{tp('trigger')}</span>
       </button>
 
@@ -121,7 +122,7 @@ export function CommandPalette() {
           {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the dialog owns the arrow/Enter/Escape keymap for the list it labels. */}
           <div className={styles.panel} role="dialog" aria-modal="true" aria-label={tp('title')} onKeyDown={onKeyDown}>
             <div className={styles.inputRow}>
-              <span className={styles.inputIcon} aria-hidden="true">⌕</span>
+              <span className={styles.inputIcon}><Icon name="search" size={20} /></span>
               <input
                 ref={inputRef}
                 type="text"
@@ -153,7 +154,7 @@ export function CommandPalette() {
                       onMouseEnter={() => setCursor(index)}
                       onClick={() => openDestination(destination)}
                     >
-                      <span className={styles.rowIcon} aria-hidden="true">{destination.icon}</span>
+                      <span className={styles.rowIcon}><Icon source={destination.icon} size={18} /></span>
                       <span className={styles.rowLabel}>{destination.label}</span>
                       {locked
                         ? <span className={styles.rowLock}>{tp('locked', { plan: planLabel(destination.requiredPlan) })}</span>

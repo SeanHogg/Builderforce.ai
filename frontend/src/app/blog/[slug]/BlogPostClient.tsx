@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { use } from 'react';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
@@ -208,7 +209,7 @@ export default function BlogPostClient({ params }: { params: Promise<{ slug: str
 
           {!post ? (
             <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-secondary)' }}>
-              <p style={{ fontSize: 'var(--font-size-page-title)', marginBottom: 16 }}>📄</p>
+              <p style={{ fontSize: 'var(--font-size-page-title)', marginBottom: 16 }}><Icon source="📄" size="1em" /></p>
               <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'var(--font-size-section)', color: 'var(--text-primary)', marginBottom: 8 }}>
                 Post not found
               </h2>

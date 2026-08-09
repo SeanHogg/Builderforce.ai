@@ -50,7 +50,7 @@ export function FinancePanelProvider({ children }: { children: ReactNode }) {
         open={panel != null}
         onClose={close}
         width="min(960px, 96vw)"
-        title={panel ? `${panel.icon} ${t(panel.titleKey)}` : ''}
+        title={panel ? t(panel.titleKey) : ''}
         tabs={tabs}
         activeTabId={active ?? undefined}
         onTabChange={(id) => setActive(id as FinancePanelId)}

@@ -2,6 +2,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * ToastProvider — the app-wide, promise-free notification system.
@@ -147,12 +148,12 @@ function ToastCard({
   const tone = TONE[toast.tone];
   return (
     <div className="bf-toast" role={tone.role} style={{ borderLeft: `3px solid ${tone.accent}` }}>
-      <span className="bf-toast-icon" aria-hidden style={{ color: tone.accent }}>{tone.icon}</span>
+      <span className="bf-toast-icon" aria-hidden style={{ color: tone.accent }}><Icon source={tone.icon} size={19} /></span>
       <div className="bf-toast-body">
         {toast.title && <div className="bf-toast-title">{toast.title}</div>}
         <div className="bf-toast-msg">{toast.message}</div>
       </div>
-      <button type="button" className="bf-toast-x" onClick={() => onDismiss(toast.id)} aria-label={dismissLabel}>✕</button>
+      <button type="button" className="bf-toast-x" onClick={() => onDismiss(toast.id)} aria-label={dismissLabel}><Icon name="close" size={17} /></button>
     </div>
   );
 }

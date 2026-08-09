@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 import { toolsApi } from '@/lib/builderforceApi';
 import { ToolResultView } from '@/components/tools/ToolResultView';
@@ -118,7 +119,7 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
       {!embedded && <header style={{ marginBottom: 20 }}>
         <Link href="/tools" style={{ fontSize: 'var(--font-size-small)', color: 'var(--accent)', textDecoration: 'none' }}>← {t('allTools')}</Link>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '10px 0 4px' }}>
-          <span style={{ fontSize: 'var(--font-size-section)' }}>{def.icon}</span>
+          <span><Icon source={def.icon} size={24} /></span>
           <h1 style={{ fontSize: 'var(--font-size-section)', fontWeight: 800, color: 'var(--text-strong)', margin: 0 }}>{def.name}</h1>
         </div>
         <p style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', color: 'var(--coral-bright)', margin: '4px 0' }}>

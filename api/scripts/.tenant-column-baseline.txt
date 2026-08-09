@@ -48,6 +48,7 @@ newsletter_templates
 oauth_accounts
 pending_prompts
 platform_modules
+platform_pricing_configuration
 platform_personas
 privacy_requests
 prompt_library_stars

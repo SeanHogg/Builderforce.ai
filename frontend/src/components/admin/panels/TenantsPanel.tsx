@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { adminApi, type AdminTenant, type AdminUser, type TenantMember } from '@/lib/adminApi';
@@ -93,7 +94,7 @@ export default function TenantsPanel() {
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.currentTarget.click(); } }}
                 >
                   <td style={{ verticalAlign: 'middle' }}>
-                    <span style={{ display: 'inline-block', transition: 'transform 0.2s', transform: expandedTenantId === tenant.id ? 'rotate(90deg)' : 'none' }}>▶</span>
+                    <span style={{ display: 'inline-block', transition: 'transform 0.2s', transform: expandedTenantId === tenant.id ? 'rotate(90deg)' : 'none' }}><Icon source="▶" size="1em" /></span>
                   </td>
                   <td>{tenant.name}</td>
                   <td style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{tenant.slug}</td>
@@ -236,7 +237,7 @@ export default function TenantsPanel() {
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
                     <span style={{ fontWeight: 600 }}>
-                      <span style={{ display: 'inline-block', marginRight: 6, transition: 'transform 0.2s', transform: expanded ? 'rotate(90deg)' : 'none' }}>▶</span>
+                      <span style={{ display: 'inline-block', marginRight: 6, transition: 'transform 0.2s', transform: expanded ? 'rotate(90deg)' : 'none' }}><Icon source="▶" size="1em" /></span>
                       {tenant.name}
                     </span>
                     <span className={`badge ${tenant.effectivePlan === 'pro' ? 'badge-danger' : 'badge-neutral'}`}>

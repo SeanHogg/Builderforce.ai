@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 import { useBrainDataRefresh } from '@/lib/brain/useBrainDataRefresh';
@@ -460,7 +461,7 @@ export function WorkforceAgents({ tenantId }: { tenantId?: number }) {
         <div style={{ color: 'var(--muted)', fontSize: 13, padding: 24 }}>{tWf('loadingWorkforce')}</div>
       ) : isEmpty ? (
         <div className="empty-state" style={{ padding: 48 }}>
-          <div className="empty-state-icon">📁</div>
+          <div className="empty-state-icon"><Icon source="📁" size="1em" /></div>
           <div className="empty-state-title">{tWf('emptyTitle')}</div>
           <div className="empty-state-sub">{tWf('emptySub')}</div>
           <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>

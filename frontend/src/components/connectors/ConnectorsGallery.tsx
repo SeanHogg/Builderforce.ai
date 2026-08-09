@@ -7,6 +7,7 @@ import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { ClickableCard } from '@/components/ClickableCard';
 import { ConnectToggleButton } from '@/components/integrations/ConnectToggleButton';
 import { ConnectorBuilder } from '@/components/connectors/ConnectorBuilder';
+import { Icon } from '@/components/ui/Icon';
 import {
   authFieldsFor,
   connectorsApi,
@@ -166,7 +167,7 @@ export function ConnectorsGallery({ search = '', viewMode = 'card' }: { search?:
                 onClick={() => { setActiveKey(c.key); setPanelTab('connect'); }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
-                  <span aria-hidden style={{ fontSize: 18, lineHeight: 1 }}>{c.icon}</span>
+                  <span aria-hidden><Icon source={c.icon} size={20} /></span>
                   <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {c.name}
                   </span>
@@ -210,7 +211,7 @@ export function ConnectorsGallery({ search = '', viewMode = 'card' }: { search?:
         <SlideOutPanel
           open={!!activeKey}
           onClose={() => setActiveKey(null)}
-          title={`${active.icon} ${active.name}`}
+          title={active.name}
           tabs={[
             { id: 'connect', label: t('panel.connections') },
             { id: 'actions', label: t('panel.actions') },

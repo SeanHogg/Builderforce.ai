@@ -16,6 +16,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { CANVAS_FIT_MIN_ZOOM, CanvasCommands, useCanvasCleanLayout } from '@/components/canvas/CanvasCommands';
+import { Icon } from '@/components/ui/Icon';
 import { Canvas3DView, type Canvas3DMove } from '@/components/canvas/Canvas3DView';
 import { Canvas3DControlsProvider, useCanvasThreeD } from '@/components/canvas/canvas3dControls';
 import { applyCanvas3DMoves, canvas3dDepthOffset, type Canvas3DDescriptor } from '@/components/canvas/canvas3d';
@@ -61,7 +62,7 @@ function WorkspacePanel({ data, selected }: NodeProps<WorkspacePanelNode>) {
     <section className={`${styles.node} ${selected ? styles.nodeSelected : ''}`} aria-label={t('panelLabel', { title: panel.title })}>
       <NodeResizer isVisible={selected} minWidth={360} minHeight={260} />
       <header className={`${styles.header} workspace-panel-drag-handle`}>
-        <span className={styles.icon} aria-hidden>{panel.icon ?? '◇'}</span>
+        <span className={styles.icon} aria-hidden><Icon source={panel.icon ?? '◇'} size={18} /></span>
         <strong className={styles.title}>{panel.title}</strong>
         {panel.subtitle && <span className={styles.subtitle}>{panel.subtitle}</span>}
         <span className={styles.spacer} />
@@ -83,7 +84,7 @@ function MobileWorkspacePanel({ panel, onRemovePanel }: { panel: WorkspaceCanvas
   const t = useTranslations('workspaceCanvas');
   return <section className={`${styles.node} ${styles.mobileNode}`} aria-label={t('panelLabel', { title: panel.title })}>
     <header className={styles.header}>
-      <span className={styles.icon} aria-hidden>{panel.icon ?? '◇'}</span>
+      <span className={styles.icon} aria-hidden><Icon source={panel.icon ?? '◇'} size={18} /></span>
       <strong className={styles.title}>{panel.title}</strong>
       {panel.subtitle && <span className={styles.subtitle}>{panel.subtitle}</span>}
       <span className={styles.spacer} />

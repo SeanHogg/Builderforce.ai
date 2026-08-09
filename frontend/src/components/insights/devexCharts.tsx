@@ -12,6 +12,7 @@
  *                   BenchmarkModal
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type {
@@ -261,7 +262,7 @@ export function SegmentHeatmap({
               {rows.map((seg) => (
                 <tr key={seg.label}>
                   <td style={{ fontSize: '0.8rem', fontWeight: 600, whiteSpace: 'nowrap', paddingRight: 8 }}>
-                    {seg.label} <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{seg.n} 👤</span>
+                    {seg.label} <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{seg.n}  <Icon source="👤" size="1em" /></span>
                   </td>
                   {columns.map((d) => {
                     const s = seg.scores[d];
@@ -283,7 +284,7 @@ export function AnonymityNote({ threshold }: { threshold: number }) {
   const t = useTranslations('insights');
   return (
     <div style={{ marginTop: 14, padding: '12px 14px', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-      <span style={{ fontWeight: 600 }}>🛡 {t('devex.anonymityTitle', { n: threshold })}</span>
+      <span style={{ fontWeight: 600 }}><Icon source="🛡" size="1em" /> {t('devex.anonymityTitle', { n: threshold })}</span>
       <div style={{ marginTop: 4 }}>{t('devex.anonymityBody', { n: threshold })}</div>
     </div>
   );

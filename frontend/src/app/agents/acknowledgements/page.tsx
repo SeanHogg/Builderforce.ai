@@ -1,3 +1,4 @@
+import { Icon } from '@/components/ui/Icon';
 import type { Metadata } from 'next';
 import ProsePage from '../ProsePage';
 
@@ -65,7 +66,7 @@ export default function AcknowledgementsPage() {
       </section>
 
       <section>
-        <h2>How BuilderForce Agents Extends OpenClaw 🚀</h2>
+        <h2>How BuilderForce Agents Extends OpenClaw <Icon source="🚀" size="1em" /></h2>
         <p>
           BuilderForce Agents kept everything that makes OpenClaw great and added a focused developer-first orchestration layer
           on top.
@@ -80,7 +81,7 @@ export default function AcknowledgementsPage() {
       </section>
 
       <section>
-        <h2>Get Started 📦</h2>
+        <h2>Get Started <Icon source="📦" size="1em" /></h2>
         <p>Node ≥ 22 required.</p>
         <pre><code># Install
 npm install -g @seanhogg/builderforce-agents@latest
@@ -93,7 +94,7 @@ builderforce onboard --install-daemon</code></pre>
       </section>
 
       <section>
-        <h2>Open-Source Packages 📚</h2>
+        <h2>Open-Source Packages <Icon source="📚" size="1em" /></h2>
         <p>BuilderForce Agents is powered by an excellent ecosystem of open-source projects. We&apos;re grateful to every maintainer.</p>
         <ul>
           {packages.map((p) => (
@@ -105,7 +106,7 @@ builderforce onboard --install-daemon</code></pre>
       </section>
 
       <section>
-        <h2>Built By 👤</h2>
+        <h2>Built By <Icon source="👤" size="1em" /></h2>
         <p>
           <a href="https://hired.video/resumes/seanhogg" target="_blank" rel="noopener">Sean Hogg</a> — Developer,
           architect, and maintainer of BuilderForce Agents and Builderforce.ai.{' '}
@@ -115,7 +116,7 @@ builderforce onboard --install-daemon</code></pre>
       </section>
 
       <section>
-        <h2>License ⚖️</h2>
+        <h2>License <Icon source="⚖️" size="1em" /></h2>
         <p>
           BuilderForce Agents is released under the{' '}
           <a href="https://opensource.org/licenses/MIT" target="_blank" rel="noopener">MIT License</a>. Use it, fork it,

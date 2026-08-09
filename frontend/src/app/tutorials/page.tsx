@@ -7,6 +7,7 @@ import { pageMetadata } from '@/lib/seo';
 import { routeMarketingSchema } from '@/lib/structured-data';
 import { TUTORIAL_TOPICS, type TutorialTopicId } from '@/lib/tutorialCatalog';
 import styles from './TutorialsPage.module.css';
+import { Icon } from '@/components/ui/Icon';
 
 export const runtime = 'edge';
 
@@ -43,7 +44,7 @@ export default async function TutorialsPage() {
               const topic = topics[definition.id];
               return (
                 <Link key={definition.id} href={courseHref(topic)} className={styles.card} style={{ '--topic-accent': definition.accent } as CSSProperties}>
-                  <div className={styles.cardTop}><span className={styles.icon} aria-hidden="true">{definition.icon}</span><span className={styles.agent}>{t('teacherLabel', { agent: topic.agent })}</span></div>
+                  <div className={styles.cardTop}><span className={styles.icon} aria-hidden="true"><Icon source={definition.icon} size={22} /></span><span className={styles.agent}>{t('teacherLabel', { agent: topic.agent })}</span></div>
                   <h3>{topic.title}</h3><p className={styles.summary}>{topic.summary}</p>
                   <ul className={styles.outcomes}>{topic.outcomes.map((outcome) => <li key={outcome}>{outcome}</li>)}</ul>
                   <span className={styles.start}><span>{t('startCourse')}</span><span aria-hidden="true">→</span></span>

@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { joinGuestRoom, getGuestDisplayName, setGuestDisplayName, type GuestRoomState } from '@/lib/guestRoomApi';
@@ -44,7 +45,7 @@ export function GuestRoomJoinCard({
 
   return (
     <div className="grj-root">
-      <div className="grj-emoji" aria-hidden>👋</div>
+      <div className="grj-emoji" aria-hidden><Icon source="👋" size="1em" /></div>
       <div className="grj-title">{t('inviteTitle')}</div>
       <div className="grj-body">{blurb ?? t('inviteBody')}</div>
       <form className="grj-form" onSubmit={(e) => { e.preventDefault(); void join(); }}>

@@ -14,6 +14,7 @@
 
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
+import { Icon } from '@/components/ui/Icon';
 import {
   capabilitiesForSurface,
   type BrainCapabilityId,
@@ -47,7 +48,7 @@ export function BrainCapabilityPicker({ surface, value, onSelect, layout, disabl
         >
           <option value="">{t('none')}</option>
           {options.map((c) => (
-            <option key={c.id} value={c.id}>{`${c.icon} ${t(`${c.id}.label`)}`}</option>
+            <option key={c.id} value={c.id}>{t(`${c.id}.label`)}</option>
           ))}
         </Select>
       </>
@@ -90,7 +91,7 @@ export function BrainCapabilityPicker({ surface, value, onSelect, layout, disabl
                 textAlign: 'center',
               }}
             >
-              <span aria-hidden style={{ fontSize: 'var(--font-size-section)', lineHeight: 1 }}>{c.icon}</span>
+              <span aria-hidden><Icon source={c.icon} size={24} /></span>
               <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 600 }}>{t(`${c.id}.label`)}</span>
             </button>
           );

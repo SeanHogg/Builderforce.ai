@@ -8,6 +8,7 @@ import { ToolResultView } from '@/components/tools/ToolResultView';
 import { ReturningVisitorBanner } from '@/components/tools/ReturningVisitorBanner';
 import { getStoredTenantToken } from '@/lib/auth';
 import type { ToolSummary, ToolCategory, TenantDiagnosticsRollup } from '@/lib/tools';
+import { Icon } from '@/components/ui/Icon';
 
 const wrap: React.CSSProperties = { maxWidth: 980, margin: '0 auto', padding: '32px 20px' };
 const cardLink: React.CSSProperties = {
@@ -67,7 +68,7 @@ export default function ToolsHubClient() {
       {/* Featured: the full maturity diagnostic */}
       <Link href="/tools/agentic-maturity" style={{ ...cardLink, marginBottom: 24, background: 'var(--bg-elevated)', borderColor: 'var(--accent)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 'var(--font-size-section)' }}>📈</span>
+            <Icon name="insights" size={24} />
           <span style={{ fontSize: 'var(--font-size-card-title)', fontWeight: 800, color: 'var(--text-strong)' }}>{t('featuredTitle')}</span>
           <span style={{ marginLeft: 'auto', fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--accent)' }}>{t('open')} →</span>
         </div>
@@ -87,7 +88,7 @@ export default function ToolsHubClient() {
               {gridTools.filter((tool) => tool.category === cat).map((tool) => (
                 <Link key={tool.id} href={`/tools/${tool.id}`} style={cardLink}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 'var(--font-size-card-title)' }}>{tool.icon}</span>
+                    <span><Icon source={tool.icon} size={20} /></span>
                     <span style={{ fontSize: 'var(--font-size-body)', fontWeight: 700, color: 'var(--text-strong)' }}>{tool.name}</span>
                     <span style={{ marginLeft: 'auto', fontSize: 'var(--font-size-field-label)', fontWeight: 700, padding: '2px 7px', borderRadius: 'var(--radius-sm)', background: 'var(--bg-elevated)', color: 'var(--muted)' }}>
                       {t(`kind.${tool.kind}`)}

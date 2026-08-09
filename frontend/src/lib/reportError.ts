@@ -1,3 +1,5 @@
+import { apiRequest } from './apiClient';
+
 /** Fields to pre-fill the reporter when opened from an existing error. */
 export interface ReportErrorPrefill {
   title?: string;
@@ -62,4 +64,3 @@ export async function reportProductError(
   if (result.accepted !== 1) throw new Error('Could not record the report');
   return { accepted: result.accepted };
 }
-import { apiRequest } from './apiClient';

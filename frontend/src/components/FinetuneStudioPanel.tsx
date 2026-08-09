@@ -25,6 +25,7 @@ import { getFileName } from '@/lib/utils';
 import type { RightTab } from '@/lib/modality';
 import { BenchmarkPanel } from '@/components/BenchmarkPanel';
 import { ModelExportPanel } from '@/components/ModelExportPanel';
+import { Icon } from '@/components/ui/Icon';
 
 interface FinetuneStudioPanelProps {
   projectId: number | string;
@@ -184,7 +185,7 @@ export function FinetuneStudioPanel({ projectId, files = [], onGoToTab, onOpenFi
                   justifyContent: 'center', fontSize: '1.2rem',
                 }}
               >
-                {step.icon}
+                <Icon source={step.icon} size={20} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>

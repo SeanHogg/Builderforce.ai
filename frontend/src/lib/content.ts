@@ -419,95 +419,6 @@ export const AGENT_CAPABILITIES: AgentCapability[] = [
 
 /* ════════════════════ PRICING ════════════════════ */
 
-export interface PricingPlan {
-  name: string;
-  price: string;
-  priceNumeric: number;
-  period: string;
-  description: string;
-  features: string[];
-  excluded: string[];
-  cta: string;
-  ctaHref: string;
-  highlighted: boolean;
-}
-
-/** @deprecated Historical presentation snapshot. Public pricing now comes from
- * GET /api/tenants/pricing, derived from TenantService.PRICING + PLAN_LIMITS. */
-const LEGACY_PRICING_PLANS: PricingPlan[] = [
-  {
-    name: 'Free',
-    price: '$0',
-    priceNumeric: 0,
-    period: '/month',
-    description: 'Start creating on a private canvas, explore the platform, and add agents when they help.',
-    features: [
-      'Evermind self-updating model (on-device)',
-      'WebGPU LoRA training',
-      'Dataset generation wizard',
-      'AI evaluation engine',
-      'Public Workforce browsing',
-      '1 AgentHost (BuilderForce Agents instance)',
-      '5 projects',
-      '10K tokens/day',
-      'Community support',
-    ],
-    excluded: [
-      'Approval workflows',
-      'Fleet mesh + remote dispatch',
-      'Full telemetry + audit trail',
-      'Custom agent roles',
-    ],
-    cta: 'Get Started Free',
-    ctaHref: '/register',
-    highlighted: false,
-  },
-  {
-    name: 'Pro',
-    price: '$29',
-    priceNumeric: 29,
-    period: '/seat/month',
-    description: 'More projects, agent capacity, approvals, telemetry, and support for sustained creative delivery.',
-    features: [
-      'Everything in Free',
-      'Up to 3 AgentHosts',
-      'Unlimited projects',
-      '1M tokens/day',
-      'Approval workflows',
-      'Fleet mesh + remote dispatch',
-      'Full telemetry + audit trail',
-      'Custom agent roles',
-      'Priority support',
-    ],
-    excluded: [
-      'Shared team approval inbox',
-      'Per-seat cost controls',
-    ],
-    cta: 'Upgrade to Pro',
-    ctaHref: '/pricing?upgrade=pro',
-    highlighted: true,
-  },
-  {
-    name: 'Teams',
-    price: '$20',
-    priceNumeric: 20,
-    period: '/seat/month',
-    description: 'Shared controls and volume pricing for organizations coordinating work across a larger team.',
-    features: [
-      'Everything in Pro',
-      '5-seat minimum (org-wide volume pricing)',
-      'Unlimited AgentHosts',
-      '5M tokens/day',
-      'Shared team approval inbox',
-      'Per-seat cost controls',
-    ],
-    excluded: [],
-    cta: 'Upgrade to Teams',
-    ctaHref: '/pricing?upgrade=teams',
-    highlighted: false,
-  },
-];
-
 /* ════════════════════ MEDIA KIT ════════════════════ */
 
 export interface MediaAsset {
@@ -1480,8 +1391,6 @@ export const PRODUCT_SECTIONS: ProductSection[] = [
     ],
   },
 ];
-
-void LEGACY_PRICING_PLANS;
 
 void LEGACY_COMPETITIVE_COMPARISON;
 

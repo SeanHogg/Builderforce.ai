@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -365,7 +366,7 @@ function ModelCard({
       </p>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 'var(--font-size-small)', color: 'var(--text-muted)' }}>
-        <span title={t('field.contextWindow')}>🧠 {formatContext(record)}</span>
+        <span title={t('field.contextWindow')}><Icon source="🧠" size="1em" /> {formatContext(record)}</span>
         <PriceTag record={record} />
       </div>
 

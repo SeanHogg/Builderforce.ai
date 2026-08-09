@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import type { FreelancerStats } from '@/lib/freelancerApi';
+import { Icon } from '@/components/ui/Icon';
 
 /**
  * Shared trust signal — the derived Top-Rated / Rising-Talent badge and (optionally)
@@ -31,7 +32,7 @@ export function TrustBadge({ badge, jss, size = 'md', showJss = true }: {
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
       {tone && (
         <span title={t('badgeTip')} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: fs, fontWeight: 700, padding: pad, borderRadius: 'var(--radius-full)', background: tone.bg, color: tone.fg, whiteSpace: 'nowrap' }}>
-          <span aria-hidden>{tone.icon}</span>{tone.label}
+          <span aria-hidden><Icon source={tone.icon} size={14} /></span>{tone.label}
         </span>
       )}
       {showJss && jss != null && (

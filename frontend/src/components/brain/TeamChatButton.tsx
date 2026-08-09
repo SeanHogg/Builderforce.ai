@@ -17,6 +17,7 @@
  * to open the drawer, so it renders nothing. Consumers never gate on that themselves.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useOptionalBrainContext } from '@/lib/brain';
@@ -98,7 +99,7 @@ export function TeamChatButton({
         ...style,
       }}
     >
-      <span aria-hidden style={{ fontSize: 14, lineHeight: 1 }}>💬</span>
+      <span aria-hidden style={{ fontSize: 14, lineHeight: 1 }}><Icon source="💬" size="1em" /></span>
       {variant === 'labeled' && <span>{text}</span>}
     </button>
   );

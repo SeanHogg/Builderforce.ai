@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import type { Task, AgentHost } from '@/lib/builderforceApi';
 import { AgentCapabilitiesContent } from '../AgentCapabilitiesContent';
@@ -50,7 +51,7 @@ export function AgentTab({ projectId, agentHostId, tenantId, task, agentHosts, o
               cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
             }}
           >
-            <span style={{ transform: showCapabilities ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', color: 'var(--text-muted)' }}>▶</span>
+            <span style={{ transform: showCapabilities ? 'rotate(90deg)' : 'none', transition: 'transform 0.15s', color: 'var(--text-muted)' }}><Icon source="▶" size="1em" /></span>
             Agents &amp; capabilities
           </button>
           {showCapabilities && (

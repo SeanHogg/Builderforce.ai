@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useTranslations } from 'next-intl';
 import type { PublishedAgent } from '@/lib/types';
 import { formatAgentPrice } from '@/lib/agentPresentation';
@@ -87,7 +88,7 @@ export function AgentCard({
 
   return (
     <WorkforceCard
-      avatar={<span style={{ fontSize: 'var(--font-size-section)' }}>🤖</span>}
+      avatar={<span style={{ fontSize: 'var(--font-size-section)' }}><Icon source="🤖" size="1em" /></span>}
       name={agent.name}
       subtitle={subtitle}
       pill={{ kind: owner ? 'cloud' : 'marketplace', label: t('card.agentPill') }}

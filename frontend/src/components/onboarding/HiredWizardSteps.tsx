@@ -10,6 +10,7 @@
  * immediately live on the public profile.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
@@ -174,7 +175,7 @@ export function WizardResumeStep() {
           </button>
         )}
       </div>
-      {currentFile && <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 8px' }}>📄 {currentFile}</p>}
+      {currentFile && <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: '0 0 8px' }}><Icon source="📄" size="1em" /> {currentFile}</p>}
       {autofilled && <p style={{ ...okText, margin: '0 0 8px' }}>{tf('profile.autofilled')}</p>}
       <StatusLine saving={saving} saved={saved && !autofilled} error={uploadError ?? error} />
       <p style={{ ...intro, marginTop: 14, marginBottom: 0 }}>{t('resumeStep.skipHint')}</p>
