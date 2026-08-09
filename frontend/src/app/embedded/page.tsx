@@ -1,5 +1,3 @@
-'use client';
-
 import PageContainer from '@/components/PageContainer';
 import { EmbeddedCapabilities } from '@/components/embedded/EmbeddedCapabilities';
 

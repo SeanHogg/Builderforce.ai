@@ -220,7 +220,6 @@
     "columnNamePlaceholder": "Column name (e.g. Design, In Review, QA)",
     "add": "Add",
     "cancel": "Cancel",
-    "openCanvas": "Create in Canvas",
     "addSwimlane": "Add swimlane",
     "whenDone": "When done",
     "whenDoneTitle": "What happens to the ticket once this lane's agents finish",
@@ -12872,6 +12871,7 @@
     "copySnippet": "Copy install snippet",
     "copied": "Copied",
     "cancel": "Cancel",
+    "openCanvas": "Create in Canvas",
     "surfaces": {
       "title": "BuilderForce app surfaces",
       "description": "Surface Product, Agile, and Security areas as authenticated, sandboxed experiences inside another application.",
