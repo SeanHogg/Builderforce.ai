@@ -1,6 +1,7 @@
 import { and, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../infrastructure/database/connection';
 import { businessPhoneNumbers, carts, catalogItems, orderLineItems, orders, settings } from '../../infrastructure/database/schema';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import type { WebhookEvent } from '../../infrastructure/payment/PaymentProvider';
 
 export async function recordBusinessPhoneEvent(db: Db, event: WebhookEvent): Promise<void> {
@@ -22,7 +23,7 @@ export async function recordBusinessPhoneEvent(db: Db, event: WebhookEvent): Pro
     ]);
     if (event.cartId) await db.update(carts).set({ status: 'converted', convertedOrderId: orderId, updatedAt: sql`now()` }).where(and(eq(carts.id, event.cartId), eq(carts.tenantId, event.tenantId)));
   } else if (orderId) {
-    await db.update(orders).set({ status: status === 'active' ? 'paid' : status === 'cancelled' ? 'cancelled' : 'pending', updatedAt: sql`now()` }).where(eq(orders.id, orderId));
+    await db.update(orders).set({ status: status === 'active' ? 'paid' : status === 'cancelled' ? 'cancelled' : 'pending', updatedAt: sql`now()` }).where(scopedToTenant(orders, event.tenantId, eq(orders.id, orderId)));
   }
   await db.insert(settings).values({ tenantId: event.tenantId, scope: 'tenant', scopeRef: '', feature: 'business_phone', value: { status, orderId, externalSubscriptionId: event.externalSubscriptionId } }).onConflictDoUpdate({ target: [settings.tenantId, settings.scope, settings.scopeRef, settings.feature], set: { value: { status, orderId, externalSubscriptionId: event.externalSubscriptionId }, updatedAt: sql`now()` } });
 }
