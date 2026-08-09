@@ -147,7 +147,9 @@ function authoredWebsite(saved) {
     await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 });
     await dismissIfVisible(page.getByRole('button', { name: /necessary only/i }), 5000);
     const persisted = await snapshot(page);
-    assert(JSON.stringify(persisted.nodes) === JSON.stringify(second.nodes), 'Website edits did not persist across reload.');
+    const persistedWebsite = authoredWebsite(persisted);
+    assert(persistedWebsite.id === secondWebsite.id, 'Reload did not preserve the edited website object.');
+    assert(JSON.stringify(persistedWebsite.data.pages) === JSON.stringify(secondWebsite.data.pages), 'Website pages did not persist across reload.');
     await page.screenshot({ path: 'docker-website-wysiwyg-followup.png', fullPage: true });
 
     console.log(JSON.stringify({
