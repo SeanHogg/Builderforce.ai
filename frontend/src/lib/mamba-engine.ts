@@ -402,6 +402,22 @@ export class MambaEngine {
     return this.state.agentId;
   }
 
+  /** Release WebGPU resources owned by this engine. Safe to call repeatedly. */
+  dispose(): void {
+    const gpu = this.gpuBackend;
+    this.gpuBackend = null;
+    this.gpuReady = false;
+    if (!gpu) return;
+
+    gpu.paramsBuffer.destroy();
+    gpu.stateBuffer.destroy();
+    gpu.inputBuffer.destroy();
+    gpu.stateOutBuffer.destroy();
+    gpu.outputBuffer.destroy();
+    gpu.readbackBuffer.destroy();
+    gpu.device.destroy();
+  }
+
   // -- Private helpers -------------------------------------------------------
 
   private makeInitialState(agentId: string, projectId: string | number): MambaAgentState {
