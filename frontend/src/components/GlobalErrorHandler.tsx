@@ -239,7 +239,7 @@ function Toast({
         >
           {expanded ? <IconChevronUp /> : <IconChevronDown />}
         </button>
-        {/* Report this error into a project's Quality feed. */}
+        {/* Add user context to this error in BuilderForce.ai's product Quality feed. */}
         <button
           onClick={() => requestReportError({
             title: `${ev.status}${ev.code ? ` ${ev.code}` : ''}`.trim(),

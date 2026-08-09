@@ -4,6 +4,7 @@ import { MAX_TABULAR_COLUMNS } from '@/lib/canvasTabularData';
 import { DEFAULT_MODALITY } from '@/lib/modality';
 import { DEFAULT_PITCH_COMPETITION_ID } from '@/lib/pitchCompetition';
 import { buildLlmCourse, COURSE_EXPORT_STANDARDS } from '@/lib/courseLms';
+import { defaultCanvasTourDesign } from '@/lib/onboarding/canvasTourDesign';
 
 export type CreationObjectGroup = 'Build' | 'Data' | 'Knowledge' | 'Insights' | 'Work' | 'Pitch' | 'People' | 'Agents' | 'Models' | 'Collaborate' | 'Integrations';
 
@@ -47,6 +48,7 @@ const BASE_CREATION_OBJECT_REGISTRY = [
   { kind: 'roadmap', label: 'Roadmap', icon: '↗', group: 'Insights', createData: () => ({ kind: 'roadmap', title: 'Executive sales roadmap', status: 'Draft' }) },
   { kind: 'note', label: 'Note', icon: '◇', group: 'Insights', createData: () => ({ kind: 'note', title: 'Note', subtitle: 'Add context for your collaborators.' }) },
   { kind: 'prototype', label: 'WYSIWYG', icon: '▣', group: 'Build', createData: () => ({ kind: 'prototype', title: 'Interactive prototype', status: 'Draft' }) },
+  { kind: 'guidedTour', label: 'Guided tour', icon: '◉', group: 'Build', createData: () => ({ kind: 'guidedTour', title: 'Product onboarding tour', status: 'Draft · 2 steps', tour: defaultCanvasTourDesign() }) },
   { kind: 'code', label: 'Code', icon: '</>', group: 'Build', createData: () => ({ kind: 'code', title: 'Code workspace', status: 'Draft' }) },
   // Browser / URL / Local service all render the SAME live page panel — they
   // differ only in where the address comes from (typed, dropped, or forwarded
@@ -147,6 +149,7 @@ const ACTIONS: Partial<Record<CreationObjectKind, readonly string[]>> = {
   inbox: ['refresh', 'filter', 'pin'], email: ['reply', 'open'],
   emailCampaign: ['draft', 'send'], emailTemplate: ['edit', 'apply'],
   course: ['learn', 'export'],
+  guidedTour: ['preview'],
 };
 
 const MUTABLE_FIELDS = {
@@ -186,6 +189,7 @@ const MUTABLE_FIELDS = {
   service: ['content', 'url', 'port', 'viewport', 'pageTitle'],
   llm: ['content', 'model', 'instructions', 'parameters'],
   course: ['content', 'course', 'exportStandards'],
+  guidedTour: ['content', 'tour'],
   project: ['content', 'projectLens', 'sources', 'qualityScore', 'qualityLabel', 'qualityHeadline', 'diagnosticCount', 'gapCount', 'diagnostics', 'recommendations', 'qualityUpdatedAt'],
   salesPipeline: ['content', 'ownerUserId', 'stages', 'pipelineCounts', 'recommendations', 'sources'],
   salesContact: ['content', 'ownerUserId', 'contactId', 'email', 'company', 'market', 'stage', 'lastTouchAt'],
@@ -338,7 +342,7 @@ const CONTEXT_FIELDS = [
   // it through the template tools rather than reading it out of the snapshot.
   'audienceId', 'audienceName', 'transport', 'recipients', 'failed', 'opened', 'clicked', 'blockers',
   'mergeFields', 'assetId', 'logoUrl',
-  'course', 'exportStandards',
+  'course', 'exportStandards', 'tour',
 ] as const;
 const SENSITIVE_CONTEXT_KEY = /(?:secret|token|password|credential|authorization|api.?key|cookie)/i;
 const DEFAULT_CONTEXT_ARRAY_LIMIT = 25;
@@ -373,6 +377,7 @@ const DEFAULT_CONTEXT_DEPTH_LIMIT = 3;
  */
 const CONTEXT_DEPTH_LIMITS: Readonly<Partial<Record<string, number>>> = {
   course: 5,
+  tour: 5,
 };
 
 function safeContextValue(

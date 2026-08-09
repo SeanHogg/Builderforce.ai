@@ -12,8 +12,13 @@
  * subscribers, and the components are views of it.
  *
  * Signed-out visitors cost nothing — there is no token, so there is no fetch.
- * The fetch is lazy: it happens on the first mount that needs it, once per page
- * lifetime, and after that a mutation updates the store in place.
+ * The fetch is lazy: it happens on the first mount that needs it, once per
+ * SESSION, and after that a mutation updates the store in place.
+ *
+ * Session, not page: signing out is a state change here, not a reload, so a
+ * module-level cache would otherwise show the next person to use this tab the
+ * standing of the last one. The loaded state remembers WHOSE it is and is
+ * dropped the moment the token changes — including to none.
  */
 
 import { useCallback, useEffect, useState } from 'react';
@@ -30,9 +35,11 @@ interface BetaState {
   /** The server's choice of which beta is worth a banner — never the client's. */
   bannerBetaId: string | null;
   loaded: boolean;
+  /** The session this state describes. null = nobody's, i.e. signed out. */
+  owner: string | null;
 }
 
-const EMPTY: BetaState = { betas: [], bannerBetaId: null, loaded: false };
+const EMPTY: BetaState = { betas: [], bannerBetaId: null, loaded: false, owner: null };
 
 let state: BetaState = EMPTY;
 let inFlight: Promise<void> | null = null;
@@ -43,14 +50,14 @@ function publish(next: BetaState): void {
   subscribers.forEach((fn) => fn(next));
 }
 
-/** Load once per page lifetime. A failure is silent and re-armed: a beta invite
- *  is never worth an error surface, and the next mount may well succeed. */
-function loadOnce(): Promise<void> {
-  if (state.loaded) return Promise.resolve();
+/** Load once per session. A failure is silent and re-armed on the next session:
+ *  a beta invite is never worth an error surface. */
+function loadOnce(token: string): Promise<void> {
+  if (state.loaded && state.owner === token) return Promise.resolve();
   if (!inFlight) {
     inFlight = fetchBetaPrograms()
-      .then(({ betas, bannerBetaId }) => publish({ betas, bannerBetaId, loaded: true }))
-      .catch(() => { publish({ ...EMPTY, loaded: true }); })
+      .then(({ betas, bannerBetaId }) => publish({ betas, bannerBetaId, loaded: true, owner: token }))
+      .catch(() => { publish({ ...EMPTY, loaded: true, owner: token }); })
       .finally(() => { inFlight = null; });
   }
   return inFlight;
@@ -83,15 +90,22 @@ export interface UseBetaPrograms {
 
 export function useBetaPrograms(): UseBetaPrograms {
   const [local, setLocal] = useState<BetaState>(state);
+  // Read per render rather than once: signing in or out re-renders everything
+  // under the auth provider, and that re-render is the signal this store gets.
+  const token = getStoredWebToken();
 
   useEffect(() => {
-    // No session, no betas — and no request. Enrolment is per person, so there
-    // is nothing to ask about until someone is signed in.
-    if (!getStoredWebToken()) return undefined;
+    // No session, no betas — and no request. Whatever the previous person in
+    // this tab had loaded goes with them.
+    if (!token) {
+      if (state.owner !== null || state.loaded) publish(EMPTY);
+      return undefined;
+    }
     subscribers.add(setLocal);
-    void loadOnce();
+    if (state.owner !== null && state.owner !== token) publish(EMPTY);
+    void loadOnce(token);
     return () => { subscribers.delete(setLocal); };
-  }, []);
+  }, [token]);
 
   const act = useCallback(async (id: string, action: BetaAction, agreed = false) => {
     const previous = state;

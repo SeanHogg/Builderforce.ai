@@ -53,6 +53,7 @@ privacy_requests
 prompt_library_stars
 prompt_library_versions
 qa_run_steps
+release_note_beta_enrollments
 release_notes
 role_permission_overrides
 sales_associate_settings

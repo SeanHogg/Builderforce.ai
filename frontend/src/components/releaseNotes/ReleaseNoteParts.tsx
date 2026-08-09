@@ -50,7 +50,7 @@ function Pill({ accent, children }: { accent: string; children: React.ReactNode 
         display: 'inline-flex',
         alignItems: 'center',
         gap: 6,
-        fontSize: 11,
+        fontSize: 'var(--font-size-eyebrow)',
         fontWeight: 700,
         letterSpacing: 0.4,
         textTransform: 'uppercase',
@@ -95,7 +95,7 @@ export function ReleaseNoteBody({ body }: { body: string | null }) {
   return (
     <>
       {paragraphs.map((para, i) => (
-        <p key={i} style={{ margin: '0 0 8px', fontSize: 14, lineHeight: 1.6, color: 'var(--text-secondary)' }}>
+        <p key={i} style={{ margin: '0 0 8px', fontSize: 'var(--font-size-body)', lineHeight: 1.6, color: 'var(--text-secondary)' }}>
           {para}
         </p>
       ))}

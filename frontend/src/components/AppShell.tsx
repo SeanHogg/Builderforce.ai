@@ -6,6 +6,7 @@ import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import MobileBottomNav from './MobileBottomNav';
 import EmulationBar from './EmulationBar';
+import BetaBanner from './beta/BetaBanner';
 import PermissionDebuggerPanel from './PermissionDebuggerPanel';
 import QaTelemetry from './QaTelemetry';
 import { useEmulation } from '@/lib/EmulationContext';
@@ -78,6 +79,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="app-frame">
       <EmulationBar />
+      {/* The open beta on offer, if this person has not answered it yet. In flow
+          at the top of the frame so it pushes the shell down rather than covering
+          the nav; it decides its own visibility and costs nothing otherwise. */}
+      <BetaBanner />
       <PermissionDebuggerPanel />
       <QaTelemetry />
       <div

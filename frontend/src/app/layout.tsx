@@ -190,7 +190,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                         <ConfirmProvider>
                           <ToastProvider>
                             <DemoModeProvider>
-                              <ConditionalAppShell>{children}</ConditionalAppShell>
+                              <ConditionalAppShell
+                                qualityErrorApiKey={QUALITY_ERROR_KEY}
+                                qualityEndpoint={QUALITY_ENDPOINT}
+                              >
+                                {children}
+                              </ConditionalAppShell>
                             </DemoModeProvider>
                           </ToastProvider>
                         </ConfirmProvider>

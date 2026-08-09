@@ -9503,7 +9503,16 @@
       "sendNoteHint": "立即将此更新发送给所有已同意接收的用户——之后将不会包含在每周汇总中。",
       "resendNoteHint": "此更新已发送过。再次发送给所有已同意接收的用户。",
       "sendNoteConfirm": "现在就将更新日志“{title}”发送给所有已同意接收的用户吗？之后它将不会包含在每周汇总中。",
-      "resendNoteConfirm": "此更新已发送过。现在再次将“{title}”发送给所有已同意接收的用户吗？"
+      "resendNoteConfirm": "此更新已发送过。现在再次将“{title}”发送给所有已同意接收的用户吗？",
+      "stage": "阶段",
+      "thStage": "阶段",
+      "thBeta": "测试版",
+      "betaOptIn": "允许用户自行加入此测试版",
+      "betaOptInHint": "关闭即为仅限邀请：横幅中不会提供该测试版。",
+      "phBetaTerms": "用户加入前必须接受的测试版条款。留空则使用平台标准测试版条款。",
+      "releasesOn": "计划发布日期",
+      "sunsetsOn": "下线日期",
+      "participants": "{count, plural, =0 {暂无参与者} other {# 人}}"
     },
     "demoFunnel": {
       "title": "演示转化漏斗",
@@ -12243,15 +12252,13 @@
   "globalError": {
     "collapse": "收起",
     "expandDetails": "展开详情",
-    "report": "上报到项目",
+    "report": "上报此错误",
     "copyTicket": "复制支持工单",
     "dismiss": "关闭"
   },
   "reportError": {
     "title": "上报错误",
-    "intro": "将错误提交到某个项目。它会与自动采集的错误一起出现在该项目的质量列表中。",
-    "projectLabel": "项目",
-    "projectPlaceholder": "选择一个项目…",
+    "intro": "向 BuilderForce.ai 产品团队发送更多信息。该错误会记录到产品的质量列表中。",
     "titleLabel": "标题",
     "titlePlaceholder": "简要摘要（可选）",
     "messageLabel": "发生了什么？",
@@ -12261,8 +12268,7 @@
     "level_error": "错误",
     "level_warning": "警告",
     "level_info": "信息",
-    "noProjects": "你还没有项目——请先创建一个项目再上报错误。",
-    "reported": "错误已上报到项目。",
+    "reported": "错误已上报到 BuilderForce.ai。",
     "failed": "无法上报该错误。",
     "cancel": "取消",
     "submit": "上报错误",
@@ -12509,8 +12515,29 @@
     "linkSignIn": "登录",
     "linkGetStarted": "开始使用"
   },
+  "beta": {
+    "crumb": "产品更新",
+    "bannerLabel": "Beta 计划",
+    "bannerLead": "已进入公开测试 — 在向所有人开放之前抢先体验。",
+    "bannerLeadDated": "已进入公开测试 — 在 {date} 全面发布之前抢先体验。",
+    "joinCta": "加入测试",
+    "join": "加入测试版",
+    "leave": "退出测试版",
+    "manage": "管理测试版",
+    "notNow": "暂不",
+    "working": "处理中…",
+    "whatIsIt": "这是什么？",
+    "lastUpdated": "最后更新于 {date}",
+    "rollsOut": "计划于 {date} 发布。",
+    "termsTitle": "测试版条款",
+    "defaultTerms": "测试版功能按现状提供，可能随时变更、出现故障或被撤回，且不受任何服务级别承诺的保障。我们可能会就测试版联系您收集反馈。您的使用仍受《使用条款》约束，您可以随时在“产品更新”中退出测试版。",
+    "agreeLabel": "我已阅读并同意以上测试版条款以及",
+    "joinedOn": "您已于 {date} 加入此测试版。",
+    "joinedAlready": "您正在参与此测试版。",
+    "actionFailed": "操作未成功，请重试。"
+  },
   "whatsNew": {
-    "title": "新功能",
+    "title": "产品更新",
     "loading": "加载中…",
     "error": "无法加载更新日志，请稍后重试。",
     "empty": "暂无更新，敬请期待。",
@@ -12518,6 +12545,13 @@
       "new": "新功能",
       "improvement": "改进",
       "fix": "修复"
+    },
+    "stages": {
+      "in_development": "开发中",
+      "private_beta": "私有测试版",
+      "public_beta": "公开测试版",
+      "live": "已上线",
+      "sunset": "即将下线"
     }
   },
   "demo": {
@@ -13550,7 +13584,13 @@
       "email": "邮件",
       "emailCampaign": "邮件营销活动",
       "emailTemplate": "邮件模板",
-      "course": "课程"
+      "course": "课程",
+      "guidedTour": "引导式导览"
+    },
+    "tourBuilder": {
+      "closePreview": "关闭导览预览", "stepOf": "第 {current} 步，共 {total} 步", "targetConnected": "已连接目标", "targetNeeded": "请选择目标对象", "back": "返回", "finish": "完成", "next": "下一步", "offer": "导览邀请",
+      "stepCount": "{count} 个步骤", "visitCount": "访问 {count} 次后显示", "escapeEnabled": "已启用退出通道",
+      "settings": "引导式导览设置", "settingsHint": "设计一个可选择加入的导览，并将每个步骤连接到要突出显示的画布对象。", "draftSteps": "草稿 · {count} 个步骤", "offerTitle": "邀请标题", "offerBody": "邀请说明", "version": "导览版本", "minimumVisits": "显示前访问次数", "blurBackground": "邀请时模糊背景", "escapeHatch": "始终提供关闭和 Escape", "steps": "导览步骤", "addStep": "添加步骤", "newStepTitle": "新导览步骤", "stepTitle": "步骤标题", "stepBody": "步骤说明", "targetObject": "要突出显示的对象", "chooseTarget": "选择对象", "removeStep": "删除步骤"
     },
     "canvasOutline": "无障碍画布大纲",
     "canvasGestureToggle": "拖动以框选",
@@ -13725,6 +13765,12 @@
     "largeSessionHint": "仅渲染可见对象。使用框架或隐藏较重的对象可保持导航流畅。",
     "toggleObjectPalette": "切换对象面板",
     "closePalette": "关闭面板",
+    "tourLabel": "引导式导览",
+    "tourOfferTitle": "欢迎使用创作画布",
+    "tourOfferBody": "通过六个简短步骤，了解 Brain、对象、连接、协作者和交付如何协同工作。您可以随时退出导览。",
+    "tourStart": "开始导览",
+    "tourCancel": "暂时不要",
+    "tourClose": "关闭导览",
     "tourStep": "第 {step} / 6 步",
     "tourTitle1": "在 Brain 面板中提问",
     "tourTitle2": "一切皆是对象",

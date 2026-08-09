@@ -4,6 +4,7 @@ import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import MobileBottomNav from './MobileBottomNav';
 import AppFooter from './AppFooter';
+import BetaBanner from './beta/BetaBanner';
 import { useSidebarCollapse } from '@/lib/useSidebarCollapse';
 import { useMobileNav } from '@/lib/useMobileNav';
 
@@ -23,6 +24,9 @@ export default function PublicShell({ children }: { children: React.ReactNode })
 
   return (
     <div className="app-frame">
+      {/* Same offer as in the app: a signed-in reader on a marketing/browse page
+          is still someone who can join the beta. Renders nothing when signed out. */}
+      <BetaBanner />
       <div className={`shell ${collapsed ? 'nav-collapsed' : ''}`} style={{ position: 'relative' }}>
         <TopBar onMenuClick={openNav} />
         <Sidebar collapsed={collapsed} onToggleCollapsed={toggle} mobileOpen={navOpen} onMobileClose={closeNav} />

@@ -103,7 +103,7 @@ export function SectionTour(props: SectionTourProps) {
   const offer = phase === 'offer';
   const cardStyle = offer ? undefined : positionCard(box);
   return createPortal(<div className={styles.root} role="dialog" aria-modal="true" aria-label={props.label}>
-    <div className={`${styles.veil} ${offer ? styles.offerVeil : ''}`} />
+    <div className={`${styles.veil} ${offer ? styles.offerVeil : styles.activeVeil}`} />
     {!offer && box && <div className={styles.spotlight} style={box} />}
     <div ref={cardRef} tabIndex={-1} className={`${styles.card} ${offer ? styles.offerCard : ''}`} style={cardStyle}>
       <button type="button" className={styles.close} aria-label={props.closeLabel} onClick={() => props.onCancel('close')}>×</button>

@@ -13,6 +13,7 @@
 
 import { useEffect } from 'react';
 import { init } from '@seanhogg/builderforce-quality';
+import { API_ERROR_EVENT, type ApiErrorEvent } from '@/lib/errors/apiErrorEvent';
 
 interface Props {
   apiKey: string;
@@ -24,7 +25,25 @@ interface Props {
 export function QualityErrorReporter({ apiKey, endpoint, environment, release }: Props) {
   useEffect(() => {
     if (!apiKey) return;
-    init({ key: apiKey, endpoint, environment, release });
+    const client = init({ key: apiKey, endpoint, environment, release });
+    const captureApiError = (event: Event) => {
+      const error = (event as CustomEvent<ApiErrorEvent>).detail;
+      client.captureMessage(`${error.status}${error.code ? ` ${error.code}` : ''}: ${error.message}`, {
+        level: 'error',
+        url: error.url,
+        tags: { source: 'api-client', method: error.method, status: String(error.status) },
+        context: {
+          requestId: error.requestId,
+          details: error.details,
+          page: window.location.href,
+        },
+      });
+    };
+    window.addEventListener(API_ERROR_EVENT, captureApiError);
+    return () => {
+      window.removeEventListener(API_ERROR_EVENT, captureApiError);
+      client.close();
+    };
   }, [apiKey, endpoint, environment, release]);
 
   return null;

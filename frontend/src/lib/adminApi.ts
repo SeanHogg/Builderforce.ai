@@ -8,6 +8,7 @@ import { getStoredWebToken } from './auth';
 import type { LlmModelStatus, VendorId } from './builderforceApi';
 import type { PsychometricProfile } from './psychometric';
 import type { FeedbackQueue, FeedbackStatus } from './feedbackApi';
+import type { ReleaseNoteStage } from './releaseNotesApi';
 
 export type { LlmModelStatus, VendorId };
 
@@ -664,8 +665,14 @@ export interface AdminReleaseNote {
   title: string;
   body: string | null;
   category: string;
+  stage: string;
+  betaOptIn: boolean;
+  betaTerms: string | null;
+  stageEndsAt: string | null;
   publishedAt: string | null;
   emailedAt: string | null;
+  /** People currently IN this beta — 0 for anything not opened for enrolment. */
+  participants: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -675,6 +682,11 @@ export interface AdminReleaseNoteInput {
   title: string;
   body?: string | null;
   category?: AdminReleaseNoteCategory;
+  stage?: ReleaseNoteStage;
+  betaOptIn?: boolean;
+  betaTerms?: string | null;
+  /** ISO date — "scheduled for release" on a beta, sunset date on a sunset. */
+  stageEndsAt?: string | null;
   publish?: boolean;
 }
 

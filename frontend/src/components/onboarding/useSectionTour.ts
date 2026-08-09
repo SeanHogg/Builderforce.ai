@@ -21,6 +21,7 @@ export function useSectionTour({ sectionId, version, audienceId, enabled = true,
   const [phase, setPhase] = useState<SectionTourPhase>('idle');
   const [step, setStep] = useState(0);
   const historyRef = useRef<SectionTourHistory | null>(null);
+  const visitedAudienceRef = useRef<string | null>(null);
   const activityRef = useRef(activity);
   activityRef.current = activity;
 
@@ -30,6 +31,9 @@ export function useSectionTour({ sectionId, version, audienceId, enabled = true,
 
   useEffect(() => {
     if (!enabled || !audienceId) return;
+    const visitKey = `${sectionId}:${audienceId}:${version}`;
+    if (visitedAudienceRef.current === visitKey) return;
+    visitedAudienceRef.current = visitKey;
     const result = registerSectionVisit(readSectionTourHistory(sectionId, audienceId), { version, minimumVisits });
     historyRef.current = result.history;
     writeSectionTourHistory(sectionId, audienceId, result.history);

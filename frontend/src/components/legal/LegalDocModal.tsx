@@ -12,6 +12,9 @@ interface LegalDocModalProps {
   type: LegalModalType | null;
   legal: LegalCurrent | null;
   onClose: () => void;
+  /** Raise the reader above a panel that opened it — the beta join flow shows
+   *  the terms from inside its own slide-out, which already claims a layer. */
+  zIndex?: number;
 }
 
 /**
@@ -23,7 +26,7 @@ interface LegalDocModalProps {
  * modals are reserved for terminal / destructive approvals — every other overlay,
  * including read-only detail views like this one, is a slide-out side panel.
  */
-export default function LegalDocModal({ type, legal, onClose }: LegalDocModalProps) {
+export default function LegalDocModal({ type, legal, onClose, zIndex }: LegalDocModalProps) {
   const t = useTranslations('legal');
 
   const doc = type === 'terms' ? legal?.terms : legal?.privacy;
@@ -35,6 +38,7 @@ export default function LegalDocModal({ type, legal, onClose }: LegalDocModalPro
       onClose={onClose}
       width="min(920px, 96vw)"
       title={`${doc?.title ?? modalTitle}${doc?.version ? ` · v${doc.version}` : ''}`}
+      {...(zIndex != null ? { zIndex } : {})}
     >
       <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 14 }}>
         {doc?.publishedAt && (

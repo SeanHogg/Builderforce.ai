@@ -11,6 +11,7 @@ import { ButtonLink } from '@/components/ui';
 import SidebarLegalMenu from './legal/SidebarLegalMenu';
 import SessionList from './SessionList';
 import UsageMeter from './UsageMeter';
+import { NavIcon } from './navigation/NavIcon';
 
 /**
  * The left panel (PRD 21 §3.2).
@@ -54,7 +55,7 @@ function GroupLink({ group, active, onNavigate, t, badge = 0, locked = false, lo
   const label = t(group.labelKey);
   const body = (
     <>
-      <span style={{ fontSize: 'var(--font-size-card-title)', flexShrink: 0 }}>{group.icon}</span>
+      <span className="nav-item-icon"><NavIcon name={group.id} /></span>
       <span className="nav-item-label">{label}</span>
       {locked && <span className="nav-item__lock" aria-hidden="true">🔒</span>}
       {!!badge && <span aria-label={`${badge} unread sessions`} style={{ marginLeft: 'auto', minWidth: 17, height: 17, borderRadius: 'var(--radius-full)', display: 'grid', placeItems: 'center', background: 'var(--accent)', color: 'var(--text-on-accent)', fontSize: 'var(--font-size-field-label)', fontWeight: 800 }}>{badge > 99 ? '99+' : badge}</span>}
@@ -68,7 +69,7 @@ function GroupLink({ group, active, onNavigate, t, badge = 0, locked = false, lo
   // middle-click, so the state has to be the element, not a class on it.
   if (locked) {
     return (
-      <span className="nav-item nav-item--locked flex items-center" aria-disabled="true" title={lockHint} data-tour={group.id}>
+      <span className="nav-item nav-item--locked flex items-center" aria-disabled="true" title={lockHint} data-label={label} data-tour={group.id}>
         {body}
       </span>
     );
@@ -81,6 +82,7 @@ function GroupLink({ group, active, onNavigate, t, badge = 0, locked = false, lo
       className={`nav-item ${active ? 'active' : ''} flex items-center`}
       style={{ textAlign: 'left' }}
       aria-current={active ? 'page' : undefined}
+      data-label={label}
       // Stable anchor for the demo product tour (DemoTour) — the group id maps to
       // a TourAnchor. Inert outside a demo session.
       data-tour={group.id}
@@ -125,6 +127,9 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
           >
             <polyline points="15 18 9 12 15 6" />
           </svg>
+          <span className="nav-collapse-tooltip" role="tooltip">
+            {collapsed ? t('expandSidebar') : t('collapseSidebar')}
+          </span>
         </button>
 
         {/* Mobile drawer header (hidden on desktop via CSS) */}

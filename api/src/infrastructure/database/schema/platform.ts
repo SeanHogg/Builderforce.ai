@@ -561,6 +561,18 @@ export const platformPricing = pgTable('platform_pricing', {
   uniqueIndex('uq_platform_pricing_plan').on(t.planCode, t.region, t.effectiveFrom),
 ]);
 
+/** Singleton draft + published snapshot for the public pricing surfaces. Draft
+ * edits are deliberately separate from the immutable published snapshot so a
+ * half-finished admin edit can never leak onto marketing pages. */
+export const platformPricingConfiguration = pgTable('platform_pricing_configuration', {
+  key:               varchar('key', { length: 32 }).primaryKey(),
+  draftDocument:     jsonb('draft_document').notNull(),
+  publishedDocument: jsonb('published_document').notNull(),
+  publishedAt:       timestamp('published_at').notNull().defaultNow(),
+  publishedBy:       varchar('published_by', { length: 36 }),
+  updatedAt:         timestamp('updated_at').notNull().defaultNow(),
+});
+
 /**
  * A queued unit of background processing.
  *

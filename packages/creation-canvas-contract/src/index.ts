@@ -20,6 +20,9 @@ export const CREATION_OBJECT_KINDS = [
   'emailCampaign', 'emailTemplate',
   // A standards-based learning experience authored and completed on the canvas.
   'course',
+  // A reusable, target-aware product onboarding design. It stays provider-neutral:
+  // the Canvas authors the contract and each delivery surface supplies its anchors.
+  'guidedTour',
 ] as const;
 
 export type CreationObjectKind = typeof CREATION_OBJECT_KINDS[number];

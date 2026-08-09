@@ -80,6 +80,12 @@ describe('creation object registry', () => {
     expect(course.modules[0]!.lessons[0]).toEqual({ title: 'Sourcing', nested: { safe: true } });
   });
 
+  it('keeps a guided tour contract authorable while stripping sensitive fields', () => {
+    const patch = sanitizeCreationObjectPatch('guidedTour', { tour: { version: 2, minimumVisits: 2, offerTitle: 'Welcome', apiKey: 'hidden', steps: [{ id: 'one', title: 'Start here', body: 'Learn this area', targetObjectId: 'node-1' }] } });
+    expect(patch.tour).toMatchObject({ version: 2, minimumVisits: 2, steps: [{ targetObjectId: 'node-1' }] });
+    expect(patch.tour).not.toHaveProperty('apiKey');
+  });
+
   it('shows Brain the lessons of a course that is already on the board', () => {
     // The read-side twin of the sanitizer bug above. A teacher agent asked to
     // work through the material one step at a time and check understanding was

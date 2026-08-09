@@ -282,7 +282,11 @@ function MarketingConversionTracker() {
   return null;
 }
 
-function AppBrainShell({ children }: { children: React.ReactNode }) {
+function AppBrainShell({ children, qualityErrorApiKey, qualityEndpoint }: {
+  children: React.ReactNode;
+  qualityErrorApiKey: string;
+  qualityEndpoint: string;
+}) {
   const content = useShellContent(children);
   const { hasTenant, isAuthenticated } = useAuth();
   const pathname = usePathname() || '';
@@ -331,7 +335,7 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
           <CanvasPanelProvider>
           <BrainActionsProvider>
             <BrainContextProvider>
-              <ReportErrorProvider>
+              <ReportErrorProvider apiKey={qualityErrorApiKey} endpoint={qualityEndpoint}>
               {content}
               {/* The room, rendered once at shell level so the call is visible —
                   and controllable — from wherever the person has navigated to.
@@ -405,7 +409,11 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function ConditionalAppShell({ children }: { children: React.ReactNode }) {
+export default function ConditionalAppShell({ children, qualityErrorApiKey, qualityEndpoint }: {
+  children: React.ReactNode;
+  qualityErrorApiKey: string;
+  qualityEndpoint: string;
+}) {
   // `/embed` is framed cross-origin (VS Code webview / third-party host) and gets a
   // lean provider tree (no global Brain launcher/bridges) so a webview-hostile
   // global effect can't take the framed page down with it; every other route gets
@@ -415,6 +423,8 @@ export default function ConditionalAppShell({ children }: { children: React.Reac
   return pathname.startsWith('/embed') ? (
     <EmbedShell>{children}</EmbedShell>
   ) : (
-    <AppBrainShell>{children}</AppBrainShell>
+    <AppBrainShell qualityErrorApiKey={qualityErrorApiKey} qualityEndpoint={qualityEndpoint}>
+      {children}
+    </AppBrainShell>
   );
 }

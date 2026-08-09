@@ -90,6 +90,7 @@ import { isBrainAutoApprove, setBrainAutoApprove } from '@/lib/brain/autoApprove
 import { useConfirm } from '@/components/ConfirmProvider';
 import { SectionTour, type SectionTourStep } from '@/components/onboarding/SectionTour';
 import { useSectionTour } from '@/components/onboarding/useSectionTour';
+import { canvasTourDesignFromNode, type CanvasTourDesign } from '@/lib/onboarding/canvasTourDesign';
 import { useChatModelOptions } from '@/lib/useLlmModels';
 import { ChatInput, type ChatModelSelection } from '@/components/ChatInput';
 import { PromptUseCasePicker } from '@/components/PromptUseCasePicker';
@@ -165,6 +166,15 @@ const COURSE_AUTHORING_SCHEMA = {
         },
       },
     },
+  },
+} as const;
+const GUIDED_TOUR_AUTHORING_SCHEMA = {
+  type: 'object',
+  required: ['version', 'minimumVisits', 'offerTitle', 'offerBody', 'startLabel', 'cancelLabel', 'blurBackground', 'escapeHatch', 'steps'],
+  properties: {
+    version: { type: 'number' }, minimumVisits: { type: 'number' }, offerTitle: { type: 'string' }, offerBody: { type: 'string' },
+    startLabel: { type: 'string' }, cancelLabel: { type: 'string' }, blurBackground: { type: 'boolean' }, escapeHatch: { type: 'boolean', const: true },
+    steps: { type: 'array', minItems: 1, items: { type: 'object', required: ['id', 'title', 'body', 'targetObjectId'], properties: { id: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' }, targetObjectId: { type: 'string', description: 'Canvas object id to spotlight; use an empty string until a target exists.' } } } },
   },
 } as const;
 const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
@@ -704,6 +714,29 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const [allMembers, setAllMembers] = useState<CreationSessionDetail['members']>([]);
   const [pendingInvitations, setPendingInvitations] = useState<CreationSessionInvitation[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const tourSteps = useMemo<SectionTourStep[]>(() => Array.from({ length: 6 }, (_, index) => ({
+    title: t(`tourTitle${index + 1}` as 'tourTitle1'),
+    body: t(`tourBody${index + 1}` as 'tourBody1'),
+    target: [
+      '[data-tour="creation-brain-dock"]',
+      '[data-tour="creation-object-palette"]',
+      '[data-tour="creation-board"]',
+      '[data-tour="creation-board"]',
+      '[data-tour="creation-collaborators"]',
+      '[data-tour="creation-share"]',
+    ][index],
+  })), [t]);
+  const sectionTour = useSectionTour({
+    sectionId: 'creation-canvas',
+    version: 2,
+    audienceId: currentUserId || (persistence === 'local' ? 'guest' : null),
+    activity: { sessionId, clientSurface: canvasSurface() },
+  });
+  const prepareTourStep = useCallback((step: number) => {
+    setMoreOpen(false);
+    setShareOpen(false);
+    if (step === 1) setPaletteOpen(true);
+  }, []);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<CreationSnapshotSummary[]>([]);
   const [timeline, setTimeline] = useState<CanvasTimelineMessage[]>([]);
@@ -3049,7 +3082,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       properties: {
         kind: { type: 'string', enum: CREATION_OBJECT_REGISTRY.map((definition) => definition.kind) },
         title: { type: 'string' }, subtitle: { type: 'string' }, status: { type: 'string' },
-        fields: { type: 'object', description: 'Type-specific authored content. Unknown or sensitive fields are rejected. For courses, course must match the declared nested schema; do not probe for it.', properties: { course: COURSE_AUTHORING_SCHEMA }, additionalProperties: true },
+        fields: { type: 'object', description: 'Type-specific authored content. Unknown or sensitive fields are rejected. For courses, course must match the declared nested schema. For guidedTour objects, author the complete reusable onboarding contract in tour.', properties: { course: COURSE_AUTHORING_SCHEMA, tour: GUIDED_TOUR_AUTHORING_SCHEMA }, additionalProperties: true },
         x: { type: 'number' }, y: { type: 'number' }, width: { type: 'number' }, height: { type: 'number' },
       },
     },
@@ -4573,7 +4606,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * of the Brain surface: it stays put and stays reachable whether Brain is inline in
    * its Object, docked to either edge, or closed entirely.
    */
-  const composer = !presentMode && <div className={styles.composerDock}>
+  const composer = !presentMode && <div className={styles.composerDock} data-tour="creation-brain-dock">
     <PromptUseCasePicker placement="top" onSelect={setPrompt} />
     <ChatInput
       className={styles.composer}
@@ -4618,7 +4651,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       <div className={styles.sessionBar}>
         <div className={styles.titleBlock}><span className={styles.spark}>✦</span><input aria-label={t('sessionTitle')} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice(t('titleSaveFailed'))); }} /><span className={styles.saved}>{notice}</span>{persistence === 'server' && <span role="status" aria-live="polite" className={styles.realtimeStatus} data-state={realtimeState}>{realtimeState === 'online' ? t('live') : realtimeState === 'offline' ? t('offlineRetry') : realtimeState === 'reconnecting' ? t('reconnecting') : t('connecting')}</span>}</div>
         <div className={styles.sessionActions}>
-          <div className={styles.collaborators} aria-label={t('activeCollaborators')}>
+          <div className={styles.collaborators} aria-label={t('activeCollaborators')} data-tour="creation-collaborators">
             {/* In a shared free session the roster is REAL — showing only "you"
                 while three other people move cards around is a lie the board
                 itself contradicts. */}
@@ -4653,7 +4686,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           {/* A local canvas opens the SAME share menu a saved one does. It used to
               open a sign-up gate, which answered a question nobody asked: they
               wanted to show someone the board, not to create an account. */}
-          <button className={styles.secondaryButton} onClick={() => { setShareOpen((value) => !value); setMoreOpen(false); }}>{t('share')} ▾</button>
+          <button className={styles.secondaryButton} data-tour="creation-share" onClick={() => { setShareOpen((value) => !value); setMoreOpen(false); }}>{t('share')} ▾</button>
           {persistence === 'local' && <button className={`${styles.secondaryButton} ${styles.saveButton}`} aria-label={t('saveCollaborate')} onClick={() => requireAccount('save', t('gateSaveTitle'), t('gateSaveBody'))}><span className={styles.saveButtonFull}>{t('saveCollaborate')}</span><span className={styles.saveButtonShort} aria-hidden>{t('save')}</span></button>}
           {moreOpen && <div className={styles.moreMenu} aria-label={t('moreActions')}>
             <span className={styles.moreMenuHeading}>{t('createAndView')}</span>
@@ -4664,7 +4697,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
             <span className={styles.moreMenuHeading}>{t('sessionTools')}</span>
             <button onClick={() => { openHistory(); setMoreOpen(false); }}><span aria-hidden>↶</span>{t('history')}</button>
             <button onClick={() => { exportSession(); setMoreOpen(false); }}><span aria-hidden>↓</span>{t('exportCanvas')}</button>
-            <button onClick={() => { setTourStep(1); setMoreOpen(false); }}><span aria-hidden>?</span>{t('tutorial')}</button>
+            <button onClick={() => { sectionTour.openOffer(); setMoreOpen(false); }}><span aria-hidden>?</span>{t('tutorial')}</button>
             <button onClick={() => { setShowHidden((value) => !value); setMoreOpen(false); }}><span aria-hidden>◉</span>{showHidden ? t('hideHidden') : t('showHidden')}</button>
             <button onClick={() => { createBranch(); setMoreOpen(false); }}><span aria-hidden>⑂</span>{t('branch')}</button>
             {branchParentId && <button onClick={() => { prepareMerge(); setMoreOpen(false); }}><span aria-hidden>⇄</span>{t('merge')}</button>}
@@ -4728,6 +4761,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       <div
         ref={flowWrapRef}
         className={styles.flowWrap}
+        data-tour="creation-board"
         style={{
           // The dock owns one edge of the board; every other floating panel is
           // pushed in by exactly its width so nothing can ever sit underneath it.
@@ -4760,11 +4794,6 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         </div>}
         {loadingSession && <div className={styles.canvasSkeleton} role="status" aria-live="polite"><span /><span /><span /><b>{t('loadingSession')}</b></div>}
         {nodes.length > 100 && <div className={styles.performanceNotice} role="status"><strong>{t('largeSession', { count: nodes.length })}</strong><span>{t('largeSessionHint')}</span><button type="button" onClick={openPalette}>{t('frame')}</button></div>}
-        {tourStep > 0 && <div style={{ position: 'absolute', zIndex: 30, top: 18, left: '50%', transform: 'translateX(-50%)', width: 'min(430px, calc(100% - 32px))', padding: 16, borderRadius: 'var(--radius-lg)', background: 'var(--bg-elevated, white)', boxShadow: '0 14px 44px rgba(25,40,70,.22)', border: '1px solid var(--border-subtle)' }}>
-          <strong>{t(`tourTitle${tourStep}` as 'tourTitle1')}</strong>
-          <p style={{ margin: '7px 0 12px', color: 'var(--text-secondary)', fontSize: 13 }}>{t(`tourBody${tourStep}` as 'tourBody1')}</p>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><small>{t('tourStep', { step: tourStep })}</small><span style={{ display: 'flex', gap: 7 }}><button className={styles.secondaryButton} onClick={() => { localStorage.setItem(tourStorageKey, '1'); setTourStep(0); }}>{t('dismiss')}</button><button className={styles.primaryButton} onClick={() => { trackActivity('creation_tutorial_step_completed', { sessionId, metadata: { clientSurface: canvasSurface(), step: tourStep } }); if (tourStep < 6) setTourStep((step) => step + 1); else { localStorage.setItem(tourStorageKey, '1'); setTourStep(0); } }}>{tourStep < 6 ? t('next') : t('startCreating')}</button></span></div>
-        </div>}
         <BrainSurfaceProvider value={brainSurface}>
         <ReactFlow<CreationFlowNode, Edge>
           nodes={renderedNodes}
@@ -5008,6 +5037,26 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           onClick={() => updateBrainDock({ open: true })}
         ><span aria-hidden>✦</span>{t('brain')}</button>}
       </div>
+      <SectionTour
+        phase={sectionTour.phase}
+        step={sectionTour.step}
+        steps={tourSteps}
+        label={t('tourLabel')}
+        offerTitle={t('tourOfferTitle')}
+        offerBody={t('tourOfferBody')}
+        startLabel={t('tourStart')}
+        cancelLabel={t('tourCancel')}
+        closeLabel={t('tourClose')}
+        backLabel={t('back')}
+        nextLabel={t('next')}
+        finishLabel={t('startCreating')}
+        stepLabel={(current) => t('tourStep', { step: current })}
+        onStart={sectionTour.start}
+        onCancel={sectionTour.cancel}
+        onNext={() => sectionTour.next(tourSteps.length)}
+        onBack={sectionTour.back}
+        onStepChange={prepareTourStep}
+      />
     </div>
   );
 }
@@ -5019,6 +5068,39 @@ function RemoteCursors({ members, currentUserId, instance, container }: { member
     const screen = instance.flowToScreenPosition({ x: member.cursor!.x!, y: member.cursor!.y! });
     return <span key={member.userId} style={{ left: screen.x - rect.left, top: screen.y - rect.top, color: ['var(--canvas-presence-1)', 'var(--canvas-presence-2)', 'var(--canvas-presence-3)', 'var(--canvas-presence-4)'][index % 4] }}><i>◢</i><b>{member.displayName || 'Collaborator'}{member.typing ? ' · …' : ''}</b></span>;
   })}</div>;
+}
+
+function GuidedTourInspector({ node, nodes, onChange }: { node: CreationFlowNode; nodes: CreationFlowNode[]; onChange: (patch: Partial<CreationNodeData>) => void }) {
+  const t = useTranslations('creationCanvas.tourBuilder');
+  const objectT = useTranslations('creationCanvas.object');
+  const tour = canvasTourDesignFromNode(node.data);
+  const update = (patch: Partial<CanvasTourDesign>) => {
+    const next = { ...tour, ...patch };
+    onChange({ tour: next, status: t('draftSteps', { count: next.steps.length }) });
+  };
+  const updateStep = (index: number, patch: Partial<CanvasTourDesign['steps'][number]>) => update({ steps: tour.steps.map((step, stepIndex) => stepIndex === index ? { ...step, ...patch } : step) });
+  const targets = nodes.filter((candidate) => candidate.id !== node.id);
+  return <section className={styles.tourInspector} aria-label={t('settings')}>
+    <p className={styles.inspectorHint}>{t('settingsHint')}</p>
+    <label>{t('offerTitle')}<input value={tour.offerTitle} onChange={(event) => update({ offerTitle: event.target.value })} /></label>
+    <label>{t('offerBody')}<textarea rows={3} value={tour.offerBody} onChange={(event) => update({ offerBody: event.target.value })} /></label>
+    <div className={styles.tourInspectorGrid}>
+      <label>{t('version')}<input type="number" min={1} max={999} value={tour.version} onChange={(event) => update({ version: Number(event.target.value) || 1 })} /></label>
+      <label>{t('minimumVisits')}<input type="number" min={1} max={20} value={tour.minimumVisits} onChange={(event) => update({ minimumVisits: Number(event.target.value) || 1 })} /></label>
+    </div>
+    <label className={styles.tourToggle}><input type="checkbox" checked={tour.blurBackground} onChange={(event) => update({ blurBackground: event.target.checked })} /><span>{t('blurBackground')}</span></label>
+    <label className={styles.tourToggle}><input type="checkbox" checked disabled /><span>{t('escapeHatch')}</span></label>
+    <div className={styles.tourStepEditor}>
+      <div className={styles.tourStepEditorHeader}><strong>{t('steps')}</strong><button type="button" onClick={() => update({ steps: [...tour.steps, { id: crypto.randomUUID(), title: t('newStepTitle'), body: '', targetObjectId: '' }] })}>{t('addStep')}</button></div>
+      {tour.steps.map((step, index) => <fieldset key={step.id} className={styles.tourStepFields}>
+        <legend>{t('stepOf', { current: index + 1, total: tour.steps.length })}</legend>
+        <label>{t('stepTitle')}<input value={step.title} onChange={(event) => updateStep(index, { title: event.target.value })} /></label>
+        <label>{t('stepBody')}<textarea rows={2} value={step.body} onChange={(event) => updateStep(index, { body: event.target.value })} /></label>
+        <label>{t('targetObject')}<select value={step.targetObjectId} onChange={(event) => updateStep(index, { targetObjectId: event.target.value })}><option value="">{t('chooseTarget')}</option>{targets.map((target) => <option key={target.id} value={target.id}>{target.data.title} · {objectT(target.data.kind)}</option>)}</select></label>
+        <button type="button" disabled={tour.steps.length <= 1} onClick={() => update({ steps: tour.steps.filter((_, stepIndex) => stepIndex !== index) })}>{t('removeStep')}</button>
+      </fieldset>)}
+    </div>
+  </section>;
 }
 
 function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId, persistence, role, editable, members, onChange, onWebsiteViewportChange, onClose, onRun, onPublishWebsite, onOpenBuild, onAttachBuild, onDeleteBuildWorkspace, onBuildWebsiteWithCode, creatingBuild, onGenerateVideo, onRunCreativeAction, onShipGame, onEditWorkflow, onBuildWorkflow, onSaveAgent, onAddAgentKnowledge, onRunAgentTest, onSaveFramePreset, onExpandProject, onLoadProjectQuality, onCompareProjects, onDeliverMockup, onExpandMockupSet, onImportDataset, onVisualizeDataset, onPlotDataset, onProfileDataset, onAttachEvermindProject, onExpandEvermindPipeline, onTrainEvermind, onStartStandup, onConvertDrawio, onExportArtifact }: { node: CreationFlowNode; nodes: CreationFlowNode[]; edges: Edge[]; focus: 'knowledge' | 'test' | 'evaluation' | 'delivery' | null; timeline: CanvasTimelineMessage[]; brainTrace: BrainTraceEvent[]; sessionId: string; persistence: 'local' | 'server'; role: CreationSessionSummary['role']; editable: boolean; members: CreationSessionDetail['members']; onChange: (patch: Partial<CreationNodeData>) => void; onWebsiteViewportChange: (viewport: 'desktop' | 'tablet' | 'mobile') => void; onClose: () => void; onRun: () => void; onPublishWebsite: () => void; onOpenBuild: () => void; onAttachBuild: (ide: IdeProject) => void; onDeleteBuildWorkspace: () => void; onBuildWebsiteWithCode: () => void; creatingBuild: boolean; onGenerateVideo: () => void; onRunCreativeAction: (action: string) => void; onShipGame: () => void; onEditWorkflow: () => void; onBuildWorkflow: () => void; onSaveAgent: () => void; onAddAgentKnowledge: (content: string) => void; onRunAgentTest: (testPrompt: string, expected: string) => void | Promise<void>; onSaveFramePreset: () => void; onExpandProject: () => void; onLoadProjectQuality: () => void; onCompareProjects: () => void; onDeliverMockup: () => void; onExpandMockupSet: () => void; onImportDataset: (file: File) => void | Promise<void>; onVisualizeDataset: () => void; onPlotDataset: () => void; onProfileDataset: (nodeId: string) => void; onAttachEvermindProject: () => void; onExpandEvermindPipeline: () => void; onTrainEvermind: () => void; onStartStandup: () => void; onConvertDrawio: (diagramId?: string) => string; onExportArtifact: (action: CanvasExportAction) => Promise<string> }) {
@@ -5200,6 +5282,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
       </section>}
       {kind === 'staff' && <><label>{t('role')}<input value={node.data.role || ''} onChange={(event) => onChange({ role: event.target.value })} /></label><label>{t('currentFocus')}<textarea value={node.data.focus || ''} onChange={(event) => onChange({ focus: event.target.value })} rows={4} /></label></>}
       {(kind === 'website' || kind === 'prototype') && <><label>{t('headline')}<input value={typeof node.data.websiteHeadline === 'string' ? node.data.websiteHeadline : 'Fall in love with every look'} onChange={(event) => onChange({ websiteHeadline: event.target.value })} /></label><label>{t('supportingCopy')}<textarea rows={3} value={typeof node.data.websiteBody === 'string' ? node.data.websiteBody : 'New arrivals for the season ahead.'} onChange={(event) => onChange({ websiteBody: event.target.value })} /></label><label>{t('callToAction')}<input value={typeof node.data.websiteCta === 'string' ? node.data.websiteCta : 'Shop the collection'} onChange={(event) => onChange({ websiteCta: event.target.value })} /></label><label>{t('accentColor')}<input type="color" value={typeof node.data.websiteAccent === 'string' ? node.data.websiteAccent : AUTHORED_WEBSITE_ACCENT} onChange={(event) => onChange({ websiteAccent: event.target.value })} /></label><label>{t('viewport')}<select value={typeof node.data.viewport === 'string' ? node.data.viewport : 'desktop'} onChange={(event) => onWebsiteViewportChange(event.target.value as 'desktop' | 'tablet' | 'mobile')}><option value="desktop">{t('viewportDesktop')}</option><option value="tablet">{t('viewportTablet')}</option><option value="mobile">{t('viewportMobile')}</option></select></label>{kind === 'website' && <><label>{t('subdomain')}<input value={typeof node.data.subdomain === 'string' ? node.data.subdomain : ''} placeholder={t('subdomainPlaceholder')} onChange={(event) => onChange({ subdomain: event.target.value })} /></label><button type="button" className={styles.fullButton} onClick={onPublishWebsite}>{t('publishWebsite')}</button>{typeof node.data.siteUrl === 'string' && <a href={node.data.siteUrl} target="_blank" rel="noreferrer">{t('openPublishedSite')}</a>}<button type="button" className={styles.secondaryFullButton} onClick={onBuildWebsiteWithCode}>{t('build.websiteWithCode')}</button><p className={styles.inspectorHint}>{t('build.websiteWithCodeHint')}</p></>}<p className={styles.inspectorHint}>{t('websiteLiveHint')}</p></>}
+      {kind === 'guidedTour' && <GuidedTourInspector node={node} nodes={nodes} onChange={onChange} />}
       {kind === 'build' && <BuildInspectorSection node={node} editable={editable} creating={creatingBuild} persistence={persistence} onChange={onChange} onOpenBuild={onOpenBuild} onAttachBuild={onAttachBuild} onDeleteBuildWorkspace={onDeleteBuildWorkspace} />}
       {kind === 'video' && <><label>{t('prompt')}<textarea rows={5} value={typeof node.data.prompt === 'string' ? node.data.prompt : ''} onChange={(event) => onChange({ prompt: event.target.value })} placeholder={t('videoPromptPlaceholder')} /></label><label>{t('publishedEvermindModel')}<input value={typeof node.data.modelSlug === 'string' ? node.data.modelSlug : ''} onChange={(event) => onChange({ modelSlug: event.target.value })} placeholder={t('mediaModelPlaceholder')} /></label><label>{t('frames')}<input type="number" min="1" max="64" value={typeof node.data.maxFrames === 'number' ? node.data.maxFrames : 16} onChange={(event) => onChange({ maxFrames: Math.max(1, Math.min(64, Number(event.target.value) || 16)) })} /></label><button type="button" className={styles.fullButton} onClick={onGenerateVideo}>{t('generateVideo')}</button>{typeof node.data.videoUrl === 'string' && <img src={node.data.videoUrl} alt={t('videoFirstFrame')} style={{ width: '100%', borderRadius: 'var(--radius-lg)' }} />}</>}
       {kind === 'workflow' && <><label>{t('executionTarget')}<select value={typeof node.data.runTarget === 'string' ? node.data.runTarget : 'builderforce'} onChange={(event) => onChange({ runTarget: event.target.value })}><option value="builderforce">BuilderForce.AI</option><option value="campaign-strategist">Campaign Strategist</option></select></label><label>{t('approvalMode')}<select value={typeof node.data.approvalMode === 'string' ? node.data.approvalMode : 'required'} onChange={(event) => onChange({ approvalMode: event.target.value })}><option value="required">{t('approvalRequiredBeforePublish')}</option><option value="autonomous">{t('fullyAutonomous')}</option></select></label><button type="button" className={styles.fullButton} onClick={onEditWorkflow}>{t('editWorkflowOnCanvas')}</button><button type="button" className={styles.fullButton} onClick={onBuildWorkflow}>{t('buildWorkflow')}</button><button className={styles.fullButton} onClick={onRun}>{`▶ ${t('runWorkflow')}`}</button></>}
@@ -5308,7 +5391,7 @@ function Inspector({ node, nodes, edges, focus, timeline, brainTrace, sessionId,
           onChange={(event) => onChange({ diagram: event.target.value, content: event.target.value })}
         /></label>
       </>}
-      {!['chat', 'agent', 'evaluation', 'staff', 'website', 'prototype', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'task', 'mockup', 'evermind', 'standup', 'frame', 'drawing', 'diagram'].includes(kind) && !DOCUMENT_EDITOR_KINDS.has(kind) && !CREATIVE_GENERATOR_KINDS.has(kind) && <p className={styles.inspectorHint}>{t('objectLiveHint')}</p>}
+      {!['chat', 'agent', 'evaluation', 'staff', 'website', 'prototype', 'guidedTour', 'workflow', 'dashboard', 'dataset', 'voice', 'project', 'task', 'mockup', 'evermind', 'standup', 'frame', 'drawing', 'diagram'].includes(kind) && !DOCUMENT_EDITOR_KINDS.has(kind) && !CREATIVE_GENERATOR_KINDS.has(kind) && <p className={styles.inspectorHint}>{t('objectLiveHint')}</p>}
       </fieldset> : <ActivityInspector sessionId={sessionId} objectId={node.id} persistence={persistence} role={role} members={members} />}
       {tab === 'details' && canvasExportActionsFor(node.data).length > 0 && <section aria-label={t('copyAndDownload')} style={{ display: 'grid', gap: 7, paddingTop: 12, borderTop: '1px solid var(--border-subtle)' }}>
         <strong style={{ fontSize: 12 }}>{t('copyAndDownload')}</strong>

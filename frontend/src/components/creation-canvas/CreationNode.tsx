@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
 import { Handle, NodeResizer, Position, useStore, type Node, type NodeProps } from '@xyflow/react';
 import { useTranslations } from 'next-intl';
 import type { BrainTraceEvent } from '@seanhogg/builderforce-brain-embedded';
@@ -38,6 +38,7 @@ import { MermaidDiagram } from '@/components/MermaidDiagram';
 import { COURSE_EXPORT_STANDARDS, courseFromNode, courseProgress } from '@/lib/courseLms';
 import ToolRunnerClient from '@/app/tools/[id]/ToolRunnerClient';
 import type { ToolResult } from '@/lib/tools';
+import { canvasTourDesignFromNode } from '@/lib/onboarding/canvasTourDesign';
 
 export type CreationFlowNode = Node<CreationNodeData, 'creation'>;
 
@@ -111,6 +112,35 @@ function CourseBody({ data, onEdit }: { data: CreationNodeData; onEdit?: (patch:
         </div>
       </section>
     </div>
+  </div>;
+}
+
+function GuidedTourBody({ data }: { data: CreationNodeData }) {
+  const t = useTranslations('creationCanvas.tourBuilder');
+  const tour = canvasTourDesignFromNode(data);
+  const [previewStep, setPreviewStep] = useState(-1);
+  const active = previewStep >= 0 ? tour.steps[previewStep] : null;
+  const stop = (event: MouseEvent) => event.stopPropagation();
+  return <div className={`${styles.tourDesign} nodrag nowheel`} onClick={stop}>
+    <div className={styles.tourPreview} data-blur={tour.blurBackground ? 'true' : 'false'}>
+      <div className={styles.tourPreviewChrome} aria-hidden><i /><i /><i /></div>
+      <div className={styles.tourPreviewCard}>
+        <button type="button" aria-label={t('closePreview')} onClick={() => setPreviewStep(-1)}>×</button>
+        {active ? <>
+          <small>{t('stepOf', { current: previewStep + 1, total: tour.steps.length })}</small>
+          <strong>{active.title}</strong>
+          <p>{active.body}</p>
+          <span>{active.targetObjectId ? t('targetConnected') : t('targetNeeded')}</span>
+          <div><button type="button" disabled={previewStep === 0} onClick={() => setPreviewStep((value) => Math.max(0, value - 1))}>{t('back')}</button><button type="button" onClick={() => setPreviewStep((value) => value >= tour.steps.length - 1 ? -1 : value + 1)}>{previewStep >= tour.steps.length - 1 ? t('finish') : t('next')}</button></div>
+        </> : <>
+          <small>{t('offer')}</small>
+          <strong>{tour.offerTitle}</strong>
+          <p>{tour.offerBody}</p>
+          <div><button type="button">{tour.cancelLabel}</button><button type="button" onClick={() => setPreviewStep(0)}>{tour.startLabel}</button></div>
+        </>}
+      </div>
+    </div>
+    <div className={styles.tourDesignMeta}><span>{t('stepCount', { count: tour.steps.length })}</span><span>{t('visitCount', { count: tour.minimumVisits })}</span>{tour.escapeHatch && <span>{t('escapeEnabled')}</span>}</div>
   </div>;
 }
 
@@ -1769,7 +1799,7 @@ function useAuthoredNodeSize(id: string): { width?: number; height?: number } {
 
 export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenDetails, onEditData, onExport }: CreationNodeProps) {
   const t = useTranslations('creationCanvas.node');
-  const isWide = ['workflow', 'website', 'prototype', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication', 'course',
+  const isWide = ['workflow', 'website', 'prototype', 'guidedTour', 'dashboard', 'chart', 'map', 'report', 'evaluation', 'diagnostics', 'roadmap', 'slides', 'document', 'diagram', 'prd', 'knowledge', 'code', 'table', 'spreadsheet', 'featureSummary', 'mockupSet', 'evermind', 'projectComparison', 'frame', 'pitch', 'pitchScorecard', 'pitchQa', 'pitchApplication', 'course',
     // A game is played in its own body, so it needs the width a game needs.
     'game'].includes(data.kind) || WEB_PAGE_KINDS.has(data.kind);
   // Every kind with a body of its own. A kind missing from here renders its own
@@ -1777,7 +1807,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
   // creative kinds did: a studio tile followed by a second, redundant block
   // repeating the same authored text. They are folded in from the one set that
   // already lists them, so a new creative kind cannot reintroduce the same bug.
-  const specialized = new Set(['workflow','website','build','prototype','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','course','game', ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
+  const specialized = new Set(['workflow','website','build','prototype','guidedTour','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','course','game', ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
   const authoredSize = useAuthoredNodeSize(id);
   const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || AUTHORED_FRAME_FILL), borderColor: String(data.frameBorder || AUTHORED_FRAME_BORDER) } : undefined;
   const cardStyle = { ...frameStyle, ...authoredSize };
@@ -1803,6 +1833,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
         {typeof data.pipelineStep === 'number' && <div className={styles.pipelineNodeGuide} data-start={data.pipelineStart === true ? 'true' : 'false'}><b>{data.pipelineStart === true ? t('startHere') : t('stepOfFive', { step: data.pipelineStep })}</b><span>{String(data.pipelineInstruction || t('pipelineFallback'))}</span></div>}
         {data.kind === 'workflow' && <WorkflowBody data={data} />}
         {(data.kind === 'website' || data.kind === 'prototype') && <WebsiteBody data={data} />}
+        {data.kind === 'guidedTour' && <GuidedTourBody data={data} />}
         {data.kind === 'build' && <BuildBody data={data} />}
         {WEB_PAGE_KINDS.has(data.kind) && <CanvasWebPage
           data={data}

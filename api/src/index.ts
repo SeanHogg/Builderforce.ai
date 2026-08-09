@@ -491,7 +491,6 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // outside the presentation layer, so this is where the connection is bound to
   // the use cases and the route files stay free of `src/infrastructure`.
   app.route('/api/objects', createObjectRoutes(createObjectRegistry(db, env)));
-  app.route('/api', createDomainRoutes(createDomainService(db, env), createEntityService(db, env), createTeamRosterService(db, env)));
   app.route('/api/timecards', createTimecardRoutes());
   // Two-sided marketplace: job postings + proposals (bidding) and the in-app feed.
   app.route('/api/jobs', createJobRoutes());
@@ -799,6 +798,13 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/monitoring',        createMonitoringRoutes(db));
   app.route('/api/knowledge',         createKnowledgeRoutes(db));
   app.route('/api/knowledge-market',  createKnowledgeMarketRoutes(db)); // PUBLIC browse (logged-out)
+
+  // The domain router is intentionally LAST among `/api` mounts. It owns dynamic
+  // `/api/:domain/*` paths and installs blanket auth for them; mounting it earlier
+  // makes that middleware intercept unrelated routes registered below it (including
+  // the public knowledge marketplace and marketplace stats feeds) before their own
+  // handlers can run.
+  app.route('/api', createDomainRoutes(createDomainService(db, env), createEntityService(db, env), createTeamRosterService(db, env)));
 
   app.onError(errorHandler);
   app.notFound((c) => addCorsToResponse(c, c.json({ error: 'Not found' }, 404)));

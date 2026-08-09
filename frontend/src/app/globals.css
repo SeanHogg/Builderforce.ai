@@ -74,8 +74,8 @@
 
   /* BuilderForceAgentsLink-style shell (same header, footer, slide-out nav) */
   --footer-height: 44px;
-  --shell-nav-width: 220px;
-  --shell-nav-width-collapsed: 52px;
+  --shell-nav-width: 240px;
+  --shell-nav-width-collapsed: 64px;
   --shell-topbar-height: 56px;
   /* Aliases for BuilderForceAgentsLink class names */
   --bg: var(--bg-deep);
@@ -1413,14 +1413,13 @@ html[data-theme='light'] .nebula {
   min-height: 0;
   /* visible so the collapse handle can straddle the right divider */
   overflow: visible;
-  padding: 16px 12px;
-  background: color-mix(in srgb, var(--bg) 86%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  padding: 18px 14px 14px;
+  background: var(--chrome-strong);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  transition: width 0.2s ease;
+  box-shadow: 8px 0 24px color-mix(in srgb, var(--bg-deep) 12%, transparent);
+  transition: width 0.2s ease, padding 0.2s ease;
 }
 
 .nav-main {
@@ -1530,28 +1529,56 @@ html[data-theme='light'] .nebula {
    and straddling the right divider so it bridges the sidebar/content border. */
 .nav-collapse-toggle {
   position: absolute;
-  top: 14px;
-  right: -13px;
+  top: 16px;
+  right: -15px;
   z-index: 3;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
   padding: 0;
   border: 1px solid var(--border);
   border-radius: 50%;
   background: var(--bg-elevated, var(--bg));
   color: var(--muted);
   cursor: pointer;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
-  transition: color var(--duration-fast) ease, background var(--duration-fast) ease, border-color var(--duration-fast) ease;
+  box-shadow: 0 4px 12px var(--surface-overlay);
+  transition: color var(--duration-fast) ease, background var(--duration-fast) ease, border-color var(--duration-fast) ease, transform var(--duration-fast) ease;
 }
 
 .nav-collapse-toggle:hover {
   color: var(--text);
   background: var(--bg-hover);
   border-color: var(--accent-subtle, var(--border));
+  transform: translateX(2px);
+}
+
+.nav-collapse-tooltip {
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  z-index: 20;
+  width: max-content;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 8px 24px var(--surface-overlay);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(4px, -50%);
+  transition: opacity var(--duration-fast) ease, transform var(--duration-fast) ease;
+}
+
+.nav-collapse-toggle:hover .nav-collapse-tooltip,
+.nav-collapse-toggle:focus-visible .nav-collapse-tooltip {
+  opacity: 1;
+  transform: translate(0, -50%);
 }
 
 .nav-section {
@@ -1624,14 +1651,15 @@ html[data-theme='light'] .nebula {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  min-height: 40px;
+  padding: 9px 10px;
   border-radius: var(--radius-md);
   border: 1px solid transparent;
   color: var(--muted);
   cursor: pointer;
-  transition: all var(--duration-fast) ease;
-  font-size: 13px;
-  font-weight: 500;
+  transition: color var(--duration-fast) ease, background var(--duration-fast) ease, border-color var(--duration-fast) ease, transform var(--duration-fast) ease;
+  font-size: var(--font-size-body);
+  font-weight: 550;
   width: 100%;
   text-align: left;
   background: transparent;
@@ -1641,12 +1669,27 @@ html[data-theme='light'] .nebula {
 .nav-item:hover {
   color: var(--text);
   background: var(--bg-hover);
+  transform: translateX(2px);
 }
 
 .nav-item.active {
   color: var(--text-strong);
   background: var(--accent-subtle);
   border-color: rgba(77, 158, 255, 0.15);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.nav-item-icon {
+  display: grid;
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  color: currentColor;
+}
+
+.nav-item-icon svg {
+  display: block;
 }
 
 /* Disable, never hide (PRD 21 §2.6 rule 7) — a destination a signed-out visitor
@@ -1688,7 +1731,7 @@ html[data-theme='light'] .nebula {
 }
 
 .nav.collapsed {
-  padding: 16px 8px;
+  padding: 14px 10px 68px;
 }
 
 .nav.collapsed .nav-section-label {
@@ -1704,9 +1747,56 @@ html[data-theme='light'] .nebula {
 }
 
 .nav.collapsed .nav-item {
-  padding: 8px;
+  position: relative;
+  min-height: 42px;
+  padding: 9px;
   justify-content: center;
   gap: 0;
+}
+
+.nav.collapsed .nav-item::after {
+  content: attr(data-label);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  z-index: 30;
+  width: max-content;
+  max-width: 220px;
+  padding: 8px 11px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 8px 24px var(--surface-overlay);
+  font-size: var(--font-size-small);
+  font-weight: 600;
+  line-height: 1.2;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(4px, -50%);
+  transition: opacity var(--duration-fast) ease, transform var(--duration-fast) ease;
+}
+
+.nav.collapsed .nav-item:hover::after,
+.nav.collapsed .nav-item:focus-visible::after {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+.nav.collapsed .nav-collapse-toggle {
+  top: auto;
+  right: 11px;
+  bottom: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  box-shadow: none;
+}
+
+.nav.collapsed .nav-collapse-toggle:hover {
+  background: var(--accent-subtle);
+  border-color: var(--border-accent);
+  transform: none;
 }
 
 .nav.collapsed .nav-item-label {
@@ -2963,6 +3053,7 @@ select.input option {
   }
   .nav.collapsed .nav-item { padding: 10px 12px; justify-content: flex-start; gap: 10px; }
   .nav.collapsed .nav-item-label { display: inline; }
+  .nav.collapsed .nav-item::after { display: none; }
 
   /* Hide the desktop collapse chevron in the drawer — the X closes it */
   .nav-collapse-toggle { display: none; }
@@ -4049,10 +4140,13 @@ select.input option {
    recovery, the carousel) advance their state on those events and would hang
    forever if the events never arrived. This is the WCAG-recommended form.
 
-   `transform` is neutralised separately because a translate/scale hover is the
-   motion itself, not merely its timing — with only the duration collapsed it
-   would still jump to the moved position. Border, shadow and colour hover
-   states are untouched, so every affordance still reads.
+   This rule deliberately leaves `transform` values intact. Many components
+   (dropdowns, canvas nodes, centered dialogs) use transforms as layout
+   coordinates rather than optional motion; resetting them on hover moves the
+   element somewhere else. Decorative transform effects that need stronger
+   reduced-motion treatment must opt out in their own component rule, where the
+   structural and decorative transforms can be distinguished safely. Border,
+   shadow and colour hover states remain untouched, so affordances still read.
 
    Deliberately NOT `!important`-free: an inline `style={{ transition }}` or a
    CSS-module rule would otherwise out-specify this, and there are ~2,600 inline
@@ -4069,11 +4163,5 @@ select.input option {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
-  }
-
-  /* A moved element must not merely arrive instantly — it must not move. */
-  *:not(.motion-essential):not(.motion-essential *):hover,
-  *:not(.motion-essential):not(.motion-essential *):focus-visible {
-    transform: none !important;
   }
 }

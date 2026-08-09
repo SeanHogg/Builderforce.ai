@@ -9503,7 +9503,16 @@
       "sendNoteHint": "Diese Neuerung jetzt per E-Mail an alle einwilligenden Nutzer senden – sie wird aus der wöchentlichen Zusammenfassung ausgeschlossen.",
       "resendNoteHint": "Diese Neuerung wurde bereits gesendet. Erneut an alle einwilligenden Nutzer senden.",
       "sendNoteConfirm": "Die Neuerung „{title}“ jetzt per E-Mail an alle einwilligenden Nutzer senden? Sie wird danach aus der wöchentlichen Zusammenfassung ausgeschlossen.",
-      "resendNoteConfirm": "Diese Neuerung wurde bereits gesendet. „{title}“ jetzt erneut an alle einwilligenden Nutzer senden?"
+      "resendNoteConfirm": "Diese Neuerung wurde bereits gesendet. „{title}“ jetzt erneut an alle einwilligenden Nutzer senden?",
+      "stage": "Phase",
+      "thStage": "Phase",
+      "thBeta": "Beta",
+      "betaOptIn": "Nutzer dürfen dieser Beta selbst beitreten",
+      "betaOptInHint": "Aus bedeutet nur auf Einladung: Die Beta wird nie im Banner angeboten.",
+      "phBetaTerms": "Beta-Bedingungen, die Nutzer vor dem Beitritt akzeptieren müssen. Leer lassen für die Standard-Beta-Bedingungen der Plattform.",
+      "releasesOn": "Geplante Veröffentlichung",
+      "sunsetsOn": "Einstellung am",
+      "participants": "{count, plural, =0 {Noch niemand} one {# Person} other {# Personen}}"
     },
     "demoFunnel": {
       "title": "Demo-Conversion-Funnel",
@@ -12243,15 +12252,13 @@
   "globalError": {
     "collapse": "Einklappen",
     "expandDetails": "Details anzeigen",
-    "report": "An ein Projekt melden",
+    "report": "Diesen Fehler melden",
     "copyTicket": "Support-Ticket kopieren",
     "dismiss": "Schließen"
   },
   "reportError": {
     "title": "Fehler melden",
-    "intro": "Melde einen Fehler an ein Projekt. Er erscheint im Qualitäts-Feed dieses Projekts neben automatisch erfassten Fehlern.",
-    "projectLabel": "Projekt",
-    "projectPlaceholder": "Projekt auswählen…",
+    "intro": "Sende zusätzliche Informationen an das BuilderForce.ai-Produktteam. Der Fehler wird im Qualitäts-Feed des Produkts erfasst.",
     "titleLabel": "Titel",
     "titlePlaceholder": "Kurze Zusammenfassung (optional)",
     "messageLabel": "Was ist passiert?",
@@ -12261,8 +12268,7 @@
     "level_error": "Fehler",
     "level_warning": "Warnung",
     "level_info": "Info",
-    "noProjects": "Du hast noch keine Projekte – erstelle zuerst eines, um ihm einen Fehler zu melden.",
-    "reported": "Fehler an das Projekt gemeldet.",
+    "reported": "Fehler an BuilderForce.ai gemeldet.",
     "failed": "Fehler konnte nicht gemeldet werden.",
     "cancel": "Abbrechen",
     "submit": "Fehler melden",
@@ -12509,8 +12515,29 @@
     "linkSignIn": "Anmelden",
     "linkGetStarted": "Loslegen"
   },
+  "beta": {
+    "crumb": "Produkt-Update",
+    "bannerLabel": "Beta-Programm",
+    "bannerLead": "ist in der öffentlichen Beta – testen Sie es vor dem allgemeinen Rollout.",
+    "bannerLeadDated": "ist in der öffentlichen Beta – testen Sie es vor dem Rollout am {date}.",
+    "joinCta": "Beta beitreten",
+    "join": "Beta beitreten",
+    "leave": "Beta verlassen",
+    "manage": "Beta verwalten",
+    "notNow": "Jetzt nicht",
+    "working": "Wird ausgeführt…",
+    "whatIsIt": "Worum geht es?",
+    "lastUpdated": "Zuletzt aktualisiert am {date}",
+    "rollsOut": "Geplante Veröffentlichung am {date}.",
+    "termsTitle": "Beta-Bedingungen",
+    "defaultTerms": "Beta-Funktionen werden wie besehen bereitgestellt. Sie können sich jederzeit ändern, fehlerhaft sein oder zurückgezogen werden und unterliegen keiner Service-Level-Zusage. Wir kontaktieren Sie unter Umständen für Feedback zur Beta. Die Nutzung unterliegt weiterhin den Nutzungsbedingungen, und Sie können die Beta jederzeit unter „Produkt-Updates“ verlassen.",
+    "agreeLabel": "Ich habe die obigen Beta-Bedingungen gelesen und stimme ihnen zu sowie den",
+    "joinedOn": "Sie sind dieser Beta am {date} beigetreten.",
+    "joinedAlready": "Sie nehmen an dieser Beta teil.",
+    "actionFailed": "Das hat nicht geklappt. Bitte versuchen Sie es erneut."
+  },
   "whatsNew": {
-    "title": "Neuerungen",
+    "title": "Produkt-Updates",
     "loading": "Wird geladen…",
     "error": "Neuerungen konnten nicht geladen werden. Bitte später erneut versuchen.",
     "empty": "Noch keine Neuerungen – schauen Sie bald wieder vorbei.",
@@ -12518,6 +12545,13 @@
       "new": "Neu",
       "improvement": "Verbessert",
       "fix": "Behoben"
+    },
+    "stages": {
+      "in_development": "In Entwicklung",
+      "private_beta": "Private Beta",
+      "public_beta": "Öffentliche Beta",
+      "live": "Live",
+      "sunset": "Wird eingestellt"
     }
   },
   "demo": {
@@ -13550,7 +13584,13 @@
       "email": "E-Mail",
       "emailCampaign": "E-Mail-Kampagne",
       "emailTemplate": "E-Mail-Vorlage",
-      "course": "Kurs"
+      "course": "Kurs",
+      "guidedTour": "Geführte Tour"
+    },
+    "tourBuilder": {
+      "closePreview": "Tourvorschau schließen", "stepOf": "{current} von {total}", "targetConnected": "Ziel verbunden", "targetNeeded": "Zielobjekt auswählen", "back": "Zurück", "finish": "Fertig", "next": "Weiter", "offer": "Tourangebot",
+      "stepCount": "{count, plural, one {# Schritt} other {# Schritte}}", "visitCount": "Nach {count, plural, one {# Besuch} other {# Besuchen}} anbieten", "escapeEnabled": "Abbruch aktiviert",
+      "settings": "Einstellungen der geführten Tour", "settingsHint": "Entwerfen Sie eine optionale Tour und verbinden Sie jeden Schritt mit dem hervorzuhebenden Canvas-Objekt.", "draftSteps": "Entwurf · {count} Schritte", "offerTitle": "Titel des Angebots", "offerBody": "Beschreibung des Angebots", "version": "Tourversion", "minimumVisits": "Besuche vor dem Angebot", "blurBackground": "Hintergrund beim Angebot weichzeichnen", "escapeHatch": "Schließen und Escape immer anbieten", "steps": "Tourschritte", "addStep": "Schritt hinzufügen", "newStepTitle": "Neuer Tourschritt", "stepTitle": "Schritttitel", "stepBody": "Schrittbeschreibung", "targetObject": "Hervorzuhebendes Objekt", "chooseTarget": "Objekt auswählen", "removeStep": "Schritt entfernen"
     },
     "canvasOutline": "Barrierefreie Leinwandübersicht",
     "canvasGestureToggle": "Ziehen zum Auswählen",
@@ -13725,6 +13765,12 @@
     "largeSessionHint": "Nur sichtbare Objekte werden gerendert. Nutzen Sie Rahmen oder blenden Sie schwere Objekte aus, damit die Navigation schnell bleibt.",
     "toggleObjectPalette": "Objektpalette umschalten",
     "closePalette": "Palette schließen",
+    "tourLabel": "Geführte Tour",
+    "tourOfferTitle": "Willkommen im Creation Canvas",
+    "tourOfferBody": "Erfahren Sie in sechs kurzen Schritten, wie Brain, Objekte, Verbindungen, Zusammenarbeit und Bereitstellung zusammenspielen. Sie können die Tour jederzeit verlassen.",
+    "tourStart": "Tour starten",
+    "tourCancel": "Nicht jetzt",
+    "tourClose": "Tour schließen",
     "tourStep": "{step} von 6",
     "tourTitle1": "Fragen Sie Brain im Dock",
     "tourTitle2": "Alles ist ein Objekt",

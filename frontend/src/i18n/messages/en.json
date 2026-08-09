@@ -9504,7 +9504,16 @@
       "sendNoteHint": "Email this note to all consenting users now — it will be excluded from the weekly digest.",
       "resendNoteHint": "This note was already emailed. Send it again to all consenting users.",
       "sendNoteConfirm": "Email the release note “{title}” to all consenting users now? It will then be excluded from the weekly digest.",
-      "resendNoteConfirm": "This note was already sent. Email “{title}” again to all consenting users now?"
+      "resendNoteConfirm": "This note was already sent. Email “{title}” again to all consenting users now?",
+      "stage": "Stage",
+      "thStage": "Stage",
+      "thBeta": "Beta",
+      "betaOptIn": "Let users join this beta themselves",
+      "betaOptInHint": "Off means invitation-only: the beta is never offered in the banner.",
+      "phBetaTerms": "Beta terms users must accept before joining. Leave blank to use the standard platform beta terms.",
+      "releasesOn": "Scheduled for release",
+      "sunsetsOn": "Sunsets on",
+      "participants": "{count, plural, =0 {No one yet} one {# person} other {# people}}"
     },
     "demoFunnel": {
       "title": "Demo conversion funnel",
@@ -12244,15 +12253,13 @@
   "globalError": {
     "collapse": "Collapse",
     "expandDetails": "Expand details",
-    "report": "Report to a project",
+    "report": "Report this error",
     "copyTicket": "Copy support ticket",
     "dismiss": "Dismiss"
   },
   "reportError": {
     "title": "Report an error",
-    "intro": "File an error into a project. It appears in that project's Quality feed alongside automatically-collected errors.",
-    "projectLabel": "Project",
-    "projectPlaceholder": "Choose a project…",
+    "intro": "Send additional context to the BuilderForce.ai product team. The error is recorded in the product's Quality feed.",
     "titleLabel": "Title",
     "titlePlaceholder": "Short summary (optional)",
     "messageLabel": "What happened?",
@@ -12262,8 +12269,7 @@
     "level_error": "Error",
     "level_warning": "Warning",
     "level_info": "Info",
-    "noProjects": "You have no projects yet — create one first to report an error to it.",
-    "reported": "Error reported to the project.",
+    "reported": "Error reported to BuilderForce.ai.",
     "failed": "Could not report the error.",
     "cancel": "Cancel",
     "submit": "Report error",
@@ -12510,8 +12516,29 @@
     "linkSignIn": "Sign In",
     "linkGetStarted": "Get Started"
   },
+  "beta": {
+    "crumb": "Product update",
+    "bannerLabel": "Beta program",
+    "bannerLead": "is in public beta — try it before it rolls out to everyone.",
+    "bannerLeadDated": "is in public beta — try it before it rolls out on {date}.",
+    "joinCta": "Join the beta",
+    "join": "Join beta",
+    "leave": "Leave beta",
+    "manage": "Manage beta",
+    "notNow": "Not now",
+    "working": "Working…",
+    "whatIsIt": "What is it?",
+    "lastUpdated": "Last updated {date}",
+    "rollsOut": "Scheduled for release on {date}.",
+    "termsTitle": "Beta terms",
+    "defaultTerms": "Beta features are provided as they are. They may change, break, or be withdrawn at any time, and they are not covered by any service-level commitment. We may contact you for feedback about the beta. Your use of it remains subject to the Terms of Use, and you can leave the beta whenever you like from Product updates.",
+    "agreeLabel": "I have read and agree to the beta terms above and the",
+    "joinedOn": "You joined this beta on {date}.",
+    "joinedAlready": "You are taking part in this beta.",
+    "actionFailed": "That didn't go through. Please try again."
+  },
   "whatsNew": {
-    "title": "What's new",
+    "title": "Product updates",
     "loading": "Loading…",
     "error": "Couldn't load release notes. Please try again later.",
     "empty": "No updates yet — check back soon.",
@@ -12519,6 +12546,13 @@
       "new": "New",
       "improvement": "Improved",
       "fix": "Fixed"
+    },
+    "stages": {
+      "in_development": "In development",
+      "private_beta": "Private beta",
+      "public_beta": "Public beta",
+      "live": "Live",
+      "sunset": "Sunsetting"
     }
   },
   "demo": {
@@ -13551,7 +13585,13 @@
       "email": "Email",
       "emailCampaign": "Email campaign",
       "emailTemplate": "Email template",
-      "course": "Course"
+      "course": "Course",
+      "guidedTour": "Guided tour"
+    },
+    "tourBuilder": {
+      "closePreview": "Close tour preview", "stepOf": "{current} of {total}", "targetConnected": "Target connected", "targetNeeded": "Choose a target object", "back": "Back", "finish": "Finish", "next": "Next", "offer": "Tour offer",
+      "stepCount": "{count, plural, one {# step} other {# steps}}", "visitCount": "Offer after {count, plural, one {# visit} other {# visits}}", "escapeEnabled": "Escape enabled",
+      "settings": "Guided tour settings", "settingsHint": "Design an opt-in tour, then connect each step to the Canvas object it should highlight.", "draftSteps": "Draft · {count} steps", "offerTitle": "Offer title", "offerBody": "Offer description", "version": "Tour version", "minimumVisits": "Visits before offer", "blurBackground": "Blur the background on the offer", "escapeHatch": "Always provide close and Escape", "steps": "Tour steps", "addStep": "Add step", "newStepTitle": "New tour step", "stepTitle": "Step title", "stepBody": "Step description", "targetObject": "Object to highlight", "chooseTarget": "Choose an object", "removeStep": "Remove step"
     },
     "canvasOutline": "Accessible canvas outline",
     "canvasGestureToggle": "Drag to select",
@@ -13726,6 +13766,12 @@
     "largeSessionHint": "Only visible Objects are rendered. Use frames or hide heavy Objects to keep navigation fast.",
     "toggleObjectPalette": "Toggle object palette",
     "closePalette": "Close palette",
+    "tourLabel": "Guided tour",
+    "tourOfferTitle": "Welcome to the Creation Canvas",
+    "tourOfferBody": "See how Brain, objects, connections, collaborators, and delivery fit together in six quick steps. You can leave the tour at any time.",
+    "tourStart": "Start tour",
+    "tourCancel": "Not now",
+    "tourClose": "Close tour",
     "tourStep": "{step} of 6",
     "tourTitle1": "Ask Brain from the dock",
     "tourTitle2": "Everything is an object",

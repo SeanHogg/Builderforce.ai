@@ -9503,7 +9503,16 @@
       "sendNoteHint": "Envía esta novedad por correo a todos los usuarios que lo consienten ahora; quedará excluida del resumen semanal.",
       "resendNoteHint": "Esta novedad ya se envió. Vuelve a enviarla a todos los usuarios que lo consienten.",
       "sendNoteConfirm": "¿Enviar por correo la novedad «{title}» a todos los usuarios que lo consienten ahora? Después quedará excluida del resumen semanal.",
-      "resendNoteConfirm": "Esta novedad ya se envió. ¿Volver a enviar «{title}» a todos los usuarios que lo consienten ahora?"
+      "resendNoteConfirm": "Esta novedad ya se envió. ¿Volver a enviar «{title}» a todos los usuarios que lo consienten ahora?",
+      "stage": "Etapa",
+      "thStage": "Etapa",
+      "thBeta": "Beta",
+      "betaOptIn": "Permitir que los usuarios se unan a esta beta por su cuenta",
+      "betaOptInHint": "Desactivado significa solo por invitación: la beta nunca se ofrece en el banner.",
+      "phBetaTerms": "Términos de la beta que el usuario debe aceptar antes de unirse. Déjalo en blanco para usar los términos estándar de la plataforma.",
+      "releasesOn": "Lanzamiento previsto",
+      "sunsetsOn": "Se retira el",
+      "participants": "{count, plural, =0 {Nadie todavía} one {# persona} other {# personas}}"
     },
     "demoFunnel": {
       "title": "Embudo de conversión de demos",
@@ -12243,15 +12252,13 @@
   "globalError": {
     "collapse": "Contraer",
     "expandDetails": "Ver detalles",
-    "report": "Reportar a un proyecto",
+    "report": "Reportar este error",
     "copyTicket": "Copiar ticket de soporte",
     "dismiss": "Descartar"
   },
   "reportError": {
     "title": "Reportar un error",
-    "intro": "Registra un error en un proyecto. Aparecerá en el feed de Calidad de ese proyecto junto a los errores recopilados automáticamente.",
-    "projectLabel": "Proyecto",
-    "projectPlaceholder": "Elige un proyecto…",
+    "intro": "Envía contexto adicional al equipo de producto de BuilderForce.ai. El error se registra en el feed de Calidad del producto.",
     "titleLabel": "Título",
     "titlePlaceholder": "Resumen breve (opcional)",
     "messageLabel": "¿Qué ha pasado?",
@@ -12261,8 +12268,7 @@
     "level_error": "Error",
     "level_warning": "Advertencia",
     "level_info": "Información",
-    "noProjects": "Aún no tienes proyectos: crea uno primero para reportarle un error.",
-    "reported": "Error reportado al proyecto.",
+    "reported": "Error reportado a BuilderForce.ai.",
     "failed": "No se pudo reportar el error.",
     "cancel": "Cancelar",
     "submit": "Reportar error",
@@ -12509,8 +12515,29 @@
     "linkSignIn": "Iniciar sesión",
     "linkGetStarted": "Empezar"
   },
+  "beta": {
+    "crumb": "Actualización de producto",
+    "bannerLabel": "Programa beta",
+    "bannerLead": "está en beta pública: pruébalo antes de que llegue a todo el mundo.",
+    "bannerLeadDated": "está en beta pública: pruébalo antes de su lanzamiento el {date}.",
+    "joinCta": "Unirme a la beta",
+    "join": "Unirme a la beta",
+    "leave": "Salir de la beta",
+    "manage": "Gestionar la beta",
+    "notNow": "Ahora no",
+    "working": "Procesando…",
+    "whatIsIt": "¿Qué es?",
+    "lastUpdated": "Última actualización: {date}",
+    "rollsOut": "Lanzamiento previsto para el {date}.",
+    "termsTitle": "Términos de la beta",
+    "defaultTerms": "Las funciones en beta se ofrecen tal cual. Pueden cambiar, fallar o retirarse en cualquier momento y no están cubiertas por ningún compromiso de nivel de servicio. Es posible que te contactemos para pedirte tu opinión sobre la beta. Su uso sigue sujeto a los Términos de uso y puedes salir de la beta cuando quieras desde Novedades del producto.",
+    "agreeLabel": "He leído y acepto los términos de la beta anteriores y los",
+    "joinedOn": "Te uniste a esta beta el {date}.",
+    "joinedAlready": "Estás participando en esta beta.",
+    "actionFailed": "No se pudo completar la acción. Inténtalo de nuevo."
+  },
   "whatsNew": {
-    "title": "Novedades",
+    "title": "Novedades del producto",
     "loading": "Cargando…",
     "error": "No se pudieron cargar las novedades. Inténtalo más tarde.",
     "empty": "Aún no hay novedades; vuelve pronto.",
@@ -12518,6 +12545,13 @@
       "new": "Nuevo",
       "improvement": "Mejorado",
       "fix": "Corregido"
+    },
+    "stages": {
+      "in_development": "En desarrollo",
+      "private_beta": "Beta privada",
+      "public_beta": "Beta pública",
+      "live": "Disponible",
+      "sunset": "En retirada"
     }
   },
   "demo": {
@@ -13550,7 +13584,13 @@
       "email": "Correo",
       "emailCampaign": "Campaña de correo",
       "emailTemplate": "Plantilla de correo",
-      "course": "Curso"
+      "course": "Curso",
+      "guidedTour": "Visita guiada"
+    },
+    "tourBuilder": {
+      "closePreview": "Cerrar vista previa", "stepOf": "{current} de {total}", "targetConnected": "Objetivo conectado", "targetNeeded": "Elige un objeto objetivo", "back": "Atrás", "finish": "Finalizar", "next": "Siguiente", "offer": "Oferta de visita",
+      "stepCount": "{count, plural, one {# paso} other {# pasos}}", "visitCount": "Ofrecer tras {count, plural, one {# visita} other {# visitas}}", "escapeEnabled": "Salida activada",
+      "settings": "Ajustes de la visita guiada", "settingsHint": "Diseña una visita opcional y conecta cada paso con el objeto del Lienzo que debe destacar.", "draftSteps": "Borrador · {count} pasos", "offerTitle": "Título de la oferta", "offerBody": "Descripción de la oferta", "version": "Versión de la visita", "minimumVisits": "Visitas antes de ofrecer", "blurBackground": "Desenfocar el fondo de la oferta", "escapeHatch": "Ofrecer siempre cerrar y Escape", "steps": "Pasos de la visita", "addStep": "Añadir paso", "newStepTitle": "Nuevo paso", "stepTitle": "Título del paso", "stepBody": "Descripción del paso", "targetObject": "Objeto que destacar", "chooseTarget": "Elige un objeto", "removeStep": "Eliminar paso"
     },
     "canvasOutline": "Esquema accesible del lienzo",
     "canvasGestureToggle": "Arrastrar para seleccionar",
@@ -13725,6 +13765,12 @@
     "largeSessionHint": "Solo se renderizan los objetos visibles. Usa marcos u oculta objetos pesados para mantener la navegación rápida.",
     "toggleObjectPalette": "Alternar la paleta de objetos",
     "closePalette": "Cerrar la paleta",
+    "tourLabel": "Visita guiada",
+    "tourOfferTitle": "Te damos la bienvenida al Lienzo de Creación",
+    "tourOfferBody": "Descubre en seis pasos breves cómo funcionan juntos Brain, los objetos, las conexiones, los colaboradores y la entrega. Puedes salir de la visita en cualquier momento.",
+    "tourStart": "Iniciar visita",
+    "tourCancel": "Ahora no",
+    "tourClose": "Cerrar visita",
     "tourStep": "{step} de 6",
     "tourTitle1": "Pregunta a Brain desde el panel",
     "tourTitle2": "Todo es un objeto",
