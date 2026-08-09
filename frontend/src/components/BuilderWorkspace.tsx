@@ -73,7 +73,7 @@ interface CheckResult {
   detail?: string;
 }
 
-export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId, initialPrompt, initialTicket }: IDEProps) {
+export function BuilderWorkspace({ project, initialFiles, onProjectUpdate, onOpenProjectDetails, initialChatId, initialPrompt, initialTicket }: IDEProps) {
   const t = useTranslations('ide');
   const tc = useTranslations('common');
   const confirm = useConfirm();

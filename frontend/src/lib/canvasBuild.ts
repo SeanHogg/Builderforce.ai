@@ -6,7 +6,7 @@
  * its modality selects (`api/src/application/project/projectTemplate.ts`). The
  * canvas stores only the binding; every capability — file tree, editor, dev
  * server, checks, terminal, publish, train, state — comes from mounting the one
- * `<IDE>` surface against the bound storage project, so there is no second
+ * `<BuilderWorkspace>` against the bound storage project, so there is no second
  * implementation to keep in step.
  *
  * This module is the single source for that binding: how a build is created,
@@ -25,7 +25,7 @@ export const BUILD_RESOURCE_PREFIX = 'ideProject:';
 /** The binding a bound Builder object carries. */
 export interface CanvasBuildBinding {
   ideProjectId: number;
-  /** The backing storage project — what `<IDE>` and the file APIs address. */
+  /** The backing storage project — what `<BuilderWorkspace>` and the file APIs address. */
   storageProjectId: number;
   /** Public id for the `/ide/:publicId` deep link. */
   storageProjectPublicId: string;

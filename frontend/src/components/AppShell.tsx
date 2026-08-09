@@ -28,23 +28,18 @@ function isProjectIdPage(pathname: string | null): boolean {
   return pathname != null && /^\/projects\/[^/]+$/.test(pathname);
 }
 
-function isIdePage(pathname: string | null): boolean {
-  return pathname != null && pathname.startsWith('/ide/');
-}
-
 /** A canvas ITSELF is full-screen. `/create` alone is now the canvas library — an
  *  ordinary scrolling page — so it must not be swept into the edge-to-edge case. */
 function isCreationPage(pathname: string | null): boolean {
   return pathname != null && pathname.startsWith('/create/');
 }
 
-/** Deep full-screen routes (the IDE editor + a single project) render edge-to-edge
- *  with no index. The IDE launcher + Voice Studio still show theirs. */
+/** Deep full-screen routes render edge-to-edge with no index. */
 function isFullScreenRoute(pathname: string | null): boolean {
   if (pathname == null) return false;
   if (isProjectIdPage(pathname)) return true;
   if (isCreationPage(pathname)) return true;
-  return /^\/ide\/(?!dashboard$|voice$)[^/]+/.test(pathname);
+  return false;
 }
 
 /**
@@ -60,10 +55,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { emulation } = useEmulation();
 
-  // IDE/project pages force icon-only mode; otherwise the user's stored choice.
+  // Project pages force icon-only mode; otherwise use the stored choice.
   // The collapsed rail keeps the canvas spacious, which §3.2 calls the default
   // posture for real work; expanding it reveals the session list and search.
-  const routeCollapsed = isProjectIdPage(pathname) || isIdePage(pathname);
+  const routeCollapsed = isProjectIdPage(pathname);
   const { collapsed: navCollapsed, toggle: toggleNav } = useSidebarCollapse(routeCollapsed);
   const { open: navOpen, openNav, closeNav } = useMobileNav();
 

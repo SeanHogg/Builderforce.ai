@@ -14,7 +14,7 @@
  * matches across both surfaces, so they share one EvermindValidationProvider.
  *
  * Self-gating per the DRY rule: each child owns its own RBAC / loading / empty
- * states; the host (IDENew) only decides whether the `evermind` modality is active.
+ * states; the host (BuilderWorkspace) only decides whether the `evermind` modality is active.
  */
 
 import { Icon } from '@/components/ui/Icon';

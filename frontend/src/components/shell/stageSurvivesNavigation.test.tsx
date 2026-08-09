@@ -85,9 +85,8 @@ describe('PRD 21 §6.1 — the stage survives a navigation', () => {
     for (const route of ['/settings', '/workforce', '/insights/delivery', '/quality', '/knowledge']) {
       expect(panelOpen(route, true)).toBe(true);
     }
-    // A second infinite surface still takes the screen — two boards competing
-    // for one pointer is not "the panel slides over it".
-    expect(panelOpen('/ide/42', true)).toBe(false);
+    // The old IDE URL is now only a compatibility adapter into a Builder object.
+    expect(panelOpen('/ide/42', true)).toBe(true);
     expect(panelOpen('/projects/7', true)).toBe(false);
   });
 });

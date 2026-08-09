@@ -11,15 +11,15 @@ import { ChunkErrorBoundary } from '@/components/ChunkErrorBoundary';
 /**
  * The full IDE surface, mounted inside the Creation Canvas.
  *
- * Every IDE project capability lives in `<IDE>` — file explorer, code editor,
+ * Every IDE project capability lives in `<BuilderWorkspace>` — file explorer, code editor,
  * WebContainer dev server + live preview, quality checks, terminal, site/agent
  * publish, training, agent state, and the per-modality studios (video, Evermind,
  * fine-tune, voice). Rather than reimplementing any of that on the canvas, a
- * Builder object opens THIS panel against its bound storage project, so the two
- * surfaces can never drift. Lazily imported for the same reason `/ide/[id]` does
- * it: the editor + WebGPU bundles must not ship with the canvas itself.
+ * Builder object opens THIS panel against its bound storage project, so there is
+ * no second surface to drift. It is lazy so the editor + WebGPU bundles do not
+ * ship until a Builder object is opened.
  */
-const IDE = dynamic(() => import('@/components/IDE').then((m) => m.IDE), { ssr: false });
+const BuilderWorkspace = dynamic(() => import('@/components/BuilderWorkspace').then((m) => m.BuilderWorkspace), { ssr: false });
 
 interface CanvasBuildPanelProps {
   /** Backing storage project id of the bound IDE project. */
@@ -72,7 +72,7 @@ export function CanvasBuildPanel({ storageProjectId, onClose, onProjectRenamed }
         </div>
       ) : (
         <ChunkErrorBoundary>
-          <IDE
+          <BuilderWorkspace
             project={project}
             initialFiles={files}
             onProjectUpdate={(updated) => {

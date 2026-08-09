@@ -5,7 +5,7 @@ import { render, screen, cleanup } from '@testing-library/react';
  * Center-panel modality switch regression (Consolidated Gap Register #143).
  *
  * modality.test.ts locks the registry FLAGS (evermind + finetune stay enabled),
- * but nothing rendered IDENew to prove the center panel actually mounts the
+ * but nothing rendered BuilderWorkspace to prove the center panel actually mounts the
  * right component per modality:
  *
  *   video    → <StudioPanel>            (@seanhogg/builderforce-studio-embedded)
@@ -13,7 +13,7 @@ import { render, screen, cleanup } from '@testing-library/react';
  *   finetune → <FinetuneStudioPanel>    (no active file → the studio panel, not code)
  *   designer → preview/code view        (the Preview/Code toggle chrome)
  *
- * IDENew pulls in WebContainer / collaboration / brain / a dozen side panels —
+ * BuilderWorkspace pulls in WebContainer / collaboration / brain / a dozen side panels —
  * all irrelevant to the center-panel decision — so we mock them to sentinels
  * and assert ONLY which center component renders for each `project.modality`.
  */
@@ -99,7 +99,7 @@ vi.mock('./ArtifactReviewModals', () => ({
 }));
 
 // Import AFTER mocks are registered.
-import { IDE } from './IDENew';
+import { BuilderWorkspace } from './BuilderWorkspace';
 import type { Project } from '@/lib/types';
 
 function makeProject(modality: string): Project {
@@ -110,39 +110,39 @@ function makeProject(modality: string): Project {
   } as unknown as Project;
 }
 
-describe('IDENew center-panel modality switch', () => {
+describe('BuilderWorkspace center-panel modality switch', () => {
   beforeEach(() => cleanup());
 
   it('video modality mounts <StudioPanel>', () => {
-    render(<IDE project={makeProject('video')} initialFiles={[]} />);
+    render(<BuilderWorkspace project={makeProject('video')} initialFiles={[]} />);
     expect(screen.getByTestId('center-studio-panel')).toBeTruthy();
     expect(screen.queryByTestId('center-evermind-panel')).toBeNull();
   });
 
   it('evermind modality (no active file) mounts <EvermindStudioPanel>', () => {
-    render(<IDE project={makeProject('evermind')} initialFiles={[]} />);
+    render(<BuilderWorkspace project={makeProject('evermind')} initialFiles={[]} />);
     expect(screen.getByTestId('center-evermind-panel')).toBeTruthy();
     expect(screen.queryByTestId('center-finetune-panel')).toBeNull();
     expect(screen.queryByTestId('center-studio-panel')).toBeNull();
   });
 
   it('finetune modality (no active file) mounts <FinetuneStudioPanel>', () => {
-    render(<IDE project={makeProject('finetune')} initialFiles={[]} />);
+    render(<BuilderWorkspace project={makeProject('finetune')} initialFiles={[]} />);
     expect(screen.getByTestId('center-finetune-panel')).toBeTruthy();
     expect(screen.queryByTestId('center-evermind-panel')).toBeNull();
     expect(screen.queryByTestId('center-studio-panel')).toBeNull();
   });
 
   // Legacy `llm` projects predate the split; getModality aliases them to evermind,
-  // so IDENew must mount the Evermind studio for them.
+  // so BuilderWorkspace must mount the Evermind studio for them.
   it('legacy llm modality mounts <EvermindStudioPanel>', () => {
-    render(<IDE project={makeProject('llm')} initialFiles={[]} />);
+    render(<BuilderWorkspace project={makeProject('llm')} initialFiles={[]} />);
     expect(screen.getByTestId('center-evermind-panel')).toBeTruthy();
     expect(screen.queryByTestId('center-finetune-panel')).toBeNull();
   });
 
   it('designer modality mounts the preview/code view, not a studio panel', () => {
-    render(<IDE project={makeProject('designer')} initialFiles={[]} />);
+    render(<BuilderWorkspace project={makeProject('designer')} initialFiles={[]} />);
     expect(screen.queryByTestId('center-studio-panel')).toBeNull();
     expect(screen.queryByTestId('center-evermind-panel')).toBeNull();
     expect(screen.queryByTestId('center-finetune-panel')).toBeNull();
@@ -155,14 +155,14 @@ describe('IDENew center-panel modality switch', () => {
   // Mobile shares Designer's Preview/Code chrome but frames the preview in a
   // device bezel, so the swap has to be the DevicePreview and not the plain one.
   it('mobile modality mounts the device preview instead of the plain frame', () => {
-    render(<IDE project={makeProject('mobile')} initialFiles={[]} />);
+    render(<BuilderWorkspace project={makeProject('mobile')} initialFiles={[]} />);
     expect(screen.getByTestId('center-device-preview')).toBeTruthy();
     expect(screen.queryByTestId('center-preview-frame')).toBeNull();
     expect(screen.queryByTestId('center-studio-panel')).toBeNull();
   });
 
   it('mobile modality mounts the scan-to-phone slide-out', () => {
-    render(<IDE project={makeProject('mobile')} initialFiles={[]} />);
+    render(<BuilderWorkspace project={makeProject('mobile')} initialFiles={[]} />);
     expect(screen.getByTestId('mobile-device-panel')).toBeTruthy();
   });
 });

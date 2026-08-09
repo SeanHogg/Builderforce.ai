@@ -36,12 +36,11 @@ const STAGE_PATTERNS: RegExp[] = [
 ];
 
 /**
- * App-shell routes that still own the whole screen. The IDE and a single project
- * are editors in their own right — docking them beside a board would give the
- * person two infinite surfaces competing for one pointer.
+ * App-shell routes that still own the whole screen. A single Project keeps its
+ * dedicated editor for now. The former IDE route is only a compatibility
+ * adapter; its workspace is opened by the Builder object on the canvas.
  */
 const FULL_WIDTH_PATTERNS: RegExp[] = [
-  /^\/ide\/(?!dashboard$|voice$)[^/]+/,
   /^\/projects\/[^/]+$/,
   /^\/freelancer(?:\/|$)/,
   /^\/sales(?:\/|$)/,

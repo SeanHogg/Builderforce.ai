@@ -14,7 +14,7 @@
  * existing dataset/training APIs.
  *
  * Self-gating per the DRY rule: the panel owns its own loading/empty/error states;
- * the host (IDENew) only decides whether the `finetune` modality is active.
+ * the host (BuilderWorkspace) only decides whether the `finetune` modality is active.
  */
 
 import { useCallback, useEffect, useState } from 'react';

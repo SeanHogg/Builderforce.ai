@@ -21,10 +21,10 @@ describe('classifyRoute', () => {
     expect(classifyRoute('/tasks')).toBe('workbench');
   });
 
-  it('leaves the other full-surface editors alone', () => {
-    expect(classifyRoute('/ide/42')).toBe('standalone');
+  it('keeps compatibility routes in the shell and full-surface project editors alone', () => {
+    expect(classifyRoute('/ide/42')).toBe('workbench');
     expect(classifyRoute('/projects/7')).toBe('standalone');
-    // The IDE launcher is an ordinary page and still docks.
+    // Both IDE routes immediately adapt into Creation Canvas.
     expect(classifyRoute('/ide/dashboard')).toBe('workbench');
   });
 
@@ -45,7 +45,7 @@ describe('panelOpen', () => {
 
   it('stays closed on the stage itself and on standalone routes', () => {
     expect(panelOpen('/create/c_8fa2', true)).toBe(false);
-    expect(panelOpen('/ide/42', true)).toBe(false);
+    expect(panelOpen('/ide/42', true)).toBe(true);
   });
 });
 
