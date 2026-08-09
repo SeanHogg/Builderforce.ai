@@ -167,6 +167,19 @@ export function clearSession(): void {
   document.cookie = `bf_tenant_token=; path=/; expires=${COOKIE_EXPIRE}; Max-Age=0`;
 }
 
+/**
+ * THE way back in — `/login` carrying where the person was going.
+ *
+ * Fifteen call sites hand-built this string, and the hand-built ones disagreed:
+ * some encoded `next`, some did not, and an un-encoded path with a query string
+ * (`/create/x?share=1`) lost everything after the `&` on the round trip. One
+ * spelling, encoded once, so a sign-in never silently drops the destination.
+ */
+export function signInHref(next?: string): string {
+  const target = next ?? (isBrowser() ? window.location.pathname + window.location.search : '');
+  return target ? `/login?next=${encodeURIComponent(target)}` : '/login';
+}
+
 // ---------------------------------------------------------------------------
 // Centralized 401 (invalid/expired token) handling — redirect to login
 // ---------------------------------------------------------------------------
@@ -188,10 +201,7 @@ export function handleApiUnauthorized(): never {
     throw new Error('Unauthorized');
   }
   clearSession();
-  const next = encodeURIComponent(
-    window.location.pathname + window.location.search || '/'
-  );
-  window.location.href = `/login?next=${next}`;
+  window.location.href = signInHref();
   throw new Error('Session expired');
 }
 

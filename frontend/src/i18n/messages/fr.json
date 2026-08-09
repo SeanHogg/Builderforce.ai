@@ -1160,7 +1160,10 @@
       "errorGeneric": "Échec de la déconnexion. Réessayez."
     },
     "renderingDiagram": "Rendu du diagramme…",
-    "skipToContent": "Aller au contenu principal"
+    "skipToContent": "Aller au contenu principal",
+    "signIn": "Se connecter",
+    "getStarted": "Commencer →",
+    "signInToOpen": "Connectez-vous pour ouvrir {label}"
   },
   "prdCreate": {
     "title": "Nouveau PRD",
@@ -12244,8 +12247,6 @@
     "compare": "Comparer",
     "integrations": "Intégrations",
     "mediaKit": "Kit média",
-    "signIn": "Se connecter",
-    "getStarted": "Commencer →",
     "toggleMenu": "Basculer le menu",
     "switchToLight": "Passer au mode clair",
     "switchToDark": "Passer au mode sombre"
@@ -15197,7 +15198,8 @@
     "invite": "+ Inviter",
     "roleTeammate": "coéquipier",
     "chipJoin": "Ajouter {name} ({role}) à ce tableau : faites-le glisser ou appuyez sur Entrée",
-    "chipLocked": "{name} n’est pas encore configuré dans cet espace de travail"
+    "chipLocked": "{name} n’est pas encore configuré dans cet espace de travail",
+    "inviteSignedOut": "Connectez-vous pour inviter"
   },
   "sessions": {
     "newCanvas": "+ Nouveau tableau",
@@ -15205,7 +15207,8 @@
     "recents": "Récents",
     "untitled": "Tableau sans titre",
     "draft": "Brouillon",
-    "draftHint": "Enregistré uniquement dans ce navigateur — connectez-vous pour le conserver"
+    "draftHint": "Enregistré uniquement dans ce navigateur — connectez-vous pour le conserver",
+    "signInToKeep": "Connectez-vous pour conserver votre travail"
   },
   "shellPanel": {
     "crumb": "Espace de travail",
@@ -15221,5 +15224,15 @@
     "save": "Enregistrer",
     "saved": "Enregistré",
     "saveFailed": "Échec de l’enregistrement"
+  },
+  "creationInvitation": {
+    "title": "Rejoindre la session de création",
+    "joining": "Connexion à cette session de création…",
+    "signInPrompt": "Connectez-vous avec l'e-mail invité pour rejoindre cette session.",
+    "invalidLink": "Ce lien d'invitation n'est pas valide.",
+    "notAccepted": "Cette invitation n'a pas pu être acceptée.",
+    "workspaceUnavailable": "L'espace de travail invité n'est pas accessible depuis ce compte.",
+    "signInLink": "Se connecter avec l'e-mail invité",
+    "useAnotherAccount": "Utiliser un autre compte"
   }
 }

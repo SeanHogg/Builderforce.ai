@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import { BUILTIN_AGENTS } from './provisionBuiltinAgents';
 import { listBuiltinTools } from '../llm/builtinMcpService';
+import { SEAT_AGENT_KIND } from '../kernel/TeamRoster';
 
 /**
  * A PERSISTED PROMPT MAY NOT NAME A TOOL.
@@ -94,6 +95,40 @@ describe('Manager persona · seed ⇄ migration parity', () => {
     // tenants narrating.
     expect(sql).toContain('manager.digest for what finished today');
     expect(sql).toContain('builtin_manager_digest for what finished today');
+  });
+});
+
+/**
+ * The six PRD 20 §3 business seats (CMO, CFO, CRO, Recruiter, HR, CEO) that filled the
+ * footer roster. Same rule as the Manager above, for the same reason: 0436 backfills
+ * every existing tenant and the seed covers every tenant made since, so a drift between
+ * them means a workspace's CFO depends on the week it was created.
+ */
+describe('seat personas · seed ⇄ migration 0436 parity', () => {
+  const sql = readFileSync(
+    fileURLToPath(new URL('../../../migrations/0436_remaining_seat_agents.sql', import.meta.url).href),
+    'utf8',
+  );
+  const SEAT_KINDS = ['cmo', 'cfo', 'cro', 'recruiter', 'hr', 'ceo'];
+
+  it.each(SEAT_KINDS)('0436 backfills exactly the %s persona the code seeds', (kind) => {
+    const seed = BUILTIN_AGENTS.find((a) => a.kind === kind);
+    expect(seed, `no seed for '${kind}'`).toBeDefined();
+    expect(seed!.bio.length).toBeGreaterThan(100);
+    expect(sql).toContain(seed!.bio.replace(/'/g, "''"));
+    expect(sql).toContain(seed!.title.replace(/'/g, "''"));
+    // The id is what makes the backfill idempotent against `provisionBuiltinAgents`:
+    // both must write the SAME row, or a tenant ends up with two of the same seat.
+    expect(sql).toContain(`'${seed!.idPrefix}' || t.id`);
+  });
+
+  /** Every teammate seat the footer lists must resolve to one of these kinds — the
+   *  roster's map and this seed list are two halves of one fact. */
+  it('covers every seat the roster maps to a built-in kind', () => {
+    const seeded = new Set(BUILTIN_AGENTS.map((a) => a.kind));
+    for (const kind of Object.values(SEAT_AGENT_KIND)) {
+      expect(seeded, `roster maps a seat to unseeded kind '${kind}'`).toContain(kind);
+    }
   });
 });
 

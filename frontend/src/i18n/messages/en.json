@@ -1160,7 +1160,10 @@
       "errorGeneric": "Disconnect failed. Try again."
     },
     "renderingDiagram": "Rendering diagram…",
-    "skipToContent": "Skip to main content"
+    "skipToContent": "Skip to main content",
+    "signIn": "Sign In",
+    "getStarted": "Get Started →",
+    "signInToOpen": "Sign in to open {label}"
   },
   "prdCreate": {
     "title": "New PRD",
@@ -12245,8 +12248,6 @@
     "compare": "Compare",
     "integrations": "Integrations",
     "mediaKit": "Media Kit",
-    "signIn": "Sign In",
-    "getStarted": "Get Started →",
     "toggleMenu": "Toggle menu",
     "switchToLight": "Switch to light mode",
     "switchToDark": "Switch to dark mode"
@@ -15198,7 +15199,8 @@
     "invite": "+ Invite",
     "roleTeammate": "teammate",
     "chipJoin": "Add {name} ({role}) to this board — drag it on, or press Enter",
-    "chipLocked": "{name} is not set up in this workspace yet"
+    "chipLocked": "{name} is not set up in this workspace yet",
+    "inviteSignedOut": "Sign in to invite"
   },
   "sessions": {
     "newCanvas": "+ New canvas",
@@ -15206,7 +15208,8 @@
     "recents": "Recents",
     "untitled": "Untitled canvas",
     "draft": "Draft",
-    "draftHint": "Saved in this browser only — sign in to keep it"
+    "draftHint": "Saved in this browser only — sign in to keep it",
+    "signInToKeep": "Sign in to keep your work"
   },
   "shellPanel": {
     "crumb": "Workspace",
@@ -15222,5 +15225,15 @@
     "save": "Save",
     "saved": "Saved",
     "saveFailed": "Could not save"
+  },
+  "creationInvitation": {
+    "title": "Join Creation Session",
+    "joining": "Joining this Creation Session…",
+    "signInPrompt": "Sign in with the invited email to join this Session.",
+    "invalidLink": "This invitation link is invalid.",
+    "notAccepted": "This invitation could not be accepted.",
+    "workspaceUnavailable": "The invited workspace is not available to this account.",
+    "signInLink": "Sign in with the invited email",
+    "useAnotherAccount": "Use another account"
   }
 }

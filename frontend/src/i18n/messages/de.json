@@ -1160,7 +1160,10 @@
       "errorGeneric": "Trennen fehlgeschlagen. Bitte erneut versuchen."
     },
     "renderingDiagram": "Diagramm wird gerendert…",
-    "skipToContent": "Zum Hauptinhalt springen"
+    "skipToContent": "Zum Hauptinhalt springen",
+    "signIn": "Anmelden",
+    "getStarted": "Loslegen →",
+    "signInToOpen": "Melde dich an, um {label} zu öffnen"
   },
   "prdCreate": {
     "title": "Neues PRD",
@@ -12244,8 +12247,6 @@
     "compare": "Vergleich",
     "integrations": "Integrationen",
     "mediaKit": "Medien-Kit",
-    "signIn": "Anmelden",
-    "getStarted": "Loslegen →",
     "toggleMenu": "Menü umschalten",
     "switchToLight": "Zum hellen Modus wechseln",
     "switchToDark": "Zum dunklen Modus wechseln"
@@ -15197,7 +15198,8 @@
     "invite": "+ Einladen",
     "roleTeammate": "Teammitglied",
     "chipJoin": "{name} ({role}) zu diesem Board hinzufügen – ziehen oder Enter drücken",
-    "chipLocked": "{name} ist in diesem Workspace noch nicht eingerichtet"
+    "chipLocked": "{name} ist in diesem Workspace noch nicht eingerichtet",
+    "inviteSignedOut": "Zum Einladen anmelden"
   },
   "sessions": {
     "newCanvas": "+ Neues Canvas",
@@ -15205,7 +15207,8 @@
     "recents": "Zuletzt",
     "untitled": "Unbenanntes Canvas",
     "draft": "Entwurf",
-    "draftHint": "Nur in diesem Browser gespeichert – melde dich an, um es zu behalten"
+    "draftHint": "Nur in diesem Browser gespeichert – melde dich an, um es zu behalten",
+    "signInToKeep": "Melde dich an, um deine Arbeit zu behalten"
   },
   "shellPanel": {
     "crumb": "Workspace",
@@ -15221,5 +15224,15 @@
     "save": "Speichern",
     "saved": "Gespeichert",
     "saveFailed": "Speichern fehlgeschlagen"
+  },
+  "creationInvitation": {
+    "title": "Creation-Session beitreten",
+    "joining": "Dieser Creation-Session wird beigetreten…",
+    "signInPrompt": "Melde dich mit der eingeladenen E-Mail-Adresse an, um dieser Session beizutreten.",
+    "invalidLink": "Dieser Einladungslink ist ungültig.",
+    "notAccepted": "Diese Einladung konnte nicht angenommen werden.",
+    "workspaceUnavailable": "Der eingeladene Workspace ist für dieses Konto nicht verfügbar.",
+    "signInLink": "Mit der eingeladenen E-Mail-Adresse anmelden",
+    "useAnotherAccount": "Anderes Konto verwenden"
   }
 }

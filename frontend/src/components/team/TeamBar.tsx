@@ -25,7 +25,10 @@
  */
 
 import { useCallback, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { useAuth } from '@/lib/AuthContext';
+import { signInHref } from '@/lib/auth';
 import type { TeamRosterMember } from '@/lib/kernel/kernelApi';
 import { useTeamRoster } from '@/lib/team/useTeamRoster';
 import {
@@ -97,7 +100,9 @@ function TeammateChip({ member }: { member: TeamRosterMember }) {
 
 export function TeamBar() {
   const t = useTranslations('team');
+  const { hasTenant } = useAuth();
   const { members, loading } = useTeamRoster();
+  const pathname = usePathname() || '';
 
   // Nothing to show and nothing to explain yet — the bar appears with its data
   // rather than reserving an empty strip of chrome.
@@ -105,6 +110,12 @@ export function TeamBar() {
 
   const alwaysOn = members.filter((m) => m.alwaysOn);
   const team = members.filter((m) => !m.alwaysOn);
+  // Inviting needs a workspace. Rather than hide the control (which would make
+  // the guest footer a different footer), it becomes the offer that leads to
+  // one — the same row, the same place, an honest label.
+  const invite = hasTenant
+    ? { href: '/workforce', label: t('invite') }
+    : { href: signInHref(pathname), label: t('inviteSignedOut') };
 
   return (
     <div className={styles.bar} role="group" aria-label={t('barLabel')}>
@@ -121,8 +132,8 @@ export function TeamBar() {
         <div className={styles.chips}>
           {team.map((member) => <TeammateChip key={member.id} member={member} />)}
         </div>
-        <ButtonLink href="/workforce" variant="ghost" size="sm" className={styles.invite}>
-          {t('invite')}
+        <ButtonLink href={invite.href} variant="ghost" size="sm" className={styles.invite}>
+          {invite.label}
         </ButtonLink>
       </div>
     </div>

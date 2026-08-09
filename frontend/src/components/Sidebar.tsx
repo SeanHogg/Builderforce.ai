@@ -6,6 +6,8 @@ import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { findActiveGroup, navGroupsForAccountType, type NavGroup } from '@/lib/navGroups';
 import { useAvailableForHire, useIsFreelancer, useIsSalesAssociate } from '@/lib/rbac';
+import { signInHref } from '@/lib/auth';
+import { ButtonLink } from '@/components/ui';
 import SidebarLegalMenu from './legal/SidebarLegalMenu';
 import SessionList from './SessionList';
 import UsageMeter from './UsageMeter';
@@ -39,13 +41,39 @@ interface SidebarProps {
   onMobileClose?: () => void;
 }
 
-function GroupLink({ group, active, onNavigate, t, badge = 0 }: {
+function GroupLink({ group, active, onNavigate, t, badge = 0, locked = false, lockHint }: {
   group: NavGroup;
   active: boolean;
   onNavigate?: () => void;
   t: (k: string) => string;
   badge?: number;
+  /** Renders visible and inert instead of navigating — see the note below. */
+  locked?: boolean;
+  lockHint?: string;
 }) {
+  const label = t(group.labelKey);
+  const body = (
+    <>
+      <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{group.icon}</span>
+      <span className="nav-item-label">{label}</span>
+      {locked && <span className="nav-item__lock" aria-hidden="true">🔒</span>}
+      {!!badge && <span aria-label={`${badge} unread sessions`} style={{ marginLeft: 'auto', minWidth: 17, height: 17, borderRadius: 'var(--radius-full)', display: 'grid', placeItems: 'center', background: 'var(--accent)', color: 'var(--text-on-accent)', fontSize: 9, fontWeight: 800 }}>{badge > 99 ? '99+' : badge}</span>}
+    </>
+  );
+
+  // Disable, never hide (PRD 21 §2.6 rule 7). A visitor with no account sees the
+  // whole product's shape — what they cannot do yet reads as "not yet", not as
+  // "this product does not do that". A `<span>` rather than a dimmed `<Link>`:
+  // an anchor that looks disabled is still followable by keyboard and by
+  // middle-click, so the state has to be the element, not a class on it.
+  if (locked) {
+    return (
+      <span className="nav-item nav-item--locked flex items-center" aria-disabled="true" title={lockHint} data-tour={group.id}>
+        {body}
+      </span>
+    );
+  }
+
   return (
     <Link
       href={group.href}
@@ -57,9 +85,7 @@ function GroupLink({ group, active, onNavigate, t, badge = 0 }: {
       // a TourAnchor. Inert outside a demo session.
       data-tour={group.id}
     >
-      <span style={{ fontSize: '1.1rem', flexShrink: 0 }}>{group.icon}</span>
-      <span className="nav-item-label">{t(group.labelKey)}</span>
-      {!!badge && <span aria-label={`${badge} unread sessions`} style={{ marginLeft: 'auto', minWidth: 17, height: 17, borderRadius: 9, display: 'grid', placeItems: 'center', background: 'var(--accent)', color: 'white', fontSize: 9, fontWeight: 800 }}>{badge > 99 ? '99+' : badge}</span>}
+      {body}
     </Link>
   );
 }
@@ -67,7 +93,9 @@ function GroupLink({ group, active, onNavigate, t, badge = 0 }: {
 export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname() || '';
   const t = useTranslations('nav');
-  const { user } = useAuth();
+  const tc = useTranslations('common');
+  const ts = useTranslations('sessions');
+  const { user, isAuthenticated } = useAuth();
 
   const isFreelancer = useIsFreelancer();
   const availableForHire = useAvailableForHire();
@@ -117,12 +145,30 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
           {!collapsed && <SessionList onNavigate={onMobileClose} />}
           <div className="nav-section">
             {!collapsed && <div className="ui-eyebrow nav-section__label">{t('workspaceLabel')}</div>}
-            {groups.map((g) => <GroupLink key={g.id} group={g} active={activeGroupId === g.id} onNavigate={onMobileClose} t={t} />)}
+            {groups.map((g) => (
+              <GroupLink
+                key={g.id}
+                group={g}
+                active={activeGroupId === g.id}
+                onNavigate={onMobileClose}
+                t={t}
+                locked={!isAuthenticated}
+                lockHint={tc('signInToOpen', { label: t(g.labelKey) })}
+              />
+            ))}
           </div>
         </div>
 
         {!collapsed && (
           <div className="nav-footer">
+            {/* The one thing a signed-out visitor's rail is missing: the way to
+                keep what they are making. Their board is real and local-first,
+                so this is an offer rather than a wall. */}
+            {!isAuthenticated && (
+              <ButtonLink href={signInHref(pathname)} variant="primary" size="sm" block>
+                {ts('signInToKeep')}
+              </ButtonLink>
+            )}
             <UsageMeter />
             <SidebarLegalMenu collapsed={collapsed} />
           </div>

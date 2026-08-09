@@ -16,7 +16,7 @@
  * published to the marketplace with a price for revenue.
  */
 import { Hono } from 'hono';
-import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import { buildDatabase, type Db } from '../../infrastructure/database/connection';
 import {
   agentFeedback,
@@ -609,24 +609,23 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
       .returning({ id: ideAgents.id });
     if (rows.length === 0) return c.json({ error: 'Agent not found' }, 404);
 
-    const bridges = await db
-      .delete(projectAgents)
+    const bridges = await db.select({ id: projectAgents.id }).from(projectAgents)
       .where(and(
         eq(projectAgents.tenantId, tenantId),
         eq(projectAgents.agentKind, 'workforce'),
         eq(projectAgents.agentRef, id),
         isNull(projectAgents.projectId),
-      ))
-      .returning({ id: projectAgents.id });
-    const bridgeId = bridges[0]?.id;
-    if (bridgeId != null) {
+      ));
+    const bridgeIds = bridges.map((bridge) => bridge.id);
+    if (bridgeIds.length > 0) {
       await db
         .delete(artifactAssignments)
         .where(and(
           eq(artifactAssignments.tenantId, tenantId),
           eq(artifactAssignments.scope, 'agent'),
-          eq(artifactAssignments.scopeId, bridgeId),
+          inArray(artifactAssignments.scopeId, bridgeIds),
         ));
+      await db.delete(projectAgents).where(inArray(projectAgents.id, bridgeIds));
     }
     await invalidateAgentCaches(c.env as Env, tenantId);
     return c.json({ deleted: true });
@@ -733,9 +732,9 @@ export function createWorkforceRoutes(): Hono<HonoEnv> {
         target: agentFeedback.purchaseId,
         set: { rating, comment, createdAt: sql`NOW()` },
       })
-      .returning({ id: agentFeedback.id });
+      .returning({ id: agentFeedback.id, created: sql<boolean>`(xmax = 0)` });
     await invalidateCached(c.env as Env, perfCacheKey(id));
-    return c.json({ id: row?.id }, 201);
+    return c.json({ id: row?.id }, row?.created ? 201 : 200);
   });
 
   // ----- Public: browse published agents ---------------------------------

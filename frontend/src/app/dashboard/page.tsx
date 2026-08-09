@@ -27,6 +27,7 @@ import { useWorkforcePresence } from '@/lib/useWorkforcePresence';
 import { agentHosts, tasksApi, approvalsApi, creationSessionsApi, type AgentHost } from '@/lib/builderforceApi';
 import { WorkspaceCanvas, type WorkspaceCanvasPanel } from '@/components/workspace-canvas/WorkspaceCanvas';
 import styles from './DashboardCanvas.module.css';
+import { signInHref } from '@/lib/auth';
 
 const DASHBOARD_TABS = ['create', 'projects', 'workforce', 'quality', 'knowledge'] as const;
 type DashboardTab = (typeof DASHBOARD_TABS)[number];
@@ -80,7 +81,7 @@ export default function DashboardPage() {
   // the picker is the right destination (multi-workspace, or provisioning fell back).
   useEffect(() => {
     if (!isAuthenticated) {
-      router.replace('/login?next=/dashboard');
+      router.replace(signInHref('/dashboard'));
     }
   }, [isAuthenticated, router]);
 

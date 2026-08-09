@@ -35,8 +35,8 @@ const srcDir = resolve(here, '../src');
  * A number here is a debt, not a budget.
  */
 const BASELINE = {
-  literalHexFiles: 405,
-  offScaleRadii: 2087,
+  literalHexFiles: 403,
+  offScaleRadii: 2086,
 };
 
 /** The five documented steps (§2.4), plus 0 and the pill value. */

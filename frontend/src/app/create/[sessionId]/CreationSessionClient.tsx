@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { CreationCanvas } from '@/components/creation-canvas/CreationCanvas';
 import { useAuth } from '@/lib/AuthContext';
 import { isLocalCreationSession } from '@/lib/creationSessions';
 import { claimLocalDraft, rememberLastCanvas } from '@/lib/pendingWork';
@@ -27,15 +26,17 @@ export default function CreationSessionClient({ sessionId }: { sessionId: string
   // THE ROUTE NO LONGER OWNS THE BOARD. It says which board belongs on the stage
   // and the shell keeps that board mounted, so opening a page (or coming back)
   // does not tear down the canvas, its in-flight Brain turn, or the presence
-  // poll. The marketing shell has no stage, so an anonymous board still renders
-  // here — `stageHosted` is derived, never reported late, so exactly one of the
-  // two paths ever mounts a canvas.
-  const stageHosted = canvas?.stageHosted ?? false;
+  // poll.
+  //
+  // There is no longer a second path. The anonymous board used to render itself
+  // here because the marketing shell had no stage; it now gets the same operator
+  // shell a signed-in board does, so the ONE stage hosts every canvas and this
+  // route only ever registers.
   const registerCanvas = canvas?.open;
   useEffect(() => {
-    if (!stageHosted || !registerCanvas) return;
+    if (!registerCanvas) return;
     registerCanvas({ sessionId, persistence: local ? 'local' : 'server', focusId, shareOpen, present, modelComparisonIds });
-  }, [focusId, local, modelComparisonIds, present, registerCanvas, sessionId, shareOpen, stageHosted]);
+  }, [focusId, local, modelComparisonIds, present, registerCanvas, sessionId, shareOpen]);
 
   // Claiming itself lives in `lib/pendingWork` — this route and the shell-level
   // <ResumeWorkBridge> both call the same coalesced function, so whichever gets
@@ -66,7 +67,6 @@ export default function CreationSessionClient({ sessionId }: { sessionId: string
   return <>
     {/* Theme tokens, not literals: this rides on the guest→sign-in path, which
         renders in whichever theme the visitor arrived from. */}
-    {claimError && <div role="alert" style={{ position: 'fixed', zIndex: 100, top: 76, left: '50%', transform: 'translateX(-50%)', maxWidth: 'calc(100vw - 32px)', padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--error, #e0736f)', boxShadow: '0 6px 22px var(--shadow-coral-soft)' }}>{claimError}</div>}
-    {!stageHosted && <CreationCanvas sessionId={sessionId} persistence={local ? 'local' : 'server'} initialFocusId={focusId} initialShareOpen={shareOpen} initialPresent={present} initialModelComparisonIds={modelComparisonIds} />}
+    {claimError && <div role="alert" style={{ position: 'fixed', zIndex: 100, top: 76, left: '50%', transform: 'translateX(-50%)', maxWidth: 'calc(100vw - 32px)', padding: '10px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)', color: 'var(--error)', boxShadow: '0 6px 22px var(--shadow-coral-soft)' }}>{claimError}</div>}
   </>;
 }

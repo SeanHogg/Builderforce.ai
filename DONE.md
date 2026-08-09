@@ -1,3 +1,46 @@
+## ✅ RESOLVED 2026-08-09 — A dead class is invisible until someone trusts it
+
+*Support ticket: `/dashboard` white-screened with a Turbopack "module factory is not available — it
+might have been deleted in an HMR update" naming `freelance/formStyles.ts`, deleted the previous day
+by the E5/E6 pass above. The deletion was correct and complete — nothing in `src/` still imports it.
+Three separate defects turned a routine stale-chunk skew into a crash, and each is now closed.*
+
+**1 — the recovery that exists did not recognise the error.** `chunkErrorRecovery.ts` already owns
+exactly this cure: purge the SW caches, hard-reload onto the current build, loop-guarded to one
+attempt per 30s window. But `isChunkLoadError()` matched webpack signatures only (`Loading chunk NN
+failed`, `NN.undefined.js`, CSS chunks, dynamic-import failures). Turbopack states the same failure
+in different words, so the predicate returned false, `ChunkErrorBoundary` re-threw to the generic
+boundary, and the user got a white screen instead of the reload that would have fixed it. The
+predicate now matches `module factory is not available` and `deleted in an HMR update`; the reported
+message is a regression test.
+
+**2 — the primitives shipped classes with no CSS rule.** The deeper cause of *why the page was
+stale-sensitive there at all* was a hand-migration off `formStyles`, and that migration copied class
+strings the primitives emit: `ui-surface--panel` and `ui-button--md`. Neither rule exists. Both are
+DEFAULTS carried by the base `.ui-surface` (`background: var(--surface-panel)`) and `.ui-button`
+(`min-height: var(--control-md)`) rules — so `<Surface>` and every default-size `<Button>` in the app
+had been rendering a dead class on every mount. Nothing looked wrong, which is precisely why it
+propagated: the emitted markup read as the contract. Declaring the two missing rules would have
+duplicated the base declarations, so instead the default variant now emits **no modifier**, in both
+primitives. The two files that copied them use `<Button>`/`<Surface>` directly, which also retires a
+hand-rolled coral gradient, a hand-rolled `disabled`/`cursor: wait` pair the `loading` prop already
+owns, and a hardcoded `rgba(34,197,94,0.9)` "saved" green that had no light-mode answer
+(→ `--success-text` / `--error-text`, both declared in both themes).
+
+**3 — no guard could see either.** `check-design-tokens.mjs` proves every `var(--x)` resolves, which
+is why undeclared-token bugs are gone — but a `.ui-*` class that names no rule fails the same silent
+way and nothing checked it. The guard now runs **two** checks over one file list: tokens, and every
+*static* `ui-*` class in a `className`. Strings carrying a `${…}` interpolation are skipped rather
+than guessed at — the primitives build their own names and are the source of truth; the check
+polices everyone who hand-writes what they emit. It landed at **zero** violations because the two
+above were the only ones, so it is a hard check rather than a shrink-only baseline. Verified by
+re-injecting both class names and confirming exit 1.
+
+**Verified:** guard fails on the reintroduced bug and passes clean (247 tokens, 50 `ui-*` classes) ·
+`tsgo --noEmit` clean · **1,530 frontend tests green (155 files)** · `check:api-transport` green ·
+`check:design-scale` ratcheted DOWN to 403 literal-hex files / 2,086 off-scale radii, as its own
+"the floor follows the work down" rule requires.
+
 ## ✅ RESOLVED 2026-08-08 — One profile, every account type (PRD 21 E2's other half)
 
 *Closes the Gap Register's "There is no 'my profile' surface for a builder account". E2's gate said

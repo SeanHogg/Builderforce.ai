@@ -7,6 +7,7 @@ import { PRODUCT_SECTIONS } from '@/lib/content';
 import { routeMarketingSchema } from '@/lib/structured-data';
 import JsonLd from './JsonLd';
 import RelatedArticles from './blog/RelatedArticles';
+import { signInHref } from '@/lib/auth';
 
 /**
  * Marketing page rendered (inside MarketingShell) when a logged-out visitor or
@@ -20,7 +21,7 @@ import RelatedArticles from './blog/RelatedArticles';
  */
 export default function RouteMarketing({ pathname }: { pathname: string }) {
   const m = getRouteMarketing(pathname);
-  const loginHref = `/login?next=${encodeURIComponent(pathname)}`;
+  const loginHref = signInHref(pathname);
   const metaDesc = m.seoDescription ?? m.description;
 
   // Client-set <title>/description so each feature route has a unique, crawlable

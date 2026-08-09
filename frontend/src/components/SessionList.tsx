@@ -25,6 +25,7 @@ import { useAuth } from '@/lib/AuthContext';
 import { creationSessionsApi, type CreationSessionSummary } from '@/lib/builderforceApi';
 import { fetchRecentCanvases, invalidateRecentCanvases, listPendingDrafts } from '@/lib/pendingWork';
 import type { LocalCreationEntry } from '@/lib/creationSessions';
+import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { Button } from '@/components/ui';
 
 /** How many sessions the panel lists before deferring to the canvas library. */
@@ -56,20 +57,31 @@ export function SessionList({ onNavigate }: { onNavigate?: () => void }) {
 
   const newCanvas = useCallback(async () => {
     setCreating(true);
+    const openLocal = () => {
+      // No workspace: the anonymous board is still a real board — a local-first
+      // one this browser holds until sign-in claims it (`pendingWork`). It used
+      // to bounce to `/create`, which for a signed-out visitor was a login
+      // redirect, so "New canvas" was the one control in the guest shell that
+      // could not do the thing it is named after.
+      onNavigate?.();
+      router.push(`/create/${startGuestCreationSession('', { surface: 'brain' })}`);
+    };
+    if (!hasTenant) {
+      openLocal();
+      setCreating(false);
+      return;
+    }
     try {
       const created = await creationSessionsApi.create({ title: t('untitled') });
       invalidateRecentCanvases();
       onNavigate?.();
       router.push(`/create/${created.session.id}`);
     } catch {
-      // No workspace yet (or the write failed): the anonymous board is still a
-      // real board, and claiming it on sign-in is what `pendingWork` is for.
-      onNavigate?.();
-      router.push('/create');
+      openLocal();
     } finally {
       setCreating(false);
     }
-  }, [onNavigate, router, t]);
+  }, [hasTenant, onNavigate, router, t]);
 
   const active = recent.find((session) => session.id === currentId)
     ?? drafts.find((draft) => draft.sessionId === currentId);

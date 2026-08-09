@@ -24,7 +24,7 @@
  */
 
 import { Hono, type Context } from 'hono';
-import { authMiddleware } from '../middleware/authMiddleware';
+import { authMiddleware, optionalAuthMiddleware } from '../middleware/authMiddleware';
 import { scope } from './segmentTrackerRoutes';
 import { isDomain, type Domain } from '../../application/kernel/ObjectRegistry';
 import type { DomainService } from '../../application/kernel/DomainService';
@@ -49,6 +49,27 @@ export function createDomainRoutes(
   team: TeamRosterService,
 ): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
+
+  /**
+   * The roster in its PEOPLE form — the ONE endpoint the footer, the presence
+   * pile and the canvas drop target read (PRD 21 §4.1).
+   *
+   * Humans and agents come back in one row shape with a `kind` discriminator, so
+   * both cards become renderers of one row rather than two lists a consumer has
+   * to merge (and get subtly different). A seat with nothing provisioned behind
+   * it is returned `locked` rather than omitted — disable, never hide.
+   *
+   * Registered ABOVE the blanket `authMiddleware`, with optional auth of its own,
+   * because the shell is the same surface signed in or out: a visitor on an
+   * anonymous canvas has the same footer, showing the same seats, locked. A 401
+   * here would have made the guest shell a different product, which is the one
+   * thing PRD 21 §0 forbids. Hono applies middleware in registration order, so
+   * everything below still gets the full gate.
+   */
+  router.get('/roster/team', optionalAuthMiddleware, async (c) => {
+    return c.json({ members: await team.list(c.get('tenantId') ?? null) });
+  });
+
   router.use('*', authMiddleware);
 
   /**
@@ -98,20 +119,6 @@ export function createDomainRoutes(
   /** The roster's static shape, for a surface that has no tenant yet — the
    *  logged-out public catalogue is the same list read through another shell. */
   router.get('/roster/manifest', (c) => c.json(domains.manifest()));
-
-  /**
-   * The roster in its PEOPLE form — the ONE endpoint the footer, the presence
-   * pile and the canvas drop target read (PRD 21 §4.1).
-   *
-   * Humans and agents come back in one row shape with a `kind` discriminator, so
-   * both cards become renderers of one row rather than two lists a consumer has
-   * to merge (and get subtly different). A seat with nothing provisioned behind
-   * it is returned `locked` rather than omitted — disable, never hide.
-   */
-  router.get('/roster/team', async (c) => {
-    const { tenantId } = scope(c);
-    return c.json({ members: await team.list(tenantId) });
-  });
 
   /** Resolve and validate `:domain` once, rather than in each handler. */
   const resolve = (raw: string): Domain | null => (isDomain(raw) ? raw : null);

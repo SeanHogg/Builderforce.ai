@@ -4,6 +4,7 @@ import JsonLd from '@/components/JsonLd';
 import { BRAND } from '@/lib/content';
 import { pageMetadata } from '@/lib/seo';
 import styles from './sell-builderforce.module.css';
+import { signInHref } from '@/lib/auth';
 
 export const runtime = 'edge';
 
@@ -52,7 +53,7 @@ export default function SellBuilderforcePage() {
           <p className={styles.lede}>Get the materials, connected sales workspace, and direct support you need to introduce Builderforce to the right teams—and earn according to the referral and sales rates assigned to your program.</p>
           <div className={styles.actions}>
             <Link className={styles.primaryButton} href="/register?role=sales&next=/sales">Become a sales associate</Link>
-            <Link className={styles.secondaryButton} href="/login?next=/sales">Associate sign in</Link>
+            <Link className={styles.secondaryButton} href={signInHref('/sales')}>Associate sign in</Link>
           </div>
           <p className={styles.finePrint}>Program participation and commission eligibility are subject to approval and the terms shown in your account.</p>
         </div>

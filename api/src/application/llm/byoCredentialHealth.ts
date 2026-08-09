@@ -333,7 +333,7 @@ export async function probeByoProvider(
     const alert: ProviderAuthAlert = { provider, reason: 'unresolved', status: 0, vendor: byoVendorIdFor(provider, 'api_key'), at: now };
     const detail = `Stored credential could not be used (${reason}).`;
     await raise(alert, detail);
-    return { provider, ok: false, status: reason, error: detail, alert, checkedAt };
+    return { provider, ok: false, status: reason, alert, checkedAt };
   }
 
   const model = probeModelFor(provider, resolved);

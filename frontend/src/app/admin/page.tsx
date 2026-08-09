@@ -38,6 +38,7 @@ import TokenPanel from '@/components/admin/panels/TokenPanel';
 import FeedbackPanel from '@/components/admin/panels/FeedbackPanel';
 import OutcomeMetricsPanel from '@/components/admin/panels/OutcomeMetricsPanel';
 import EmailDeliveriesPanel from '@/components/admin/panels/EmailDeliveriesPanel';
+import { signInHref } from '@/lib/auth';
 
 /**
  * Platform Admin shell — a THIN router.
@@ -93,7 +94,7 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.replace('/login?next=/admin');
+      router.replace(signInHref('/admin'));
       return;
     }
     if (isAuthenticated && !isSuperadmin) {

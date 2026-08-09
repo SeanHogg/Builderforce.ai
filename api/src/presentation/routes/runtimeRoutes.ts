@@ -2246,15 +2246,14 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
   router.get('/tasks/:taskId/file-changes', async (c) => {
     const taskId = Number(c.req.param('taskId'));
     if (!Number.isFinite(taskId)) return c.json({ changes: [] });
-    // `createdAt` is projected as the RAW driver string (not a Drizzle `Date`) so the
-    // JSON wire format the Changes tab already parses is unchanged.
+    // Typed timestamps serialize to the API-wide ISO-8601 UTC wire format.
     const rows = await db
       .select({
         path: taskFileChanges.path,
         change: taskFileChanges.change,
         agent: taskFileChanges.agent,
         executionId: taskFileChanges.executionId,
-        createdAt: sql<string>`${taskFileChanges.createdAt}`,
+        createdAt: taskFileChanges.createdAt,
         // NOTE: the outer-row references below interpolate the TABLE (`${taskFileChanges}`),
         // not its columns. In a single-table select Drizzle renders an interpolated
         // Column WITHOUT its table qualifier, so `${taskFileChanges.executionId}` would
@@ -2333,9 +2332,8 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     };
 
     // Version token = newest change row for this path (null when unrecorded).
-    // Kept as the raw driver string so the cache key it composes is byte-identical.
     const [ver] = await db
-      .select({ ts: sql<string>`${taskFileChanges.createdAt}` })
+      .select({ ts: taskFileChanges.createdAt })
       .from(taskFileChanges)
       .where(and(
         eq(taskFileChanges.taskId, taskId),
@@ -2348,7 +2346,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     if (!ver?.ts) return c.json(await load());
     const body = await getOrSetCached(
       env,
-      `task-file-content:${tenantId}:${taskId}:${path}:${ver.ts}`,
+      `task-file-content:${tenantId}:${taskId}:${path}:${ver.ts.toISOString()}`,
       load,
       { kvTtlSeconds: 600 },
     );
@@ -2417,7 +2415,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     // Version token = newest change row for this task (null when the run hasn't
     // written anything yet — then the branch content is stable at the base).
     const [ver] = await db
-      .select({ ts: sql<string>`${taskFileChanges.createdAt}` })
+      .select({ ts: taskFileChanges.createdAt })
       .from(taskFileChanges)
       .where(and(eq(taskFileChanges.taskId, taskId), eq(taskFileChanges.tenantId, tenantId)))
       .orderBy(desc(taskFileChanges.createdAt))
@@ -2425,7 +2423,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
 
     const body = await getOrSetCached(
       env,
-      `task-repo-files:${tenantId}:${taskId}:${ctx.branch}:${ver?.ts ?? 'base'}`,
+      `task-repo-files:${tenantId}:${taskId}:${ctx.branch}:${ver?.ts.toISOString() ?? 'base'}`,
       load,
       { kvTtlSeconds: 300, l1TtlMs: 30_000 },
     );

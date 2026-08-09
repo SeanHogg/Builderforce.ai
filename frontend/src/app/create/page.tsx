@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { DashboardCreationLauncher, DashboardCreationSessions } from '@/components/dashboard/DashboardCreationSessions';
 import { PendingDraftsNotice } from '@/components/workspace/PendingDraftsNotice';
+import { signInHref } from '@/lib/auth';
 
 export const runtime = 'edge';
 
@@ -30,7 +31,7 @@ export default function CanvasLibraryPage() {
   const { isAuthenticated } = useAuth();
 
   useEffect(() => {
-    if (!isAuthenticated) router.replace('/login?next=/create');
+    if (!isAuthenticated) router.replace(signInHref('/create'));
   }, [isAuthenticated, router]);
 
   if (!isAuthenticated) return null;

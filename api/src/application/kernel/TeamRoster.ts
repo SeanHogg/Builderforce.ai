@@ -63,13 +63,24 @@ const TEAM_ROSTER_TTL_SECONDS = 120;
 
 /**
  * Seat → the built-in agent that fills it (`ide_agents.builtin_kind`, migration
- * 0289). Only seats a provisioned agent genuinely fills are listed; the rest
- * render `locked` until PRD 19's tracks land theirs, which is the honest state
- * and the one rule 7 asks for.
+ * 0289).
+ *
+ * Every teammate seat in `DOMAIN_MANIFEST` is now mapped: the six that had no
+ * agent behind them — CMO, CFO, CRO, Recruiter, HR, CEO — are seeded by
+ * `provisionBuiltinAgents` and backfilled by migration 0436. A seat still renders
+ * `locked` when a workspace has not been provisioned yet (a tenant created before
+ * the backfill ran, or one whose agent was deleted), which is the honest state
+ * and the one rule 7 asks for — it is no longer the DEFAULT state.
  */
-const SEAT_AGENT_KIND: Readonly<Record<string, string>> = {
+export const SEAT_AGENT_KIND: Readonly<Record<string, string>> = {
+  CMO: 'cmo',
   Manager: 'manager',
+  Recruiter: 'recruiter',
+  CFO: 'cfo',
+  CRO: 'cro',
+  HR: 'hr',
   Security: 'security',
+  CEO: 'ceo',
   Support: 'incident_manager',
 };
 
@@ -99,6 +110,32 @@ const humanName = (
 
 const availabilityOf = (lastUsedAt: Date | null, now: number): TeamAvailability =>
   lastUsedAt != null && now - lastUsedAt.getTime() < BUSY_WINDOW_MS ? 'busy' : 'available';
+
+/**
+ * The seats with nothing behind them — the roster a caller with no workspace
+ * gets.
+ *
+ * Not an empty list and not a 401: PRD 21 §0 says the shell is the same surface
+ * for everyone, so an anonymous visitor on a canvas sees the same footer with the
+ * same seats, `locked`. That is rule 7 ("disable, never hide") applied to the one
+ * case where NOTHING is provisioned, and it is derived from `DOMAIN_MANIFEST`
+ * here rather than restated in the client — a second copy of the seat list is
+ * exactly the drift §4.1 exists to prevent.
+ */
+export function unprovisionedSeatRoster(): TeamRosterMember[] {
+  return seatRoster().map(({ seat, domain }) => ({
+    kind: 'agent',
+    id: `seat:${domain}`,
+    name: seat,
+    role: seat,
+    availability: 'unprovisioned',
+    avatarUrl: null,
+    seat,
+    domain,
+    alwaysOn: true,
+    locked: true,
+  }));
+}
 
 /**
  * Build the roster. One read of each owner, composed here — the footer, the
@@ -225,8 +262,15 @@ export async function loadTeamRoster(db: Db, tenantId: number, now = Date.now())
   ];
 }
 
-/** The cached read the route serves. */
-export async function getTeamRoster(db: Db, env: Env, tenantId: number): Promise<TeamRosterMember[]> {
+/**
+ * The cached read the route serves.
+ *
+ * `tenantId` is nullable because the endpoint answers for a visitor who has no
+ * workspace yet — they get the seats, locked, computed with no database read and
+ * nothing to cache.
+ */
+export async function getTeamRoster(db: Db, env: Env, tenantId: number | null): Promise<TeamRosterMember[]> {
+  if (tenantId == null) return unprovisionedSeatRoster();
   return getOrSetCached(env, teamRosterCacheKey(tenantId), () => loadTeamRoster(db, tenantId), {
     kvTtlSeconds: TEAM_ROSTER_TTL_SECONDS,
   });
@@ -265,7 +309,7 @@ export async function invalidateTeamCaches(env: Env, tenantId: number): Promise<
  */
 export function createTeamRosterService(db: Db, env: Env) {
   return {
-    list: (tenantId: number) => getTeamRoster(db, env, tenantId),
+    list: (tenantId: number | null) => getTeamRoster(db, env, tenantId),
     invalidate: (tenantId: number) => invalidateTeamRoster(env, tenantId),
   };
 }

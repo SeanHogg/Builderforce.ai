@@ -4,8 +4,11 @@ import { Select } from '@/components/Select';
 
 import Link from 'next/link';
 import Image from 'next/image';
+import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
+import { signInHref } from '@/lib/auth';
+import { ButtonLink } from '@/components/ui';
 import { ThemeToggleButton } from '@/app/ThemeProvider';
 import { useRolePreview, type PreviewRole } from '@/lib/RolePreviewContext';
 import { useEmulation } from '@/lib/EmulationContext';
@@ -78,6 +81,8 @@ function CartButton() {
 
 export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
   const t = useTranslations('topbar');
+  const tc = useTranslations('common');
+  const pathname = usePathname() || '';
   const { logout, user, isAuthenticated, hasTenant } = useAuth();
   const { previewRole, startPreview, exitPreview } = useRolePreview();
   const { emulation } = useEmulation();
@@ -193,6 +198,15 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
         <CartButton />
 
         <ThemeToggleButton />
+        {/* The shell is the same surface signed in or out (PRD 21 §0), so the way
+            IN has to live in it — the marketing header used to carry this pair,
+            and a guest on a canvas no longer sees that header. */}
+        {!isAuthenticated && (
+          <>
+            <ButtonLink href={signInHref(pathname)} variant="ghost" size="sm">{tc('signIn')}</ButtonLink>
+            <ButtonLink href="/register" variant="primary" size="sm">{tc('getStarted')}</ButtonLink>
+          </>
+        )}
         {isAuthenticated && (
           <button
             type="button"

@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { AUTH_API_URL, getStoredWebToken } from '@/lib/auth';
+import { AUTH_API_URL, getStoredWebToken, signInHref } from '@/lib/auth';
 import { useCopyToClipboard } from '@/lib/useCopyToClipboard';
 
 type Mode = 'device' | 'key';
@@ -38,7 +38,7 @@ function ActivateInner() {
     if (!token) {
       setPhase('redirecting');
       const back = mode === 'device' ? `/activate?code=${encodeURIComponent(code)}` : '/activate';
-      router.replace(`/login?next=${encodeURIComponent(back)}`);
+      router.replace(signInHref(back));
       return;
     }
     setPhase(mode === 'device' ? 'confirm' : 'loading');

@@ -1160,7 +1160,10 @@
       "errorGeneric": "断开连接失败，请重试。"
     },
     "renderingDiagram": "正在渲染图表…",
-    "skipToContent": "跳转到主要内容"
+    "skipToContent": "跳转到主要内容",
+    "signIn": "登录",
+    "getStarted": "立即开始 →",
+    "signInToOpen": "登录后可打开{label}"
   },
   "prdCreate": {
     "title": "新建 PRD",
@@ -12244,8 +12247,6 @@
     "compare": "对比",
     "integrations": "集成",
     "mediaKit": "媒体资料包",
-    "signIn": "登录",
-    "getStarted": "立即开始 →",
     "toggleMenu": "切换菜单",
     "switchToLight": "切换到浅色模式",
     "switchToDark": "切换到深色模式"
@@ -15197,7 +15198,8 @@
     "invite": "+ 邀请",
     "roleTeammate": "队友",
     "chipJoin": "把 {name}（{role}）加入此画布 —— 拖入或按 Enter",
-    "chipLocked": "{name} 尚未在此工作区中配置"
+    "chipLocked": "{name} 尚未在此工作区中配置",
+    "inviteSignedOut": "登录后邀请"
   },
   "sessions": {
     "newCanvas": "+ 新建画布",
@@ -15205,7 +15207,8 @@
     "recents": "最近",
     "untitled": "未命名画布",
     "draft": "草稿",
-    "draftHint": "仅保存在此浏览器中 —— 登录后才会保留"
+    "draftHint": "仅保存在此浏览器中 —— 登录后才会保留",
+    "signInToKeep": "登录以保存你的工作"
   },
   "shellPanel": {
     "crumb": "工作区",
@@ -15221,5 +15224,15 @@
     "save": "保存",
     "saved": "已保存",
     "saveFailed": "保存失败"
+  },
+  "creationInvitation": {
+    "title": "加入创作会话",
+    "joining": "正在加入此创作会话…",
+    "signInPrompt": "请使用收到邀请的邮箱登录以加入此会话。",
+    "invalidLink": "此邀请链接无效。",
+    "notAccepted": "无法接受此邀请。",
+    "workspaceUnavailable": "此账号无法访问被邀请的工作区。",
+    "signInLink": "使用收到邀请的邮箱登录",
+    "useAnotherAccount": "使用其他账号"
   }
 }

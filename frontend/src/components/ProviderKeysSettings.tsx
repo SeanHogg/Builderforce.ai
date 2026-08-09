@@ -364,7 +364,9 @@ function probeVerdict(
   return {
     // An upstream outage is not this account's fault and not this operator's job to fix.
     tone: result.status === 'upstream_error' ? 'warn' : 'error',
-    message: result.error ?? t('diagnostic.failedFallback', { status: stateLabel(t, result.status) }),
+    // Server responses carry machine status codes; compose all operator-facing prose
+    // here so every supported locale sees the same diagnostic contract.
+    message: t('diagnostic.failedFallback', { status: stateLabel(t, result.status) }),
     ...(result.diagnostic ? { diagnostic: result.diagnostic } : {}),
   };
 }

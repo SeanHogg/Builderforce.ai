@@ -129,31 +129,26 @@ export async function resolveCloudAgent(
   // DB. A run is the current engine regardless of any legacy `engine` value on the row.
   const DEFAULT: ResolvedCloudAgent = { engine: CURRENT_ENGINE_ID, ref, runtimeSurface: 'durable' };
   if (!ref) return DEFAULT;
-  try {
-    const db = buildDatabase(env);
-    const rows = await db
-      .select({
-        name:             ideAgents.name,
-        runtimeSurface:   ideAgents.runtimeSurface,
-        baseModel:        ideAgents.baseModel,
-        runtimeSupport:   ideAgents.runtimeSupport,
-        preferredRuntime: ideAgents.preferredRuntime,
-      })
-      .from(ideAgents)
-      .where(and(eq(ideAgents.id, ref), eq(ideAgents.tenantId, tenantId)))
-      .limit(1);
-    const engine = CURRENT_ENGINE_ID;
-    const label = typeof rows[0]?.name === 'string' && rows[0].name ? rows[0].name : undefined;
-    const runtimeSurface = rows[0]?.runtimeSurface === 'container' ? 'container' : 'durable';
-    const rawModel = typeof rows[0]?.baseModel === 'string' ? rows[0].baseModel.trim() : '';
-    const baseModel = rawModel && rawModel !== AGENT_DEFAULT_MODEL_SENTINEL ? rawModel : undefined;
-    const runtimeSupport = typeof rows[0]?.runtimeSupport === 'string' ? rows[0].runtimeSupport : undefined;
-    const preferredRuntime = rows[0]?.preferredRuntime ?? null;
-    return { engine, label, ref, runtimeSurface, baseModel, runtimeSupport, preferredRuntime };
-  } catch (error) {
-    reportCaughtError(error, { source: "application/runtime/cloudAgentEngine.ts", operation: "resolveCloudAgent", context: { logMessage: '[cloud-agent] agent resolution failed; using runtime defaults', details: { tenantId, ref, error } } });
-    return DEFAULT;
-  }
+  const db = buildDatabase(env);
+  const rows = await db
+    .select({
+      name:             ideAgents.name,
+      runtimeSurface:   ideAgents.runtimeSurface,
+      baseModel:        ideAgents.baseModel,
+      runtimeSupport:   ideAgents.runtimeSupport,
+      preferredRuntime: ideAgents.preferredRuntime,
+    })
+    .from(ideAgents)
+    .where(and(eq(ideAgents.id, ref), eq(ideAgents.tenantId, tenantId)))
+    .limit(1);
+  const engine = CURRENT_ENGINE_ID;
+  const label = typeof rows[0]?.name === 'string' && rows[0].name ? rows[0].name : undefined;
+  const runtimeSurface = rows[0]?.runtimeSurface === 'container' ? 'container' : 'durable';
+  const rawModel = typeof rows[0]?.baseModel === 'string' ? rows[0].baseModel.trim() : '';
+  const baseModel = rawModel && rawModel !== AGENT_DEFAULT_MODEL_SENTINEL ? rawModel : undefined;
+  const runtimeSupport = typeof rows[0]?.runtimeSupport === 'string' ? rows[0].runtimeSupport : undefined;
+  const preferredRuntime = rows[0]?.preferredRuntime ?? null;
+  return { engine, label, ref, runtimeSurface, baseModel, runtimeSupport, preferredRuntime };
 }
 /**
  * Load a cloud agent's OWN psychometric profile (ide_agents.psychometric) — the

@@ -109,7 +109,7 @@ const unreadCount = (side: 'employer' | 'freelancer') => {
         AND ${freelancerMessages.createdAt} > COALESCE(${watermark}, 'epoch'))::int`;
 };
 
-export function createFreelancerMessagingRoutes(_db: Db): Hono<HonoEnv> {
+export function createFreelancerMessagingRoutes(): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
 
   /** Append a message to an already-authorized conversation, refresh the denormalized
@@ -176,12 +176,11 @@ export function createFreelancerMessagingRoutes(_db: Db): Hono<HonoEnv> {
       const file = entry as unknown as File;
       if (file.size > ATTACH_MAX_BYTES) return { error: 'Attachment too large (max 15MB)', status: 413 };
       const type = file.type || 'application/octet-stream';
-      if (c.env.UPLOADS) {
-        const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
-        const key = `messages/${senderUserId}/${crypto.randomUUID()}.${ext}`;
-        await c.env.UPLOADS.put(key, file.stream(), { httpMetadata: { contentType: type } });
-        attach = { key, name: file.name.slice(0, 255), type: type.slice(0, 120) };
-      }
+      if (!c.env.UPLOADS) return { error: 'Attachments are not available', status: 415 };
+      const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8);
+      const key = `messages/${senderUserId}/${crypto.randomUUID()}.${ext}`;
+      await c.env.UPLOADS.put(key, file.stream(), { httpMetadata: { contentType: type } });
+      attach = { key, name: file.name.slice(0, 255), type: type.slice(0, 120) };
     }
     return { body, attach };
   }
@@ -311,10 +310,12 @@ export function createFreelancerMessagingRoutes(_db: Db): Hono<HonoEnv> {
     if (!conv) return c.json({ error: 'Not found' }, 404);
     const payload = await readSendPayload(c, userId);
     if ('error' in payload) return c.json({ error: payload.error }, payload.status);
+    // Capture the read boundary BEFORE inserting. A peer message committed while this
+    // send is in flight remains newer than the watermark and cannot be marked read unseen.
+    const readThrough = new Date();
     const { id: msgId } = await appendMessage(db, c.env, conv, userId, payload.body, payload.attach);
-    // Sending implies reading everything before it on your side.
     await db.update(freelancerConversations)
-      .set({ freelancerLastReadAt: sql`NOW()` })
+      .set({ freelancerLastReadAt: readThrough })
       .where(eq(freelancerConversations.id, id));
     return c.json({ id: msgId }, 201);
   });
@@ -324,9 +325,11 @@ export function createFreelancerMessagingRoutes(_db: Db): Hono<HonoEnv> {
     const db = buildDatabase(c.env);
     const userId = c.get('userId') as string;
     const id = c.req.param('id');
-    await db.update(freelancerConversations)
+    const rows = await db.update(freelancerConversations)
       .set({ freelancerLastReadAt: sql`NOW()` })
-      .where(and(eq(freelancerConversations.id, id), eq(freelancerConversations.freelancerUserId, userId)));
+      .where(and(eq(freelancerConversations.id, id), eq(freelancerConversations.freelancerUserId, userId)))
+      .returning({ id: freelancerConversations.id });
+    if (rows.length === 0) return c.json({ error: 'Not found' }, 404);
     return c.json({ ok: true });
   });
 
@@ -404,9 +407,10 @@ export function createFreelancerMessagingRoutes(_db: Db): Hono<HonoEnv> {
       subjectType, engagementId, jobId, proposalId, projectId, title: b.title ?? null,
     });
     if (b.body && b.body.trim()) {
+      const readThrough = new Date();
       await appendMessage(db, c.env, conv, actor, b.body.trim());
       await db.update(freelancerConversations)
-        .set({ employerLastReadAt: sql`NOW()` })
+        .set({ employerLastReadAt: readThrough })
         .where(eq(freelancerConversations.id, conv.id));
     }
     return c.json({ id: conv.id }, 201);
@@ -434,9 +438,10 @@ export function createFreelancerMessagingRoutes(_db: Db): Hono<HonoEnv> {
     if (!conv) return c.json({ error: 'Not found' }, 404);
     const payload = await readSendPayload(c, actor);
     if ('error' in payload) return c.json({ error: payload.error }, payload.status);
+    const readThrough = new Date();
     const { id: msgId } = await appendMessage(db, c.env, conv, actor, payload.body, payload.attach);
     await db.update(freelancerConversations)
-      .set({ employerLastReadAt: sql`NOW()` })
+      .set({ employerLastReadAt: readThrough })
       .where(eq(freelancerConversations.id, id));
     return c.json({ id: msgId }, 201);
   });
@@ -446,9 +451,11 @@ export function createFreelancerMessagingRoutes(_db: Db): Hono<HonoEnv> {
     const db = buildDatabase(c.env);
     const tenantId = c.get('tenantId') as number;
     const id = c.req.param('id');
-    await db.update(freelancerConversations)
+    const rows = await db.update(freelancerConversations)
       .set({ employerLastReadAt: sql`NOW()` })
-      .where(and(eq(freelancerConversations.id, id), eq(freelancerConversations.tenantId, tenantId)));
+      .where(and(eq(freelancerConversations.id, id), eq(freelancerConversations.tenantId, tenantId)))
+      .returning({ id: freelancerConversations.id });
+    if (rows.length === 0) return c.json({ error: 'Not found' }, 404);
     return c.json({ ok: true });
   });
 
@@ -502,7 +509,7 @@ async function getOrCreateConversation(db: Db, input: {
   if (existing) return existing;
 
   const id = crypto.randomUUID();
-  const [created] = await db.insert(freelancerConversations).values({
+  const insert = db.insert(freelancerConversations).values({
     id,
     tenantId: input.tenantId,
     freelancerUserId: input.freelancerUserId,
@@ -513,11 +520,21 @@ async function getOrCreateConversation(db: Db, input: {
     proposalId: input.proposalId,
     projectId: input.projectId,
     title: input.title,
-  }).onConflictDoNothing().returning();
+  });
+  const [created] = input.engagementId
+    ? await insert.onConflictDoNothing({
+        target: [freelancerConversations.tenantId, freelancerConversations.freelancerUserId, freelancerConversations.engagementId],
+        targetWhere: sql`${freelancerConversations.engagementId} IS NOT NULL`,
+      }).returning()
+    : input.jobId
+      ? await insert.onConflictDoNothing({
+          target: [freelancerConversations.tenantId, freelancerConversations.freelancerUserId, freelancerConversations.jobId],
+          targetWhere: sql`${freelancerConversations.jobId} IS NOT NULL AND ${freelancerConversations.engagementId} IS NULL`,
+        }).returning()
+      : await insert.returning();
   if (created) return created;
   // Lost a race on the unique index — read the winner back.
   const winner = await findScoped();
   if (winner) return winner;
-  const [any] = await db.select().from(freelancerConversations).where(eq(freelancerConversations.id, id));
-  return any as ConversationRow;
+  throw new Error('Conversation conflict could not be resolved to its scoped row');
 }

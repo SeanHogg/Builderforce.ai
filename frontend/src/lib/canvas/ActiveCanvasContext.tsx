@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
-import { classifyShell } from '@/lib/shellRouting';
+import { rendersAppShell } from '@/lib/shellRouting';
 
 /**
  * WHICH board is on the stage — shell state, so the board is no longer owned by
@@ -35,9 +35,9 @@ export interface ActiveCanvasValue {
   /** Every board opened in this shell session. Each owns one mounted canvas. */
   opened: ActiveCanvas[];
   /**
-   * True when THIS shell renders the stage. The logged-out marketing shell does
-   * not, so the anonymous-canvas route falls back to rendering the board itself
-   * rather than registering into a stage that will never mount.
+   * True when THIS shell renders the stage — which is now every shell that
+   * renders a canvas route, signed in or not. An anonymous board is a real
+   * board and gets the real stage; see {@link shellHostsCanvasStage}.
    */
   stageHosted: boolean;
   /** Canonical project ids referenced by the board, published by the canvas. */
@@ -55,9 +55,13 @@ const ActiveCanvasContext = createContext<ActiveCanvasValue | null>(null);
  * Derived rather than reported by the stage on mount: a boolean that arrives one
  * commit late makes the route render the board for a frame and then hand it over,
  * which loads the same canvas twice.
+ *
+ * It is the SAME predicate that picks the chrome, so "which shell is on screen"
+ * and "who owns the board" can never disagree — the guest canvas is hosted by the
+ * operator shell exactly as a signed-in one is.
  */
 export function shellHostsCanvasStage(pathname: string, isAuthenticated: boolean): boolean {
-  return isAuthenticated && classifyShell(pathname) === 'app';
+  return rendersAppShell(pathname, isAuthenticated);
 }
 
 export function ActiveCanvasProvider({

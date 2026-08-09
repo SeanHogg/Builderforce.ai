@@ -45,6 +45,7 @@ import { TrustBadge } from '@/components/freelance/TrustBadge';
 import { SkeletonGrid } from './SkeletonGrid';
 import { ModelsExplorer } from './ModelsExplorer';
 import MarketplaceGigsSection from './MarketplaceGigsSection';
+import { signInHref } from '@/lib/auth';
 
 // Human freelancers ("Talent"), the live model catalog ("Models"), and open work to
 // bid on ("Gigs") are now categories of the marketplace rather than standalone
@@ -455,7 +456,7 @@ export default function MarketplacePageClient() {
     // Hiring requires an account — route anonymous users to sign in (mirrors the
     // Publish tab gate) instead of firing an auth-only POST that 401s silently.
     if (!isAuthenticated) {
-      window.location.href = '/login?next=/marketplace';
+      window.location.href = signInHref('/marketplace');
       return;
     }
     setHiringId(agentId);

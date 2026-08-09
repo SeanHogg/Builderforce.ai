@@ -1160,7 +1160,10 @@
       "errorGeneric": "No se pudo desconectar. Inténtalo de nuevo."
     },
     "renderingDiagram": "Generando el diagrama…",
-    "skipToContent": "Saltar al contenido principal"
+    "skipToContent": "Saltar al contenido principal",
+    "signIn": "Iniciar sesión",
+    "getStarted": "Empezar →",
+    "signInToOpen": "Inicia sesión para abrir {label}"
   },
   "prdCreate": {
     "title": "Nuevo PRD",
@@ -12244,8 +12247,6 @@
     "compare": "Comparar",
     "integrations": "Integraciones",
     "mediaKit": "Kit de medios",
-    "signIn": "Iniciar sesión",
-    "getStarted": "Comenzar →",
     "toggleMenu": "Alternar menú",
     "switchToLight": "Cambiar al modo claro",
     "switchToDark": "Cambiar al modo oscuro"
@@ -15197,7 +15198,8 @@
     "invite": "+ Invitar",
     "roleTeammate": "compañero",
     "chipJoin": "Añade a {name} ({role}) a este lienzo: arrástralo o pulsa Intro",
-    "chipLocked": "{name} aún no está configurado en este espacio de trabajo"
+    "chipLocked": "{name} aún no está configurado en este espacio de trabajo",
+    "inviteSignedOut": "Inicia sesión para invitar"
   },
   "sessions": {
     "newCanvas": "+ Nuevo lienzo",
@@ -15205,7 +15207,8 @@
     "recents": "Recientes",
     "untitled": "Lienzo sin título",
     "draft": "Borrador",
-    "draftHint": "Guardado solo en este navegador: inicia sesión para conservarlo"
+    "draftHint": "Guardado solo en este navegador: inicia sesión para conservarlo",
+    "signInToKeep": "Inicia sesión para conservar tu trabajo"
   },
   "shellPanel": {
     "crumb": "Espacio de trabajo",
@@ -15221,5 +15224,15 @@
     "save": "Guardar",
     "saved": "Guardado",
     "saveFailed": "No se pudo guardar"
+  },
+  "creationInvitation": {
+    "title": "Unirse a la sesión de creación",
+    "joining": "Uniéndote a esta sesión de creación…",
+    "signInPrompt": "Inicia sesión con el correo invitado para unirte a esta sesión.",
+    "invalidLink": "Este enlace de invitación no es válido.",
+    "notAccepted": "No se pudo aceptar esta invitación.",
+    "workspaceUnavailable": "El espacio de trabajo invitado no está disponible para esta cuenta.",
+    "signInLink": "Inicia sesión con el correo invitado",
+    "useAnotherAccount": "Usar otra cuenta"
   }
 }

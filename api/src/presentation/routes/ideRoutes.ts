@@ -74,13 +74,9 @@ function parseProjectIdInt(param: string): number {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * `SELECT *` projections that keep the raw snake_case keys — AND the raw
- * Postgres timestamp text — these endpoints have always returned to clients.
- *
- * Timestamps and int8 are cast to text on purpose: Drizzle maps `timestamptz` to
- * a JS `Date` (which would serialise as an ISO-Z string, not the wire form
- * clients already parse) and `bigint` to a `number` (the pg driver returns a
- * string). Casting keeps the response byte-identical to the raw-SQL version.
+ * `SELECT *` projections that keep the raw snake_case keys these endpoints expose.
+ * Timestamp columns stay typed so JSON serialization uses the API-wide ISO-8601
+ * UTC contract; only bigint values that cannot safely be JSON numbers stay text.
  */
 const datasetRow = {
   id: ideDatasets.id,
@@ -91,8 +87,8 @@ const datasetRow = {
   r2_key: ideDatasets.r2Key,
   example_count: ideDatasets.exampleCount,
   status: ideDatasets.status,
-  created_at: sql<string>`${ideDatasets.createdAt}::text`,
-  updated_at: sql<string>`${ideDatasets.updatedAt}::text`,
+  created_at: ideDatasets.createdAt,
+  updated_at: ideDatasets.updatedAt,
 };
 
 const trainingJobRow = {
@@ -114,9 +110,9 @@ const trainingJobRow = {
   eval_reasoning_quality: ideTrainingJobs.evalReasoningQuality,
   eval_hallucination_rate: ideTrainingJobs.evalHallucinationRate,
   eval_details: ideTrainingJobs.evalDetails,
-  evaluated_at: sql<string | null>`${ideTrainingJobs.evaluatedAt}::text`,
-  created_at: sql<string>`${ideTrainingJobs.createdAt}::text`,
-  updated_at: sql<string>`${ideTrainingJobs.updatedAt}::text`,
+  evaluated_at: ideTrainingJobs.evaluatedAt,
+  created_at: ideTrainingJobs.createdAt,
+  updated_at: ideTrainingJobs.updatedAt,
 };
 
 const trainingLogRow = {
@@ -126,8 +122,45 @@ const trainingLogRow = {
   step: ideTrainingLogs.step,
   loss: ideTrainingLogs.loss,
   message: ideTrainingLogs.message,
-  created_at: sql<string>`${ideTrainingLogs.createdAt}::text`,
+  created_at: ideTrainingLogs.createdAt,
 };
+
+/** Complete workforce-agent wire projection. Keep the established snake_case API
+ * keys while letting Drizzle own every column mapping (including ISO timestamps). */
+const agentRow = {
+  id: ideAgents.id,
+  tenant_id: ideAgents.tenantId,
+  project_id: ideAgents.projectId,
+  job_id: ideAgents.jobId,
+  name: ideAgents.name,
+  builtin_kind: ideAgents.builtinKind,
+  role_keys: ideAgents.roleKeys,
+  title: ideAgents.title,
+  bio: ideAgents.bio,
+  skills: ideAgents.skills,
+  base_model: ideAgents.baseModel,
+  status: ideAgents.status,
+  hire_count: ideAgents.hireCount,
+  runtime_support: ideAgents.runtimeSupport,
+  preferred_runtime: ideAgents.preferredRuntime,
+  runtime_surface: ideAgents.runtimeSurface,
+  psychometric: ideAgents.psychometric,
+  price_cents: ideAgents.priceCents,
+  pricing_model: ideAgents.pricingModel,
+  price_unit: ideAgents.priceUnit,
+  eval_score: ideAgents.evalScore,
+  published: ideAgents.published,
+  lora_rank: ideAgents.loraRank,
+  r2_artifact_key: ideAgents.r2ArtifactKey,
+  resume_md: ideAgents.resumeMd,
+  package_version: ideAgents.packageVersion,
+  mamba_state: ideAgents.mambaState,
+  inference_mode: ideAgents.inferenceMode,
+  request_count: ideAgents.requestCount,
+  last_used_at: ideAgents.lastUsedAt,
+  created_at: ideAgents.createdAt,
+  updated_at: ideAgents.updatedAt,
+} as const;
 
 async function resolveProjectId(db: Db, param: string): Promise<number> {
   if (UUID_RE.test(param)) {
@@ -447,7 +480,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
         // int8 arrives as a string from the driver; Drizzle's bigint mapper would
         // turn it into a number and change this field's type on the wire.
         total_bytes: sql<string>`${projectSites.totalBytes}::text`,
-        published_at: sql<string | null>`${projectSites.publishedAt}::text`,
+        published_at: projectSites.publishedAt,
       })
       .from(projectSites)
       .where(eq(projectSites.projectId, projectId))
@@ -910,17 +943,11 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   });
 
   // ---------- Agents (workforce registry) ----------
-  // NOTE: every `ide_agents` statement below runs through `db.execute(sql\`\`)`
-  // rather than the query builder. The Drizzle `ideAgents` table does not declare
-  // the columns migration 0022/0036 added (job_id, lora_rank, r2_artifact_key,
-  // resume_md, package_version, mamba_state, inference_mode, request_count,
-  // last_used_at), so the builder can neither write them nor reproduce the
-  // `SELECT *` row shape these endpoints return to clients.
   router.get('/agents', async (c) => {
     const db = buildDatabase(c.env);
-    const rows = (await db.execute(sql`
-      SELECT * FROM ide_agents WHERE status = 'active' ORDER BY hire_count DESC, created_at DESC
-    `)).rows;
+    const rows = await db.select(agentRow).from(ideAgents)
+      .where(eq(ideAgents.status, 'active'))
+      .orderBy(desc(ideAgents.hireCount), desc(ideAgents.createdAt));
     return c.json(rows);
   });
 
@@ -954,13 +981,14 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     // `tenant_id` MUST be written: it is what scopes the agent to this workspace.
     // Omitting it (as this INSERT previously did) left every agent published through
     // this route with tenant_id = NULL — i.e. owned by no tenant at all.
-    await db.execute(sql`
-      INSERT INTO ide_agents (id, tenant_id, project_id, job_id, name, title, bio, skills, base_model, lora_rank, r2_artifact_key, resume_md, status, hire_count, eval_score, package_version, mamba_state, inference_mode)
-      VALUES (${id}, ${tenantId}, ${projectId}, ${body.job_id ?? null}, ${body.name}, ${body.title}, ${body.bio}, ${skillsJson},
-        ${body.base_model}, ${body.lora_rank ?? null}, ${body.r2_artifact_key ?? null}, ${body.resume_md ?? null}, 'active', 0, ${body.eval_score ?? null},
-        ${packageVersion}, ${mambaStateJson}::jsonb, ${inferenceMode})
-    `);
-    const [row] = (await db.execute(sql`SELECT * FROM ide_agents WHERE id = ${id}`)).rows;
+    const [row] = await db.insert(ideAgents).values({
+      id, tenantId, projectId, jobId: body.job_id ?? null, name: body.name,
+      title: body.title, bio: body.bio, skills: skillsJson, baseModel: body.base_model,
+      loraRank: body.lora_rank ?? null, r2ArtifactKey: body.r2_artifact_key ?? null,
+      resumeMd: body.resume_md ?? null, status: 'active', hireCount: 0,
+      evalScore: body.eval_score ?? null, packageVersion,
+      mambaState: mambaStateJson ? JSON.parse(mambaStateJson) : null, inferenceMode,
+    }).returning(agentRow);
     // Publishing a trained agent (status 'active', carries its eval_score) makes it
     // appear in the public workforce registry — drop the cached listing so the new
     // agent and its evaluation score show up immediately.
@@ -970,7 +998,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   router.get('/agents/:id', async (c) => {
     const db = buildDatabase(c.env);
-    const [row] = (await db.execute(sql`SELECT * FROM ide_agents WHERE id = ${c.req.param('id')}`)).rows;
+    const [row] = await db.select(agentRow).from(ideAgents).where(eq(ideAgents.id, c.req.param('id'))).limit(1);
     if (!row) return c.json({ error: 'Agent not found' }, 404);
     return c.json(row);
   });
@@ -978,11 +1006,9 @@ export function createIdeRoutes(): Hono<HonoEnv> {
   router.get('/agents/:id/package', async (c) => {
     const agentId = c.req.param('id');
     const db = buildDatabase(c.env);
-    const [agent] = (await db.execute(sql`SELECT * FROM ide_agents WHERE id = ${agentId}`)).rows;
+    const [agent] = await db.select(agentRow).from(ideAgents).where(eq(ideAgents.id, agentId)).limit(1);
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
-    await db.execute(sql`
-      UPDATE ide_agents SET request_count = request_count + 1, last_used_at = NOW() WHERE id = ${agentId}
-    `);
+    await db.update(ideAgents).set({ requestCount: sql`${ideAgents.requestCount} + 1`, lastUsedAt: new Date() }).where(eq(ideAgents.id, agentId));
     const skills: string[] = Array.isArray(agent.skills) ? agent.skills : JSON.parse(typeof agent.skills === 'string' ? agent.skills : '[]');
     const mambaState = agent.mamba_state ?? null;
     const version = mambaState ? '2.0' : '1.0';
@@ -997,7 +1023,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       training_job_id: agent.job_id as string | undefined,
       r2_artifact_key: agent.r2_artifact_key as string | undefined,
       resume_md: agent.resume_md as string | undefined,
-      created_at: agent.created_at as string,
+      created_at: agent.created_at.toISOString(),
     };
     const pkg = mambaState
       ? { version: '2.0' as const, ...basePkg, mamba_state: mambaState }
@@ -1009,9 +1035,8 @@ export function createIdeRoutes(): Hono<HonoEnv> {
 
   router.get('/agents/:id/mamba-state', async (c) => {
     const db = buildDatabase(c.env);
-    const [agent] = (await db.execute(sql`
-      SELECT mamba_state, package_version FROM ide_agents WHERE id = ${c.req.param('id')}
-    `)).rows;
+    const [agent] = await db.select({ mamba_state: ideAgents.mambaState, package_version: ideAgents.packageVersion })
+      .from(ideAgents).where(eq(ideAgents.id, c.req.param('id'))).limit(1);
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
     if (!agent.mamba_state) return c.json({ error: 'No mamba state stored for this agent' }, 404);
     return c.json(agent.mamba_state);
@@ -1034,15 +1059,16 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     for (const key of required) {
       if (!(key in snapshot)) return c.json({ error: `Missing field: ${key}` }, 400);
     }
-    const [row] = (await db.execute(sql`
-      UPDATE ide_agents
-      SET mamba_state = ${JSON.stringify(snapshot)}::jsonb, package_version = '2.0', inference_mode = CASE
-        WHEN r2_artifact_key IS NOT NULL THEN 'hybrid'
-        ELSE 'lora'
-      END, updated_at = NOW()
-      WHERE id = ${agentId}
-      RETURNING id, package_version, inference_mode
-    `)).rows;
+    const [row] = await db.update(ideAgents).set({
+      mambaState: snapshot,
+      packageVersion: '2.0',
+      inferenceMode: sql`CASE WHEN ${ideAgents.r2ArtifactKey} IS NOT NULL THEN 'hybrid' ELSE 'lora' END`,
+      updatedAt: new Date(),
+    }).where(eq(ideAgents.id, agentId)).returning({
+      id: ideAgents.id,
+      package_version: ideAgents.packageVersion,
+      inference_mode: ideAgents.inferenceMode,
+    });
     if (!row) return c.json({ error: 'Agent not found' }, 404);
     return c.json({ ok: true, agent_id: agentId, package_version: row.package_version, inference_mode: row.inference_mode });
   });
@@ -1057,7 +1083,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     if (!c.env.OPENROUTER_API_KEY?.trim()) {
       return c.json({ error: 'LLM not configured' }, 503);
     }
-    const [agent] = (await db.execute(sql`SELECT * FROM ide_agents WHERE id = ${agentId}`)).rows;
+    const [agent] = await db.select(agentRow).from(ideAgents).where(eq(ideAgents.id, agentId)).limit(1);
     if (!agent) return c.json({ error: 'Agent not found' }, 404);
 
     // Recall grounded context from the agent's ingested proprietary knowledge,
@@ -1117,7 +1143,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
         inferenceMode,
         createdAt: sql`NOW()`,
       });
-      await db.execute(sql`UPDATE ide_agents SET request_count = request_count + 1, last_used_at = NOW() WHERE id = ${agentId}`);
+      await db.update(ideAgents).set({ requestCount: sql`${ideAgents.requestCount} + 1`, lastUsedAt: new Date() }).where(eq(ideAgents.id, agentId));
       if (!result.response.body) return c.json({ error: 'No stream body' }, 502);
       return new Response(result.response.body, {
         headers: {

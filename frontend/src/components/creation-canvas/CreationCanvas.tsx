@@ -118,6 +118,7 @@ import type { ProjectModality } from '@/lib/modality';
 import { buildLlmCourse, buildScormPackage, courseFromNode } from '@/lib/courseLms';
 import { executeModelComparison } from '@/lib/modelComparison';
 import { normalizeModelComparisonIds } from '@/lib/modelComparisonRequest';
+import { signInHref } from '@/lib/auth';
 
 const DND_MIME = 'application/x-builderforce-creation-object';
 const PALETTE_COLLAPSE_STORAGE_KEY = 'builderforce:create:palette-collapsed-groups';
@@ -4665,7 +4666,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           <div className={styles.accountGateBenefits}><span>{`✓ ${t('gateBenefitKeep')}`}</span><span>{`✓ ${t('gateBenefitUnlock')}`}</span><span>{`✓ ${t('gateBenefitCollaborate')}`}</span></div>
           <div className={styles.accountGateActions}>
             <button type="button" className={styles.primaryButton} onClick={() => { trackActivity('creation_account_gate_accepted', { sessionId, metadata: { clientSurface: canvasSurface(), action: accountGate.action } }); canvasNavigate(`/register?next=${encodeURIComponent(`/create/${sessionId}`)}`); }}>{t('createFreeAccount')}</button>
-            <button type="button" className={styles.secondaryButton} onClick={() => { canvasNavigate(`/login?next=${encodeURIComponent(`/create/${sessionId}`)}`); }}>{t('signIn')}</button>
+            <button type="button" className={styles.secondaryButton} onClick={() => { canvasNavigate(signInHref(`/create/${sessionId}`)); }}>{t('signIn')}</button>
           </div>
           <button type="button" className={styles.accountGateLater} onClick={() => setAccountGate(null)}>{t('notNowKeepLocal')}</button>
         </section>

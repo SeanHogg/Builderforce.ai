@@ -33,7 +33,7 @@ import { ProjectScopeProvider } from '@/lib/ProjectScopeContext';
 import { useAuth } from '@/lib/AuthContext';
 import { useIsFreelancer, useIsSalesAssociate } from '@/lib/rbac';
 import { findActiveGroup, isFreelancerAllowedPath, isSalesAllowedPath } from '@/lib/navGroups';
-import { classifyGuestBrainstormEntry, classifyShell } from '@/lib/shellRouting';
+import { classifyGuestBrainstormEntry, classifyShell, rendersAppShell } from '@/lib/shellRouting';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { convertVisitor } from '@/lib/marketingApi';
@@ -152,10 +152,15 @@ function useShellContent(children: React.ReactNode): React.ReactNode {
       }
       return <MarketingShell><LegacyPromptCanvasRedirect /></MarketingShell>;
     }
-    // Anonymous Create sessions are real, editable local-first canvases. They
-    // remain under marketing chrome until sign-in, when the draft is claimed.
-    if (pathname.startsWith('/create/local-')) {
-      return <MarketingShell>{children}</MarketingShell>;
+    // Anonymous Create sessions are real, editable local-first canvases — so they
+    // get the REAL shell, identical to the signed-in one (PRD 21 §0). Marketing
+    // chrome here was the whole defect: a guest opening a board saw the top-of-
+    // funnel nav where the session list, the stage and the team belong, and
+    // therefore saw a different product from the one they were signing up for.
+    // Every part of that shell self-gates on auth (disable, never hide), so the
+    // difference between the two visitors is what is ENABLED, not what exists.
+    if (rendersAppShell(pathname, false)) {
+      return <AppShell>{children}</AppShell>;
     }
     return (
       <MarketingShell>

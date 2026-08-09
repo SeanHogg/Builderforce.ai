@@ -1528,6 +1528,29 @@ html[data-theme='light'] .nebula {
   border-color: rgba(77, 158, 255, 0.15);
 }
 
+/* Disable, never hide (PRD 21 §2.6 rule 7) — a destination a signed-out visitor
+   cannot open yet still occupies its row, dimmed and inert, so the product's
+   shape is legible before the account exists. */
+.nav-item--locked {
+  opacity: .48;
+  cursor: not-allowed;
+}
+
+.nav-item--locked:hover {
+  color: var(--muted);
+  background: transparent;
+}
+
+.nav-item__lock {
+  margin-left: auto;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.nav.collapsed .nav-item__lock {
+  display: none;
+}
+
 .nav-item-highlight {
   color: var(--warning, #f59e0b);
 }

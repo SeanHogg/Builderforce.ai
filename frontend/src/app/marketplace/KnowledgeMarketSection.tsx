@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { knowledgeApi, type KnowledgeListing, type DocType } from '@/lib/knowledgeApi';
+import { signInHref } from '@/lib/auth';
 
 /**
  * Marketplace section for KNOWLEDGE listings (SOPs / processes / docs / canvases
@@ -36,7 +37,7 @@ export function KnowledgeMarketSection() {
   async function acquire(listing: KnowledgeListing) {
     // Buying/installing writes into a workspace — a logged-out visitor signs in first.
     if (!hasTenant) {
-      router.push('/login?next=/marketplace');
+      router.push(signInHref('/marketplace'));
       return;
     }
     setInstalling(listing.id);

@@ -105,8 +105,7 @@ import { getAllVendorIds, vendorForModel, type VendorId } from '../../applicatio
 import { llmFailoverLog, llmHealthProbes, llmTraces } from '../../infrastructure/database/schema';
 import { probeVendor, tryAcquireProbeSlot, type VendorProbeResult } from '../../application/llm/vendorHealthProbe';
 import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
-import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';
-import { invalidateTeamCaches } from '../../application/kernel/TeamRoster';
+import { membershipChanged } from '../../application/tenant/membershipChanged';
 import {
   mintTenantApiKey,
   listTenantApiKeys,
@@ -3497,15 +3496,10 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     if (!row) return c.json({ error: 'Member not found in tenant' }, 404);
     await db.update(tenantMembers).set({ role: body.role as 'viewer' | 'developer' | 'manager' | 'owner' }).where(eq(tenantMembers.id, row.id));
     // The role is the label the footer roster renders beside the person (PRD 21
-    // §4.1), so a role change stales it exactly as it stales the gateway cache.
-    await invalidateTeamCaches(c.env as Env, tenantId).catch((error) => {
-      reportCaughtError(error, { source: "presentation/routes/adminRoutes.ts", operation: "createAdminRoutes" });
-    });
-    // Bust the gateway's JWT→membership cache so the new role takes effect at once
-    // (otherwise a demote keeps elevated gateway access until the 60s TTL lapses).
-    await invalidateJwtMembershipCache(c.env as Env, tenantId, userId).catch((error) => {
-      reportCaughtError(error, { source: "presentation/routes/adminRoutes.ts", operation: "createAdminRoutes" });
-    });
+    // §4.1) AND the claim the gateway caches, so one announcement clears both —
+    // this handler used to name each cache itself, which is precisely the drift
+    // `membershipChanged` exists to end.
+    await membershipChanged(c.env as Env, tenantId, [userId]);
     await writeAudit(db, 'USER_PERSONA_CHANGED', actorId, {
       targetUserId: userId,
       tenantId,

@@ -12,6 +12,8 @@ import { NotFoundError, ValidationError } from '../../domain/shared/errors';
 import { trialDaysRemaining } from '../../domain/tenant/effectivePlan';
 import type { PaymentProvider, WebhookEvent } from '../../infrastructure/payment/PaymentProvider';
 import { PLAN_LIMITS } from '../../domain/tenant/PlanLimits';
+import { membershipChanged } from './membershipChanged';
+import type { Env } from '../../env';
 
 export interface CreateTenantDto {
   name: string;
@@ -25,7 +27,20 @@ export class TenantService {
   constructor(
     private readonly tenants: ITenantRepository,
     private readonly payment: PaymentProvider,
+    /**
+     * Present so a membership use case can announce itself (see
+     * {@link membershipChanged}). Optional because the unit tests construct this
+     * service without a worker environment, and a missing cache binding must not
+     * be the reason a member cannot be added.
+     */
+    private readonly env?: Env,
   ) {}
+
+  /** Every membership use case ends here — see `membershipChanged`. */
+  private async announceMembership(tenantId: number, userIds: readonly string[] = []): Promise<void> {
+    if (!this.env) return;
+    await membershipChanged(this.env, tenantId, userIds);
+  }
 
   static readonly PRICING = {
     currency: 'USD',
@@ -148,7 +163,12 @@ export class TenantService {
     // rejecting the create, mirroring how project keys auto-disambiguate.
     const slug = await this.resolveUniqueSlug(dto.name);
     const tenant = Tenant.create(dto.name, dto.ownerUserId, slug);
-    return this.tenants.save(tenant);
+    const saved = await this.tenants.save(tenant);
+    // A workspace's FIRST member is created here, inside provisioning — which is
+    // why "there is no insert(tenantMembers) outside the demo seeder" was true
+    // and the roster still went stale.
+    await this.announceMembership(saved.id as number, [dto.ownerUserId]);
+    return saved;
   }
 
   /** Lowest free slug for a display name: `default`, then `default-2`, `default-3`… */
@@ -179,7 +199,9 @@ export class TenantService {
   ): Promise<Tenant> {
     const tenant = await this.getTenant(tenantId);
     const updated = tenant.addMember(actorUserId, newUserId, role);
-    return this.tenants.update(updated);
+    const persisted = await this.tenants.update(updated);
+    await this.announceMembership(tenantId, [newUserId]);
+    return persisted;
   }
 
   async removeMember(
@@ -189,7 +211,9 @@ export class TenantService {
   ): Promise<Tenant> {
     const tenant = await this.getTenant(tenantId);
     const updated = tenant.removeMember(actorUserId, targetUserId);
-    return this.tenants.update(updated);
+    const persisted = await this.tenants.update(updated);
+    await this.announceMembership(tenantId, [targetUserId]);
+    return persisted;
   }
 
   async changeMemberRole(
@@ -200,7 +224,9 @@ export class TenantService {
   ): Promise<Tenant> {
     const tenant = await this.getTenant(tenantId);
     const updated = tenant.changeMemberRole(actorUserId, targetUserId, role);
-    return this.tenants.update(updated);
+    const persisted = await this.tenants.update(updated);
+    await this.announceMembership(tenantId, [targetUserId]);
+    return persisted;
   }
 
   async deleteTenant(id: number): Promise<void> {

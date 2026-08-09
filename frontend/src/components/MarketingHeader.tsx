@@ -73,6 +73,9 @@ export default function MarketingHeader() {
   const pathname = usePathname() || '';
   const { open, openNav, closeNav } = useMobileNav();
   const t = useTranslations('marketingNav');
+  // Sign In / Get Started are the SAME offer the operator shell's TopBar makes to
+  // a signed-out visitor, so the copy lives in `common.*` once rather than twice.
+  const tc = useTranslations('common');
 
   return (
     <header className="mh">
@@ -127,8 +130,8 @@ export default function MarketingHeader() {
         {/* Right side: theme + auth CTAs (desktop), hamburger (mobile) */}
         <div className="mh-right">
           <ThemeToggleButton />
-          <Link href="/login" className="mh-signin">{t('signIn')}</Link>
-          <Link href="/register" className="mh-cta">{t('getStarted')}</Link>
+          <Link href="/login" className="mh-signin">{tc('signIn')}</Link>
+          <Link href="/register" className="mh-cta">{tc('getStarted')}</Link>
           <button type="button" className="mh-hamburger" onClick={open ? closeNav : openNav} aria-label={t('toggleMenu')} aria-expanded={open}>
             {open ? (
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></svg>
@@ -166,8 +169,8 @@ export default function MarketingHeader() {
         </div>
 
         <div className="mh-drawer-cta">
-          <Link href="/login" className="mh-signin" onClick={closeNav}>{t('signIn')}</Link>
-          <Link href="/register" className="mh-cta" onClick={closeNav}>{t('getStarted')}</Link>
+          <Link href="/login" className="mh-signin" onClick={closeNav}>{tc('signIn')}</Link>
+          <Link href="/register" className="mh-cta" onClick={closeNav}>{tc('getStarted')}</Link>
         </div>
       </div>
       {open && <div className="mh-drawer-backdrop" onClick={closeNav} aria-hidden="true" />}

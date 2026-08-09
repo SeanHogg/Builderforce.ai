@@ -18,6 +18,7 @@ import { RoleGate } from '@/components/RoleGate';
 import { usePublishNavCount } from '@/lib/navCounts';
 import { PROJECTS_COUNT_KEY } from '@/lib/navGroups';
 import { WorkspaceCanvas, type WorkspaceCanvasPanel } from '@/components/workspace-canvas/WorkspaceCanvas';
+import { signInHref } from '@/lib/auth';
 
 type Tab = 'projects' | 'tasks' | 'manager' | 'pm' | 'portfolio' | 'ceremonies' | 'templates' | 'rfp';
 
@@ -49,7 +50,7 @@ export default function ProjectsTasksPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.replace('/login?next=/projects');
+      router.replace(signInHref('/projects'));
     } else if (!hasTenant) {
       router.replace('/tenants?next=/projects');
     }

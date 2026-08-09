@@ -305,7 +305,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
         reportCaughtError(error, { source: "index.ts", operation: "taskService" });
       });
     });
-  const tenantService   = new TenantService(tenantRepo, paymentProvider);
+  const tenantService   = new TenantService(tenantRepo, paymentProvider, env);
   const toolService     = new ToolService(db);
   const auditRunner     = new AuditRunner(db, toolService, taskService);
   const marketingService = new MarketingService(db);
@@ -505,12 +505,12 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   app.route('/api/release-notes', createReleaseNoteRoutes(db));
   // Gig Marketplace (0293): publish a ticket as a gig, a hired freelancer's scoped
   // board access, and deliverable proposals the employer AI-evaluates.
-  app.route('/api/marketplace', createGigMarketplaceRoutes(db));
+  app.route('/api/marketplace', createGigMarketplaceRoutes());
   app.route('/api/engagement-board', createEngagementBoardRoutes(db));
   app.route('/api/deliverables', createDeliverableRoutes(db));
   // In-platform messaging (0298): employer<->freelancer threads scoped to an
   // engagement / job / proposal, with attachments + notification-fed unread counts.
-  app.route('/api/conversations', createFreelancerMessagingRoutes(db));
+  app.route('/api/conversations', createFreelancerMessagingRoutes());
 
   // Limbic affective layer — serves the shared compiler's directive block to
   // clients that can't bundle it (the VS Code built-in agent).

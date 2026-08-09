@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import { useProjectScope } from '@/lib/ProjectScopeContext';
-import { persistLastProjectId } from '@/lib/auth';
+import { persistLastProjectId, signInHref } from '@/lib/auth';
 import { Select } from '@/components/Select';
 import {
   listIdeProjects,
@@ -96,7 +96,7 @@ export default function IDEDashboardPage() {
 
   useEffect(() => {
     if (!isAuthenticated) {
-      router.replace('/login?next=/ide/dashboard');
+      router.replace(signInHref('/ide/dashboard'));
     } else if (!hasTenant) {
       router.replace('/tenants?next=/ide/dashboard');
     } else {
