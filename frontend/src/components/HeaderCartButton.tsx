@@ -1,5 +1,3 @@
-'use client';
-
 import { useTranslations } from 'next-intl';
 import { useCart } from '@/lib/CartContext';
 import ShoppingCart from './ShoppingCart';

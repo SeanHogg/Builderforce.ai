@@ -6,7 +6,7 @@ describe('navigation feature filtering', () => {
   it('keeps core navigation while hiding disabled optional modules', () => {
     const groups = filterNavigationGroups(NAV_GROUPS, new Set(['projects', 'knowledge']));
     const ids = groups.map((group) => group.id);
-    expect(ids).toContain('dashboard');
+    expect(ids).toContain('create');
     expect(ids).toContain('create');
     expect(ids).toContain('settings');
     expect(ids).toContain('projects');

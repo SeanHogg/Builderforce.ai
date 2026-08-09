@@ -8,6 +8,22 @@ import de from './messages/de.json';
 import { LOCALES, DEFAULT_LOCALE, type Locale } from './config';
 import { STALL_CAUSES } from '@/lib/builderforceApi';
 import { CREATION_OBJECT_REGISTRY } from '@/components/creation-canvas/creationObjectRegistry';
+import {
+  PUBLIC_NAV,
+  NAV_GROUPS,
+  FOR_HIRE_NAV_GROUPS,
+  FREELANCER_NAV_GROUPS,
+  SALES_NAV_GROUPS,
+  REFERENCE_DESTINATIONS,
+  bottomNavFor,
+} from '@/lib/navGroups';
+import { FAMILIES, FAMILY_IDS } from '@/lib/marketplaceFamilies';
+import { FOOTER_COLUMNS, RESOURCE_NAV_LINKS } from '@/lib/content';
+import { listWidgets } from '@/lib/widgets/registry';
+import { AI_INSIGHT_PANELS } from '@/components/insights/aiInsightPanels';
+import { DELIVERY_PANELS } from '@/components/insights/deliveryPanels';
+import { DEVEX_PANELS } from '@/components/insights/devexPanels';
+import { FINANCE_PANELS } from '@/components/insights/finance/financePanels';
 
 /**
  * Catalog guard for the five message files.
@@ -116,6 +132,51 @@ describe('message catalogs', () => {
       const key = `creationCanvas.${control}`;
       return t(key as never) === key;
     });
+    expect(missing).toEqual([]);
+  });
+
+  it.each(LOCALES)('%s resolves every registry-backed localization key', (locale) => {
+    const t = createTranslator({ locale, messages: CATALOGS[locale], onError: () => {} });
+    const navGroups = [...NAV_GROUPS, ...FOR_HIRE_NAV_GROUPS, ...FREELANCER_NAV_GROUPS, ...SALES_NAV_GROUPS];
+    const bottomNav = [
+      ...bottomNavFor(false, false),
+      ...bottomNavFor(true, false),
+      ...bottomNavFor(true, true),
+      ...bottomNavFor(true, false, true),
+      ...bottomNavFor(true, false, false, true),
+    ];
+    const familyKeys = FAMILY_IDS.flatMap((id) => {
+      const family = FAMILIES[id];
+      return [family.labelKey, family.publishKey, family.noteKey, ...family.kinds.map((kind) => `kind.${kind}`)]
+        .map((key) => `marketplace.family.${key}`);
+    });
+    const panelKeys = [
+      ...Object.values(AI_INSIGHT_PANELS).flatMap((panel) => [`insights.aihub.${panel.titleKey}`, `insights.aihub.${panel.descKey}`]),
+      ...Object.values(DELIVERY_PANELS).flatMap((panel) => [`insights.delivhub.${panel.titleKey}`, `insights.delivhub.${panel.descKey}`]),
+      ...Object.values(DEVEX_PANELS).flatMap((panel) => [`insights.devexhub.${panel.titleKey}`, `insights.devexhub.${panel.descKey}`]),
+      ...FINANCE_PANELS.flatMap((panel) => [`insights.${panel.titleKey}`, `insights.${panel.subtitleKey}`]),
+    ];
+    const keys = new Set([
+      ...PUBLIC_NAV.map(({ labelKey }) => `marketingNav.${labelKey}`),
+      ...RESOURCE_NAV_LINKS.map(({ marketingLabelKey }) => `marketingNav.${marketingLabelKey}`),
+      ...navGroups.flatMap((group) => [
+        `nav.${group.labelKey}`,
+        ...(group.tabs ?? []).map((tab) => `nav.${tab.labelKey}`),
+      ]),
+      ...bottomNav.map(({ labelKey }) => `nav.${labelKey}`),
+      ...REFERENCE_DESTINATIONS.flatMap(({ copyId }) => [
+        `burnrateMarketing.domains.${copyId}.title`,
+        `burnrateMarketing.domains.${copyId}.tagline`,
+      ]),
+      ...FOOTER_COLUMNS.flatMap((column) => [
+        `footer.${column.titleKey}`,
+        ...column.links.map(({ labelKey }) => `footer.${labelKey}`),
+      ]),
+      ...familyKeys,
+      ...listWidgets().flatMap(({ titleKey, group }) => [`widgets.title.${titleKey}`, `widgets.group.${group}`]),
+      ...panelKeys,
+    ]);
+    const missing = [...keys].filter((key) => t(key as never) === key).sort();
     expect(missing).toEqual([]);
   });
 

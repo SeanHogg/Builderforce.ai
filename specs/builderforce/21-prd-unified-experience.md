@@ -3,9 +3,12 @@
 > **Status:** shell BUILT (E0–E6) · 2026-08-08 — **residuals closed 2026-08-09**: literal-hex files
 > 341 → **0** (the ratchet is now an allowlist, not a count) and the panel body is a named size
 > container. Nothing outstanding in the Gap Register's design-system block.
-> **§11 (the unified MENU — what is in it, what it is called, where it sits) is DESIGN, added
-> 2026-08-09.** E0–E6 built the shell and left the *contents* of the left panel as five separate
-> lists; §11 is the sequence (M0–M5) that makes them one.
+> **§11 (the unified MENU — what is in it, what it is called, where it sits): M0, M1, M2 and the
+> IA halves of M3/M4 are BUILT, 2026-08-09.** Seven registries became one; the left panel renders
+> the Idea → Make → Run arc with collapsible headers; `burnrateCatalog.ts` and the `seat` and
+> `dashboard` rows are deleted; the reference pages open as panels; the marketplace has four
+> families with a derived publish CTA; `/features` is a registry projection in the ported band
+> rhythm; `check:destinations` is wired into `npm test`. What remains is named in §11.11.
 > **Consolidates:** [PRD 19 — BurnRateOS consolidation](./19-prd-burnrateos-consolidation.md) ·
 > [PRD 20 — The Consolidated Data Model](./20-prd-consolidated-data-model.md)
 > **Supersedes for experience decisions:** the navigation architecture "The Session Is The Anchor"
@@ -1046,6 +1049,9 @@ The Run group in full is PRD 18 + PRD 19 pointed at one company:
 | Support | tickets · knowledge base · live chat · CSAT | PRD 19 §2 row 7 |
 | Commerce | plans · invoices · cart/orders · payouts · affiliates · AI credits | PRD 18 T6 + PRD 19 B9 |
 
+Nine rows. Each is one seat, one panel, one index column, N leaves. **That is how 549 destinations
+become a menu you can read.**
+
 #### 11.5.4 Cart and purchase memory
 
 The cart is global chrome, not a marketplace-page widget. The same cart icon and item count appear
@@ -1062,9 +1068,6 @@ does not disappear merely because an item was free, later uninstalled, or no lon
 The server-owned listing price is authoritative at checkout. The cart may display a cached price for
 responsiveness, but it cannot confer an entitlement or submit a client-selected amount. Mixed carts
 that require different checkout providers are completed separately and say so explicitly.
-
-Nine rows. Each is one seat, one panel, one index column, N leaves. **That is how 549 destinations
-become a menu you can read.**
 
 ### 11.6 What gets deleted
 
@@ -1154,12 +1157,12 @@ surface — the same argument §5 makes about E6.
 13. Every `surface:'panel'` destination renders identically signed out (as a page) and signed in
     (in `ShellPanel` at `full`), from one component, with its public URL unchanged (§11.4.5).
 14. The public header has no `Home` item, and its primary CTA resolves to a real board (§11.4.6).
-15. Both public and signed-in headers expose the same persisted cart; completing a free marketplace
-    acquisition creates a queryable purchase-history row with a zero amount (§11.5.4).
 15. Every seat in kernel `DOMAINS` has a `--seat-*` token declared in both themes, no two seats
     share a hue, and no surface hard-codes a seat colour (§11.10.1).
 16. The Features page renders its domain cards from the registry — title, seat, hue, stage and
     feature bullets — and carries no second copy of any of them (§11.10.3).
+17. Both public and signed-in headers expose the same persisted cart; completing a free marketplace
+    acquisition creates a queryable purchase-history row with a zero amount (§11.5.4).
 
 ### 11.9 Open decisions — operator, not engineering
 
@@ -1251,9 +1254,13 @@ mean three things.
    stage pill and feature bullets come from the same array the left panel reads — so a features
    page cannot advertise a capability under a name the product does not use. This is the same rule
    as §11.4.6, applied to the page rather than the menu.
-2. **The FAQ disclosure is the nav disclosure.** The collapsible stage header (§11.4.1), the FAQ
-   accordion and the panel index all reduce to one `aria-expanded` primitive with three consumers —
-   the DRY rule applied to an *interaction*, not just to a value.
+2. ~~**The FAQ disclosure is the nav disclosure.**~~ **Corrected on contact with the code,
+   2026-08-09.** They are deliberately NOT one component. `/features` is a server component, so its
+   FAQ is `<details>/<summary>` — the platform primitive, keyboard-correct and zero JS. The nav's
+   stage header cannot be: it is controlled, its state persists per stage, and it has to stay shut
+   when the rail collapses to icons. Forcing one component on two different contracts would have
+   made the marketing page ship JavaScript to open a paragraph. Same `aria-expanded` contract, two
+   implementations, and the reason is written at both call sites.
 
 #### 11.10.4 What this adds to `check:design-tokens`
 
@@ -1263,3 +1270,40 @@ Three assertions, landing with M0:
 2. No `--seat-*` value is used by more than one seat (a duplicate hue defeats the point).
 3. `--grad-brand` appears at most twice per page (hero + CTA), enforced as a lint over `.mk-band`
    usage rather than a runtime check.
+
+---
+
+### 11.11 What shipped, and what did not — 2026-08-09
+
+**Built.**
+
+| Milestone | What landed |
+|---|---|
+| **M0** | `NavGroup` gains `seat`, `stage` and `rung`; `REFERENCE_DESTINATIONS`, `PUBLIC_NAV` and `bottomNavFor()` join it, so `navGroups.ts` is the one declaration site. `lib/seats.ts` + `--seat-*` / `--stage-*` / `--grad-brand` / `--wash-hero` in `globals.css`. `scripts/check-destinations.mjs` wired into `npm test`. |
+| **M1** | The left panel renders the arc with collapsible, persisted stage headers and a seat badge in each RUN row's own hue. `burnrateCatalog.ts` **deleted** (12 rows moved onto the registry as reference destinations). The `seat` and `dashboard` rows **deleted**. The public header drops `Home`, folds Agents into Marketplace, and its CTA opens `/create/new`. `SlideOutPanel` gains the three-step width control, persisted per destination. |
+| **M2** | `RosterNav` no longer renders on `/seat/<domain>` — it was a third seat enumeration beside the RUN rows and the footer. The footer is the only one. |
+| **M3** (IA half) | `surface:'panel'` behaviour is live: the nine domain pages, `/soc2`, `/integrations` and `/features` are ordinary pages signed out and full-width panels over a mounted board signed in. |
+| **M4** (IA half) | Four families from `FAMILIES`, kinds as sub-filters, and a publish CTA whose label **and** flow are derived. Every legacy `?category=` link still resolves. |
+| **Features** | `/features` rebuilt on the ported band rhythm, every card projected from the registry, counts computed from it. |
+
+**The ratchet earned its keep on day one.** It failed its first run against two lists nobody had
+noticed: the marketing header's `FLAT_LINKS` and `MobileBottomNav`'s item table. Both were {href,
+labelKey} arrays living beside the component that rendered them — the sixth and seventh registries,
+found by a script rather than by a person. Both are now registry rows.
+
+**Not built, and why.**
+
+1. **M3's other half — the seat workbench index.** Level 2 is still each destination's existing tab
+   set; `filter(parent === seat)` waits on the PRD 19 tracks that bring leaves to parent.
+2. **M4's company directory and claim flow.** The `companies` table exists (PRD 20, investor
+   domain) but is tenant-scoped with no nullable-owner column and no verification. The directory
+   needs the company graph PRD 19 B0 brings *and* the answer to §7's decision 4. The family is
+   therefore **visible and inert** with an honest line, per §2.6 rule 7 — not hidden.
+3. **M5's preview state.** `earnedRung()` exists and dims what is unearned; clicking a dim row does
+   not yet open its workbench in preview.
+4. **Two entitlement helpers.** `earnedRung()` (three rungs: public / signed-in / workspace) and
+   `RosterNav`'s `earned()` (PRD 20's manifest rungs) now coexist. Reconciling them is a *data*
+   decision about the manifest's rung scale, not a UI one.
+5. **The fourth rung.** "Claimed a company" cannot be enforced until a company can be claimed, so
+   RUN rows sit at `WORKSPACE`. That is honest: they need a workspace, and there is not yet a
+   company for them to need.

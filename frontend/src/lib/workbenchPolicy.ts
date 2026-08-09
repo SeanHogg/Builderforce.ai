@@ -20,7 +20,7 @@
  * Pure, so the buckets are a unit-testable table rather than emergent behaviour.
  */
 
-import { classifyShell } from './shellRouting';
+import { classifyShell, isReferenceSurface } from './shellRouting';
 
 export type RouteBucket = 'stage' | 'workbench' | 'standalone';
 
@@ -51,7 +51,12 @@ export function isStageRoute(pathname: string): boolean {
 }
 
 export function classifyRoute(pathname: string): RouteBucket {
-  // Anything outside the operator shell keeps its own chrome, by definition.
+  // A reference surface is a page to a visitor and a PANEL to a signed-in
+  // person (§11.4.5). It reaches here only once `rendersAppShell` has decided
+  // the operator shell applies, i.e. only when signed in — so by the time we
+  // are classifying it, it is a workbench.
+  if (isReferenceSurface(pathname)) return 'workbench';
+  // Anything else outside the operator shell keeps its own chrome, by definition.
   if (classifyShell(pathname) !== 'app') return 'standalone';
   if (isStageRoute(pathname)) return 'stage';
   if (FULL_WIDTH_PATTERNS.some((pattern) => pattern.test(pathname))) return 'standalone';
@@ -96,6 +101,9 @@ const FULL_PATTERNS: RegExp[] = [
 
 export function panelWidth(pathname: string): 'sheet' | 'wide' | 'full' {
   if (SHEET_PATTERNS.some((pattern) => pattern.test(pathname))) return 'sheet';
+  // A reference surface was written as a full-bleed marketing page, so it opens
+  // at full and the reader narrows it if they would rather see more board.
+  if (isReferenceSurface(pathname)) return 'full';
   if (FULL_PATTERNS.some((pattern) => pattern.test(pathname))) return 'full';
   return 'wide';
 }

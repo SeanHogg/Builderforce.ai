@@ -15,7 +15,7 @@ import {
 } from '../../application/kernel/InvitationService';
 import { getObject } from '../../application/kernel/ObjectRegistry';
 import { sha256Hex } from '../../domain/shared/hash';
-import { TenantRole, TenantBillingCycle, TenantPlan } from '../../domain/shared/types';
+import { TenantRole, TenantBillingCycle, TenantBillingStatus, TenantPlan } from '../../domain/shared/types';
 import { resolveAppBaseUrl, type Env, type HonoEnv } from '../../env';
 import { authMiddleware, requireRole } from '../middleware/authMiddleware';
 import { requirePermission } from '../middleware/requirePermission';
@@ -430,17 +430,27 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
     const pricing = await getPublishedPricing(db, c.env as Env);
     const existing = await getBusinessPhoneSubscription(db, tenantId);
     if (existing?.status === 'active') return c.json({ error: 'Business Phone is already active' }, 409);
+    const baseSubscription = await tenantService.getSubscription(tenantId);
+    if (baseSubscription.billingStatus !== TenantBillingStatus.ACTIVE || baseSubscription.effectivePlan === TenantPlan.FREE) {
+      return c.json({ error: 'Business Phone requires an active Pro or Teams plan' }, 403);
+    }
     const appUrl = c.env.APP_URL ?? 'https://builderforce.ai';
     const activationCents = Math.round(pricing.businessPhone.activation * 100);
     const monthlyCents = Math.round(pricing.businessPhone.monthly * 100);
     const [cart] = await db.insert(carts).values({ tenantId, buyerRef: c.get('userId') as string, currency: pricing.currency, subtotalCents: activationCents + monthlyCents, totalCents: activationCents + monthlyCents }).returning({ id: carts.id });
     if (!cart) throw new Error('Business Phone cart was not created');
-    const result = await tenantService.createBusinessPhoneCheckoutSession(tenantId, {
-      cartId: cart.id,
-      billingEmail: body.billingEmail.trim(), currency: pricing.currency,
-      activationCents, monthlyCents,
-      successUrl: `${appUrl}/crm/phone?purchase=success`, cancelUrl: `${appUrl}/pricing?phone=cancelled`,
-    });
+    let result: { checkoutUrl: string; sessionId: string };
+    try {
+      result = await tenantService.createBusinessPhoneCheckoutSession(tenantId, {
+        cartId: cart.id,
+        billingEmail: body.billingEmail.trim(), currency: pricing.currency,
+        activationCents, monthlyCents,
+        successUrl: `${appUrl}/crm/phone?purchase=success`, cancelUrl: `${appUrl}/pricing?phone=cancelled`,
+      });
+    } catch (error) {
+      await db.update(carts).set({ status: 'abandoned', updatedAt: sql`now()` }).where(and(eq(carts.id, cart.id), eq(carts.tenantId, tenantId)));
+      throw error;
+    }
     return c.json(result);
   });
 

@@ -102,6 +102,45 @@ export function classifyShell(pathname: string): ShellKind {
  * either mounted twice or not at all.
  */
 export function rendersAppShell(pathname: string, isAuthenticated: boolean): boolean {
+  if (isReferenceSurface(pathname) && isAuthenticated) return true;
   if (classifyShell(pathname) !== 'app') return false;
   return isAuthenticated || GUEST_APP_PATTERNS.some((pattern) => pattern.test(pathname));
+}
+
+/**
+ * The public explainer surfaces that are a PANEL when you are signed in
+ * (PRD 21 §11.4.5).
+ *
+ * `/soc2`, `/integrations` and the nine domain pages were the last controls in
+ * the product that navigated a signed-in person AWAY from their board — so
+ * someone mid-agent-turn who wanted to check whether an HRMS is supported paid
+ * for the answer with their session. They now resolve two ways, from one
+ * component:
+ *
+ *   signed out → an ordinary page, ordinary URL, ordinary SEO. Unchanged, which
+ *                is what makes this cheap: no redirect map, no slug migration.
+ *   signed in  → the same route inside `ShellPanel`, over a board that stays
+ *                mounted. Esc puts you back with the turn still running.
+ *
+ * Declared as the registry's `marketingHref` values plus the two standalone
+ * reference routes, so adding a domain page cannot forget to add it here.
+ */
+const REFERENCE_SURFACES: string[] = [
+  '/product-management',
+  '/business-intelligence',
+  '/survival-focused-agile',
+  '/sales-revenue',
+  '/customer-engagement',
+  '/investor-intelligence',
+  '/operational-cadence',
+  '/governance-security',
+  '/marketing-growth',
+  '/companies-contacts',
+  '/features',
+  '/integrations',
+  '/soc2',
+];
+
+export function isReferenceSurface(pathname: string): boolean {
+  return REFERENCE_SURFACES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }

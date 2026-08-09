@@ -466,7 +466,14 @@
       "challenges": "挑战",
       "growth": "增长",
       "embedded": "嵌入式功能",
-      "seat": "团队"
+      "seat": "团队",
+      "finance": "财务",
+      "revenue": "收入",
+      "people": "人员",
+      "hiring": "招聘",
+      "investor": "投资人",
+      "governance": "治理",
+      "support": "支持"
     },
     "tab": {
       "projects": "项目",
@@ -557,7 +564,17 @@
       "canvasLibrary": "画布",
       "newCanvas": "新建画布"
     },
-    "workspaceLabel": "工作区"
+    "workspaceLabel": "工作区",
+    "stage": {
+      "idea": "构想",
+      "make": "构建",
+      "run": "运营",
+      "measure": "衡量",
+      "market": "市场",
+      "admin": "管理",
+      "notYet": "尚未开放",
+      "lockHint": "登录后即可使用"
+    }
   },
   "alerts": {
     "title": "告警",
@@ -565,7 +582,26 @@
     "loading": "加载中…",
     "days": "{n} 天",
     "pricing": {
-      "title": "已发布定价", "description": "编辑定价页面和可复用定价卡片的草稿。草稿在发布前保持私密。", "publishedAt": "上次发布时间：{date}", "currency": "货币", "managedHost": "托管 AgentHost / 月", "name": "方案名称", "descriptionLabel": "说明", "monthly": "月价", "yearly": "年价", "suffix": "价格后缀", "minimumSeats": "最低席位数", "features": "包含功能 — 每行一项", "excluded": "不包含功能 — 每行一项", "ctaLabel": "按钮文字", "ctaHref": "按钮目标", "saveDraft": "保存草稿", "saving": "正在保存…", "publish": "发布定价", "publishing": "正在发布…", "draftSaved": "草稿已保存；公开定价未更改。"
+      "title": "已发布定价",
+      "description": "编辑定价页面和可复用定价卡片的草稿。草稿在发布前保持私密。",
+      "publishedAt": "上次发布时间：{date}",
+      "currency": "货币",
+      "managedHost": "托管 AgentHost / 月",
+      "name": "方案名称",
+      "descriptionLabel": "说明",
+      "monthly": "月价",
+      "yearly": "年价",
+      "suffix": "价格后缀",
+      "minimumSeats": "最低席位数",
+      "features": "包含功能 — 每行一项",
+      "excluded": "不包含功能 — 每行一项",
+      "ctaLabel": "按钮文字",
+      "ctaHref": "按钮目标",
+      "saveDraft": "保存草稿",
+      "saving": "正在保存…",
+      "publish": "发布定价",
+      "publishing": "正在发布…",
+      "draftSaved": "草稿已保存；公开定价未更改。"
     },
     "common": {
       "delete": "删除"
@@ -1168,7 +1204,13 @@
     "skipToContent": "跳转到主要内容",
     "signIn": "登录",
     "getStarted": "立即开始 →",
-    "signInToOpen": "登录后可打开{label}"
+    "signInToOpen": "登录后可打开{label}",
+    "panelWidth": {
+      "label": "面板宽度",
+      "sheet": "窄 — 440px",
+      "wide": "宽 — 660px",
+      "full": "全宽 — 94%"
+    }
   },
   "prdCreate": {
     "title": "新建 PRD",
@@ -6133,11 +6175,26 @@
     "ctaDesc": "从一句提示开始，与团队和 AI 智能体一起，把它变成相互连接、可审核、可交付的成果。无需信用卡。",
     "ctaSeeLiveAgents": "探索画布",
     "homepageFaq": [
-      { "question": "开始使用需要账户吗？", "answer": "不需要。第一个画布是私密的，并保存在你的浏览器本地；登录前不会有任何内容离开设备。登录后，你已经开始的草稿会被接入工作区，而不会被丢弃。" },
-      { "question": "AI 智能体究竟是什么？", "answer": "它们是团队中承担具体角色的专家，例如 CFO、CMO、CTO 等。它们与受邀成员一起显示在每个画布底部。把智能体拖到看板上，它会读取工作、接受任务，并产出可供你审查的变更。" },
-      { "question": "我可以使用自己的模型吗？", "answer": "可以。连接你自己的模型提供商账户，工作就会通过该账户运行。如果工作区没有连接提供商，平台路由会选择合适的模型，费用计入工作区用量。" },
-      { "question": "这与 AI 聊天工具有什么不同？", "answer": "聊天工具生成的是需要再搬到别处的文本。Builderforce 生成的是相互关联的对象——在线页面、运行中的工作流或绑定的数据集——它们彼此引用，并保留从最初想法到生产环境的可审查历史。" },
-      { "question": "智能体自主完成的工作会如何处理？", "answer": "每项变更都有作者和差异记录。任何涉及生产环境、代表你发送内容或超过支出限额的操作，都会等待看板上指定人员的批准。" }
+      {
+        "question": "开始使用需要账户吗？",
+        "answer": "不需要。第一个画布是私密的，并保存在你的浏览器本地；登录前不会有任何内容离开设备。登录后，你已经开始的草稿会被接入工作区，而不会被丢弃。"
+      },
+      {
+        "question": "AI 智能体究竟是什么？",
+        "answer": "它们是团队中承担具体角色的专家，例如 CFO、CMO、CTO 等。它们与受邀成员一起显示在每个画布底部。把智能体拖到看板上，它会读取工作、接受任务，并产出可供你审查的变更。"
+      },
+      {
+        "question": "我可以使用自己的模型吗？",
+        "answer": "可以。连接你自己的模型提供商账户，工作就会通过该账户运行。如果工作区没有连接提供商，平台路由会选择合适的模型，费用计入工作区用量。"
+      },
+      {
+        "question": "这与 AI 聊天工具有什么不同？",
+        "answer": "聊天工具生成的是需要再搬到别处的文本。Builderforce 生成的是相互关联的对象——在线页面、运行中的工作流或绑定的数据集——它们彼此引用，并保留从最初想法到生产环境的可审查历史。"
+      },
+      {
+        "question": "智能体自主完成的工作会如何处理？",
+        "answer": "每项变更都有作者和差异记录。任何涉及生产环境、代表你发送内容或超过支出限额的操作，都会等待看板上指定人员的批准。"
+      }
     ],
     "faq": [
       {
@@ -6273,7 +6330,30 @@
       "realDefinition": "已上线。立即可用。"
     }
   },
-  "shoppingCart": { "title": "购物车", "close": "关闭购物车", "empty": "购物车为空", "browse": "浏览市场", "free": "免费", "use": "次使用", "plusActivation": "+ ${price} 开通费", "remove": "移除{name}", "dueToday": "今日应付", "thenMonthly": "之后每月", "checkout": "安全结账", "redirecting": "正在跳转…", "checkoutFailed": "无法启动结账", "mixedCheckout": "市场商品和订阅必须分开结账。", "workspaceRequired": "购买此服务前请选择工作区。", "unsupportedCheckout": "一个或多个商品暂时无法通过此结账流程购买。", "purchaseComplete": "已完成 {count} 笔购买。", "purchaseHistory": "购买记录", "clear": "清空购物车", "signInPrompt": "请登录以完成购买", "createAccount": "创建账户", "signIn": "登录" },
+  "shoppingCart": {
+    "title": "购物车",
+    "close": "关闭购物车",
+    "empty": "购物车为空",
+    "browse": "浏览市场",
+    "free": "免费",
+    "use": "次使用",
+    "plusActivation": "+ ${price} 开通费",
+    "remove": "移除{name}",
+    "dueToday": "今日应付",
+    "thenMonthly": "之后每月",
+    "checkout": "安全结账",
+    "redirecting": "正在跳转…",
+    "checkoutFailed": "无法启动结账",
+    "mixedCheckout": "市场商品和订阅必须分开结账。",
+    "workspaceRequired": "购买此服务前请选择工作区。",
+    "unsupportedCheckout": "一个或多个商品暂时无法通过此结账流程购买。",
+    "purchaseComplete": "已完成 {count} 笔购买。",
+    "purchaseHistory": "购买记录",
+    "clear": "清空购物车",
+    "signInPrompt": "请登录以完成购买",
+    "createAccount": "创建账户",
+    "signIn": "登录"
+  },
   "pricing": {
     "enabledModulesTitle": "已启用的模块（{count}）",
     "enabledModulesDescription": "套餐价格和共享用量额度适用于此功能组合。",
@@ -6345,7 +6425,22 @@
     "teamsCostNoteYear": "${perSeat}/席位/年 — 按 ${total}/年 计费",
     "teamsCostNoteMonth": "${perSeat}/席位/月 — 按 ${total}/月 计费",
     "managedAddon": "附加组件：<b>托管 AgentHost</b> — 每个托管 AgentHost ${price}/月。我们为您运行 BuilderForce Agents 实例 — 无需 Docker，无需 DevOps。",
-    "phone": { "eyebrow": "客户留存附加服务", "title": "企业电话", "description": "为企业提供专属美国号码，支持语音、短信和彩信，无需添置硬件。", "dedicatedNumber": "专属企业号码", "forwarding": "来电可转接至现有手机", "allowance": "每月含 {minutes} 分钟、{sms} 条短信和 {mms} 条彩信", "overages": "超额费用：每分钟 ${minute}、每个短信分段 ${sms}、每条彩信 ${mms}。", "learnMore": "了解企业电话", "addonFor": "Pro 和 Teams 附加服务", "perMonth": "/月", "activation": "一次性开通费 ${price}", "addToCart": "加入购物车", "viewCart": "查看购物车", "eligibility": "需要有效的 Pro 或 Teams 订阅。" },
+    "phone": {
+      "eyebrow": "客户留存附加服务",
+      "title": "企业电话",
+      "description": "为企业提供专属美国号码，支持语音、短信和彩信，无需添置硬件。",
+      "dedicatedNumber": "专属企业号码",
+      "forwarding": "来电可转接至现有手机",
+      "allowance": "每月含 {minutes} 分钟、{sms} 条短信和 {mms} 条彩信",
+      "overages": "超额费用：每分钟 ${minute}、每个短信分段 ${sms}、每条彩信 ${mms}。",
+      "learnMore": "了解企业电话",
+      "addonFor": "Pro 和 Teams 附加服务",
+      "perMonth": "/月",
+      "activation": "一次性开通费 ${price}",
+      "addToCart": "加入购物车",
+      "viewCart": "查看购物车",
+      "eligibility": "需要有效的 Pro 或 Teams 订阅。"
+    },
     "relatedHeading": "在您决定之前",
     "planFeatures": [
       "1 个 AgentHost",
@@ -6364,7 +6459,16 @@
       "按席位成本控制"
     ]
   },
-  "phonePage": { "seoTitle": "企业电话 — Builderforce.ai", "seoDescription": "支持语音、短信和彩信的专属企业号码。", "active": "企业电话已启用", "provisioning": "你的号码已可配置和分配。", "loading": "正在加载价格…", "createAccount": "创建账户", "voiceMessaging": "语音与消息", "transparentUsage": "透明的用量定价" },
+  "phonePage": {
+    "seoTitle": "企业电话 — Builderforce.ai",
+    "seoDescription": "支持语音、短信和彩信的专属企业号码。",
+    "active": "企业电话已启用",
+    "provisioning": "你的号码已可配置和分配。",
+    "loading": "正在加载价格…",
+    "createAccount": "创建账户",
+    "voiceMessaging": "语音与消息",
+    "transparentUsage": "透明的用量定价"
+  },
   "product": {
     "seo": {
       "title": "产品 — 构建、训练、编排并治理你的 AI 团队",
@@ -8188,6 +8292,42 @@
       "evalTitle": "AI 评估分数（0-1）",
       "hired": "已雇用 {count} 次",
       "inUse": "{count} 个在使用"
+    },
+    "family": {
+      "label": "浏览",
+      "talent": "人才",
+      "company": "公司",
+      "companySoon": {
+        "soonTitle": "公司目录将随企业图谱一同开放",
+        "soonBody": "认领企业会写入一条经过验证的所有权记录，为 CEO 就位，并为其激活财务、收入、增长、人员、招聘、投资人与治理。上架界面将与该记录一同上线；在此之前，此类别保持可见但不可用，而非隐藏，让你看见即将到来的能力。",
+        "soonAction": "看看公司能解锁什么"
+      },
+      "agent": "智能体",
+      "asset": "资产",
+      "publishTalent": "发布服务",
+      "publishCompany": "发布公司",
+      "publishAgent": "发布智能体",
+      "publishAsset": "发布资产",
+      "kindLabel": "类型",
+      "kind": {
+        "person": "个人",
+        "gig": "零工",
+        "business": "企业",
+        "storefront": "店铺",
+        "builtin": "内置",
+        "community": "社区",
+        "model": "模型",
+        "skill": "技能",
+        "persona": "角色",
+        "knowledge": "知识",
+        "all": "全部"
+      },
+      "note": {
+        "talent": "人与零工。对一次会话而言，人和智能体是同类参与者，但并非同类listing——一个有档期与费率，另一个有价格与席位。",
+        "company": "认领你经营的企业，整套运营能力就会以它为范围。你尚未拥有的公司目录将随企业图谱一同上线。",
+        "agent": "没有独立的智能体页面——智能体就是一条listing，购买后即写入团队名册，因此目录与你的团队永不脱节。",
+        "asset": "构建者制作并可出售的成果。每一项都安装进拥有它的界面——技能进知识库，模板进项目——绝不新建界面。"
+      }
     }
   },
   "models": {
@@ -12356,7 +12496,9 @@
     "mediaKit": "媒体资料包",
     "toggleMenu": "切换菜单",
     "switchToLight": "切换到浅色模式",
-    "switchToDark": "切换到深色模式"
+    "switchToDark": "切换到深色模式",
+    "openCanvas": "打开画布 →",
+    "features": "功能"
   },
   "tutorials": {
     "seo": {
@@ -12586,7 +12728,9 @@
     "searchLabel": "搜索产品更新",
     "searchPlaceholder": "搜索更新或版本…",
     "filterLabel": "按类别筛选更新",
-    "filters": { "all": "全部更新" },
+    "filters": {
+      "all": "全部更新"
+    },
     "showingCount": "显示 {count} 项更新",
     "latest": "最新",
     "noResultsTitle": "没有匹配的更新",
@@ -12694,10 +12838,6 @@
         "governance": "一起看看持续的 SOC 2 审计、整改与审计轨迹。"
       },
       "nav": {
-        "dashboard": {
-          "title": "构建任何东西",
-          "body": "用自然语言描述你的需求，AI 智能体即刻开始构建——无需任何配置。"
-        },
         "projects": {
           "title": "共享看板",
           "body": "人类与 AI 智能体共用一个看板。把工单拖到 Ready，智能体便会规划、编写代码并提交拉取请求。"
@@ -12717,6 +12857,10 @@
         "knowledge": {
           "title": "知识与治理",
           "body": "SOP、流程与政策，具备版本管理和阅读确认，可作为审计证据。"
+        },
+        "create": {
+          "title": "从画布开始",
+          "body": "用自然语言描述你的需求，AI 智能体即刻开始构建——无需任何配置。"
         }
       }
     }
@@ -12858,8 +13002,19 @@
     "subtitle": "Put the experiences you create in BuilderForce directly inside your product, website, or customer portal with one script and independently governed capabilities.",
     "activeCapabilities": "capabilities active",
     "tabsLabel": "Embedded capability sections",
-    "tabs": { "features": "Features", "install": "Install", "consent": "Consent log", "surfaces": "BuilderForce surfaces" },
-    "categories": { "all": "All", "engage": "Engage", "measure": "Measure", "govern": "Govern", "operate": "Operate" },
+    "tabs": {
+      "features": "Features",
+      "install": "Install",
+      "consent": "Consent log",
+      "surfaces": "BuilderForce surfaces"
+    },
+    "categories": {
+      "all": "All",
+      "engage": "Engage",
+      "measure": "Measure",
+      "govern": "Govern",
+      "operate": "Operate"
+    },
     "search": "Search embedded capabilities…",
     "examples": "{count, plural, one {# example} other {# examples}}",
     "toggleLabel": "Toggle {feature}",
@@ -12876,7 +13031,11 @@
       "loading": "Loading…",
       "enable": "Enable embedded app surfaces",
       "capabilities": "Capabilities",
-      "capability": { "product": "Product", "agile": "Agile", "security": "Security" },
+      "capability": {
+        "product": "Product",
+        "agile": "Agile",
+        "security": "Security"
+      },
       "saving": "Saving…",
       "reviewEnable": "Review and enable…",
       "save": "Save",
@@ -12884,7 +13043,10 @@
       "loadError": "Could not load app-surface settings.",
       "saveError": "Could not save app-surface settings."
     },
-    "install": { "title": "One script, every capability", "description": "Install this once on the customer site. Feature changes apply on the next page load without redeploying the host." },
+    "install": {
+      "title": "One script, every capability",
+      "description": "Install this once on the customer site. Feature changes apply on the next page load without redeploying the host."
+    },
     "consent": {
       "title": "Consent log",
       "description": "An immutable workspace history of every capability opt-in and opt-out.",
@@ -12892,22 +13054,77 @@
       "enableTitle": "Enable {feature}?",
       "auditNotice": "Your account, timestamp, and consent text version {version} are recorded for audit. You can revoke access at any time.",
       "agree": "I consent, enable feature",
-      "actions": { "OPT_IN": "Enabled", "OPT_OUT": "Disabled" }
+      "actions": {
+        "OPT_IN": "Enabled",
+        "OPT_OUT": "Disabled"
+      }
     },
     "features": {
-      "usage_tracking": { "name": "Usage tracking", "description": "Track page views, custom events, identities, and feature engagement from customer sites.", "consent": "Sends page views, events, and identified-user traits to BuilderForce for product analytics and adoption signals." },
-      "support_widget": { "name": "Support widget", "description": "Embed an AI help experience that answers from your knowledge and escalates to people.", "consent": "Sends visitor questions, matched knowledge references, and the originating page to BuilderForce support." },
-      "feedback_widget": { "name": "Feedback widget", "description": "Capture ideas, bugs, feature requests, and contextual customer feedback.", "consent": "Sends what the visitor types, optional contact details, and the originating page to BuilderForce." },
-      "heatmaps": { "name": "Heatmaps", "description": "Measure click locations and scroll depth to understand real customer behavior.", "consent": "Captures click coordinates and scroll depth and aggregates them into interaction heatmaps." },
-      "feature_management": { "name": "Feature management", "description": "Evaluate remotely managed flags and variants for identified users.", "consent": "Sends flag keys and the targeting attributes configured by your workspace for evaluation." },
-      "terms_gate": { "name": "Terms gate", "description": "Require acceptance of a versioned agreement before a visitor can continue.", "consent": "Displays a blocking terms experience and records acceptance or decline against the active version." },
-      "sourcing": { "name": "Contact sourcing", "description": "Add governed contact lookup and enrichment to forms and internal tools.", "consent": "Runs customer-triggered contact lookups and charges them to this workspace's enrichment allowance." },
-      "lead_forms": { "name": "Lead forms", "description": "Publish lead-capture forms inline, in a drawer, or as a standalone frame.", "consent": "Stores submitted form data in this workspace and attributes it to the originating site." },
-      "push_notifications": { "name": "Push notifications", "description": "Ask for browser permission and deliver targeted web and PWA notifications.", "consent": "Stores browser push subscription details and delivers workspace-authored notification campaigns." },
-      "onboarding": { "name": "Onboarding", "description": "Turn Canvas-authored guided tours into live, target-aware product onboarding.", "consent": "Displays the published onboarding flow and records visitor progress and completion." },
-      "cookie_consent": { "name": "Cookie consent", "description": "Gate optional analytics with a configurable, auditable consent banner.", "consent": "Stores the visitor's consent choice and prevents optional tracking until it is accepted." },
-      "hr_widget": { "name": "HR widget", "description": "Embed personnel cards, leave requests, and document actions in a host portal.", "consent": "Displays authorized HR actions and sends submitted HR requests to this workspace." },
-      "status_page": { "name": "Public status page", "description": "Publish live service health as an inline component or standalone status page.", "consent": "Publishes the workspace's selected monitor status and incident updates to the customer site." }
+      "usage_tracking": {
+        "name": "Usage tracking",
+        "description": "Track page views, custom events, identities, and feature engagement from customer sites.",
+        "consent": "Sends page views, events, and identified-user traits to BuilderForce for product analytics and adoption signals."
+      },
+      "support_widget": {
+        "name": "Support widget",
+        "description": "Embed an AI help experience that answers from your knowledge and escalates to people.",
+        "consent": "Sends visitor questions, matched knowledge references, and the originating page to BuilderForce support."
+      },
+      "feedback_widget": {
+        "name": "Feedback widget",
+        "description": "Capture ideas, bugs, feature requests, and contextual customer feedback.",
+        "consent": "Sends what the visitor types, optional contact details, and the originating page to BuilderForce."
+      },
+      "heatmaps": {
+        "name": "Heatmaps",
+        "description": "Measure click locations and scroll depth to understand real customer behavior.",
+        "consent": "Captures click coordinates and scroll depth and aggregates them into interaction heatmaps."
+      },
+      "feature_management": {
+        "name": "Feature management",
+        "description": "Evaluate remotely managed flags and variants for identified users.",
+        "consent": "Sends flag keys and the targeting attributes configured by your workspace for evaluation."
+      },
+      "terms_gate": {
+        "name": "Terms gate",
+        "description": "Require acceptance of a versioned agreement before a visitor can continue.",
+        "consent": "Displays a blocking terms experience and records acceptance or decline against the active version."
+      },
+      "sourcing": {
+        "name": "Contact sourcing",
+        "description": "Add governed contact lookup and enrichment to forms and internal tools.",
+        "consent": "Runs customer-triggered contact lookups and charges them to this workspace's enrichment allowance."
+      },
+      "lead_forms": {
+        "name": "Lead forms",
+        "description": "Publish lead-capture forms inline, in a drawer, or as a standalone frame.",
+        "consent": "Stores submitted form data in this workspace and attributes it to the originating site."
+      },
+      "push_notifications": {
+        "name": "Push notifications",
+        "description": "Ask for browser permission and deliver targeted web and PWA notifications.",
+        "consent": "Stores browser push subscription details and delivers workspace-authored notification campaigns."
+      },
+      "onboarding": {
+        "name": "Onboarding",
+        "description": "Turn Canvas-authored guided tours into live, target-aware product onboarding.",
+        "consent": "Displays the published onboarding flow and records visitor progress and completion."
+      },
+      "cookie_consent": {
+        "name": "Cookie consent",
+        "description": "Gate optional analytics with a configurable, auditable consent banner.",
+        "consent": "Stores the visitor's consent choice and prevents optional tracking until it is accepted."
+      },
+      "hr_widget": {
+        "name": "HR widget",
+        "description": "Embed personnel cards, leave requests, and document actions in a host portal.",
+        "consent": "Displays authorized HR actions and sends submitted HR requests to this workspace."
+      },
+      "status_page": {
+        "name": "Public status page",
+        "description": "Publish live service health as an inline component or standalone status page.",
+        "consent": "Publishes the workspace's selected monitor status and incident updates to the customer site."
+      }
     }
   },
   "embedInstall": {
@@ -13734,10 +13951,43 @@
       "guidedTour": "引导式导览"
     },
     "tourBuilder": {
-      "defaultObjectTitle": "产品引导导览", "defaultOfferTitle": "欢迎使用，要快速了解一下吗？", "defaultOfferBody": "通过几个简短步骤了解基本功能。您可以随时退出导览。", "defaultStartLabel": "开始导览", "defaultCancelLabel": "暂时不要", "defaultStep1Title": "帮助用户熟悉界面", "defaultStep1Body": "说明第一个重要区域及其作用。", "defaultStep2Title": "展示关键操作", "defaultStep2Body": "突出显示可帮助用户继续操作的功能。",
-      "closePreview": "关闭导览预览", "stepOf": "第 {current} 步，共 {total} 步", "targetConnected": "已连接目标", "targetNeeded": "请选择目标对象", "back": "返回", "finish": "完成", "next": "下一步", "offer": "导览邀请",
-      "stepCount": "{count} 个步骤", "visitCount": "访问 {count} 次后显示", "escapeEnabled": "已启用退出通道",
-      "settings": "引导式导览设置", "settingsHint": "设计一个可选择加入的导览，并将每个步骤连接到要突出显示的画布对象。", "draftSteps": "草稿 · {count} 个步骤", "offerTitle": "邀请标题", "offerBody": "邀请说明", "version": "导览版本", "minimumVisits": "显示前访问次数", "blurBackground": "邀请时模糊背景", "escapeHatch": "始终提供关闭和 Escape", "steps": "导览步骤", "addStep": "添加步骤", "newStepTitle": "新导览步骤", "stepTitle": "步骤标题", "stepBody": "步骤说明", "targetObject": "要突出显示的对象", "chooseTarget": "选择对象", "removeStep": "删除步骤"
+      "defaultObjectTitle": "产品引导导览",
+      "defaultOfferTitle": "欢迎使用，要快速了解一下吗？",
+      "defaultOfferBody": "通过几个简短步骤了解基本功能。您可以随时退出导览。",
+      "defaultStartLabel": "开始导览",
+      "defaultCancelLabel": "暂时不要",
+      "defaultStep1Title": "帮助用户熟悉界面",
+      "defaultStep1Body": "说明第一个重要区域及其作用。",
+      "defaultStep2Title": "展示关键操作",
+      "defaultStep2Body": "突出显示可帮助用户继续操作的功能。",
+      "closePreview": "关闭导览预览",
+      "stepOf": "第 {current} 步，共 {total} 步",
+      "targetConnected": "已连接目标",
+      "targetNeeded": "请选择目标对象",
+      "back": "返回",
+      "finish": "完成",
+      "next": "下一步",
+      "offer": "导览邀请",
+      "stepCount": "{count} 个步骤",
+      "visitCount": "访问 {count} 次后显示",
+      "escapeEnabled": "已启用退出通道",
+      "settings": "引导式导览设置",
+      "settingsHint": "设计一个可选择加入的导览，并将每个步骤连接到要突出显示的画布对象。",
+      "draftSteps": "草稿 · {count} 个步骤",
+      "offerTitle": "邀请标题",
+      "offerBody": "邀请说明",
+      "version": "导览版本",
+      "minimumVisits": "显示前访问次数",
+      "blurBackground": "邀请时模糊背景",
+      "escapeHatch": "始终提供关闭和 Escape",
+      "steps": "导览步骤",
+      "addStep": "添加步骤",
+      "newStepTitle": "新导览步骤",
+      "stepTitle": "步骤标题",
+      "stepBody": "步骤说明",
+      "targetObject": "要突出显示的对象",
+      "chooseTarget": "选择对象",
+      "removeStep": "删除步骤"
     },
     "canvasOutline": "无障碍画布大纲",
     "canvasGestureToggle": "拖动以框选",
@@ -15508,15 +15758,93 @@
     "useAnotherAccount": "使用其他账号"
   },
   "about": {
-    "seo": { "title": "关于 Builderforce.ai — 构建与经营一体化操作系统", "description": "了解 Builderforce：团队与 AI 智能体基于共享上下文进行创造、经营、治理和交付的互联操作系统。" },
-    "hero": { "eyebrow": "关于 Builderforce", "title": "构建产品。经营公司。一个系统。", "lead": "Builderforce 将 BurnRateOS 的创业生存智能融入人类与 AI 智能体共用的创意画布，把想法、业务和让想法成真的工作连接起来。", "primaryCta": "免费开始", "secondaryCta": "预约演示", "domains": "运营领域", "foundations": "共享基础", "workspace": "互联工作空间", "core": "从想法到成果", "visualAria": "Builderforce 操作系统连接产品、财务、收入和治理" },
-    "thesis": { "eyebrow": "我们为何存在", "title": "公司是一个系统，它的软件也应该如此。", "body": "创业公司不会在整齐的部门孤岛中失败。产品决策会改变现金跑道，客户反馈会改变路线图，安全要求会改变交付方式。Builderforce 让这些关系始终可见，并为人类和智能体提供从决策到行动的受治理路径。" },
-    "promises": { "eyebrow": "Builderforce 的不同", "title": "自由创造。清晰经营。受控交付。", "items": [{ "title": "从意图开始创造", "description": "在一个可视化画布上，将想法变成相互连接的网站、工作流、原型、数据集、模型、计划和产品。" }, { "title": "基于共享事实经营", "description": "连接产品、财务、收入、客户、人员、投资者、营销与风险，无需在每个工具中重建上下文。" }, { "title": "让决策转化为行动", "description": "让专业智能体与工作并肩，审查拟议变更、保留证据，并将获批工作送入交付。" }] },
-    "system": { "eyebrow": "我们构建了什么", "title": "完整运营视图，与执行紧密相连", "lead": "九个运营领域承载 BurnRateOS 的创业生存能力，三个基础能力为每个领域提供一致的智能、业务上下文、集成和受治理的 Builderforce 执行。", "domains": "运营领域", "foundations": "共享基础" },
-    "story": { "eyebrow": "我们的故事", "title": "两个必需的理念，汇成一个平台。", "bodyOne": "BurnRateOS 始于一个直白的观察：优秀团队即使持续交付，也仍可能耗尽时间或资金。它连接现金跑道、客户证据、运营节奏和商业决策，让进展以生存能力衡量，而不只是活动数量。", "bodyTwo": "Builderforce 始于问题的另一半：想法、产物、人员和 AI 智能体散落在彼此割裂的工具中。二者合一，形成从业务信号到创意决策、受治理执行和可衡量成果的完整闭环。" },
-    "principles": { "eyebrow": "我们的构建原则", "title": "智能体操作系统的原则", "items": [{ "title": "创业公司优先", "description": "每项能力都应帮助团队更快验证、节省资源、获得收入、降低风险，或构建客户真正重视的价值。" }, { "title": "默认互联", "description": "想法、公司数据、决策、产物、工作和成果应始终相连，而不是在另一个单点工具里变成副本。" }, { "title": "人类始终参与", "description": "智能体扩展团队，但不会消除责任。审查、审批、权限和明确归属都属于工作流的一部分。" }, { "title": "证据胜于表演", "description": "真实对象、可见边界、保留的执行记录和可衡量成果，比华丽却无法验证的回答更重要。" }] },
-    "trust": { "eyebrow": "安全与信任", "title": "治理应与工作同行，而不是事后补上。", "body": "角色、审批路径、凭证控制、审计历史、隐私工作流和系统证据均属于平台架构，帮助团队从实验更清晰地走向负责任的运营。", "cta": "了解信任与审计" },
-    "cta": { "eyebrow": "构建真正重要的事", "title": "带上你的下一个想法，以及它背后的公司。", "body": "从画布开始，连接运营上下文，为人类与智能体提供一个将意图转化为成果的共同空间。", "primary": "免费开始创作", "secondary": "探索全部能力" }
+    "seo": {
+      "title": "关于 Builderforce.ai — 构建与经营一体化操作系统",
+      "description": "了解 Builderforce：团队与 AI 智能体基于共享上下文进行创造、经营、治理和交付的互联操作系统。"
+    },
+    "hero": {
+      "eyebrow": "关于 Builderforce",
+      "title": "构建产品。经营公司。一个系统。",
+      "lead": "Builderforce 将 BurnRateOS 的创业生存智能融入人类与 AI 智能体共用的创意画布，把想法、业务和让想法成真的工作连接起来。",
+      "primaryCta": "免费开始",
+      "secondaryCta": "预约演示",
+      "domains": "运营领域",
+      "foundations": "共享基础",
+      "workspace": "互联工作空间",
+      "core": "从想法到成果",
+      "visualAria": "Builderforce 操作系统连接产品、财务、收入和治理"
+    },
+    "thesis": {
+      "eyebrow": "我们为何存在",
+      "title": "公司是一个系统，它的软件也应该如此。",
+      "body": "创业公司不会在整齐的部门孤岛中失败。产品决策会改变现金跑道，客户反馈会改变路线图，安全要求会改变交付方式。Builderforce 让这些关系始终可见，并为人类和智能体提供从决策到行动的受治理路径。"
+    },
+    "promises": {
+      "eyebrow": "Builderforce 的不同",
+      "title": "自由创造。清晰经营。受控交付。",
+      "items": [
+        {
+          "title": "从意图开始创造",
+          "description": "在一个可视化画布上，将想法变成相互连接的网站、工作流、原型、数据集、模型、计划和产品。"
+        },
+        {
+          "title": "基于共享事实经营",
+          "description": "连接产品、财务、收入、客户、人员、投资者、营销与风险，无需在每个工具中重建上下文。"
+        },
+        {
+          "title": "让决策转化为行动",
+          "description": "让专业智能体与工作并肩，审查拟议变更、保留证据，并将获批工作送入交付。"
+        }
+      ]
+    },
+    "system": {
+      "eyebrow": "我们构建了什么",
+      "title": "完整运营视图，与执行紧密相连",
+      "lead": "九个运营领域承载 BurnRateOS 的创业生存能力，三个基础能力为每个领域提供一致的智能、业务上下文、集成和受治理的 Builderforce 执行。",
+      "domains": "运营领域",
+      "foundations": "共享基础"
+    },
+    "story": {
+      "eyebrow": "我们的故事",
+      "title": "两个必需的理念，汇成一个平台。",
+      "bodyOne": "BurnRateOS 始于一个直白的观察：优秀团队即使持续交付，也仍可能耗尽时间或资金。它连接现金跑道、客户证据、运营节奏和商业决策，让进展以生存能力衡量，而不只是活动数量。",
+      "bodyTwo": "Builderforce 始于问题的另一半：想法、产物、人员和 AI 智能体散落在彼此割裂的工具中。二者合一，形成从业务信号到创意决策、受治理执行和可衡量成果的完整闭环。"
+    },
+    "principles": {
+      "eyebrow": "我们的构建原则",
+      "title": "智能体操作系统的原则",
+      "items": [
+        {
+          "title": "创业公司优先",
+          "description": "每项能力都应帮助团队更快验证、节省资源、获得收入、降低风险，或构建客户真正重视的价值。"
+        },
+        {
+          "title": "默认互联",
+          "description": "想法、公司数据、决策、产物、工作和成果应始终相连，而不是在另一个单点工具里变成副本。"
+        },
+        {
+          "title": "人类始终参与",
+          "description": "智能体扩展团队，但不会消除责任。审查、审批、权限和明确归属都属于工作流的一部分。"
+        },
+        {
+          "title": "证据胜于表演",
+          "description": "真实对象、可见边界、保留的执行记录和可衡量成果，比华丽却无法验证的回答更重要。"
+        }
+      ]
+    },
+    "trust": {
+      "eyebrow": "安全与信任",
+      "title": "治理应与工作同行，而不是事后补上。",
+      "body": "角色、审批路径、凭证控制、审计历史、隐私工作流和系统证据均属于平台架构，帮助团队从实验更清晰地走向负责任的运营。",
+      "cta": "了解信任与审计"
+    },
+    "cta": {
+      "eyebrow": "构建真正重要的事",
+      "title": "带上你的下一个想法，以及它背后的公司。",
+      "body": "从画布开始，连接运营上下文，为人类与智能体提供一个将意图转化为成果的共同空间。",
+      "primary": "免费开始创作",
+      "secondary": "探索全部能力"
+    }
   },
   "routeMarketing": {
     "subtitle": "创建免费工作区即可使用{surface}，或登录以继续已有的工作。",
@@ -15530,21 +15858,338 @@
     "relatedReading": "相关阅读"
   },
   "burnrateMarketing": {
-    "shared":{"builtFor":"为 {persona} 打造","poweredBy":"由 Builderforce.ai 提供支持","publicCta":"免费开始","publicSecondaryCta":"预约演示","authenticatedCta":"打开工作区","authenticatedEyebrow":"你的运营工作区","featureHeading":"包含的能力","publicClosing":"用一个运营系统替代相互割裂的工具，让每个决策都能到达负责执行的人和智能体。","authenticatedClosing":"在 Builderforce 实时工作区继续，企业上下文、团队、智能体和治理已经连接。"},
-    "index":{"eyebrow":"创业公司的运营系统","title":"让每个职能都连接到执行","description":"BurnRateOS 的高管产品结构现已整合到 Builderforce。探索九个互联的运营领域及其共享基础。","domains":"产品领域","foundations":"基础能力","explore":"探索"},
-    "domains":{
-      "productManagement":{"title":"产品管理","tagline":"发现、验证与路线图","hero":"把客户证据转化为正确的路线图","description":"梳理想法、规划 MVP、验证需求、确定战略待办优先级，并把产品投入连接到交付。","features":[{"title":"产品发现","description":"通过客户、市场和竞争证据捕获并评估机会。"},{"title":"MVP 规划","description":"把有潜力的想法变成可验证的范围和假设。"},{"title":"路线图与待办","description":"按业务价值、采用率、工作量和战略匹配度排序。"}]},
-      "businessIntelligence":{"title":"商业智能","tagline":"跑道、燃烧率、预测与定价","hero":"了解每个决策对资金跑道的影响","description":"在协调实际工作的同一系统中，对现金、收入、留存、费用和情景进行建模。","features":[{"title":"跑道与燃烧率","description":"实时跟踪现金、月度燃烧、盈亏平衡和资金跑道。"},{"title":"预测情景","description":"比较假设、敏感性和各种假设方案。"},{"title":"单位经济模型","description":"衡量 ARR、留存、CAC、LTV 和回收周期。"}]},
-      "agileSurvival":{"title":"敏捷生存","tagline":"每个迭代都关联资金跑道","hero":"不浪费任何一个迭代地交付","description":"把规划、复盘、看板、产能和交付风险与每个迭代的财务影响结合起来。","features":[{"title":"生存导向规划","description":"在承诺前同时查看产能和资金跑道。"},{"title":"成本感知看板","description":"查看流程、瓶颈、风险和延期的财务影响。"},{"title":"复盘与速度","description":"把交付信号转化为下个迭代的改进。"}]},
-      "salesRevenue":{"title":"销售与收入","tagline":"ICP、潜客、管道与漏斗","hero":"建立全团队可见的收入引擎","description":"把目标客户、联系人、序列、商机、转化信号和预测连接在同一流程中。","features":[{"title":"ICP 与潜客开发","description":"定义理想客户、丰富潜客并保留来源。"},{"title":"序列与营销活动","description":"协调触达、回复、跟进和转化信号。"},{"title":"商机与收入漏斗","description":"管理管道阶段、配额达成和预测变化。"}]},
-      "customerEngagement":{"title":"客户互动","tagline":"反馈、支持、留存与健康度","hero":"把每个客户信号转化为行动","description":"统一反馈、支持、引导、情绪、留存、流失和账户健康度。","features":[{"title":"客户反馈","description":"收集反馈并直接送入产品和交付决策。"},{"title":"健康度与留存","description":"结合参与度、NPS、情绪和流失指标。"},{"title":"支持与引导","description":"协调工单、知识、引导流程和后续行动。"}]},
-      "investorIntelligence":{"title":"投资者智能","tagline":"融资、更新与投资组合健康度","hero":"基于实时公司事实管理投资者关系","description":"创建路演材料、投资者更新、数据室、尽调流程、融资历史和投资组合视图。","features":[{"title":"路演材料与分析","description":"按版本共享并衡量每页的参与度。"},{"title":"更新与数据室","description":"准备已审批的投资者沟通和尽调材料。"},{"title":"投资组合智能","description":"跟踪融资、里程碑、健康评分和交易流。"}]},
-      "operationalCadence":{"title":"运营节奏","tagline":"人员、目标、会议与节奏","hero":"不增加会议也能保持公司一致","description":"连接目标、人员规划、绩效、一对一、签到、运营节奏、笔记和决策。","features":[{"title":"目标与记分卡","description":"关联目标、成果、里程碑和运营指标。"},{"title":"人员运营","description":"协调人员规划、绩效评估、签到和一对一。"},{"title":"会议与决策","description":"记录议程、转录、负责人和后续行动。"}]},
-      "governanceSecurity":{"title":"治理与安全","tagline":"控制、证据、风险与隐私","hero":"让治理成为工作的一部分","description":"在执行旁运营 SOC 控制、证据、事件、供应商、隐私资产、审批和审计轨迹。","features":[{"title":"控制与证据","description":"管理 SOC 控制、证据收集、培训和合规事件。"},{"title":"安全与供应商风险","description":"跟踪事件、供应商、DPA、PII 资产和整改。"},{"title":"隐私与审批","description":"处理数据请求、同意、版本、签署和审计。"}]},
-      "marketingGrowth":{"title":"营销与增长","tagline":"活动、转化与内容","hero":"把注意力转化为可衡量的增长","description":"在同一闭环中构建落地页、活动、培育流程、实验、内容、SEO 和分析。","features":[{"title":"活动与培育","description":"协调受众、消息、注册、投递和跟进。"},{"title":"网站与转化","description":"构建页面、表单、实验、热图和转化旅程。"},{"title":"内容与分发","description":"规划内容、SEO、社交、推荐、邮件和推送。"}]},
-      "aiCoach":{"title":"AI 教练","tagline":"一个助手，覆盖所有高管视角","hero":"为每个决策引入正确的高管视角","description":"通过同一个 Builderforce Brain 使用 CEO、CFO、CRO、CMO、CPO、CTO、CHRO 和 CISO 上下文。","features":[{"title":"八种高管视角","description":"切换视角时不丢失公司或项目上下文。"},{"title":"领域工具","description":"使用财务、产品、增长、人员和风险工具。"},{"title":"受治理的行动","description":"从建议走向已审批、可审计的执行。"}]},
-      "integrations":{"title":"集成与迁移","tagline":"连接你保留的工具","hero":"在现有技术栈之上的统一运营层","description":"连接协作、开发、财务、CRM 和交付系统，同时保持租户边界和审批控制。","features":[{"title":"已连接服务","description":"引入团队现有系统中的信号。"},{"title":"迁移流程","description":"把工作和知识迁出割裂的单点工具。"},{"title":"受控访问","description":"集中管理凭据、范围、审批和数据边界。"}]},
-      "companiesContacts":{"title":"公司与联系人","tagline":"共享的商业关系图","hero":"所有运营领域共用一个公司图谱","description":"只需一次表示你的公司、客户、潜客、投资者、合作伙伴、供应商和联系人。","features":[{"title":"公司关系","description":"表示所有者、客户、潜客、伙伴、投资者和供应商。"},{"title":"联系人来源","description":"保留标识、来源、丰富过程和编辑历史。"},{"title":"共享上下文","description":"在销售、财务、产品、支持和治理中使用同一图谱。"}]}
+    "shared": {
+      "builtFor": "为 {persona} 打造",
+      "poweredBy": "由 Builderforce.ai 提供支持",
+      "publicCta": "免费开始",
+      "publicSecondaryCta": "预约演示",
+      "authenticatedCta": "打开工作区",
+      "authenticatedEyebrow": "你的运营工作区",
+      "featureHeading": "包含的能力",
+      "publicClosing": "用一个运营系统替代相互割裂的工具，让每个决策都能到达负责执行的人和智能体。",
+      "authenticatedClosing": "在 Builderforce 实时工作区继续，企业上下文、团队、智能体和治理已经连接。"
+    },
+    "index": {
+      "eyebrow": "创业公司的运营系统",
+      "title": "让每个职能都连接到执行",
+      "description": "BurnRateOS 的高管产品结构现已整合到 Builderforce。探索九个互联的运营领域及其共享基础。",
+      "domains": "产品领域",
+      "foundations": "基础能力",
+      "explore": "探索"
+    },
+    "domains": {
+      "productManagement": {
+        "title": "产品管理",
+        "tagline": "发现、验证与路线图",
+        "hero": "把客户证据转化为正确的路线图",
+        "description": "梳理想法、规划 MVP、验证需求、确定战略待办优先级，并把产品投入连接到交付。",
+        "features": [
+          {
+            "title": "产品发现",
+            "description": "通过客户、市场和竞争证据捕获并评估机会。"
+          },
+          {
+            "title": "MVP 规划",
+            "description": "把有潜力的想法变成可验证的范围和假设。"
+          },
+          {
+            "title": "路线图与待办",
+            "description": "按业务价值、采用率、工作量和战略匹配度排序。"
+          }
+        ]
+      },
+      "businessIntelligence": {
+        "title": "商业智能",
+        "tagline": "跑道、燃烧率、预测与定价",
+        "hero": "了解每个决策对资金跑道的影响",
+        "description": "在协调实际工作的同一系统中，对现金、收入、留存、费用和情景进行建模。",
+        "features": [
+          {
+            "title": "跑道与燃烧率",
+            "description": "实时跟踪现金、月度燃烧、盈亏平衡和资金跑道。"
+          },
+          {
+            "title": "预测情景",
+            "description": "比较假设、敏感性和各种假设方案。"
+          },
+          {
+            "title": "单位经济模型",
+            "description": "衡量 ARR、留存、CAC、LTV 和回收周期。"
+          }
+        ]
+      },
+      "agileSurvival": {
+        "title": "敏捷生存",
+        "tagline": "每个迭代都关联资金跑道",
+        "hero": "不浪费任何一个迭代地交付",
+        "description": "把规划、复盘、看板、产能和交付风险与每个迭代的财务影响结合起来。",
+        "features": [
+          {
+            "title": "生存导向规划",
+            "description": "在承诺前同时查看产能和资金跑道。"
+          },
+          {
+            "title": "成本感知看板",
+            "description": "查看流程、瓶颈、风险和延期的财务影响。"
+          },
+          {
+            "title": "复盘与速度",
+            "description": "把交付信号转化为下个迭代的改进。"
+          }
+        ]
+      },
+      "salesRevenue": {
+        "title": "销售与收入",
+        "tagline": "ICP、潜客、管道与漏斗",
+        "hero": "建立全团队可见的收入引擎",
+        "description": "把目标客户、联系人、序列、商机、转化信号和预测连接在同一流程中。",
+        "features": [
+          {
+            "title": "ICP 与潜客开发",
+            "description": "定义理想客户、丰富潜客并保留来源。"
+          },
+          {
+            "title": "序列与营销活动",
+            "description": "协调触达、回复、跟进和转化信号。"
+          },
+          {
+            "title": "商机与收入漏斗",
+            "description": "管理管道阶段、配额达成和预测变化。"
+          }
+        ]
+      },
+      "customerEngagement": {
+        "title": "客户互动",
+        "tagline": "反馈、支持、留存与健康度",
+        "hero": "把每个客户信号转化为行动",
+        "description": "统一反馈、支持、引导、情绪、留存、流失和账户健康度。",
+        "features": [
+          {
+            "title": "客户反馈",
+            "description": "收集反馈并直接送入产品和交付决策。"
+          },
+          {
+            "title": "健康度与留存",
+            "description": "结合参与度、NPS、情绪和流失指标。"
+          },
+          {
+            "title": "支持与引导",
+            "description": "协调工单、知识、引导流程和后续行动。"
+          }
+        ]
+      },
+      "investorIntelligence": {
+        "title": "投资者智能",
+        "tagline": "融资、更新与投资组合健康度",
+        "hero": "基于实时公司事实管理投资者关系",
+        "description": "创建路演材料、投资者更新、数据室、尽调流程、融资历史和投资组合视图。",
+        "features": [
+          {
+            "title": "路演材料与分析",
+            "description": "按版本共享并衡量每页的参与度。"
+          },
+          {
+            "title": "更新与数据室",
+            "description": "准备已审批的投资者沟通和尽调材料。"
+          },
+          {
+            "title": "投资组合智能",
+            "description": "跟踪融资、里程碑、健康评分和交易流。"
+          }
+        ]
+      },
+      "operationalCadence": {
+        "title": "运营节奏",
+        "tagline": "人员、目标、会议与节奏",
+        "hero": "不增加会议也能保持公司一致",
+        "description": "连接目标、人员规划、绩效、一对一、签到、运营节奏、笔记和决策。",
+        "features": [
+          {
+            "title": "目标与记分卡",
+            "description": "关联目标、成果、里程碑和运营指标。"
+          },
+          {
+            "title": "人员运营",
+            "description": "协调人员规划、绩效评估、签到和一对一。"
+          },
+          {
+            "title": "会议与决策",
+            "description": "记录议程、转录、负责人和后续行动。"
+          }
+        ]
+      },
+      "governanceSecurity": {
+        "title": "治理与安全",
+        "tagline": "控制、证据、风险与隐私",
+        "hero": "让治理成为工作的一部分",
+        "description": "在执行旁运营 SOC 控制、证据、事件、供应商、隐私资产、审批和审计轨迹。",
+        "features": [
+          {
+            "title": "控制与证据",
+            "description": "管理 SOC 控制、证据收集、培训和合规事件。"
+          },
+          {
+            "title": "安全与供应商风险",
+            "description": "跟踪事件、供应商、DPA、PII 资产和整改。"
+          },
+          {
+            "title": "隐私与审批",
+            "description": "处理数据请求、同意、版本、签署和审计。"
+          }
+        ]
+      },
+      "marketingGrowth": {
+        "title": "营销与增长",
+        "tagline": "活动、转化与内容",
+        "hero": "把注意力转化为可衡量的增长",
+        "description": "在同一闭环中构建落地页、活动、培育流程、实验、内容、SEO 和分析。",
+        "features": [
+          {
+            "title": "活动与培育",
+            "description": "协调受众、消息、注册、投递和跟进。"
+          },
+          {
+            "title": "网站与转化",
+            "description": "构建页面、表单、实验、热图和转化旅程。"
+          },
+          {
+            "title": "内容与分发",
+            "description": "规划内容、SEO、社交、推荐、邮件和推送。"
+          }
+        ]
+      },
+      "aiCoach": {
+        "title": "AI 教练",
+        "tagline": "一个助手，覆盖所有高管视角",
+        "hero": "为每个决策引入正确的高管视角",
+        "description": "通过同一个 Builderforce Brain 使用 CEO、CFO、CRO、CMO、CPO、CTO、CHRO 和 CISO 上下文。",
+        "features": [
+          {
+            "title": "八种高管视角",
+            "description": "切换视角时不丢失公司或项目上下文。"
+          },
+          {
+            "title": "领域工具",
+            "description": "使用财务、产品、增长、人员和风险工具。"
+          },
+          {
+            "title": "受治理的行动",
+            "description": "从建议走向已审批、可审计的执行。"
+          }
+        ]
+      },
+      "integrations": {
+        "title": "集成与迁移",
+        "tagline": "连接你保留的工具",
+        "hero": "在现有技术栈之上的统一运营层",
+        "description": "连接协作、开发、财务、CRM 和交付系统，同时保持租户边界和审批控制。",
+        "features": [
+          {
+            "title": "已连接服务",
+            "description": "引入团队现有系统中的信号。"
+          },
+          {
+            "title": "迁移流程",
+            "description": "把工作和知识迁出割裂的单点工具。"
+          },
+          {
+            "title": "受控访问",
+            "description": "集中管理凭据、范围、审批和数据边界。"
+          }
+        ]
+      },
+      "companiesContacts": {
+        "title": "公司与联系人",
+        "tagline": "共享的商业关系图",
+        "hero": "所有运营领域共用一个公司图谱",
+        "description": "只需一次表示你的公司、客户、潜客、投资者、合作伙伴、供应商和联系人。",
+        "features": [
+          {
+            "title": "公司关系",
+            "description": "表示所有者、客户、潜客、伙伴、投资者和供应商。"
+          },
+          {
+            "title": "联系人来源",
+            "description": "保留标识、来源、丰富过程和编辑历史。"
+          },
+          {
+            "title": "共享上下文",
+            "description": "在销售、财务、产品、支持和治理中使用同一图谱。"
+          }
+        ]
+      }
     }
+  },
+  "featuresPage": {
+    "badgeAllSeats": "全部席位",
+    "badgeSystem": "✦ 创业操作系统",
+    "titleLead": "从想法到落地。",
+    "titleSub": "一块画布，全套席位。",
+    "lede": "九个业务领域，每个都由一位可以拖到画布上的高管队友负责——所以每项能力都对应一个真正担责的人，而不是一个无人负责的菜单项。",
+    "ctaCanvas": "打开画布 →",
+    "ctaPricing": "查看定价",
+    "check": {
+      "noCard": "无需信用卡",
+      "boardFirst": "先有画布，再有账号",
+      "soc2": "符合 SOC 2 准备"
+    },
+    "overviewTitle": "平台概览",
+    "overviewNote": "……以及把它们串起来的主线。",
+    "stat": {
+      "domains": "产品领域",
+      "seats": "团队席位",
+      "destinations": "目的地",
+      "features": "子视图"
+    },
+    "domainsBadge": "产品领域",
+    "domainsTitle": "{count} 个领域，{count} 位负责人，一块画布",
+    "domainsLede": "每个领域都由团队中的一个席位负责。从菜单进入，或从队友进入——两者落到同一个界面，因为读的是同一份清单。",
+    "foundationsBadge": "基础能力",
+    "foundationsTitle": "每个席位都依赖的 {count} 项基础",
+    "foundationsLede": "横向支撑层。没有单一席位拥有它们——而且值得注意：其中没有一项叫“AI”，模型是界面本身，不是一个部门。",
+    "foundationBadge": "基础",
+    "arcBadge": "主线",
+    "arcTitle": "构想 → 构建 → 运营",
+    "arcLede": "菜单不是部门清单，而是你在旅程中的位置；下面每个目的地都只属于一个位置。",
+    "arcCol": {
+      "stage": "阶段",
+      "question": "要回答的问题",
+      "where": "前往何处"
+    },
+    "arcQuestion": {
+      "idea": "如果……会怎样？",
+      "make": "把它做出来。",
+      "run": "像公司一样运营它。",
+      "measure": "有效果吗？",
+      "market": "销售、采购、招聘、被发现。",
+      "admin": "设置。"
+    },
+    "arcNote": "由产品自身的导航生成，因此这张表不会宣传不存在的目的地，也不会遗漏已有的目的地。",
+    "faqTitle": "由此带来的问题",
+    "faq": [
+      {
+        "q": "菜单去哪了？",
+        "a": "现在只有一份清单。左侧面板按主线所处的位置分组——构想、构建、运营——底部则列出拥有这些能力的人和智能体。你过去从侧边栏进入的一切都属于这两者之一，而且两者读取同一份注册表，因此名称不可能不一致。"
+      },
+      {
+        "q": "必须创建公司才能使用吗？",
+        "a": "不必，中途停下也是一次完整而成功的使用。有人发布了三个落地页却从未成立公司，这并不算引导失败。业务相关的条目始终保持可见——变暗而非隐藏——让你在需要之前就先看见它们。"
+      },
+      {
+        "q": "原来的 AI 板块去哪了？",
+        "a": "它的入口都回到了真正负责该工作的席位：费用分类归 CFO，合同分析归安全，竞品监控归 CMO，路演材料反馈归 CEO。以技术命名的菜单项，恰恰说明产品还没想清楚这项工作归谁。"
+      },
+      {
+        "q": "参考页为什么是侧滑面板？",
+        "a": "因为为了看一眼 SOC 2 而丢掉正在用的画布并不划算。未登录时它们就是普通页面、普通网址；登录后，同一页面会在你正在工作的画布之上打开，按 Esc 即可返回，智能体的任务仍在运行。"
+      },
+      {
+        "q": "市场只面向自由职业者吗？",
+        "a": "不是。四个类别并列：人才、公司、智能体与资产。智能体不是独立板块——购买即加入你的团队，这也是目录与团队名册永不脱节的原因。"
+      }
+    ],
+    "closeTitle": "准备好替换整套工具了吗？",
+    "closeLede": "用一个平台取代五个，用一份菜单取代七份。先从画布开始；等你有了公司，再认领它。",
+    "closeFine": "无需信用卡 · 注册之前画布就属于你 · 随时升级"
   }
 }

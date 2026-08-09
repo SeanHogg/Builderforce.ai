@@ -266,6 +266,50 @@
   --ev-personality: var(--violet-bright);
   --ev-core: var(--coral-bright);
 
+  /* SEAT identities (PRD 21 §11.10.1). A seat's colour was being invented three
+     times over — BurnRateOS coloured each domain on its marketing cards, the
+     roster picked its own, and the canvas picked a third for agent objects. One
+     declaration, five readers: the roster chip, the nav row's seat badge, the
+     panel's top rule and index marker, the marketing/features card, and any
+     chart series broken down by owner. Read through `lib/seats.ts`, never
+     hard-coded at a call site.
+
+     Every value is an ALIAS of a categorical hue already declared for both
+     themes above, so this list spends no new colour — it only stops three
+     surfaces from each picking their own. Twelve seats consume all eleven
+     categorical hues plus the brand: a THIRTEENTH always-on seat needs a twelfth
+     hue declared before it needs a menu entry. */
+  --seat-ceo: var(--violet-bright);
+  --seat-cfo: var(--emerald-bright);
+  --seat-cro: var(--amber-bright);
+  --seat-cmo: var(--pink-bright);
+  --seat-cto: var(--sky-bright);
+  --seat-cpo: var(--yellow-bright);
+  --seat-hr: var(--teal-bright);
+  --seat-recruiter: var(--orange-bright);
+  --seat-security: var(--red-bright);
+  --seat-support: var(--purple-bright);
+  --seat-manager: var(--indigo-bright);
+  --seat-brain: var(--coral-bright);
+
+  /* STAGE identities — the Idea → Make → Run arc the left panel groups by. Four
+     of the six reuse a seat-adjacent hue deliberately: a stage is a phase, not a
+     brand, so it should read as a quiet marker beside the row rather than as a
+     seventh accent competing with the seats. */
+  --stage-idea: var(--amber-bright);
+  --stage-make: var(--coral-bright);
+  --stage-run: var(--emerald-bright);
+  --stage-measure: var(--violet-bright);
+  --stage-market: var(--pink-bright);
+  --stage-admin: var(--text-muted);
+
+  /* The brand gradient, ported from burnrateos.com/features (§11.10.2). It is
+     restricted to TWO positions on a page — the hero word-mark and the closing
+     CTA band — because a gradient that also appears on cards stops meaning "this
+     is the beginning or the end of the page" and becomes decoration. */
+  --grad-brand: linear-gradient(135deg, #1e3a8a 0%, #3730a3 100%);
+  --wash-hero: linear-gradient(135deg, rgba(77, 158, 255, 0.10) 0%, rgba(124, 131, 253, 0.12) 100%);
+
   /* Canvas OBJECT identities. They live here rather than with the board's own
      surfaces because two surfaces read them — the board's minimap and the
      dashboard's session tiles — and the dashboard is not inside the board, so a
@@ -460,6 +504,12 @@ html[data-theme='light'] {
   --yellow-bright: #a16207;
   --orange-bright: #c2410c;
   --error-strong: #7f1d1d;
+
+  /* The brand gradient on paper. `--seat-*` and `--stage-*` need no override —
+     they alias the categorical hues above, so they flip with them. These two do,
+     because a gradient cannot be expressed as an alias of a single token. */
+  --grad-brand: linear-gradient(135deg, #1d4ed8 0%, #4338ca 100%);
+  --wash-hero: linear-gradient(135deg, rgba(29, 78, 216, 0.07) 0%, rgba(67, 56, 202, 0.09) 100%);
 
   /* Brain regions on paper. Every region also carries a text label, which is what
      relieves the two steps that land under 3:1 on white. */
@@ -3787,11 +3837,88 @@ select.input option {
 .mh-mega-link strong, .mh-mega-link small { display: block; }
 .mh-mega-link small { margin-top: 2px; color: var(--text-muted); font-size: var(--font-size-eyebrow); font-weight: 400; }
 
-.nav-domain-section { border-top: 1px solid var(--border-subtle); padding-top: 12px; }
-.nav-domain-persona { margin-left: auto; color: var(--text-muted); font-size: 9px; font-weight: 800; letter-spacing: .08em; }
+/* The left panel's ARC groups (PRD 21 §11.4.1). `.nav-domain-section` and
+   `.nav-domain-persona` were the second rail's chrome and went with it. */
+.nav-stage { margin-top: var(--space-3); }
+.nav-stage:first-child { margin-top: 0; }
+
+.nav-stage__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-2) var(--space-1);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
+}
+
+.nav-stage__label:hover { background: var(--surface-interactive); color: var(--text-secondary); }
+
+/* The stage's own quiet marker — a phase, not a brand, so it is a 5px dot
+   rather than a seventh accent competing with the seat badges. */
+.nav-stage__dot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: var(--radius-full);
+  background: var(--stage-admin);
+}
+.nav-stage[data-stage='idea'] .nav-stage__dot { background: var(--stage-idea); }
+.nav-stage[data-stage='make'] .nav-stage__dot { background: var(--stage-make); }
+.nav-stage[data-stage='run'] .nav-stage__dot { background: var(--stage-run); }
+.nav-stage[data-stage='measure'] .nav-stage__dot { background: var(--stage-measure); }
+.nav-stage[data-stage='market'] .nav-stage__dot { background: var(--stage-market); }
+
+.nav-stage__hint {
+  margin-left: auto;
+  font-style: normal;
+  font-size: var(--font-size-field-label);
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+}
+
+.nav-stage__chev {
+  margin-left: auto;
+  flex: none;
+  opacity: 0.7;
+  transition: transform var(--duration-fast) ease;
+}
+.nav-stage__hint + .nav-stage__chev { margin-left: var(--space-2); }
+.nav-stage__label[aria-expanded='false'] .nav-stage__chev { transform: rotate(-90deg); }
+
+.nav-stage__rows { display: flex; flex-direction: column; gap: 1px; }
+.nav-stage__rows[hidden] { display: none; }
+
+/* Dim, never absent. A locked row inside a dim stage still renders and still
+   reads — it is an offer, and the lock glyph plus the title say why. */
+.nav-stage--dim .nav-stage__label,
+.nav-stage--dim .nav-item-label { color: var(--text-muted); }
+
+/* The seat badge — one hue, from the one declaration in `lib/seats.ts`. */
+.nav-item__seat {
+  margin-left: auto;
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-field-label);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  color: var(--seat, var(--text-muted));
+  border: 1px solid color-mix(in srgb, var(--seat, var(--border-subtle)) 40%, transparent);
+  background: color-mix(in srgb, var(--seat, transparent) 10%, transparent);
+}
+.nav-item__seat + .nav-item__lock { margin-left: var(--space-2); }
+.nav-stage--dim .nav-item__seat { opacity: 0.5; }
+.nav.collapsed .nav-item__seat { display: none; }
 
 /* Consolidated BurnRateOS marketing surfaces. */
-.br-domain-page, .br-feature-index { position: relative; z-index: 1; min-height: 100vh; color: var(--text-primary); }
+.br-domain-page { position: relative; z-index: 1; min-height: 100vh; color: var(--text-primary); }
 .br-domain-hero { max-width: 1240px; margin: 0 auto; padding: 64px 28px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, .85fr); gap: 56px; align-items: center; }
 .br-domain-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 26px; }
 .br-domain-badges span { padding: 5px 10px; border: 1px solid var(--border-accent); border-radius: var(--radius-full); color: var(--coral-bright); font-size: var(--font-size-eyebrow); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
@@ -3810,27 +3937,15 @@ select.input option {
 .br-domain-signal-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 38px; }
 .br-domain-signal-grid i { height: calc(34px + var(--signal-index) * 15px); align-self: end; border-radius: var(--radius-sm); background: linear-gradient(180deg, var(--coral-bright), color-mix(in srgb, var(--coral-bright) 18%, transparent)); }
 .br-domain-features { padding: 72px max(28px, calc((100vw - 1184px) / 2)); background: var(--surface-sunken); border-block: 1px solid var(--border-subtle); }
-.br-domain-grid, .br-feature-index__grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
-.br-domain-card, .br-feature-index__card { padding: 26px; border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); background: var(--surface-card); }
+.br-domain-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.br-domain-card { padding: 26px; border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); background: var(--surface-card); }
 .br-domain-card__number { color: var(--coral-bright); font-family: var(--font-display); font-size: var(--font-size-small); font-weight: 800; }
 .br-domain-card h3 { margin: 22px 0 8px; font-size: var(--font-size-card-title); }
-.br-domain-card p, .br-feature-index__card p { margin: 0; color: var(--text-secondary); line-height: 1.6; }
+.br-domain-card p { margin: 0; color: var(--text-secondary); line-height: 1.6; }
 .br-domain-closing { max-width: 820px; margin: 0 auto; padding: 72px 28px 92px; text-align: center; }
 .br-domain-closing p { margin: 0 auto 28px; color: var(--text-secondary); font-size: var(--font-size-lede); line-height: 1.6; }
-.br-feature-index { max-width: 1200px; margin: 0 auto; padding: 72px 28px 100px; }
-.br-feature-index > header { max-width: 820px; margin-bottom: 64px; }
-.br-feature-index > header > p { color: var(--coral-bright); font-weight: 800; text-transform: uppercase; letter-spacing: .1em; }
-.br-feature-index > header h1 { margin: 10px 0 18px; font-family: var(--font-display); font-size: var(--font-size-page-title); }
-.br-feature-index > header div { color: var(--text-secondary); font-size: var(--font-size-lede); line-height: 1.65; }
-.br-feature-index > section { margin-top: 48px; }
-.br-feature-index > section > h2 { font-family: var(--font-display); }
-.br-feature-index__card { color: inherit; text-decoration: none; transition: transform .2s ease, border-color .2s ease; }
-.br-feature-index__card:hover { transform: translateY(-4px); border-color: var(--border-accent); }
-.br-feature-index__card small { float: right; color: var(--coral-bright); font-weight: 800; }
-.br-feature-index__card h2 { margin: 22px 0 7px; font-size: var(--font-size-card-title); }
-.br-feature-index__card b { display: block; margin-top: 20px; color: var(--coral-bright); }
-@media (max-width: 850px) { .br-domain-hero { grid-template-columns: 1fr; padding-top: 38px; } .br-domain-grid, .br-feature-index__grid { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 560px) { .br-domain-hero { padding-inline: 18px; } .br-domain-features { padding-inline: 18px; } .br-domain-grid, .br-feature-index__grid { grid-template-columns: 1fr; } .br-domain-visual { min-height: 280px; } }
+@media (max-width: 850px) { .br-domain-hero { grid-template-columns: 1fr; padding-top: 38px; } .br-domain-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 560px) { .br-domain-hero { padding-inline: 18px; } .br-domain-features { padding-inline: 18px; } .br-domain-grid { grid-template-columns: 1fr; } .br-domain-visual { min-height: 280px; } }
 
 /* Right cluster */
 .mh-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; margin-left: auto; }
@@ -4267,4 +4382,349 @@ select.input option {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MARKETING BAND PRIMITIVES (PRD 21 §11.10.3)
+   ---------------------------------------------------------------------------
+   The six section shapes BurnRateOS's 95 marketing pages were built from,
+   ported as a SYSTEM rather than as pages — hand-authoring a third marketing
+   system is how a product ends up with a fourth.
+
+   The rhythm is fixed: wash (hero) → tint → raised → tint → raised → gradient
+   (close). Five content bands and a close; a page that needs a sixth content
+   band is two pages.
+
+   `.mk-*` sits BESIDE `.ui-*` rather than inside it on purpose: a marketing
+   section and a product surface are different contracts, and merging their
+   class namespaces is how `.card` came to mean three things.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.mk { position: relative; z-index: 1; color: var(--text-primary); }
+.mk-in { max-width: var(--content-readable, 1100px); margin: 0 auto; }
+
+.mk-band { padding: clamp(36px, 6vw, 68px) clamp(18px, 4vw, 32px); background: var(--bg-surface); }
+.mk-band--tint { background: var(--bg-deep); }
+.mk-band--wash { background: var(--wash-hero); border-bottom: 1px solid var(--border-subtle); }
+.mk-band--grad { background: var(--grad-brand); text-align: center; }
+.mk-band--grad h2 { color: #fff; }
+.mk-band--grad p { color: rgba(255, 255, 255, 0.84); max-width: 56ch; margin: var(--space-4) auto 0; }
+.mk-band--grad .mk-actions { justify-content: center; }
+.mk-band--grad .mk-cta { background: #fff; color: #1d4ed8; border-color: transparent; }
+.mk-band--grad .mk-cta--ghost { background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.55); }
+.mk-fine { color: rgba(255, 255, 255, 0.66); font-size: var(--font-size-small); margin-top: var(--space-5); }
+
+/* ── hero ─────────────────────────────────────────────────────────────── */
+.mk-hero {
+  display: grid;
+  gap: clamp(20px, 4vw, 40px);
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  align-items: center;
+}
+.mk-badges { display: flex; gap: var(--space-2); flex-wrap: wrap; margin-bottom: var(--space-4); }
+
+/* The one badge shape. `--seat` is the owner's hue from `lib/seats.ts`; the
+   solid variant is for a persona, the outline for a section label. */
+.mk-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-field-label);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  color: var(--seat, var(--coral-bright));
+  border: 1px solid currentColor;
+  background: color-mix(in srgb, var(--seat, var(--coral-bright)) 11%, transparent);
+  white-space: nowrap;
+}
+.mk-badge--solid {
+  background: var(--seat, var(--coral-bright));
+  color: var(--text-on-accent);
+  border-color: transparent;
+}
+
+/* The gradient's FIRST of two allowed positions on a page. */
+.mk-h1 { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 800; letter-spacing: -0.038em; line-height: 1.05; margin: 0; text-wrap: balance; }
+.mk-h1__grad {
+  background: var(--grad-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  /* The fallback matters: a clipped gradient with no colour under it renders
+     invisible wherever background-clip is unsupported or disabled. */
+  color: var(--coral-bright);
+}
+.mk-h1__sub { display: block; font-size: 0.66em; color: var(--text-secondary); font-weight: 750; margin-top: var(--space-2); }
+.mk-lede { color: var(--text-secondary); font-size: var(--font-size-lede); margin-top: var(--space-4); max-width: 46ch; line-height: 1.65; }
+
+.mk-actions { display: flex; gap: var(--space-3); flex-wrap: wrap; margin-top: var(--space-5); }
+.mk-cta {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-lg);
+  padding: 0 18px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: var(--coral-bright);
+  color: var(--text-on-accent);
+  font-weight: 650;
+  font-size: var(--font-size-small);
+  text-decoration: none;
+}
+.mk-cta:hover { filter: brightness(1.06); }
+.mk-cta--ghost { background: transparent; border-color: var(--border-accent); color: var(--coral-bright); }
+
+.mk-checks { display: flex; gap: var(--space-5); flex-wrap: wrap; margin-top: var(--space-5); }
+.mk-checks span { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--font-size-small); color: var(--text-muted); }
+.mk-tick { flex: none; }
+
+.mk-overview { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card-strong); padding: var(--space-5); box-shadow: var(--shadow-sm); }
+.mk-overview__head { display: flex; align-items: center; gap: var(--space-2); font-weight: 700; margin: 0 0 var(--space-4); }
+.mk-overview__note { margin: var(--space-3) 0 0; text-align: center; font-size: var(--font-size-small); color: var(--text-muted); font-style: italic; }
+.mk-stats { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.mk-stat { border-radius: var(--radius-md); padding: 11px 9px; text-align: center; background: color-mix(in srgb, var(--seat, var(--coral-bright)) 11%, transparent); }
+.mk-stat b { display: block; font-size: 1.4rem; font-weight: 800; letter-spacing: -0.03em; color: var(--seat, var(--coral-bright)); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.mk-stat small { font-size: var(--font-size-small); color: var(--text-muted); }
+
+/* ── centred section header ───────────────────────────────────────────── */
+.mk-center { text-align: center; display: flex; flex-direction: column; align-items: center; gap: var(--space-2); margin-bottom: var(--space-6); }
+.mk-center h2 { font-size: clamp(1.3rem, 3vw, 1.85rem); font-weight: 750; letter-spacing: -0.028em; margin: 0; text-wrap: balance; }
+.mk-center p { color: var(--text-secondary); max-width: 58ch; margin: 0; }
+
+/* ── card grid ────────────────────────────────────────────────────────── */
+.mk-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fill, minmax(258px, 1fr)); }
+.mk-grid--wide { grid-template-columns: repeat(auto-fit, minmax(288px, 1fr)); }
+
+.mk-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  /* The owner's hue as a top rule — the card's one piece of identity, so the
+     body stays neutral and nine of them side by side stay readable. */
+  border-top: 3px solid var(--seat, var(--coral-bright));
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+  color: inherit;
+  text-decoration: none;
+  transition: transform var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
+}
+.mk-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+/* Dashed, because nobody owns a foundation — it is substrate every seat needs. */
+.mk-card--foundation { border-style: dashed; border-top-style: solid; }
+.mk-card__top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.mk-card__icon {
+  width: 42px; height: 42px; flex: none;
+  display: grid; place-items: center;
+  border-radius: var(--radius-md);
+  color: var(--seat, var(--coral-bright));
+  background: color-mix(in srgb, var(--seat, var(--coral-bright)) 12%, transparent);
+}
+.mk-card__title { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); font-size: var(--font-size-card-title); font-weight: 700; letter-spacing: -0.012em; margin: 0; }
+.mk-card__title span { color: var(--seat, var(--coral-bright)); }
+.mk-card__lede { font-size: var(--font-size-small); color: var(--text-secondary); line-height: 1.55; margin: 0; }
+.mk-feats { display: flex; flex-direction: column; gap: var(--space-1); }
+.mk-feats span { display: flex; gap: var(--space-2); align-items: flex-start; font-size: var(--font-size-small); color: var(--text-secondary); }
+.mk-feats svg { margin-top: 3px; }
+
+/* ── the arc table ────────────────────────────────────────────────────── */
+.mk-tablewrap { overflow-x: auto; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--surface-card); }
+.mk-table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: var(--font-size-small); }
+.mk-table th, .mk-table td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--border-subtle); vertical-align: top; }
+.mk-table thead th { font-family: var(--font-mono); font-size: var(--font-size-field-label); letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); font-weight: 600; background: var(--surface-sunken); white-space: nowrap; }
+.mk-table tbody tr:last-child th, .mk-table tbody tr:last-child td { border-bottom: 0; }
+.mk-table tbody th { font-weight: 700; white-space: nowrap; }
+.mk-stagedot { display: inline-block; width: 6px; height: 6px; border-radius: var(--radius-full); background: var(--seat, var(--text-muted)); margin-right: var(--space-2); vertical-align: middle; }
+.mk-rowlist { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+.mk-rowchip {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid color-mix(in srgb, var(--seat, var(--border-subtle)) 34%, transparent);
+  background: color-mix(in srgb, var(--seat, transparent) 8%, transparent);
+  color: var(--text-primary);
+  text-decoration: none;
+  font-size: var(--font-size-small);
+}
+.mk-rowchip:hover { border-color: var(--seat, var(--border-strong)); }
+.mk-rowchip em { font-style: normal; font-family: var(--font-mono); font-size: var(--font-size-field-label); letter-spacing: 0.06em; color: var(--seat, var(--text-muted)); }
+.mk-note { margin-top: var(--space-4); font-size: var(--font-size-small); color: var(--text-muted); line-height: 1.55; }
+
+/* ── FAQ ──────────────────────────────────────────────────────────────── */
+.mk-faq { display: flex; flex-direction: column; gap: var(--space-2); max-width: 760px; margin: 0 auto; }
+.mk-q { border: 1px solid var(--border-subtle); border-radius: var(--radius-md); background: var(--surface-card); overflow: hidden; }
+.mk-q > summary {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 14px 16px; cursor: pointer; font-weight: 650; list-style: none;
+  min-height: var(--control-lg);
+}
+.mk-q > summary::-webkit-details-marker { display: none; }
+.mk-q > summary:focus-visible { outline: 2px solid var(--focus-color); outline-offset: -2px; }
+.mk-q__chev { margin-left: auto; flex: none; color: var(--text-muted); transition: transform var(--duration-fast) ease; }
+.mk-q[open] .mk-q__chev { transform: rotate(180deg); }
+.mk-q > p { margin: 0; padding: 0 16px 15px; font-size: var(--font-size-small); color: var(--text-secondary); line-height: 1.65; }
+
+@media (max-width: 860px) {
+  .mk-hero { grid-template-columns: 1fr; }
+  .mk-lede { max-width: none; }
+}
+
+/* The panel's width control (PRD 21 §11.4.4). Three steps, matching the three
+   named widths — `panelWidth()` picks the default, the reader picks the answer.
+   The glyph is a proportional bar rather than an icon so the control reads as
+   "how much of the screen", which is the thing being chosen. */
+.ui-panel-width {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  flex: none;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+
+.ui-panel-width button {
+  width: 26px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.ui-panel-width button:hover { background: var(--surface-interactive); color: var(--text-secondary); }
+.ui-panel-width button[aria-pressed='true'] { background: var(--bg-elevated); color: var(--text-primary); box-shadow: var(--shadow-xs); }
+.ui-panel-width button:focus-visible { outline: 2px solid var(--focus-color); outline-offset: 1px; }
+
+.ui-panel-width span {
+  display: block;
+  height: 12px;
+  border: 1.5px solid currentColor;
+  border-radius: var(--radius-sm);
+}
+.ui-panel-width span[data-w='sheet'] { width: 5px; }
+.ui-panel-width span[data-w='wide'] { width: 9px; }
+.ui-panel-width span[data-w='full'] { width: 14px; }
+
+/* Coarse pointers get the 44px touch floor; the drawer header wraps for it. */
+@media (pointer: coarse) {
+  .ui-panel-width button { width: 44px; height: 44px; }
+}
+
+/* ── Marketplace families (PRD 21 §11.5) ──────────────────────────────────
+   Four families, the kinds inside the active one, and a publish button whose
+   label AND flow are derived from the family — so the CTA cannot disagree with
+   the filter under it. `--seat` is the family's hue from `lib/seats.ts`. */
+.mp-head {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-6);
+}
+.mp-head > div { flex: 1 1 320px; min-width: 0; }
+
+.mp-publish {
+  margin-left: auto;
+  min-height: var(--control-md);
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: var(--seat, var(--coral-bright));
+  color: var(--text-on-accent);
+  font-weight: 650;
+  font-size: var(--font-size-small);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mp-publish:hover:not(:disabled) { filter: brightness(1.06); }
+/* Disabled, never hidden: the family is real and coming, and a missing button
+   would read as "this product cannot do that". */
+.mp-publish:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.mp-families { display: flex; gap: var(--space-2); flex-wrap: wrap; min-width: 0; }
+.mp-family {
+  min-height: var(--control-md);
+  padding: 0 14px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: var(--font-size-small);
+  cursor: pointer;
+}
+.mp-family:hover { border-color: var(--seat, var(--border-strong)); color: var(--text-primary); }
+.mp-family[aria-pressed='true'] {
+  background: var(--seat, var(--coral-bright));
+  border-color: var(--seat, var(--coral-bright));
+  color: var(--text-on-accent);
+}
+
+.mp-kinds { display: flex; gap: var(--space-1); flex-wrap: wrap; min-width: 0; }
+.mp-kind {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-field-label);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  min-height: var(--control-sm);
+  padding: 0 9px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.mp-kind:hover { color: var(--text-secondary); }
+.mp-kind[aria-pressed='true'] {
+  border-color: var(--seat, var(--coral-bright));
+  color: var(--seat, var(--coral-bright));
+  background: color-mix(in srgb, var(--seat, var(--coral-bright)) 10%, transparent);
+}
+
+.mp-note {
+  margin: var(--space-5) 0 0;
+  font-size: var(--font-size-small);
+  color: var(--text-muted);
+  line-height: 1.6;
+  max-width: 78ch;
+}
+
+/* The company family's honest state until the company graph lands. */
+.mp-soon {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-6);
+  text-align: center;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface-card);
+}
+.mp-soon h2 { margin: var(--space-3) 0 var(--space-4); font-size: var(--font-size-card-title); font-weight: 700; }
+.mp-soon > p:last-of-type { color: var(--text-secondary); font-size: var(--font-size-small); line-height: 1.65; margin: 0; }
+.mp-soon__action {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--control-md);
+  margin-top: var(--space-5);
+  padding: 0 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-accent);
+  color: var(--coral-bright);
+  text-decoration: none;
+  font-weight: 650;
+  font-size: var(--font-size-small);
+}
+
+@media (max-width: 560px) {
+  .mp-publish { margin-left: 0; width: 100%; justify-content: center; }
 }

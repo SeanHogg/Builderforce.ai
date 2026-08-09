@@ -9,8 +9,11 @@ import { NavIcon } from '@/components/navigation/NavIcon';
 import { useConsumption } from '@/lib/useConsumption';
 import { ConsumptionMeterCard } from '@/components/UsageMeter';
 
+// The starting set for a new workspace: make the work, see the work, write it
+// down. The RUN seats stay listed and switched off until there is a business to
+// run — dim is an invitation, absent is a secret.
 const RECOMMENDED: readonly NavigationFeatureId[] = [
-  'seat', 'projects', 'workforce', 'insights', 'knowledge',
+  'projects', 'workforce', 'insights', 'knowledge',
 ];
 
 export default function NavigationFeaturesSettings() {

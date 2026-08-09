@@ -54,6 +54,8 @@ export default function ShoppingCart() {
   const { items, count, subtotal, removeItem, clearCart, isOpen, closeCart } = useCart();
   const { isAuthenticated, tenant, user, webToken } = useAuth();
   const t = useTranslations('shoppingCart');
+  const phoneT = useTranslations('pricing.phone');
+  const phonePageT = useTranslations('phonePage');
   const locale = useLocale();
   const [checkingOut, setCheckingOut] = useState(false);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
@@ -112,7 +114,9 @@ export default function ShoppingCart() {
         const token = getStoredTenantToken();
         const response = await fetch(`${AUTH_API_URL}/api/tenants/${tenant.id}/add-ons/business-phone/checkout`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify({ billingEmail: user.email }) });
         const body = await response.json() as { checkoutUrl?: string; error?: string };
-        if (!response.ok || !body.checkoutUrl) throw new Error(body.error ?? t('checkoutFailed'));
+        if (response.status === 403) throw new Error(phoneT('eligibility'));
+        if (response.status === 409) throw new Error(phonePageT('active'));
+        if (!response.ok || !body.checkoutUrl) throw new Error(t('checkoutFailed'));
         window.location.href = body.checkoutUrl;
         return;
       }
@@ -120,10 +124,13 @@ export default function ShoppingCart() {
       if (marketplaceItems.length !== items.length || marketplaceItems.length === 0) {
         throw new Error(t('unsupportedCheckout'));
       }
-      await Promise.all(marketplaceItems.map((item) => marketplacePurchaseApi.purchase({
-        artifactType: item.type,
-        artifactSlug: item.slug,
-      })));
+      // Ask the server about paid items first. Until their provider payment has
+      // been verified it returns 402, and no free item in the same cart is
+      // accidentally recorded as a partial checkout.
+      const checkoutItems = [...marketplaceItems].sort((a, b) => b.price - a.price);
+      for (const item of checkoutItems) {
+        await marketplacePurchaseApi.purchase({ artifactType: item.type, artifactSlug: item.slug });
+      }
       const nextPurchases = await marketplacePurchaseApi.list();
       setPurchases(nextPurchases);
       clearCart();

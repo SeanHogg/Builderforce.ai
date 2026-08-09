@@ -279,6 +279,7 @@ export default function PricingPageClient() {
   const planById = (id: Plan): PublicPricingPlan | undefined => configuredPlans.find((plan) => plan.id === id);
   const comparisonFeatures = Array.from(new Set(configuredPlans.flatMap((plan) => [...plan.features, ...plan.excluded])));
   const formatPrice = (price: number) => new Intl.NumberFormat(locale, { style: 'currency', currency: publicPricing?.currency ?? 'USD', maximumFractionDigits: 0 }).format(price);
+  const formatAddonPrice = (price: number) => new Intl.NumberFormat(locale, { style: 'currency', currency: publicPricing?.currency ?? 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(price);
 
   return (
     <>
@@ -430,7 +431,7 @@ export default function PricingPageClient() {
               </div>
               <div className={styles.phonePriceCard}>
                 <span>{t('phone.addonFor')}</span>
-                <strong>{formatPrice(publicPricing.businessPhone.monthly)}<small>{t('phone.perMonth')}</small></strong>
+                <strong>{formatAddonPrice(publicPricing.businessPhone.monthly)}<small>{t('phone.perMonth')}</small></strong>
                 <p>{t('phone.activation', { price: publicPricing.businessPhone.activation })}</p>
                 <button type="button" className={styles.primaryButton} onClick={() => {
                   const id = 'service:business-phone';

@@ -1,83 +1,23 @@
 'use client';
 
-import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/lib/AuthContext';
 import { useIsFreelancer, useIsSalesAssociate } from '@/lib/rbac';
-import { isNavItemActive, type NavMatch } from '@/lib/nav';
+import { isNavItemActive } from '@/lib/nav';
+import { MASCOT_ICON, bottomNavFor } from '@/lib/navGroups';
 import MascotIcon from './MascotIcon';
 import { Icon } from '@/components/ui/Icon';
 import { useNavigationFeatures } from '@/lib/NavigationFeaturesContext';
 import { navigationFeatureForPath } from '@/lib/navigationFeatures';
 
-interface BottomItem extends NavMatch {
-  /** i18n key under the `nav` namespace (resolved in the component). */
-  labelKey: string;
-  icon: ReactNode;
-  /** Priority CTA treatment (e.g. Sign In when logged out). */
-  accent?: boolean;
-}
-
-// Convention (matches the reference): "Home" is always first. Five high-traffic
-// destinations; the full menu lives in the hamburger drawer. Uses the same
-// isNavItemActive matcher as the Sidebar so both surfaces agree on active state.
-//
-// Account-type aware so the bottom bar mirrors the correct shell:
-//   - Builder (IDE creator):  Home / Projects / Workforce / Insights / account slot
-//   - Job seeker (freelancer): Home / Profile / Marketplace / Timecard / account slot
-// The final "account slot" is privilege-gated and shared by both bars (DRY): a
-// platform superadmin gets Admin; everyone else gets their own account Settings
-// (the "admin" of their own account) — we never surface a /admin link to a viewer
-// who can't reach it. Labels are i18n keys, resolved by the component.
-export function itemsFor(
-  isAuthenticated: boolean,
-  isSuperadmin: boolean,
-  isFreelancer = false,
-  isSales = false,
-): BottomItem[] {
-  if (!isAuthenticated) {
-    return [
-      { href: '/', labelKey: 'tab.home', icon: '🏠', exactMatch: true },
-      { href: '/product', labelKey: 'bottom.product', icon: '✨' },
-      { href: '/marketplace', labelKey: 'tab.workforce', icon: <MascotIcon size={22} /> },
-      { href: '/pricing', labelKey: 'bottom.pricing', icon: '💳' },
-      { href: '/login', labelKey: 'bottom.signIn', icon: '🔑', accent: true },
-    ];
-  }
-  // Shared final slot: superadmins manage the platform (Admin), everyone else
-  // manages their own account (Settings). One definition, used by both bars.
-  const accountSlot: BottomItem = isSuperadmin
-    ? { href: '/admin', labelKey: 'group.admin', icon: '⚙' }
-    : { href: '/settings', labelKey: 'group.settings', icon: '⚙', exactMatch: true };
-  // Job seeker (freelancer / gig account): the restricted for-hire shell — never
-  // the builder app.
-  if (isFreelancer) {
-    return [
-      { href: '/freelancer/dashboard', labelKey: 'tab.home', icon: '🏠' },
-      { href: '/freelancer/profile', labelKey: 'group.myProfile', icon: '👤' },
-      { href: '/marketplace', labelKey: 'group.marketplace', icon: <MascotIcon size={22} /> },
-      { href: '/freelancer/timecard', labelKey: 'group.timecard', icon: '⏱' },
-      accountSlot,
-    ];
-  }
-  if (isSales) {
-    return [
-      { href: '/sales', labelKey: 'group.sales', icon: '📈' },
-      { href: '/media', labelKey: 'group.library', icon: '🗂' },
-      accountSlot,
-    ];
-  }
-  // Builder (IDE creator): the four primary work destinations + the account slot.
-  return [
-    { href: '/dashboard', labelKey: 'tab.home', icon: '🏠' },
-    { href: '/projects', labelKey: 'group.projects', icon: '📁' },
-    { href: '/workforce', labelKey: 'tab.workforce', icon: <MascotIcon size={22} /> },
-    { href: '/insights', labelKey: 'group.insights', icon: '📈' },
-    accountSlot,
-  ];
-}
+/**
+ * The item table lives in `lib/navGroups.ts` (the registry) rather than here.
+ * It was a fifth list of hrefs and labels, and `check-destinations.mjs` found
+ * it — a destination declared beside the component that renders it is exactly
+ * how this product arrived at seven of them.
+ */
 
 /**
  * Persistent mobile-only bottom navigation (hidden ≥768px via CSS). Self-gating
@@ -91,7 +31,7 @@ export default function MobileBottomNav() {
   const isSales = useIsSalesAssociate();
   const t = useTranslations('nav');
   const { enabled } = useNavigationFeatures();
-  const items = itemsFor(isAuthenticated, !!user?.isSuperadmin, isFreelancer, isSales)
+  const items = bottomNavFor(isAuthenticated, !!user?.isSuperadmin, isFreelancer, isSales)
     .filter((item) => {
       const feature = navigationFeatureForPath(item.href);
       return !feature || enabled.has(feature);
@@ -111,7 +51,9 @@ export default function MobileBottomNav() {
             // the sidebar nav ids / TourAnchor (e.g. /workforce → "workforce").
             data-tour={item.href.replace(/^\//, '').split('/')[0]}
           >
-            <span className="mbn-icon" aria-hidden="true"><Icon source={item.icon} size={21} /></span>
+            <span className="mbn-icon" aria-hidden="true">
+              {item.icon === MASCOT_ICON ? <MascotIcon size={22} /> : <Icon source={item.icon} size={21} />}
+            </span>
             <span className="mbn-label">{t(item.labelKey)}</span>
           </Link>
         );

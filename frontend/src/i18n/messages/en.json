@@ -466,7 +466,14 @@
       "challenges": "Challenges",
       "growth": "Growth",
       "embedded": "Embedded",
-      "seat": "Team"
+      "seat": "Team",
+      "finance": "Finance",
+      "revenue": "Revenue",
+      "people": "People",
+      "hiring": "Hiring",
+      "investor": "Investors",
+      "governance": "Governance",
+      "support": "Support"
     },
     "tab": {
       "projects": "Projects",
@@ -557,7 +564,17 @@
       "canvasLibrary": "Canvases",
       "newCanvas": "New canvas"
     },
-    "workspaceLabel": "Workspace"
+    "workspaceLabel": "Workspace",
+    "stage": {
+      "idea": "Idea",
+      "make": "Make",
+      "run": "Run",
+      "measure": "Measure",
+      "market": "Market",
+      "admin": "Admin",
+      "notYet": "not yet",
+      "lockHint": "Sign in to use this"
+    }
   },
   "alerts": {
     "title": "Alerts",
@@ -1187,7 +1204,13 @@
     "skipToContent": "Skip to main content",
     "signIn": "Sign In",
     "getStarted": "Get Started →",
-    "signInToOpen": "Sign in to open {label}"
+    "signInToOpen": "Sign in to open {label}",
+    "panelWidth": {
+      "label": "Panel width",
+      "sheet": "Narrow — 440px",
+      "wide": "Wide — 660px",
+      "full": "Full — 94%"
+    }
   },
   "prdCreate": {
     "title": "New PRD",
@@ -6153,11 +6176,26 @@
     "ctaDesc": "Start with a prompt and turn it into connected, reviewable, deliverable work with your team and AI agents. No credit card required.",
     "ctaSeeLiveAgents": "Explore the Canvas",
     "homepageFaq": [
-      { "question": "Do I need an account to start?", "answer": "No. The first canvas is private and local to your browser—nothing leaves the device until you sign in. When you do, the draft you already started is claimed into your workspace rather than discarded." },
-      { "question": "What exactly are the AI agents?", "answer": "Specialists that hold a role on your team—a CFO, a CMO, a CTO, and others. They sit along the bottom of every canvas beside the people you invited. Bring one onto the board and it reads the work, takes the assignment, and produces a change you can review." },
-      { "question": "Can I use my own model?", "answer": "Yes. Connect your own provider account and your work runs on it. When a workspace has no connection, the platform’s routing picks a model and the cost lands against your workspace meter." },
-      { "question": "How is this different from an AI chat tool?", "answer": "A chat tool produces text you then have to move somewhere. Builderforce produces connected objects—a live page, a running workflow, or a bound dataset—that reference each other and carry a reviewable history from the first idea to production." },
-      { "question": "What happens to work an agent does on its own?", "answer": "Every change has an author and a diff. Anything that touches production, sends on your behalf, or exceeds a spending limit waits for a named human approver on the board." }
+      {
+        "question": "Do I need an account to start?",
+        "answer": "No. The first canvas is private and local to your browser—nothing leaves the device until you sign in. When you do, the draft you already started is claimed into your workspace rather than discarded."
+      },
+      {
+        "question": "What exactly are the AI agents?",
+        "answer": "Specialists that hold a role on your team—a CFO, a CMO, a CTO, and others. They sit along the bottom of every canvas beside the people you invited. Bring one onto the board and it reads the work, takes the assignment, and produces a change you can review."
+      },
+      {
+        "question": "Can I use my own model?",
+        "answer": "Yes. Connect your own provider account and your work runs on it. When a workspace has no connection, the platform’s routing picks a model and the cost lands against your workspace meter."
+      },
+      {
+        "question": "How is this different from an AI chat tool?",
+        "answer": "A chat tool produces text you then have to move somewhere. Builderforce produces connected objects—a live page, a running workflow, or a bound dataset—that reference each other and carry a reviewable history from the first idea to production."
+      },
+      {
+        "question": "What happens to work an agent does on its own?",
+        "answer": "Every change has an author and a diff. Anything that touches production, sends on your behalf, or exceeds a spending limit waits for a named human approver on the board."
+      }
     ],
     "faq": [
       {
@@ -6293,7 +6331,30 @@
       "realDefinition": "Live in production. Ready to use."
     }
   },
-  "shoppingCart": { "title": "Cart", "close": "Close cart", "empty": "Your cart is empty", "browse": "Browse marketplace", "free": "Free", "use": "use", "plusActivation": "+ ${price} activation", "remove": "Remove {name}", "dueToday": "Due today", "thenMonthly": "Then monthly", "checkout": "Secure checkout", "redirecting": "Redirecting…", "checkoutFailed": "Checkout could not be started", "mixedCheckout": "Marketplace items and subscriptions must be checked out separately.", "workspaceRequired": "Select a workspace before purchasing this service.", "unsupportedCheckout": "One or more items cannot be purchased through this checkout yet.", "purchaseComplete": "{count, plural, one {Purchase complete} other {# purchases complete}}.", "purchaseHistory": "Purchase history", "clear": "Clear cart", "signInPrompt": "Sign in to complete your purchase", "createAccount": "Create account", "signIn": "Sign in" },
+  "shoppingCart": {
+    "title": "Cart",
+    "close": "Close cart",
+    "empty": "Your cart is empty",
+    "browse": "Browse marketplace",
+    "free": "Free",
+    "use": "use",
+    "plusActivation": "+ ${price} activation",
+    "remove": "Remove {name}",
+    "dueToday": "Due today",
+    "thenMonthly": "Then monthly",
+    "checkout": "Secure checkout",
+    "redirecting": "Redirecting…",
+    "checkoutFailed": "Checkout could not be started",
+    "mixedCheckout": "Marketplace items and subscriptions must be checked out separately.",
+    "workspaceRequired": "Select a workspace before purchasing this service.",
+    "unsupportedCheckout": "One or more items cannot be purchased through this checkout yet.",
+    "purchaseComplete": "{count, plural, one {Purchase complete} other {# purchases complete}}.",
+    "purchaseHistory": "Purchase history",
+    "clear": "Clear cart",
+    "signInPrompt": "Sign in to complete your purchase",
+    "createAccount": "Create account",
+    "signIn": "Sign in"
+  },
   "pricing": {
     "enabledModulesTitle": "Your enabled modules ({count})",
     "enabledModulesDescription": "Plan pricing and shared usage allowances apply to this feature set.",
@@ -6365,7 +6426,22 @@
     "teamsCostNoteYear": "${perSeat}/seat/yr — billed as ${total}/yr",
     "teamsCostNoteMonth": "${perSeat}/seat/mo — billed as ${total}/mo",
     "managedAddon": "Add-on: <b>Managed AgentHost</b> — ${price}/mo per hosted AgentHost. We run your BuilderForce Agents instance for you — no Docker, no DevOps.",
-    "phone": { "eyebrow": "Retention add-on", "title": "Business Phone", "description": "Give your company a dedicated US number for voice, SMS, and MMS without new hardware.", "dedicatedNumber": "Dedicated business number", "forwarding": "Forward calls to the phone you already use", "allowance": "{minutes} minutes, {sms} SMS, and {mms} MMS included monthly", "overages": "Overages: ${minute}/minute, ${sms}/SMS segment, ${mms}/MMS.", "learnMore": "Explore Business Phone", "addonFor": "Add-on for Pro and Teams", "perMonth": "/month", "activation": "${price} one-time activation", "addToCart": "Add to cart", "viewCart": "View cart", "eligibility": "Requires an active Pro or Teams subscription." },
+    "phone": {
+      "eyebrow": "Retention add-on",
+      "title": "Business Phone",
+      "description": "Give your company a dedicated US number for voice, SMS, and MMS without new hardware.",
+      "dedicatedNumber": "Dedicated business number",
+      "forwarding": "Forward calls to the phone you already use",
+      "allowance": "{minutes} minutes, {sms} SMS, and {mms} MMS included monthly",
+      "overages": "Overages: ${minute}/minute, ${sms}/SMS segment, ${mms}/MMS.",
+      "learnMore": "Explore Business Phone",
+      "addonFor": "Add-on for Pro and Teams",
+      "perMonth": "/month",
+      "activation": "${price} one-time activation",
+      "addToCart": "Add to cart",
+      "viewCart": "View cart",
+      "eligibility": "Requires an active Pro or Teams subscription."
+    },
     "relatedHeading": "Before you decide",
     "planFeatures": [
       "1 AgentHost",
@@ -6384,7 +6460,16 @@
       "Per-seat cost controls"
     ]
   },
-  "phonePage": { "seoTitle": "Business Phone — Builderforce.ai", "seoDescription": "A dedicated business number for voice, SMS, and MMS.", "active": "Business Phone is active", "provisioning": "Your number is ready for provisioning and assignment.", "loading": "Loading pricing…", "createAccount": "Create an account", "voiceMessaging": "Voice and messaging", "transparentUsage": "Transparent usage pricing" },
+  "phonePage": {
+    "seoTitle": "Business Phone — Builderforce.ai",
+    "seoDescription": "A dedicated business number for voice, SMS, and MMS.",
+    "active": "Business Phone is active",
+    "provisioning": "Your number is ready for provisioning and assignment.",
+    "loading": "Loading pricing…",
+    "createAccount": "Create an account",
+    "voiceMessaging": "Voice and messaging",
+    "transparentUsage": "Transparent usage pricing"
+  },
   "product": {
     "seo": {
       "title": "Product — The Creative Canvas for Humans and AI Agents",
@@ -8208,6 +8293,42 @@
       "evalTitle": "AI evaluation score (0-1)",
       "hired": "Hired {count}×",
       "inUse": "{count} in use"
+    },
+    "family": {
+      "label": "Browse",
+      "talent": "Talent",
+      "company": "Companies",
+      "companySoon": {
+        "soonTitle": "The company directory opens with the company graph",
+        "soonBody": "Claiming a business writes a verified ownership record, seats the CEO and activates Finance, Revenue, Growth, People, Hiring, Investors and Governance for it. The listing surface lands with that record; until then this family is visible and inert rather than hidden, so you can see what is coming.",
+        "soonAction": "See what a company unlocks"
+      },
+      "agent": "Agents",
+      "asset": "Assets",
+      "publishTalent": "Publish a listing",
+      "publishCompany": "Publish a company",
+      "publishAgent": "Publish an agent",
+      "publishAsset": "Publish an asset",
+      "kindLabel": "Type",
+      "kind": {
+        "person": "People",
+        "gig": "Gigs",
+        "business": "Businesses",
+        "storefront": "Storefronts",
+        "builtin": "Built-in",
+        "community": "Community",
+        "model": "Models",
+        "skill": "Skills",
+        "persona": "Personas",
+        "knowledge": "Knowledge",
+        "all": "All"
+      },
+      "note": {
+        "talent": "People and gigs. A person and an agent are the same kind of participant to a session, but not the same kind of listing — one has availability and a rate, the other a price and a seat.",
+        "company": "Claim the business you run and the whole operating stack scopes to it. The directory of companies you do not own arrives with the company graph.",
+        "agent": "There is no separate Agents page — an agent is a listing whose purchase writes a roster row, so the catalogue and your team can never drift apart.",
+        "asset": "What builders made and can sell. Each installs into the surface that owns it — a skill into Knowledge, a template into Projects — never into a new one."
+      }
     }
   },
   "models": {
@@ -12376,7 +12497,9 @@
     "mediaKit": "Media Kit",
     "toggleMenu": "Toggle menu",
     "switchToLight": "Switch to light mode",
-    "switchToDark": "Switch to dark mode"
+    "switchToDark": "Switch to dark mode",
+    "openCanvas": "Open the canvas →",
+    "features": "Features"
   },
   "tutorials": {
     "seo": {
@@ -12606,7 +12729,9 @@
     "searchLabel": "Search product updates",
     "searchPlaceholder": "Search updates or versions…",
     "filterLabel": "Filter updates by category",
-    "filters": { "all": "All updates" },
+    "filters": {
+      "all": "All updates"
+    },
     "showingCount": "{count, plural, one {Showing # update} other {Showing # updates}}",
     "latest": "Latest",
     "noResultsTitle": "No matching updates",
@@ -12714,10 +12839,6 @@
         "governance": "Let's walk through continuous SOC 2 auditing, remediation, and the audit trail."
       },
       "nav": {
-        "dashboard": {
-          "title": "Build anything",
-          "body": "Describe what you want in plain language and an AI agent starts building it — no setup."
-        },
         "projects": {
           "title": "The shared board",
           "body": "Humans and AI agents work one board. Drag a ticket to Ready and an agent plans it, writes the code, and opens a pull request."
@@ -12737,6 +12858,10 @@
         "knowledge": {
           "title": "Knowledge & governance",
           "body": "SOPs, processes, and policies with versioning and read-acknowledgement for audit evidence."
+        },
+        "create": {
+          "title": "Start on the canvas",
+          "body": "Describe what you want in plain language and an AI agent starts building it — no setup."
         }
       }
     }
@@ -12878,8 +13003,19 @@
     "subtitle": "Put the experiences you create in BuilderForce directly inside your product, website, or customer portal with one script and independently governed capabilities.",
     "activeCapabilities": "capabilities active",
     "tabsLabel": "Embedded capability sections",
-    "tabs": { "features": "Features", "install": "Install", "consent": "Consent log", "surfaces": "BuilderForce surfaces" },
-    "categories": { "all": "All", "engage": "Engage", "measure": "Measure", "govern": "Govern", "operate": "Operate" },
+    "tabs": {
+      "features": "Features",
+      "install": "Install",
+      "consent": "Consent log",
+      "surfaces": "BuilderForce surfaces"
+    },
+    "categories": {
+      "all": "All",
+      "engage": "Engage",
+      "measure": "Measure",
+      "govern": "Govern",
+      "operate": "Operate"
+    },
     "search": "Search embedded capabilities…",
     "examples": "{count, plural, one {# example} other {# examples}}",
     "toggleLabel": "Toggle {feature}",
@@ -12896,7 +13032,11 @@
       "loading": "Loading…",
       "enable": "Enable embedded app surfaces",
       "capabilities": "Capabilities",
-      "capability": { "product": "Product", "agile": "Agile", "security": "Security" },
+      "capability": {
+        "product": "Product",
+        "agile": "Agile",
+        "security": "Security"
+      },
       "saving": "Saving…",
       "reviewEnable": "Review and enable…",
       "save": "Save",
@@ -12904,7 +13044,10 @@
       "loadError": "Could not load app-surface settings.",
       "saveError": "Could not save app-surface settings."
     },
-    "install": { "title": "One script, every capability", "description": "Install this once on the customer site. Feature changes apply on the next page load without redeploying the host." },
+    "install": {
+      "title": "One script, every capability",
+      "description": "Install this once on the customer site. Feature changes apply on the next page load without redeploying the host."
+    },
     "consent": {
       "title": "Consent log",
       "description": "An immutable workspace history of every capability opt-in and opt-out.",
@@ -12912,22 +13055,77 @@
       "enableTitle": "Enable {feature}?",
       "auditNotice": "Your account, timestamp, and consent text version {version} are recorded for audit. You can revoke access at any time.",
       "agree": "I consent, enable feature",
-      "actions": { "OPT_IN": "Enabled", "OPT_OUT": "Disabled" }
+      "actions": {
+        "OPT_IN": "Enabled",
+        "OPT_OUT": "Disabled"
+      }
     },
     "features": {
-      "usage_tracking": { "name": "Usage tracking", "description": "Track page views, custom events, identities, and feature engagement from customer sites.", "consent": "Sends page views, events, and identified-user traits to BuilderForce for product analytics and adoption signals." },
-      "support_widget": { "name": "Support widget", "description": "Embed an AI help experience that answers from your knowledge and escalates to people.", "consent": "Sends visitor questions, matched knowledge references, and the originating page to BuilderForce support." },
-      "feedback_widget": { "name": "Feedback widget", "description": "Capture ideas, bugs, feature requests, and contextual customer feedback.", "consent": "Sends what the visitor types, optional contact details, and the originating page to BuilderForce." },
-      "heatmaps": { "name": "Heatmaps", "description": "Measure click locations and scroll depth to understand real customer behavior.", "consent": "Captures click coordinates and scroll depth and aggregates them into interaction heatmaps." },
-      "feature_management": { "name": "Feature management", "description": "Evaluate remotely managed flags and variants for identified users.", "consent": "Sends flag keys and the targeting attributes configured by your workspace for evaluation." },
-      "terms_gate": { "name": "Terms gate", "description": "Require acceptance of a versioned agreement before a visitor can continue.", "consent": "Displays a blocking terms experience and records acceptance or decline against the active version." },
-      "sourcing": { "name": "Contact sourcing", "description": "Add governed contact lookup and enrichment to forms and internal tools.", "consent": "Runs customer-triggered contact lookups and charges them to this workspace's enrichment allowance." },
-      "lead_forms": { "name": "Lead forms", "description": "Publish lead-capture forms inline, in a drawer, or as a standalone frame.", "consent": "Stores submitted form data in this workspace and attributes it to the originating site." },
-      "push_notifications": { "name": "Push notifications", "description": "Ask for browser permission and deliver targeted web and PWA notifications.", "consent": "Stores browser push subscription details and delivers workspace-authored notification campaigns." },
-      "onboarding": { "name": "Onboarding", "description": "Turn Canvas-authored guided tours into live, target-aware product onboarding.", "consent": "Displays the published onboarding flow and records visitor progress and completion." },
-      "cookie_consent": { "name": "Cookie consent", "description": "Gate optional analytics with a configurable, auditable consent banner.", "consent": "Stores the visitor's consent choice and prevents optional tracking until it is accepted." },
-      "hr_widget": { "name": "HR widget", "description": "Embed personnel cards, leave requests, and document actions in a host portal.", "consent": "Displays authorized HR actions and sends submitted HR requests to this workspace." },
-      "status_page": { "name": "Public status page", "description": "Publish live service health as an inline component or standalone status page.", "consent": "Publishes the workspace's selected monitor status and incident updates to the customer site." }
+      "usage_tracking": {
+        "name": "Usage tracking",
+        "description": "Track page views, custom events, identities, and feature engagement from customer sites.",
+        "consent": "Sends page views, events, and identified-user traits to BuilderForce for product analytics and adoption signals."
+      },
+      "support_widget": {
+        "name": "Support widget",
+        "description": "Embed an AI help experience that answers from your knowledge and escalates to people.",
+        "consent": "Sends visitor questions, matched knowledge references, and the originating page to BuilderForce support."
+      },
+      "feedback_widget": {
+        "name": "Feedback widget",
+        "description": "Capture ideas, bugs, feature requests, and contextual customer feedback.",
+        "consent": "Sends what the visitor types, optional contact details, and the originating page to BuilderForce."
+      },
+      "heatmaps": {
+        "name": "Heatmaps",
+        "description": "Measure click locations and scroll depth to understand real customer behavior.",
+        "consent": "Captures click coordinates and scroll depth and aggregates them into interaction heatmaps."
+      },
+      "feature_management": {
+        "name": "Feature management",
+        "description": "Evaluate remotely managed flags and variants for identified users.",
+        "consent": "Sends flag keys and the targeting attributes configured by your workspace for evaluation."
+      },
+      "terms_gate": {
+        "name": "Terms gate",
+        "description": "Require acceptance of a versioned agreement before a visitor can continue.",
+        "consent": "Displays a blocking terms experience and records acceptance or decline against the active version."
+      },
+      "sourcing": {
+        "name": "Contact sourcing",
+        "description": "Add governed contact lookup and enrichment to forms and internal tools.",
+        "consent": "Runs customer-triggered contact lookups and charges them to this workspace's enrichment allowance."
+      },
+      "lead_forms": {
+        "name": "Lead forms",
+        "description": "Publish lead-capture forms inline, in a drawer, or as a standalone frame.",
+        "consent": "Stores submitted form data in this workspace and attributes it to the originating site."
+      },
+      "push_notifications": {
+        "name": "Push notifications",
+        "description": "Ask for browser permission and deliver targeted web and PWA notifications.",
+        "consent": "Stores browser push subscription details and delivers workspace-authored notification campaigns."
+      },
+      "onboarding": {
+        "name": "Onboarding",
+        "description": "Turn Canvas-authored guided tours into live, target-aware product onboarding.",
+        "consent": "Displays the published onboarding flow and records visitor progress and completion."
+      },
+      "cookie_consent": {
+        "name": "Cookie consent",
+        "description": "Gate optional analytics with a configurable, auditable consent banner.",
+        "consent": "Stores the visitor's consent choice and prevents optional tracking until it is accepted."
+      },
+      "hr_widget": {
+        "name": "HR widget",
+        "description": "Embed personnel cards, leave requests, and document actions in a host portal.",
+        "consent": "Displays authorized HR actions and sends submitted HR requests to this workspace."
+      },
+      "status_page": {
+        "name": "Public status page",
+        "description": "Publish live service health as an inline component or standalone status page.",
+        "consent": "Publishes the workspace's selected monitor status and incident updates to the customer site."
+      }
     }
   },
   "embedInstall": {
@@ -13754,10 +13952,43 @@
       "guidedTour": "Guided tour"
     },
     "tourBuilder": {
-      "defaultObjectTitle": "Product onboarding tour", "defaultOfferTitle": "Welcome — want a quick tour?", "defaultOfferBody": "Learn the essentials in a few short steps. You can leave at any time.", "defaultStartLabel": "Start tour", "defaultCancelLabel": "Not now", "defaultStep1Title": "Orient the user", "defaultStep1Body": "Explain the first important area and why it matters.", "defaultStep2Title": "Show the key action", "defaultStep2Body": "Highlight the action that helps the user make progress.",
-      "closePreview": "Close tour preview", "stepOf": "{current} of {total}", "targetConnected": "Target connected", "targetNeeded": "Choose a target object", "back": "Back", "finish": "Finish", "next": "Next", "offer": "Tour offer",
-      "stepCount": "{count, plural, one {# step} other {# steps}}", "visitCount": "Offer after {count, plural, one {# visit} other {# visits}}", "escapeEnabled": "Escape enabled",
-      "settings": "Guided tour settings", "settingsHint": "Design an opt-in tour, then connect each step to the Canvas object it should highlight.", "draftSteps": "Draft · {count} steps", "offerTitle": "Offer title", "offerBody": "Offer description", "version": "Tour version", "minimumVisits": "Visits before offer", "blurBackground": "Blur the background on the offer", "escapeHatch": "Always provide close and Escape", "steps": "Tour steps", "addStep": "Add step", "newStepTitle": "New tour step", "stepTitle": "Step title", "stepBody": "Step description", "targetObject": "Object to highlight", "chooseTarget": "Choose an object", "removeStep": "Remove step"
+      "defaultObjectTitle": "Product onboarding tour",
+      "defaultOfferTitle": "Welcome — want a quick tour?",
+      "defaultOfferBody": "Learn the essentials in a few short steps. You can leave at any time.",
+      "defaultStartLabel": "Start tour",
+      "defaultCancelLabel": "Not now",
+      "defaultStep1Title": "Orient the user",
+      "defaultStep1Body": "Explain the first important area and why it matters.",
+      "defaultStep2Title": "Show the key action",
+      "defaultStep2Body": "Highlight the action that helps the user make progress.",
+      "closePreview": "Close tour preview",
+      "stepOf": "{current} of {total}",
+      "targetConnected": "Target connected",
+      "targetNeeded": "Choose a target object",
+      "back": "Back",
+      "finish": "Finish",
+      "next": "Next",
+      "offer": "Tour offer",
+      "stepCount": "{count, plural, one {# step} other {# steps}}",
+      "visitCount": "Offer after {count, plural, one {# visit} other {# visits}}",
+      "escapeEnabled": "Escape enabled",
+      "settings": "Guided tour settings",
+      "settingsHint": "Design an opt-in tour, then connect each step to the Canvas object it should highlight.",
+      "draftSteps": "Draft · {count} steps",
+      "offerTitle": "Offer title",
+      "offerBody": "Offer description",
+      "version": "Tour version",
+      "minimumVisits": "Visits before offer",
+      "blurBackground": "Blur the background on the offer",
+      "escapeHatch": "Always provide close and Escape",
+      "steps": "Tour steps",
+      "addStep": "Add step",
+      "newStepTitle": "New tour step",
+      "stepTitle": "Step title",
+      "stepBody": "Step description",
+      "targetObject": "Object to highlight",
+      "chooseTarget": "Choose an object",
+      "removeStep": "Remove step"
     },
     "canvasOutline": "Accessible canvas outline",
     "canvasGestureToggle": "Drag to select",
@@ -15528,15 +15759,93 @@
     "useAnotherAccount": "Use another account"
   },
   "about": {
-    "seo": { "title": "About Builderforce.ai — One Operating System for Building and Running", "description": "Meet Builderforce: the connected operating system where teams and AI agents create, operate, govern, and deliver from one shared context." },
-    "hero": { "eyebrow": "About Builderforce", "title": "Build the product. Run the company. One system.", "lead": "Builderforce brings BurnRateOS's startup survival intelligence into the creative canvas for humans and AI agents—connecting the idea, the business, and the work that makes it real.", "primaryCta": "Start free", "secondaryCta": "Book a demo", "domains": "operating domains", "foundations": "shared foundations", "workspace": "connected workspace", "core": "Idea to outcome", "visualAria": "Builderforce operating system connecting product, finance, revenue, and governance" },
-    "thesis": { "eyebrow": "Why we exist", "title": "A company is a system. Its software should be one too.", "body": "Startups do not fail in neat departmental silos. A product decision changes runway. Customer feedback changes the roadmap. A security requirement changes delivery. Builderforce keeps those relationships visible, then gives people and agents a governed path from decision to action." },
-    "promises": { "eyebrow": "The Builderforce difference", "title": "Create freely. Operate clearly. Deliver with control.", "items": [{ "title": "Create from intent", "description": "Turn an idea into connected websites, workflows, prototypes, datasets, models, plans, and products on one visual canvas." }, { "title": "Run on shared truth", "description": "Connect product, finance, revenue, customers, people, investors, marketing, and risk instead of rebuilding context in every tool." }, { "title": "Move decisions into action", "description": "Place specialist agents beside the work, review proposed changes, preserve evidence, and send approved work into delivery." }] },
-    "system": { "eyebrow": "What we have built", "title": "The whole operating picture, connected to execution", "lead": "Nine operating domains carry the startup-survival scope of BurnRateOS. Three foundations give every domain the same intelligence, business context, integrations, and governed Builderforce execution.", "domains": "Operating domains", "foundations": "Shared foundations" },
-    "story": { "eyebrow": "Our story", "title": "Two necessary ideas became one platform.", "bodyOne": "BurnRateOS began with a blunt observation: talented teams can ship constantly and still run out of time or money. It connected runway, customer evidence, operating cadence, and commercial decisions so progress could be measured by survival—not activity alone.", "bodyTwo": "Builderforce began with the other half of the problem: ideas, artifacts, people, and AI agents were scattered across disconnected tools. Bringing the two together creates one loop—from business signal to creative decision, governed execution, and measurable outcome." },
-    "principles": { "eyebrow": "How we build", "title": "Principles for an agentic operating system", "items": [{ "title": "Startup-first", "description": "Every capability should help a team validate faster, conserve resources, earn revenue, reduce risk, or build something customers value." }, { "title": "Connected by default", "description": "Ideas, company data, decisions, artifacts, work, and outcomes should remain linked instead of becoming copies in another point tool." }, { "title": "Humans stay in the loop", "description": "Agents expand the team; they do not erase accountability. Review, approval, permissions, and clear ownership belong in the workflow." }, { "title": "Evidence over theater", "description": "Real objects, visible boundaries, retained execution records, and measurable outcomes matter more than an impressive but unverifiable answer." }] },
-    "trust": { "eyebrow": "Security and trust", "title": "Governance belongs beside the work—not after it.", "body": "Roles, approval paths, credential controls, audit history, privacy workflows, and system evidence are part of the platform architecture, giving teams a clearer route from experimentation to responsible operation.", "cta": "Explore trust and audits" },
-    "cta": { "eyebrow": "Build what matters", "title": "Bring your next idea—and the company behind it.", "body": "Start on the canvas, connect the operating context, and give people and agents one place to turn intent into outcomes.", "primary": "Start creating free", "secondary": "Explore all capabilities" }
+    "seo": {
+      "title": "About Builderforce.ai — One Operating System for Building and Running",
+      "description": "Meet Builderforce: the connected operating system where teams and AI agents create, operate, govern, and deliver from one shared context."
+    },
+    "hero": {
+      "eyebrow": "About Builderforce",
+      "title": "Build the product. Run the company. One system.",
+      "lead": "Builderforce brings BurnRateOS's startup survival intelligence into the creative canvas for humans and AI agents—connecting the idea, the business, and the work that makes it real.",
+      "primaryCta": "Start free",
+      "secondaryCta": "Book a demo",
+      "domains": "operating domains",
+      "foundations": "shared foundations",
+      "workspace": "connected workspace",
+      "core": "Idea to outcome",
+      "visualAria": "Builderforce operating system connecting product, finance, revenue, and governance"
+    },
+    "thesis": {
+      "eyebrow": "Why we exist",
+      "title": "A company is a system. Its software should be one too.",
+      "body": "Startups do not fail in neat departmental silos. A product decision changes runway. Customer feedback changes the roadmap. A security requirement changes delivery. Builderforce keeps those relationships visible, then gives people and agents a governed path from decision to action."
+    },
+    "promises": {
+      "eyebrow": "The Builderforce difference",
+      "title": "Create freely. Operate clearly. Deliver with control.",
+      "items": [
+        {
+          "title": "Create from intent",
+          "description": "Turn an idea into connected websites, workflows, prototypes, datasets, models, plans, and products on one visual canvas."
+        },
+        {
+          "title": "Run on shared truth",
+          "description": "Connect product, finance, revenue, customers, people, investors, marketing, and risk instead of rebuilding context in every tool."
+        },
+        {
+          "title": "Move decisions into action",
+          "description": "Place specialist agents beside the work, review proposed changes, preserve evidence, and send approved work into delivery."
+        }
+      ]
+    },
+    "system": {
+      "eyebrow": "What we have built",
+      "title": "The whole operating picture, connected to execution",
+      "lead": "Nine operating domains carry the startup-survival scope of BurnRateOS. Three foundations give every domain the same intelligence, business context, integrations, and governed Builderforce execution.",
+      "domains": "Operating domains",
+      "foundations": "Shared foundations"
+    },
+    "story": {
+      "eyebrow": "Our story",
+      "title": "Two necessary ideas became one platform.",
+      "bodyOne": "BurnRateOS began with a blunt observation: talented teams can ship constantly and still run out of time or money. It connected runway, customer evidence, operating cadence, and commercial decisions so progress could be measured by survival—not activity alone.",
+      "bodyTwo": "Builderforce began with the other half of the problem: ideas, artifacts, people, and AI agents were scattered across disconnected tools. Bringing the two together creates one loop—from business signal to creative decision, governed execution, and measurable outcome."
+    },
+    "principles": {
+      "eyebrow": "How we build",
+      "title": "Principles for an agentic operating system",
+      "items": [
+        {
+          "title": "Startup-first",
+          "description": "Every capability should help a team validate faster, conserve resources, earn revenue, reduce risk, or build something customers value."
+        },
+        {
+          "title": "Connected by default",
+          "description": "Ideas, company data, decisions, artifacts, work, and outcomes should remain linked instead of becoming copies in another point tool."
+        },
+        {
+          "title": "Humans stay in the loop",
+          "description": "Agents expand the team; they do not erase accountability. Review, approval, permissions, and clear ownership belong in the workflow."
+        },
+        {
+          "title": "Evidence over theater",
+          "description": "Real objects, visible boundaries, retained execution records, and measurable outcomes matter more than an impressive but unverifiable answer."
+        }
+      ]
+    },
+    "trust": {
+      "eyebrow": "Security and trust",
+      "title": "Governance belongs beside the work—not after it.",
+      "body": "Roles, approval paths, credential controls, audit history, privacy workflows, and system evidence are part of the platform architecture, giving teams a clearer route from experimentation to responsible operation.",
+      "cta": "Explore trust and audits"
+    },
+    "cta": {
+      "eyebrow": "Build what matters",
+      "title": "Bring your next idea—and the company behind it.",
+      "body": "Start on the canvas, connect the operating context, and give people and agents one place to turn intent into outcomes.",
+      "primary": "Start creating free",
+      "secondary": "Explore all capabilities"
+    }
   },
   "routeMarketing": {
     "subtitle": "Create a free workspace to use {surface}, or sign in to continue existing work.",
@@ -15570,18 +15879,318 @@
       "explore": "Explore"
     },
     "domains": {
-      "productManagement": { "title": "Product Management", "tagline": "Discovery, validation, and roadmaps", "hero": "Turn customer evidence into the right roadmap", "description": "Shape ideas, scaffold an MVP, validate demand, prioritize a strategic backlog, and connect product bets to delivery.", "features": [{"title":"Product discovery","description":"Capture and score opportunities with customer, market, and competitive evidence."},{"title":"MVP scaffolding","description":"Turn a promising idea into testable scope, assumptions, and approval gates."},{"title":"Roadmap and backlog","description":"Prioritize releases by business value, adoption, effort, and strategic fit."}] },
-      "businessIntelligence": { "title": "Business Intelligence", "tagline": "Runway, burn, forecasts, and pricing", "hero": "Know what every decision does to runway", "description": "Model cash, revenue, retention, expenses, and scenarios in the same system that coordinates the work behind those numbers.", "features": [{"title":"Runway and burn","description":"Track cash position, monthly burn, break-even, and runway in real time."},{"title":"Forecast scenarios","description":"Compare assumptions, sensitivity, Monte Carlo ranges, and what-if plans."},{"title":"Unit economics","description":"Measure ARR, retention, CAC, LTV, payback, and pricing performance."}] },
-      "agileSurvival": { "title": "Agile Survival", "tagline": "Every sprint tied to runway", "hero": "Ship without wasting a sprint", "description": "Combine planning, retrospectives, Kanban, capacity, and delivery risk with the financial impact of every sprint.", "features": [{"title":"Survival-focused planning","description":"Estimate work with capacity and runway visible before the commitment is made."},{"title":"Burn-aware Kanban","description":"See flow, bottlenecks, risk, and the financial impact of delayed work."},{"title":"Retrospectives and velocity","description":"Turn delivery signals into actions that improve the next sprint."}] },
-      "salesRevenue": { "title": "Sales & Revenue", "tagline": "ICP, prospects, pipeline, and funnel", "hero": "Build a revenue engine your whole team can see", "description": "Connect target accounts, contacts, sequences, deals, conversion signals, and forecasts in one operating flow.", "features": [{"title":"ICP and prospecting","description":"Define ideal customers, enrich prospects, and preserve source provenance."},{"title":"Sequences and campaigns","description":"Coordinate outreach, replies, follow-ups, and conversion signals."},{"title":"Deals and revenue funnel","description":"Manage pipeline stages, quota attainment, and forecast movement."}] },
-      "customerEngagement": { "title": "Customer Engagement", "tagline": "Feedback, support, retention, and health", "hero": "Turn every customer signal into action", "description": "Unify feedback, support, onboarding, sentiment, retention, churn, and account health with the work needed to respond.", "features": [{"title":"Customer feedback","description":"Collect feedback and route it directly into product and delivery decisions."},{"title":"Health and retention","description":"Combine engagement, NPS, sentiment, and churn indicators into clear risk."},{"title":"Support and onboarding","description":"Coordinate tickets, knowledge, onboarding flows, and follow-up actions."}] },
-      "investorIntelligence": { "title": "Investor Intelligence", "tagline": "Fundraising, updates, and portfolio health", "hero": "Run investor relations from live company truth", "description": "Create pitch decks, investor updates, data rooms, diligence workflows, funding histories, and portfolio views grounded in current operating data.", "features": [{"title":"Pitch decks and analytics","description":"Version, share, and measure decks with per-slide engagement."},{"title":"Updates and data rooms","description":"Prepare approved investor communications and diligence materials."},{"title":"Portfolio intelligence","description":"Track funding, milestones, health scores, and investor deal flow."}] },
-      "operationalCadence": { "title": "Operational Cadence", "tagline": "People, goals, meetings, and rhythms", "hero": "Keep the company aligned without adding meetings", "description": "Connect goals, headcount, performance, 1:1s, check-ins, recurring operating rhythms, notes, and decisions.", "features": [{"title":"Goals and scorecards","description":"Link objectives, outcomes, milestones, and operating metrics."},{"title":"People operations","description":"Coordinate headcount, performance reviews, check-ins, and 1:1s."},{"title":"Meetings and decisions","description":"Capture agendas, transcripts, notes, owners, and follow-through."}] },
-      "governanceSecurity": { "title": "Governance & Security", "tagline": "Controls, evidence, risk, and privacy", "hero": "Make governance part of the work", "description": "Operate SOC controls, evidence, incidents, vendors, privacy assets, approvals, audit trails, and policy agreements beside execution.", "features": [{"title":"Controls and evidence","description":"Manage SOC controls, evidence collection, training, and compliance events."},{"title":"Security and vendor risk","description":"Track incidents, vendors, DPAs, PII assets, and remediation."},{"title":"Privacy and approvals","description":"Handle data requests, consent, versions, sign-offs, and audit history."}] },
-      "marketingGrowth": { "title": "Marketing & Growth", "tagline": "Campaigns, conversion, and content", "hero": "Turn attention into measurable growth", "description": "Build landing pages, campaigns, nurture flows, experiments, content, SEO, referrals, and conversion analytics in one loop.", "features": [{"title":"Campaigns and nurture","description":"Coordinate audiences, messages, enrollment, delivery, and follow-up."},{"title":"Web and conversion","description":"Build pages, forms, experiments, heatmaps, and conversion journeys."},{"title":"Content and distribution","description":"Plan content, SEO, social, referrals, email, and push campaigns."}] },
-      "aiCoach": { "title": "AI Coach", "tagline": "One assistant, every C-suite viewpoint", "hero": "Bring the right executive perspective into every decision", "description": "Use CEO, CFO, CRO, CMO, CPO, CTO, CHRO, and CISO context through the same governed Builderforce Brain.", "features": [{"title":"Eight executive viewpoints","description":"Switch perspectives without losing company or project context."},{"title":"Domain tools","description":"Use operating tools for finance, product, growth, people, sales, and risk."},{"title":"Governed action","description":"Move from advice to approved, auditable execution on the canvas."}] },
-      "integrations": { "title": "Integrations & Migrations", "tagline": "Connect the tools you keep", "hero": "One operating layer across your existing stack", "description": "Connect collaboration, development, finance, CRM, and delivery systems while preserving tenant boundaries and approval controls.", "features": [{"title":"Connected services","description":"Bring signals from the systems your teams already use."},{"title":"Migration workflows","description":"Move work and knowledge out of fragmented point tools."},{"title":"Controlled access","description":"Manage credentials, scopes, approvals, and data boundaries centrally."}] },
-      "companiesContacts": { "title": "Companies & Contacts", "tagline": "The shared business graph", "hero": "One company graph for every operating domain", "description": "Represent your company, customers, prospects, investors, partners, vendors, and contacts once, then use that context everywhere.", "features": [{"title":"Company relationships","description":"Model owners, customers, prospects, partners, investors, and vendors."},{"title":"Contact provenance","description":"Preserve identifiers, sources, enrichment, and edit history."},{"title":"Shared context","description":"Use one business graph across sales, finance, product, support, and governance."}] }
+      "productManagement": {
+        "title": "Product Management",
+        "tagline": "Discovery, validation, and roadmaps",
+        "hero": "Turn customer evidence into the right roadmap",
+        "description": "Shape ideas, scaffold an MVP, validate demand, prioritize a strategic backlog, and connect product bets to delivery.",
+        "features": [
+          {
+            "title": "Product discovery",
+            "description": "Capture and score opportunities with customer, market, and competitive evidence."
+          },
+          {
+            "title": "MVP scaffolding",
+            "description": "Turn a promising idea into testable scope, assumptions, and approval gates."
+          },
+          {
+            "title": "Roadmap and backlog",
+            "description": "Prioritize releases by business value, adoption, effort, and strategic fit."
+          }
+        ]
+      },
+      "businessIntelligence": {
+        "title": "Business Intelligence",
+        "tagline": "Runway, burn, forecasts, and pricing",
+        "hero": "Know what every decision does to runway",
+        "description": "Model cash, revenue, retention, expenses, and scenarios in the same system that coordinates the work behind those numbers.",
+        "features": [
+          {
+            "title": "Runway and burn",
+            "description": "Track cash position, monthly burn, break-even, and runway in real time."
+          },
+          {
+            "title": "Forecast scenarios",
+            "description": "Compare assumptions, sensitivity, Monte Carlo ranges, and what-if plans."
+          },
+          {
+            "title": "Unit economics",
+            "description": "Measure ARR, retention, CAC, LTV, payback, and pricing performance."
+          }
+        ]
+      },
+      "agileSurvival": {
+        "title": "Agile Survival",
+        "tagline": "Every sprint tied to runway",
+        "hero": "Ship without wasting a sprint",
+        "description": "Combine planning, retrospectives, Kanban, capacity, and delivery risk with the financial impact of every sprint.",
+        "features": [
+          {
+            "title": "Survival-focused planning",
+            "description": "Estimate work with capacity and runway visible before the commitment is made."
+          },
+          {
+            "title": "Burn-aware Kanban",
+            "description": "See flow, bottlenecks, risk, and the financial impact of delayed work."
+          },
+          {
+            "title": "Retrospectives and velocity",
+            "description": "Turn delivery signals into actions that improve the next sprint."
+          }
+        ]
+      },
+      "salesRevenue": {
+        "title": "Sales & Revenue",
+        "tagline": "ICP, prospects, pipeline, and funnel",
+        "hero": "Build a revenue engine your whole team can see",
+        "description": "Connect target accounts, contacts, sequences, deals, conversion signals, and forecasts in one operating flow.",
+        "features": [
+          {
+            "title": "ICP and prospecting",
+            "description": "Define ideal customers, enrich prospects, and preserve source provenance."
+          },
+          {
+            "title": "Sequences and campaigns",
+            "description": "Coordinate outreach, replies, follow-ups, and conversion signals."
+          },
+          {
+            "title": "Deals and revenue funnel",
+            "description": "Manage pipeline stages, quota attainment, and forecast movement."
+          }
+        ]
+      },
+      "customerEngagement": {
+        "title": "Customer Engagement",
+        "tagline": "Feedback, support, retention, and health",
+        "hero": "Turn every customer signal into action",
+        "description": "Unify feedback, support, onboarding, sentiment, retention, churn, and account health with the work needed to respond.",
+        "features": [
+          {
+            "title": "Customer feedback",
+            "description": "Collect feedback and route it directly into product and delivery decisions."
+          },
+          {
+            "title": "Health and retention",
+            "description": "Combine engagement, NPS, sentiment, and churn indicators into clear risk."
+          },
+          {
+            "title": "Support and onboarding",
+            "description": "Coordinate tickets, knowledge, onboarding flows, and follow-up actions."
+          }
+        ]
+      },
+      "investorIntelligence": {
+        "title": "Investor Intelligence",
+        "tagline": "Fundraising, updates, and portfolio health",
+        "hero": "Run investor relations from live company truth",
+        "description": "Create pitch decks, investor updates, data rooms, diligence workflows, funding histories, and portfolio views grounded in current operating data.",
+        "features": [
+          {
+            "title": "Pitch decks and analytics",
+            "description": "Version, share, and measure decks with per-slide engagement."
+          },
+          {
+            "title": "Updates and data rooms",
+            "description": "Prepare approved investor communications and diligence materials."
+          },
+          {
+            "title": "Portfolio intelligence",
+            "description": "Track funding, milestones, health scores, and investor deal flow."
+          }
+        ]
+      },
+      "operationalCadence": {
+        "title": "Operational Cadence",
+        "tagline": "People, goals, meetings, and rhythms",
+        "hero": "Keep the company aligned without adding meetings",
+        "description": "Connect goals, headcount, performance, 1:1s, check-ins, recurring operating rhythms, notes, and decisions.",
+        "features": [
+          {
+            "title": "Goals and scorecards",
+            "description": "Link objectives, outcomes, milestones, and operating metrics."
+          },
+          {
+            "title": "People operations",
+            "description": "Coordinate headcount, performance reviews, check-ins, and 1:1s."
+          },
+          {
+            "title": "Meetings and decisions",
+            "description": "Capture agendas, transcripts, notes, owners, and follow-through."
+          }
+        ]
+      },
+      "governanceSecurity": {
+        "title": "Governance & Security",
+        "tagline": "Controls, evidence, risk, and privacy",
+        "hero": "Make governance part of the work",
+        "description": "Operate SOC controls, evidence, incidents, vendors, privacy assets, approvals, audit trails, and policy agreements beside execution.",
+        "features": [
+          {
+            "title": "Controls and evidence",
+            "description": "Manage SOC controls, evidence collection, training, and compliance events."
+          },
+          {
+            "title": "Security and vendor risk",
+            "description": "Track incidents, vendors, DPAs, PII assets, and remediation."
+          },
+          {
+            "title": "Privacy and approvals",
+            "description": "Handle data requests, consent, versions, sign-offs, and audit history."
+          }
+        ]
+      },
+      "marketingGrowth": {
+        "title": "Marketing & Growth",
+        "tagline": "Campaigns, conversion, and content",
+        "hero": "Turn attention into measurable growth",
+        "description": "Build landing pages, campaigns, nurture flows, experiments, content, SEO, referrals, and conversion analytics in one loop.",
+        "features": [
+          {
+            "title": "Campaigns and nurture",
+            "description": "Coordinate audiences, messages, enrollment, delivery, and follow-up."
+          },
+          {
+            "title": "Web and conversion",
+            "description": "Build pages, forms, experiments, heatmaps, and conversion journeys."
+          },
+          {
+            "title": "Content and distribution",
+            "description": "Plan content, SEO, social, referrals, email, and push campaigns."
+          }
+        ]
+      },
+      "aiCoach": {
+        "title": "AI Coach",
+        "tagline": "One assistant, every C-suite viewpoint",
+        "hero": "Bring the right executive perspective into every decision",
+        "description": "Use CEO, CFO, CRO, CMO, CPO, CTO, CHRO, and CISO context through the same governed Builderforce Brain.",
+        "features": [
+          {
+            "title": "Eight executive viewpoints",
+            "description": "Switch perspectives without losing company or project context."
+          },
+          {
+            "title": "Domain tools",
+            "description": "Use operating tools for finance, product, growth, people, sales, and risk."
+          },
+          {
+            "title": "Governed action",
+            "description": "Move from advice to approved, auditable execution on the canvas."
+          }
+        ]
+      },
+      "integrations": {
+        "title": "Integrations & Migrations",
+        "tagline": "Connect the tools you keep",
+        "hero": "One operating layer across your existing stack",
+        "description": "Connect collaboration, development, finance, CRM, and delivery systems while preserving tenant boundaries and approval controls.",
+        "features": [
+          {
+            "title": "Connected services",
+            "description": "Bring signals from the systems your teams already use."
+          },
+          {
+            "title": "Migration workflows",
+            "description": "Move work and knowledge out of fragmented point tools."
+          },
+          {
+            "title": "Controlled access",
+            "description": "Manage credentials, scopes, approvals, and data boundaries centrally."
+          }
+        ]
+      },
+      "companiesContacts": {
+        "title": "Companies & Contacts",
+        "tagline": "The shared business graph",
+        "hero": "One company graph for every operating domain",
+        "description": "Represent your company, customers, prospects, investors, partners, vendors, and contacts once, then use that context everywhere.",
+        "features": [
+          {
+            "title": "Company relationships",
+            "description": "Model owners, customers, prospects, partners, investors, and vendors."
+          },
+          {
+            "title": "Contact provenance",
+            "description": "Preserve identifiers, sources, enrichment, and edit history."
+          },
+          {
+            "title": "Shared context",
+            "description": "Use one business graph across sales, finance, product, support, and governance."
+          }
+        ]
+      }
     }
+  },
+  "featuresPage": {
+    "badgeAllSeats": "Every seat",
+    "badgeSystem": "✦ Startup operating system",
+    "titleLead": "Idea to real.",
+    "titleSub": "One canvas. Every seat.",
+    "lede": "Nine business domains, each owned by a C-suite teammate you can drag onto the board — so every capability maps to somebody accountable for it, not to a menu nobody owns.",
+    "ctaCanvas": "Open the canvas →",
+    "ctaPricing": "View pricing",
+    "check": {
+      "noCard": "No credit card",
+      "boardFirst": "Your board before your account",
+      "soc2": "SOC 2 ready"
+    },
+    "overviewTitle": "Platform overview",
+    "overviewNote": "…and the arc that connects them.",
+    "stat": {
+      "domains": "Product domains",
+      "seats": "Seats on your team",
+      "destinations": "Destinations",
+      "features": "Sub-views"
+    },
+    "domainsBadge": "Product domains",
+    "domainsTitle": "{count} domains, {count} owners, one board",
+    "domainsLede": "Each domain is owned by a seat on your team. Open it from the menu or from the teammate — both land on the same surface, because both read the same list.",
+    "foundationsBadge": "Foundations",
+    "foundationsTitle": "{count} things every seat stands on",
+    "foundationsLede": "Cross-cutting substrate. No single seat owns these — and notably, none of them is called “AI”: the model is the surface, not a department.",
+    "foundationBadge": "Foundation",
+    "arcBadge": "The arc",
+    "arcTitle": "Idea → Make → Run",
+    "arcLede": "The menu is not a list of departments. It is where you are in the journey, and every destination below sits in exactly one place.",
+    "arcCol": {
+      "stage": "Stage",
+      "question": "The question",
+      "where": "Where you go"
+    },
+    "arcQuestion": {
+      "idea": "What if?",
+      "make": "Build it.",
+      "run": "Run it as a company.",
+      "measure": "Is it working?",
+      "market": "Sell, buy, hire, be found.",
+      "admin": "Settings."
+    },
+    "arcNote": "Generated from the product’s own navigation, so this table cannot advertise a destination that does not exist or miss one that does.",
+    "faqTitle": "Questions this raises",
+    "faq": [
+      {
+        "q": "Where did the menu go?",
+        "a": "There is one list now. The left panel groups destinations by where they sit in the arc — Idea, Make, Run — and the footer lists the people and agents who own them. Everything you used to reach from a sidebar is one of those two, and both read the same registry, so a name can never differ between them."
+      },
+      {
+        "q": "Do I have to create a company to use this?",
+        "a": "No, and stopping partway is a complete, successful use of the product. Someone who ships three landing pages and never forms a company has not failed to onboard. The business rows stay listed the whole time — dim, not hidden — so you can see what is there before you need it."
+      },
+      {
+        "q": "What replaced the AI section?",
+        "a": "Its destinations moved to the seats that own the work: expense categorisation to the CFO, contract analysis to Security, competitor monitoring to the CMO, pitch-deck feedback to the CEO. A menu item named after the technology is the tell that a product has not decided who the work belongs to."
+      },
+      {
+        "q": "Why is a reference page a panel?",
+        "a": "Because losing your board to read about SOC 2 is a bad trade. Signed out these are ordinary pages with ordinary URLs. Signed in, the same page opens over the board you were working on, and Esc puts you back with your agent turn still running."
+      },
+      {
+        "q": "Is the marketplace only for freelancers?",
+        "a": "No. Four families list side by side: talent, companies, agents and assets. Agents are not a separate area — buying one adds it to your team, which is why the catalogue and your roster can never drift apart."
+      }
+    ],
+    "closeTitle": "Ready to replace the stack?",
+    "closeLede": "One platform instead of five, and one menu instead of seven. Start on the canvas; claim your company when you have one.",
+    "closeFine": "No credit card · your board is yours before you sign up · upgrade whenever"
   }
 }

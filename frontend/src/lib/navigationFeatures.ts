@@ -2,7 +2,6 @@ import type { NavGroup } from './navGroups';
 
 /** Optional workspace modules. Core routes are deliberately absent. */
 export const NAVIGATION_FEATURE_IDS = [
-  'seat',
   'challenges',
   'projects',
   'workforce',
@@ -11,6 +10,16 @@ export const NAVIGATION_FEATURE_IDS = [
   'quality',
   'reliability',
   'knowledge',
+  // The RUN group: each business seat's domain is independently optional, so a
+  // workspace that does not raise money can switch Investors off without losing
+  // Finance. `seat` is gone — it was one toggle for a door labelled *door*.
+  'finance',
+  'revenue',
+  'people',
+  'hiring',
+  'investor',
+  'governance',
+  'support',
 ] as const;
 
 export type NavigationFeatureId = (typeof NAVIGATION_FEATURE_IDS)[number];

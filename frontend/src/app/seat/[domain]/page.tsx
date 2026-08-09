@@ -16,9 +16,8 @@
 
 import { use, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
-import { notFound, useRouter } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { isDomain, type Domain } from '@/lib/kernel/kernelApi';
-import { RosterNav } from '@/components/kernel/RosterNav';
 import { DomainSurface } from '@/components/kernel/DomainSurface';
 import { ObjectPanel } from '@/components/kernel/ObjectPanel';
 
@@ -26,19 +25,17 @@ export default function SeatPage({ params }: { params: Promise<{ domain: string 
   const { domain } = use(params);
   const locale = useLocale();
   const t = useTranslations('kernel.surface');
-  const router = useRouter();
   const [openObject, setOpenObject] = useState<string | undefined>();
 
   if (!isDomain(domain)) notFound();
 
   return (
+    // `RosterNav` used to render a seat rail down the left of this page. It was
+    // a THIRD enumeration of the seats — the left panel's RUN rows and the
+    // footer roster are the other two — and PRD 21 §11.4.2 allows one: the
+    // footer. Switching seats is the rail or a chip now, and this page renders
+    // the domain it was asked for.
     <div className="flex min-h-[calc(100vh-4rem)] min-w-0" style={{ background: 'var(--bg-deep)' }}>
-      <RosterNav
-        activeDomain={domain as Domain}
-        onSelect={(next) => router.push(`/seat/${next}`)}
-        onOpenObject={setOpenObject}
-        locale={locale}
-      />
       <main className="flex-1 min-w-0 overflow-x-hidden">
         <DomainSurface domain={domain as Domain} onOpenObject={setOpenObject} locale={locale} />
       </main>

@@ -1,3 +1,54 @@
+## ✅ RESOLVED 2026-08-09 — PRD 21 §11: the unified menu (M0–M2 + the IA halves of M3/M4)
+
+**Seven registries became one.** `NAV_GROUPS` now carries `seat`, `stage` and `rung`, and
+`REFERENCE_DESTINATIONS`, `PUBLIC_NAV` and `bottomNavFor()` moved in beside it, so
+`lib/navGroups.ts` is the single declaration site every surface projects from. The CFO existed
+four times under four names, one of which navigated out of the product; it exists once.
+
+- **Deleted:** `lib/burnrateCatalog.ts` (+ its test) — the second navigation list, whose nine rows
+  pointed the authenticated rail at marketing pages. Its twelve entries are registry reference rows.
+  Also gone: the `seat` nav group (a door labelled *door*), the `dashboard` nav group (§6.8 lands
+  sign-in on the last board; a Dashboard row undoes it), `.nav-domain-section`/`.nav-domain-persona`,
+  the `.br-feature-index` rules, and `RosterNav` on `/seat/<domain>` — a third seat enumeration
+  beside the RUN rows and the footer.
+- **The left panel is the arc.** Idea → Make → Run → Measure → Market → Admin, every header a
+  collapsible `<button aria-expanded>` whose state persists per stage, separately from the rail's
+  own collapsed state. Each RUN row carries its seat as a trailing chip in that seat's own hue.
+- **The public header** drops `Home` (the logo is home), folds Agents into Marketplace (an agent is
+  a listing whose purchase writes a roster row, not a destination), and its primary CTA opens
+  `/create/new` — a real local-first board — instead of a signup form.
+- **Reference pages are panels.** The nine domain pages, `/soc2`, `/integrations` and `/features`
+  render as ordinary crawlable pages signed out and as full-width panels over a mounted board signed
+  in, from one component. No redirect map, no slug migration.
+- **`SlideOutPanel` got its width control back** — three steps (440 / 660 / 94%), keyboard
+  reachable, persisted per destination. `panelWidth()` supplies the default, not the answer: a
+  policy cannot know a Gantt wants 94% and a settings form does not.
+- **The marketplace has four families** — talent · companies · agents · assets — from
+  `lib/marketplaceFamilies.ts`, with the kinds as sub-filters and a publish CTA whose label **and
+  flow** are derived, so "Publish a company" runs the claim rather than a listing form. Every legacy
+  `?category=` link still resolves through one mapping table.
+- **`/features` is a registry projection** in BurnRateOS's ported band rhythm (wash → tint → raised
+  → tint → raised → gradient): nine domain cards, three dashed foundation cards, an arc table and a
+  FAQ, with the overview counts computed from the registry rather than typed into copy.
+- **Design system:** `--seat-*` for twelve seats (aliases of the existing categorical hues, so the
+  merge spent no new colour), `--stage-*`, `--grad-brand` / `--wash-hero`, and the `.mk-*` band
+  primitives — ported as a system, not as 95 pages.
+- **`scripts/check-destinations.mjs`** is wired into `npm test` and **found two lists nobody had
+  noticed on its first run**: the marketing header's `FLAT_LINKS` and `MobileBottomNav`'s item
+  table — the sixth and seventh registries, both {href, labelKey} arrays living beside the component
+  that rendered them. Both are registry rows now.
+- **Corrected against the code:** §11.10.3 claimed the features FAQ and the nav's stage header would
+  be one disclosure component. They are not, deliberately — `/features` is a server component and
+  uses `<details>`, while the nav header is controlled, persisted and must stay shut when the rail
+  collapses. Forcing one component would have shipped JavaScript to open a paragraph.
+- **Verified:** `check:destinations` green (72 destinations, 12 reference pages, 12 seats, 12
+  distinct hues); `tsc --noEmit` clean; 25 new acceptance assertions in `lib/unifiedMenu.test.ts`;
+  full frontend suite 1,614 passing with only the two pre-existing `CreationCanvas` failures, both
+  confirmed against a stashed baseline. All new strings landed in en/zh/es/fr/de.
+
+What did not ship, and why, is in PRD 21 §11.11 and the two open Gap Register entries.
+
+
 ## 2026-07-19 — ✅ RESOLVED: Residual burndown — provider parity, CI correlation, Actions reconcile, deploy-resolver drift
 
 A pass dedicated to closing the open residuals rather than shipping a new feature. Every item below was an entry in the Consolidated Gap Register and is now deleted from it.

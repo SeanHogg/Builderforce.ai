@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
 import { Icon } from '@/components/ui/Icon';
-import { BURNRATE_FOUNDATIONS, BURNRATE_PRODUCT_DOMAINS } from '@/lib/burnrateCatalog';
+import { REFERENCE_DOMAINS, REFERENCE_FOUNDATIONS } from '@/lib/navGroups';
 import styles from './AboutPage.module.css';
 
 export const runtime = 'edge';
@@ -112,10 +112,10 @@ export default async function AboutPage() {
         <div className={styles.domainGroup}>
           <div className={styles.groupHeading}><h3>{t('system.domains')}</h3><span>9</span></div>
           <div className={styles.domainGrid}>
-            {BURNRATE_PRODUCT_DOMAINS.map((domain) => (
+            {REFERENCE_DOMAINS.map((domain) => (
               <Link href={domain.marketingHref} key={domain.id} className={styles.domainCard}>
                 <span className={styles.domainIcon}><Icon source={domain.icon} size={22} /></span>
-                <span><small>{domain.persona}</small><strong>{tb(`domains.${domain.id}.title`)}</strong><em>{tb(`domains.${domain.id}.tagline`)}</em></span>
+                <span><small>{domain.seat}</small><strong>{tb(`domains.${domain.copyId}.title`)}</strong><em>{tb(`domains.${domain.copyId}.tagline`)}</em></span>
                 <b aria-hidden="true">↗</b>
               </Link>
             ))}
@@ -125,10 +125,10 @@ export default async function AboutPage() {
         <div className={styles.domainGroup}>
           <div className={styles.groupHeading}><h3>{t('system.foundations')}</h3><span>3</span></div>
           <div className={`${styles.domainGrid} ${styles.foundationGrid}`}>
-            {BURNRATE_FOUNDATIONS.map((domain) => (
+            {REFERENCE_FOUNDATIONS.map((domain) => (
               <Link href={domain.marketingHref} key={domain.id} className={styles.domainCard}>
                 <span className={styles.domainIcon}><Icon source={domain.icon} size={22} /></span>
-                <span><small>{domain.persona}</small><strong>{tb(`domains.${domain.id}.title`)}</strong><em>{tb(`domains.${domain.id}.tagline`)}</em></span>
+                <span><small>{domain.seat}</small><strong>{tb(`domains.${domain.copyId}.title`)}</strong><em>{tb(`domains.${domain.copyId}.tagline`)}</em></span>
                 <b aria-hidden="true">↗</b>
               </Link>
             ))}

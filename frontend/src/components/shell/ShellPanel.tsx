@@ -44,6 +44,10 @@ export function ShellPanel({ children }: { children: React.ReactNode }) {
       open
       onClose={close}
       width={panelWidth(pathname)}
+      // Per destination, not per session: widening Finance must not widen
+      // Settings. Falls back to the pathname for a route with no nav group,
+      // which is still stable enough to remember.
+      widthStorageKey={group?.id ?? pathname}
       crumb={tPanel('crumb')}
       title={group ? t(group.labelKey) : tPanel('title')}
       // An index of one is not a choice, and `DestinationIndex` already returns

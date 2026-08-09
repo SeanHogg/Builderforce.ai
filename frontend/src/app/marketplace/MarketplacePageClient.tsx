@@ -43,17 +43,36 @@ import { SkillTags } from '@/components/SkillTags';
 import { listFreelancers, type FreelancerProfile } from '@/lib/freelancerApi';
 import { RatingStars } from '@/components/freelance/RatingStars';
 import { TrustBadge } from '@/components/freelance/TrustBadge';
+import { FAMILIES, FAMILY_IDS, resolveFamily, type FamilyId } from '@/lib/marketplaceFamilies';
 import { SkeletonGrid } from './SkeletonGrid';
 import { ModelsExplorer } from './ModelsExplorer';
 import MarketplaceGigsSection from './MarketplaceGigsSection';
 import { signInHref } from '@/lib/auth';
 
 // Human freelancers ("Talent"), the live model catalog ("Models"), and open work to
-// bid on ("Gigs") are now categories of the marketplace rather than standalone
+// bid on ("Gigs") are categories of the marketplace rather than standalone
 // /talent, /models, and /freelancer/gigs pages — same search box, one merged surface.
-type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'workforce' | 'talent' | 'models' | 'gigs' | 'publish';
+//
+// PRD 21 §11.5 groups them: the eight mixed tabs became FOUR FAMILIES (talent,
+// companies, agents, assets) with the kinds as sub-filters, and `publish` — a
+// verb that was never a category — became the primary button. This stays the
+// INTERNAL section discriminator; the families above it are the vocabulary a
+// person sees, and `SECTION_BY_KIND` is the one place the two meet.
+type MarketplaceCategory = 'all' | 'personas' | 'skills' | 'workforce' | 'talent' | 'models' | 'gigs' | 'publish' | 'company';
 
-const CATEGORY_IDS: MarketplaceCategory[] = ['all', 'personas', 'skills', 'workforce', 'talent', 'models', 'gigs', 'publish'];
+/** (family, kind) → which section renders. A table, so a new kind is a row. */
+const SECTION_BY_KIND: Record<string, MarketplaceCategory> = {
+  'talent:person': 'talent',
+  'talent:gig': 'gigs',
+  'agent:builtin': 'workforce',
+  'agent:community': 'workforce',
+  'asset:model': 'models',
+  'asset:skill': 'skills',
+  'asset:persona': 'personas',
+  'asset:knowledge': 'all',
+  'company:business': 'company',
+  'company:storefront': 'company',
+};
 
 const TALENT_DISCIPLINES = ['developer', 'dba', 'designer', 'devops', 'qa', 'pm', 'data', 'security', 'other'] as const;
 
@@ -169,6 +188,9 @@ export default function MarketplacePageClient() {
   const { addItem, hasItem } = useCart();
   const tenantId = tenant?.id ?? '';
   const tm = useTranslations('marketplace');
+  // The families' own copy — labels, the derived publish CTA and the one-line
+  // note under each grid all live under `marketplace.family`.
+  const tf = useTranslations('marketplace.family');
   const confirm = useConfirm();
   const tt = useTranslations('talent');
   const tdis = useTranslations('freelancer');
@@ -343,16 +365,44 @@ export default function MarketplacePageClient() {
   // /models routes redirect here, and the header links deep-link in) selects the
   // right tab — reactively, so a query-only nav on the same route still switches
   // (a mount-once read would miss it for a visitor already on /marketplace).
+  // Both vocabularies resolve here: `?family=…&kind=…` is the one a person sees,
+  // and `?category=…` is the legacy value every old bookmark, tutorial CTA and
+  // freelancer nav link still carries. Breaking those to rename a tab would be a
+  // poor trade, so `resolveFamily` maps them onto each other in one table.
   const categoryParam = searchParams.get('category');
+  const familyParam = searchParams.get('family');
+  const kindParam = searchParams.get('kind');
+  const { family, kind } = resolveFamily(familyParam, kindParam, categoryParam);
+  const activeFamily = FAMILIES[family];
+
   useEffect(() => {
-    if (categoryParam && (CATEGORY_IDS as string[]).includes(categoryParam)) {
-      setCategory(categoryParam as MarketplaceCategory);
-    }
-  }, [categoryParam]);
+    setCategory(SECTION_BY_KIND[`${family}:${kind}`] ?? 'all');
+  }, [family, kind]);
 
   // Selecting a category chip mirrors the choice into the URL (?category=…) so the tab
   // is deep-linkable + shareable + survives refresh — 'all' clears the param. Reuses
   // the same query the deep-link read above consumes (one source of truth).
+  /** Move to a family (and optionally a kind), mirroring the choice into the URL
+   *  so the storefront stays deep-linkable, shareable and refresh-proof. The
+   *  legacy `?category=` is dropped on the way out — one vocabulary in the bar. */
+  const selectFamily = (nextFamily: FamilyId, nextKind?: string) => {
+    const params = new URLSearchParams(Array.from(searchParams.entries()));
+    params.delete('category');
+    params.set('family', nextFamily);
+    const resolvedKind = nextKind ?? FAMILIES[nextFamily].kinds[0];
+    params.set('kind', resolvedKind);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  /** The publish CTA. ONE derivation for the label and the flow, so the button
+   *  can never disagree with the filter above it — and "Publish a company" runs
+   *  the claim, not a listing form, because a company you do not own is not
+   *  yours to list. */
+  const startPublish = () => {
+    if (activeFamily.flow === 'claim') return; // gated below; the button is inert
+    setCategory('publish');
+  };
+
   const selectCategory = (id: MarketplaceCategory) => {
     setCategory(id);
     const params = new URLSearchParams(Array.from(searchParams.entries()));
@@ -508,8 +558,6 @@ export default function MarketplacePageClient() {
     }
   }, [loadAgents]);
 
-  const categories: { id: MarketplaceCategory }[] = CATEGORY_IDS.map((id) => ({ id }));
-
   const searchPlaceholder =
     category === 'talent' ? tt('filter.search')
     : category === 'models' ? tmodels('searchPlaceholder')
@@ -519,13 +567,28 @@ export default function MarketplacePageClient() {
     // Full-width surface: the marketplace is a browse-heavy grid, so it overrides the
     // shared 1100px `.page-inner` cap and runs to 100% of the shell width.
     <div className="page-inner" style={{ maxWidth: '100%' }}>
-      <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        <h1 style={{ fontSize: 'var(--font-size-page-title)', fontWeight: 800, color: 'var(--text-strong)', margin: '0 0 8px' }}>
-          {tm('title')}
-        </h1>
-        <p style={{ color: 'var(--muted)', fontSize: 'var(--font-size-small)', maxWidth: 520, margin: '0 auto' }}>
-          {tm('blurb')}
-        </p>
+      <div className="mp-head">
+        <div>
+          <h1 style={{ fontSize: 'var(--font-size-page-title)', fontWeight: 800, color: 'var(--text-strong)', margin: '0 0 8px' }}>
+            {tm('title')}
+          </h1>
+          <p style={{ color: 'var(--muted)', fontSize: 'var(--font-size-small)', maxWidth: 520, margin: 0 }}>
+            {tm('blurb')}
+          </p>
+        </div>
+        {/* `publish` was never a category — it is the verb. Its label AND the
+            flow it runs are derived from the active family, so the button can
+            never disagree with the filter underneath it. */}
+        <button
+          type="button"
+          className="mp-publish"
+          onClick={startPublish}
+          disabled={activeFamily.flow === 'claim'}
+          title={activeFamily.flow === 'claim' ? tf('companySoon.soonTitle') : undefined}
+          style={{ '--seat': `var(${activeFamily.hueVar})` } as React.CSSProperties}
+        >
+          {tf(activeFamily.publishKey)}
+        </button>
       </div>
 
       {/* Knowledge listings (SOPs/processes/docs published for sale). Public
@@ -569,29 +632,29 @@ export default function MarketplacePageClient() {
           }}
           aria-label={searchPlaceholder}
         />
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: isMobile ? 1 : 0, flexWrap: 'wrap', width: isMobile ? '100%' : undefined, minWidth: 0 }} role="group" aria-label={tm('categoryLabel')}>
-          <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-strong)' }}>{tm('categoryLabel')}</span>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
-            {categories.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => selectCategory(c.id)}
-                className={category === c.id ? 'btn btn-primary' : 'btn btn-secondary'}
-                aria-pressed={category === c.id}
-                style={{
-                  padding: '8px 16px',
-                  borderRadius: 'var(--radius-md)',
-                  border: '1px solid var(--border)',
-                  fontWeight: 500,
-                  fontSize: 'var(--font-size-small)',
-                  cursor: 'pointer',
-                }}
-              >
-                {c.id === 'talent' ? <Icon source="👤" size="1em" /> : c.id === 'models' ? <Icon source="🧠" size="1em" /> : c.id === 'gigs' ? <Icon source="💼" size="1em" /> : ''}{tm(`cat.${c.id}`)}
-              </button>
-            ))}
-          </div>
+        {/* Four families, and the kinds inside the active one. The old bar mixed
+            what-is-sold with who-sells-it with a verb; this is the vocabulary
+            from `lib/marketplaceFamilies.ts`, and it is the only one. */}
+        <div className="mp-families" role="group" aria-label={tf('label')}>
+          {FAMILY_IDS.map((id) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => selectFamily(id)}
+              className="mp-family"
+              aria-pressed={family === id}
+              style={{ '--seat': `var(${FAMILIES[id].hueVar})` } as React.CSSProperties}
+            >
+              {tf(FAMILIES[id].labelKey)}
+            </button>
+          ))}
+        </div>
+        <div className="mp-kinds" role="group" aria-label={tf('kindLabel')} style={{ '--seat': `var(${activeFamily.hueVar})` } as React.CSSProperties}>
+          {activeFamily.kinds.map((k) => (
+            <button key={k} type="button" className="mp-kind" aria-pressed={kind === k} onClick={() => selectFamily(family, k)}>
+              {tf(`kind.${k}`)}
+            </button>
+          ))}
         </div>
         {/* Talent-only sub-filters (discipline + sort) mirror the retired /talent page. */}
         {category === 'talent' && (
@@ -782,6 +845,18 @@ export default function MarketplacePageClient() {
             )}
           </>
         )
+      ) : category === 'company' ? (
+        // Visible and inert, never hidden (PRD 21 §2.6 rule 7). Claiming a
+        // business writes a verified ownership record against the company graph
+        // PRD 19 B0 brings; the listing surface lands with that record. Showing
+        // the family dimmed says "not yet"; hiding it would say "this product
+        // cannot do that", which is the more expensive lie.
+        <div className="mp-soon">
+          <p className="ui-eyebrow">{tf('company')}</p>
+          <h2>{tf('companySoon.soonTitle')}</h2>
+          <p>{tf('companySoon.soonBody')}</p>
+          <Link href="/features" className="mp-soon__action">{tf('companySoon.soonAction')} →</Link>
+        </div>
       ) : category === 'models' ? (
         <ModelsExplorer search={search} viewMode={viewMode} />
       ) : category === 'gigs' ? (
@@ -1124,6 +1199,11 @@ export default function MarketplacePageClient() {
           })}
         </div>
       )}
+
+      {/* One line saying what this family IS, so the four are distinguishable
+          by more than their names. Hidden while publishing — the form is the
+          answer to "what is this" at that point. */}
+      {category !== 'publish' && <p className="mp-note">{tf(activeFamily.noteKey)}</p>}
 
       {/* Owner manages their own listing in place (edit / pricing). */}
       {selectedAgent && (

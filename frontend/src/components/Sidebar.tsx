@@ -4,39 +4,58 @@ import { Icon } from '@/components/ui/Icon';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/lib/AuthContext';
-import { findActiveGroup, navGroupsForAccountType, type NavGroup } from '@/lib/navGroups';
+import {
+  STAGES,
+  earnedRung,
+  findActiveGroup,
+  groupsForStage,
+  navGroupsForAccountType,
+  type NavGroup,
+  type Stage,
+} from '@/lib/navGroups';
+import { isSeat, seatHueVar } from '@/lib/seats';
 import { useAvailableForHire, useIsFreelancer, useIsSalesAssociate } from '@/lib/rbac';
-import { signInHref } from '@/lib/auth';
+import { getStoredTenant, signInHref } from '@/lib/auth';
 import { ButtonLink } from '@/components/ui';
 import SidebarLegalMenu from './legal/SidebarLegalMenu';
 import SessionList from './SessionList';
 import { NavIcon } from './navigation/NavIcon';
 import { isStageRoute } from '@/lib/workbenchPolicy';
-import { BURNRATE_PRODUCT_DOMAINS } from '@/lib/burnrateCatalog';
 import { useNavigationFeatures } from '@/lib/NavigationFeaturesContext';
 import { filterNavigationGroups } from '@/lib/navigationFeatures';
 
 /**
- * The left panel (PRD 21 §3.2).
+ * The left panel — the ARC (PRD 21 §3.2, §11.4.1).
  *
- * It used to be a SITE MAP: `NAV_GROUPS` and nothing else, so the persistent
- * surface listed the product's departments and the person's own work appeared
- * nowhere. It now leads with **sessions** — New canvas, Active, Recents — and the
- * primary destinations follow underneath.
+ * It leads with **sessions** (New, Active, Recents), then groups every
+ * destination by its `stage`: Idea → Make → Run, plus Measure, Market and Admin.
+ * That ordering answers *where am I in the journey*, which is the only question
+ * a first-time visitor can actually ask — a department list answers a question
+ * only an employee has.
  *
- * The destinations stay because §3.2's "short object index" is only short if
- * everything it omits is reachable another way, and today the ⌘K palette is the
- * only other way in. Removing them would strand Insights, Growth, Reliability and
- * the rest behind a keystroke, which is not "the canvas is the front door" — it is
- * a product with hidden rooms. They are secondary here, not absent.
+ * Three things it deliberately no longer does:
+ *
+ *  1. **No second rail.** It used to render `BURNRATE_PRODUCT_DOMAINS` under a
+ *     "Product domains" heading, whose nine rows navigated OUT of the product
+ *     into marketing pages while the footer simultaneously showed a different
+ *     roster of the same seats. Those rows are now the RUN group, under their
+ *     product names with the seat as a trailing chip in that seat's own hue.
+ *  2. **No `Seat` item.** `/seat/delivery` as a menu entry was a door labelled
+ *     *door*; the RUN rows and the footer chips are how a seat is reached.
+ *  3. **No `Dashboard` item.** §6.8 already lands sign-in on the last board, and
+ *     a Dashboard entry is the thing that undoes it.
+ *
+ * Every stage header collapses and remembers it, because with PRD 18/19 landed
+ * the RUN group alone carries eight rows and somebody who lives in Make should
+ * not scroll past a company they touch on Fridays. Collapse is a click, never a
+ * hover: the stage underneath is a drag surface and a hover-opened region at the
+ * left edge eats drags.
  *
  * Sub-views are NOT listed: they are their destination's index, rendered by the
  * shared <ShellIndex>. The Platform Admin destination self-gates to superadmins;
  * visibility is decided here — no prop-drilled flags.
- *
- * Desktop: a docked rail (collapsible via the footer chevron). Mobile: an
- * off-canvas drawer opened from the TopBar hamburger.
  */
 
 interface SidebarProps {
@@ -44,6 +63,21 @@ interface SidebarProps {
   onToggleCollapsed: () => void;
   mobileOpen?: boolean;
   onMobileClose?: () => void;
+}
+
+/** Persisted per stage, separately from the rail's own collapsed state — a
+ *  collapsed GROUP inside an expanded rail is a different intention from a
+ *  collapsed rail, so neither may infer the other. */
+const COLLAPSE_KEY = 'bf-nav-stage-collapsed';
+
+function readCollapsed(): Record<string, boolean> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(COLLAPSE_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
 }
 
 function GroupLink({ group, active, onNavigate, t, badge = 0, locked = false, lockHint }: {
@@ -61,6 +95,14 @@ function GroupLink({ group, active, onNavigate, t, badge = 0, locked = false, lo
     <>
       <span className="nav-item-icon"><NavIcon name={group.id} /></span>
       <span className="nav-item-label">{label}</span>
+      {/* The seat badge, in that seat's own hue from the one declaration
+          (§11.10.1). A platform-owned destination has no teammate, so no chip —
+          which is exactly PRD 21 §4's test for whether a seat exists at all. */}
+      {isSeat(group.seat) && (
+        <span className="nav-item__seat" style={{ '--seat': `var(${seatHueVar(group.seat)})` } as React.CSSProperties}>
+          {group.seat}
+        </span>
+      )}
       {locked && <span className="nav-item__lock" aria-hidden="true"><Icon source="🔒" size="1em" /></span>}
       {!!badge && <span aria-label={`${badge} unread sessions`} style={{ marginLeft: 'auto', minWidth: 17, height: 17, borderRadius: 'var(--radius-full)', display: 'grid', placeItems: 'center', background: 'var(--accent)', color: 'var(--text-on-accent)', fontSize: 'var(--font-size-field-label)', fontWeight: 800 }}>{badge > 99 ? '99+' : badge}</span>}
     </>
@@ -99,7 +141,6 @@ function GroupLink({ group, active, onNavigate, t, badge = 0, locked = false, lo
 export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname() || '';
   const t = useTranslations('nav');
-  const tb = useTranslations('burnrateMarketing');
   const ts = useTranslations('sessions');
   const { user, isAuthenticated } = useAuth();
 
@@ -114,6 +155,23 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
   const activeGroupId = findActiveGroup(pathname)?.id
     ?? allGroups.find((g) => g.match.some((m) => pathname === m || pathname.startsWith(`${m}/`)))?.id;
   const groups = allGroups.filter((g) => !g.superadminOnly || user?.isSuperadmin);
+
+  // Progressive disclosure through the ONE helper (§11.4.4): a row is always
+  // listed, and the rung decides whether it is live. A local canvas is the
+  // product rather than a teaser, so its rail stays navigable while signed out.
+  const [collapsedStages, setCollapsedStages] = useState<Record<string, boolean>>({});
+  useEffect(() => { setCollapsedStages(readCollapsed()); }, []);
+
+  const toggleStage = useCallback((stage: Stage) => {
+    setCollapsedStages((prev) => {
+      const next = { ...prev, [stage]: !prev[stage] };
+      try { window.localStorage.setItem(COLLAPSE_KEY, JSON.stringify(next)); } catch { /* private mode */ }
+      return next;
+    });
+  }, []);
+
+  const rung = earnedRung(isAuthenticated, Boolean(getStoredTenant()));
+  const onStage = isStageRoute(pathname);
 
 
   return (
@@ -157,40 +215,50 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
               stay — the rail is a way back to a place, not to a board. */}
           {!collapsed && <SessionList onNavigate={onMobileClose} />}
           <div className="nav-section">
-            {!collapsed && <div className="ui-eyebrow nav-section__label">{t('workspaceLabel')}</div>}
-            {groups.map((g) => (
-              <GroupLink
-                key={g.id}
-                group={g}
-                active={activeGroupId === g.id}
-                onNavigate={onMobileClose}
-                t={t}
-                // A local Canvas is the product, not a teaser. Its destination
-                // rail stays navigable while signed out; the destination's
-                // durable Create/Save action owns the account gate. Outside a
-                // Canvas, app destinations retain the normal auth boundary.
-                locked={!isAuthenticated && !isStageRoute(pathname)}
-              />
-            ))}
-          </div>
-          <div className="nav-section nav-domain-section">
-            {!collapsed && <div className="ui-eyebrow nav-section__label">{tb('index.domains')}</div>}
-            {BURNRATE_PRODUCT_DOMAINS.map((domain) => {
-              const active = pathname === domain.marketingHref || pathname.startsWith(`${domain.marketingHref}/`);
-              const label = tb(`domains.${domain.id}.title`);
+            {STAGES.map((stage) => {
+              const rows = groupsForStage(groups, stage);
+              if (rows.length === 0) return null;
+              // A stage is live when its cheapest row is. Dim, never absent:
+              // "a dim row is an invitation; a missing row is a secret."
+              const stageRung = Math.min(...rows.map((row) => row.rung));
+              const earned = rung >= stageRung || onStage;
+              const isOpen = !collapsedStages[stage];
               return (
-                <Link
-                  key={domain.id}
-                  href={domain.marketingHref}
-                  onClick={onMobileClose}
-                  className={`nav-item ${active ? 'active' : ''} flex items-center`}
-                  aria-current={active ? 'page' : undefined}
-                  data-label={label}
-                >
-                  <span className="nav-item-icon"><Icon source={domain.icon} size="1em" /></span>
-                  <span className="nav-item-label">{label}</span>
-                  {!collapsed && <span className="nav-domain-persona">{domain.persona}</span>}
-                </Link>
+                <div key={stage} className={`nav-stage${earned ? '' : ' nav-stage--dim'}`} data-stage={stage}>
+                  {!collapsed && (
+                    <button
+                      type="button"
+                      className="ui-eyebrow nav-stage__label"
+                      onClick={() => toggleStage(stage)}
+                      aria-expanded={isOpen}
+                      aria-controls={`nav-stage-${stage}`}
+                    >
+                      <span className="nav-stage__dot" aria-hidden="true" />
+                      {t(`stage.${stage}`)}
+                      {!earned && <em className="nav-stage__hint">{t('stage.notYet')}</em>}
+                      <svg className="nav-stage__chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" aria-hidden="true">
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
+                  )}
+                  <div id={`nav-stage-${stage}`} className="nav-stage__rows" hidden={!collapsed && !isOpen}>
+                    {rows.map((g) => (
+                      <GroupLink
+                        key={g.id}
+                        group={g}
+                        active={activeGroupId === g.id}
+                        onNavigate={onMobileClose}
+                        t={t}
+                        // A local Canvas is the product, not a teaser. Its
+                        // destination rail stays navigable while signed out; the
+                        // destination's durable Create/Save action owns the
+                        // account gate.
+                        locked={rung < g.rung && !onStage}
+                        lockHint={t('stage.lockHint')}
+                      />
+                    ))}
+                  </div>
+                </div>
               );
             })}
           </div>

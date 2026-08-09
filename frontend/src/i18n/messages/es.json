@@ -466,7 +466,14 @@
       "challenges": "Desafíos",
       "growth": "Crecimiento",
       "embedded": "Integrado",
-      "seat": "Equipo"
+      "seat": "Equipo",
+      "finance": "Finanzas",
+      "revenue": "Ingresos",
+      "people": "Personas",
+      "hiring": "Contratación",
+      "investor": "Inversores",
+      "governance": "Gobernanza",
+      "support": "Soporte"
     },
     "tab": {
       "projects": "Proyectos",
@@ -557,7 +564,17 @@
       "canvasLibrary": "Lienzos",
       "newCanvas": "Nuevo lienzo"
     },
-    "workspaceLabel": "Espacio de trabajo"
+    "workspaceLabel": "Espacio de trabajo",
+    "stage": {
+      "idea": "Idea",
+      "make": "Crear",
+      "run": "Operar",
+      "measure": "Medir",
+      "market": "Mercado",
+      "admin": "Administración",
+      "notYet": "aún no",
+      "lockHint": "Inicia sesión para usarlo"
+    }
   },
   "alerts": {
     "title": "Alertas",
@@ -565,7 +582,26 @@
     "loading": "Cargando…",
     "days": "{n} días",
     "pricing": {
-      "title": "Precios publicados", "description": "Edita el borrador de la página y las tarjetas de precios. Los borradores son privados hasta que se publican.", "publishedAt": "Última publicación: {date}", "currency": "Moneda", "managedHost": "AgentHost gestionado / mes", "name": "Nombre del plan", "descriptionLabel": "Descripción", "monthly": "Precio mensual", "yearly": "Precio anual", "suffix": "Sufijo del precio", "minimumSeats": "Asientos mínimos", "features": "Funciones incluidas — una por línea", "excluded": "Funciones excluidas — una por línea", "ctaLabel": "Texto del botón", "ctaHref": "Destino del botón", "saveDraft": "Guardar borrador", "saving": "Guardando…", "publish": "Publicar precios", "publishing": "Publicando…", "draftSaved": "Borrador guardado; los precios públicos no cambiaron."
+      "title": "Precios publicados",
+      "description": "Edita el borrador de la página y las tarjetas de precios. Los borradores son privados hasta que se publican.",
+      "publishedAt": "Última publicación: {date}",
+      "currency": "Moneda",
+      "managedHost": "AgentHost gestionado / mes",
+      "name": "Nombre del plan",
+      "descriptionLabel": "Descripción",
+      "monthly": "Precio mensual",
+      "yearly": "Precio anual",
+      "suffix": "Sufijo del precio",
+      "minimumSeats": "Asientos mínimos",
+      "features": "Funciones incluidas — una por línea",
+      "excluded": "Funciones excluidas — una por línea",
+      "ctaLabel": "Texto del botón",
+      "ctaHref": "Destino del botón",
+      "saveDraft": "Guardar borrador",
+      "saving": "Guardando…",
+      "publish": "Publicar precios",
+      "publishing": "Publicando…",
+      "draftSaved": "Borrador guardado; los precios públicos no cambiaron."
     },
     "common": {
       "delete": "Eliminar"
@@ -1168,7 +1204,13 @@
     "skipToContent": "Saltar al contenido principal",
     "signIn": "Iniciar sesión",
     "getStarted": "Empezar →",
-    "signInToOpen": "Inicia sesión para abrir {label}"
+    "signInToOpen": "Inicia sesión para abrir {label}",
+    "panelWidth": {
+      "label": "Ancho del panel",
+      "sheet": "Estrecho — 440px",
+      "wide": "Ancho — 660px",
+      "full": "Completo — 94%"
+    }
   },
   "prdCreate": {
     "title": "Nuevo PRD",
@@ -6133,11 +6175,26 @@
     "ctaDesc": "Empieza con una instrucción y conviértela en trabajo conectado, revisable y listo para entregar junto a tu equipo y agentes de IA. Sin tarjeta de crédito.",
     "ctaSeeLiveAgents": "Explorar el lienzo",
     "homepageFaq": [
-      { "question": "¿Necesito una cuenta para empezar?", "answer": "No. El primer lienzo es privado y permanece en tu navegador; nada sale del dispositivo hasta que inicias sesión. Al hacerlo, el borrador que ya empezaste se incorpora a tu espacio de trabajo en lugar de descartarse." },
-      { "question": "¿Qué son exactamente los agentes de IA?", "answer": "Son especialistas que desempeñan un rol en tu equipo: CFO, CMO, CTO y otros. Aparecen en la parte inferior de cada lienzo junto a las personas invitadas. Lleva uno al tablero y leerá el trabajo, asumirá la tarea y producirá un cambio que podrás revisar." },
-      { "question": "¿Puedo usar mi propio modelo?", "answer": "Sí. Conecta tu propia cuenta de proveedor y el trabajo se ejecutará en ella. Si un espacio no tiene conexión, el enrutamiento de la plataforma elige un modelo y el coste se carga al medidor del espacio de trabajo." },
-      { "question": "¿En qué se diferencia de una herramienta de chat con IA?", "answer": "Una herramienta de chat produce texto que después tienes que trasladar. Builderforce produce objetos conectados—una página activa, un flujo en ejecución o un conjunto de datos vinculado—que se referencian entre sí y conservan un historial revisable desde la primera idea hasta producción." },
-      { "question": "¿Qué ocurre con el trabajo que un agente realiza por su cuenta?", "answer": "Cada cambio tiene un autor y un diff. Todo lo que afecte a producción, envíe algo en tu nombre o supere un límite de gasto espera la aprobación de una persona designada en el tablero." }
+      {
+        "question": "¿Necesito una cuenta para empezar?",
+        "answer": "No. El primer lienzo es privado y permanece en tu navegador; nada sale del dispositivo hasta que inicias sesión. Al hacerlo, el borrador que ya empezaste se incorpora a tu espacio de trabajo en lugar de descartarse."
+      },
+      {
+        "question": "¿Qué son exactamente los agentes de IA?",
+        "answer": "Son especialistas que desempeñan un rol en tu equipo: CFO, CMO, CTO y otros. Aparecen en la parte inferior de cada lienzo junto a las personas invitadas. Lleva uno al tablero y leerá el trabajo, asumirá la tarea y producirá un cambio que podrás revisar."
+      },
+      {
+        "question": "¿Puedo usar mi propio modelo?",
+        "answer": "Sí. Conecta tu propia cuenta de proveedor y el trabajo se ejecutará en ella. Si un espacio no tiene conexión, el enrutamiento de la plataforma elige un modelo y el coste se carga al medidor del espacio de trabajo."
+      },
+      {
+        "question": "¿En qué se diferencia de una herramienta de chat con IA?",
+        "answer": "Una herramienta de chat produce texto que después tienes que trasladar. Builderforce produce objetos conectados—una página activa, un flujo en ejecución o un conjunto de datos vinculado—que se referencian entre sí y conservan un historial revisable desde la primera idea hasta producción."
+      },
+      {
+        "question": "¿Qué ocurre con el trabajo que un agente realiza por su cuenta?",
+        "answer": "Cada cambio tiene un autor y un diff. Todo lo que afecte a producción, envíe algo en tu nombre o supere un límite de gasto espera la aprobación de una persona designada en el tablero."
+      }
     ],
     "faq": [
       {
@@ -6273,7 +6330,30 @@
       "realDefinition": "En producción. Listo para usar."
     }
   },
-  "shoppingCart": { "title": "Carrito", "close": "Cerrar carrito", "empty": "Tu carrito está vacío", "browse": "Explorar el mercado", "free": "Gratis", "use": "uso", "plusActivation": "+ ${price} de activación", "remove": "Quitar {name}", "dueToday": "A pagar hoy", "thenMonthly": "Luego cada mes", "checkout": "Pago seguro", "redirecting": "Redirigiendo…", "checkoutFailed": "No se pudo iniciar el pago", "mixedCheckout": "Los artículos del mercado y las suscripciones deben pagarse por separado.", "workspaceRequired": "Selecciona un espacio de trabajo antes de comprar este servicio.", "unsupportedCheckout": "Uno o más artículos aún no se pueden comprar mediante este pago.", "purchaseComplete": "{count, plural, one {Compra completada} other {# compras completadas}}.", "purchaseHistory": "Historial de compras", "clear": "Vaciar carrito", "signInPrompt": "Inicia sesión para completar la compra", "createAccount": "Crear cuenta", "signIn": "Iniciar sesión" },
+  "shoppingCart": {
+    "title": "Carrito",
+    "close": "Cerrar carrito",
+    "empty": "Tu carrito está vacío",
+    "browse": "Explorar el mercado",
+    "free": "Gratis",
+    "use": "uso",
+    "plusActivation": "+ ${price} de activación",
+    "remove": "Quitar {name}",
+    "dueToday": "A pagar hoy",
+    "thenMonthly": "Luego cada mes",
+    "checkout": "Pago seguro",
+    "redirecting": "Redirigiendo…",
+    "checkoutFailed": "No se pudo iniciar el pago",
+    "mixedCheckout": "Los artículos del mercado y las suscripciones deben pagarse por separado.",
+    "workspaceRequired": "Selecciona un espacio de trabajo antes de comprar este servicio.",
+    "unsupportedCheckout": "Uno o más artículos aún no se pueden comprar mediante este pago.",
+    "purchaseComplete": "{count, plural, one {Compra completada} other {# compras completadas}}.",
+    "purchaseHistory": "Historial de compras",
+    "clear": "Vaciar carrito",
+    "signInPrompt": "Inicia sesión para completar la compra",
+    "createAccount": "Crear cuenta",
+    "signIn": "Iniciar sesión"
+  },
   "pricing": {
     "enabledModulesTitle": "Tus módulos activados ({count})",
     "enabledModulesDescription": "Los precios del plan y los límites de uso compartidos se aplican a este conjunto de funciones.",
@@ -6345,7 +6425,22 @@
     "teamsCostNoteYear": "${perSeat}/asiento/año — facturado como ${total}/año",
     "teamsCostNoteMonth": "${perSeat}/asiento/mes — facturado como ${total}/mes",
     "managedAddon": "Complemento: <b>AgentHost gestionado</b> — ${price}/mes por cada AgentHost alojado. Ejecutamos tu instancia de BuilderForce Agents por ti — sin Docker, sin DevOps.",
-    "phone": { "eyebrow": "Complemento de retención", "title": "Teléfono empresarial", "description": "Dale a tu empresa un número de EE. UU. para voz, SMS y MMS sin hardware nuevo.", "dedicatedNumber": "Número empresarial dedicado", "forwarding": "Desvía llamadas al teléfono que ya usas", "allowance": "{minutes} minutos, {sms} SMS y {mms} MMS incluidos al mes", "overages": "Excedentes: ${minute}/minuto, ${sms}/segmento SMS, ${mms}/MMS.", "learnMore": "Explorar Teléfono empresarial", "addonFor": "Complemento para Pro y Teams", "perMonth": "/mes", "activation": "Activación única de ${price}", "addToCart": "Añadir al carrito", "viewCart": "Ver carrito", "eligibility": "Requiere una suscripción Pro o Teams activa." },
+    "phone": {
+      "eyebrow": "Complemento de retención",
+      "title": "Teléfono empresarial",
+      "description": "Dale a tu empresa un número de EE. UU. para voz, SMS y MMS sin hardware nuevo.",
+      "dedicatedNumber": "Número empresarial dedicado",
+      "forwarding": "Desvía llamadas al teléfono que ya usas",
+      "allowance": "{minutes} minutos, {sms} SMS y {mms} MMS incluidos al mes",
+      "overages": "Excedentes: ${minute}/minuto, ${sms}/segmento SMS, ${mms}/MMS.",
+      "learnMore": "Explorar Teléfono empresarial",
+      "addonFor": "Complemento para Pro y Teams",
+      "perMonth": "/mes",
+      "activation": "Activación única de ${price}",
+      "addToCart": "Añadir al carrito",
+      "viewCart": "Ver carrito",
+      "eligibility": "Requiere una suscripción Pro o Teams activa."
+    },
     "relatedHeading": "Antes de decidir",
     "planFeatures": [
       "1 AgentHost",
@@ -6364,7 +6459,16 @@
       "Controles de costos por asiento"
     ]
   },
-  "phonePage": { "seoTitle": "Teléfono empresarial — Builderforce.ai", "seoDescription": "Un número empresarial dedicado para voz, SMS y MMS.", "active": "El teléfono empresarial está activo", "provisioning": "Tu número está listo para aprovisionarse y asignarse.", "loading": "Cargando precios…", "createAccount": "Crear una cuenta", "voiceMessaging": "Voz y mensajería", "transparentUsage": "Precios de uso transparentes" },
+  "phonePage": {
+    "seoTitle": "Teléfono empresarial — Builderforce.ai",
+    "seoDescription": "Un número empresarial dedicado para voz, SMS y MMS.",
+    "active": "El teléfono empresarial está activo",
+    "provisioning": "Tu número está listo para aprovisionarse y asignarse.",
+    "loading": "Cargando precios…",
+    "createAccount": "Crear una cuenta",
+    "voiceMessaging": "Voz y mensajería",
+    "transparentUsage": "Precios de uso transparentes"
+  },
   "product": {
     "seo": {
       "title": "Producto — Crea, entrena, orquesta y gobierna tu fuerza de trabajo de IA",
@@ -8188,6 +8292,42 @@
       "evalTitle": "Puntuación de evaluación de IA (0-1)",
       "hired": "Contratado {count}×",
       "inUse": "{count} en uso"
+    },
+    "family": {
+      "label": "Explorar",
+      "talent": "Talento",
+      "company": "Empresas",
+      "companySoon": {
+        "soonTitle": "El directorio de empresas abre con el grafo de empresas",
+        "soonBody": "Reclamar un negocio escribe un registro de propiedad verificado, sienta al CEO y activa Finanzas, Ingresos, Crecimiento, Personas, Contratación, Inversores y Gobernanza para él. La superficie de publicación llega con ese registro; hasta entonces esta familia se muestra visible e inactiva en lugar de oculta, para que veas lo que viene.",
+        "soonAction": "Ver qué desbloquea una empresa"
+      },
+      "agent": "Agentes",
+      "asset": "Recursos",
+      "publishTalent": "Publicar un anuncio",
+      "publishCompany": "Publicar una empresa",
+      "publishAgent": "Publicar un agente",
+      "publishAsset": "Publicar un recurso",
+      "kindLabel": "Tipo",
+      "kind": {
+        "person": "Personas",
+        "gig": "Encargos",
+        "business": "Negocios",
+        "storefront": "Tiendas",
+        "builtin": "Integrados",
+        "community": "Comunidad",
+        "model": "Modelos",
+        "skill": "Habilidades",
+        "persona": "Perfiles",
+        "knowledge": "Conocimiento",
+        "all": "Todo"
+      },
+      "note": {
+        "talent": "Personas y encargos. Para una sesión, una persona y un agente son el mismo tipo de participante, pero no el mismo tipo de anuncio: una tiene disponibilidad y tarifa; el otro, precio y puesto.",
+        "company": "Reclama el negocio que diriges y toda la operación se ajusta a él. El directorio de empresas que no son tuyas llega con el grafo de empresas.",
+        "agent": "No hay una página de Agentes aparte: un agente es un anuncio cuya compra escribe una fila en tu equipo, así que catálogo y equipo nunca se separan.",
+        "asset": "Lo que crean los constructores y pueden vender. Cada recurso se instala en la superficie que lo posee —una habilidad en Conocimiento, una plantilla en Proyectos— nunca en una nueva."
+      }
     }
   },
   "models": {
@@ -12356,7 +12496,9 @@
     "mediaKit": "Kit de medios",
     "toggleMenu": "Alternar menú",
     "switchToLight": "Cambiar al modo claro",
-    "switchToDark": "Cambiar al modo oscuro"
+    "switchToDark": "Cambiar al modo oscuro",
+    "openCanvas": "Abrir el lienzo →",
+    "features": "Funciones"
   },
   "tutorials": {
     "seo": {
@@ -12586,7 +12728,9 @@
     "searchLabel": "Buscar novedades del producto",
     "searchPlaceholder": "Buscar novedades o versiones…",
     "filterLabel": "Filtrar novedades por categoría",
-    "filters": { "all": "Todas" },
+    "filters": {
+      "all": "Todas"
+    },
     "showingCount": "{count, plural, one {Se muestra # actualización} other {Se muestran # actualizaciones}}",
     "latest": "Más reciente",
     "noResultsTitle": "No hay novedades coincidentes",
@@ -12694,10 +12838,6 @@
         "governance": "Veamos la auditoría SOC 2 continua, la remediación y el registro de auditoría."
       },
       "nav": {
-        "dashboard": {
-          "title": "Construye lo que sea",
-          "body": "Describe lo que quieres en lenguaje natural y un agente de IA empieza a construirlo, sin configuración."
-        },
         "projects": {
           "title": "El tablero compartido",
           "body": "Personas y agentes de IA en un mismo tablero. Arrastra un ticket a Listo y un agente lo planifica, escribe el código y abre un pull request."
@@ -12717,6 +12857,10 @@
         "knowledge": {
           "title": "Conocimiento y gobernanza",
           "body": "SOP, procesos y políticas con versionado y acuse de lectura como evidencia de auditoría."
+        },
+        "create": {
+          "title": "Empieza en el lienzo",
+          "body": "Describe lo que quieres en lenguaje natural y un agente de IA empieza a construirlo, sin configuración."
         }
       }
     }
@@ -12858,8 +13002,19 @@
     "subtitle": "Put the experiences you create in BuilderForce directly inside your product, website, or customer portal with one script and independently governed capabilities.",
     "activeCapabilities": "capabilities active",
     "tabsLabel": "Embedded capability sections",
-    "tabs": { "features": "Features", "install": "Install", "consent": "Consent log", "surfaces": "BuilderForce surfaces" },
-    "categories": { "all": "All", "engage": "Engage", "measure": "Measure", "govern": "Govern", "operate": "Operate" },
+    "tabs": {
+      "features": "Features",
+      "install": "Install",
+      "consent": "Consent log",
+      "surfaces": "BuilderForce surfaces"
+    },
+    "categories": {
+      "all": "All",
+      "engage": "Engage",
+      "measure": "Measure",
+      "govern": "Govern",
+      "operate": "Operate"
+    },
     "search": "Search embedded capabilities…",
     "examples": "{count, plural, one {# example} other {# examples}}",
     "toggleLabel": "Toggle {feature}",
@@ -12876,7 +13031,11 @@
       "loading": "Loading…",
       "enable": "Enable embedded app surfaces",
       "capabilities": "Capabilities",
-      "capability": { "product": "Product", "agile": "Agile", "security": "Security" },
+      "capability": {
+        "product": "Product",
+        "agile": "Agile",
+        "security": "Security"
+      },
       "saving": "Saving…",
       "reviewEnable": "Review and enable…",
       "save": "Save",
@@ -12884,7 +13043,10 @@
       "loadError": "Could not load app-surface settings.",
       "saveError": "Could not save app-surface settings."
     },
-    "install": { "title": "One script, every capability", "description": "Install this once on the customer site. Feature changes apply on the next page load without redeploying the host." },
+    "install": {
+      "title": "One script, every capability",
+      "description": "Install this once on the customer site. Feature changes apply on the next page load without redeploying the host."
+    },
     "consent": {
       "title": "Consent log",
       "description": "An immutable workspace history of every capability opt-in and opt-out.",
@@ -12892,22 +13054,77 @@
       "enableTitle": "Enable {feature}?",
       "auditNotice": "Your account, timestamp, and consent text version {version} are recorded for audit. You can revoke access at any time.",
       "agree": "I consent, enable feature",
-      "actions": { "OPT_IN": "Enabled", "OPT_OUT": "Disabled" }
+      "actions": {
+        "OPT_IN": "Enabled",
+        "OPT_OUT": "Disabled"
+      }
     },
     "features": {
-      "usage_tracking": { "name": "Usage tracking", "description": "Track page views, custom events, identities, and feature engagement from customer sites.", "consent": "Sends page views, events, and identified-user traits to BuilderForce for product analytics and adoption signals." },
-      "support_widget": { "name": "Support widget", "description": "Embed an AI help experience that answers from your knowledge and escalates to people.", "consent": "Sends visitor questions, matched knowledge references, and the originating page to BuilderForce support." },
-      "feedback_widget": { "name": "Feedback widget", "description": "Capture ideas, bugs, feature requests, and contextual customer feedback.", "consent": "Sends what the visitor types, optional contact details, and the originating page to BuilderForce." },
-      "heatmaps": { "name": "Heatmaps", "description": "Measure click locations and scroll depth to understand real customer behavior.", "consent": "Captures click coordinates and scroll depth and aggregates them into interaction heatmaps." },
-      "feature_management": { "name": "Feature management", "description": "Evaluate remotely managed flags and variants for identified users.", "consent": "Sends flag keys and the targeting attributes configured by your workspace for evaluation." },
-      "terms_gate": { "name": "Terms gate", "description": "Require acceptance of a versioned agreement before a visitor can continue.", "consent": "Displays a blocking terms experience and records acceptance or decline against the active version." },
-      "sourcing": { "name": "Contact sourcing", "description": "Add governed contact lookup and enrichment to forms and internal tools.", "consent": "Runs customer-triggered contact lookups and charges them to this workspace's enrichment allowance." },
-      "lead_forms": { "name": "Lead forms", "description": "Publish lead-capture forms inline, in a drawer, or as a standalone frame.", "consent": "Stores submitted form data in this workspace and attributes it to the originating site." },
-      "push_notifications": { "name": "Push notifications", "description": "Ask for browser permission and deliver targeted web and PWA notifications.", "consent": "Stores browser push subscription details and delivers workspace-authored notification campaigns." },
-      "onboarding": { "name": "Onboarding", "description": "Turn Canvas-authored guided tours into live, target-aware product onboarding.", "consent": "Displays the published onboarding flow and records visitor progress and completion." },
-      "cookie_consent": { "name": "Cookie consent", "description": "Gate optional analytics with a configurable, auditable consent banner.", "consent": "Stores the visitor's consent choice and prevents optional tracking until it is accepted." },
-      "hr_widget": { "name": "HR widget", "description": "Embed personnel cards, leave requests, and document actions in a host portal.", "consent": "Displays authorized HR actions and sends submitted HR requests to this workspace." },
-      "status_page": { "name": "Public status page", "description": "Publish live service health as an inline component or standalone status page.", "consent": "Publishes the workspace's selected monitor status and incident updates to the customer site." }
+      "usage_tracking": {
+        "name": "Usage tracking",
+        "description": "Track page views, custom events, identities, and feature engagement from customer sites.",
+        "consent": "Sends page views, events, and identified-user traits to BuilderForce for product analytics and adoption signals."
+      },
+      "support_widget": {
+        "name": "Support widget",
+        "description": "Embed an AI help experience that answers from your knowledge and escalates to people.",
+        "consent": "Sends visitor questions, matched knowledge references, and the originating page to BuilderForce support."
+      },
+      "feedback_widget": {
+        "name": "Feedback widget",
+        "description": "Capture ideas, bugs, feature requests, and contextual customer feedback.",
+        "consent": "Sends what the visitor types, optional contact details, and the originating page to BuilderForce."
+      },
+      "heatmaps": {
+        "name": "Heatmaps",
+        "description": "Measure click locations and scroll depth to understand real customer behavior.",
+        "consent": "Captures click coordinates and scroll depth and aggregates them into interaction heatmaps."
+      },
+      "feature_management": {
+        "name": "Feature management",
+        "description": "Evaluate remotely managed flags and variants for identified users.",
+        "consent": "Sends flag keys and the targeting attributes configured by your workspace for evaluation."
+      },
+      "terms_gate": {
+        "name": "Terms gate",
+        "description": "Require acceptance of a versioned agreement before a visitor can continue.",
+        "consent": "Displays a blocking terms experience and records acceptance or decline against the active version."
+      },
+      "sourcing": {
+        "name": "Contact sourcing",
+        "description": "Add governed contact lookup and enrichment to forms and internal tools.",
+        "consent": "Runs customer-triggered contact lookups and charges them to this workspace's enrichment allowance."
+      },
+      "lead_forms": {
+        "name": "Lead forms",
+        "description": "Publish lead-capture forms inline, in a drawer, or as a standalone frame.",
+        "consent": "Stores submitted form data in this workspace and attributes it to the originating site."
+      },
+      "push_notifications": {
+        "name": "Push notifications",
+        "description": "Ask for browser permission and deliver targeted web and PWA notifications.",
+        "consent": "Stores browser push subscription details and delivers workspace-authored notification campaigns."
+      },
+      "onboarding": {
+        "name": "Onboarding",
+        "description": "Turn Canvas-authored guided tours into live, target-aware product onboarding.",
+        "consent": "Displays the published onboarding flow and records visitor progress and completion."
+      },
+      "cookie_consent": {
+        "name": "Cookie consent",
+        "description": "Gate optional analytics with a configurable, auditable consent banner.",
+        "consent": "Stores the visitor's consent choice and prevents optional tracking until it is accepted."
+      },
+      "hr_widget": {
+        "name": "HR widget",
+        "description": "Embed personnel cards, leave requests, and document actions in a host portal.",
+        "consent": "Displays authorized HR actions and sends submitted HR requests to this workspace."
+      },
+      "status_page": {
+        "name": "Public status page",
+        "description": "Publish live service health as an inline component or standalone status page.",
+        "consent": "Publishes the workspace's selected monitor status and incident updates to the customer site."
+      }
     }
   },
   "embedInstall": {
@@ -13734,10 +13951,43 @@
       "guidedTour": "Visita guiada"
     },
     "tourBuilder": {
-      "defaultObjectTitle": "Visita de incorporación al producto", "defaultOfferTitle": "Te damos la bienvenida. ¿Quieres una visita rápida?", "defaultOfferBody": "Aprende lo esencial en unos pocos pasos. Puedes salir de la visita en cualquier momento.", "defaultStartLabel": "Iniciar visita", "defaultCancelLabel": "Ahora no", "defaultStep1Title": "Orientar al usuario", "defaultStep1Body": "Explica la primera área importante y por qué es relevante.", "defaultStep2Title": "Mostrar la acción clave", "defaultStep2Body": "Destaca la acción que ayuda al usuario a avanzar.",
-      "closePreview": "Cerrar vista previa", "stepOf": "{current} de {total}", "targetConnected": "Objetivo conectado", "targetNeeded": "Elige un objeto objetivo", "back": "Atrás", "finish": "Finalizar", "next": "Siguiente", "offer": "Oferta de visita",
-      "stepCount": "{count, plural, one {# paso} other {# pasos}}", "visitCount": "Ofrecer tras {count, plural, one {# visita} other {# visitas}}", "escapeEnabled": "Salida activada",
-      "settings": "Ajustes de la visita guiada", "settingsHint": "Diseña una visita opcional y conecta cada paso con el objeto del Lienzo que debe destacar.", "draftSteps": "Borrador · {count} pasos", "offerTitle": "Título de la oferta", "offerBody": "Descripción de la oferta", "version": "Versión de la visita", "minimumVisits": "Visitas antes de ofrecer", "blurBackground": "Desenfocar el fondo de la oferta", "escapeHatch": "Ofrecer siempre cerrar y Escape", "steps": "Pasos de la visita", "addStep": "Añadir paso", "newStepTitle": "Nuevo paso", "stepTitle": "Título del paso", "stepBody": "Descripción del paso", "targetObject": "Objeto que destacar", "chooseTarget": "Elige un objeto", "removeStep": "Eliminar paso"
+      "defaultObjectTitle": "Visita de incorporación al producto",
+      "defaultOfferTitle": "Te damos la bienvenida. ¿Quieres una visita rápida?",
+      "defaultOfferBody": "Aprende lo esencial en unos pocos pasos. Puedes salir de la visita en cualquier momento.",
+      "defaultStartLabel": "Iniciar visita",
+      "defaultCancelLabel": "Ahora no",
+      "defaultStep1Title": "Orientar al usuario",
+      "defaultStep1Body": "Explica la primera área importante y por qué es relevante.",
+      "defaultStep2Title": "Mostrar la acción clave",
+      "defaultStep2Body": "Destaca la acción que ayuda al usuario a avanzar.",
+      "closePreview": "Cerrar vista previa",
+      "stepOf": "{current} de {total}",
+      "targetConnected": "Objetivo conectado",
+      "targetNeeded": "Elige un objeto objetivo",
+      "back": "Atrás",
+      "finish": "Finalizar",
+      "next": "Siguiente",
+      "offer": "Oferta de visita",
+      "stepCount": "{count, plural, one {# paso} other {# pasos}}",
+      "visitCount": "Ofrecer tras {count, plural, one {# visita} other {# visitas}}",
+      "escapeEnabled": "Salida activada",
+      "settings": "Ajustes de la visita guiada",
+      "settingsHint": "Diseña una visita opcional y conecta cada paso con el objeto del Lienzo que debe destacar.",
+      "draftSteps": "Borrador · {count} pasos",
+      "offerTitle": "Título de la oferta",
+      "offerBody": "Descripción de la oferta",
+      "version": "Versión de la visita",
+      "minimumVisits": "Visitas antes de ofrecer",
+      "blurBackground": "Desenfocar el fondo de la oferta",
+      "escapeHatch": "Ofrecer siempre cerrar y Escape",
+      "steps": "Pasos de la visita",
+      "addStep": "Añadir paso",
+      "newStepTitle": "Nuevo paso",
+      "stepTitle": "Título del paso",
+      "stepBody": "Descripción del paso",
+      "targetObject": "Objeto que destacar",
+      "chooseTarget": "Elige un objeto",
+      "removeStep": "Eliminar paso"
     },
     "canvasOutline": "Esquema accesible del lienzo",
     "canvasGestureToggle": "Arrastrar para seleccionar",
@@ -15508,15 +15758,93 @@
     "useAnotherAccount": "Usar otra cuenta"
   },
   "about": {
-    "seo": { "title": "Sobre Builderforce.ai — Un sistema operativo para crear y gestionar", "description": "Conoce Builderforce: el sistema operativo conectado donde equipos y agentes de IA crean, gestionan, gobiernan y entregan con un contexto compartido." },
-    "hero": { "eyebrow": "Sobre Builderforce", "title": "Crea el producto. Gestiona la empresa. Un solo sistema.", "lead": "Builderforce incorpora la inteligencia de supervivencia para startups de BurnRateOS al lienzo creativo para personas y agentes de IA, conectando la idea, el negocio y el trabajo que la hace realidad.", "primaryCta": "Empieza gratis", "secondaryCta": "Reserva una demo", "domains": "dominios operativos", "foundations": "bases compartidas", "workspace": "espacio conectado", "core": "De la idea al resultado", "visualAria": "Sistema operativo Builderforce que conecta producto, finanzas, ingresos y gobierno" },
-    "thesis": { "eyebrow": "Por qué existimos", "title": "Una empresa es un sistema. Su software también debería serlo.", "body": "Las startups no fracasan en silos departamentales ordenados. Una decisión de producto cambia el runway. La opinión del cliente cambia la hoja de ruta. Un requisito de seguridad cambia la entrega. Builderforce mantiene visibles estas relaciones y ofrece a personas y agentes un camino gobernado desde la decisión hasta la acción." },
-    "promises": { "eyebrow": "La diferencia de Builderforce", "title": "Crea con libertad. Opera con claridad. Entrega con control.", "items": [{ "title": "Crea desde la intención", "description": "Convierte una idea en sitios web, flujos, prototipos, datos, modelos, planes y productos conectados en un lienzo visual." }, { "title": "Opera sobre una verdad compartida", "description": "Conecta producto, finanzas, ingresos, clientes, personas, inversores, marketing y riesgo sin reconstruir el contexto en cada herramienta." }, { "title": "Convierte decisiones en acciones", "description": "Sitúa agentes especialistas junto al trabajo, revisa los cambios propuestos, conserva la evidencia y lleva el trabajo aprobado a producción." }] },
-    "system": { "eyebrow": "Lo que hemos creado", "title": "Toda la visión operativa, conectada con la ejecución", "lead": "Nueve dominios operativos reúnen el alcance de supervivencia de BurnRateOS. Tres bases aportan a cada dominio la misma inteligencia, contexto empresarial, integraciones y ejecución gobernada de Builderforce.", "domains": "Dominios operativos", "foundations": "Bases compartidas" },
-    "story": { "eyebrow": "Nuestra historia", "title": "Dos ideas necesarias se convirtieron en una plataforma.", "bodyOne": "BurnRateOS nació de una observación directa: los equipos con talento pueden entregar sin parar y aun así quedarse sin tiempo o dinero. Conectó runway, evidencia del cliente, cadencia operativa y decisiones comerciales para medir el progreso por supervivencia, no solo por actividad.", "bodyTwo": "Builderforce nació de la otra mitad del problema: ideas, artefactos, personas y agentes de IA estaban dispersos en herramientas desconectadas. Al unirlos se crea un ciclo único: de la señal de negocio a la decisión creativa, la ejecución gobernada y el resultado medible." },
-    "principles": { "eyebrow": "Cómo construimos", "title": "Principios para un sistema operativo agéntico", "items": [{ "title": "Primero la startup", "description": "Cada capacidad debe ayudar al equipo a validar más rápido, conservar recursos, generar ingresos, reducir riesgo o crear valor para el cliente." }, { "title": "Conectado por defecto", "description": "Ideas, datos, decisiones, artefactos, trabajo y resultados deben seguir enlazados, no convertirse en copias dentro de otra herramienta." }, { "title": "Las personas siguen en el ciclo", "description": "Los agentes amplían el equipo; no eliminan la responsabilidad. La revisión, aprobación, permisos y propiedad clara forman parte del flujo." }, { "title": "Evidencia antes que espectáculo", "description": "Los objetos reales, límites visibles, registros de ejecución y resultados medibles importan más que una respuesta vistosa e imposible de verificar." }] },
-    "trust": { "eyebrow": "Seguridad y confianza", "title": "El gobierno debe estar junto al trabajo, no después.", "body": "Roles, aprobaciones, controles de credenciales, historial de auditoría, flujos de privacidad y evidencia del sistema forman parte de la arquitectura para pasar de la experimentación a una operación responsable.", "cta": "Explorar confianza y auditorías" },
-    "cta": { "eyebrow": "Crea lo que importa", "title": "Trae tu próxima idea y la empresa que hay detrás.", "body": "Empieza en el lienzo, conecta el contexto operativo y ofrece a personas y agentes un lugar donde convertir intención en resultados.", "primary": "Empieza a crear gratis", "secondary": "Explorar todas las capacidades" }
+    "seo": {
+      "title": "Sobre Builderforce.ai — Un sistema operativo para crear y gestionar",
+      "description": "Conoce Builderforce: el sistema operativo conectado donde equipos y agentes de IA crean, gestionan, gobiernan y entregan con un contexto compartido."
+    },
+    "hero": {
+      "eyebrow": "Sobre Builderforce",
+      "title": "Crea el producto. Gestiona la empresa. Un solo sistema.",
+      "lead": "Builderforce incorpora la inteligencia de supervivencia para startups de BurnRateOS al lienzo creativo para personas y agentes de IA, conectando la idea, el negocio y el trabajo que la hace realidad.",
+      "primaryCta": "Empieza gratis",
+      "secondaryCta": "Reserva una demo",
+      "domains": "dominios operativos",
+      "foundations": "bases compartidas",
+      "workspace": "espacio conectado",
+      "core": "De la idea al resultado",
+      "visualAria": "Sistema operativo Builderforce que conecta producto, finanzas, ingresos y gobierno"
+    },
+    "thesis": {
+      "eyebrow": "Por qué existimos",
+      "title": "Una empresa es un sistema. Su software también debería serlo.",
+      "body": "Las startups no fracasan en silos departamentales ordenados. Una decisión de producto cambia el runway. La opinión del cliente cambia la hoja de ruta. Un requisito de seguridad cambia la entrega. Builderforce mantiene visibles estas relaciones y ofrece a personas y agentes un camino gobernado desde la decisión hasta la acción."
+    },
+    "promises": {
+      "eyebrow": "La diferencia de Builderforce",
+      "title": "Crea con libertad. Opera con claridad. Entrega con control.",
+      "items": [
+        {
+          "title": "Crea desde la intención",
+          "description": "Convierte una idea en sitios web, flujos, prototipos, datos, modelos, planes y productos conectados en un lienzo visual."
+        },
+        {
+          "title": "Opera sobre una verdad compartida",
+          "description": "Conecta producto, finanzas, ingresos, clientes, personas, inversores, marketing y riesgo sin reconstruir el contexto en cada herramienta."
+        },
+        {
+          "title": "Convierte decisiones en acciones",
+          "description": "Sitúa agentes especialistas junto al trabajo, revisa los cambios propuestos, conserva la evidencia y lleva el trabajo aprobado a producción."
+        }
+      ]
+    },
+    "system": {
+      "eyebrow": "Lo que hemos creado",
+      "title": "Toda la visión operativa, conectada con la ejecución",
+      "lead": "Nueve dominios operativos reúnen el alcance de supervivencia de BurnRateOS. Tres bases aportan a cada dominio la misma inteligencia, contexto empresarial, integraciones y ejecución gobernada de Builderforce.",
+      "domains": "Dominios operativos",
+      "foundations": "Bases compartidas"
+    },
+    "story": {
+      "eyebrow": "Nuestra historia",
+      "title": "Dos ideas necesarias se convirtieron en una plataforma.",
+      "bodyOne": "BurnRateOS nació de una observación directa: los equipos con talento pueden entregar sin parar y aun así quedarse sin tiempo o dinero. Conectó runway, evidencia del cliente, cadencia operativa y decisiones comerciales para medir el progreso por supervivencia, no solo por actividad.",
+      "bodyTwo": "Builderforce nació de la otra mitad del problema: ideas, artefactos, personas y agentes de IA estaban dispersos en herramientas desconectadas. Al unirlos se crea un ciclo único: de la señal de negocio a la decisión creativa, la ejecución gobernada y el resultado medible."
+    },
+    "principles": {
+      "eyebrow": "Cómo construimos",
+      "title": "Principios para un sistema operativo agéntico",
+      "items": [
+        {
+          "title": "Primero la startup",
+          "description": "Cada capacidad debe ayudar al equipo a validar más rápido, conservar recursos, generar ingresos, reducir riesgo o crear valor para el cliente."
+        },
+        {
+          "title": "Conectado por defecto",
+          "description": "Ideas, datos, decisiones, artefactos, trabajo y resultados deben seguir enlazados, no convertirse en copias dentro de otra herramienta."
+        },
+        {
+          "title": "Las personas siguen en el ciclo",
+          "description": "Los agentes amplían el equipo; no eliminan la responsabilidad. La revisión, aprobación, permisos y propiedad clara forman parte del flujo."
+        },
+        {
+          "title": "Evidencia antes que espectáculo",
+          "description": "Los objetos reales, límites visibles, registros de ejecución y resultados medibles importan más que una respuesta vistosa e imposible de verificar."
+        }
+      ]
+    },
+    "trust": {
+      "eyebrow": "Seguridad y confianza",
+      "title": "El gobierno debe estar junto al trabajo, no después.",
+      "body": "Roles, aprobaciones, controles de credenciales, historial de auditoría, flujos de privacidad y evidencia del sistema forman parte de la arquitectura para pasar de la experimentación a una operación responsable.",
+      "cta": "Explorar confianza y auditorías"
+    },
+    "cta": {
+      "eyebrow": "Crea lo que importa",
+      "title": "Trae tu próxima idea y la empresa que hay detrás.",
+      "body": "Empieza en el lienzo, conecta el contexto operativo y ofrece a personas y agentes un lugar donde convertir intención en resultados.",
+      "primary": "Empieza a crear gratis",
+      "secondary": "Explorar todas las capacidades"
+    }
   },
   "routeMarketing": {
     "subtitle": "Crea un espacio de trabajo gratuito para usar {surface}, o inicia sesión para continuar con tu trabajo.",
@@ -15530,21 +15858,338 @@
     "relatedReading": "Lecturas relacionadas"
   },
   "burnrateMarketing": {
-    "shared": {"builtFor":"Creado para {persona}","poweredBy":"Impulsado por Builderforce.ai","publicCta":"Empieza gratis","publicSecondaryCta":"Reserva una demo","authenticatedCta":"Abrir espacio de trabajo","authenticatedEyebrow":"Tu espacio operativo","featureHeading":"Capacidades incluidas","publicClosing":"Sustituye herramientas aisladas por un sistema operativo donde cada decisión llega a las personas y agentes que la ejecutan.","authenticatedClosing":"Continúa en Builderforce con el contexto de tu empresa, equipo, agentes y gobierno ya conectados."},
-    "index": {"eyebrow":"El sistema operativo para startups","title":"Cada función conectada con la ejecución","description":"La estructura de producto C-suite de BurnRateOS ahora vive en Builderforce. Explora nueve dominios conectados y sus bases compartidas.","domains":"Dominios de producto","foundations":"Fundamentos","explore":"Explorar"},
+    "shared": {
+      "builtFor": "Creado para {persona}",
+      "poweredBy": "Impulsado por Builderforce.ai",
+      "publicCta": "Empieza gratis",
+      "publicSecondaryCta": "Reserva una demo",
+      "authenticatedCta": "Abrir espacio de trabajo",
+      "authenticatedEyebrow": "Tu espacio operativo",
+      "featureHeading": "Capacidades incluidas",
+      "publicClosing": "Sustituye herramientas aisladas por un sistema operativo donde cada decisión llega a las personas y agentes que la ejecutan.",
+      "authenticatedClosing": "Continúa en Builderforce con el contexto de tu empresa, equipo, agentes y gobierno ya conectados."
+    },
+    "index": {
+      "eyebrow": "El sistema operativo para startups",
+      "title": "Cada función conectada con la ejecución",
+      "description": "La estructura de producto C-suite de BurnRateOS ahora vive en Builderforce. Explora nueve dominios conectados y sus bases compartidas.",
+      "domains": "Dominios de producto",
+      "foundations": "Fundamentos",
+      "explore": "Explorar"
+    },
     "domains": {
-      "productManagement":{"title":"Gestión de producto","tagline":"Descubrimiento, validación y hojas de ruta","hero":"Convierte evidencia del cliente en la hoja de ruta correcta","description":"Da forma a ideas, define el MVP, valida la demanda, prioriza el backlog y conecta las apuestas con la entrega.","features":[{"title":"Descubrimiento de producto","description":"Captura y puntúa oportunidades con evidencia de clientes y mercado."},{"title":"Definición del MVP","description":"Convierte una idea en alcance, supuestos y controles verificables."},{"title":"Hoja de ruta y backlog","description":"Prioriza lanzamientos por valor, adopción, esfuerzo y estrategia."}]},
-      "businessIntelligence":{"title":"Inteligencia empresarial","tagline":"Runway, gasto, previsiones y precios","hero":"Conoce el impacto de cada decisión en tu runway","description":"Modela caja, ingresos, retención, gastos y escenarios junto al trabajo que produce esos números.","features":[{"title":"Runway y burn rate","description":"Sigue caja, gasto mensual, equilibrio y runway en tiempo real."},{"title":"Escenarios de previsión","description":"Compara supuestos, sensibilidad y planes hipotéticos."},{"title":"Economía unitaria","description":"Mide ARR, retención, CAC, LTV, recuperación y precios."}]},
-      "agileSurvival":{"title":"Supervivencia ágil","tagline":"Cada sprint ligado al runway","hero":"Entrega sin desperdiciar un sprint","description":"Combina planificación, retrospectivas, Kanban, capacidad y riesgo con el impacto financiero de cada sprint.","features":[{"title":"Planificación enfocada en supervivencia","description":"Estima con capacidad y runway visibles antes del compromiso."},{"title":"Kanban consciente del gasto","description":"Ve flujo, cuellos de botella, riesgo e impacto financiero."},{"title":"Retrospectivas y velocidad","description":"Convierte señales de entrega en mejoras para el próximo sprint."}]},
-      "salesRevenue":{"title":"Ventas e ingresos","tagline":"ICP, prospectos, pipeline y embudo","hero":"Construye un motor de ingresos visible para todo el equipo","description":"Conecta cuentas objetivo, contactos, secuencias, oportunidades, conversión y previsiones.","features":[{"title":"ICP y prospección","description":"Define clientes ideales, enriquece prospectos y conserva la procedencia."},{"title":"Secuencias y campañas","description":"Coordina contacto, respuestas, seguimiento y conversión."},{"title":"Oportunidades y embudo","description":"Gestiona etapas, cuotas y cambios de previsión."}]},
-      "customerEngagement":{"title":"Interacción con clientes","tagline":"Feedback, soporte, retención y salud","hero":"Convierte cada señal del cliente en acción","description":"Unifica feedback, soporte, onboarding, sentimiento, retención, churn y salud de cuenta.","features":[{"title":"Feedback del cliente","description":"Recoge feedback y llévalo a decisiones de producto y entrega."},{"title":"Salud y retención","description":"Combina uso, NPS, sentimiento y riesgo de abandono."},{"title":"Soporte y onboarding","description":"Coordina tickets, conocimiento, incorporación y seguimiento."}]},
-      "investorIntelligence":{"title":"Inteligencia para inversores","tagline":"Financiación, informes y salud de cartera","hero":"Gestiona inversores con datos vivos de la empresa","description":"Crea pitch decks, informes, data rooms, diligencia, historial de rondas y vistas de cartera.","features":[{"title":"Pitch decks y analítica","description":"Versiona, comparte y mide decks por diapositiva."},{"title":"Informes y data rooms","description":"Prepara comunicaciones aprobadas y materiales de diligencia."},{"title":"Inteligencia de cartera","description":"Sigue financiación, hitos, salud y flujo de operaciones."}]},
-      "operationalCadence":{"title":"Cadencia operativa","tagline":"Personas, metas, reuniones y ritmos","hero":"Mantén la empresa alineada sin añadir reuniones","description":"Conecta objetivos, plantilla, rendimiento, 1:1, check-ins, notas y decisiones.","features":[{"title":"Metas y scorecards","description":"Vincula objetivos, resultados, hitos y métricas."},{"title":"Operaciones de personas","description":"Coordina plantilla, evaluaciones, check-ins y 1:1."},{"title":"Reuniones y decisiones","description":"Captura agendas, transcripciones, responsables y seguimiento."}]},
-      "governanceSecurity":{"title":"Gobierno y seguridad","tagline":"Controles, evidencia, riesgo y privacidad","hero":"Integra el gobierno en el trabajo","description":"Opera controles SOC, evidencia, incidentes, proveedores, privacidad, aprobaciones y auditoría.","features":[{"title":"Controles y evidencia","description":"Gestiona controles SOC, evidencia, formación y eventos."},{"title":"Riesgo de seguridad y proveedores","description":"Sigue incidentes, proveedores, DPA, PII y remediación."},{"title":"Privacidad y aprobaciones","description":"Gestiona solicitudes, consentimiento, versiones y firmas."}]},
-      "marketingGrowth":{"title":"Marketing y crecimiento","tagline":"Campañas, conversión y contenido","hero":"Convierte la atención en crecimiento medible","description":"Crea landing pages, campañas, nutrición, experimentos, contenido, SEO y analítica.","features":[{"title":"Campañas y nutrición","description":"Coordina audiencias, mensajes, altas, entrega y seguimiento."},{"title":"Web y conversión","description":"Crea páginas, formularios, experimentos y heatmaps."},{"title":"Contenido y distribución","description":"Planifica contenido, SEO, social, referidos, email y push."}]},
-      "aiCoach":{"title":"Coach de IA","tagline":"Un asistente, todas las perspectivas ejecutivas","hero":"Aporta la perspectiva ejecutiva correcta a cada decisión","description":"Usa el contexto de CEO, CFO, CRO, CMO, CPO, CTO, CHRO y CISO desde Brain.","features":[{"title":"Ocho perspectivas ejecutivas","description":"Cambia de perspectiva sin perder el contexto."},{"title":"Herramientas de dominio","description":"Usa herramientas de finanzas, producto, crecimiento y riesgo."},{"title":"Acción gobernada","description":"Pasa del consejo a una ejecución aprobada y auditable."}]},
-      "integrations":{"title":"Integraciones y migraciones","tagline":"Conecta las herramientas que conservas","hero":"Una capa operativa sobre tu stack actual","description":"Conecta colaboración, desarrollo, finanzas, CRM y entrega con límites y aprobaciones.","features":[{"title":"Servicios conectados","description":"Importa señales de los sistemas que ya usa tu equipo."},{"title":"Flujos de migración","description":"Mueve trabajo y conocimiento desde herramientas aisladas."},{"title":"Acceso controlado","description":"Gestiona credenciales, ámbitos, aprobaciones y datos."}]},
-      "companiesContacts":{"title":"Empresas y contactos","tagline":"El grafo empresarial compartido","hero":"Un grafo de empresas para todos los dominios","description":"Representa tu empresa, clientes, prospectos, inversores, socios, proveedores y contactos una sola vez.","features":[{"title":"Relaciones empresariales","description":"Modela propietarios, clientes, socios, inversores y proveedores."},{"title":"Procedencia de contactos","description":"Conserva identificadores, fuentes, enriquecimiento e historial."},{"title":"Contexto compartido","description":"Usa un grafo en ventas, finanzas, producto y gobierno."}]}
+      "productManagement": {
+        "title": "Gestión de producto",
+        "tagline": "Descubrimiento, validación y hojas de ruta",
+        "hero": "Convierte evidencia del cliente en la hoja de ruta correcta",
+        "description": "Da forma a ideas, define el MVP, valida la demanda, prioriza el backlog y conecta las apuestas con la entrega.",
+        "features": [
+          {
+            "title": "Descubrimiento de producto",
+            "description": "Captura y puntúa oportunidades con evidencia de clientes y mercado."
+          },
+          {
+            "title": "Definición del MVP",
+            "description": "Convierte una idea en alcance, supuestos y controles verificables."
+          },
+          {
+            "title": "Hoja de ruta y backlog",
+            "description": "Prioriza lanzamientos por valor, adopción, esfuerzo y estrategia."
+          }
+        ]
+      },
+      "businessIntelligence": {
+        "title": "Inteligencia empresarial",
+        "tagline": "Runway, gasto, previsiones y precios",
+        "hero": "Conoce el impacto de cada decisión en tu runway",
+        "description": "Modela caja, ingresos, retención, gastos y escenarios junto al trabajo que produce esos números.",
+        "features": [
+          {
+            "title": "Runway y burn rate",
+            "description": "Sigue caja, gasto mensual, equilibrio y runway en tiempo real."
+          },
+          {
+            "title": "Escenarios de previsión",
+            "description": "Compara supuestos, sensibilidad y planes hipotéticos."
+          },
+          {
+            "title": "Economía unitaria",
+            "description": "Mide ARR, retención, CAC, LTV, recuperación y precios."
+          }
+        ]
+      },
+      "agileSurvival": {
+        "title": "Supervivencia ágil",
+        "tagline": "Cada sprint ligado al runway",
+        "hero": "Entrega sin desperdiciar un sprint",
+        "description": "Combina planificación, retrospectivas, Kanban, capacidad y riesgo con el impacto financiero de cada sprint.",
+        "features": [
+          {
+            "title": "Planificación enfocada en supervivencia",
+            "description": "Estima con capacidad y runway visibles antes del compromiso."
+          },
+          {
+            "title": "Kanban consciente del gasto",
+            "description": "Ve flujo, cuellos de botella, riesgo e impacto financiero."
+          },
+          {
+            "title": "Retrospectivas y velocidad",
+            "description": "Convierte señales de entrega en mejoras para el próximo sprint."
+          }
+        ]
+      },
+      "salesRevenue": {
+        "title": "Ventas e ingresos",
+        "tagline": "ICP, prospectos, pipeline y embudo",
+        "hero": "Construye un motor de ingresos visible para todo el equipo",
+        "description": "Conecta cuentas objetivo, contactos, secuencias, oportunidades, conversión y previsiones.",
+        "features": [
+          {
+            "title": "ICP y prospección",
+            "description": "Define clientes ideales, enriquece prospectos y conserva la procedencia."
+          },
+          {
+            "title": "Secuencias y campañas",
+            "description": "Coordina contacto, respuestas, seguimiento y conversión."
+          },
+          {
+            "title": "Oportunidades y embudo",
+            "description": "Gestiona etapas, cuotas y cambios de previsión."
+          }
+        ]
+      },
+      "customerEngagement": {
+        "title": "Interacción con clientes",
+        "tagline": "Feedback, soporte, retención y salud",
+        "hero": "Convierte cada señal del cliente en acción",
+        "description": "Unifica feedback, soporte, onboarding, sentimiento, retención, churn y salud de cuenta.",
+        "features": [
+          {
+            "title": "Feedback del cliente",
+            "description": "Recoge feedback y llévalo a decisiones de producto y entrega."
+          },
+          {
+            "title": "Salud y retención",
+            "description": "Combina uso, NPS, sentimiento y riesgo de abandono."
+          },
+          {
+            "title": "Soporte y onboarding",
+            "description": "Coordina tickets, conocimiento, incorporación y seguimiento."
+          }
+        ]
+      },
+      "investorIntelligence": {
+        "title": "Inteligencia para inversores",
+        "tagline": "Financiación, informes y salud de cartera",
+        "hero": "Gestiona inversores con datos vivos de la empresa",
+        "description": "Crea pitch decks, informes, data rooms, diligencia, historial de rondas y vistas de cartera.",
+        "features": [
+          {
+            "title": "Pitch decks y analítica",
+            "description": "Versiona, comparte y mide decks por diapositiva."
+          },
+          {
+            "title": "Informes y data rooms",
+            "description": "Prepara comunicaciones aprobadas y materiales de diligencia."
+          },
+          {
+            "title": "Inteligencia de cartera",
+            "description": "Sigue financiación, hitos, salud y flujo de operaciones."
+          }
+        ]
+      },
+      "operationalCadence": {
+        "title": "Cadencia operativa",
+        "tagline": "Personas, metas, reuniones y ritmos",
+        "hero": "Mantén la empresa alineada sin añadir reuniones",
+        "description": "Conecta objetivos, plantilla, rendimiento, 1:1, check-ins, notas y decisiones.",
+        "features": [
+          {
+            "title": "Metas y scorecards",
+            "description": "Vincula objetivos, resultados, hitos y métricas."
+          },
+          {
+            "title": "Operaciones de personas",
+            "description": "Coordina plantilla, evaluaciones, check-ins y 1:1."
+          },
+          {
+            "title": "Reuniones y decisiones",
+            "description": "Captura agendas, transcripciones, responsables y seguimiento."
+          }
+        ]
+      },
+      "governanceSecurity": {
+        "title": "Gobierno y seguridad",
+        "tagline": "Controles, evidencia, riesgo y privacidad",
+        "hero": "Integra el gobierno en el trabajo",
+        "description": "Opera controles SOC, evidencia, incidentes, proveedores, privacidad, aprobaciones y auditoría.",
+        "features": [
+          {
+            "title": "Controles y evidencia",
+            "description": "Gestiona controles SOC, evidencia, formación y eventos."
+          },
+          {
+            "title": "Riesgo de seguridad y proveedores",
+            "description": "Sigue incidentes, proveedores, DPA, PII y remediación."
+          },
+          {
+            "title": "Privacidad y aprobaciones",
+            "description": "Gestiona solicitudes, consentimiento, versiones y firmas."
+          }
+        ]
+      },
+      "marketingGrowth": {
+        "title": "Marketing y crecimiento",
+        "tagline": "Campañas, conversión y contenido",
+        "hero": "Convierte la atención en crecimiento medible",
+        "description": "Crea landing pages, campañas, nutrición, experimentos, contenido, SEO y analítica.",
+        "features": [
+          {
+            "title": "Campañas y nutrición",
+            "description": "Coordina audiencias, mensajes, altas, entrega y seguimiento."
+          },
+          {
+            "title": "Web y conversión",
+            "description": "Crea páginas, formularios, experimentos y heatmaps."
+          },
+          {
+            "title": "Contenido y distribución",
+            "description": "Planifica contenido, SEO, social, referidos, email y push."
+          }
+        ]
+      },
+      "aiCoach": {
+        "title": "Coach de IA",
+        "tagline": "Un asistente, todas las perspectivas ejecutivas",
+        "hero": "Aporta la perspectiva ejecutiva correcta a cada decisión",
+        "description": "Usa el contexto de CEO, CFO, CRO, CMO, CPO, CTO, CHRO y CISO desde Brain.",
+        "features": [
+          {
+            "title": "Ocho perspectivas ejecutivas",
+            "description": "Cambia de perspectiva sin perder el contexto."
+          },
+          {
+            "title": "Herramientas de dominio",
+            "description": "Usa herramientas de finanzas, producto, crecimiento y riesgo."
+          },
+          {
+            "title": "Acción gobernada",
+            "description": "Pasa del consejo a una ejecución aprobada y auditable."
+          }
+        ]
+      },
+      "integrations": {
+        "title": "Integraciones y migraciones",
+        "tagline": "Conecta las herramientas que conservas",
+        "hero": "Una capa operativa sobre tu stack actual",
+        "description": "Conecta colaboración, desarrollo, finanzas, CRM y entrega con límites y aprobaciones.",
+        "features": [
+          {
+            "title": "Servicios conectados",
+            "description": "Importa señales de los sistemas que ya usa tu equipo."
+          },
+          {
+            "title": "Flujos de migración",
+            "description": "Mueve trabajo y conocimiento desde herramientas aisladas."
+          },
+          {
+            "title": "Acceso controlado",
+            "description": "Gestiona credenciales, ámbitos, aprobaciones y datos."
+          }
+        ]
+      },
+      "companiesContacts": {
+        "title": "Empresas y contactos",
+        "tagline": "El grafo empresarial compartido",
+        "hero": "Un grafo de empresas para todos los dominios",
+        "description": "Representa tu empresa, clientes, prospectos, inversores, socios, proveedores y contactos una sola vez.",
+        "features": [
+          {
+            "title": "Relaciones empresariales",
+            "description": "Modela propietarios, clientes, socios, inversores y proveedores."
+          },
+          {
+            "title": "Procedencia de contactos",
+            "description": "Conserva identificadores, fuentes, enriquecimiento e historial."
+          },
+          {
+            "title": "Contexto compartido",
+            "description": "Usa un grafo en ventas, finanzas, producto y gobierno."
+          }
+        ]
+      }
     }
+  },
+  "featuresPage": {
+    "badgeAllSeats": "Todos los puestos",
+    "badgeSystem": "✦ Sistema operativo para startups",
+    "titleLead": "De la idea a la realidad.",
+    "titleSub": "Un lienzo. Todos los puestos.",
+    "lede": "Nueve dominios de negocio, cada uno a cargo de un compañero de la dirección que puedes arrastrar al lienzo, para que cada capacidad tenga a alguien responsable y no un menú que no es de nadie.",
+    "ctaCanvas": "Abrir el lienzo →",
+    "ctaPricing": "Ver precios",
+    "check": {
+      "noCard": "Sin tarjeta",
+      "boardFirst": "Tu lienzo antes que tu cuenta",
+      "soc2": "Preparado para SOC 2"
+    },
+    "overviewTitle": "Resumen de la plataforma",
+    "overviewNote": "…y el recorrido que los conecta.",
+    "stat": {
+      "domains": "Dominios de producto",
+      "seats": "Puestos en tu equipo",
+      "destinations": "Destinos",
+      "features": "Subvistas"
+    },
+    "domainsBadge": "Dominios de producto",
+    "domainsTitle": "{count} dominios, {count} responsables, un lienzo",
+    "domainsLede": "Cada dominio pertenece a un puesto de tu equipo. Ábrelo desde el menú o desde el compañero: ambos llegan a la misma superficie, porque leen la misma lista.",
+    "foundationsBadge": "Fundamentos",
+    "foundationsTitle": "{count} cosas sobre las que se apoya cada puesto",
+    "foundationsLede": "Sustrato transversal. Ningún puesto es dueño de esto y, en particular, ninguno se llama «IA»: el modelo es la superficie, no un departamento.",
+    "foundationBadge": "Fundamento",
+    "arcBadge": "El recorrido",
+    "arcTitle": "Idea → Crear → Operar",
+    "arcLede": "El menú no es una lista de departamentos: es dónde estás en el recorrido, y cada destino ocupa exactamente un lugar.",
+    "arcCol": {
+      "stage": "Etapa",
+      "question": "La pregunta",
+      "where": "Adónde vas"
+    },
+    "arcQuestion": {
+      "idea": "¿Y si…?",
+      "make": "Constrúyelo.",
+      "run": "Opéralo como empresa.",
+      "measure": "¿Está funcionando?",
+      "market": "Vender, comprar, contratar, que te encuentren.",
+      "admin": "Configuración."
+    },
+    "arcNote": "Generada desde la propia navegación del producto, así que esta tabla no puede anunciar un destino inexistente ni omitir uno real.",
+    "faqTitle": "Preguntas que esto plantea",
+    "faq": [
+      {
+        "q": "¿Dónde quedó el menú?",
+        "a": "Ahora hay una sola lista. El panel izquierdo agrupa los destinos por su lugar en el recorrido —Idea, Crear, Operar— y el pie lista a las personas y agentes que los tienen a cargo. Todo lo que antes alcanzabas desde una barra lateral es una de esas dos cosas, y ambas leen el mismo registro, así que un nombre nunca puede diferir."
+      },
+      {
+        "q": "¿Tengo que crear una empresa para usarlo?",
+        "a": "No, y detenerse a mitad de camino es un uso completo y exitoso del producto. Quien publica tres páginas y nunca constituye una empresa no ha fallado en la incorporación. Las filas de negocio siguen listadas todo el tiempo —atenuadas, no ocultas— para que veas lo que hay antes de necesitarlo."
+      },
+      {
+        "q": "¿Qué reemplazó a la sección de IA?",
+        "a": "Sus destinos pasaron a los puestos dueños del trabajo: la clasificación de gastos al CFO, el análisis de contratos a Seguridad, el seguimiento de competidores al CMO, el feedback del pitch al CEO. Un elemento de menú con el nombre de la tecnología delata que el producto aún no decidió de quién es ese trabajo."
+      },
+      {
+        "q": "¿Por qué una página de referencia es un panel?",
+        "a": "Porque perder tu lienzo para leer sobre SOC 2 es un mal intercambio. Sin sesión son páginas normales con URLs normales. Con sesión, la misma página se abre sobre el lienzo en el que trabajabas, y Esc te devuelve con tu agente aún en marcha."
+      },
+      {
+        "q": "¿El marketplace es solo para freelancers?",
+        "a": "No. Cuatro familias conviven: talento, empresas, agentes y recursos. Los agentes no son un área aparte: comprarlos los suma a tu equipo, y por eso el catálogo y tu equipo nunca se separan."
+      }
+    ],
+    "closeTitle": "¿Listo para reemplazar tu stack?",
+    "closeLede": "Una plataforma en vez de cinco y un menú en vez de siete. Empieza en el lienzo; reclama tu empresa cuando la tengas.",
+    "closeFine": "Sin tarjeta · tu lienzo es tuyo antes de registrarte · mejora cuando quieras"
   }
 }

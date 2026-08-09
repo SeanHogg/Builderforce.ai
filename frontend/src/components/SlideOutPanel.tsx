@@ -40,8 +40,33 @@ const PANEL_WIDTH: Record<PanelWidth, string> = {
   full: 'var(--panel-width-full)',
 };
 
+const WIDTH_ORDER: PanelWidth[] = ['sheet', 'wide', 'full'];
+
+const isNamedWidth = (width: PanelWidth | string): width is PanelWidth => width in PANEL_WIDTH;
+
 const resolveWidth = (width: PanelWidth | string): string =>
-  (width in PANEL_WIDTH ? PANEL_WIDTH[width as PanelWidth] : width);
+  (isNamedWidth(width) ? PANEL_WIDTH[width] : width);
+
+/**
+ * The reader's own width choice, remembered per destination (PRD 21 §11.4.4).
+ *
+ * `panelWidth()` picking a default is a POLICY, and a policy cannot know that a
+ * Gantt wants 94% while a settings form does not — only the person reading it
+ * can. So the policy supplies the default and this supplies the final answer.
+ * Keyed per destination deliberately: somebody who widens Finance wants Finance
+ * wide every time and does not want Settings to follow it.
+ */
+const widthKey = (storageKey: string) => `bf-panel-width:${storageKey}`;
+
+function readStoredWidth(storageKey: string | undefined): PanelWidth | null {
+  if (!storageKey || typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(widthKey(storageKey));
+    return raw && isNamedWidth(raw) ? raw : null;
+  } catch {
+    return null;
+  }
+}
 
 export interface SlideOutPanelProps {
   open: boolean;
@@ -69,6 +94,12 @@ export interface SlideOutPanelProps {
   children: React.ReactNode;
   /** One of the three named widths, or a raw CSS length for an unported surface. */
   width?: PanelWidth | string;
+  /**
+   * Turns on the reader's width control and names where the choice is kept.
+   * Omit it and the panel keeps exactly the width the caller asked for — which
+   * is right for a short confirmation sheet, and wrong for a destination.
+   */
+  widthStorageKey?: string;
   /** Which edge the drawer docks to. Default 'right'. Use 'left' when the Brain
    *  (which is right-docked) needs a companion work panel on the opposite side. */
   side?: 'left' | 'right';
@@ -98,10 +129,24 @@ export function SlideOutPanel({
   headerActions,
   children,
   width = 'sheet',
+  widthStorageKey,
   side = 'right',
   zIndex = 9998,
 }: SlideOutPanelProps) {
   const tCommon = useTranslations('common');
+  // Seeded from the policy, overridden by the reader. Read in an effect rather
+  // than in the initialiser so the server and the first hydrated frame agree.
+  const [chosenWidth, setChosenWidth] = useState<PanelWidth | null>(null);
+  useEffect(() => { setChosenWidth(readStoredWidth(widthStorageKey)); }, [widthStorageKey]);
+
+  const chooseWidth = (next: PanelWidth) => {
+    setChosenWidth(next);
+    if (!widthStorageKey) return;
+    try { window.localStorage.setItem(widthKey(widthStorageKey), next); } catch { /* private mode */ }
+  };
+
+  const effectiveWidth = chosenWidth ?? width;
+  const showWidthControl = Boolean(widthStorageKey) && isNamedWidth(effectiveWidth);
   // Portal to <body> so the fixed drawer escapes ancestor stacking contexts
   // (e.g. the app `.shell` has `position: relative; z-index: 1`, which would
   // otherwise trap the drawer below the fixed footer regardless of its z-index).
@@ -140,7 +185,7 @@ export function SlideOutPanel({
           top: 0,
           ...(side === 'left' ? { left: 0 } : { right: 0 }),
           bottom: 0,
-          width: resolveWidth(width),
+          width: resolveWidth(effectiveWidth),
           maxWidth: '100%',
           ...(side === 'left'
             ? { borderRight: '1px solid var(--border-subtle)', boxShadow: '8px 0 24px rgba(0,0,0,0.2)' }
@@ -193,6 +238,24 @@ export function SlideOutPanel({
                 {title != null && (
                   <div style={{ fontWeight: 700, fontSize: 'var(--font-size-card-title)', color: 'var(--text-primary)' }}>{title}</div>
                 )}
+              </div>
+            )}
+            {/* The reader's escape hatch — the thing a full-screen page used to
+                be. Widening never navigates and never remounts the stage. */}
+            {showWidthControl && (
+              <div className="ui-panel-width" role="group" aria-label={tCommon('panelWidth.label')}>
+                {WIDTH_ORDER.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => chooseWidth(option)}
+                    aria-pressed={effectiveWidth === option}
+                    aria-label={tCommon(`panelWidth.${option}`)}
+                    title={tCommon(`panelWidth.${option}`)}
+                  >
+                    <span aria-hidden="true" data-w={option} />
+                  </button>
+                ))}
               </div>
             )}
             {headerActions}

@@ -37,6 +37,7 @@ describe('classifyShell — app-shell deny-list model [1557]', () => {
     expect(classifyShell('/blog/some-post')).toBe('public');
     expect(classifyShell('/tutorials')).toBe('public');
     expect(classifyShell('/pricing')).toBe('public');
+    expect(classifyShell('/crm/phone')).toBe('public');
     expect(classifyShell('/compare')).toBe('public'); // added so the inversion doesn't give marketing the app shell
     expect(classifyShell('/marketplace')).toBe('public');
     // Dedicated Evermind marketing page (app/evermind/page.tsx) must render its
