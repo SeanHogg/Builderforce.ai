@@ -4630,7 +4630,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
               open a sign-up gate, which answered a question nobody asked: they
               wanted to show someone the board, not to create an account. */}
           <button className={styles.secondaryButton} onClick={() => { setShareOpen((value) => !value); setMoreOpen(false); }}>{t('share')} ▾</button>
-          {persistence === 'local' && <button className={`${styles.primaryButton} ${styles.saveButton}`} aria-label={t('saveCollaborate')} onClick={() => requireAccount('save', t('gateSaveTitle'), t('gateSaveBody'))}><span className={styles.saveButtonFull}>{t('saveCollaborate')}</span><span className={styles.saveButtonShort} aria-hidden>{t('save')}</span></button>}
+          {persistence === 'local' && <button className={`${styles.secondaryButton} ${styles.saveButton}`} aria-label={t('saveCollaborate')} onClick={() => requireAccount('save', t('gateSaveTitle'), t('gateSaveBody'))}><span className={styles.saveButtonFull}>{t('saveCollaborate')}</span><span className={styles.saveButtonShort} aria-hidden>{t('save')}</span></button>}
           {moreOpen && <div className={styles.moreMenu} aria-label={t('moreActions')}>
             <span className={styles.moreMenuHeading}>{t('createAndView')}</span>
             <button onClick={() => { setTemplateOpen(true); setMoreOpen(false); }}><span aria-hidden>▦</span>{t('templates')}</button>

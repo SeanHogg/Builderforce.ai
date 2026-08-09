@@ -1189,7 +1189,7 @@
      the prompt. */
   .flowWrap:global(.react-flow) { height:calc(100% - var(--mobile-composer-space)); }
   .node { max-width:calc(100vw - 32px); }
-  .mobileAction { display:inline-flex; min-width:36px; min-height:36px; align-items:center; justify-content:center; padding:7px 8px; }.mobileAction span { display:none; }.primaryButton { min-height:36px; padding:7px 10px; font-size:10px; }.saveButtonFull { display:none; }.saveButtonShort { display:inline; }
+  .mobileAction { display:inline-flex; min-width:36px; min-height:36px; align-items:center; justify-content:center; padding:7px 8px; }.mobileAction span { display:none; }.primaryButton,.saveButton { min-height:36px; padding:7px 10px; font-size:10px; }.saveButton { display:inline-flex; align-items:center; }.saveButtonFull { display:none; }.saveButtonShort { display:inline; }
   .moreMenu { top:44px; right:0; width:min(280px,calc(100vw - 16px)); }
   .shareMenu { top:44px; right:0; width:min(300px,calc(100vw - 16px)); box-sizing:border-box; }
   .palette { top:8px; right:8px; bottom:calc(var(--mobile-composer-space) + 8px); left:44px; width:auto; max-height:none; }

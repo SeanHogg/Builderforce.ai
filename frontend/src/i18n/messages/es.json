@@ -6050,24 +6050,41 @@
     ],
     "featuresHeading": "Todo lo que puedes llevar al lienzo",
     "pricingHeading": "Precios",
+    "pricingTitle": "Empieza gratis. Incorpora al equipo cuando lo necesites.",
     "currentPricing": "Ver precios actuales",
     "pricePerMonth": "/mes",
+    "customPricing": "Personalizado",
     "pricingTeaser": [
       {
+        "id": "free",
         "name": "Gratis",
         "perks": [
           "Espacio de creación privado",
           "1 AgentHost",
           "5 proyectos"
-        ]
+        ],
+        "cta": "Empieza a crear gratis"
       },
       {
+        "id": "pro",
         "name": "Pro",
         "perks": [
           "Hasta 3 AgentHosts",
           "Proyectos ilimitados",
-          "Flujos de aprobación configurados"
-        ]
+          "Flujos de aprobación configurados",
+          "Todo el equipo de agentes ejecutivos"
+        ],
+        "cta": "Ver precios actuales"
+      },
+      {
+        "id": "teams",
+        "name": "Equipos",
+        "perks": [
+          "Límites de gasto por usuario",
+          "Roles, aprobaciones y auditoría",
+          "Usa tu propio modelo"
+        ],
+        "cta": "Habla con nosotros"
       }
     ],
     "blogHeading": "Lo último del blog",

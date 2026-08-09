@@ -6051,24 +6051,41 @@
     ],
     "featuresHeading": "Everything you can bring onto the canvas",
     "pricingHeading": "Pricing",
+    "pricingTitle": "Start free. Bring the team when you need them.",
     "currentPricing": "See current pricing",
     "pricePerMonth": "/month",
+    "customPricing": "Custom",
     "pricingTeaser": [
       {
+        "id": "free",
         "name": "Free",
         "perks": [
           "Private creation workspace",
           "1 AgentHost",
           "5 projects"
-        ]
+        ],
+        "cta": "Start creating free"
       },
       {
+        "id": "pro",
         "name": "Pro",
         "perks": [
           "Up to 3 AgentHosts",
           "Unlimited projects",
-          "Configured approval workflows"
-        ]
+          "Configured approval workflows",
+          "The full C-suite of agent teammates"
+        ],
+        "cta": "See current pricing"
+      },
+      {
+        "id": "teams",
+        "name": "Teams",
+        "perks": [
+          "Per-seat spend limits",
+          "Roles, approvals and audit",
+          "Bring your own model"
+        ],
+        "cta": "Talk to us"
       }
     ],
     "blogHeading": "Latest from the blog",

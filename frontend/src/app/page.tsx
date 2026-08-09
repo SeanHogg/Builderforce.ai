@@ -34,7 +34,18 @@ import {
 
 type StatLabel = { label: string };
 type FaqItem = { question: string; answer: string };
-type PricingTeaser = { name: string; perks: string[] };
+type PricingTeaser = {
+  id: 'free' | 'pro' | 'teams';
+  name: string;
+  perks: string[];
+  cta: string;
+};
+
+const PRICING_HREFS: Record<PricingTeaser['id'], string> = {
+  free: '/register',
+  pro: '/pricing?upgrade=pro',
+  teams: '/book-demo',
+};
 
 /**
  * The homepage is one argument, told in order.
@@ -143,20 +154,28 @@ export default function LandingPage() {
 
         {/* 9 · WHAT IT COSTS */}
         <HomeSection id="pricing">
-          <HomeSectionHeader eyebrow={t('home.beat.pricing')} title={t('home.pricingHeading')} />
-          <HomeGrid columns={2}>
-            {(t.raw('home.pricingTeaser') as PricingTeaser[]).map((plan, index) => (
-              <HomeCard key={plan.name}>
+          <HomeSectionHeader eyebrow={t('home.pricingHeading')} title={t('home.pricingTitle')} />
+          <div className={styles.pricingPlans}>
+            {(t.raw('home.pricingTeaser') as PricingTeaser[]).map((plan) => (
+              <HomeCard
+                key={plan.id}
+                className={`${styles.pricingCard} ${plan.id === 'pro' ? styles.pricingCardFeatured : ''}`}
+              >
                 <CardTitle>{plan.name}</CardTitle>
                 <div className={styles.price}>
-                  {index === 0 ? '$0' : publicPlanPrices
-                    ? `$${publicPlanPrices.pro}${t('home.pricePerMonth')}`
-                    : <Link href="/pricing">{t('home.currentPricing')}</Link>}
+                  {plan.id === 'free' && <><span>$0</span><small>{t('home.pricePerMonth')}</small></>}
+                  {plan.id === 'pro' && (publicPlanPrices
+                    ? <><span>${publicPlanPrices.pro}</span><small>{t('home.pricePerMonth')}</small></>
+                    : <Link href="/pricing">{t('home.currentPricing')}</Link>)}
+                  {plan.id === 'teams' && <span>{t('home.customPricing')}</span>}
                 </div>
                 <ul className={styles.perks}>{plan.perks.map((perk) => <li className={styles.perk} key={perk}>{perk}</li>)}</ul>
+                <div className={styles.pricingCta}>
+                  <HomeButton href={PRICING_HREFS[plan.id]} primary={plan.id === 'pro'}>{plan.cta}</HomeButton>
+                </div>
               </HomeCard>
             ))}
-          </HomeGrid>
+          </div>
         </HomeSection>
 
         {/* 10 · OBJECTIONS — answered immediately before the ask, which is where

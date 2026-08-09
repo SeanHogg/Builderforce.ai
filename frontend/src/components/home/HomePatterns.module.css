@@ -150,11 +150,21 @@
 .statValue { margin-bottom: 8px; color: var(--text-primary); font: 680 clamp(1.65rem, 3vw, 2.25rem)/1 var(--font-display); letter-spacing: -.04em; }
 .statLabel { color: var(--text-muted); font: 600 .72rem/1.45 var(--font-mono); letter-spacing: .02em; }
 
-.price { margin: 24px 0; color: var(--text-primary); font: 680 2rem/1 var(--font-display); letter-spacing: -.04em; }
+.pricingPlans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.pricingCard > article { display: flex; min-height: 100%; flex-direction: column; }
+.pricingCardFeatured {
+  background: var(--surface-card-strong);
+  border-color: var(--coral-bright);
+  box-shadow: var(--shadow-sm);
+}
+.price { display: flex; align-items: baseline; margin: 24px 0; color: var(--text-primary); font: 760 2rem/1 var(--font-display); letter-spacing: -.04em; }
+.price small { color: var(--text-muted); font: 500 .8rem/1.2 var(--font-display); letter-spacing: 0; }
 .price a { color: var(--coral-bright); font-size: var(--font-size-card-title); letter-spacing: 0; }
 .perks { display: grid; gap: 11px; margin: 0; padding: 20px 0 0; list-style: none; border-top: 1px solid var(--border-subtle); }
 .perk { display: flex; gap: 10px; color: var(--text-secondary); font-size: var(--font-size-small); line-height: 1.45; }
-.perk::before { content: '✓'; color: var(--coral-bright); font-weight: 800; }
+.perk::before { content: '✓'; color: var(--success-text); font-weight: 800; }
+.pricingCta { margin-top: auto; padding-top: 28px; }
+.pricingCta > a { width: 100%; }
 
 .form { display: flex; gap: 8px; margin-top: 28px; }
 .form > :global(.ui-input) { min-width: 0; flex: 1; }
@@ -183,6 +193,7 @@
   .header { grid-template-columns: 1fr; gap: 18px; }
   .headerAside { gap: 16px; }
   .grid3, .grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pricingPlans { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .statBand { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stat:nth-child(2) { border-right: 0; }
   .stat:nth-child(-n+2) { border-bottom: 1px solid var(--border-subtle); }
@@ -191,6 +202,7 @@
 @media (max-width: 560px) {
   .section { padding: 64px 18px; }
   .grid2, .grid3, .grid4 { grid-template-columns: 1fr; }
+  .pricingPlans { grid-template-columns: 1fr; }
   .card { padding: 22px; }
   .statBand { width: calc(100% - 36px); }
   .stat { padding: 20px; }

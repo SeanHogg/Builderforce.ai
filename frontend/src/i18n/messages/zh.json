@@ -6050,24 +6050,41 @@
     ],
     "featuresHeading": "你可以带到画布上的一切",
     "pricingHeading": "定价",
+    "pricingTitle": "免费开始，需要时再组建团队。",
     "currentPricing": "查看当前价格",
     "pricePerMonth": "/月",
+    "customPricing": "定制",
     "pricingTeaser": [
       {
+        "id": "free",
         "name": "免费版",
         "perks": [
           "私密创作工作区",
           "1 个 AgentHost",
           "5 个项目"
-        ]
+        ],
+        "cta": "免费开始创作"
       },
       {
+        "id": "pro",
         "name": "Pro",
         "perks": [
           "最多 3 个 AgentHost",
           "无限项目",
-          "已配置的审批工作流"
-        ]
+          "已配置的审批工作流",
+          "完整的高管智能体团队"
+        ],
+        "cta": "查看当前价格"
+      },
+      {
+        "id": "teams",
+        "name": "团队版",
+        "perks": [
+          "按席位设置支出限额",
+          "角色、审批与审计",
+          "接入你自己的模型"
+        ],
+        "cta": "联系我们"
       }
     ],
     "blogHeading": "博客最新文章",

@@ -6050,24 +6050,41 @@
     ],
     "featuresHeading": "Tout ce que vous pouvez apporter au canevas",
     "pricingHeading": "Tarifs",
+    "pricingTitle": "Commencez gratuitement. Ajoutez l’équipe quand vous en avez besoin.",
     "currentPricing": "Voir les tarifs actuels",
     "pricePerMonth": "/mois",
+    "customPricing": "Sur mesure",
     "pricingTeaser": [
       {
+        "id": "free",
         "name": "Gratuit",
         "perks": [
           "Espace de création privé",
           "1 AgentHost",
           "5 projets"
-        ]
+        ],
+        "cta": "Commencer gratuitement"
       },
       {
+        "id": "pro",
         "name": "Pro",
         "perks": [
           "Jusqu’à 3 AgentHosts",
           "Projets illimités",
-          "Workflows d’approbation configurés"
-        ]
+          "Workflows d’approbation configurés",
+          "Toute l’équipe d’agents de direction"
+        ],
+        "cta": "Voir les tarifs actuels"
+      },
+      {
+        "id": "teams",
+        "name": "Équipes",
+        "perks": [
+          "Plafonds de dépenses par utilisateur",
+          "Rôles, approbations et audit",
+          "Utilisez votre propre modèle"
+        ],
+        "cta": "Nous contacter"
       }
     ],
     "blogHeading": "Les dernières publications du blog",

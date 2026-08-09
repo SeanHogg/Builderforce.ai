@@ -6050,24 +6050,41 @@
     ],
     "featuresHeading": "Alles, was Sie auf die Leinwand bringen können",
     "pricingHeading": "Preise",
+    "pricingTitle": "Kostenlos starten. Das Team dazuholen, wenn Sie es brauchen.",
     "currentPricing": "Aktuelle Preise ansehen",
     "pricePerMonth": "/Monat",
+    "customPricing": "Individuell",
     "pricingTeaser": [
       {
+        "id": "free",
         "name": "Free",
         "perks": [
           "Privater Creation-Arbeitsbereich",
           "1 AgentHost",
           "5 Projekte"
-        ]
+        ],
+        "cta": "Kostenlos loslegen"
       },
       {
+        "id": "pro",
         "name": "Pro",
         "perks": [
           "Bis zu 3 AgentHosts",
           "Unbegrenzte Projekte",
-          "Konfigurierte Freigabe-Workflows"
-        ]
+          "Konfigurierte Freigabe-Workflows",
+          "Das vollständige C-Suite-Agententeam"
+        ],
+        "cta": "Aktuelle Preise ansehen"
+      },
+      {
+        "id": "teams",
+        "name": "Teams",
+        "perks": [
+          "Ausgabenlimits pro Nutzer",
+          "Rollen, Freigaben und Audit",
+          "Eigenes Modell verwenden"
+        ],
+        "cta": "Kontakt aufnehmen"
       }
     ],
     "blogHeading": "Neuestes aus dem Blog",
