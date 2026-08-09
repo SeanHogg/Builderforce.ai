@@ -205,8 +205,10 @@ export default function ToolRunnerClient({ toolId, embedded = false, initialInpu
                     >
                       <span aria-hidden style={{
                         flexShrink: 0, marginTop: 2, width: 16, height: 16, borderRadius: '50%',
-                        border: `2px solid ${active ? '#fff' : 'var(--border-subtle)'}`,
-                        background: active ? '#fff' : 'transparent', boxShadow: active ? 'inset 0 0 0 3px var(--accent)' : 'none',
+                        // The dot sits ON the accent-filled row when selected, so its
+                        // ring and centre are the on-accent ink, not a raw white.
+                        border: `2px solid ${active ? 'var(--text-on-accent)' : 'var(--border-subtle)'}`,
+                        background: active ? 'var(--text-on-accent)' : 'transparent', boxShadow: active ? 'inset 0 0 0 3px var(--accent)' : 'none',
                       }} />
                       <span>{o.text}</span>
                     </button>

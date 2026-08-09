@@ -1671,6 +1671,7 @@ export interface ResourceNavLink extends FooterLink {
 }
 
 export const RESOURCE_NAV_LINKS: ResourceNavLink[] = [
+  { href: '/tutorials', marketingLabelKey: 'tutorials', labelKey: 'linkTutorials' },
   { href: '/blog', marketingLabelKey: 'blog', labelKey: 'linkBlog' },
   { href: '/tools', marketingLabelKey: 'diagnosticsTools', labelKey: 'linkDiagnostics' },
   { href: '/soc2', marketingLabelKey: 'soc2Audits', labelKey: 'linkSoc2' },
@@ -1691,9 +1692,7 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
     titleKey: 'colProduct',
     links: [
       { href: '/product', labelKey: 'linkProduct' },
-      { href: '/compare', labelKey: 'linkCompare' },
       { href: '/pricing', labelKey: 'linkPricing' },
-      { href: '/media', labelKey: 'linkMediaKit' },
     ],
   },
   {
@@ -1702,9 +1701,6 @@ export const FOOTER_COLUMNS: FooterColumn[] = [
       { href: '/evermind', labelKey: 'linkEvermind' },
       { href: '/marketplace', labelKey: 'linkWorkforceRegistry' },
       { href: '/agents', labelKey: 'linkAgents' },
-      { href: '/tools', labelKey: 'linkDiagnostics' },
-      { href: '/soc2', labelKey: 'linkSoc2' },
-      { href: '/blog', labelKey: 'linkBlog' },
     ],
   },
   {

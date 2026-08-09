@@ -25,8 +25,18 @@ const card: React.CSSProperties = {
   padding: 16,
 };
 
+/**
+ * The proposal DOCUMENT's palette, not this app's.
+ *
+ * These five colours are written into a standalone `.html` the customer opens
+ * outside BuilderForce (see `DocumentSection`: it renders into an isolated
+ * `srcDoc` iframe and downloads as a file), so a token here resolves to nothing
+ * — which is what had happened: `text` was `var(--bg-elevated)`, i.e. WHITE ink
+ * on a white page anywhere the variable did resolve, and invalid where it did
+ * not. Literals are correct here, and only here.
+ */
 const DEFAULT_BRAND: BrandPalette = {
-  primary: '#334155', secondary: 'var(--text-secondary)', accent: 'var(--sky-bright)', text: 'var(--bg-elevated)', background: '#ffffff', logoUrl: '',
+  primary: '#334155', secondary: '#64748b', accent: '#0ea5e9', text: '#0f172a', background: '#ffffff', logoUrl: '',
 };
 
 const EMPTY: RfpRequestInput = {

@@ -87,7 +87,7 @@ export function ManagerKillSwitch({ checked, disabled, onChange }: {
       onClick={() => onChange(!checked)}
       style={{
         display: 'inline-flex', alignItems: 'center', gap: 10, minHeight: 42, padding: '7px 10px 7px 12px',
-        border: `1px solid ${checked ? 'var(--success, var(--success))' : 'var(--coral-bright)'}`,
+        border: `1px solid ${checked ? 'var(--success)' : 'var(--border-strong)'}`,
         borderRadius: 'var(--radius-lg)', background: 'var(--bg-elevated)', color: 'var(--text-primary)',
         cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.65 : 1,
       }}
@@ -102,13 +102,13 @@ export function ManagerKillSwitch({ checked, disabled, onChange }: {
         aria-hidden="true"
         style={{
           position: 'relative', display: 'inline-block', width: 38, height: 22, flex: '0 0 auto',
-          borderRadius: 'var(--radius-full)', background: checked ? 'var(--success, var(--success))' : 'var(--text-muted)',
+          borderRadius: 'var(--radius-full)', background: checked ? 'var(--success)' : 'var(--text-muted)',
           transition: 'background .15s ease',
         }}
       >
         <span style={{
           position: 'absolute', top: 3, left: checked ? 19 : 3, width: 16, height: 16,
-          borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.28)', transition: 'left .15s ease',
+          borderRadius: '50%', background: 'var(--text-on-accent)', boxShadow: '0 1px 3px rgba(0,0,0,.28)', transition: 'left .15s ease',
         }} />
       </span>
     </button>

@@ -65,6 +65,62 @@
   --canvas-brain-accent: #6d4ee9;
   --creation-dot: #d4dce8;
   --creation-minimap-mask: color-mix(in srgb, var(--canvas-board) 76%, transparent);
+
+  /* ---------------------------------------------------------------------
+     The board's OWN categorical palette (PRD 21 §2.6 rule 9: "the board
+     declares its own palette").
+     ---------------------------------------------------------------------
+     These identities used to live as literals inside CreationCanvas.tsx and
+     CreationNode.tsx, which put the board's colours in two places neither of
+     which was a declaration — so the design-scale ratchet counted them and
+     nobody could change a hue without grepping a five-thousand-line component.
+     They belong HERE, beside the rest of the board's palette, for the same
+     reason the surfaces do.
+
+     Declared once, on the light selector, so they carry into dark as well: a
+     saturated identity hue reads on the paper board and on the slate one, and
+     the four that do NOT are overridden in the dark block near the end. What
+     must never happen is a board hue inheriting the SHELL's tokens — that is
+     the flattening this file's header warns about. */
+  --canvas-obj-workflow: #7357ed;
+  --canvas-obj-website: #3978f6;
+  --canvas-obj-dashboard: #08b59d;
+  --canvas-obj-agent: #8a5cf5;
+  --canvas-obj-staff: #f09a3e;
+  --canvas-obj-evaluation: #6941d7;
+  --canvas-obj-evermind: #df4fa5;
+  --canvas-obj-comparison: #0d8f82;
+  --canvas-obj-pitch: #e0653f;
+  --canvas-obj-unknown: #9aa8bd;
+
+  /* Series colours for a chart drawn ON an object card. Eight, because that is
+     where the funnel/status charts top out before they start repeating. */
+  --canvas-series-1: #3978f6;
+  --canvas-series-2: #25b7a3;
+  --canvas-series-3: #7657df;
+  --canvas-series-4: #f4a126;
+  --canvas-series-5: #e85d75;
+  --canvas-series-6: #46a4d9;
+  --canvas-series-7: #9b6ad6;
+  --canvas-series-8: #68b36b;
+
+  /* Live collaborators. Four hues, assigned round-robin by join order. */
+  --canvas-presence-1: #d946ef;
+  --canvas-presence-2: #f97316;
+  --canvas-presence-3: #059669;
+  --canvas-presence-4: #2563eb;
+
+  /* A frame is a labelled region drawn UNDER objects, so it is a tint rather
+     than a surface — pale enough that a white card still reads as raised. */
+  --canvas-frame-fill: #f8f6ff;
+  --canvas-frame-border: #9d8bea;
+  --canvas-edge: #7b8aa0;
+
+  /* The two inks a widget picks between when its fill is chosen at RUNTIME (a
+     user-tinted diagram vertex). Not the shell's ink: the fill they sit on is
+     the author's colour, not a themed surface. */
+  --canvas-ink-on-light: #10203a;
+  --canvas-ink-on-dark: #f7faff;
   height: calc(100vh - var(--shell-topbar-height, 58px));
   min-height: 620px;
   overflow: hidden;
@@ -1415,6 +1471,13 @@
   --canvas-brain-accent:#a991ff;
   --creation-dot:rgba(116,145,184,.24);
   --creation-minimap-mask:rgba(7,14,25,.76);
+  /* The four board hues that do NOT survive the move to slate: a frame's pale
+     tint and its border become a dark tint, and the two neutrals lift so an
+     unknown object and an edge stay visible against #09111f. */
+  --canvas-obj-unknown:#6f8099;
+  --canvas-frame-fill:#1b1a33;
+  --canvas-frame-border:#6f5fc0;
+  --canvas-edge:#5a6b83;
 }
 :global(html:not([data-theme='light'])) .sessionBar {
   background:color-mix(in srgb,var(--canvas-panel) 94%,#172b48);

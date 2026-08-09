@@ -25,6 +25,7 @@ import { subscribeExecution, unsubscribeExecution, notifyExecutionSubscribers } 
 import {
   markCloudExecutionRunning, prepareCloudRun, gitSecret, recordCloudToolEvent, recordPrdDirective,
   handleContainerOp, loadContainerRunContext, resolveCloudAgent, agentAllowsHostExecution, DEFAULT_CLOUD_REF,
+  stampExecutionSourceRef,
 } from '../../application/runtime/cloudAgentEngine';
 import { recordAutoRunSkip, clearAutoRunSkip } from '../../application/runtime/autoRunSkipLedger';
 import { CONTAINER_MAX_STEPS } from '../../application/runtime/cloudAgentTools';
@@ -785,6 +786,7 @@ async function startDispatchedExecution(
         );
         const token = await mintContainerRunToken(env.JWT_SECRET, execution.id);
         const repo = await resolveTicketRepoContext(db, gitSecret(env), tenantId, taskRow.id);
+        if (repo.ok) await stampExecutionSourceRef(db, tenantId, execution.id, repo.ctx);
         // Clone the ticket's HEAD branch (ctx.branch — where prior runs commit their
         // WIP), not just the base. A container that clones only the base branch starts
         // every run from a stale default and cannot see earlier passes' work; carrying

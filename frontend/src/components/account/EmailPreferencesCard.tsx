@@ -21,6 +21,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
+import { Select } from '@/components/Select';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 import { LOCALE_LABELS, LOCALES, type Locale } from '@/i18n/config';
 import {
@@ -79,7 +80,7 @@ function ToggleRow({ label, help, checked, disabled, onChange }: {
       >
         <span style={{
           position: 'absolute', top: 2, left: checked ? 20 : 2, width: 18, height: 18,
-          borderRadius: '50%', background: '#fff', transition: 'left 0.2s',
+          borderRadius: '50%', background: 'var(--text-on-accent)', transition: 'left 0.2s',
         }} />
       </button>
       <span>
@@ -185,30 +186,23 @@ export default function EmailPreferencesCard() {
               <span style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-primary)' }}>
                 {t('emailPrefs.language')}
               </span>
-              <select
+              {/* The house `Select` renders its OWN listbox for the reason recorded in
+                  that file: a browser honours `color` on a native <option> and ignores
+                  `background-color`, so a hand-styled popup is a coin toss. This one had
+                  lost it — `background:'#ffffff'` with `color:var(--bg-elevated)` is
+                  white on white the moment the light theme is on. */}
+              <Select
                 value={locale ?? ''}
                 disabled={busy}
+                aria-label={t('emailPrefs.language')}
                 onChange={(e) => { if (e.target.value) void patch({ locale: e.target.value as Locale }); }}
-                style={{
-                  padding: '7px 10px', fontSize: 13, borderRadius: 'var(--radius-md)',
-                  background: 'var(--bg-elevated)', color: 'var(--text-primary)',
-                  border: '1px solid var(--border-subtle)', cursor: busy ? 'wait' : 'pointer',
-                  minWidth: 160,
-                }}
+                style={{ minWidth: 160 }}
               >
-                {/* Native <option> needs its own opaque colours — the OS popup does
-                    not inherit the theme variables from the <select>. */}
-                {locale === null && (
-                  <option value="" style={{ background: '#ffffff', color: 'var(--bg-elevated)' }}>
-                    {t('emailPrefs.languageAuto')}
-                  </option>
-                )}
+                {locale === null && <option value="">{t('emailPrefs.languageAuto')}</option>}
                 {LOCALES.map((l) => (
-                  <option key={l} value={l} style={{ background: '#ffffff', color: 'var(--bg-elevated)' }}>
-                    {LOCALE_LABELS[l]}
-                  </option>
+                  <option key={l} value={l}>{LOCALE_LABELS[l]}</option>
                 ))}
-              </select>
+              </Select>
             </div>
             <p style={{ ...mutedStyle, margin: '4px 0 0' }}>{t('emailPrefs.languageHelp')}</p>
           </div>

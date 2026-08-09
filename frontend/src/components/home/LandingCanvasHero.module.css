@@ -2,7 +2,7 @@
  * Landing hero — the Creation Canvas itself, running, above the fold.
  *
  * Every colour is a theme token so the board reads in BOTH themes: the dot grid
- * and node cards sit on --bg-surface, which is var(--bg-surface) dark / #ffffff light.
+ * and node cards sit on --bg-surface, which flips per theme with the token.
  * The old hero hardcoded rgba(236,242,255,…) text because it always sat on the
  * dark BrainBackdrop; nothing here may assume a ground colour.
  *

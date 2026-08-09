@@ -195,7 +195,7 @@ export function buildBrowserCreativeArtifact(data: CreationNodeData): BrowserCre
     // BOTH keyboard and touch for the same reason.
     const content = `<!doctype html><html><head><meta charset="utf-8"><title>${escapedTitle}</title>`
       + '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">'
-      + '<style>html,body{height:100%;margin:0;overflow:hidden;background:#0b0e1a;color:var(--text-on-accent);'
+      + '<style>html,body{height:100%;margin:0;overflow:hidden;background:#0b0e1a;color:#fff;'
       + 'font:16px/1.4 system-ui,sans-serif;-webkit-user-select:none;user-select:none;touch-action:manipulation}'
       + '#hud{position:fixed;top:max(12px,env(safe-area-inset-top));left:0;right:0;text-align:center;'
       + 'font-size:clamp(18px,4vw,28px);font-weight:700;pointer-events:none}'
@@ -391,7 +391,7 @@ export function evermindMediaArtifact(
   const page = `<!doctype html><meta charset="utf-8"><title>${escapedTitle}</title>`
     + '<style>html,body{height:100%;margin:0;background:#11152b;display:grid;place-items:center}'
     + 'img{max-width:100vw;max-height:100vh;image-rendering:pixelated}'
-    + 'h1{position:fixed;left:4vw;bottom:5vh;margin:0;color:var(--text-on-accent);font:700 4vw system-ui}</style>'
+    + 'h1{position:fixed;left:4vw;bottom:5vh;margin:0;color:#fff;font:700 4vw system-ui}</style>'
     + `<img id="f" alt="${escapedTitle}"><h1>${escapedTitle}</h1>`
     + `<script>const frames=${JSON.stringify(frames)};let i=0;const img=document.getElementById('f');`
     + 'const tick=()=>{img.src=frames[i++%frames.length]};tick();setInterval(tick,1000/12);</script>';
@@ -418,7 +418,7 @@ export function buildWebsiteAssets(data: CreationNodeData): Array<{ path: string
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${title}</title><meta name="description" content="${body.slice(0, 155)}"><link rel="stylesheet" href="styles.css"></head>
 <body><nav><strong>${title}</strong><a href="#main">Explore</a></nav><main id="main"><section><p class="eyebrow">Created with Builderforce</p><h1>${headline}</h1><p class="lead">${body}</p><a class="cta" href="#contact">${cta}</a></section><aside aria-hidden="true">${title.slice(0, 2).toUpperCase()}</aside></main><footer id="contact">${title}</footer></body></html>`;
-  const css = `:root{font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:#172033;background:#f8fafc}*{box-sizing:border-box}body{margin:0}nav{height:72px;padding:0 clamp(24px,6vw,88px);display:flex;align-items:center;justify-content:space-between;background:white;border-bottom:1px solid #e5e7eb}nav a{color:${accent}}main{min-height:calc(100vh - 132px);padding:clamp(48px,9vw,128px) clamp(24px,8vw,120px);display:grid;grid-template-columns:minmax(0,1.25fr) minmax(240px,.75fr);gap:8vw;align-items:center}h1{font-size:clamp(44px,7vw,92px);line-height:.98;letter-spacing:-.055em;margin:12px 0 24px}.eyebrow{color:${accent};font-weight:750;text-transform:uppercase;letter-spacing:.12em}.lead{font-size:clamp(18px,2vw,25px);line-height:1.6;color:#526079;max-width:680px}.cta{display:inline-block;margin-top:24px;padding:14px 22px;border-radius:var(--radius-full);background:${accent};color:white;text-decoration:none;font-weight:750}aside{aspect-ratio:1;border-radius:32%;display:grid;place-items:center;background:${accent};color:white;font-size:clamp(64px,10vw,150px);font-weight:850;box-shadow:0 40px 90px ${accent}44}footer{height:60px;padding:20px clamp(24px,6vw,88px);color:#64748b}@media(max-width:760px){main{grid-template-columns:1fr}aside{max-width:320px}}`;
+  const css = `:root{font-family:Inter,ui-sans-serif,system-ui,sans-serif;color:#172033;background:#f8fafc}*{box-sizing:border-box}body{margin:0}nav{height:72px;padding:0 clamp(24px,6vw,88px);display:flex;align-items:center;justify-content:space-between;background:white;border-bottom:1px solid #e5e7eb}nav a{color:${accent}}main{min-height:calc(100vh - 132px);padding:clamp(48px,9vw,128px) clamp(24px,8vw,120px);display:grid;grid-template-columns:minmax(0,1.25fr) minmax(240px,.75fr);gap:8vw;align-items:center}h1{font-size:clamp(44px,7vw,92px);line-height:.98;letter-spacing:-.055em;margin:12px 0 24px}.eyebrow{color:${accent};font-weight:750;text-transform:uppercase;letter-spacing:.12em}.lead{font-size:clamp(18px,2vw,25px);line-height:1.6;color:#526079;max-width:680px}.cta{display:inline-block;margin-top:24px;padding:14px 22px;border-radius:9999px;background:${accent};color:white;text-decoration:none;font-weight:750}aside{aspect-ratio:1;border-radius:32%;display:grid;place-items:center;background:${accent};color:white;font-size:clamp(64px,10vw,150px);font-weight:850;box-shadow:0 40px 90px ${accent}44}footer{height:60px;padding:20px clamp(24px,6vw,88px);color:#64748b}@media(max-width:760px){main{grid-template-columns:1fr}aside{max-width:320px}}`;
   const encoder = new TextEncoder();
   return [{ path: 'index.html', data: encoder.encode(html) }, { path: 'styles.css', data: encoder.encode(css) }];
 }

@@ -510,7 +510,7 @@ function extractFrozenRef(payload: string | null): string | null {
   if (!payload) return null;
   try {
     const parsed = JSON.parse(payload) as Record<string, unknown>;
-    const candidates = [parsed.baseSha, parsed.headSha, parsed.base, parsed.ref];
+    const candidates = [parsed.sourceSha, parsed.baseSha, parsed.headSha, parsed.base, parsed.ref];
     for (const c of candidates) if (typeof c === 'string' && c.trim()) return c.trim();
     return null;
   } catch {

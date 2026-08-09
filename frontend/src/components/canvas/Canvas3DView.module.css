@@ -182,7 +182,7 @@
   flex: none;
   place-items: center;
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--canvas-3d-accent, var(--canvas-accent)) 16%, var(--canvas-panel, #fff));
+  background: color-mix(in srgb, var(--canvas-3d-accent, var(--canvas-accent)) 16%, var(--canvas-panel, var(--bg-elevated)));
   color: var(--canvas-3d-accent, var(--canvas-accent));
   font-size: 24px;
   font-style: normal;
@@ -208,7 +208,7 @@
   object-fit: contain;
   border: 1px solid var(--canvas-line, var(--border-subtle));
   border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--canvas-3d-accent, var(--canvas-accent)) 10%, var(--canvas-panel, #fff));
+  background: color-mix(in srgb, var(--canvas-3d-accent, var(--canvas-accent)) 10%, var(--canvas-panel, var(--bg-elevated)));
 }
 
 /* A mesh redrawn from its own triangles is a view FROM the camera, so it has to

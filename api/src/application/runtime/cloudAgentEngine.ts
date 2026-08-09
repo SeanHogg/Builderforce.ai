@@ -22,6 +22,7 @@ import { recordActivity, SYSTEM_ACTOR } from '../activity/activityLog';
 import { isIncidentTriagePayload, incidentIdFromPayload } from '../incident/incidentTriageMarker';
 import { resolveTicketRepoContext, commitAgentFile, deleteAgentFile, type TicketRepoContext } from '../repos/commitFileAsPendingChange';
 import { commitPrdAsPendingChange } from '../repos/commitPrdToRepo';
+import { resolveRepoRefSha } from '../repos/commitFileToRepo';
 import { createPullRequest } from '../repos/createPullRequest';
 import { mergeBranchToBase, cloudAutoMergeRequiresGreen, cloudAutoMergeEnabled } from '../repos/mergeBranchToBase';
 import { recordPullRequestRow, markPullRequestMergedById } from '../repos/recordPullRequestRow';
@@ -1859,6 +1860,7 @@ export async function runCloudToolLoop(
     repoMiss = repoResolved.ok ? '' : repoResolved.reason;
   }
   const writtenPaths = new Set<string>(opts?.resume?.writtenPaths ?? []);
+  if (repoCtx && !opts?.resume) await stampExecutionSourceRef(db, tenantId, executionId, repoCtx);
 
   // Tenant "LLM" (migration 0211): if `model` is a `tenant_model:<slug>` ref, expand
   // it to its configured base model + system directives so THIS run honours the
@@ -2537,6 +2539,19 @@ export async function runCloudToolLoop(
     repoCtx, repoMiss, writtenPaths, finalOutput, cancelled,
   });
   return { ok: fin.ok, output: fin.output, cancelled, finished: true };
+}
+
+/** Capture the exact tree a run starts from. Best-effort on the provider read, but
+ * never fabricates a ref: absence remains explicit in rehearsal reports. */
+export async function stampExecutionSourceRef(db: Db, tenantId: number, executionId: number, repoCtx: TicketRepoContext): Promise<string | null> {
+  const sourceSha = await resolveRepoRefSha(repoCtx, repoCtx.branch) ?? await resolveRepoRefSha(repoCtx, repoCtx.base);
+  if (!sourceSha) return null;
+  const [run] = await db.select({ payload: executions.payload }).from(executions).where(and(eq(executions.id, executionId), eq(executions.tenantId, tenantId))).limit(1);
+  let payload: Record<string, unknown> = {};
+  try { payload = run?.payload ? JSON.parse(run.payload) as Record<string, unknown> : {}; } catch { payload = {}; }
+  if (payload.sourceSha === sourceSha) return sourceSha;
+  await db.update(executions).set({ payload: JSON.stringify({ ...payload, sourceSha }) }).where(and(eq(executions.id, executionId), eq(executions.tenantId, tenantId)));
+  return sourceSha;
 }
 
 /** The runtime context an engine is constructed with (the surface-specific wiring

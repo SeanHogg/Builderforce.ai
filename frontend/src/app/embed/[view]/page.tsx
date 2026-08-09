@@ -87,8 +87,13 @@ export default function EmbedViewPage() {
         minHeight: '100vh',
         padding: 16,
         font: '14px system-ui, -apple-system, sans-serif',
-        background: frame.theme === 'dark' ? '#0b1220' : '#ffffff',
-        color: frame.theme === 'dark' ? 'var(--border-subtle)' : '#0f172a',
+        // The effect above puts the host's theme on <html>, which is what the
+        // token declarations key off — so the chrome can just READ the tokens
+        // instead of re-deciding light/dark for itself. It used to branch on
+        // `frame.theme` with two literals, and the dark branch had drifted onto
+        // `--border-subtle` (a translucent hairline) as its TEXT colour.
+        background: 'var(--bg-deep)',
+        color: 'var(--text-primary)',
         boxSizing: 'border-box',
       }}
     >

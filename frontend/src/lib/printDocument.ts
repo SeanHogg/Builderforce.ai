@@ -30,7 +30,7 @@ const PRINT_STYLES = `
   @page { size: A4; margin: 18mm 16mm; }
   * { box-sizing: border-box; }
   body {
-    margin: 0; padding: 0; background: #fff; color: var(--bg-elevated);
+    margin: 0; padding: 0; background: #fff; color: #111827;
     font: 11pt/1.55 Georgia, "Times New Roman", serif;
     -webkit-print-color-adjust: exact; print-color-adjust: exact;
   }
@@ -43,8 +43,8 @@ const PRINT_STYLES = `
   ul, ol { margin: 0 0 .7em; padding-left: 1.4em; }
   li { margin: .18em 0; }
   blockquote { margin: .8em 0; padding: .1em 0 .1em .9em; border-left: 2px solid #9ca3af; color: #374151; break-inside: avoid; }
-  code { font: 9.5pt/1.4 "SFMono-Regular", Consolas, monospace; background: #f3f4f6; padding: .08em .3em; border-radius: var(--radius-sm); }
-  pre { margin: .8em 0; padding: .7em .9em; background: #f3f4f6; border-radius: var(--radius-sm); overflow: visible; white-space: pre-wrap; word-break: break-word; break-inside: avoid; }
+  code { font: 9.5pt/1.4 "SFMono-Regular", Consolas, monospace; background: #f3f4f6; padding: .08em .3em; border-radius: 6px; }
+  pre { margin: .8em 0; padding: .7em .9em; background: #f3f4f6; border-radius: 6px; overflow: visible; white-space: pre-wrap; word-break: break-word; break-inside: avoid; }
   pre code { padding: 0; background: none; }
   table { width: 100%; border-collapse: collapse; margin: .8em 0; font-size: 9.5pt; break-inside: avoid; }
   th, td { padding: .35em .5em; border: 1px solid #9ca3af; text-align: left; vertical-align: top; }

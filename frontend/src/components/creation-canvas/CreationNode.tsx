@@ -916,7 +916,7 @@ function DrawioCanvas({ graph, title }: { graph: DrawioGraph; title: string }) {
     </g>)}
     {graph.vertices.map((vertex) => {
       const polygon = drawioShapePolygon(vertex);
-      const fill = vertex.fill ?? 'var(--canvas-widget-surface, #fff)';
+      const fill = vertex.fill ?? 'var(--canvas-widget-surface)';
       const stroke = vertex.stroke ?? 'var(--canvas-widget-border, #ccd8e7)';
       const ink = vertex.fontColor ?? (vertex.fill ? readableInk(vertex.fill) : 'var(--canvas-ink, #142234)');
       const lines = drawioLabelLines(vertex.label, vertex.width, vertex.fontSize);

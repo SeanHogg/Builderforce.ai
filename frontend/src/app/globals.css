@@ -236,6 +236,12 @@
      as on paper and wants dark ink either way. Declared (rather than written
      `#16241c` at the tile) so the pairing has a name and one place to change. */
   --ink-on-light: #16241c;
+  /* Ink for a label printed ON a categorical fill. The whole `*-bright` family is
+     built so a hue is PALE on slate and DEEP on paper, which is one relationship
+     and therefore one token — a stacked-bar segment cannot measure its own fill
+     once that fill is a `var()`, and it does not need to. Flips with the theme,
+     which is exactly what a per-segment luminance test could never do. */
+  --ink-on-categorical: #0b1220;
   /* Unread-message badge (distinct indigo, so it reads apart from the coral/amber
      run-state dots). Matches the NotificationBell badge for a consistent "unread"
      hue across the app. Same value in dark; legible on white text in both. */
@@ -393,6 +399,7 @@ html[data-theme='light'] {
   --shadow-color: rgba(60, 48, 36, 0.16);
   --text-on-accent: #fff;
   --ink-on-light: #16241c;
+  --ink-on-categorical: #ffffff;
   --badge-unread: #4f46e5;
   --surface-page: var(--bg-deep);
   --surface-panel: var(--bg-surface);

@@ -33,7 +33,6 @@ const FLAT_LINKS: SimpleLink[] = [
   // footer's "Get started" column, not the top bar (kept lean).
   // Talent (freelancers) + Workforce (AI agents/skills/personas) are one merged
   // marketplace surface now — a single nav entry, no separate /talent link.
-  { href: '/tutorials', labelKey: 'tutorials' },
   { href: '/marketplace', labelKey: 'talentWorkforce' },
   { href: '/agents', labelKey: 'agents' },
   // Evermind intentionally NOT a top-level flat link — it lives under the Product
