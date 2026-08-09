@@ -6273,6 +6273,7 @@
       "realDefinition": "En producción. Listo para usar."
     }
   },
+  "shoppingCart": { "title": "Carrito", "close": "Cerrar carrito", "empty": "Tu carrito está vacío", "browse": "Explorar el mercado", "free": "Gratis", "use": "uso", "plusActivation": "+ ${price} de activación", "remove": "Quitar {name}", "dueToday": "A pagar hoy", "thenMonthly": "Luego cada mes", "checkout": "Pago seguro", "redirecting": "Redirigiendo…", "checkoutFailed": "No se pudo iniciar el pago", "mixedCheckout": "Los artículos del mercado y las suscripciones deben pagarse por separado.", "workspaceRequired": "Selecciona un espacio de trabajo antes de comprar este servicio.", "unsupportedCheckout": "Uno o más artículos aún no se pueden comprar mediante este pago.", "purchaseComplete": "{count, plural, one {Compra completada} other {# compras completadas}}.", "purchaseHistory": "Historial de compras", "clear": "Vaciar carrito", "signInPrompt": "Inicia sesión para completar la compra", "createAccount": "Crear cuenta", "signIn": "Iniciar sesión" },
   "pricing": {
     "enabledModulesTitle": "Tus módulos activados ({count})",
     "enabledModulesDescription": "Los precios del plan y los límites de uso compartidos se aplican a este conjunto de funciones.",
@@ -6344,6 +6345,7 @@
     "teamsCostNoteYear": "${perSeat}/asiento/año — facturado como ${total}/año",
     "teamsCostNoteMonth": "${perSeat}/asiento/mes — facturado como ${total}/mes",
     "managedAddon": "Complemento: <b>AgentHost gestionado</b> — ${price}/mes por cada AgentHost alojado. Ejecutamos tu instancia de BuilderForce Agents por ti — sin Docker, sin DevOps.",
+    "phone": { "eyebrow": "Complemento de retención", "title": "Teléfono empresarial", "description": "Dale a tu empresa un número de EE. UU. para voz, SMS y MMS sin hardware nuevo.", "dedicatedNumber": "Número empresarial dedicado", "forwarding": "Desvía llamadas al teléfono que ya usas", "allowance": "{minutes} minutos, {sms} SMS y {mms} MMS incluidos al mes", "overages": "Excedentes: ${minute}/minuto, ${sms}/segmento SMS, ${mms}/MMS.", "learnMore": "Explorar Teléfono empresarial", "addonFor": "Complemento para Pro y Teams", "perMonth": "/mes", "activation": "Activación única de ${price}", "addToCart": "Añadir al carrito", "viewCart": "Ver carrito", "eligibility": "Requiere una suscripción Pro o Teams activa." },
     "relatedHeading": "Antes de decidir",
     "planFeatures": [
       "1 AgentHost",
@@ -6362,6 +6364,7 @@
       "Controles de costos por asiento"
     ]
   },
+  "phonePage": { "seoTitle": "Teléfono empresarial — Builderforce.ai", "seoDescription": "Un número empresarial dedicado para voz, SMS y MMS.", "active": "El teléfono empresarial está activo", "provisioning": "Tu número está listo para aprovisionarse y asignarse.", "loading": "Cargando precios…", "createAccount": "Crear una cuenta", "voiceMessaging": "Voz y mensajería", "transparentUsage": "Precios de uso transparentes" },
   "product": {
     "seo": {
       "title": "Producto — Crea, entrena, orquesta y gobierna tu fuerza de trabajo de IA",

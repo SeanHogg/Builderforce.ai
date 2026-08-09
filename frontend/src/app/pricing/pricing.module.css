@@ -235,3 +235,15 @@
 @media (prefers-reduced-motion: reduce) {
   .comparisonTable tbody tr { transition: none; }
 }
+/* Business Phone is a separately billed retention add-on, not a fourth base plan. */
+.phoneOffer { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 28px; padding: 32px; border: 1px solid var(--border-subtle); border-radius: var(--radius-xl); background: linear-gradient(135deg, var(--bg-elevated), var(--surface-coral-soft)); }
+.phoneOfferCopy h2 { margin: 4px 0 10px; font-size: var(--font-size-h2); }
+.phoneOfferCopy > p { color: var(--text-secondary); }
+.phoneFeatures { display: grid; gap: 8px; padding-left: 20px; color: var(--text-secondary); }
+.phoneOverages { font-size: var(--font-size-small); }
+.phonePriceCard { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; padding: 24px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-base); }
+.phonePriceCard > strong { font-size: 32px; }
+.phonePriceCard > strong small { margin-left: 4px; font-size: var(--font-size-small); color: var(--text-muted); }
+.phonePriceCard > p, .phonePriceCard > small { margin: 0; color: var(--text-muted); }
+
+@media (max-width: 760px) { .phoneOffer { grid-template-columns: 1fr; padding: 22px; } }

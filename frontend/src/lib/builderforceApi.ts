@@ -1138,6 +1138,8 @@ export interface MarketplaceSkill {
   repo_url: string | null;
   downloads: number;
   likes: number;
+  price_cents: number;
+  pricing_model: 'flat_fee' | 'consumption';
   created_at: string;
   author_username?: string;
   author_display_name?: string;
@@ -4832,6 +4834,28 @@ export interface CustomerEmbedFeatureConfig {
   consentedAt: string | null;
   consentedBy: string | null;
 }
+
+export interface MarketplacePurchase {
+  id: number;
+  userId: string;
+  artifactType: 'skill' | 'persona' | 'content';
+  artifactSlug: string;
+  priceCents: number;
+  pricingModel: 'flat_fee' | 'consumption';
+  stripePaymentIntentId: string | null;
+  createdAt: string;
+}
+
+export const marketplacePurchaseApi = {
+  purchase: (item: { artifactType: 'skill' | 'persona' | 'content'; artifactSlug: string; stripePaymentIntentId?: string }) =>
+    mpRequest<{ ok: true; priceCents: number; pricingModel: 'flat_fee' | 'consumption' }>('/marketplace/purchase', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(item),
+    }),
+  list: () => mpRequest<{ purchases: MarketplacePurchase[] }>('/marketplace/purchases')
+    .then((result) => result.purchases ?? []),
+};
 
 export interface CustomerEmbedConsentEvent {
   feature: CustomerEmbedFeatureKey;

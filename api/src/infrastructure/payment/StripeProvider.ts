@@ -141,8 +141,13 @@ export class StripeProvider implements PaymentProvider {
       'line_items[1][price_data][recurring][interval]': 'month',
       'line_items[1][price_data][product_data][name]': 'BuilderForce Business Phone',
       'metadata[tenantId]': String(opts.tenantId), 'metadata[purchaseKind]': 'business_phone',
+      'metadata[cartId]': opts.cartId,
+      'metadata[activationCents]': String(opts.activationCents), 'metadata[monthlyCents]': String(opts.monthlyCents),
       'subscription_data[metadata][tenantId]': String(opts.tenantId),
       'subscription_data[metadata][purchaseKind]': 'business_phone',
+      'subscription_data[metadata][cartId]': opts.cartId,
+      'subscription_data[metadata][activationCents]': String(opts.activationCents),
+      'subscription_data[metadata][monthlyCents]': String(opts.monthlyCents),
     });
     const res = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST', headers: { Authorization: `Bearer ${this.config.secretKey}`, 'Content-Type': 'application/x-www-form-urlencoded' }, body: params.toString(),
@@ -340,6 +345,8 @@ export class StripeProvider implements PaymentProvider {
         if (meta['purchaseKind'] === 'business_phone') {
           return {
             type: 'addon.activated', purchaseKind: 'business_phone',
+            activationCents: Number(meta['activationCents']), monthlyCents: Number(meta['monthlyCents']),
+            cartId: meta['cartId'],
             ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}),
             externalCustomerId: customer, externalSubscriptionId: sub ?? '',
             billingEmail: (obj['customer_email'] as string | undefined) ?? customerDetails?.['email'], raw: event,
@@ -385,7 +392,7 @@ export class StripeProvider implements PaymentProvider {
           const addonType = status === 'active' || status === 'trialing' ? 'addon.activated'
             : status === 'past_due' || status === 'unpaid' ? 'addon.past_due'
               : status === 'canceled' ? 'addon.cancelled' : null;
-          return addonType ? { type: addonType, purchaseKind: 'business_phone', ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}), externalCustomerId: customer, externalSubscriptionId: obj['id'] as string, raw: event } : null;
+          return addonType ? { type: addonType, purchaseKind: 'business_phone', activationCents: Number(meta['activationCents']), monthlyCents: Number(meta['monthlyCents']), ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}), externalCustomerId: customer, externalSubscriptionId: obj['id'] as string, raw: event } : null;
         }
 
         // Only statuses that carry an actual billing verdict may move the tenant's
@@ -407,7 +414,7 @@ export class StripeProvider implements PaymentProvider {
         const meta = (obj['metadata'] ?? {}) as Record<string, string>;
         if (meta['purchaseKind'] === 'business_phone') {
           const rawTenantId = Number(meta['tenantId']);
-          return { type: 'addon.cancelled', purchaseKind: 'business_phone', ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}), externalCustomerId: obj['customer'] as string, externalSubscriptionId: obj['id'] as string, raw: event };
+          return { type: 'addon.cancelled', purchaseKind: 'business_phone', activationCents: Number(meta['activationCents']), monthlyCents: Number(meta['monthlyCents']), ...(Number.isInteger(rawTenantId) && rawTenantId > 0 ? { tenantId: rawTenantId } : {}), externalCustomerId: obj['customer'] as string, externalSubscriptionId: obj['id'] as string, raw: event };
         }
         return {
           type: 'subscription.cancelled',

@@ -70,6 +70,7 @@ export interface CheckoutSessionResult {
 
 export interface BusinessPhoneCheckoutOpts {
   tenantId: number;
+  cartId: string;
   billingEmail: string;
   currency: string;
   activationCents: number;
@@ -143,6 +144,9 @@ export interface WebhookEvent {
   /** Signed checkout/subscription metadata identifying the attributed referral. */
   salesReferralId?: string;
   purchaseKind?: 'business_phone';
+  activationCents?: number;
+  monthlyCents?: number;
+  cartId?: string;
 
   /** Raw provider-specific data for logging/debugging */
   raw: unknown;

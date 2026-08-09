@@ -717,8 +717,19 @@ export interface Destination {
   /** Level 2 — this row is a leaf of a seat's workbench index. */
   parent?: string;
   /** Marketplace family, when this destination is also listable (§11.5). */
-  listable?: 'talent' | 'company' | 'thing';
+  listable?: Family;
 }
+
+/** The marketplace families. ONE derivation for the filter label, the publish
+ *  CTA and the flow that CTA runs — so the button can never disagree with the
+ *  filter above it, and "Publish a company" genuinely runs the claim (§11.5). */
+export const FAMILIES = {
+  talent:  { label: 'Talent',    publish: 'Publish a listing', flow: 'listing' },
+  company: { label: 'Companies', publish: 'Publish a company', flow: 'claim'   },
+  agent:   { label: 'Agents',    publish: 'Publish an agent',  flow: 'agent'   },
+  asset:   { label: 'Assets',    publish: 'Publish an asset',  flow: 'asset'   },
+} as const;
+export type Family = keyof typeof FAMILIES;
 ```
 
 | Surface | Projection over the one array |
@@ -945,12 +956,31 @@ adding a ninth tab to that list is how it reaches fifteen.
 
 | Family | Kinds | Who lists | Who is buying |
 |---|---|---|---|
-| **Talent** | person · agent · gig | freelancers, agencies, agent authors | anyone hiring |
-| **Company** | business · service · product · storefront | claimed company owners | customers, partners, investors, acquirers |
-| **Thing** | model · skill · persona · prompt · template · canvas | builders | anyone |
+| **Talent** | person · gig | freelancers, agencies | anyone hiring |
+| **Companies** | business · service · product · storefront | claimed company owners | customers, partners, investors, acquirers |
+| **Agents** | built-in · community | agent authors, the platform | anyone staffing a seat |
+| **Assets** | model · skill · persona · prompt · template · canvas | builders | anyone |
 
 `publish` is not a family — it is the **verb**, and it belongs on a primary button. `all` is the
 absence of a filter, not a filter.
+
+**There is no `/agents` destination.** An agent is a *listing* whose purchase writes a roster row —
+so the catalog and the footer are the same rows at two rungs and cannot drift. Agents split out of
+Talent rather than sitting inside it because, although a person and an agent are the same kind of
+*participant* to a session, they are not the same kind of *listing*: one has availability and an
+hourly rate, the other has a price, a seat and a set of tools. Merging them forces one publish form
+to serve two shapes, which is where the honest flow dies.
+
+**The publish CTA is derived, and that is the point of `FAMILIES` (§11.2).** Four buttons written
+by hand drift from the filter above them within one release; one `FAMILIES[active].publish` cannot.
+The `flow` field matters as much as the label — **"Publish a company" runs the claim-and-verify
+flow, not a listing form**, because a company you do not own is not yours to list.
+
+> **Copy decision, flagged for the operator.** The fourth family was drafted as **Things**, which
+> fails the CTA test — no product ships a button reading *Publish a thing*. **Assets** survives the
+> publish sentence, so §11 uses it. The test itself is the durable rule: **a family name that
+> cannot complete "Publish a ___" is not a family name.** It is also what splits Talent's CTA to
+> "Publish a listing" rather than the ungrammatical *Publish a talent*.
 
 #### 11.5.1 A company listing is not a new concept
 
@@ -1016,6 +1046,23 @@ The Run group in full is PRD 18 + PRD 19 pointed at one company:
 | Support | tickets · knowledge base · live chat · CSAT | PRD 19 §2 row 7 |
 | Commerce | plans · invoices · cart/orders · payouts · affiliates · AI credits | PRD 18 T6 + PRD 19 B9 |
 
+#### 11.5.4 Cart and purchase memory
+
+The cart is global chrome, not a marketplace-page widget. The same cart icon and item count appear
+in the signed-out public header and the signed-in top bar, and its drawer survives navigation. Every
+marketplace listing that can be acquired enters this cart before checkout; subscriptions and other
+recurring services may share the drawer but complete through their own provider checkout.
+
+**Free is a price, not an absence of a transaction.** Completing checkout for a zero-dollar skill,
+persona or content item writes a `marketplace_purchases` row with `price_cents = 0` before the item
+is removed from the cart. Paid acquisitions write the same record only after payment is verified.
+The drawer exposes the authenticated person's purchase history, newest first, so acquisition history
+does not disappear merely because an item was free, later uninstalled, or no longer listed.
+
+The server-owned listing price is authoritative at checkout. The cart may display a cached price for
+responsiveness, but it cannot confer an entitlement or submit a client-selected amount. Mixed carts
+that require different checkout providers are completed separately and say so explicitly.
+
 Nine rows. Each is one seat, one panel, one index column, N leaves. **That is how 549 destinations
 become a menu you can read.**
 
@@ -1034,7 +1081,9 @@ section exists to prevent.
 | The signup-form destination behind `Get Started →` | `/create/new` — a real local-first board (§11.4.6) | M1 |
 | Standalone page rendering for the nine domain pages + `/soc2` + `/integrations` when signed in | `surface:'panel'` over the mounted board (§11.4.5) | M3 |
 | `ADMIN_GROUP_META` as its own list | `stage:'admin'`, `parent:'admin'` rows | M3 |
-| `CATEGORY_IDS` literal | the `listable` families | M4 |
+| `CATEGORY_IDS` literal (8 mixed tabs) | `FAMILIES` — four families, derived label + CTA + flow | M4 |
+| The `/agents` destination | the `agent` marketplace family (§11.5) | M4 |
+| Per-surface seat colours (roster / marketing cards / canvas agent objects) | `--seat-*`, one declaration (§11.10.1) | M0 |
 | BurnRateOS "AI Assistant" category, `/ai/hub`, `/ai/coach` | the composer and the owning seats | M3 |
 | BurnRateOS hard-coded "Hubs" block (`/bi/hub`, `/ops/hub`, `/ai/hub`, `/agile/holistic`) | the seat workbench home | M3 |
 | BurnRateOS `system_features` **as a menu mechanism** | the registry; the table survives as *entitlement only* | M3 |
@@ -1051,11 +1100,11 @@ section exists to prevent.
 
 | # | Work | Gate |
 |---|---|---|
-| **M0** | `destinations.ts` + the `Destination` type; populate from all five existing lists **with no UI change**. Add the ratchet (§11.7.1) baselined at today's numbers. | Every currently-reachable route resolves through the registry; ratchet green |
+| **M0** | `destinations.ts` + the `Destination` type + `FAMILIES`; populate from all five existing lists **with no UI change**. Declare `--seat-*`, `--grad-brand`, `--wash-hero` in both themes (§11.10). Add the ratchet (§11.7.1) baselined at today's numbers. | Every currently-reachable route resolves through the registry; every seat has a hue in both themes; ratchet green |
 | **M1** | Left panel renders from the registry, grouped by stage, with collapsible headers. `burnrateCatalog.ts`, the `seat` group and the `dashboard` group are deleted. The public header drops `Home` and repoints its CTA at the canvas. `SlideOutPanel` gets its width control back. | Zero references to `burnrateCatalog`; no marketing href reachable from the app rail; the CTA lands on a board |
 | **M2** | The footer is the only seat enumeration; a RUN row and a footer chip resolve to the same panel. | One roster endpoint, one seat list, drag + keyboard parity retained (§6.4, §6.5) |
 | **M3** | Seat workbench index = `filter(parent === seat)`. Absorb `ADMIN_GROUP_META` and, as PRD 19 tracks land, the `system_features` leaves; demote that table to entitlement. **Flip the reference destinations to `surface:'panel'`** (§11.4.5) and fix their viewport-vs-container queries. | §6.3 still holds; every ported leaf has a `parent`; a signed-in `/soc2` opens over a board whose agent turn survives it |
-| **M4** | Marketplace: three families, the `company` listing kind, the claim flow surfaced, `publish` becomes a button. | Browse → claim → verify → RUN activates |
+| **M4** | Marketplace: four families from `FAMILIES`, the `company` listing kind, the claim flow surfaced, `publish` becomes a derived button. The `/agents` destination is deleted and becomes the `agent` family. | Browse → claim → verify → RUN activates; the CTA label and flow are derived, never written per tab |
 | **M5** | Progressive disclosure through one `earned(rung)` helper; dim rows open a real preview. | A visitor sees every row; a claimed company activates eight seats |
 
 Against PRD 18/19: **M0–M2 block no track's schema or API, and gate every track's left-panel
@@ -1091,7 +1140,8 @@ surface — the same argument §5 makes about E6.
    rung — rows dim, never disappear (§2.6 rule 7).
 5. Every BurnRateOS `system_features` leaf and every hired.video page group has exactly one `parent`
    in the registry before its track's UI ships.
-6. The marketplace exposes exactly three families; `publish` is an action, not a filter.
+6. The marketplace exposes exactly four families from `FAMILIES`; the publish CTA's label **and**
+   flow are derived from the active family, and `/agents` has zero references as a destination.
 7. A company can be browsed unclaimed, claimed with verification, and the claim activates the RUN
    group and the eight business seats for that tenant.
 8. Every registry string is a `labelKey` present in all five catalogs with real translations.
@@ -1104,6 +1154,12 @@ surface — the same argument §5 makes about E6.
 13. Every `surface:'panel'` destination renders identically signed out (as a page) and signed in
     (in `ShellPanel` at `full`), from one component, with its public URL unchanged (§11.4.5).
 14. The public header has no `Home` item, and its primary CTA resolves to a real board (§11.4.6).
+15. Both public and signed-in headers expose the same persisted cart; completing a free marketplace
+    acquisition creates a queryable purchase-history row with a zero amount (§11.5.4).
+15. Every seat in kernel `DOMAINS` has a `--seat-*` token declared in both themes, no two seats
+    share a hue, and no surface hard-codes a seat colour (§11.10.1).
+16. The Features page renders its domain cards from the registry — title, seat, hue, stage and
+    feature bullets — and carries no second copy of any of them (§11.10.3).
 
 ### 11.9 Open decisions — operator, not engineering
 
@@ -1119,3 +1175,91 @@ Added to §7's two, which remain.
 5. **Whose custom domain does a claimed company's storefront use** — the site-backend work (0412) or
    the whitelabel table PRD 18 T6 ports? Both exist; PRD 19 §2's one-owner rule applies and neither
    PRD has claimed the row. *Blocks M4's publish path.*
+6. **"Things" vs "Assets"** for the fourth marketplace family (§11.5). The CTA test picked Assets;
+   Things was the earlier draft. *Blocks M4's copy and the `Family` union.*
+
+---
+
+### 11.10 What the merge adds to the design system
+
+§2 settles palette, type and scale for one product. Consolidating two products' menus adds exactly
+three token families, and each one exists for the same reason: **a value that was being re-invented
+per surface now has more than one reader.** Nothing here introduces a new colour — every value is
+drawn from the eleven categorical hues §2.2 already declares.
+
+#### 11.10.1 Seat hue — `--seat-*`
+
+BurnRateOS assigns each domain a Mantine colour on its marketing cards. Builderforce's roster picks
+its own. The canvas picks a third for agent objects. Twelve seats × three surfaces is how a CFO
+ends up green in one place and blue in another, and it is the colour equivalent of the four-name
+problem §11.1 describes.
+
+**One declaration, both themes, five readers** — the roster chip, the nav row's seat badge, the
+panel's top rule and index marker, the marketing card, and any chart series broken down by owner.
+
+| Seat | Token | Categorical hue |
+|---|---|---|
+| CEO | `--seat-ceo` | violet |
+| CFO | `--seat-cfo` | emerald |
+| CRO | `--seat-cro` | amber |
+| CMO | `--seat-cmo` | pink |
+| CTO | `--seat-cto` | sky |
+| CPO | `--seat-cpo` | yellow |
+| HR | `--seat-hr` | teal |
+| Recruiter | `--seat-recruiter` | orange |
+| Security | `--seat-security` | red |
+| Support | `--seat-support` | purple |
+| Manager | `--seat-manager` | indigo |
+| Brain | `--seat-brain` | the brand blue |
+
+Twelve seats consume exactly the eleven categorical hues plus the brand — which is why §2.2's
+eleventh hue was needed and is now spent. **A thirteenth seat needs a twelfth hue before it needs a
+menu entry**, and that is a deliberate constraint on how many always-on seats the product grows.
+
+Soft fills derive with `color-mix(in srgb, var(--seat-x) 12%, transparent)` rather than twelve more
+tokens: the mix follows the base through both themes, so there is still one declaration per seat.
+
+#### 11.10.2 Brand gradient — `--grad-brand`, `--wash-hero`
+
+Ported from `burnrateos.com/features`, and deliberately restricted to **two positions on a page**:
+the hero word-mark and the closing CTA band. `--wash-hero` is its ~8% tint for the hero ground.
+Everything between them stays flat. A gradient that also appears on cards stops meaning *this is
+the beginning or the end of the page* and becomes decoration, which is the failure mode §2.6 rule 1
+guards against for colour generally.
+
+#### 11.10.3 Marketing band rhythm
+
+BurnRateOS ships **95 marketing pages built from `MarketingPageShell` plus six section primitives**
+(Hero / FeatureGrid / NarrativeSplit / FAQ / FinalCTA / PartnerBadge). **Port the system, never the
+pages** — hand-authoring a third marketing system is how a product gets a fourth.
+
+The rhythm, which the Features page is the reference implementation of:
+
+```
+wash (hero + overview card)  →  tint (domain grid)  →  raised (foundations, dashed cards)
+   →  tint (tier table)  →  raised (FAQ)  →  gradient (final CTA)
+```
+
+Five content bands and a close. A page that needs a sixth content band is two pages. The primitives
+carry `.mk-*` names and sit beside the existing `.ui-*` set, because a marketing section and a
+product surface are different contracts and merging their class namespaces is how `.card` came to
+mean three things.
+
+**Two DRY consequences worth naming, both visible in the mockup:**
+
+1. **The features page is a registry projection.** Every domain card's title, seat badge, seat hue,
+   stage pill and feature bullets come from the same array the left panel reads — so a features
+   page cannot advertise a capability under a name the product does not use. This is the same rule
+   as §11.4.6, applied to the page rather than the menu.
+2. **The FAQ disclosure is the nav disclosure.** The collapsible stage header (§11.4.1), the FAQ
+   accordion and the panel index all reduce to one `aria-expanded` primitive with three consumers —
+   the DRY rule applied to an *interaction*, not just to a value.
+
+#### 11.10.4 What this adds to `check:design-tokens`
+
+Three assertions, landing with M0:
+
+1. Every seat in kernel `DOMAINS` has a `--seat-*` token declared in **both** themes.
+2. No `--seat-*` value is used by more than one seat (a duplicate hue defeats the point).
+3. `--grad-brand` appears at most twice per page (hero + CTA), enforced as a lint over `.mk-band`
+   usage rather than a runtime check.

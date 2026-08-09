@@ -6293,6 +6293,7 @@
       "realDefinition": "Live in production. Ready to use."
     }
   },
+  "shoppingCart": { "title": "Cart", "close": "Close cart", "empty": "Your cart is empty", "browse": "Browse marketplace", "free": "Free", "use": "use", "plusActivation": "+ ${price} activation", "remove": "Remove {name}", "dueToday": "Due today", "thenMonthly": "Then monthly", "checkout": "Secure checkout", "redirecting": "Redirecting…", "checkoutFailed": "Checkout could not be started", "mixedCheckout": "Marketplace items and subscriptions must be checked out separately.", "workspaceRequired": "Select a workspace before purchasing this service.", "unsupportedCheckout": "One or more items cannot be purchased through this checkout yet.", "purchaseComplete": "{count, plural, one {Purchase complete} other {# purchases complete}}.", "purchaseHistory": "Purchase history", "clear": "Clear cart", "signInPrompt": "Sign in to complete your purchase", "createAccount": "Create account", "signIn": "Sign in" },
   "pricing": {
     "enabledModulesTitle": "Your enabled modules ({count})",
     "enabledModulesDescription": "Plan pricing and shared usage allowances apply to this feature set.",
@@ -6364,6 +6365,7 @@
     "teamsCostNoteYear": "${perSeat}/seat/yr — billed as ${total}/yr",
     "teamsCostNoteMonth": "${perSeat}/seat/mo — billed as ${total}/mo",
     "managedAddon": "Add-on: <b>Managed AgentHost</b> — ${price}/mo per hosted AgentHost. We run your BuilderForce Agents instance for you — no Docker, no DevOps.",
+    "phone": { "eyebrow": "Retention add-on", "title": "Business Phone", "description": "Give your company a dedicated US number for voice, SMS, and MMS without new hardware.", "dedicatedNumber": "Dedicated business number", "forwarding": "Forward calls to the phone you already use", "allowance": "{minutes} minutes, {sms} SMS, and {mms} MMS included monthly", "overages": "Overages: ${minute}/minute, ${sms}/SMS segment, ${mms}/MMS.", "learnMore": "Explore Business Phone", "addonFor": "Add-on for Pro and Teams", "perMonth": "/month", "activation": "${price} one-time activation", "addToCart": "Add to cart", "viewCart": "View cart", "eligibility": "Requires an active Pro or Teams subscription." },
     "relatedHeading": "Before you decide",
     "planFeatures": [
       "1 AgentHost",
@@ -6382,6 +6384,7 @@
       "Per-seat cost controls"
     ]
   },
+  "phonePage": { "seoTitle": "Business Phone — Builderforce.ai", "seoDescription": "A dedicated business number for voice, SMS, and MMS.", "active": "Business Phone is active", "provisioning": "Your number is ready for provisioning and assignment.", "loading": "Loading pricing…", "createAccount": "Create an account", "voiceMessaging": "Voice and messaging", "transparentUsage": "Transparent usage pricing" },
   "product": {
     "seo": {
       "title": "Product — The Creative Canvas for Humans and AI Agents",

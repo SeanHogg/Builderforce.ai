@@ -19,6 +19,7 @@ import styles from './pricing.module.css';
 import { fetchPublicPricing, type PublicPricingContract, type PublicPricingPlan } from '@/lib/publicPricing';
 import { NAV_GROUPS } from '@/lib/navGroups';
 import { isNavigationFeatureId } from '@/lib/navigationFeatures';
+import { useCart } from '@/lib/CartContext';
 
 type Plan = 'free' | 'pro' | 'teams';
 
@@ -97,6 +98,7 @@ export default function PricingPageClient() {
   const navT = useTranslations('nav');
   const confirm = useConfirm();
   const { tenant } = useAuth();
+  const { addItem, hasItem, openCart } = useCart();
   const searchParams = useSearchParams();
   const tenantId = tenant?.id != null ? Number(tenant.id) : null;
   const selectedModuleIds = Array.from(new Set(
@@ -412,6 +414,33 @@ export default function PricingPageClient() {
               );})}
             </div>
           </section>
+
+          {publicPricing?.businessPhone && (
+            <section className={styles.phoneOffer} aria-labelledby="business-phone-title">
+              <div className={styles.phoneOfferCopy}>
+                <p className={styles.eyebrow}>{t('phone.eyebrow')}</p>
+                <h2 id="business-phone-title">{t('phone.title')}</h2>
+                <p>{t('phone.description')}</p>
+                <ul className={styles.phoneFeatures}>
+                  <li>{t('phone.dedicatedNumber')}</li><li>{t('phone.forwarding')}</li>
+                  <li>{t('phone.allowance', { minutes: publicPricing.businessPhone.includedMinutes, sms: publicPricing.businessPhone.includedSms, mms: publicPricing.businessPhone.includedMms })}</li>
+                </ul>
+                <p className={styles.phoneOverages}>{t('phone.overages', { minute: publicPricing.businessPhone.overagePerMinute, sms: publicPricing.businessPhone.overagePerSms, mms: publicPricing.businessPhone.overagePerMms })}</p>
+                <Link href="/crm/phone" className={styles.secondaryButton}>{t('phone.learnMore')}</Link>
+              </div>
+              <div className={styles.phonePriceCard}>
+                <span>{t('phone.addonFor')}</span>
+                <strong>{formatPrice(publicPricing.businessPhone.monthly)}<small>{t('phone.perMonth')}</small></strong>
+                <p>{t('phone.activation', { price: publicPricing.businessPhone.activation })}</p>
+                <button type="button" className={styles.primaryButton} onClick={() => {
+                  const id = 'service:business-phone';
+                  if (!hasItem(id)) addItem({ id, type: 'service', slug: 'business-phone', name: t('phone.title'), price: publicPricing.businessPhone.monthly, setupFee: publicPricing.businessPhone.activation, pricingModel: 'subscription', priceUnit: t('phone.perMonth'), checkoutKind: 'business_phone', emoji: 'phone' });
+                  else openCart();
+                }}>{hasItem('service:business-phone') ? t('phone.viewCart') : t('phone.addToCart')}</button>
+                <small>{t('phone.eligibility')}</small>
+              </div>
+            </section>
+          )}
 
           {/* Upgrade checkout — a slide-out panel (opened by any upgrade CTA). Per the
               app convention only terminal/destructive confirms use a centered modal;

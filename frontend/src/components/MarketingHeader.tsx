@@ -10,6 +10,7 @@ import { BURNRATE_FOUNDATIONS, BURNRATE_PRODUCT_DOMAINS } from '@/lib/burnrateCa
 import { isNavItemActive } from '@/lib/nav';
 import { useMobileNav } from '@/lib/useMobileNav';
 import { Icon } from '@/components/ui/Icon';
+import { HeaderCartButton } from './HeaderCartButton';
 
 /**
  * Horizontal top-of-page navigation for marketing / public pages (logged-out
@@ -138,6 +139,7 @@ export default function MarketingHeader() {
 
         {/* Right side: theme + auth CTAs (desktop), hamburger (mobile) */}
         <div className="mh-right">
+          <HeaderCartButton className="mh-cart" />
           <ThemeToggleButton />
           <Link href="/login" className="mh-signin">{tc('signIn')}</Link>
           <Link href="/register" className="mh-cta">{tc('getStarted')}</Link>

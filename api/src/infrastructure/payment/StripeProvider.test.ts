@@ -132,6 +132,27 @@ describe('createCheckoutSession — discount', () => {
   });
 });
 
+describe('Business Phone checkout', () => {
+  it('charges activation once, service monthly, and signs the consolidated cart metadata', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ id: 'cs_phone', url: 'https://checkout.stripe.test/phone', customer: null }), { status: 200 })));
+    await makeProvider().createBusinessPhoneCheckoutSession({ tenantId: 7, cartId: 'cart-7', billingEmail: 'billing@example.com', currency: 'USD', activationCents: 1995, monthlyCents: 995, successUrl: 'https://builderforce.ai/crm/phone?purchase=success', cancelUrl: 'https://builderforce.ai/pricing?phone=cancelled' });
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    const body = new URLSearchParams(String(init?.body));
+    expect(body.get('line_items[0][price_data][unit_amount]')).toBe('1995');
+    expect(body.get('line_items[0][price_data][recurring][interval]')).toBeNull();
+    expect(body.get('line_items[1][price_data][unit_amount]')).toBe('995');
+    expect(body.get('line_items[1][price_data][recurring][interval]')).toBe('month');
+    expect(body.get('metadata[purchaseKind]')).toBe('business_phone');
+    expect(body.get('metadata[cartId]')).toBe('cart-7');
+  });
+
+  it('normalizes checkout completion as an add-on event, not a base-plan activation', async () => {
+    const payload = JSON.stringify({ type: 'checkout.session.completed', data: { object: { mode: 'subscription', customer: 'cus_phone', subscription: 'sub_phone', customer_email: 'billing@example.com', metadata: { tenantId: '7', purchaseKind: 'business_phone', cartId: 'cart-7', activationCents: '1995', monthlyCents: '995' } } } });
+    const event = await makeProvider().parseWebhook(payload, await sign(payload));
+    expect(event).toMatchObject({ type: 'addon.activated', purchaseKind: 'business_phone', tenantId: 7, cartId: 'cart-7', activationCents: 1995, monthlyCents: 995 });
+  });
+});
+
 describe('createCardValidationSession — billing profile collection', () => {
   afterEach(() => vi.unstubAllGlobals());
 

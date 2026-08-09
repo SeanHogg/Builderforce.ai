@@ -99,8 +99,8 @@ export function validatePricingDocument(raw: unknown): PricingDocument {
     currency: value.currency.trim().toUpperCase(),
     managedAgentHostMonthly: managed,
     businessPhone: {
-      activation: phoneNumbers[0], monthly: phoneNumbers[1], includedMinutes: phoneNumbers[2], includedSms: phoneNumbers[3], includedMms: phoneNumbers[4],
-      overagePerMinute: phoneNumbers[5], overagePerSms: phoneNumbers[6], overagePerMms: phoneNumbers[7], eligiblePlans: ['pro', 'teams'],
+      activation: phoneNumbers[0]!, monthly: phoneNumbers[1]!, includedMinutes: phoneNumbers[2]!, includedSms: phoneNumbers[3]!, includedMms: phoneNumbers[4]!,
+      overagePerMinute: phoneNumbers[5]!, overagePerSms: phoneNumbers[6]!, overagePerMms: phoneNumbers[7]!, eligiblePlans: ['pro', 'teams'],
     },
     plans: (['free', 'pro', 'teams'] as const).map((id) => validatePlan(byId.get(id), id)),
   };

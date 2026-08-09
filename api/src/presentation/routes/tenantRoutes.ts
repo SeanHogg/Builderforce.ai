@@ -46,6 +46,7 @@ import {
   tenants,
   users,
   salesReferrals,
+  carts,
 } from '../../infrastructure/database/schema';
 import { sendWorkspaceInviteEmail } from '../../infrastructure/email/EmailService';
 import { sendTransactionalEmail } from '../../application/email/sendEmail';
@@ -61,6 +62,7 @@ import {
   reserveDiscount,
 } from '../../application/tenant/discountCodeService';
 import { getPublishedPricing } from '../../application/tenant/pricingConfiguration';
+import { getBusinessPhoneSubscription } from '../../application/tenant/businessPhoneSubscription';
 import {
   readNavigationFeatures,
   validateNavigationFeatures,
@@ -412,6 +414,34 @@ export function createTenantRoutes(tenantService: TenantService, db: Db): Hono<H
 
     const subscription = await tenantService.getSubscription(tenantId);
     return c.json(subscription);
+  });
+
+  router.get('/:id/add-ons/business-phone', requirePermission(PERMISSIONS.BILLING_READ), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    if (tenantId !== c.get('tenantId')) return c.json({ error: 'Forbidden' }, 403);
+    return c.json({ subscription: await getBusinessPhoneSubscription(db, tenantId) });
+  });
+
+  router.post('/:id/add-ons/business-phone/checkout', requireRole(TenantRole.MANAGER), requirePermission(PERMISSIONS.BILLING_MANAGE), async (c) => {
+    const tenantId = Number(c.req.param('id'));
+    if (tenantId !== c.get('tenantId')) return c.json({ error: 'Forbidden' }, 403);
+    const body = await c.req.json<{ billingEmail?: string }>();
+    if (!body.billingEmail?.trim()) return c.json({ error: 'billingEmail is required' }, 400);
+    const pricing = await getPublishedPricing(db, c.env as Env);
+    const existing = await getBusinessPhoneSubscription(db, tenantId);
+    if (existing?.status === 'active') return c.json({ error: 'Business Phone is already active' }, 409);
+    const appUrl = c.env.APP_URL ?? 'https://builderforce.ai';
+    const activationCents = Math.round(pricing.businessPhone.activation * 100);
+    const monthlyCents = Math.round(pricing.businessPhone.monthly * 100);
+    const [cart] = await db.insert(carts).values({ tenantId, buyerRef: c.get('userId') as string, currency: pricing.currency, subtotalCents: activationCents + monthlyCents, totalCents: activationCents + monthlyCents }).returning({ id: carts.id });
+    if (!cart) throw new Error('Business Phone cart was not created');
+    const result = await tenantService.createBusinessPhoneCheckoutSession(tenantId, {
+      cartId: cart.id,
+      billingEmail: body.billingEmail.trim(), currency: pricing.currency,
+      activationCents, monthlyCents,
+      successUrl: `${appUrl}/crm/phone?purchase=success`, cancelUrl: `${appUrl}/pricing?phone=cancelled`,
+    });
+    return c.json(result);
   });
 
   /**

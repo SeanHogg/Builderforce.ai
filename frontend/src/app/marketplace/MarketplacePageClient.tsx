@@ -267,6 +267,8 @@ export default function MarketplacePageClient() {
         tags: Array.isArray(s.tags) ? s.tags : [],
         downloads: s.downloads ?? 0,
         likes: s.likes ?? 0,
+        price: (s.price_cents ?? 0) / 100,
+        pricingModel: s.pricing_model ?? 'flat_fee',
         image: s.icon_url ?? undefined,
       }));
     } catch {

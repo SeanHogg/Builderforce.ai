@@ -331,11 +331,31 @@ export class TenantService {
     return { checkoutUrl: result.checkoutUrl, sessionId: result.sessionId };
   }
 
+  async createBusinessPhoneCheckoutSession(tenantId: number, input: {
+    cartId: string;
+    billingEmail: string;
+    currency: string;
+    activationCents: number;
+    monthlyCents: number;
+    successUrl: string;
+    cancelUrl: string;
+  }): Promise<{ checkoutUrl: string; sessionId: string }> {
+    const tenant = await this.getTenant(tenantId);
+    if (tenant.billingStatus !== TenantBillingStatus.ACTIVE || tenant.plan === TenantPlan.FREE) {
+      throw new ValidationError('Business Phone requires an active Pro or Teams plan');
+    }
+    const result = await this.payment.createBusinessPhoneCheckoutSession({ tenantId, ...input });
+    return { checkoutUrl: result.checkoutUrl, sessionId: result.sessionId };
+  }
+
   /**
    * Process a normalised webhook event from the payment provider.
    * Called by the webhook route after signature verification.
    */
   async handleWebhookEvent(event: WebhookEvent): Promise<void> {
+    // Add-on lifecycle is persisted by the webhook route in its own bounded context;
+    // it must never mutate the workspace's base plan subscription.
+    if (event.purchaseKind) return;
     const tenant = await this.tenants.findByExternalCustomerId(event.externalCustomerId);
     if (!tenant) {
       // Unknown customer — could be a test event or a race condition; log and ignore

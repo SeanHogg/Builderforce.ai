@@ -6273,6 +6273,7 @@
       "realDefinition": "En production. Prêt à l’emploi."
     }
   },
+  "shoppingCart": { "title": "Panier", "close": "Fermer le panier", "empty": "Votre panier est vide", "browse": "Parcourir la marketplace", "free": "Gratuit", "use": "utilisation", "plusActivation": "+ ${price} d’activation", "remove": "Retirer {name}", "dueToday": "À payer aujourd’hui", "thenMonthly": "Puis chaque mois", "checkout": "Paiement sécurisé", "redirecting": "Redirection…", "checkoutFailed": "Impossible de démarrer le paiement", "mixedCheckout": "Les articles de la marketplace et les abonnements doivent être réglés séparément.", "workspaceRequired": "Sélectionnez un espace de travail avant d’acheter ce service.", "unsupportedCheckout": "Un ou plusieurs articles ne peuvent pas encore être achetés via ce paiement.", "purchaseComplete": "{count, plural, one {Achat terminé} other {# achats terminés}}.", "purchaseHistory": "Historique des achats", "clear": "Vider le panier", "signInPrompt": "Connectez-vous pour terminer l’achat", "createAccount": "Créer un compte", "signIn": "Se connecter" },
   "pricing": {
     "enabledModulesTitle": "Vos modules activés ({count})",
     "enabledModulesDescription": "La tarification du forfait et les quotas partagés s’appliquent à cet ensemble de fonctionnalités.",
@@ -6344,6 +6345,7 @@
     "teamsCostNoteYear": "{perSeat} $/poste/an — facturé {total} $/an",
     "teamsCostNoteMonth": "{perSeat} $/poste/mois — facturé {total} $/mois",
     "managedAddon": "Module complémentaire : <b>AgentHost géré</b> — {price} $/mois par AgentHost hébergé. Nous exécutons votre instance BuilderForce Agents pour vous — sans Docker, sans DevOps.",
+    "phone": { "eyebrow": "Option de fidélisation", "title": "Téléphone professionnel", "description": "Offrez à votre entreprise un numéro américain dédié pour la voix, les SMS et les MMS, sans nouveau matériel.", "dedicatedNumber": "Numéro professionnel dédié", "forwarding": "Transférez les appels vers votre téléphone actuel", "allowance": "{minutes} minutes, {sms} SMS et {mms} MMS inclus chaque mois", "overages": "Dépassements : ${minute}/minute, ${sms}/segment SMS, ${mms}/MMS.", "learnMore": "Découvrir le téléphone professionnel", "addonFor": "Option pour Pro et Teams", "perMonth": "/mois", "activation": "Activation unique de ${price}", "addToCart": "Ajouter au panier", "viewCart": "Voir le panier", "eligibility": "Nécessite un abonnement Pro ou Teams actif." },
     "relatedHeading": "Avant de vous décider",
     "planFeatures": [
       "1 AgentHost",
@@ -6362,6 +6364,7 @@
       "Contrôles de coûts par poste"
     ]
   },
+  "phonePage": { "seoTitle": "Téléphone professionnel — Builderforce.ai", "seoDescription": "Un numéro professionnel dédié pour la voix, les SMS et les MMS.", "active": "Le téléphone professionnel est actif", "provisioning": "Votre numéro est prêt à être provisionné et attribué.", "loading": "Chargement des tarifs…", "createAccount": "Créer un compte", "voiceMessaging": "Voix et messagerie", "transparentUsage": "Tarification d’usage transparente" },
   "product": {
     "seo": {
       "title": "Produit — Créez, entraînez, orchestrez et gouvernez votre main-d'œuvre IA",

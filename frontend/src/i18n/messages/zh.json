@@ -435,8 +435,7 @@
     "closeMenu": "关闭菜单",
     "bottom": {
       "product": "产品",
-    "pricing": "价格",
-    "about": "关于我们",
+      "pricing": "价格",
       "signIn": "登录"
     },
     "group": {
@@ -6274,6 +6273,7 @@
       "realDefinition": "已上线。立即可用。"
     }
   },
+  "shoppingCart": { "title": "购物车", "close": "关闭购物车", "empty": "购物车为空", "browse": "浏览市场", "free": "免费", "use": "次使用", "plusActivation": "+ ${price} 开通费", "remove": "移除{name}", "dueToday": "今日应付", "thenMonthly": "之后每月", "checkout": "安全结账", "redirecting": "正在跳转…", "checkoutFailed": "无法启动结账", "mixedCheckout": "市场商品和订阅必须分开结账。", "workspaceRequired": "购买此服务前请选择工作区。", "unsupportedCheckout": "一个或多个商品暂时无法通过此结账流程购买。", "purchaseComplete": "已完成 {count} 笔购买。", "purchaseHistory": "购买记录", "clear": "清空购物车", "signInPrompt": "请登录以完成购买", "createAccount": "创建账户", "signIn": "登录" },
   "pricing": {
     "enabledModulesTitle": "已启用的模块（{count}）",
     "enabledModulesDescription": "套餐价格和共享用量额度适用于此功能组合。",
@@ -6345,6 +6345,7 @@
     "teamsCostNoteYear": "${perSeat}/席位/年 — 按 ${total}/年 计费",
     "teamsCostNoteMonth": "${perSeat}/席位/月 — 按 ${total}/月 计费",
     "managedAddon": "附加组件：<b>托管 AgentHost</b> — 每个托管 AgentHost ${price}/月。我们为您运行 BuilderForce Agents 实例 — 无需 Docker，无需 DevOps。",
+    "phone": { "eyebrow": "客户留存附加服务", "title": "企业电话", "description": "为企业提供专属美国号码，支持语音、短信和彩信，无需添置硬件。", "dedicatedNumber": "专属企业号码", "forwarding": "来电可转接至现有手机", "allowance": "每月含 {minutes} 分钟、{sms} 条短信和 {mms} 条彩信", "overages": "超额费用：每分钟 ${minute}、每个短信分段 ${sms}、每条彩信 ${mms}。", "learnMore": "了解企业电话", "addonFor": "Pro 和 Teams 附加服务", "perMonth": "/月", "activation": "一次性开通费 ${price}", "addToCart": "加入购物车", "viewCart": "查看购物车", "eligibility": "需要有效的 Pro 或 Teams 订阅。" },
     "relatedHeading": "在您决定之前",
     "planFeatures": [
       "1 个 AgentHost",
@@ -6363,6 +6364,7 @@
       "按席位成本控制"
     ]
   },
+  "phonePage": { "seoTitle": "企业电话 — Builderforce.ai", "seoDescription": "支持语音、短信和彩信的专属企业号码。", "active": "企业电话已启用", "provisioning": "你的号码已可配置和分配。", "loading": "正在加载价格…", "createAccount": "创建账户", "voiceMessaging": "语音与消息", "transparentUsage": "透明的用量定价" },
   "product": {
     "seo": {
       "title": "产品 — 构建、训练、编排并治理你的 AI 团队",
@@ -12344,6 +12346,7 @@
     "agents": "智能体",
     "models": "模型",
     "pricing": "定价",
+    "about": "关于我们",
     "blog": "博客",
     "diagnosticsTools": "诊断与工具",
     "soc2Audits": "SOC 2 与系统审计",
