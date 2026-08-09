@@ -1,8 +1,10 @@
+import { getTranslations } from 'next-intl/server';
 import { CompliancePage, LegalCallout, LegalChecklist, LegalSection } from '@/components/legal/CompliancePage';
 
-export default function Page() {
+export default async function Page() {
+  const t = await getTranslations('legal.titles');
   return (
-    <CompliancePage title="Customer data processing addendum" currentHref="/legal/dpa">
+    <CompliancePage title={t('dpa')} currentHref="/legal/dpa">
       <LegalCallout label="When this DPA applies">
         This DPA forms part of the customer agreement when Fix Faster LLC processes Customer Personal Data on the customer&apos;s behalf.
       </LegalCallout>

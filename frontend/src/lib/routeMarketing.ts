@@ -258,6 +258,40 @@ const DEFAULT: RouteMarketing = {
 
 const REGISTRY: Record<string, RouteMarketing> = { ...fromSurfaces, ...extra };
 
+/**
+ * Registry routes that must NOT be indexed.
+ *
+ * Every authenticated route renders a `RouteMarketing` teaser to a logged-out
+ * visitor (see `ConditionalAppShell`), which makes it a real, crawlable page
+ * whether or not anyone decided it should be. For a marketed surface — the IDE,
+ * projects, workforce — that is the point: it is a demand-capture landing page.
+ * For operator tooling it is not. A "Platform Admin" page in the index invites
+ * exactly the traffic it should never receive, and a workspace switcher has
+ * nothing to rank for.
+ *
+ * These four therefore keep their teaser (so a deep link is still not a dead
+ * end) and are excluded from the sitemap.
+ */
+const NOINDEX_TEASER_ROUTES = new Set(['/admin', '/tenants', '/settings', '/agent-worker']);
+
+/**
+ * The teaser routes that belong in the sitemap, derived from the registry.
+ *
+ * Derived rather than hand-listed on purpose: the previous sitemap named twelve
+ * of these by hand and silently omitted the rest, so adding a surface to the
+ * registry left it unindexed and nobody found out. Now the two cannot drift —
+ * a new marketed surface is indexed by existing, and a new internal one is
+ * excluded by being named above.
+ */
+export function indexableTeaserRoutes(): string[] {
+  return Object.keys(REGISTRY).filter((route) => !NOINDEX_TEASER_ROUTES.has(route)).sort();
+}
+
+/** Should this route tell crawlers to stay away? Consumed by robots metadata. */
+export function isNoindexTeaserRoute(pathname: string): boolean {
+  return NOINDEX_TEASER_ROUTES.has(pathname);
+}
+
 /** Longest-prefix match of `pathname` against a `key → value` map. */
 function longestPrefixMatch<T>(pathname: string, map: Record<string, T>): { key: string; val: T } | null {
   let best: { key: string; val: T } | null = null;

@@ -1327,7 +1327,47 @@
     "privacyTitle": "Datenschutzrichtlinie",
     "published": "Veröffentlicht am {date}",
     "loading": "Wird geladen…",
-    "close": "Schließen"
+    "close": "Schließen",
+    "eyebrow": "Recht und Compliance",
+    "backToCenter": "Compliance-Center",
+    "lastUpdated": "Zuletzt aktualisiert",
+    "navLabel": "Rechts- und Compliance-Seiten",
+    "resourcesHeading": "Compliance-Ressourcen",
+    "contactHeading": "Fragen zu diesem Dokument?",
+    "contactBody": "Unser Datenschutzteam hilft bei Anfragen, Verträgen und Compliance-Details.",
+    "authoritativeNotice": "Dieses Dokument wird in englischer Sprache veröffentlicht. Die englische Fassung ist der verbindliche Text und geht bei Abweichungen von einer Übersetzung vor.",
+    "nav": {
+      "overview": "Überblick",
+      "privacyRights": "Datenschutzrechte",
+      "cookies": "Cookie-Einstellungen",
+      "subprocessors": "Unterauftragsverarbeiter",
+      "dpa": "Datenverarbeitung",
+      "aiTransparency": "KI-Transparenz",
+      "accessibility": "Barrierefreiheit"
+    },
+    "titles": {
+      "compliance": "Trust- und Compliance-Center",
+      "privacyRights": "Datenschutzrechte und Beschwerden",
+      "cookies": "Cookie-Richtlinie",
+      "subprocessors": "Unterauftragsverarbeiter",
+      "dpa": "Vereinbarung zur Auftragsverarbeitung",
+      "aiTransparency": "KI-Transparenz",
+      "accessibility": "Erklärung zur Barrierefreiheit"
+    },
+    "center": {
+      "eyebrow": "BuilderForce Trust-Center",
+      "lead": "BuilderForce.ai wird von Fix Faster LLC betrieben, einer Gesellschaft mit beschränkter Haftung nach dem Recht von Michigan. Diese öffentlichen Kontrollen ergänzen unsere Nutzungsbedingungen und unsere Datenschutzerklärung.",
+      "assuranceLead": "Die Kontrollen werden fortlaufend überprüft.",
+      "assuranceBody": "Unser Compliance-Audit-Agent prüft die Kontrollen für Sicherheit, Datenschutz, KI, Minderjährigenschutz, Reaktion auf Datenschutzverletzungen, Folgenabschätzung, Aufbewahrung und Barrierefreiheit gegen das Quellcode-Repository.",
+      "details": {
+        "privacyRights": "Anfragen, Löschung, Beschwerden und menschliche Überprüfung",
+        "cookies": "Einwilligung, optionale Analyse und Global Privacy Control",
+        "subprocessors": "Dienstleister, Datennutzung und Übermittlungsgarantien",
+        "dpa": "Weisungen des Kunden, Sicherheit und Auditbedingungen",
+        "aiTransparency": "Agentenverhalten, Nutzerkontrolle und wesentliche Entscheidungen",
+        "accessibility": "Unser WCAG-Bekenntnis, Feedback und Vorkehrungen"
+      }
+    }
   },
   "llmUsage": {
     "byUser": "Nach Benutzer · letzte 7 Tage",

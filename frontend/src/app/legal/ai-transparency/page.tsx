@@ -1,8 +1,10 @@
+import { getTranslations } from 'next-intl/server';
 import { CompliancePage, LegalCallout, LegalChecklist, LegalSection } from '@/components/legal/CompliancePage';
 
-export default function Page() {
+export default async function Page() {
+  const t = await getTranslations('legal.titles');
   return (
-    <CompliancePage title="AI transparency and human review" currentHref="/legal/ai-transparency">
+    <CompliancePage title={t('aiTransparency')} currentHref="/legal/ai-transparency">
       <LegalCallout label="Humans stay in control">
         AI output may be inaccurate. BuilderForce exposes agent activity and approval prompts so people can review work before relying on it.
       </LegalCallout>

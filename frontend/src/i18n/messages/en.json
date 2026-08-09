@@ -1327,7 +1327,47 @@
     "privacyTitle": "Privacy Policy",
     "published": "Published {date}",
     "loading": "Loading…",
-    "close": "Close"
+    "close": "Close",
+    "eyebrow": "Legal & compliance",
+    "backToCenter": "Compliance center",
+    "lastUpdated": "Last updated",
+    "navLabel": "Legal and compliance pages",
+    "resourcesHeading": "Compliance resources",
+    "contactHeading": "Questions about this document?",
+    "contactBody": "Our privacy team can help with requests, contracts, and compliance details.",
+    "authoritativeNotice": "This document is published in English. The English version is the authoritative text and governs in the event of any discrepancy with a translation.",
+    "nav": {
+      "overview": "Overview",
+      "privacyRights": "Privacy rights",
+      "cookies": "Cookie choices",
+      "subprocessors": "Subprocessors",
+      "dpa": "Data processing",
+      "aiTransparency": "AI transparency",
+      "accessibility": "Accessibility"
+    },
+    "titles": {
+      "compliance": "Trust & compliance center",
+      "privacyRights": "Privacy rights and appeals",
+      "cookies": "Cookie policy",
+      "subprocessors": "Subprocessors",
+      "dpa": "Customer data processing addendum",
+      "aiTransparency": "AI transparency",
+      "accessibility": "Accessibility statement"
+    },
+    "center": {
+      "eyebrow": "BuilderForce trust center",
+      "lead": "BuilderForce.ai is operated by Fix Faster LLC, a Michigan limited liability company. These public controls supplement our Terms and Privacy Policy.",
+      "assuranceLead": "Controls are continuously reviewed.",
+      "assuranceBody": "Security, privacy, AI, minor-safety, breach-response, impact-assessment, retention, and accessibility controls are tested by our Compliance Audit Agent against the source repository.",
+      "details": {
+        "privacyRights": "Requests, deletion, appeals, and human review",
+        "cookies": "Consent, optional analytics, and Global Privacy Control",
+        "subprocessors": "Service providers, data use, and transfer safeguards",
+        "dpa": "Customer instructions, security, and audit terms",
+        "aiTransparency": "Agent behavior, user control, and consequential decisions",
+        "accessibility": "Our WCAG commitment, feedback, and accommodations"
+      }
+    }
   },
   "llmUsage": {
     "byUser": "By user · last 7 days",

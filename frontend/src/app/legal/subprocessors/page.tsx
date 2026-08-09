@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server';
 import { CompliancePage } from '@/components/legal/CompliancePage';
 import styles from './page.module.css';
 
@@ -34,9 +35,10 @@ const providers = [
   },
 ];
 
-export default function Page() {
+export default async function Page() {
+  const t = await getTranslations('legal.titles');
   return (
-    <CompliancePage title="Subprocessor list" currentHref="/legal/subprocessors">
+    <CompliancePage title={t('subprocessors')} currentHref="/legal/subprocessors">
       <p className={styles.intro}>
         Providers are used only when the corresponding feature is enabled. Customers receive notice of material additions through this page and may object by contacting <a href="mailto:privacy@builderforce.ai">privacy@builderforce.ai</a>.
       </p>

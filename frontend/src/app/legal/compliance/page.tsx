@@ -1,37 +1,45 @@
+import { getTranslations } from 'next-intl/server';
 import Link from 'next/link';
 import { CompliancePage } from '@/components/legal/CompliancePage';
 import styles from './page.module.css';
 
+/**
+ * Route, glyph, and the catalog key its label comes from.
+ *
+ * The label reuses `legal.nav.*` — the same seven names the shared chrome's
+ * sidebar renders — rather than a second copy of the words. Two lists of the
+ * same page names is how "Cookie choices" and "Cookie policy" end up naming one
+ * page in two places.
+ */
 const resources = [
-  { href: '/legal/privacy-rights', icon: '↗', title: 'Privacy rights', detail: 'Requests, deletion, appeals, and human review' },
-  { href: '/legal/cookies', icon: '◌', title: 'Cookie choices', detail: 'Consent, optional analytics, and Global Privacy Control' },
-  { href: '/legal/subprocessors', icon: '◇', title: 'Subprocessors', detail: 'Service providers, data use, and transfer safeguards' },
-  { href: '/legal/dpa', icon: '✓', title: 'Data processing addendum', detail: 'Customer instructions, security, and audit terms' },
-  { href: '/legal/ai-transparency', icon: '✦', title: 'AI transparency', detail: 'Agent behavior, user control, and consequential decisions' },
-  { href: '/legal/accessibility', icon: '◎', title: 'Accessibility', detail: 'Our WCAG commitment, feedback, and accommodations' },
-];
+  { href: '/legal/privacy-rights', icon: '↗', key: 'privacyRights' },
+  { href: '/legal/cookies', icon: '◌', key: 'cookies' },
+  { href: '/legal/subprocessors', icon: '◇', key: 'subprocessors' },
+  { href: '/legal/dpa', icon: '✓', key: 'dpa' },
+  { href: '/legal/ai-transparency', icon: '✦', key: 'aiTransparency' },
+  { href: '/legal/accessibility', icon: '◎', key: 'accessibility' },
+] as const;
 
-export default function ComplianceCenter() {
+export default async function ComplianceCenter() {
+  const t = await getTranslations('legal');
   return (
     <CompliancePage
-      title="Trust & compliance center"
+      title={t('titles.compliance')}
       updated={null}
-      eyebrow="BuilderForce trust center"
+      eyebrow={t('center.eyebrow')}
       backHref="/"
       backLabel="BuilderForce.ai"
       currentHref="/legal/compliance"
     >
-      <p className={styles.lead}>
-        BuilderForce.ai is operated by Fix Faster LLC, a Michigan limited liability company. These public controls supplement our Terms and Privacy Policy.
-      </p>
+      <p className={styles.lead}>{t('center.lead')}</p>
 
-      <nav className={styles.grid} aria-label="Compliance resources">
+      <nav className={styles.grid} aria-label={t('resourcesHeading')}>
         {resources.map((resource) => (
           <Link className={styles.card} href={resource.href} key={resource.href}>
             <span className={styles.icon} aria-hidden="true">{resource.icon}</span>
             <span className={styles.cardCopy}>
-              <strong>{resource.title}</strong>
-              <span>{resource.detail}</span>
+              <strong>{t(`nav.${resource.key}`)}</strong>
+              <span>{t(`center.details.${resource.key}`)}</span>
             </span>
             <span className={styles.arrow} aria-hidden="true">→</span>
           </Link>
@@ -40,7 +48,7 @@ export default function ComplianceCenter() {
 
       <div className={styles.assurance}>
         <span className={styles.pulse} aria-hidden="true" />
-        <p><strong>Controls are continuously reviewed.</strong> Security, privacy, AI, minor-safety, breach-response, impact-assessment, retention, and accessibility controls are tested by our Compliance Audit Agent against the source repository.</p>
+        <p><strong>{t('center.assuranceLead')}</strong> {t('center.assuranceBody')}</p>
       </div>
     </CompliancePage>
   );

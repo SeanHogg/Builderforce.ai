@@ -1327,7 +1327,47 @@
     "privacyTitle": "Politique de confidentialité",
     "published": "Publié le {date}",
     "loading": "Chargement…",
-    "close": "Fermer"
+    "close": "Fermer",
+    "eyebrow": "Juridique et conformité",
+    "backToCenter": "Centre de conformité",
+    "lastUpdated": "Dernière mise à jour",
+    "navLabel": "Pages juridiques et de conformité",
+    "resourcesHeading": "Ressources de conformité",
+    "contactHeading": "Des questions sur ce document ?",
+    "contactBody": "Notre équipe chargée de la confidentialité peut vous aider pour les demandes, les contrats et les détails de conformité.",
+    "authoritativeNotice": "Ce document est publié en anglais. La version anglaise fait foi et prévaut en cas de divergence avec une traduction.",
+    "nav": {
+      "overview": "Vue d’ensemble",
+      "privacyRights": "Droits relatifs à la vie privée",
+      "cookies": "Choix relatifs aux cookies",
+      "subprocessors": "Sous-traitants ultérieurs",
+      "dpa": "Traitement des données",
+      "aiTransparency": "Transparence de l’IA",
+      "accessibility": "Accessibilité"
+    },
+    "titles": {
+      "compliance": "Centre de confiance et de conformité",
+      "privacyRights": "Droits relatifs à la vie privée et recours",
+      "cookies": "Politique relative aux cookies",
+      "subprocessors": "Sous-traitants ultérieurs",
+      "dpa": "Avenant relatif au traitement des données client",
+      "aiTransparency": "Transparence de l’IA",
+      "accessibility": "Déclaration d’accessibilité"
+    },
+    "center": {
+      "eyebrow": "Centre de confiance BuilderForce",
+      "lead": "BuilderForce.ai est exploité par Fix Faster LLC, une société à responsabilité limitée du Michigan. Ces contrôles publics complètent nos Conditions et notre Politique de confidentialité.",
+      "assuranceLead": "Les contrôles sont revus en continu.",
+      "assuranceBody": "Notre agent d’audit de conformité teste, par rapport au dépôt de code source, les contrôles de sécurité, de confidentialité, d’IA, de protection des mineurs, de réponse aux violations, d’analyse d’impact, de conservation et d’accessibilité.",
+      "details": {
+        "privacyRights": "Demandes, effacement, recours et examen humain",
+        "cookies": "Consentement, analytique facultative et Global Privacy Control",
+        "subprocessors": "Prestataires, usage des données et garanties de transfert",
+        "dpa": "Instructions du client, sécurité et conditions d’audit",
+        "aiTransparency": "Comportement des agents, contrôle par l’utilisateur et décisions significatives",
+        "accessibility": "Notre engagement WCAG, retours et aménagements"
+      }
+    }
   },
   "llmUsage": {
     "byUser": "Par utilisateur · 7 derniers jours",

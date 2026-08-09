@@ -1327,7 +1327,47 @@
     "privacyTitle": "隐私政策",
     "published": "发布于 {date}",
     "loading": "加载中…",
-    "close": "关闭"
+    "close": "关闭",
+    "eyebrow": "法律与合规",
+    "backToCenter": "合规中心",
+    "lastUpdated": "最后更新",
+    "navLabel": "法律与合规页面",
+    "resourcesHeading": "合规资源",
+    "contactHeading": "对本文件有疑问？",
+    "contactBody": "我们的隐私团队可以协助处理请求、合同和合规细节。",
+    "authoritativeNotice": "本文件以英文发布。英文版本为权威文本；如与任何译本存在差异，以英文版本为准。",
+    "nav": {
+      "overview": "概览",
+      "privacyRights": "隐私权利",
+      "cookies": "Cookie 选择",
+      "subprocessors": "次级处理方",
+      "dpa": "数据处理",
+      "aiTransparency": "AI 透明度",
+      "accessibility": "无障碍访问"
+    },
+    "titles": {
+      "compliance": "信任与合规中心",
+      "privacyRights": "隐私权利与申诉",
+      "cookies": "Cookie 政策",
+      "subprocessors": "次级处理方",
+      "dpa": "客户数据处理附录",
+      "aiTransparency": "AI 透明度",
+      "accessibility": "无障碍访问声明"
+    },
+    "center": {
+      "eyebrow": "BuilderForce 信任中心",
+      "lead": "BuilderForce.ai 由密歇根州有限责任公司 Fix Faster LLC 运营。这些公开的控制措施是对我们的服务条款和隐私政策的补充。",
+      "assuranceLead": "控制措施持续接受审查。",
+      "assuranceBody": "安全、隐私、AI、未成年人保护、违规响应、影响评估、数据留存和无障碍访问等控制措施，均由我们的合规审计智能体对照源代码仓库进行测试。",
+      "details": {
+        "privacyRights": "请求、删除、申诉与人工复核",
+        "cookies": "同意、可选分析与全球隐私控制",
+        "subprocessors": "服务提供商、数据用途与传输保障",
+        "dpa": "客户指令、安全与审计条款",
+        "aiTransparency": "智能体行为、用户控制与重大决策",
+        "accessibility": "我们的 WCAG 承诺、反馈与便利措施"
+      }
+    }
   },
   "llmUsage": {
     "byUser": "按用户 · 最近 7 天",

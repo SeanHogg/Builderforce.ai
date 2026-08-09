@@ -2,6 +2,7 @@ import type { MetadataRoute } from 'next';
 import { BLOG_POSTS } from '@/lib/blogData';
 import { COMPETITOR_SEO, SEO_INTEGRATIONS } from '@/lib/content';
 import { listPublishedSkillSlugs } from '@/lib/marketplaceSeo';
+import { indexableTeaserRoutes } from '@/lib/routeMarketing';
 
 const BASE = 'https://builderforce.ai';
 
@@ -73,21 +74,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: `${BASE}/demo`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
     { url: `${BASE}/login`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
     { url: `${BASE}/register`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
-    // Feature routes — render a rich marketing page (RouteMarketing) to logged-out
-    // visitors and crawlers, so they're indexable entry points to the product.
-    { url: `${BASE}/brainstorm`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE}/ide`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE}/training`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE}/workflows`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE}/projects`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE}/workforce`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE}/skills`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE}/personas`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
-    { url: `${BASE}/security`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
-    { url: `${BASE}/dashboard`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
-    { url: `${BASE}/contributors`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
-    { url: `${BASE}/content-manager`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
   ];
+
+  // Feature routes — every authenticated route renders a rich marketing page
+  // (RouteMarketing) to logged-out visitors and crawlers, so each is a real
+  // indexable entry point to the product.
+  //
+  // DERIVED from the same registry that renders them, not hand-listed. The
+  // hand-listed version named twelve of these and silently omitted the rest, so
+  // a surface added to the registry never reached the sitemap and nobody found
+  // out. `indexableTeaserRoutes()` also drops the operator-only routes (admin,
+  // workspaces, settings, agent worker), which keep their teaser but must not
+  // be indexed.
+  const teaserPages: MetadataRoute.Sitemap = indexableTeaserRoutes().map((route) => ({
+    url: `${BASE}${route}`,
+    lastModified: now,
+    changeFrequency: 'monthly' as const,
+    priority: 0.6,
+  }));
 
   const blogPages: MetadataRoute.Sitemap = BLOG_POSTS.map((post) => ({
     url: `${BASE}/blog/${post.slug}`,
@@ -129,5 +133,5 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.5,
   }));
 
-  return [...staticPages, ...blogPages, ...comparePages, ...integrationPages, ...marketplacePages, ...talentPages];
+  return [...staticPages, ...teaserPages, ...blogPages, ...comparePages, ...integrationPages, ...marketplacePages, ...talentPages];
 }

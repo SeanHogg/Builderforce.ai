@@ -1,8 +1,10 @@
+import { getTranslations } from 'next-intl/server';
 import { CompliancePage, LegalCallout, LegalChecklist, LegalSection } from '@/components/legal/CompliancePage';
 
-export default function Page() {
+export default async function Page() {
+  const t = await getTranslations('legal.titles');
   return (
-    <CompliancePage title="Accessibility statement" currentHref="/legal/accessibility">
+    <CompliancePage title={t('accessibility')} currentHref="/legal/accessibility">
       <LegalCallout label="Our accessibility target">
         BuilderForce aims to conform to WCAG 2.2 Level AA and treats accessible use as an ongoing product requirement.
       </LegalCallout>

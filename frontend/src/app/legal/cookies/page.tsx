@@ -1,8 +1,10 @@
+import { getTranslations } from 'next-intl/server';
 import { CompliancePage, LegalCallout, LegalChecklist, LegalSection } from '@/components/legal/CompliancePage';
 
-export default function Page() {
+export default async function Page() {
+  const t = await getTranslations('legal.titles');
   return (
-    <CompliancePage title="Cookie policy" currentHref="/legal/cookies">
+    <CompliancePage title={t('cookies')} currentHref="/legal/cookies">
       <LegalCallout label="Privacy-protective defaults">
         Optional analytics stays off until you opt in. BuilderForce does not use targeted-advertising cookies or sell personal information.
       </LegalCallout>

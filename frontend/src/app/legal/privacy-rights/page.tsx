@@ -1,8 +1,10 @@
+import { getTranslations } from 'next-intl/server';
 import { CompliancePage, LegalCallout, LegalChecklist, LegalSection } from '@/components/legal/CompliancePage';
 
-export default function Page() {
+export default async function Page() {
+  const t = await getTranslations('legal.titles');
   return (
-    <CompliancePage title="Privacy rights and appeals" currentHref="/legal/privacy-rights">
+    <CompliancePage title={t('privacyRights')} currentHref="/legal/privacy-rights">
       <LegalCallout label="How to make a request">
         Email privacy@builderforce.ai or use the privacy request form in the Privacy Policy. We verify requests proportionately and respond within the applicable statutory period.
       </LegalCallout>

@@ -96,6 +96,19 @@
   box-shadow: 0 0 10px var(--cyan-glow);
 }
 
+/* Which language version governs. Reads as a note, not as body copy — the
+   document itself is English and this says so in the reader's own language. */
+.authoritative {
+  margin: 0 0 var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-size: var(--font-size-small);
+  line-height: 1.55;
+}
+
 .content {
   color: var(--text-secondary);
   font-size: var(--font-size-card-title);

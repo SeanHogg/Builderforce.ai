@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { getTranslations } from 'next-intl/server';
 import styles from './CompliancePage.module.css';
 
 type CompliancePageProps = {
@@ -11,44 +12,58 @@ type CompliancePageProps = {
   children: React.ReactNode;
 };
 
+/** Route → catalog key. The LABEL is translated; the path never is. */
 const legalNavigation = [
-  { href: '/legal/compliance', label: 'Overview' },
-  { href: '/legal/privacy-rights', label: 'Privacy rights' },
-  { href: '/legal/cookies', label: 'Cookie choices' },
-  { href: '/legal/subprocessors', label: 'Subprocessors' },
-  { href: '/legal/dpa', label: 'Data processing' },
-  { href: '/legal/ai-transparency', label: 'AI transparency' },
-  { href: '/legal/accessibility', label: 'Accessibility' },
-];
+  { href: '/legal/compliance', key: 'overview' },
+  { href: '/legal/privacy-rights', key: 'privacyRights' },
+  { href: '/legal/cookies', key: 'cookies' },
+  { href: '/legal/subprocessors', key: 'subprocessors' },
+  { href: '/legal/dpa', key: 'dpa' },
+  { href: '/legal/ai-transparency', key: 'aiTransparency' },
+  { href: '/legal/accessibility', key: 'accessibility' },
+] as const;
 
-export function CompliancePage({
+/**
+ * Shared chrome for the seven /legal pages.
+ *
+ * The chrome is fully translated. The DOCUMENT BODY each page passes as
+ * `children` is deliberately not: these are binding instruments — a DPA, a
+ * privacy-rights notice, a subprocessor list — and a machine translation of a
+ * contractual term is a liability, not a feature. The standard practice is one
+ * authoritative language plus a notice saying so, and `authoritativeNotice`
+ * below is that notice, itself translated so a reader in every locale can
+ * understand which version governs.
+ */
+export async function CompliancePage({
   title,
   updated = 'August 4, 2026',
-  eyebrow = 'Legal & compliance',
+  eyebrow,
   backHref = '/legal/compliance',
-  backLabel = 'Compliance center',
+  backLabel,
   currentHref,
   children,
 }: CompliancePageProps) {
+  const t = await getTranslations('legal');
+
   return (
     <div className={styles.page}>
       <div className={styles.shell}>
         <header className={styles.header}>
           <Link className={styles.backLink} href={backHref}>
-            <span aria-hidden="true">←</span> {backLabel}
+            <span aria-hidden="true">←</span> {backLabel ?? t('backToCenter')}
           </Link>
-          <p className={styles.eyebrow}>{eyebrow}</p>
+          <p className={styles.eyebrow}>{eyebrow ?? t('eyebrow')}</p>
           <h1>{title}</h1>
           {updated && (
             <p className={styles.updated}>
               <span className={styles.statusDot} aria-hidden="true" />
-              Last updated <time>{updated}</time>
+              {t('lastUpdated')} <time>{updated}</time>
             </p>
           )}
         </header>
 
-        <nav className={styles.localNav} aria-label="Legal and compliance pages">
-          <p>Compliance resources</p>
+        <nav className={styles.localNav} aria-label={t('navLabel')}>
+          <p>{t('resourcesHeading')}</p>
           <div>
             {legalNavigation.map((item) => (
               <Link
@@ -57,7 +72,7 @@ export function CompliancePage({
                 className={currentHref === item.href ? styles.activeNavLink : undefined}
                 aria-current={currentHref === item.href ? 'page' : undefined}
               >
-                {item.label}
+                {t(`nav.${item.key}`)}
                 <span aria-hidden="true">→</span>
               </Link>
             ))}
@@ -65,12 +80,14 @@ export function CompliancePage({
         </nav>
 
         <article className={styles.document}>
+          <p className={styles.authoritative}>{t('authoritativeNotice')}</p>
+
           <div className={styles.content}>{children}</div>
 
           <footer className={styles.contact}>
             <div>
-              <strong>Questions about this document?</strong>
-              <span>Our privacy team can help with requests, contracts, and compliance details.</span>
+              <strong>{t('contactHeading')}</strong>
+              <span>{t('contactBody')}</span>
             </div>
             <a href="mailto:privacy@builderforce.ai">privacy@builderforce.ai</a>
             <p>Fix Faster LLC dba BuilderForce.ai · 6513 Basswood Dr., Troy, MI 48098</p>
