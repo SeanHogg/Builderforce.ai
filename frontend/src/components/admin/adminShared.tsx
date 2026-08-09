@@ -10,6 +10,7 @@
  * so no panel re-invents (and drifts on) the loading / error / header shell.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { LlmModelStatus } from '@/lib/adminApi';
@@ -175,7 +176,7 @@ export function ModelPoolBadges({
             }}
             title={m.cooldownUntil ? t('common.cooldownUntil', { time: new Date(m.cooldownUntil).toLocaleString() }) : m.available ? t('common.available') : t('common.unavailable')}
           >
-            {m.preferred ? '★ ' : ''}{m.model}
+            {m.preferred ? <Icon source="★" size="1em" /> : ''}{m.model}
             {m.cooldownUntil && !m.available ? ` (${t('common.cooldown')})` : ''}
           </span>
         ))}

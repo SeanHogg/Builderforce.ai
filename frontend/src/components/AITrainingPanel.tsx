@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -429,7 +430,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
       {/* Header */}
       <div className="px-3 py-2 flex items-center justify-between" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
         <h2 className="font-semibold flex items-center gap-1" style={{ color: 'var(--text-primary)' }}>
-          <span>🧠</span> {t('title')}
+          <span><Icon source="🧠" size="1em" /></span> {t('title')}
         </h2>
         <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
           <span className={`w-2 h-2 rounded-full ${webgpuAvailable ? 'bg-green-400' : 'bg-yellow-400'}`} />
@@ -790,7 +791,8 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
                   onClick={handleStopTraining}
                   className="bg-red-700 hover:bg-red-600 text-white px-3 py-2 rounded text-xs"
                 >
-                  ⏹ {t('stop')}
+                  
+                  <Icon source="⏹" size="1em" /> {t('stop')}
                 </button>
               )}
             </div>
@@ -864,7 +866,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
             </div>
             {datasets.length === 0 && (
               <div className="text-center text-gray-500 text-xs py-6">
-                <div className="text-2xl mb-2">📦</div>
+                <div className="text-2xl mb-2"><Icon source="📦" size="1em" /></div>
                 {t('noDatasets')}
               </div>
             )}
@@ -893,7 +895,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
             </div>
             {jobs.length === 0 && (
               <div className="text-center text-gray-500 text-xs py-6">
-                <div className="text-2xl mb-2">🤖</div>
+                <div className="text-2xl mb-2"><Icon source="🤖" size="1em" /></div>
                 {t('noJobs')}
               </div>
             )}
@@ -919,7 +921,8 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
                     onClick={() => handleEvaluate(job.id)}
                     className="text-xs bg-purple-700 hover:bg-purple-600 text-white px-2 py-0.5 rounded"
                   >
-                    🧪 {job.eval_score != null ? t('reEvaluate') : t('evaluate')}
+                    
+                    <Icon source="🧪" size="1em" /> {job.eval_score != null ? t('reEvaluate') : t('evaluate')}
                   </button>
                 )}
                 {job.eval_score != null && (

@@ -8,6 +8,7 @@
  * Self-contained: fetches its own roles/templates/assignments and gates writes on
  * the manager permission.
  */
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
@@ -208,7 +209,7 @@ export function RolesView() {
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {roleAssignments.map((a) => (
                       <span key={a.id} style={{ ...chip('var(--surface-2)', 'var(--text-secondary)'), border: '1px solid var(--border-subtle)' }}>
-                        <span aria-hidden>{a.assigneeKind === 'agent' ? '🤖' : a.assigneeKind === 'hire' ? '🤝' : '🧑'}</span>
+                        <span aria-hidden>{a.assigneeKind === 'agent' ? <Icon source="🤖" size="1em" /> : a.assigneeKind === 'hire' ? <Icon source="🤝" size="1em" /> : <Icon source="🧑" size="1em" />}</span>
                         {a.assigneeName ?? a.assigneeRef}
                         <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>· {kindLabel(a.assigneeKind)}</span>
                         {canManage && (

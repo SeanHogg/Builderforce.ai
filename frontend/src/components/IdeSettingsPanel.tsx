@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { SourceControlContent } from './sourcecontrol/SourceControlContent';
 import { RepoSyncControl } from './ide/RepoSyncControl';
 
@@ -67,7 +68,7 @@ export function IdeSettingsPanel({ open, onClose, projectId, onImported }: IdeSe
           }}
         >
           <h2 style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>⚙️</span> Settings
+            <span><Icon source="⚙️" size="1em" /></span> Settings
           </h2>
           <button
             type="button"

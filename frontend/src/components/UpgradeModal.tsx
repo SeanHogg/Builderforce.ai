@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { PlanLimitError } from '@/lib/planLimitError';
@@ -64,7 +65,8 @@ export function UpgradeModal({
               flexShrink: 0,
             }}
           >
-            ⚡
+            
+            <Icon source="⚡" size="1em" />
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
             {t.rich('onPlan', {

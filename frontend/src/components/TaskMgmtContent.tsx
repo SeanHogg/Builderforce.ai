@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 
 import { useState, useEffect, useCallback, useMemo, useRef, Fragment, type CSSProperties } from 'react';
@@ -979,7 +980,7 @@ export function TaskMgmtContent({
           )}
         </div>
         <div style={{ fontWeight: 500, fontSize: 13, color: task.restricted ? 'var(--text-muted)' : 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-          {task.restricted && <span aria-hidden style={{ flexShrink: 0 }}>🔒</span>}
+          {task.restricted && <span aria-hidden style={{ flexShrink: 0 }}><Icon source="🔒" size="1em" /></span>}
           <span style={task.restricted ? { fontStyle: 'italic' } : undefined}>{titleOf(task)}</span>
         </div>
         <div
@@ -1635,7 +1636,7 @@ export function TaskMgmtContent({
                       </td>
                       <td style={{ padding: '10px 12px' }}>
                         <div style={{ fontWeight: 500, color: task.restricted ? 'var(--text-muted)' : 'var(--text-primary)', fontStyle: task.restricted ? 'italic' : undefined }}>
-                          {task.restricted && <span aria-hidden style={{ marginRight: 6 }}>🔒</span>}{titleOf(task)}
+                          {task.restricted && <span aria-hidden style={{ marginRight: 6 }}><Icon source="🔒" size="1em" /></span>}{titleOf(task)}
                         </div>
                         <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>
                           {task.key}
@@ -2024,7 +2025,7 @@ export function TaskMgmtContent({
                   />
                 ) : drawerTask.restricted ? (
                   <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-muted)', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: 6, padding: '4px 6px', margin: '-4px -6px' }}>
-                    <span aria-hidden>🔒</span>{tCommon('clearanceNeeded')}
+                    <span aria-hidden><Icon source="🔒" size="1em" /></span>{tCommon('clearanceNeeded')}
                   </div>
                 ) : (
                   <div
@@ -2142,7 +2143,7 @@ export function TaskMgmtContent({
               // content is masked, and the detail/agent/changes tabs are suppressed
               // (they fetch by id and would otherwise leak). Show a clearance notice.
               <div style={{ flex: 1, overflow: 'auto', padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', gap: 12 }}>
-                <div aria-hidden style={{ fontSize: 40 }}>🔒</div>
+                <div aria-hidden style={{ fontSize: 40 }}><Icon source="🔒" size="1em" /></div>
                 <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' }}>{tCommon('clearanceNeeded')}</div>
                 <p style={{ fontSize: 13, color: 'var(--text-muted)', maxWidth: 360, margin: 0 }}>{tCommon('clearanceNeededBody')}</p>
               </div>

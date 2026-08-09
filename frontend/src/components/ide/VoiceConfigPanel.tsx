@@ -83,7 +83,7 @@ export function VoiceConfigPanel({ voice, projectId }: { voice: VoiceStudio; pro
                   color: 'var(--text-primary)',
                 }}
               >
-                {c.name}{voice.hasEmbedding(c.id) ? ' ·🔊' : ''}
+                {c.name}{voice.hasEmbedding(c.id) ? '·' : ''}
               </button>
             ))}
           </div>

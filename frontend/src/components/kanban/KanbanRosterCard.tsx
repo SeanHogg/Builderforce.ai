@@ -7,6 +7,7 @@
  * tickets from the per-ticket role/diagnostic audit. Self-contained: fetches its own
  * data and decides its own visibility for manager-only actions.
  */
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { kanbanApi } from '@/lib/builderforceApi';
@@ -196,7 +197,7 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {assigned.map((f) => (
                   <span key={f.assignmentId} style={{ ...chip('var(--surface)', 'var(--text-secondary)'), border: '1px solid var(--border-subtle)' }}>
-                    <span aria-hidden>{f.kind === 'agent' ? '🤖' : f.kind === 'hire' ? '🤝' : '🧑'}</span>
+                    <span aria-hidden>{f.kind === 'agent' ? <Icon source="🤖" size="1em" /> : f.kind === 'hire' ? <Icon source="🤝" size="1em" /> : <Icon source="🧑" size="1em" />}</span>
                     {f.name}
                     <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>· {kindLabel(f.kind)}</span>
                     {canManage && (

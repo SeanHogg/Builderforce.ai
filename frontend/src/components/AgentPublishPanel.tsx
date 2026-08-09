@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
@@ -210,7 +211,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
     <div className="h-full flex flex-col bg-gray-900 text-gray-100 text-sm">
       {/* Header */}
       <div className="px-3 py-2 border-b border-gray-700 flex items-center gap-2 shrink-0">
-        <span>🚀</span>
+        <span><Icon source="🚀" size="1em" /></span>
         <h2 className="font-semibold text-gray-300">{tp('title')}</h2>
       </div>
 
@@ -365,7 +366,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                     : 'bg-gray-800 border-gray-700 text-gray-400 hover:border-gray-600'
                 }`}
               >
-                <span>🧬</span>
+                <span><Icon source="🧬" size="1em" /></span>
                 {includeMamba ? tp('memoryIncluded') : tp('includeMemory')}
               </button>
               {includeMamba && mambaSnapshot && (
@@ -377,7 +378,8 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
             </div>
             {!isProfileValid ? (
               <div className="bg-yellow-900/30 border border-yellow-700 rounded p-2 text-xs text-yellow-300">
-                ⚠ {tp('fillProfileDownload')}
+                
+                <Icon source="⚠" size="1em" /> {tp('fillProfileDownload')}
               </div>
             ) : (
               <>
@@ -388,14 +390,16 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                   onClick={handleDownload}
                   className="w-full bg-blue-700 hover:bg-blue-600 text-white px-3 py-2 rounded text-xs font-semibold"
                 >
-                  ⬇ {tp('downloadPackage')}
+                  
+                  <Icon source="⬇" size="1em" /> {tp('downloadPackage')}
                 </button>
                 {profile.resumeMarkdown && (
                   <button
                     onClick={handleDownloadResume}
                     className="w-full bg-gray-700 hover:bg-gray-600 text-gray-100 px-3 py-2 rounded text-xs"
                   >
-                    ⬇ {tp('downloadResume')}
+                    
+                    <Icon source="⬇" size="1em" /> {tp('downloadResume')}
                   </button>
                 )}
               </>
@@ -409,7 +413,8 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
             {publishedId ? (
               <div className="space-y-2">
                 <div className="bg-green-900/30 border border-green-700 rounded p-3 text-xs text-green-300">
-                  ✅ {tp('publishedSuccess')}
+                  
+                  <Icon source="✅" size="1em" /> {tp('publishedSuccess')}
                 </div>
                 <div>
                   <div className="text-xs text-gray-400 mb-1">{tp('agentId')}</div>
@@ -420,7 +425,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
 
                 {/* Install command */}
                 <div>
-                  <div className="text-xs text-gray-400 mb-1">📦 {tp('installCommand')}</div>
+                  <div className="text-xs text-gray-400 mb-1"><Icon source="📦" size="1em" /> {tp('installCommand')}</div>
                   <div className="bg-gray-950 border border-gray-700 rounded p-2 flex items-center gap-2">
                     <code className="flex-1 font-mono text-xs text-green-300 break-all select-all">
                       {INSTALL_COMMAND}
@@ -482,7 +487,8 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                   rel="noopener noreferrer"
                   className="block w-full text-center bg-purple-700 hover:bg-purple-600 text-white px-3 py-2 rounded text-xs font-semibold"
                 >
-                  🌐 {tp('viewInRegistry')}
+                  
+                  <Icon source="🌐" size="1em" /> {tp('viewInRegistry')}
                 </a>
                 <button
                   onClick={() => { setPublishedId(null); setTab('profile'); }}
@@ -498,7 +504,8 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                 </p>
                 {!isProfileValid && (
                   <div className="bg-yellow-900/30 border border-yellow-700 rounded p-2 text-xs text-yellow-300">
-                    ⚠ {tp('fillProfilePublish')}
+                    
+                    <Icon source="⚠" size="1em" /> {tp('fillProfilePublish')}
                   </div>
                 )}
                 {isProfileValid && (
@@ -534,7 +541,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                     </button>
                     {validation?.ok && (
                       <div className="bg-green-900/30 border border-green-700 rounded p-2 text-xs text-green-300 space-y-1">
-                        <div className="font-semibold">✅ {tp('validatePassed')}</div>
+                        <div className="font-semibold"><Icon source="✅" size="1em" /> {tp('validatePassed')}</div>
                         <div className="text-green-400/90">
                           {tp('modeLabel')}: {validation.inference_mode} · {tp('latencyLabel')}: {validation.latency_ms}ms
                         </div>
@@ -544,14 +551,16 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                     )}
                     {validation && !validation.ok && (
                       <div className="bg-red-900/30 border border-red-700 rounded p-2 text-xs text-red-300">
-                        ❌ {tp('validateFailed')}: {validation.error}
+                        
+                        <Icon source="❌" size="1em" /> {tp('validateFailed')}: {validation.error}
                       </div>
                     )}
                   </div>
                 )}
                 {publishError && (
                   <div className="bg-red-900/30 border border-red-700 rounded p-2 text-xs text-red-300">
-                    ❌ {publishError}
+                    
+                    <Icon source="❌" size="1em" /> {publishError}
                   </div>
                 )}
                 {isProfileValid && !validation?.ok && (

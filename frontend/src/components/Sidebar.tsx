@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -58,7 +59,7 @@ function GroupLink({ group, active, onNavigate, t, badge = 0, locked = false, lo
     <>
       <span className="nav-item-icon"><NavIcon name={group.id} /></span>
       <span className="nav-item-label">{label}</span>
-      {locked && <span className="nav-item__lock" aria-hidden="true">🔒</span>}
+      {locked && <span className="nav-item__lock" aria-hidden="true"><Icon source="🔒" size="1em" /></span>}
       {!!badge && <span aria-label={`${badge} unread sessions`} style={{ marginLeft: 'auto', minWidth: 17, height: 17, borderRadius: 'var(--radius-full)', display: 'grid', placeItems: 'center', background: 'var(--accent)', color: 'var(--text-on-accent)', fontSize: 'var(--font-size-field-label)', fontWeight: 800 }}>{badge > 99 ? '99+' : badge}</span>}
     </>
   );

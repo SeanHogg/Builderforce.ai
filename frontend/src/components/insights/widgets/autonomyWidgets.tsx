@@ -25,6 +25,7 @@
  *     chrome from theme tokens, so both themes work with no per-theme hex.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useTranslations } from 'next-intl';
 import {
   autonomyApi, autonomousHopShare, shareOfCreated,
@@ -151,7 +152,7 @@ export function AutonomyCoverage({ data }: { data: AutonomySummary }) {
         color: warn ? 'var(--warning-text, var(--text-primary))' : 'var(--text-secondary)',
       }}
     >
-      <span aria-hidden>{warn ? '⚠' : 'ℹ'}</span>
+      <span aria-hidden>{warn ? <Icon source="⚠" size="1em" /> : <Icon source="ℹ" size="1em" />}</span>
       <span>
         {warn
           ? t('autonomy.coverage.truncated', { n: int(data.ticketsScanned), days: data.windowDays })

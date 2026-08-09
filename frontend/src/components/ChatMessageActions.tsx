@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useTranslations } from 'next-intl';
 import { ChatProjectActions } from './ChatProjectActions';
 import { BrainMessageExport } from './brain/BrainMessageExport';
@@ -55,7 +56,8 @@ export function ChatMessageActions({
             title={t('goodResponse')}
             aria-label={t('thumbsUp')}
           >
-            👍
+            
+            <Icon source="👍" size="1em" />
           </button>
           <button
             type="button"
@@ -64,7 +66,8 @@ export function ChatMessageActions({
             title={t('badResponse')}
             aria-label={t('thumbsDown')}
           >
-            👎
+            
+            <Icon source="👎" size="1em" />
           </button>
         </>
       )}

@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import { buildTree, getFileName } from '@/lib/utils';
 import type { TreeNode } from '@/lib/utils';
@@ -52,7 +53,7 @@ function TreeNodeComponent({
           onClick={() => setExpanded(!expanded)}
         >
           <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', width: 10, flexShrink: 0 }}>{expanded ? '▼' : '▶'}</span>
-          <span>📁</span>
+          <span><Icon source="📁" size="1em" /></span>
           <span style={{ fontWeight: 600, fontFamily: 'var(--font-display)', fontSize: '0.78rem' }}>{node.name}</span>
         </div>
         {expanded && node.children?.map(child => (
@@ -161,7 +162,7 @@ export function FileExplorer({ files, activeFile, onFileSelect, onFileCreate, on
       <div style={{ flex: 1, overflowY: 'auto', paddingTop: 4 }}>
         {tree.length === 0 ? (
           <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '16px 10px', fontSize: '0.78rem' }}>
-            <div style={{ fontSize: '1.5rem', marginBottom: 6 }}>📂</div>
+            <div style={{ fontSize: '1.5rem', marginBottom: 6 }}><Icon source="📂" size="1em" /></div>
             No files yet.<br />Click + to create one.
           </div>
         ) : tree.map(node => (

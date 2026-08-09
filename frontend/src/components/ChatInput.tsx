@@ -618,7 +618,8 @@ export function ChatInput({
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
             {pendingAttachments.map((a) => (
               <span key={a.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '4px 8px', borderRadius: 'var(--radius-md)', background: 'var(--surface-coral-soft)', fontSize: 'var(--font-size-small)', color: 'var(--text-primary)' }}>
-                📎 {a.name}
+                
+                <Icon source="📎" size="1em" /> {a.name}
                 <button type="button" onClick={() => onRemoveAttachment(a.key)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', padding: 0 }} aria-label={t('removeAttachment')}>×</button>
               </span>
             ))}

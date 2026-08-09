@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 
 /**
@@ -407,7 +408,7 @@ function FindingsPanel({ explorationId, busy, onRun }: {
 
   if (loadError) return <Empty>{loadError}</Empty>;
   if (findings == null) return <Empty>Loading findings…</Empty>;
-  if (findings.length === 0) return <Empty>No runtime errors captured in this exploration. 🎉</Empty>;
+  if (findings.length === 0) return <Empty>No runtime errors captured in this exploration. <Icon source="🎉" size="1em" /></Empty>;
 
   return (
     <div style={{ marginTop: 12, padding: 12, borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)', background: 'var(--bg-deep)' }}>

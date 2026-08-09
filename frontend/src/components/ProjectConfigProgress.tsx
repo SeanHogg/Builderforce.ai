@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
 import { computeProjectConfig, type ProjectConfigItem } from '@/lib/projectInspection';
@@ -26,7 +27,7 @@ export function ProjectConfigBadge({ project }: { project: Project }) {
         border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-full)', padding: '2px 8px',
       }}
     >
-      <span aria-hidden>🛠</span>
+      <span aria-hidden><Icon source="🛠" size="1em" /></span>
       {t('configPct', { pct: cfg.pct })}
     </span>
   );
@@ -105,7 +106,7 @@ export function ProjectConfigProgress({ project }: { project: Project }) {
               border: '1px solid var(--coral-bright)', borderRadius: 'var(--radius-md)', padding: '4px 10px',
             }}
           >
-            <span aria-hidden>💡</span>
+            <span aria-hidden><Icon source="💡" size="1em" /></span>
             {t('brainstormGoals')}
           </button>
         )}

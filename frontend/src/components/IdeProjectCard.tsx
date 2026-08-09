@@ -65,7 +65,8 @@ export function IdeProjectCard({
             onClick={(e) => { e.stopPropagation(); onDetails(ideProject); }}
             style={iconBtn}
           >
-            ⚙
+            
+            <Icon source="⚙" size="1em" />
           </button>
           <button
             type="button"
@@ -74,7 +75,8 @@ export function IdeProjectCard({
             onClick={(e) => { e.stopPropagation(); onDelete(ideProject); }}
             style={iconBtn}
           >
-            🗑
+            
+            <Icon source="🗑" size="1em" />
           </button>
         </div>
       </div>

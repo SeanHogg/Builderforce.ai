@@ -110,7 +110,7 @@ export function LegalEditorDrawer({ context, onClose, onPublished }: LegalEditor
           onClick={() => setPreview((p) => !p)}
           disabled={!content.trim()}
         >
-          {preview ? `✎ ${t('common.edit')}` : `👁 ${t('legal.editor.preview')}`}
+          {preview ? `${t('common.edit')}` : `${t('legal.editor.preview')}`}
         </button>
       }
     >

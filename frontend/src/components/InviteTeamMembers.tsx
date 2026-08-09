@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 
 import { useState } from 'react';
@@ -164,7 +165,7 @@ export function InviteTeamMembers({ tenantId, tenantToken, onInvited, onPlanLimi
                 <span style={{ fontSize: 11, color: 'var(--success-text)', fontWeight: 600 }}>✓ {t('statusAdded')}</span>
               )}
               {invite.status === 'invited' && (
-                <span style={{ fontSize: 11, color: 'var(--warning-text)', fontWeight: 600 }} title={t('statusInvitedHint')}>✉ {t('statusInvited')}</span>
+                <span style={{ fontSize: 11, color: 'var(--warning-text)', fontWeight: 600 }} title={t('statusInvitedHint')}><Icon source="✉" size="1em" /> {t('statusInvited')}</span>
               )}
               {invite.status === 'error' && (
                 <span style={{ fontSize: 11, color: 'var(--error-text)' }} title={invite.errorMsg}>

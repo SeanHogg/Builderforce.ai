@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -107,7 +108,7 @@ export default function EmulationBar() {
       role="banner"
       aria-label={t('barAria')}
     >
-      <span className="emulation-bar__eye" aria-hidden="true">👁</span>
+      <span className="emulation-bar__eye" aria-hidden="true"><Icon source="👁" size="1em" /></span>
 
       <span className="emulation-bar__info">
         {t.rich('emulatingWho', {
@@ -156,7 +157,8 @@ export default function EmulationBar() {
         className={`emulation-bar__timer${isExpiringSoon ? ' emulation-bar__timer--warn' : ''}`}
         aria-label={t('elapsedAria', { elapsed })}
       >
-        ⏱ {elapsed}
+        
+        <Icon source="⏱" size="1em" /> {elapsed}
       </span>
 
       <span className="emulation-bar__sep" aria-hidden="true">|</span>
@@ -179,7 +181,8 @@ export default function EmulationBar() {
         title={t('debugTitle')}
         aria-pressed={debuggerActive}
       >
-        🔍 {t('debug')}
+        
+        <Icon source="🔍" size="1em" /> {t('debug')}
       </button>
 
       {/* End emulation */}

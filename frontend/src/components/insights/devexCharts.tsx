@@ -170,7 +170,7 @@ export function TopicTable({ rows, dimLabel }: { rows: DevexDimensionScore[]; di
               <td style={td}><DeltaChip value={r.benchmarkDelta} /></td>
               <td style={{ ...td, color: 'var(--text-secondary)' }}>{r.questionCount}</td>
               <td style={td}><SentimentBar sentiment={r.sentiment} /></td>
-              <td style={{ ...td, color: 'var(--text-secondary)' }}>{r.commentCount > 0 ? `${r.commentCount} 💬` : '—'}</td>
+              <td style={{ ...td, color: 'var(--text-secondary)' }}>{r.commentCount > 0 ? `${r.commentCount} ` : '—'}</td>
             </tr>
           ))}
         </tbody>

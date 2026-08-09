@@ -586,7 +586,7 @@ export default function MarketplacePageClient() {
                   cursor: 'pointer',
                 }}
               >
-                {c.id === 'talent' ? '👤 ' : c.id === 'models' ? '🧠 ' : c.id === 'gigs' ? '💼 ' : ''}{tm(`cat.${c.id}`)}
+                {c.id === 'talent' ? <Icon source="👤" size="1em" /> : c.id === 'models' ? <Icon source="🧠" size="1em" /> : c.id === 'gigs' ? <Icon source="💼" size="1em" /> : ''}{tm(`cat.${c.id}`)}
               </button>
             ))}
           </div>
@@ -927,7 +927,7 @@ export default function MarketplacePageClient() {
                         title={stat.liked ? tm('action.unlike') : tm('action.like')}
                         onClick={() => toggleLike(item)}
                       >
-                        {stat.liked ? '❤️' : '🤍'} {stat.likes}
+                        {stat.liked ? <Icon source="❤️" size="1em" /> : <Icon source="🤍" size="1em" />} {stat.likes}
                       </button>
                       <span style={{ marginLeft: 10 }} title={tm('action.installsTitle')}><Icon source="⬇️" size="1em" /> {stat.installs}</span>
                       {isInstalled && <span style={{ marginLeft: 10 }}>✓</span>}
@@ -1076,7 +1076,7 @@ export default function MarketplacePageClient() {
                       title={stat.liked ? tm('action.unlike') : tm('action.like')}
                       onClick={() => toggleLike(item)}
                     >
-                      {stat.liked ? '❤️' : '🤍'} {stat.likes}
+                      {stat.liked ? <Icon source="❤️" size="1em" /> : <Icon source="🤍" size="1em" />} {stat.likes}
                     </button>
                     <span title={tm('action.installsTitle')}><Icon source="⬇️" size="1em" /> {stat.installs}</span>
                     {isInstalled && <span>✓ {tm('installed')}</span>}

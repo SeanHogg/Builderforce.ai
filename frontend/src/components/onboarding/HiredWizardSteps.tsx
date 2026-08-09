@@ -171,7 +171,7 @@ export function WizardResumeStep() {
         </label>
         {(profile?.canAutofill || currentFile) && (
           <button type="button" onClick={applyResume} disabled={autofilling} className="ui-button ui-button--secondary ui-button--sm">
-            {autofilling ? tf('profile.filling') : `✨ ${tf('profile.fillFromResume')}`}
+            {autofilling ? tf('profile.filling') : `${tf('profile.fillFromResume')}`}
           </button>
         )}
       </div>

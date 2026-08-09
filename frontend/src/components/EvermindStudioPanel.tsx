@@ -17,6 +17,7 @@
  * states; the host (IDENew) only decides whether the `evermind` modality is active.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useTranslations } from 'next-intl';
 import { ProjectEvermindPanel } from '@/components/ide/ProjectEvermindPanel';
 import { EvermindStudioCenter } from '@/components/ide/EvermindStudioCenter';
@@ -37,7 +38,7 @@ export function EvermindStudioPanel({ projectId }: { projectId: number | string 
               the centre Knowledge Map stays put no matter how long the console gets. */}
           <div className="em-studio-rail">
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-              <span style={{ fontSize: '1.6rem' }}>🧠</span>
+              <span style={{ fontSize: '1.6rem' }}><Icon source="🧠" size="1em" /></span>
               <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.25rem', margin: 0 }}>
                 {t('title')}
               </h1>

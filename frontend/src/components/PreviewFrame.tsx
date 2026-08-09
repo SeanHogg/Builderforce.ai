@@ -1,3 +1,4 @@
+import { Icon } from '@/components/ui/Icon';
 'use client';
 
 interface PreviewFrameProps {
@@ -9,7 +10,7 @@ export function PreviewFrame({ url }: PreviewFrameProps) {
     return (
       <div className="h-full flex items-center justify-center bg-gray-900 text-gray-500">
         <div className="text-center">
-          <div className="text-4xl mb-3">🌐</div>
+          <div className="text-4xl mb-3"><Icon source="🌐" size="1em" /></div>
           <p className="text-sm">Run your project to see a preview</p>
         </div>
       </div>
@@ -24,7 +25,8 @@ export function PreviewFrame({ url }: PreviewFrameProps) {
           onClick={() => window.open(url, '_blank')}
           className="text-xs text-blue-600 hover:text-blue-800 whitespace-nowrap"
         >
-          Open ↗
+          
+          Open <Icon source="↗" size="1em" />
         </button>
       </div>
       <iframe

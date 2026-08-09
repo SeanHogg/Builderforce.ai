@@ -7,6 +7,7 @@
  * `onBuild` callback supplied by the IDE (it owns the file contents + the
  * WebContainer). This panel owns the subdomain UI, the upload, and the result.
  */
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { fetchSite, publishSite, type SiteInfo } from '@/lib/api';
@@ -97,7 +98,7 @@ export function SitePublishPanel({ projectId, projectName, onBuild }: SitePublis
   return (
     <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14, color: 'var(--text-primary)', fontSize: 14 }}>
       <div>
-        <div style={{ fontWeight: 600, fontSize: 15 }}>🚀 {t('publish.title')}</div>
+        <div style={{ fontWeight: 600, fontSize: 15 }}><Icon source="🚀" size="1em" /> {t('publish.title')}</div>
         <div style={{ color: 'var(--text-muted)', fontSize: 12.5, marginTop: 2 }}>
           {t('publish.description')}
         </div>

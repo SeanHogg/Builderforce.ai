@@ -123,7 +123,7 @@ function KindBadge({ kind }: { kind: 'human' | 'agent' }) {
       background: isAgent ? 'rgba(138,75,224,0.12)' : 'rgba(38,166,65,0.12)',
       border: `1px solid ${isAgent ? 'rgba(138,75,224,0.4)' : 'rgba(38,166,65,0.4)'}`,
     }}>
-      {isAgent ? `🤖 ${t('badge.agent')}` : `👤 ${t('badge.human')}`}
+      {isAgent ? `${t('badge.agent')}` : `${t('badge.human')}`}
     </span>
   );
 }

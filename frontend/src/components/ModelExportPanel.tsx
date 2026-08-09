@@ -11,6 +11,7 @@
  * loading/empty/error states; the host only mounts it.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
@@ -168,7 +169,8 @@ export function ModelExportPanel() {
             borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: '0.78rem',
           }}
         >
-          ⚠ {error}
+          
+          <Icon source="⚠" size="1em" /> {error}
         </div>
       )}
 
@@ -180,7 +182,8 @@ export function ModelExportPanel() {
             borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: '0.78rem',
           }}
         >
-          ✅ {t('done', { filename: done })}
+          
+          <Icon source="✅" size="1em" /> {t('done', { filename: done })}
         </div>
       )}
     </div>

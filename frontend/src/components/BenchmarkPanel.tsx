@@ -16,6 +16,7 @@
  * panel owns its own mode/input/loading/error/empty states; the host only mounts it.
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { BarChart, type BarDatum } from '@/components/charts/BarChart';
@@ -302,7 +303,8 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
             borderRadius: 'var(--radius-md)', padding: '8px 12px', fontSize: '0.78rem',
           }}
         >
-          ⚠ {error}
+          
+          <Icon source="⚠" size="1em" /> {error}
         </div>
       )}
 
@@ -374,7 +376,8 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
               </div>
               {showNudge && (
                 <div style={{ fontSize: '0.76rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-                  💡 {underfit(result) ? t('nudge.underfit') : hasTraining ? t('nudge.weak') : t('nudge.weakScore')}
+                  
+                  <Icon source="💡" size="1em" /> {underfit(result) ? t('nudge.underfit') : hasTraining ? t('nudge.weak') : t('nudge.weakScore')}
                 </div>
               )}
             </div>

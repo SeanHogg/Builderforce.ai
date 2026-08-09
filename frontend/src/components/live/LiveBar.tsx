@@ -39,7 +39,7 @@ function Tile({ stream, label, self, sharing }: { stream: MediaStream; label: st
           feedback loop, and an unmuted remote tile is handled by the audio
           element the media room already owns. */}
       <video ref={ref} autoPlay playsInline muted={self} className={styles.tileVideo} />
-      <span className={styles.tileLabel}>{sharing ? `🖥 ${label}` : label}</span>
+      <span className={styles.tileLabel}>{sharing ? `${label}` : label}</span>
     </div>
   );
 }

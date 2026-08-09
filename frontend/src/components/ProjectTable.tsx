@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
@@ -192,7 +193,7 @@ export function ProjectTable({
                     title={project.workflowCount != null ? t('workflowsWithCount', { count: project.workflowCount }) : t('workflows')}
                     style={iconButtonStyle}
                   >
-                    <span style={{ fontSize: 16 }} aria-hidden>🔀</span>
+                    <span style={{ fontSize: 16 }} aria-hidden><Icon source="🔀" size="1em" /></span>
                   </button>
                   <button
                     type="button"
@@ -212,7 +213,7 @@ export function ProjectTable({
                     title={t('openIde')}
                     style={iconButtonStyle}
                   >
-                    <span style={{ fontSize: 18 }} aria-hidden>💻</span>
+                    <span style={{ fontSize: 18 }} aria-hidden><Icon source="💻" size="1em" /></span>
                   </button>
                   {onDetailsClick && (
                     <RunDiagnosticsButton

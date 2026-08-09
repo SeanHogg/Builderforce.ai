@@ -137,7 +137,7 @@ export function FinetuneStudioPanel({ projectId, files = [], onGoToTab, onOpenFi
       <style>{FT_STUDIO_CSS}</style>
       <div className="ft-studio-col">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-          <span style={{ fontSize: '1.6rem' }}>🔧</span>
+          <span style={{ fontSize: '1.6rem' }}><Icon source="🔧" size="1em" /></span>
           <h1 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.25rem', margin: 0 }}>
             {t('title')}
           </h1>
@@ -154,7 +154,7 @@ export function FinetuneStudioPanel({ projectId, files = [], onGoToTab, onOpenFi
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
             }}
           >
-            <span>⚠ {error}</span>
+            <span><Icon source="⚠" size="1em" /> {error}</span>
             <button
               type="button"
               onClick={() => void load()}
@@ -289,7 +289,7 @@ export function FinetuneStudioPanel({ projectId, files = [], onGoToTab, onOpenFi
                           width: '100%',
                         }}
                       >
-                        <span>📋</span>
+                        <span><Icon source="📋" size="1em" /></span>
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {getFileName(f.path)}
                         </span>

@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Project } from '@/lib/types';
@@ -238,7 +239,7 @@ export function ProjectCard({
             aria-label={t('openIde')}
             style={iconButtonStyle}
           >
-            <span style={{ fontSize: 18 }} aria-hidden>💻</span>
+            <span style={{ fontSize: 18 }} aria-hidden><Icon source="💻" size="1em" /></span>
           </button>
           {showDeleteButton && onDelete && (
             <>

@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
@@ -62,7 +63,7 @@ export function OnboardingProgressPill() {
           color: 'var(--coral-bright)', fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap',
         }}
       >
-        <span aria-hidden>✨</span>
+        <span aria-hidden><Icon source="✨" size="1em" /></span>
         {t('label', { pct })}
       </button>
 

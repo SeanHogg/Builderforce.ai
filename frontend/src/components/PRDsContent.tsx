@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
@@ -176,7 +177,7 @@ export function PRDsContent({ projectId, projectName }: PRDsContentProps) {
             border: '1px solid var(--border-subtle)',
           }}
         >
-          <div style={{ fontSize: 40, marginBottom: 16 }}>📄</div>
+          <div style={{ fontSize: 40, marginBottom: 16 }}><Icon source="📄" size="1em" /></div>
           <p style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>No PRDs yet.</p>
           <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16 }}>
             Add a PRD manually or generate one with Brain.

@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState } from 'react';
 import { membersApi, type MemberEngagement, type EngagementLevel } from '@/lib/builderforceApi';
 import { ENGAGEMENT_LEVEL_COLOR } from './workforceFormat';
@@ -91,7 +92,7 @@ export function EngagementSection({ days }: { days: number }) {
                 <td style={{ ...td, fontWeight: 700, color: LEVEL_COLOR[m.level] }}>{Math.round(m.score)}</td>
                 <td style={td}>{m.signals.activityEvents}</td>
                 <td style={td}>{m.signals.platformActions}</td>
-                <td style={td}>{m.signals.vscodeActive ? '🟢' : '—'}</td>
+                <td style={td}>{m.signals.vscodeActive ? <Icon source="🟢" size="1em" /> : '—'}</td>
                 <td style={td}>{m.signals.completedTasks}</td>
               </tr>
             ))}

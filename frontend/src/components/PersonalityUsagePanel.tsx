@@ -13,6 +13,7 @@
  * Theme-aware (CSS design tokens, styled for light + dark) and responsive. Self-hides
  * nothing — it always renders its own empty states so it can be dropped into a tab.
  */
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePsychometricCatalog } from '@/lib/usePsychometricCatalog';
@@ -149,7 +150,7 @@ export default function PersonalityUsagePanel({
       {/* Active personality summary */}
       <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 'var(--font-size-body)' }} aria-hidden>🧭</span>
+          <span style={{ fontSize: 'var(--font-size-body)' }} aria-hidden><Icon source="🧭" size="1em" /></span>
           <div style={{ fontWeight: 700, fontSize: 'var(--font-size-small)', color: 'var(--text-strong)' }}>{t('activeTitle')}</div>
         </div>
         <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--muted)', marginTop: 6 }}>
@@ -160,7 +161,7 @@ export default function PersonalityUsagePanel({
       {/* Suggested reinforcement */}
       <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
-          <span style={{ fontSize: 'var(--font-size-body)' }} aria-hidden>🌱</span>
+          <span style={{ fontSize: 'var(--font-size-body)' }} aria-hidden><Icon source="🌱" size="1em" /></span>
           <div style={{ fontWeight: 700, fontSize: 'var(--font-size-small)', color: 'var(--text-strong)' }}>{t('reinforceTitle')}</div>
           {reinf && (
             <span style={{ marginLeft: 'auto', fontSize: 'var(--font-size-eyebrow)', color: 'var(--muted)' }}>
@@ -214,7 +215,7 @@ export default function PersonalityUsagePanel({
       {/* Recent applications (which personality was used, when) */}
       <div style={cardStyle}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <span style={{ fontSize: 'var(--font-size-body)' }} aria-hidden>🕑</span>
+          <span style={{ fontSize: 'var(--font-size-body)' }} aria-hidden><Icon source="🕑" size="1em" /></span>
           <div style={{ fontWeight: 700, fontSize: 'var(--font-size-small)', color: 'var(--text-strong)' }}>{t('recentTitle')}</div>
         </div>
         {events == null ? (

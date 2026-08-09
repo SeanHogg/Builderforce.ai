@@ -10,6 +10,7 @@
  * Self-gating: renders nothing when the profile carries no signal, so callers can
  * drop it in unconditionally.
  */
+import { Icon } from '@/components/ui/Icon';
 import { useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePsychometricCatalog } from '@/lib/usePsychometricCatalog';
@@ -72,7 +73,7 @@ export default function PersonalitySummary({ profile }: { profile?: Psychometric
       style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: 14, background: 'var(--surface)' }}
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: notable.length ? 12 : 0, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 'var(--font-size-card-title)' }} aria-hidden>🧠</span>
+        <span style={{ fontSize: 'var(--font-size-card-title)' }} aria-hidden><Icon source="🧠" size="1em" /></span>
         <div style={{ fontWeight: 700, fontSize: 'var(--font-size-small)', color: 'var(--text-strong)' }}>{t('title')}</div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           {enne && chip(`${t('enneagram')} ${enne.type} · ${enne.name}`)}

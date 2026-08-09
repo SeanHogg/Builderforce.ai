@@ -338,7 +338,7 @@ export default function IDEDashboardPage() {
                     style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '0 0 12px', padding: 0, background: 'none', border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', textAlign: 'left' }}
                   >
                     <span aria-hidden style={{ display: 'inline-block', width: 12, fontSize: 11, color: 'var(--text-muted)', transition: 'transform 0.15s', transform: collapsed ? 'rotate(-90deg)' : 'none' }}>▼</span>
-                    <span aria-hidden>{key === 'none' ? '🗂' : '📁'}</span>
+                    <span aria-hidden>{key === 'none' ? <Icon source="🗂" size="1em" /> : <Icon source="📁" size="1em" />}</span>
                     {groupName}
                     <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>· {items.length}</span>
                   </button>

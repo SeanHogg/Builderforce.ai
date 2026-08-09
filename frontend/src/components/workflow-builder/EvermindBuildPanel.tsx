@@ -140,7 +140,7 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
                   cursor: running || stepCount === 0 ? 'default' : 'pointer', opacity: running || stepCount === 0 ? 0.7 : 1,
                 }}
               >
-                {running ? `⏳ ${t('running')}` : result ? `▶ ${t('rerun')}` : `▶ ${t('run')}`}
+                {running ? `${t('running')}` : result ? `${t('rerun')}` : `${t('run')}`}
               </button>
             </div>
 
@@ -188,8 +188,8 @@ export function EvermindBuildPanel({ open, onClose, graph, workflowName, project
                 }}
               >
                 {result.ok
-                  ? `🟢 ${t('okAll', { count: result.steps.length })}`
-                  : `🔴 ${t('failed', { label: firstFailLabel ?? '' })}`}
+                  ? `${t('okAll', { count: result.steps.length })}`
+                  : `${t('failed', { label: firstFailLabel ?? ''})}`}
               </div>
             )}
 

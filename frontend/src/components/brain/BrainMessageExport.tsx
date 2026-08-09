@@ -61,7 +61,7 @@ export function BrainMessageExport({ capability, content, title }: BrainMessageE
       title={error || label}
       aria-label={label}
     >
-      {busy ? t('export.working') : error ? `⚠ ${t('export.failed')}` : `⬇ ${label}`}
+      {busy ? t('export.working') : error ? `${t('export.failed')}` : `${label}`}
     </button>
   );
 }

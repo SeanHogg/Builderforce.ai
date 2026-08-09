@@ -96,10 +96,10 @@ export function RepoSyncControl({ projectId, onChanged }: { projectId: number; o
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             <button type="button" style={btn} onClick={runImport} disabled={busy !== null}>
-              {busy === 'import' ? 'Importing…' : '⬇ Import from repo'}
+              {busy === 'import' ? 'Importing…' : 'Import from repo'}
             </button>
             <button type="button" style={btnPrimary} onClick={runCommit} disabled={busy !== null}>
-              {busy === 'commit' ? 'Committing…' : '⬆ Commit & open PR'}
+              {busy === 'commit' ? 'Committing…' : 'Commit & open PR'}
             </button>
           </div>
         </div>

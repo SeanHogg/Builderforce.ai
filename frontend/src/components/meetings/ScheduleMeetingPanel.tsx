@@ -207,7 +207,7 @@ export function ScheduleMeetingPanel({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <button type="button" onClick={findTimes} disabled={finding}
                 style={{ alignSelf: 'flex-start', fontSize: 12, fontWeight: 700, color: 'var(--coral-bright)', background: 'none', border: 'none', cursor: 'pointer', padding: 0, opacity: finding ? 0.6 : 1 }}>
-                {finding ? t('finding') : `✨ ${t('findATime')}`}
+                {finding ? t('finding') : `${t('findATime')}`}
               </button>
               {slots && (
                 slots.length === 0 ? (

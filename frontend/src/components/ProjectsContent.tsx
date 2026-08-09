@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
@@ -340,7 +341,7 @@ export function ProjectsContent({ limit, viewAllHref, onCount }: ProjectsContent
             border: '1px solid var(--border-subtle)',
           }}
         >
-          <div style={{ fontSize: 56, marginBottom: 16 }}>🚀</div>
+          <div style={{ fontSize: 56, marginBottom: 16 }}><Icon source="🚀" size="1em" /></div>
           <p style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>{t('emptyTitle')}</p>
           <button
             type="button"

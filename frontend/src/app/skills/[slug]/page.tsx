@@ -130,7 +130,7 @@ export default function SkillDetailPage() {
         <p style={{ fontSize: 14, color: 'var(--muted)' }}>{skill.description}</p>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 12, flexWrap: 'wrap' }}>
           <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 13, color: stats?.liked ? 'var(--error)' : 'var(--muted)' }} onClick={toggleLike}>
-            {stats?.liked ? '❤️' : '🤍'} {stats?.likes ?? 0} likes
+            {stats?.liked ? <Icon source="❤️" size="1em" /> : <Icon source="🤍" size="1em" />} {stats?.likes ?? 0} likes
           </button>
           <span style={{ fontSize: 13, color: 'var(--muted)' }}><Icon source="⬇️" size="1em" /> {stats?.installs ?? 0} installs</span>
           <ArtifactAssigner artifactType="skill" artifactSlug={skill.slug} artifactName={skill.name} />

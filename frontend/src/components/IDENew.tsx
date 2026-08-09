@@ -1007,7 +1007,8 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             lineHeight: 1,
           }}
         >
-          ⚙️
+          
+          <Icon source="⚙️" size="1em" />
         </button>
 
         {/* Team Chat — the project's group conversation (humans + agents) */}
@@ -1230,7 +1231,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                 boxShadow: '0 8px 26px rgba(0,0,0,0.28)',
               }}
             >
-              <span aria-hidden style={{ fontSize: '1.2rem', lineHeight: 1 }}>🧠</span>
+              <span aria-hidden style={{ fontSize: '1.2rem', lineHeight: 1 }}><Icon source="🧠" size="1em" /></span>
               {t('askAi')}
             </button>
           )}
@@ -1317,7 +1318,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                   </>
                 ) : (
                   <>
-                    <span aria-hidden>💻</span>
+                    <span aria-hidden><Icon source="💻" size="1em" /></span>
                     {t('centerCode')}
                   </>
                 )}

@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { specsApi, taskSpecsApi, type Spec } from '@/lib/builderforceApi';
@@ -161,13 +162,13 @@ export function TaskPrdTab({ taskId, projectId }: { taskId?: number; projectId: 
           <Select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} style={{ ...selectStyle, flex: 1 }}>
             {specs.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.isPrimary ? '★ ' : ''}{s.goal || `PRD ${s.id.slice(0, 8)}`} ({s.status})
+                {s.isPrimary ? <Icon source="★" size="1em" /> : ''}{s.goal || `PRD ${s.id.slice(0, 8)}`} ({s.status})
               </option>
             ))}
           </Select>
         ) : (
           <div style={{ flex: 1, fontWeight: 600, fontSize: 14 }}>
-            {selected?.isPrimary ? '★ ' : ''}{selected?.goal || 'PRD'}
+            {selected?.isPrimary ? <Icon source="★" size="1em" /> : ''}{selected?.goal || 'PRD'}
             <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400 }}> · {selected?.status}</span>
           </div>
         )}

@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 
 import Link from 'next/link';
@@ -124,7 +125,7 @@ export default function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
       <div className="topbar-center">
         {previewRole ? (
           <span className="topbar-preview-info">
-            <span aria-hidden="true">👁</span>
+            <span aria-hidden="true"><Icon source="👁" size="1em" /></span>
             {t('previewingAs', { role: previewRole })}
           </span>
         ) : (

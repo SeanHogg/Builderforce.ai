@@ -322,7 +322,7 @@ export default function FreelancerProfilePage() {
             </label>
             {(profile.canAutofill || profile.resumeFilename) && (
               <button type="button" onClick={applyResume} disabled={autofilling} className="ui-button ui-button--secondary ui-button--sm">
-                {autofilling ? t('profile.filling') : `✨ ${t('profile.fillFromResume')}`}
+                {autofilling ? t('profile.filling') : `${t('profile.fillFromResume')}`}
               </button>
             )}
           </div>

@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -153,7 +154,7 @@ function AgentLabel({ def }: { def: WorkflowDefinitionSummary }) {
   if (hasAgent(def)) {
     return <span style={{ color: 'var(--coral-bright)', fontWeight: 600 }}>{def.agentName ?? t('assignedAgent')}</span>;
   }
-  return <span style={{ color: 'var(--coral-bright)', fontWeight: 600, opacity: 0.8 }}>⚠ {t('noAgent')}</span>;
+  return <span style={{ color: 'var(--coral-bright)', fontWeight: 600, opacity: 0.8 }}><Icon source="⚠" size="1em" /> {t('noAgent')}</span>;
 }
 
 /** A workflow (definition) as a card — mirrors the project card layout. */
@@ -172,7 +173,7 @@ function WorkflowDefCard({
   return (
     <div style={{ padding: 20, background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <span style={{ fontSize: 18 }} aria-hidden>🔀</span>
+        <span style={{ fontSize: 18 }} aria-hidden><Icon source="🔀" size="1em" /></span>
         <button type="button" onClick={() => onOpen(def)} style={{ flex: 1, textAlign: 'left', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
           <h3 style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', margin: 0 }}>{def.name}</h3>
           {def.description && (
@@ -499,7 +500,7 @@ export function WorkflowsContent({ projectId }: WorkflowsContentProps) {
 
       {!loading && visibleDefs.length === 0 ? (
         <div style={{ textAlign: 'center', padding: 48, background: 'var(--bg-elevated)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)' }}>
-          <div style={{ fontSize: 56, marginBottom: 16 }}>🔀</div>
+          <div style={{ fontSize: 56, marginBottom: 16 }}><Icon source="🔀" size="1em" /></div>
           <p style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
             {projectId != null ? t('emptyForProject') : t('empty')}
           </p>

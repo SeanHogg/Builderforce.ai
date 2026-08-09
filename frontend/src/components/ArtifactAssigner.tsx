@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Select } from '@/components/Select';
 import { SlideOutPanel } from '@/components/SlideOutPanel';
 
@@ -181,7 +182,8 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
         style={{ padding: '4px 10px', fontSize: 'var(--font-size-small)' }}
         title={t('assignTooltip')}
       >
-        📌 {t('assign')}
+        
+        <Icon source="📌" size="1em" /> {t('assign')}
       </button>
 
       <SlideOutPanel

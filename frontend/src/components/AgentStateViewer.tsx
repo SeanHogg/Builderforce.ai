@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import type { MambaAgentState, MambaStateSnapshot } from '@/lib/types';
@@ -116,7 +117,7 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
     >
       {/* Header */}
       <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{ fontWeight: 700 }}>🔬 {t('title')}</span>
+        <span style={{ fontWeight: 700 }}><Icon source="🔬" size="1em" /> {t('title')}</span>
         <button
           onClick={loadState}
           disabled={isLoading}
@@ -145,7 +146,7 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
       <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
         {!state && !isLoading && (
           <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '48px 16px' }}>
-            <div style={{ fontSize: '2rem', marginBottom: 8 }}>🧬</div>
+            <div style={{ fontSize: '2rem', marginBottom: 8 }}><Icon source="🧬" size="1em" /></div>
             <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 4 }}>{t('noStateTitle')}</p>
             <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
               {t('noStateHint')}

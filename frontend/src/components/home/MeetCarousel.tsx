@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import Link from 'next/link';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
@@ -127,7 +128,7 @@ export function MeetCarousel() {
             onClick={() => setManualPaused((value) => !value)}
             aria-label={manualPaused ? t('home.carousel.resume') : t('home.carousel.pause')}
           >
-            <span aria-hidden="true">{manualPaused ? '▶' : 'Ⅱ'}</span>
+            <span aria-hidden="true">{manualPaused ? <Icon source="▶" size="1em" /> : 'Ⅱ'}</span>
           </button>
         </span>
       </div>

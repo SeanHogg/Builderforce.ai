@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { listNotifications, markNotificationsRead, type Notification } from '@/lib/freelancerApi';
@@ -52,7 +53,7 @@ export default function NotificationsPanel() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 240, overflowY: 'auto' }}>
         {items.slice(0, 20).map((n) => (
           <div key={n.id} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', padding: '8px 10px', borderRadius: 'var(--radius-md)', background: n.read ? 'transparent' : 'var(--bg-elevated)', border: '1px solid var(--border-subtle)' }}>
-            <span aria-hidden style={{ fontSize: 'var(--font-size-small)', flexShrink: 0 }}>{!n.read ? '🔵' : '⚪'}</span>
+            <span aria-hidden style={{ fontSize: 'var(--font-size-small)', flexShrink: 0 }}>{!n.read ? <Icon source="🔵" size="1em" /> : <Icon source="⚪" size="1em" />}</span>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 'var(--font-size-small)', fontWeight: 600, color: 'var(--text-primary)' }}>{n.title}</div>
               {n.body && <div style={{ fontSize: 'var(--font-size-small)', color: 'var(--text-muted)', marginTop: 2 }}>{n.body}</div>}

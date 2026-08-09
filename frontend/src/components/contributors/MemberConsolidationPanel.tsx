@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { TenantMember } from '@/lib/auth';
@@ -125,7 +126,7 @@ export function MemberConsolidationPanel({
                     disabled={busy}
                   />
                   <span style={{ fontWeight: 600 }}>{member.displayName ?? member.email}</span>
-                  <span style={{ color: 'var(--text-muted)' }}>{contributor.displayName}{contributor.userId ? ' 🔗' : ''}</span>
+                  <span style={{ color: 'var(--text-muted)' }}>{contributor.displayName}{contributor.userId ? <Icon source="🔗" size="1em" /> : ''}</span>
                   {survivorId === contributor.id && <span style={{ fontSize: 11, color: 'var(--accent)' }}>{t('keep')}</span>}
                 </label>
               ))}

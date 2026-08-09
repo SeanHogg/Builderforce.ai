@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
@@ -122,7 +123,7 @@ export function ContributorConsolidation() {
                   style={{ ...btn(), textAlign: 'left' }}
                   title={t('keepThisTitle')}
                 >
-                  {t('keep')} <b>{survivor.displayName}</b>{survivor.userId ? ' 🔗' : ''}
+                  {t('keep')} <b>{survivor.displayName}</b>{survivor.userId ? <Icon source="🔗" size="1em" /> : ''}
                 </button>
               ))}
             </div>

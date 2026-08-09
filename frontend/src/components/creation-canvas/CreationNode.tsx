@@ -1827,7 +1827,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
           disabled={!canRun}
           aria-label={t('runObject', { title: data.title })}
           onClick={(event) => { event.stopPropagation(); onRun(id); }}
-        >{`▶ ${t('run')}`}</button>}
+        >{`${t('run')}`}</button>}
         <button className={styles.moreButton} aria-label={t('moreOptions', { title: data.title })}>•••</button>
       </header>
       <div className={styles.nodeBody}>
