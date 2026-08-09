@@ -672,7 +672,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
                     disabled={isGenerating || !config.capabilityPrompt.trim()}
                     className="text-xs bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 text-white px-2 py-0.5 rounded"
                   >
-                    {isGenerating ? `⏳ ${t('generating')}` : `✨ ${t('generate')}`}
+                    {isGenerating ? `${t('generating')}` : `${t('generate')}`}
                   </button>
                 </div>
                 <Select
@@ -759,7 +759,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
                   disabled={isTraining || !mambaTrainCode.trim()}
                   className="flex-1 bg-indigo-700 hover:bg-indigo-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
                 >
-                  {isTraining ? `⏳ ${t('training')}` : `🐍 ${t('trainMamba')}`}
+                  {isTraining ? `${t('training')}` : `${t('trainMamba')}`}
                 </button>
               ) : trainingMode === 'memory' ? (
                 <button
@@ -767,7 +767,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
                   disabled={isTraining || !memorySequences.trim()}
                   className="flex-1 bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
                 >
-                  {isTraining ? `⏳ ${t('training')}` : `🧬 ${t('trainMemory')}`}
+                  {isTraining ? `${t('training')}` : `${t('trainMemory')}`}
                 </button>
               ) : trainingMode === 'hybrid' ? (
                 <button
@@ -775,7 +775,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
                   disabled={isTraining || isGenerating}
                   className="flex-1 bg-gradient-to-r from-purple-700 to-green-700 hover:from-purple-600 hover:to-green-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
                 >
-                  {isTraining ? `⏳ ${t('training')}` : `🔮 ${t('startHybrid')}`}
+                  {isTraining ? `${t('training')}` : `${t('startHybrid')}`}
                 </button>
               ) : (
                 <button
@@ -783,7 +783,7 @@ export function AITrainingPanel({ projectId, onLog, onJobCompleted, initialDataM
                   disabled={isTraining || isGenerating || (dataMode === 'local-only' && !localTrainingText.trim()) || (!!baseCheckpoint !== !!tokenizerSpec)}
                   className="flex-1 bg-green-700 hover:bg-green-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
                 >
-                  {isTraining ? `⏳ ${t('training')}` : `▶ ${t('startTraining')}`}
+                  {isTraining ? `${t('training')}` : `${t('startTraining')}`}
                 </button>
               )}
               {isTraining && (

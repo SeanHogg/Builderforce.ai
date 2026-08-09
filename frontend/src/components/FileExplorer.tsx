@@ -52,7 +52,7 @@ function TreeNodeComponent({
           }}
           onClick={() => setExpanded(!expanded)}
         >
-          <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', width: 10, flexShrink: 0 }}>{expanded ? '▼' : '▶'}</span>
+          <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', width: 10, flexShrink: 0 }}>{expanded ? '▼' : <Icon source="▶" size="1em" />}</span>
           <span><Icon source="📁" size="1em" /></span>
           <span style={{ fontWeight: 600, fontFamily: 'var(--font-display)', fontSize: '0.78rem' }}>{node.name}</span>
         </div>

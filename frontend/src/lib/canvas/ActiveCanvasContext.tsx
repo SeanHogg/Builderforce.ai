@@ -24,6 +24,10 @@ export interface ActiveCanvas {
   focusId: string | null;
   /** Open the share panel on arrival (`?share=1`). */
   shareOpen: boolean;
+  /** Open a focused Builder object's workspace on arrival (`?build=1`). */
+  buildOpen: boolean;
+  /** One-shot Brain prompt carried by a legacy creation deep link. */
+  prompt: string | null;
   /** Arrive in presentation mode (`?present=1`). */
   present: boolean;
   /** Models explicitly selected for a prompt comparison launched from Marketplace. */
@@ -86,6 +90,8 @@ export function ActiveCanvasProvider({
         && current.persistence === canvas.persistence
         && current.focusId === canvas.focusId
         && current.shareOpen === canvas.shareOpen
+        && current.buildOpen === canvas.buildOpen
+        && current.prompt === canvas.prompt
         && current.present === canvas.present
         && current.modelComparisonIds.length === canvas.modelComparisonIds.length
         && current.modelComparisonIds.every((id, index) => id === canvas.modelComparisonIds[index])

@@ -9,6 +9,7 @@
  * All text comes in via `labels` so the page (a server component with
  * getTranslations) owns localization — this component ships no hardcoded copy.
  */
+import { Icon } from '@/components/ui/Icon';
 export interface Soc2AuditVisualLabels {
   title: string;
   scoreLabel: string;      // e.g. "Defined"
@@ -76,7 +77,7 @@ export function Soc2AuditVisual({ labels }: { labels: Soc2AuditVisualLabels }) {
           display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--font-size-small)', fontWeight: 600,
           color: 'var(--success-text)', background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.4)',
           borderRadius: 'var(--radius-full)', padding: '5px 12px',
-        }}>✓ {labels.prBadge}</span>
+        }}><Icon name="check" size={14} /> {labels.prBadge}</span>
       </div>
 
       {/* Right: CC checklist + findings */}

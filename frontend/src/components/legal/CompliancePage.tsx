@@ -1,3 +1,4 @@
+import { Icon } from '@/components/ui/Icon';
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import styles from './CompliancePage.module.css';
@@ -110,7 +111,7 @@ export function LegalSection({ title, children }: { title: string; children: Rea
 export function LegalCallout({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <aside className={styles.callout}>
-      <span aria-hidden="true">✓</span>
+      <span aria-hidden="true"><Icon source="✓" size="1em" /></span>
       <div><strong>{label}</strong><p>{children}</p></div>
     </aside>
   );

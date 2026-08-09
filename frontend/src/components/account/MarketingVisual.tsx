@@ -68,10 +68,11 @@ export default function MarketingVisual({ variant }: { variant: 'standard' | 'fr
           <line key={i} x1="160" y1="75" x2={x} y2={y} stroke="var(--coral-bright)" strokeWidth="1.5" opacity="0.4" />
         ))}
         {/* Specialist nodes */}
-        {[[70, 40, '🧠'], [70, 110, '🔁'], [250, 40, '🧪'], [250, 110, '▦']].map(([x, y, icon], i) => (
+        {[[70, 40], [70, 110], [250, 40], [250, 110]].map(([x, y], i) => (
           <g key={i}>
             <circle cx={x as number} cy={y as number} r="20" fill="var(--bg-elevated)" stroke="var(--border-subtle)" />
-            <text x={x as number} y={(y as number) + 6} textAnchor="middle" fontSize="16">{icon as string}</text>
+            <circle cx={x as number} cy={y as number} r="7" fill="none" stroke="var(--coral-bright)" strokeWidth="1.6" />
+            <circle cx={x as number} cy={y as number} r="2" fill="var(--coral-bright)" />
           </g>
         ))}
         {/* Central hub (your agent) */}

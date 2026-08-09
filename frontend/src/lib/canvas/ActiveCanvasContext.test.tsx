@@ -7,6 +7,8 @@ const board = (sessionId: string): ActiveCanvas => ({
   persistence: 'server',
   focusId: null,
   shareOpen: false,
+  buildOpen: false,
+  prompt: null,
   present: false,
   modelComparisonIds: [],
 });

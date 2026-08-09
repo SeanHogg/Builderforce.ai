@@ -5808,7 +5808,7 @@
         {
           "short": "CT",
           "name": "CTO",
-          "prefill": "Trae al CTO para revisar cómo esto llega a producción"
+          "prefill": "Añade un agente CTO y una revisión de preparación para producción conectada que cubra arquitectura, seguridad, despliegue, observabilidad, reversión y criterios de lanzamiento. Indica supuestos razonables y preguntas abiertas en vez de pedir más contexto."
         }
       ],
       "guestNote": "Un lienzo real. Nada sale de este dispositivo hasta que inicies sesión.",

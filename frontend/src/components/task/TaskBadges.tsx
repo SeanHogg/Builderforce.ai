@@ -81,7 +81,7 @@ export function TaskBadges({
             background: 'var(--bg-elevated)', color: review.color, fontWeight: 600,
           }}
         >
-          {review.glyph} {tCommon('reviewedTimes', { count: task.reviewCount })}
+          <Icon source={review.glyph} size={13} /> {tCommon('reviewedTimes', { count: task.reviewCount })}
         </span>
       ) : null}
       {flagged && (

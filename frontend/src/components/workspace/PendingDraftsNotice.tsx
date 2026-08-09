@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
@@ -49,7 +50,7 @@ export function PendingDraftsNotice() {
                 color: 'var(--text-primary)', textDecoration: 'none', fontSize: '0.88rem', fontWeight: 600,
               }}
             >
-              <span aria-hidden="true">✦</span>
+              <span aria-hidden="true"><Icon source="✦" size="1em" /></span>
               {draft.title || t('untitled')}
             </Link>
           </li>

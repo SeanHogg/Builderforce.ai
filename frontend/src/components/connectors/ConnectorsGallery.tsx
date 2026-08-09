@@ -172,7 +172,7 @@ export function ConnectorsGallery({ search = '', viewMode = 'card' }: { search?:
                     {c.name}
                   </span>
                   <span style={{ fontSize: 11, whiteSpace: 'nowrap', color: c.connectionCount > 0 ? 'var(--success)' : 'var(--text-muted)' }}>
-                    {c.connectionCount > 0 ? `● ${t('gallery.connected')}` : `○ ${t('gallery.notConnected')}`}
+                    <Icon name="activity" size={12} /> {c.connectionCount > 0 ? t('gallery.connected') : t('gallery.notConnected')}
                   </span>
                 </div>
                 <p style={{ fontSize: 12, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
@@ -466,7 +466,7 @@ function ActivityTab({ connectorKey }: { connectorKey: string }) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       {logs.map((l) => (
         <div key={l.id} style={{ display: 'flex', gap: 10, fontSize: 11.5, color: 'var(--text-secondary)', flexWrap: 'wrap', borderTop: '1px solid var(--border-subtle)', paddingTop: 6 }}>
-          <span style={{ color: l.ok ? 'var(--success)' : 'var(--danger)' }}>● {l.statusCode ?? '—'}</span>
+          <span style={{ color: l.ok ? 'var(--success)' : 'var(--danger)' }}><Icon name="activity" size={12} /> {l.statusCode ?? '—'}</span>
           <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{l.actionKey}</span>
           <span>{t(`activity.actor.${l.actorKind === 'user' || l.actorKind === 'test' ? l.actorKind : 'agent'}`)}</span>
           <span>{new Date(l.createdAt).toLocaleString()}</span>

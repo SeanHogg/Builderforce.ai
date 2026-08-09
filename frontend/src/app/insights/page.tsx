@@ -195,7 +195,7 @@ export default function InsightsHomePage() {
     if (definitions.length === 0) {
       panels.push({
         id: 'insights-empty', title: t('home.myDashboard'), icon: '📌', position: { x: 36, y: 420 }, width: 620, height: 260,
-        content: <div style={{ padding: 28, textAlign: 'center' }}><h3 style={{ margin: '0 0 8px' }}>{t('home.emptyTitle')}</h3><p style={{ color: 'var(--text-secondary)' }}>{t('home.emptyBody')}</p>{!pinsLoading && <button type="button" style={primaryBtn} onClick={() => setPicker(true)}>＋ {t('home.addWidgets')}</button>}</div>,
+        content: <div style={{ padding: 28, textAlign: 'center' }}><h3 style={{ margin: '0 0 8px' }}>{t('home.emptyTitle')}</h3><p style={{ color: 'var(--text-secondary)' }}>{t('home.emptyBody')}</p>{!pinsLoading && <button type="button" style={primaryBtn} onClick={() => setPicker(true)}><Icon source="＋" size="1em" /> {t('home.addWidgets')}</button>}</div>,
       });
     } else {
       definitions.forEach((def, index) => {
@@ -231,14 +231,14 @@ export default function InsightsHomePage() {
       panels.push({
         id: `insights-dashboard-widget:${w.widgetId}`, title: def ? tw(`title.${def.titleKey}`) : (w.title ?? w.label), subtitle: active.name, icon: '◇',
         position: { x: 36 + (index % 3) * 432, y: 600 + Math.floor(index / 3) * 390 }, width: def?.size === 'md' ? 820 : def?.size === 'lg' ? 1300 : 400, height: def?.size === 'lg' ? 430 : 350,
-        content: <div style={{ position: 'relative', height: '100%' }}>{def ? <WidgetCard def={def} days={w.days} /> : <DashboardWidget v={w} />}<RoleGate capability="dashboards.manage"><button onClick={() => void removeWidget(w.widgetId)} title={td('widget.remove')} style={{ position: 'absolute', top: 6, right: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}>✕</button></RoleGate></div>,
+        content: <div style={{ position: 'relative', height: '100%' }}>{def ? <WidgetCard def={def} days={w.days} /> : <DashboardWidget v={w} />}<RoleGate capability="dashboards.manage"><button onClick={() => void removeWidget(w.widgetId)} title={td('widget.remove')} style={{ position: 'absolute', top: 6, right: 6, border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}><Icon source="✕" size="1em" /></button></RoleGate></div>,
       });
     });
     if (data && data.widgets.length === 0) panels.push({ id: `insights-dashboard-empty:${active.id}`, title: active.name, icon: '◇', position: { x: 36, y: 600 }, width: 500, height: 180, content: <p style={{ color: 'var(--text-secondary)' }}>{td('widget.empty')}</p> });
   }
 
   return <PageContainer style={{ padding: 0 }}>
-    <WorkspaceCanvas panels={panels} toolbar={<><DaysWindowSelect value={days} onChange={setDays} />{view === 'me' && <button type="button" style={primaryBtn} onClick={() => setPicker(true)}>＋ {t('home.addWidgets')}</button>}</>} />
+    <WorkspaceCanvas panels={panels} toolbar={<><DaysWindowSelect value={days} onChange={setDays} />{view === 'me' && <button type="button" style={primaryBtn} onClick={() => setPicker(true)}><Icon source="＋" size="1em" /> {t('home.addWidgets')}</button>}</>} />
     <AddWidgetPicker open={picker} onClose={() => setPicker(false)} />
   </PageContainer>;
 }

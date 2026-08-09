@@ -5828,7 +5828,7 @@
         {
           "short": "CT",
           "name": "CTO",
-          "prefill": "Bring the CTO in to review how this ships to production"
+          "prefill": "Add a CTO agent and a connected production-readiness review covering architecture, security, deployment, observability, rollback, and launch gates. State sensible assumptions and open questions instead of asking for more context."
         }
       ],
       "guestNote": "A real canvas. Nothing leaves this device until you sign in.",

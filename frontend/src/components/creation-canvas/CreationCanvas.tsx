@@ -494,7 +494,7 @@ export function projectEvermindNodePatch(head: ProjectEvermindHead, activity: Pr
   };
 }
 
-function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialPresent = false, initialModelComparisonIds = [], stageActive = true }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
+function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialBuildOpen = false, initialPrompt, initialPresent = false, initialModelComparisonIds = [], stageActive = true }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
   const t = useTranslations('creationCanvas');
   /**
    * A shipped pack's name and blurb are product copy, so they come from the
@@ -829,6 +829,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
   const drawingPoints = useRef<Array<{ x: number; y: number }>>([]);
   const canvasClipboard = useRef<{ nodes: CreationFlowNode[]; edges: Edge[] } | null>(null);
   const initialPromptSubmitted = useRef(false);
+  const initialBuildOpened = useRef(false);
   const modelComparisonStarted = useRef(false);
   const autoApplyRef = useRef(true);
   const mobileViewportFitted = useRef(false);
@@ -1181,6 +1182,15 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     setSelectedId(initialFocusId);
     window.setTimeout(() => void flowRef.current?.fitView({ nodes: [{ id: initialFocusId }], padding: 0.45, duration: 350 }), 0);
   }, [initialFocusId, nodes]);
+
+  useEffect(() => {
+    if (!initialBuildOpen || initialBuildOpened.current || !initialFocusId) return;
+    const target = nodes.find((node) => node.id === initialFocusId && node.data.kind === 'build');
+    const binding = target ? canvasBuildBinding(target.data) : null;
+    if (!target || !binding) return;
+    initialBuildOpened.current = true;
+    setBuildFocus({ nodeId: target.id, storageProjectId: binding.storageProjectId });
+  }, [initialBuildOpen, initialFocusId, nodes]);
 
   useEffect(() => {
     if (!hydrated.current || !canEdit) return;
@@ -3671,6 +3681,14 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     evaluateCanvas(initial.body);
   }, [comparisonModelIds.length, thinking, timeline, evaluateCanvas]);
 
+  useEffect(() => {
+    const request = initialPrompt?.trim();
+    if (!request || !hydrated.current || initialPromptSubmitted.current || thinking) return;
+    initialPromptSubmitted.current = true;
+    setPrompt(request);
+    evaluateCanvas(request);
+  }, [evaluateCanvas, initialPrompt, nodes, thinking]);
+
   const applyProposedChanges = useCallback(async () => {
     const selected = proposedChanges.filter((change) => acceptedProposalIds.has(change.id));
     const additions = selected.filter((change): change is Extract<ProposedCanvasChange, { type: 'object.add' }> => change.type === 'object.add');
@@ -4626,8 +4644,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
    * of the Brain surface: it stays put and stays reachable whether Brain is inline in
    * its Object, docked to either edge, or closed entirely.
    */
+  const promptStarter = !presentMode && <div className={styles.promptStarter} data-tour="creation-prompt-starter">
+    <PromptUseCasePicker placement="bottom" onSelect={setPrompt} />
+  </div>;
+
   const composer = !presentMode && <div className={styles.composerDock} data-tour="creation-brain-dock">
-    <PromptUseCasePicker placement="top" onSelect={setPrompt} />
     {/* Keep the settled receipt mounted after the run. Token consumption used
         to disappear at the exact moment the answer arrived because this whole
         component was conditional on `thinking`. */}
@@ -4678,7 +4699,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
       data-fullscreen={fullscreen ? 'true' : 'false'}
     >
       <div className={styles.sessionBar}>
-        <div className={styles.titleBlock}><span className={styles.spark}>✦</span><input aria-label={t('sessionTitle')} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice(t('titleSaveFailed'))); }} /><span className={styles.saved}>{notice}</span>{persistence === 'server' && <span role="status" aria-live="polite" className={styles.realtimeStatus} data-state={realtimeState}>{realtimeState === 'online' ? t('live') : realtimeState === 'offline' ? t('offlineRetry') : realtimeState === 'reconnecting' ? t('reconnecting') : t('connecting')}</span>}</div>
+        <div className={styles.titleBlock}><span className={styles.spark}><Icon source="✦" size="1em" /></span><input aria-label={t('sessionTitle')} value={title} onChange={(event) => setTitle(event.target.value)} onBlur={() => { if (persistence === 'server') void creationSessionsApi.update(sessionId, { title }).then(() => setNotice(t('saved'))).catch(() => setNotice(t('titleSaveFailed'))); }} /><span className={styles.saved}>{notice}</span>{persistence === 'server' && <span role="status" aria-live="polite" className={styles.realtimeStatus} data-state={realtimeState}>{realtimeState === 'online' ? t('live') : realtimeState === 'offline' ? t('offlineRetry') : realtimeState === 'reconnecting' ? t('reconnecting') : t('connecting')}</span>}</div>
         <div className={styles.sessionActions}>
           <div className={styles.collaborators} aria-label={t('activeCollaborators')} data-tour="creation-collaborators">
             {/* In a shared free session the roster is REAL — showing only "you"
@@ -4719,8 +4740,8 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           {persistence === 'local' && <button className={`${styles.secondaryButton} ${styles.saveButton}`} aria-label={t('saveCollaborate')} onClick={() => requireAccount('save', t('gateSaveTitle'), t('gateSaveBody'))}><span className={styles.saveButtonFull}>{t('saveCollaborate')}</span><span className={styles.saveButtonShort} aria-hidden>{t('save')}</span></button>}
           {moreOpen && <div className={styles.moreMenu} aria-label={t('moreActions')}>
             <span className={styles.moreMenuHeading}>{t('createAndView')}</span>
-            <button onClick={() => { setTemplateOpen(true); setMoreOpen(false); }}><span aria-hidden>▦</span>{t('templates')}</button>
-            <button onClick={() => { setConversationOpen((value) => !value); setMoreOpen(false); }}><span aria-hidden>◌</span>{t('conversation')}</button>
+            <button onClick={() => { setTemplateOpen(true); setMoreOpen(false); }}><span aria-hidden><Icon source="▦" size="1em" /></span>{t('templates')}</button>
+            <button onClick={() => { setConversationOpen((value) => !value); setMoreOpen(false); }}><span aria-hidden><Icon source="◌" size="1em" /></span>{t('conversation')}</button>
             <button aria-pressed={drawingMode} onClick={() => { setDrawingMode((value) => !value); setMoreOpen(false); }}><span aria-hidden>⌁</span>{drawingMode ? t('stopDrawing') : t('draw')}</button>
             <button onClick={() => { setPresentMode((value) => !value); setMoreOpen(false); }}><span aria-hidden><Icon source="▶" size="1em" /></span>{presentMode ? t('exitPresentation') : t('present')}</button>
             <span className={styles.moreMenuHeading}>{t('sessionTools')}</span>
@@ -4947,7 +4968,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
         {!presentMode && <button className={styles.paletteToggle} onClick={() => setPaletteOpen((value) => !value)} aria-label={t('toggleObjectPalette')}>{paletteOpen ? '‹' : '+'}</button>}
         {!presentMode && paletteOpen && <aside id="canvas-object-palette" className={styles.palette}>
           <div className={styles.paletteHeader}><strong>{t('addToCanvas')}</strong><button onClick={() => setPaletteOpen(false)} aria-label={t('closePalette')}>×</button></div>
-          <div className={styles.paletteSearchWrap}><span aria-hidden>⌕</span><input ref={paletteSearchRef} className={styles.search} aria-label={t('searchEverything')} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder={t('searchEverything')} />{paletteSearch && <button type="button" aria-label={t('clearSearch')} onClick={() => setPaletteSearch('')}>×</button>}</div>
+          <div className={styles.paletteSearchWrap}><span aria-hidden><Icon source="⌕" size="1em" /></span><input ref={paletteSearchRef} className={styles.search} aria-label={t('searchEverything')} value={paletteSearch} onChange={(event) => setPaletteSearch(event.target.value)} placeholder={t('searchEverything')} />{paletteSearch && <button type="button" aria-label={t('clearSearch')} onClick={() => setPaletteSearch('')}>×</button>}</div>
           <div className={styles.paletteSections}>{CREATION_PALETTE_GROUPS.map((group) => ({ ...group, items: group.items.filter((item) => `${t(`object.${item.kind}`)} ${t(`group.${item.group}`)} ${item.group} ${item.kind}`.toLowerCase().includes(paletteSearch.trim().toLowerCase())) })).filter((group) => group.items.length).map((group) => {
             const collapsed = !paletteSearch.trim() && collapsedPaletteGroups.has(group.group);
             const regionId = `canvas-palette-${group.group.toLowerCase()}`;
@@ -5052,6 +5073,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           collaborators={members.filter((member) => member.userId !== currentUserId)}
           joinedCollaborator={joinedCollaborator}
         />}
+        {promptStarter}
         {composer}
         {/* The way back to a closed Brain. An inline Brain that still has its Object on
             the board already offers one ("Open Brain chat"), so the pill would be a
@@ -5064,7 +5086,7 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
           aria-label={t('openBrainDock')}
           title={t('openBrainDock')}
           onClick={() => updateBrainDock({ open: true })}
-        ><span aria-hidden>✦</span>{t('brain')}</button>}
+        ><span aria-hidden><Icon source="✦" size="1em" /></span>{t('brain')}</button>}
       </div>
       <SectionTour
         phase={sectionTour.phase}
@@ -5719,7 +5741,6 @@ function BuildInspectorSection({ node, editable, creating, persistence, onChange
         {existing.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
       </select>
     </label>}
-    {binding && <a href={`/ide/${binding.storageProjectPublicId}`} target="_blank" rel="noreferrer">{t('openFullPage')}</a>}
     <p className={styles.inspectorHint}>{binding ? t('boundHint') : t('unboundHint')}</p>
     {binding && <>
       <button type="button" className={styles.secondaryFullButton} disabled={!editable} onClick={onDeleteBuildWorkspace}>{t('deleteWorkspace')}</button>
@@ -5870,8 +5891,8 @@ function ActivityInspector({ sessionId, objectId, persistence, role, members }: 
   </div>;
 }
 
-export function CreationCanvas({ sessionId, persistence = 'server', initialFocusId, initialShareOpen, initialPresent, initialModelComparisonIds, stageActive = true }: { sessionId: string; persistence?: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
+export function CreationCanvas({ sessionId, persistence = 'server', initialFocusId, initialShareOpen, initialBuildOpen, initialPrompt, initialPresent, initialModelComparisonIds, stageActive = true }: { sessionId: string; persistence?: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialBuildOpen?: boolean; initialPrompt?: string | null; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
   // The 3D scene publishes its view commands to the canvas rail rather than
   // carrying a toolbar of its own, so both live under one provider.
-  return <ReactFlowProvider><Canvas3DControlsProvider><CanvasInner sessionId={sessionId} persistence={persistence} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialPresent={initialPresent} initialModelComparisonIds={initialModelComparisonIds} stageActive={stageActive} /></Canvas3DControlsProvider></ReactFlowProvider>;
+  return <ReactFlowProvider><Canvas3DControlsProvider><CanvasInner sessionId={sessionId} persistence={persistence} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialBuildOpen={initialBuildOpen} initialPrompt={initialPrompt} initialPresent={initialPresent} initialModelComparisonIds={initialModelComparisonIds} stageActive={stageActive} /></Canvas3DControlsProvider></ReactFlowProvider>;
 }

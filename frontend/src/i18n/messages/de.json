@@ -5808,7 +5808,7 @@
         {
           "short": "CT",
           "name": "CTO",
-          "prefill": "Hol den CTO dazu, um den Weg in die Produktion zu prüfen"
+          "prefill": "Füge einen CTO-Agenten und eine verbundene Produktionsreifeprüfung hinzu, die Architektur, Sicherheit, Bereitstellung, Beobachtbarkeit, Rollback und Freigabekriterien abdeckt. Halte sinnvolle Annahmen und offene Fragen fest, statt nach mehr Kontext zu fragen."
         }
       ],
       "guestNote": "Eine echte Leinwand. Nichts verlässt dieses Gerät, bis Sie sich anmelden.",

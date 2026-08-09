@@ -5808,7 +5808,7 @@
         {
           "short": "CT",
           "name": "CTO",
-          "prefill": "Faites venir le CTO pour examiner la mise en production"
+          "prefill": "Ajoutez un agent CTO et une revue de préparation à la production reliée couvrant l’architecture, la sécurité, le déploiement, l’observabilité, le retour arrière et les critères de lancement. Consignez des hypothèses raisonnables et les questions ouvertes au lieu de demander plus de contexte."
         }
       ],
       "guestNote": "Un vrai canevas. Rien ne quitte cet appareil tant que vous ne vous connectez pas.",

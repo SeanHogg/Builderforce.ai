@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useCart, type CartItem } from '@/lib/CartContext';
 import { useAuth } from '@/lib/AuthContext';
+import { Icon } from '@/components/ui/Icon';
 
 function formatPrice(item: CartItem): string {
   if (item.price === 0) return 'Free';
@@ -174,7 +175,7 @@ export default function ShoppingCart() {
                   }}
                 >
                   <div style={{ fontSize: 28, flexShrink: 0, width: 40, textAlign: 'center' }}>
-                    {item.emoji ?? (item.type === 'skill' ? '⚙️' : item.type === 'persona' ? '🤖' : item.type === 'agent' ? '👤' : '📄')}
+                    <Icon source={item.emoji ?? (item.type === 'skill' ? 'settings' : item.type === 'persona' ? 'brain' : item.type === 'agent' ? 'person' : 'document')} size={18} />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>

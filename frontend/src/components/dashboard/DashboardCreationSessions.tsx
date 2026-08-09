@@ -100,7 +100,7 @@ export function DashboardCreationLauncher() {
           </button>; })}
         </div>
         <button type="button" onClick={createBlank} disabled={creating || sessionLimitReached} className={styles.blankButton}>
-          <span><b aria-hidden>＋</b> Start with a blank canvas</span><span aria-hidden>→</span>
+          <span><b aria-hidden><Icon source="＋" size="1em" /></b> Start with a blank canvas</span><span aria-hidden>→</span>
         </button>
       </section>
     </div>
@@ -185,7 +185,7 @@ export function DashboardCreationSessions() {
   const visible = [...sessions].filter((session) => !searchParams.get('filter') || session.preview?.kinds?.includes(searchParams.get('filter')!)).sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned));
   const openBuild = async (build: IdeProject) => {
     const result = await creationSessionsApi.openIdeProject(build.id);
-    router.push(`/create/${result.sessionId}?focus=${result.objectId}`);
+    router.push(`/create/${result.sessionId}?focus=${result.objectId}&build=1`);
   };
   const openWorkflow = async (workflow: WorkflowDefinitionSummary) => {
     const result = await creationSessionsApi.openResource('workflow', workflow.id);
@@ -212,7 +212,7 @@ export function DashboardCreationSessions() {
     .filter((object) => object.resourceType && object.resourceId)
     .map((object) => `${object.resourceType}:${object.resourceId}`)));
   const resourceItems = status === 'archived' ? [] : [
-    ...visibleBuilds.filter((build) => !representedResources.has(`project:${build.storageProjectId}`)).map((build) => { const modality = getModality(build.modality); return { key: `build-${build.id}`, icon: modality.icon, title: build.name, meta: `${modality.label} · ${build.status}${build.containerName ? ` · ${build.containerName}` : ''}`, open: () => openBuild(build) }; }),
+    ...visibleBuilds.filter((build) => !representedResources.has(`ideProject:${build.id}`)).map((build) => { const modality = getModality(build.modality); return { key: `build-${build.id}`, icon: modality.icon, title: build.name, meta: `${modality.label} · ${build.status}${build.containerName ? ` · ${build.containerName}` : ''}`, open: () => openBuild(build) }; }),
     ...visibleWorkflows.filter((workflow) => !representedResources.has(`workflow:${workflow.id}`)).map((workflow) => ({ key: `workflow-${workflow.id}`, icon: '⌘', title: workflow.name, meta: `${t('workflowRuns', { count: workflow.runCount ?? 0 })}${workflow.projectName ? ` · ${workflow.projectName}` : ''}`, open: () => openWorkflow(workflow) })),
     ...visibleChats.filter((chat) => !representedResources.has(`chat:${chat.id}`)).map((chat) => ({ key: `chat-${chat.id}`, icon: '●', title: chat.title, meta: `${t('brainSession')}${chat.capability ? ` · ${chat.capability}` : ''}`, open: () => openChat(chat) })),
     ...visibleProjects.filter((project) => !representedResources.has(`project:${project.id}`)).map((project) => ({ key: `project-${project.id}`, icon: '▦', title: project.name, meta: `${t('object.project')} · ${project.status || t('active').toLowerCase()} · ${t('projectTasks', { count: project.taskCount ?? 0 })}`, open: () => openProject(project) })),
@@ -223,7 +223,7 @@ export function DashboardCreationSessions() {
         {(session.preview?.objects ?? []).slice(0, 8).map((object, index) => <span key={object.id} title={object.title} style={{ position: 'absolute', left: `${12 + ((Math.abs(object.x) + index * 31) % 68)}%`, top: `${14 + ((Math.abs(object.y) + index * 23) % 58)}%`, width: 42, height: 26, borderRadius: 'var(--radius-sm)', border: `2px solid ${KIND_COLOR[object.kind] ?? 'var(--canvas-obj-unknown)'}`, background: 'var(--surface-raised)', transform: 'translate(-50%, -50%)', boxShadow: '0 3px 9px var(--shadow-color)' }} />)}
         {!session.preview?.objects?.length && <span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'var(--text-muted)', fontSize: 12 }}>Blank canvas</span>}
       </div>
-      <div style={{ padding: libraryView === 'list' ? '11px 14px' : 14 }}><strong style={{ display: 'block', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{session.pinned ? '★ ' : ''}{session.title}{session.unread ? ' · New' : ''}</strong>
+      <div style={{ padding: libraryView === 'list' ? '11px 14px' : 14 }}><strong style={{ display: 'block', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{session.pinned && <Icon name="sparkles" size={14} />} {session.title}{session.unread ? ' · New' : ''}</strong>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>{(session.preview?.kinds ?? []).slice(0, 5).map((kind) => <small key={kind} style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: '2px 6px' }}>{kind}</small>)}{(session.projectIds ?? []).map((id) => <small key={id} style={{ borderRadius: 'var(--radius-lg)', padding: '2px 6px', background: 'var(--surface-sunken)' }}>Project {id}</small>)}</div>
         <span style={{ display: 'flex', justifyContent: 'space-between', marginTop: 9, color: 'var(--text-secondary)', fontSize: 12 }}><span>{session.preview?.objectCount ?? 0} objects · {session.collaboratorCount ?? 1} people{running ? ` · ${running} running` : ''}</span><span>{new Date(session.lastActivityAt).toLocaleDateString()}</span></span>
         <div onClick={(event) => event.stopPropagation()} style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 10 }}>{(['pin','rename','duplicate','share', status === 'archived' ? 'restore' : 'archive'] as const).map((action) => <button key={action} type="button" onClick={() => void act(action, session)} style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-sm)', background: 'transparent', color: 'var(--text-secondary)', padding: '4px 7px', cursor: 'pointer', textTransform: 'capitalize' }}>{action === 'pin' && session.pinned ? 'Unpin' : action}</button>)}</div>

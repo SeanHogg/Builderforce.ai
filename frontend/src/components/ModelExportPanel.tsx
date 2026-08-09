@@ -156,7 +156,7 @@ export function ModelExportPanel() {
             cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.6 : 1,
           }}
         >
-          {busy ? `⏳ ${t('exporting')}` : `⬇ ${t('export')}`}
+          {busy ? `${t('exporting')}` : `${t('export')}`}
         </button>
         <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{t('pushNote')}</span>
       </div>

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { getTranslations } from 'next-intl/server';
 import JsonLd from '@/components/JsonLd';
+import { Icon } from '@/components/ui/Icon';
 import RelatedArticles from '@/components/blog/RelatedArticles';
 import {
   CardText,
@@ -16,7 +17,6 @@ import {
 import { productSchema } from '@/lib/structured-data';
 import { pageMetadata } from '@/lib/seo';
 import { STATS, PRODUCT_SECTIONS, PRODUCT_CAPABILITY_PROOF, PRODUCT_CAPABILITY_OPERATIONS, INTEGRATION_CAPABILITY_PROOF, WORKFLOW_PROOF_DEMOS } from '@/lib/content';
-import { Icon } from '@/components/ui/Icon';
 
 export const runtime = 'edge';
 
@@ -265,7 +265,7 @@ export default async function ProductPage() {
               <p className="pp-cta-desc">{t('product.ctaDesc')}</p>
               <div className="pp-actions">
           <Link href="/register" className="pp-btn-primary"><Icon name="automation" size={17} /> {t('marketing.ctaGetStartedFree')}</Link>
-                <Link href="/creation-canvas" className="pp-btn-secondary">✦ {t('product.ctaBrowseWorkforce')}</Link>
+                <Link href="/creation-canvas" className="pp-btn-secondary"><Icon name="sparkles" size={17} /> {t('product.ctaBrowseWorkforce')}</Link>
               </div>
             </div>
           </section>

@@ -84,7 +84,7 @@ export function IdeProjectCard({
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <span style={chip}>{m.label}</span>
         <span style={{ ...chip, color: ideProject.containerName ? 'var(--text-secondary)' : 'var(--text-muted)' }}>
-          {ideProject.containerName ? `📁 ${ideProject.containerName}` : t('ungrouped')}
+          {ideProject.containerName ? `${ideProject.containerName}` : t('ungrouped')}
         </span>
       </div>
 

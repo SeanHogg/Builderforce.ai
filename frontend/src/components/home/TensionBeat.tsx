@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useTranslations } from 'next-intl';
 import { HomeSection, HomeSectionHeader } from './HomePatterns';
 import styles from './TensionBeat.module.css';
@@ -44,7 +45,7 @@ export function TensionBeat() {
             <span className={styles.endpoint}>{t('home.tension.ideaLabel')}</span>
             <span className={styles.solidArrow}>→</span>
             <div className={styles.canvasBar}>
-              <span>✦</span>
+              <span><Icon source="✦" size="1em" /></span>
               {t('home.tension.canvasLabel')}
             </div>
             <span className={styles.solidArrow}>→</span>

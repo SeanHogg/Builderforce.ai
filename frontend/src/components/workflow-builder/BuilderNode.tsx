@@ -5,6 +5,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import type { WorkflowNodeKind } from '@/lib/builderforceApi';
 import { NODE_KIND_MAP } from './nodeKinds';
 import { integrationAccent, integrationForConfig, integrationIcon } from './integrations';
+import { Icon } from '@/components/ui/Icon';
 
 export interface BuilderNodeData extends Record<string, unknown> {
   kind: WorkflowNodeKind;
@@ -71,7 +72,7 @@ function BuilderNodeImpl({ data, selected }: NodeProps) {
       )}
       <div style={{ padding: '8px 11px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <span style={{ fontSize: 'var(--font-size-body)' }}>{meta?.icon ?? '◻'}</span>
+          <span><Icon source={meta?.icon ?? 'template'} size={16} /></span>
           <span style={{ fontSize: 'var(--font-size-small)', fontWeight: 700, color: 'var(--text-primary)' }}>
             {d.label || meta?.label || d.kind}
           </span>

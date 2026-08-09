@@ -7,6 +7,7 @@ import {
   type ArtifactAssignment,
 } from '@/lib/builderforceApi';
 import { BUILTIN_SKILLS, type BuiltinSkill } from '@/lib/marketplaceData';
+import { Icon } from '@/components/ui/Icon';
 
 export interface SkillAssignmentsContentProps {
   scope: 'tenant' | 'host' | 'project' | 'task' | 'agent';
@@ -149,7 +150,7 @@ export function SkillAssignmentsContent({ scope, scopeId, className, style }: Sk
                   borderRadius: 'var(--radius-md)',
                 }}
               >
-                <span style={{ fontSize: 16, flexShrink: 0 }}>{s.emoji ?? '✨'}</span>
+                <span style={{ flexShrink: 0 }}><Icon source={s.emoji ?? 'sparkles'} size={16} /></span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{s.name}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.description}</div>
@@ -198,7 +199,7 @@ export function SkillAssignmentsContent({ scope, scopeId, className, style }: Sk
                   borderRadius: 'var(--radius-md)',
                 }}
               >
-                <span style={{ fontSize: 16, flexShrink: 0 }}>{emoji}</span>
+                <span style={{ flexShrink: 0 }}><Icon source={emoji} size={16} /></span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-primary)' }}>{name}</div>
                   <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>Assigned {new Date(a.assignedAt).toLocaleDateString()}</div>

@@ -124,7 +124,7 @@ export default function SkillDetailPage() {
       <div style={{ marginBottom: 24 }}>
         <Link href="/skills" style={{ fontSize: 13, color: 'var(--accent)', marginBottom: 8, display: 'inline-block' }}>← Back to Skills</Link>
         <h1 style={{ fontSize: 28, fontWeight: 700, color: 'var(--text-strong)', margin: '8px 0', display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 32 }}>{emoji}</span>
+          <span><Icon source={emoji} size={32} /></span>
           {skill.name}
         </h1>
         <p style={{ fontSize: 14, color: 'var(--muted)' }}>{skill.description}</p>

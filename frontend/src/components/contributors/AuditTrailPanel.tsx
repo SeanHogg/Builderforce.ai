@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { activityApi, type ActivityActorType, type ActivityLogEvent } from '@/lib/builderforceApi';
@@ -231,7 +232,7 @@ export function AuditTrailPanel() {
                       color: as.color, background: `color-mix(in srgb, ${as.color} 14%, transparent)`,
                       border: `1px solid color-mix(in srgb, ${as.color} 34%, transparent)`,
                     }}>
-                      {as.glyph} {actorLabel(e.actorType)}
+                      <Icon source={as.glyph} size={14} /> {actorLabel(e.actorType)}
                     </span>
                     <span style={{
                       fontSize: 11, fontWeight: 600, color: vColor,
@@ -262,7 +263,7 @@ export function AuditTrailPanel() {
                           minWidth: 0, overflow: 'hidden',
                         }}
                       >
-                        <span aria-hidden>◇</span>
+                        <span aria-hidden><Icon source="◇" size="1em" /></span>
                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {shortModel(mp.model ?? '')}
                         </span>

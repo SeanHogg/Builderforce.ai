@@ -6,6 +6,7 @@
  * demo convert / exit-intent panels — the form owns its own state and success
  * message so no consumer re-implements it.
  */
+import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { submitSalesLead, DEMO_PERSONAS } from '@/lib/demoApi';
@@ -48,7 +49,7 @@ export function BookDemoForm({ source, defaultInterest, onSuccess, compact }: Bo
   if (status === 'ok') {
     return (
       <div className="bdf-success" role="status">
-        <div className="bdf-success-icon" aria-hidden>✓</div>
+        <div className="bdf-success-icon" aria-hidden><Icon source="✓" size="1em" /></div>
         <p className="bdf-success-title">{t('successTitle')}</p>
         <p className="bdf-success-body">{t('successBody')}</p>
         <style>{styles}</style>

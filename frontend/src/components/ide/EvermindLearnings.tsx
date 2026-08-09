@@ -104,7 +104,7 @@ export function EvermindLearnings({
             <button type="button" onClick={() => setHighlight(null)} style={filterChip}>
               <span aria-hidden style={{ opacity: 0.8 }}><Icon source="🎯" size="1em" /></span>
               {t('recallFor', { prompt: highlight!.prompt })}
-              <span aria-hidden style={{ marginLeft: 2, opacity: 0.7 }}>✕</span>
+              <span aria-hidden style={{ marginLeft: 2, opacity: 0.7 }}><Icon source="✕" size="1em" /></span>
             </button>
             <span style={methodChip}>{t('recallMethod', { method: highlight!.method })}</span>
           </>
@@ -112,7 +112,7 @@ export function EvermindLearnings({
           <button type="button" onClick={onClearRegion} style={filterChip}>
             <span style={{ width: 9, height: 9, borderRadius: 'var(--radius-sm)', background: `var(${REGION_HUE_VAR[selectedRegion]})` }} aria-hidden />
             {regionLabel}
-            <span aria-hidden style={{ marginLeft: 2, opacity: 0.7 }}>✕</span>
+            <span aria-hidden style={{ marginLeft: 2, opacity: 0.7 }}><Icon source="✕" size="1em" /></span>
           </button>
         ) : (
           <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{t('learningsAll')}</span>

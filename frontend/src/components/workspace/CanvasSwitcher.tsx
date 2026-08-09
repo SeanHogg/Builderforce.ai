@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -101,7 +102,7 @@ export function CanvasSwitcher() {
         title={t('title', { name: currentLabel })}
         style={{ cursor: 'pointer', border: 'none', font: 'inherit' }}
       >
-        <span aria-hidden="true">✦</span>
+        <span aria-hidden="true"><Icon source="✦" size="1em" /></span>
         <span className="tenant-chip__project" style={{ fontWeight: 600 }}>{currentLabel}</span>
         <Chevron />
       </button>

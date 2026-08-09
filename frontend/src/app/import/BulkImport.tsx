@@ -517,7 +517,7 @@ export default function BulkImport({ initialMappedValues, fieldMap, onCancel }: 
   if (step === 'import-result') {
     return (
       <div style={{ ...cardStyle, textAlign: 'center' }}>
-        <div style={{ fontSize: 48, color: 'var(--accent)', marginBottom: 16 }} aria-hidden="true">✓</div>
+        <div style={{ fontSize: 48, color: 'var(--accent)', marginBottom: 16 }} aria-hidden="true"><Icon source="✓" size="1em" /></div>
         <h2 style={h2Style}>{t('bulkSuccessTitle')}</h2>
 
         {/* FR-3.9: confirmation with counts */}

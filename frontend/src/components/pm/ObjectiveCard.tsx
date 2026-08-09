@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
@@ -180,7 +181,7 @@ export function ObjectiveCard({ o, busy, run, portfolios, initiatives, projects,
               <span key={l.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', fontSize: '0.74rem' }}>
                 <span style={{ color: 'var(--text-muted)' }}>{t(`okr.linkKind.${l.kind}`)}</span>
                 {l.label}
-                <button type="button" disabled={busy} onClick={() => run(() => pmoApi.objectives.removeLink(o.id, l.id))} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-muted)', padding: 0 }} aria-label={t('okr.removeLink')}>✕</button>
+                <button type="button" disabled={busy} onClick={() => run(() => pmoApi.objectives.removeLink(o.id, l.id))} style={{ border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-muted)', padding: 0 }} aria-label={t('okr.removeLink')}><Icon source="✕" size="1em" /></button>
               </span>
             ))}
           </div>

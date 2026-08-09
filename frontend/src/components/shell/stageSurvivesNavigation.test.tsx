@@ -25,6 +25,8 @@ const board: ActiveCanvas = {
   persistence: 'server',
   focusId: null,
   shareOpen: false,
+  buildOpen: false,
+  prompt: null,
   present: false,
   modelComparisonIds: [],
 };

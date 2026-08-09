@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { creationSessionsApi } from '@/lib/builderforceApi';
@@ -52,7 +53,7 @@ export default function InvitationAcceptClient({ token, navigate = replaceLocati
 
   return <main style={{ minHeight: '100%', display: 'grid', placeItems: 'center', padding: 'var(--space-6)' }}>
     <Surface tone="raised" padding="lg" aria-live="polite" style={{ width: 'min(460px, 100%)', textAlign: 'center', display: 'grid', gap: 'var(--space-4)', justifyItems: 'center' }}>
-      <div aria-hidden="true" style={{ fontSize: '1.9rem', color: 'var(--coral-bright)' }}>✦</div>
+      <div aria-hidden="true" style={{ fontSize: '1.9rem', color: 'var(--coral-bright)' }}><Icon source="✦" size="1em" /></div>
       <h1 style={{ margin: 0, font: '700 clamp(1.25rem, 2.6vw, 1.62rem)/1.15 var(--font-display)', letterSpacing: '-.022em', color: 'var(--text-primary)' }}>{t('title')}</h1>
       <p style={{ margin: 0, color: 'var(--text-secondary)' }}>{status}</p>
       {!isAuthenticated && <ButtonLink href={back} variant="primary">{t('signInLink')}</ButtonLink>}

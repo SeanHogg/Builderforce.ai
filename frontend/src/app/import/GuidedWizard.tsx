@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
@@ -365,7 +366,7 @@ export default function GuidedWizard({ initialValues, onDataChange, onCancel }: 
   return (
     <div>
       <div style={{ ...cardStyle, textAlign: 'center' }}>
-        <div style={{ fontSize: 48, color: 'var(--accent)', marginBottom: 16 }} aria-hidden="true">✓</div>
+        <div style={{ fontSize: 48, color: 'var(--accent)', marginBottom: 16 }} aria-hidden="true"><Icon source="✓" size="1em" /></div>
         <h2 style={h2Style}>{t('guidedSuccessTitle')}</h2>
         <p style={{ color: 'var(--text-secondary)', marginBottom: 24, lineHeight: 1.6 }}>
           {t('guidedSuccessBody')}

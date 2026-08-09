@@ -223,7 +223,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
             onClick={() => setTab(t)}
             className={`px-3 py-1.5 text-xs capitalize ${tab === t ? 'bg-gray-800 text-gray-100 border-t-2 border-t-blue-500' : 'text-gray-400 hover:text-gray-100'}`}
           >
-            {t === 'profile' ? `👤 ${tp('tabProfile')}` : t === 'download' ? `⬇ ${tp('tabDownload')}` : `🌐 ${tp('tabPublish')}`}
+            {t === 'profile' ? `${tp('tabProfile')}` : t === 'download' ? `${tp('tabDownload')}` : `${tp('tabPublish')}`}
           </button>
         ))}
       </div>
@@ -435,7 +435,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                       className="shrink-0 bg-gray-700 hover:bg-gray-600 text-gray-100 text-xs px-2 py-1 rounded"
                       title={tp('copyTitle')}
                     >
-                      {installCopy.copied ? `✓ ${tp('copied')}` : tp('copy')}
+                      {installCopy.copied && <Icon name="check" size={14} />} {installCopy.copied ? tp('copied') : tp('copy')}
                     </button>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
@@ -537,7 +537,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                       disabled={isValidating}
                       className="w-full bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
                     >
-                      {isValidating ? `⏳ ${tp('validating')}` : `🧪 ${tp('validateBtn')}`}
+                      {isValidating ? `${tp('validating')}` : `${tp('validateBtn')}`}
                     </button>
                     {validation?.ok && (
                       <div className="bg-green-900/30 border border-green-700 rounded p-2 text-xs text-green-300 space-y-1">
@@ -571,7 +571,7 @@ export function AgentPublishPanel({ projectId, completedJobs }: AgentPublishPane
                   disabled={isPublishing || !isProfileValid || !validation?.ok}
                   className="w-full bg-purple-700 hover:bg-purple-600 disabled:opacity-50 text-white px-3 py-2 rounded text-xs font-semibold"
                 >
-                  {isPublishing ? `⏳ ${tp('publishing')}` : `🌐 ${tp('publishBtn')}`}
+                  {isPublishing ? `${tp('publishing')}` : `${tp('publishBtn')}`}
                 </button>
               </>
             )}

@@ -1,3 +1,4 @@
+import { Icon } from '@/components/ui/Icon';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import JsonLd from '@/components/JsonLd';
@@ -95,10 +96,10 @@ export default function SellBuilderforcePage() {
           <p>Receive notifications when attributed users sign up and when they convert. Your dashboard connects activity, opportunities, referrals, and earnings so you can focus on the next best action.</p>
         </div>
         <div className={styles.checkList}>
-          <p><span>✓</span> Signup and conversion notifications</p>
-          <p><span>✓</span> Pricing-linked referral and sales rates</p>
-          <p><span>✓</span> Revenue goals translated into pipeline targets</p>
-          <p><span>✓</span> Direct meeting requests and deal support</p>
+          <p><span><Icon source="✓" size="1em" /></span> Signup and conversion notifications</p>
+          <p><span><Icon source="✓" size="1em" /></span> Pricing-linked referral and sales rates</p>
+          <p><span><Icon source="✓" size="1em" /></span> Revenue goals translated into pipeline targets</p>
+          <p><span><Icon source="✓" size="1em" /></span> Direct meeting requests and deal support</p>
         </div>
       </section>
 

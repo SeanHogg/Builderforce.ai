@@ -9,6 +9,7 @@ import { useOptionalAuth } from '@/lib/AuthContext';
 import { TalentProfileView } from '@/components/freelance/TalentProfileView';
 import { getFreelancer, hireFreelancer, type FreelancerProfile } from '@/lib/freelancerApi';
 import { MessagesButton } from '@/components/freelance/MessagesButton';
+import { Icon } from '@/components/ui/Icon';
 
 const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-lg)', padding: 20,
@@ -80,8 +81,8 @@ export default function TalentDetailClient() {
         <Link href="/marketplace?category=talent" style={{ color: 'var(--text-muted)', fontSize: 'var(--font-size-small)', textDecoration: 'none' }}>← {t('back')}</Link>
       </div>
 
-      {hireState === 'hired' && <div style={{ ...card, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.4)', color: 'rgba(34,197,94,0.95)', fontSize: 'var(--font-size-small)', marginBottom: 16 }}>{t('hired')} ✓</div>}
-      {hireState === 'invited' && <div style={{ ...card, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.4)', color: 'rgba(59,130,246,0.95)', fontSize: 'var(--font-size-small)', marginBottom: 16 }}>{t('invited')} ✓</div>}
+      {hireState === 'hired' && <div style={{ ...card, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.4)', color: 'rgba(34,197,94,0.95)', fontSize: 'var(--font-size-small)', marginBottom: 16 }}><Icon name="check" size={14} /> {t('hired')}</div>}
+      {hireState === 'invited' && <div style={{ ...card, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.4)', color: 'rgba(59,130,246,0.95)', fontSize: 'var(--font-size-small)', marginBottom: 16 }}><Icon name="check" size={14} /> {t('invited')}</div>}
       {hireError && <div style={{ ...card, color: 'var(--coral-bright)', fontSize: 'var(--font-size-small)', marginBottom: 16 }}>{hireError}</div>}
 
       <TalentProfileView

@@ -984,7 +984,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
             }}
             title={t('projectDetailsTitle')}
           >
-            <span style={{ fontSize: '1rem' }}>▦</span>
+            <Icon name="project" size={16} />
             Details
           </button>
         )}
@@ -1053,7 +1053,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                 color: failed > 0 ? 'var(--error)' : 'var(--emerald-bright)',
               }}
             >
-              {failed > 0 ? `✗ ${failed} check${failed > 1 ? 's' : ''} failed` : `✓ ${passed} check${passed > 1 ? 's' : ''} passed`}
+              <Icon name={failed > 0 ? 'close' : 'check'} size={14} /> {failed > 0 ? `${failed} check${failed > 1 ? 's' : ''} failed` : `${passed} check${passed > 1 ? 's' : ''} passed`}
             </span>
           );
         })()}
@@ -1088,7 +1088,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
               opacity: (isChecking || isRunning) ? 0.6 : 1,
             }}
           >
-            {isChecking ? '⏳ Checking…' : '✓ Check'}
+            {!isChecking && <Icon name="check" size={14} />} {isChecking ? 'Checking…' : 'Check'}
           </button>
         )}
         {modalityDef.showRunButton && (() => {
@@ -1111,7 +1111,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                 opacity: disabled ? 0.6 : 1,
               }}
             >
-              {active ? `⏳ ${isVoice ? 'Generating' : 'Running'}…` : `▶ ${label}`}
+              {active ? `${isVoice ? 'Generating': 'Running'}…` : `${label}`}
             </button>
           );
         })()}
@@ -1184,7 +1184,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
               fontSize: '0.72rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden',
             }}>
               <span title={modality === 'voice' ? 'Voice director' : 'Coding agent'} style={{ fontSize: '0.9rem' }}>
-                {modality === 'voice' ? '🎙' : '🤖'}
+                {modality === 'voice' ? <Icon source="🎙" size="1em" /> : <Icon source="🤖" size="1em" />}
               </span>
               <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>
                 {modality === 'voice' ? 'Voice:' : 'Context:'}
@@ -1312,9 +1312,9 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
               >
                 {view === 'preview' ? (
                   <>
-                    <span aria-hidden>{modalityDef.center === 'device' ? '📱' : '🌐'}</span>
+                    <span aria-hidden>{modalityDef.center === 'device' ? <Icon source="📱" size="1em" /> : <Icon source="🌐" size="1em" />}</span>
                     {t('centerPreview')}
-                    {previewUrl && <span style={{ color: 'var(--success-text)' }}>●</span>}
+                    {previewUrl && <span style={{ color: 'var(--success-text)' }}><Icon name="activity" size={12} /></span>}
                   </>
                 ) : (
                   <>
@@ -1344,7 +1344,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                       display: 'flex', alignItems: 'center', gap: 5,
                     }}
                   >
-                    <span aria-hidden>{d === 'web' ? '🌐' : '📱'}</span>
+                    <span aria-hidden>{d === 'web' ? <Icon source="🌐" size="1em" /> : <Icon source="📱" size="1em" />}</span>
                     {d === 'web' ? t('previewWeb') : t('previewMobile')}
                   </button>
                 ))}
@@ -1419,7 +1419,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
                 Terminal
               </span>
               <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>
-                {terminalExpanded ? '▼' : '▶'}
+                {terminalExpanded ? '▼' : <Icon source="▶" size="1em" />}
               </span>
             </button>
             <div

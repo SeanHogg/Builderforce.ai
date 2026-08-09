@@ -77,7 +77,7 @@ const BASELINE = {
    * tree, of which 378 are the board's own stylesheet). The rest of the app is
    * the sweep this number now drives, exactly as 2,087 → 9 drove the radii.
    */
-  offScaleFontSizes: 3937,
+  offScaleFontSizes: 3929,
 };
 
 /**

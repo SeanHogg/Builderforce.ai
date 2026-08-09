@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import PageContainer from '@/components/PageContainer';
@@ -238,7 +239,7 @@ export default function FreelancerTimecardPage() {
                         {en.billable ? t('entries.billable') : t('entries.nonBillable')}
                       </button>
                       <button type="button" onClick={() => removeEntry(c.id, en.id)} disabled={busy === `e:${en.id}`}
-                        aria-label={t('entries.remove')} style={{ fontSize: 13, padding: '2px 7px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', border: '1px solid rgba(239,68,68,0.4)', background: 'var(--bg-elevated)', color: 'var(--error-text)' }}>✕</button>
+                        aria-label={t('entries.remove')} style={{ fontSize: 13, padding: '2px 7px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', border: '1px solid rgba(239,68,68,0.4)', background: 'var(--bg-elevated)', color: 'var(--error-text)' }}><Icon source="✕" size="1em" /></button>
                     </div>
                   ))}
                   {/* Add manual entry */}

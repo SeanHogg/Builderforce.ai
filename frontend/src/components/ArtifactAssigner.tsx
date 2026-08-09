@@ -256,7 +256,7 @@ export default function ArtifactAssigner({ artifactType, artifactSlug, artifactN
                         style={{ padding: '1px 6px', fontSize: 'var(--font-size-field-label)' }}
                         onClick={() => handleUnassign(a.scope, a.scopeId)}
                       >
-                        ✕
+                        <Icon name="close" size={14} />
                       </button>
                     </div>
                   ))}

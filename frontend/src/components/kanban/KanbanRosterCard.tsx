@@ -152,7 +152,7 @@ export function KanbanRosterCard({ projectId }: { projectId: number }) {
             padding: '8px 10px', borderRadius: 'var(--radius-md)', background: 'var(--surface-2)',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 16 }} aria-hidden>{role.icon ?? '👤'}</span>
+              <span aria-hidden><Icon source={role.icon ?? 'person'} size={16} /></span>
               <span style={{ fontWeight: 600, fontSize: 13 }}>{role.name}</span>
               {role.required
                 ? <span style={chip('var(--warning-bg)', 'var(--warning-text)')}>{t('required')}</span>

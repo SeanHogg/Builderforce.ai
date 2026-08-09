@@ -548,7 +548,7 @@
    dragged it, in which case their inline width/height wins (React Flow writes those
    as element styles, which beat these rules). :has keeps the decision in CSS so
    CreationNode never has to read the placement and re-render every Object with it. */
-.node_chat:has(.brainObjectChat) { width:390px; min-height:420px; }
+.node_chat:has(.brainObjectChat) { width:390px; height:clamp(420px,58vh,600px); min-height:420px; }
 .node_chat .nodeBody:has(.brainObjectChat) { padding:0; }
 .brainObjectChat { display:flex; flex-direction:column; flex:1; min-height:0; }
 /* The surface's own controls sit on the Object's header line, not in a second bar. */
@@ -953,6 +953,12 @@
 .sourceList > div { display:flex; gap:7px; align-items:flex-start; }.sourceList > div > span { display:grid; place-items:center; width:18px; height:18px; flex:none; border-radius:50%; background:#e7f9f6; color:#087d71; font-size:8px; font-weight:700; }
 .sourceList p { display:grid; gap:2px; margin:0; min-width:0; }.sourceList b { font-size:9px; }.sourceList code { overflow:hidden; color:var(--canvas-muted); font-size:7px; text-overflow:ellipsis; }
 
+/* Starting points belong in the open band below the selection controls. Keeping
+   this picker structurally separate from the bottom composer prevents it from
+   covering the last lines of an inline Brain conversation. It uses the same open-
+   board centring arithmetic as the selection toolbar and composer. */
+.promptStarter { position:absolute; z-index:16; top:58px; right:calc(300px + var(--brain-dock-right, 0px)); left:calc(300px + var(--brain-dock-left, 0px)); box-sizing:border-box; width:auto; max-width:700px; margin-inline:auto; display:flex; justify-content:center; --prompt-panel-bg:var(--canvas-brain-surface); --prompt-panel-border:var(--canvas-brain-border); }
+
 /* The prompt is a page fixture, not part of the Brain surface:centred on the board
    and bottom-aligned, which is where every chat product people already use puts it.
    It shifts by exactly the width a docked Brain reserved, so it stays centred on
@@ -1154,7 +1160,7 @@
 .humanChatActivity { display:grid; flex:none; gap:5px; padding:7px 9px; border-bottom:1px solid var(--canvas-brain-border); background:color-mix(in srgb,var(--canvas-brain-accent) 6%,var(--canvas-panel)); }
 .humanChatActivity > span { display:grid; grid-template-columns:22px minmax(0,1fr) auto; align-items:center; gap:7px; min-width:0; }
 .humanChatActivity b { overflow:hidden; color:var(--canvas-ink); font-size:9px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }.humanChatActivity i { color:var(--canvas-brain-accent); font-size:10px; font-style:normal; letter-spacing:2px; animation:collaboratorTyping 1.2s ease-in-out infinite; }
-.brainDockTimeline,.brainDockContext { min-height:0; flex:1; overflow:auto; padding:10px; }
+.brainDockTimeline,.brainDockContext { min-height:0; flex:1; overflow:auto; overscroll-behavior:contain; padding:10px; scrollbar-gutter:stable; }
 .brainDockLauncher { position:absolute; z-index:16; bottom:calc(var(--composer-space) + 8px); display:flex; align-items:center; gap:6px; padding:9px 13px; border:1px solid var(--canvas-brain-border); border-radius:var(--radius-full); background:var(--canvas-brain-surface); color:var(--canvas-brain-accent); box-shadow:0 10px 28px var(--canvas-shadow); font:700 11px var(--font-sans); cursor:pointer; }
 .brainDockLauncher[data-side='left'] { left:16px; }
 .brainDockLauncher[data-side='right'] { right:16px; }
@@ -1199,6 +1205,7 @@
   /* Narrower side panels leave a narrower centre; the prompt stays centred but
      stops short of the palette and the inspector rather than sliding under them. */
   .composerDock { right:calc(260px + var(--brain-dock-right, 0px)); left:calc(260px + var(--brain-dock-left, 0px)); max-width:520px; }
+  .promptStarter { right:calc(260px + var(--brain-dock-right, 0px)); left:calc(260px + var(--brain-dock-left, 0px)); max-width:520px; }
 }
 @media (max-width:760px) {
   .canvasShell { flex:1; height:100%; min-height:0; }
@@ -1234,6 +1241,7 @@
   .inspectorResizeHandle,.inspectorHeaderActions button:first-child { display:none; }
   /* The prompt is still the bottom-of-the-page fixture, just edge to edge. */
   .composerDock { left:8px; right:8px; bottom:8px; width:auto; min-width:0; max-width:none; margin-inline:0; }
+  .promptStarter { top:58px; left:8px; right:8px; width:auto; min-width:0; max-width:none; margin-inline:0; }
   .composer { --prompt-panel-action-gap:4px; }
   .scopeChip { min-width:48px; max-width:110px; flex:1 1 84px; padding:4px 5px; overflow:hidden; }
   .scopeChip select { width:100%; max-width:none; }

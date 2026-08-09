@@ -92,7 +92,7 @@ function RoutableChip({ record }: { record: ModelRecord }) {
         border: '1px solid rgba(34,197,94,0.35)', whiteSpace: 'nowrap',
       }}
     >
-      ✓ {t('routableChip.label')}{record.pool ? ` · ${record.pool}` : ''}
+      <Icon source="✓" size="1em" /> {t('routableChip.label')}{record.pool ? ` · ${record.pool}` : ''}
     </span>
   );
 }
@@ -505,7 +505,7 @@ export function ModelsExplorer({ search, viewMode }: { search: string; viewMode:
           className={routableOnly ? 'btn btn-primary' : 'btn btn-secondary'}
           style={{ padding: '8px 14px', borderRadius: 'var(--radius-md)', fontSize: 'var(--font-size-small)' }}
         >
-          ✓ {t('filter.routableOnly')}
+          <Icon source="✓" size="1em" /> {t('filter.routableOnly')}
         </button>
         <Select
           value={maxInputPrice}

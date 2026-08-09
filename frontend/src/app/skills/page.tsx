@@ -323,7 +323,7 @@ export default function SkillsPage() {
                     <div style={{ padding: s.icon ? 12 : 0 }}>
                       <div className="card-header">
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{ width: 32, height: 32, background: 'var(--accent-subtle)', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>{(s as { emoji?: string }).emoji ?? '✨'}</div>
+                          <div style={{ width: 32, height: 32, background: 'var(--accent-subtle)', borderRadius: 'var(--radius-sm)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Icon source={(s as { emoji?: string }).emoji ?? 'sparkles'} size={18} /></div>
                           <div>
                             <div className="card-title">{s.name}</div>
                             <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
@@ -367,7 +367,7 @@ export default function SkillsPage() {
                     return (
                       <tr key={s.slug} style={trStyle}>
                         <td style={{ ...tdStyle, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                          <span style={{ marginRight: 6 }}>{(s as { emoji?: string }).emoji ?? '✨'}</span>{s.name}
+                          <Icon source={(s as { emoji?: string }).emoji ?? 'sparkles'} size={16} style={{ marginRight: 6 }} />{s.name}
                         </td>
                         <td style={tdMutedStyle}>{s.description || '—'}</td>
                         <td style={tdMutedStyle}>

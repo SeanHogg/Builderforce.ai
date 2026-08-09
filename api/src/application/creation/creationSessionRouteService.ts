@@ -69,11 +69,11 @@ const ROLE_RANK: Record<SessionRole, number> = { viewer: 0, commenter: 1, editor
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function creationKindForModality(modality: string): CreationObjectKind {
-  const kinds: Record<string, CreationObjectKind> = {
-    designer: 'website', mobile: 'prototype', webmobile: 'prototype', video: 'video',
-    evermind: 'evermind', llm: 'evermind', finetune: 'llm', voice: 'voice',
-  };
-  return kinds[modality] ?? 'prototype';
+  // An IDE project is one Builder object regardless of the studio it opens.
+  // Mapping modalities to website/video/voice/etc. produced preview cards, but
+  // discarded the IDE binding and made its actual tools unreachable.
+  void modality;
+  return 'build';
 }
 
 type GraphObjectInput = {
@@ -2179,6 +2179,12 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     )).limit(1);
     if (!build) return c.json({ error: 'Build not found' }, 404);
 
+    const [storageProject] = await db.select({ publicId: projects.publicId })
+      .from(projects)
+      .where(and(eq(projects.id, build.storageProjectId), eq(projects.tenantId, tenantId)))
+      .limit(1);
+    if (!storageProject) return c.json({ error: 'Build storage project not found' }, 404);
+
     const kind = creationKindForModality(build.modality);
     const sessionSegment = segmentId == null ? isNull(creationSessions.segmentId) : eq(creationSessions.segmentId, segmentId);
     const [existing] = await db.select({ sessionId: creationSessions.id, objectId: creationSessionObjects.id })
@@ -2187,8 +2193,8 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
       .innerJoin(creationSessionMembers, and(eq(creationSessionMembers.sessionId, creationSessions.id), eq(creationSessionMembers.userId, userId)))
       .where(and(
         eq(creationSessions.tenantId, tenantId), sessionSegment, eq(creationSessions.status, 'active'),
-        eq(creationSessionObjects.kind, kind), eq(creationSessionObjects.resourceType, 'project'),
-        eq(creationSessionObjects.resourceId, String(build.storageProjectId)),
+        eq(creationSessionObjects.kind, kind), eq(creationSessionObjects.resourceType, 'ideProject'),
+        eq(creationSessionObjects.resourceId, String(build.id)),
       )).orderBy(desc(creationSessions.lastActivityAt)).limit(1);
     if (existing) return c.json({ ...existing, created: false });
 
@@ -2197,11 +2203,14 @@ export function createCreationSessionRoutes(db: Db): Hono<HonoEnv> {
     const workflowObjectId = build.workflowDefinitionId ? crypto.randomUUID() : null;
     const objectContent = {
       kind, title: build.name, status: build.status, modality: build.modality,
-      resourceId: kind === 'evermind' ? `evermind:${build.storageProjectId}` : `project:${build.storageProjectId}`,
+      resourceId: `ideProject:${build.id}`,
       ideProjectId: build.id,
+      storageProjectId: build.storageProjectId,
+      storageProjectPublicId: storageProject.publicId,
+      containerProjectId: build.containerProjectId,
     };
     const graphObjects: GraphObjectInput[] = [{
-      id: objectId, kind, resourceType: 'project', resourceId: String(build.storageProjectId),
+      id: objectId, kind, resourceType: 'ideProject', resourceId: String(build.id),
       canvasData: { x: 160, y: 120, w: 520, h: 340 }, content: objectContent,
     }];
     const graphConnections: GraphConnectionInput[] = [];

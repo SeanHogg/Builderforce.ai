@@ -257,7 +257,7 @@ export function WizardFindWorkStep() {
               display: 'block', padding: 16, borderRadius: 'var(--radius-lg)', textDecoration: 'none',
               border: '1px solid var(--border-subtle)', background: 'var(--bg-elevated)',
             }}>
-            <span style={{ fontSize: 22 }}>{emoji}</span>
+            <Icon source={emoji} size={22} />
             <span style={{ display: 'block', fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', marginTop: 6 }}>
               {t(`findWorkStep.${key}`)}
             </span>

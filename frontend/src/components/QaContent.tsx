@@ -466,7 +466,7 @@ function TargetsSection({ projectId, targets, busy, onRun }: {
             <tr key={t.id}>
               <Td>{t.name}</Td>
               <Td><code style={{ fontSize: 11 }}>{t.baseUrl}</code></Td>
-              <Td>{t.isDefault ? '★' : ''}</Td>
+              <Td>{t.isDefault ? <Icon source="★" size="1em" /> : ''}</Td>
               <Td><button type="button" style={btnStyle(busy != null)} disabled={busy != null} onClick={() => onRun(`target-del-${t.id}`, () => deleteTarget(t.id))}>Delete</button></Td>
             </tr>
           ))}

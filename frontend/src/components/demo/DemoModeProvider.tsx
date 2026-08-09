@@ -18,6 +18,7 @@
  *
  * All colors come from theme tokens; layout is fluid + mobile-safe.
  */
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -213,7 +214,7 @@ export function DemoModeProvider({ children }: { children: React.ReactNode }) {
             <button className="demo-btn demo-btn-ghost" onClick={openTour}>{t('tour.takeTour')}</button>
             <button className="demo-btn demo-btn-ghost" onClick={() => setPrompt('convert')}>{t('bookOrJoin')}</button>
             <button className="demo-btn demo-btn-primary" onClick={() => goRegister('banner')}>{t('createAccount')}</button>
-            <button className="demo-btn demo-btn-exit" onClick={exitDemo} aria-label={t('exit')}>✕</button>
+            <button className="demo-btn demo-btn-exit" onClick={exitDemo} aria-label={t('exit')}><Icon source="✕" size="1em" /></button>
           </div>
         </div>
       </div>

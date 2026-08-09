@@ -264,7 +264,7 @@ export function BrainDock({
       aria-label={t('brainDock')}
     >
       <header className={styles.brainDockHeader}>
-        <span className={styles.brainDockMark} aria-hidden>✦</span>
+        <span className={styles.brainDockMark} aria-hidden><Icon source="✦" size="1em" /></span>
         <strong>{t('brain')}</strong>
         <BrainSurfaceActions
           mode={mode}

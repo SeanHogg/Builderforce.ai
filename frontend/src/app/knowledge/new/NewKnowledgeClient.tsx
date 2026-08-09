@@ -161,7 +161,7 @@ function TemplateCard({
       </div>
       <span style={{ fontWeight: 600, fontSize: 15 }}>{title}</span>
       <span style={{ fontSize: 12, color: 'var(--text-muted)', flex: 1 }}>{desc}</span>
-      {hint && <span style={{ fontSize: 11, color: 'var(--success-text)' }}>✓ {hint}</span>}
+      {hint && <span style={{ fontSize: 11, color: 'var(--success-text)' }}><Icon name="check" size={12} /> {hint}</span>}
     </button>
   );
 }

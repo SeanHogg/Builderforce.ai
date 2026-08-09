@@ -45,7 +45,7 @@ export function ChatMessageActions({
   return (
     <>
       <button type="button" className="bs-action-btn" onClick={onCopy} title={t('copy')}>
-        {copied ? `✓ ${t('copied')}` : t('copy')}
+        {copied && <Icon name="check" size={14} />} {copied ? t('copied') : t('copy')}
       </button>
       {onFeedback != null && (
         <>

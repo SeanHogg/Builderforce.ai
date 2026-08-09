@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useEffect, useState } from 'react';
 import { EMBED_CAPABILITIES, type EmbedCapability } from '@seanhogg/builderforce-embedded';
 import { embedApi } from '@/lib/builderforceApi';
@@ -158,7 +159,7 @@ export function EmbedIntegrationSettings() {
             >
               {saving ? 'Saving…' : needsConsent ? 'Review & enable…' : 'Save'}
             </button>
-            {saved && <span style={{ fontSize: 12, color: 'var(--success-text)' }}>Saved ✓</span>}
+            {saved && <span style={{ fontSize: 12, color: 'var(--success-text)' }}>Saved <Icon source="✓" size="1em" /></span>}
             {error && <span style={{ fontSize: 12, color: 'var(--error-text)' }}>{error}</span>}
           </div>
 

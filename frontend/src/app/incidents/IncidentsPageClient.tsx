@@ -9,6 +9,7 @@
  * Fully localized (incidents namespace) + theme-driven (never one-theme hex).
  */
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
@@ -668,7 +669,7 @@ function RcaSection({ t, tc, canManage, incident, onPublished }: SectionProps & 
               onChange={(e) => setItem(i, { detail: e.target.value })}
               placeholder={t('rca.actionItemDetail')}
             />
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeItem(i)} disabled={actionItems.length <= 1} aria-label={t('rca.removeActionItem')}>✕</button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeItem(i)} disabled={actionItems.length <= 1} aria-label={t('rca.removeActionItem')}><Icon source="✕" size="1em" /></button>
           </div>
         ))}
         <div>
@@ -856,7 +857,7 @@ function OnCallSection({ t, tc, canManage }: SectionProps) {
                           <span style={{ color: 'var(--text-primary)' }}>{m.displayName || m.memberRef}</span>
                           <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>{m.memberRef}</span>
                           <span style={{ flex: 1 }} />
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeMember(r, m.id)} disabled={!canManage} aria-label={t('removeMember')}>✕</button>
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeMember(r, m.id)} disabled={!canManage} aria-label={t('removeMember')}><Icon source="✕" size="1em" /></button>
                         </div>
                       ))}
                   </div>
@@ -1026,7 +1027,7 @@ function EscalationSection({ t, tc, canManage }: SectionProps) {
                             })}
                           </span>
                           <span style={{ flex: 1 }} />
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeLevel(lv.id)} disabled={!canManage} aria-label={t('removeLevel')}>✕</button>
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => removeLevel(lv.id)} disabled={!canManage} aria-label={t('removeLevel')}><Icon source="✕" size="1em" /></button>
                         </div>
                       ))}
                   </div>

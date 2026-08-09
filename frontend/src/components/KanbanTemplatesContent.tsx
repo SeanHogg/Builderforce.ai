@@ -1,5 +1,7 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
+
 /**
  * Kanban Templates — author, switch, publish, and shop team-board templates.
  * Three sub-tabs: My Templates (list + fork + lane/requirement editor + publish/delete),
@@ -192,7 +194,7 @@ function RolesTab({ roles, canManage, rolesCrud }: {
       <div style={{ display: 'grid', gap: 6 }}>
         {roles.map((r) => (
           <div key={r.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-2)' }}>
-            <span aria-hidden>{r.icon ?? '👤'}</span>
+            <span aria-hidden><Icon source={r.icon ?? 'person'} size={16} /></span>
             <span style={{ fontWeight: 600, fontSize: 13 }}>{r.name}</span>
             <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{r.discipline}</span>
             <span style={{ flex: 1 }} />

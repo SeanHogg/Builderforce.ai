@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { Component } from 'react';
 import { useTranslations } from 'next-intl';
 import {
@@ -120,7 +121,7 @@ function ChunkErrorFallback({
       }}
     >
       <div style={{ fontSize: 'var(--font-size-page-title)', animation: recovering ? 'pulse 1.5s ease-in-out infinite' : undefined }}>
-        {recovering ? '⚡' : '⚠️'}
+        {recovering ? <Icon source="⚡" size="1em" /> : <Icon source="⚠️" size="1em" />}
       </div>
       {recovering ? (
         <p style={{ color: 'var(--text-secondary)', margin: 0 }}>{t('recovering')}</p>

@@ -3,7 +3,7 @@ import { isValidElement, type ReactNode, type SVGProps } from 'react';
 export type IconName =
   | 'activity' | 'admin' | 'alert' | 'apps' | 'arrow-up-right' | 'automation'
   | 'attachment' | 'billing' | 'brain' | 'briefcase' | 'calendar' | 'camera' | 'canvas'
-  | 'check' | 'chevron-down' | 'chevron-right' | 'clock' | 'close' | 'code' | 'document' | 'edit' | 'external-link'
+  | 'check' | 'chevron-down' | 'chevron-left' | 'chevron-right' | 'clock' | 'close' | 'code' | 'document' | 'edit' | 'external-link'
   | 'download' | 'flag' | 'folder' | 'growth' | 'heart' | 'home' | 'image' | 'info' | 'insights' | 'key' | 'knowledge'
   | 'link' | 'lock' | 'mail' | 'megaphone' | 'menu' | 'message' | 'mic' | 'mobile'
   | 'monitor' | 'pause' | 'people' | 'person' | 'play' | 'plus' | 'project' | 'quality' | 'search'
@@ -32,6 +32,8 @@ const LEGACY_ICON: Record<string, IconName> = {
   '⏸️': 'pause', '⏹': 'close', '🔊': 'volume', '👋': 'people', '⚑': 'flag',
   '🚩': 'flag', '📡': 'activity', '🕑': 'clock', '🎉': 'sparkles', '🔄': 'workflow',
   '⬇️': 'download', '⬇': 'download',
+  '☆': 'sparkles', '✔': 'check', '✖': 'close', '×': 'close',
+  '◀': 'chevron-left', '◻': 'template', '☷': 'menu',
   '👤': 'person', '👥': 'people', '🧑‍🤝‍🧑': 'people', '🤝': 'people', '🧑‍🏭': 'people',
   '💼': 'briefcase', '🎭': 'person', '🕵️': 'person',
   '📈': 'insights', '📊': 'insights', '↗': 'arrow-up-right',
@@ -48,7 +50,7 @@ const LEGACY_ICON: Record<string, IconName> = {
   '⏱': 'clock', '⏱️': 'clock', '📅': 'calendar', '🗓': 'calendar',
   '🎬': 'video', '📹': 'video', '🎙': 'video', '🎙️': 'video', '📱': 'mobile',
   '🖥️': 'monitor', '💻': 'monitor', '🖼': 'image', '🎨': 'image', '📌': 'apps',
-  '🔎': 'search', '⌕': 'search', '＋': 'apps', '◧': 'apps', '◎': 'activity', '◌': 'activity',
+  '🔎': 'search', '⌕': 'search', '＋': 'plus', '◧': 'apps', '◎': 'activity', '◌': 'activity',
   dashboard: 'home', seat: 'target', create: 'sparkles', challenges: 'target', projects: 'project',
   workforce: 'people', insights: 'insights', growth: 'growth', quality: 'quality', reliability: 'alert',
   knowledge: 'knowledge', settings: 'settings', admin: 'admin', sales: 'insights', 'sales-admin': 'admin',
@@ -72,6 +74,7 @@ const PATHS: Record<IconName, ReactNode> = {
   canvas: <><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 3v18M8 9h13"/></>,
   check: <path d="m5 12 4 4L19 6"/>,
   'chevron-down': <path d="m6 9 6 6 6-6"/>,
+  'chevron-left': <path d="m15 6-6 6 6 6"/>,
   'chevron-right': <path d="m9 6 6 6-6 6"/>,
   clock: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></>,
   close: <path d="m6 6 12 12M18 6 6 18"/>,

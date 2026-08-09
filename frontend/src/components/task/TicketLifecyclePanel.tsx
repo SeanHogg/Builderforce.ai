@@ -518,7 +518,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                               border: `1px solid ${tint(tone, 40)}`,
                             }}
                           >
-                            {glyph}
+                            <Icon source={glyph} size={14} />
                           </span>
                           {!isLast && <span style={{ flex: 1, width: 1, minHeight: 10, background: 'var(--border-subtle)' }} />}
                         </div>
@@ -572,7 +572,7 @@ export function TicketLifecyclePanel({ taskId, onClose }: TicketLifecyclePanelPr
                                 minWidth: 0, overflow: 'hidden',
                               }}
                             >
-                              <span aria-hidden>◇</span>
+                              <span aria-hidden><Icon source="◇" size="1em" /></span>
                               <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                 {e.source}
                               </span>

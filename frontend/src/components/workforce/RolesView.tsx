@@ -183,7 +183,7 @@ export function RolesView() {
             return (
               <div key={role.key} style={{ ...card, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 16 }} aria-hidden>{role.icon ?? '👤'}</span>
+                  <span aria-hidden><Icon source={role.icon ?? 'person'} size={16} /></span>
                   <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--text-strong)' }}>{role.name}</span>
                   {isStandard && <span style={chip('var(--surface-coral-soft)', 'var(--accent)')}>{t('standard')}</span>}
                   {role.builtin

@@ -288,7 +288,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
             cursor: runDisabled ? 'default' : 'pointer', opacity: runDisabled ? 0.6 : 1,
           }}
         >
-          {running ? `⏳ ${t('running')}` : `📊 ${mode === 'score' ? t('runScore') : t('run')}`}
+          {running ? `${t('running')}` : `${mode === 'score'? t('runScore') : t('run')}`}
         </button>
         <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
           {mode === 'score' ? t('serverNote') : t('onDeviceNote')}
@@ -371,7 +371,7 @@ export function BenchmarkPanel({ initialCorpus }: BenchmarkPanelProps) {
               }}
             >
               <div style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                {verdict === 'strong' ? '🟢 ' : verdict === 'good' ? '🔵 ' : '🟡 '}
+                {verdict === 'strong' ? <Icon source="🟢" size="1em" /> : verdict === 'good' ? <Icon source="🔵" size="1em" /> : <Icon source="🟡" size="1em" />}
                 {t(`verdict.${verdict}`)}
               </div>
               {showNudge && (

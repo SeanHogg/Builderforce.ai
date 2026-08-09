@@ -8,15 +8,10 @@ import {
 } from './creationSessionRouteService';
 
 describe('creationKindForModality', () => {
-  it('loads every legacy IDE build into its matching Canvas object', () => {
-    expect(creationKindForModality('designer')).toBe('website');
-    expect(creationKindForModality('mobile')).toBe('prototype');
-    expect(creationKindForModality('webmobile')).toBe('prototype');
-    expect(creationKindForModality('video')).toBe('video');
-    expect(creationKindForModality('evermind')).toBe('evermind');
-    expect(creationKindForModality('llm')).toBe('evermind');
-    expect(creationKindForModality('finetune')).toBe('llm');
-    expect(creationKindForModality('voice')).toBe('voice');
+  it('keeps every IDE modality attached to the Builder workspace', () => {
+    for (const modality of ['designer', 'mobile', 'webmobile', 'video', 'evermind', 'llm', 'finetune', 'voice', 'unknown']) {
+      expect(creationKindForModality(modality)).toBe('build');
+    }
   });
 });
 

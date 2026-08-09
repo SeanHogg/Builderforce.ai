@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import Link from 'next/link';
 
 export interface PromptInputProps {
@@ -131,7 +132,7 @@ export function PromptInput({
           title={submitLabel}
           style={buttonStyle(!canSubmit)}
         >
-          {disabled ? '⏳' : '↑'}
+          {disabled ? <Icon source="⏳" size="1em" /> : '↑'}
         </button>
       </div>
       {secondaryLink && (

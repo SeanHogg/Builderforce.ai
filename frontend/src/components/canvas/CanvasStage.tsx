@@ -87,6 +87,8 @@ export function CanvasStage() {
               persistence={board.persistence}
               initialFocusId={board.focusId}
               initialShareOpen={board.shareOpen}
+              initialBuildOpen={board.buildOpen}
+              initialPrompt={board.prompt}
               initialPresent={board.present}
               initialModelComparisonIds={board.modelComparisonIds}
               // Only the selected board answers a shell-level request — a

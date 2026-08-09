@@ -2,6 +2,7 @@
 
 import { useMemo, type MouseEvent } from 'react';
 import { Avatar } from '@/components/Avatar';
+import { Icon } from '@/components/ui/Icon';
 import type { TeamMember } from '@/lib/taskAssignee';
 import type { CloudAgentTarget } from '@/lib/taskAssignee';
 import type { AgentHost } from '@/lib/builderforceApi';
@@ -198,7 +199,7 @@ export function TeamMemberAvatarFilter({
             paddingRight: 0,
           }}
         >
-          ✕
+          <Icon name="close" size={14} />
         </button>
       )}
 

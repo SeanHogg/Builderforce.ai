@@ -113,7 +113,7 @@ export function PmoCostReconciliation() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 150 }}>
                   {cls ? <span style={chip(COST_CLASS_COLORS[cls])}>{t(cls)}</span> : <span style={{ ...chip('var(--text-muted)'), background: 'transparent', color: 'var(--text-muted)', border: '1px dashed var(--border-subtle)' }}>{t('unclassified')}</span>}
                   <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{t(`source.${n.costClassSource}`)}</span>
-                  {(n.kind === 'task' || n.kind === 'epic') && n.costClassVerified && <span title={t('verified')} style={{ color: 'var(--success-text)' }}>✓</span>}
+                  {(n.kind === 'task' || n.kind === 'epic') && n.costClassVerified && <span title={t('verified')} style={{ color: 'var(--success-text)' }}><Icon source="✓" size="1em" /></span>}
                 </div>
 
                 {n.cost.totalUsd > 0 && (
@@ -130,7 +130,7 @@ export function PmoCostReconciliation() {
                   <button type="button" disabled={busy} style={btn(n.declaredCostClass === 'capex', COST_CLASS_COLORS.capex)} onClick={() => setClass(n, 'capex')}>{t('capex')}</button>
                   <button type="button" disabled={busy} style={btn(n.declaredCostClass === 'opex', COST_CLASS_COLORS.opex)} onClick={() => setClass(n, 'opex')}>{t('opex')}</button>
                   {n.declaredCostClass && (
-                    <button type="button" disabled={busy} style={btn(false, 'var(--text-muted)')} onClick={() => setClass(n, null)} title={t('clearTip')}>✕</button>
+                    <button type="button" disabled={busy} style={btn(false, 'var(--text-muted)')} onClick={() => setClass(n, null)} title={t('clearTip')}><Icon source="✕" size="1em" /></button>
                   )}
                 </div>
               </div>

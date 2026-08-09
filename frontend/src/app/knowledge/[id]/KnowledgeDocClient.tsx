@@ -633,7 +633,7 @@ function AcknowledgeBanner({
       <div style={{ fontSize: 14 }}>
         {current ? (
           <span>
-            ✓ {t('youAcknowledged')}
+            <Icon name="check" size={14} /> {t('youAcknowledged')}
             {doc.myAcknowledgement?.acknowledgedAt &&
               ` — ${new Date(doc.myAcknowledgement.acknowledgedAt).toLocaleDateString()}`}
           </span>

@@ -207,7 +207,7 @@ export default function FreelancerProfilePage() {
                 onChange={(e) => setSlugText(e.target.value)} placeholder={t('profile.aliasPlaceholder')} />
             </div>
             {slugMsg && !slugCheck!.valid && <p style={{ fontSize: 11, color: 'var(--coral-bright)', margin: '6px 0 0' }}>{t('profile.aliasInvalid')}</p>}
-            {slugMsg && slugCheck!.valid && slugCheck!.available && <p style={{ fontSize: 11, color: 'rgba(34,197,94,0.9)', margin: '6px 0 0' }}>✓ {t('profile.aliasAvailable')}</p>}
+            {slugMsg && slugCheck!.valid && slugCheck!.available && <p style={{ fontSize: 11, color: 'rgba(34,197,94,0.9)', margin: '6px 0 0' }}><Icon source="✓" size="1em" /> {t('profile.aliasAvailable')}</p>}
             {slugMsg && slugCheck!.valid && !slugCheck!.available && (
               <p style={{ fontSize: 11, color: 'var(--coral-bright)', margin: '6px 0 0' }}>
                 {t('profile.aliasTaken')}

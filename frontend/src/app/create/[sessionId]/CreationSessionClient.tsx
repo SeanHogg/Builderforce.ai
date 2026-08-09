@@ -20,6 +20,8 @@ export default function CreationSessionClient({ sessionId }: { sessionId: string
   const canvas = useOptionalActiveCanvas();
   const focusId = searchParams.get('focus');
   const shareOpen = searchParams.get('share') === '1';
+  const buildOpen = searchParams.get('build') === '1';
+  const prompt = searchParams.get('prompt');
   const present = searchParams.get('present') === '1';
   const modelComparisonIds = useMemo(() => readModelComparison(searchParams), [searchParams]);
 
@@ -35,8 +37,8 @@ export default function CreationSessionClient({ sessionId }: { sessionId: string
   const registerCanvas = canvas?.open;
   useEffect(() => {
     if (!registerCanvas) return;
-    registerCanvas({ sessionId, persistence: local ? 'local' : 'server', focusId, shareOpen, present, modelComparisonIds });
-  }, [focusId, local, modelComparisonIds, present, registerCanvas, sessionId, shareOpen]);
+    registerCanvas({ sessionId, persistence: local ? 'local' : 'server', focusId, shareOpen, buildOpen, prompt, present, modelComparisonIds });
+  }, [buildOpen, focusId, local, modelComparisonIds, present, prompt, registerCanvas, sessionId, shareOpen]);
 
   // Claiming itself lives in `lib/pendingWork` — this route and the shell-level
   // <ResumeWorkBridge> both call the same coalesced function, so whichever gets

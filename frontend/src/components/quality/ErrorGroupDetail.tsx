@@ -1,5 +1,6 @@
 'use client';
 
+import { Icon } from '@/components/ui/Icon';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { RoleGate } from '@/components/RoleGate';
@@ -98,7 +99,7 @@ export function ErrorGroupDetail({ groupId, onClose, onChanged }: { groupId: str
       <div style={panel} onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
           <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: 0 }}>{g?.title ?? t('loading')}</h2>
-          <button type="button" style={btnSubtle} onClick={onClose} aria-label={t('detail.close')}>✕</button>
+          <button type="button" style={btnSubtle} onClick={onClose} aria-label={t('detail.close')}><Icon source="✕" size="1em" /></button>
         </div>
 
         {error && <div role="alert" style={{ fontSize: 13, color: 'var(--danger)', marginTop: 10 }}>{error}</div>}

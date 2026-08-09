@@ -412,7 +412,7 @@ function AgentBody({ data, onOpen }: { data: CreationNodeData; onOpen?: (focus: 
       <span><b>{existing ? t('configuredAgent') : t('newAgent')}</b><small>{textValue(data.role, data.status || t('online'))}</small></span>
       <em>{data.model === 'auto' || !data.model ? t('autoModel') : data.model}</em>
     </div>
-    {thinking && <div className={styles.agentThinking} role="status"><i aria-hidden>✦</i><b>{data.testStatus === 'Running' ? t('testing') : t('thinking')}</b><span>{t('contributing')}</span></div>}
+    {thinking && <div className={styles.agentThinking} role="status"><i aria-hidden><Icon source="✦" size="1em" /></i><b>{data.testStatus === 'Running' ? t('testing') : t('thinking')}</b><span>{t('contributing')}</span></div>}
     {!thinking && latestReply && <div className={styles.agentLatestReply}><small>{t('latestResponse')}</small><p>{latestReply}</p></div>}
     {!latestReply && !thinking && <p>{textValue(data.personality, textValue(data.instructions, data.subtitle || ''))}</p>}
     <div className={styles.pills}>{tools.map((tool) => <span key={tool}>{tool}</span>)}<span>{autonomy}</span>{typeof data.testStatus === 'string' && data.testStatus && <span>{data.testStatus}</span>}</div>
@@ -1189,7 +1189,7 @@ function DiagnosticsBody({ data }: { data: CreationNodeData }) {
       <section aria-label={t('diagnosticResults')}>
         <h4>{t('resultsHeading')}</h4>
         <div className={styles.diagnosticList}>{hasResults ? <>
-          {results.map((result, index) => <article key={`${result}-${index}`} data-severity="result"><span aria-hidden>✓</span><div><b>{result}</b></div></article>)}
+          {results.map((result, index) => <article key={`${result}-${index}`} data-severity="result"><span aria-hidden><Icon source="✓" size="1em" /></span><div><b>{result}</b></div></article>)}
           {diagnostics.filter((item) => item.result).map((item) => <article key={`result-${item.id}`} data-severity="result"><span aria-hidden>→</span><div><b>{item.title}</b><p>{item.result}</p></div></article>)}
         </> : <p className={styles.diagnosticEmpty}>{t('runDiagnostics')}</p>}</div>
       </section>
@@ -1235,7 +1235,7 @@ function EvermindBody({ data }: { data: CreationNodeData }) {
   const contributions = typeof data.contributions === 'number' ? data.contributions : 0;
   const loss = typeof data.trainingLoss === 'number' ? data.trainingLoss : null;
   const pending = typeof data.pendingContributions === 'number' ? data.pendingContributions : 0;
-  if (data.evermindLoading === true) return <div className={styles.evermindSyncing} role="status"><span>◌</span><b>{t('evermindSyncing')}</b><p>{t('evermindSyncingDetail')}</p></div>;
+  if (data.evermindLoading === true) return <div className={styles.evermindSyncing} role="status"><span><Icon source="◌" size="1em" /></span><b>{t('evermindSyncing')}</b><p>{t('evermindSyncingDetail')}</p></div>;
   const recent = Array.isArray(data.recentLearnings)
     ? data.recentLearnings.flatMap((value, index) => {
       if (!value || typeof value !== 'object') return [];
@@ -1316,7 +1316,7 @@ function EvermindBody({ data }: { data: CreationNodeData }) {
             <div><b>{item.prompt || (item.kind === 'delta' ? t('agentModelUpdate') : t('untitledLearning'))}</b><p>{faulted ? `${t('teacherNoAnswer')}${learnedStatus.reason ? ` · ${learnedStatus.reason.replaceAll('_', ' ')}` : ''}` : item.text || (item.kind === 'delta' ? t('weightsAdapted') : t('noReadableText'))}</p></div>
             <small>v{item.version}<strong>{learnedStatus.state === 'distilled' ? t('viaTeacher', { teacher: learnedStatus.teacherModel || t('teacher') }) : learnedStatus.state === 'fault' ? t('notDistilled') : learnedStatus.state === 'self' ? t('selfLearned') : t('weightDelta')}</strong></small>
           </article>;
-        }) : <div className={styles.evermindEmpty}><span>◇</span><b>{t('nothingLearned')}</b><p>{t('nothingLearnedDetail')}</p></div>}
+        }) : <div className={styles.evermindEmpty}><span><Icon source="◇" size="1em" /></span><b>{t('nothingLearned')}</b><p>{t('nothingLearnedDetail')}</p></div>}
       </section>
     </div>
     <section className={styles.evermindNextAction} data-tone={nextAction.tone} aria-label={t('recommendedNextAction')}><span>{t('recommendedNextAction')}</span><div><b>{nextAction.title}</b><p>{nextAction.detail}</p></div><strong>{t('openDetails', { destination: nextAction.destination })}</strong></section>
@@ -1358,7 +1358,7 @@ function ProjectComparisonBody({ data }: { data: CreationNodeData }) {
       ])}
     </div>
     <div className={styles.diagnosticMatrix}>
-      {projects.map((project, index) => <section key={`${index}-diagnostics`}><header><b>{String(project.name)}</b><span>{t('gapsCount', { count: Number(project.gapCount || 0) })}</span></header>{Array.isArray(project.diagnostics) && project.diagnostics.length ? project.diagnostics.slice(0, 5).map((raw, diagnosticIndex) => { const diagnostic = asRecord(raw, {}); return <div key={`${String(diagnostic.toolId)}-${diagnosticIndex}`}><span>{String(diagnostic.icon || '◆')} {String(diagnostic.name || t('diagnostic'))}</span><b data-tone={scoreTone(diagnostic.score)}>{diagnostic.score == null ? '—' : Math.round(Number(diagnostic.score))}</b><small>{t('gapsCount', { count: Number(diagnostic.gapCount || 0) })}</small></div>; }) : <p>{t('noDiagnosticsRun')}</p>}</section>)}
+      {projects.map((project, index) => <section key={`${index}-diagnostics`}><header><b>{String(project.name)}</b><span>{t('gapsCount', { count: Number(project.gapCount || 0) })}</span></header>{Array.isArray(project.diagnostics) && project.diagnostics.length ? project.diagnostics.slice(0, 5).map((raw, diagnosticIndex) => { const diagnostic = asRecord(raw, {}); return <div key={`${String(diagnostic.toolId)}-${diagnosticIndex}`}><span><Icon source={String(diagnostic.icon || 'apps')} size={14} /> {String(diagnostic.name || t('diagnostic'))}</span><b data-tone={scoreTone(diagnostic.score)}>{diagnostic.score == null ? '—' : Math.round(Number(diagnostic.score))}</b><small>{t('gapsCount', { count: Number(diagnostic.gapCount || 0) })}</small></div>; }) : <p>{t('noDiagnosticsRun')}</p>}</section>)}
     </div>
     <section className={styles.qualityRecommendations} aria-label={t('prioritizedRecommendations')}><header><b>{t('recommendedNextActions')}</b><span>{t('lowestScoringFirst')}</span></header>{recommendations.length ? recommendations.map((recommendation, index) => <article key={`${recommendation.project}-${String(recommendation.title)}-${index}`}><i>{index + 1}</i><div><b>{String(recommendation.title || t('reviewDiagnosticFinding'))}</b><p>{String(recommendation.detail || recommendation.diagnostic || '')}</p></div><span>{recommendation.project}<small>{String(recommendation.diagnostic || '')}</small></span></article>) : <p>{t('runQualityDiagnostics')}</p>}</section>
     <small>{t('freshness', { at: typeof data.fetchedAt === 'string' ? new Date(data.fetchedAt).toLocaleString() : t('draft') })}</small>
@@ -1699,7 +1699,7 @@ function BrainMarkerBody({ data, onOpen }: { data: CreationNodeData; onOpen: () 
     onClick={onOpen}
   >
     <span className={styles.brainMarkerPulse} aria-hidden />
-    <span className={styles.brainMarkerMark} aria-hidden>✦</span>
+    <span className={styles.brainMarkerMark} aria-hidden><Icon source="✦" size="1em" /></span>
   </button>;
 }
 

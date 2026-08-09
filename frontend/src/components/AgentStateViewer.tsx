@@ -127,7 +127,7 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
             color: 'var(--text-secondary)', cursor: 'pointer',
           }}
         >
-          {isLoading ? '⏳' : `🔄 ${t('refresh')}`}
+          {isLoading ? <Icon source="⏳" size="1em" /> : `${t('refresh')}`}
         </button>
         {state && (
           <button
@@ -252,7 +252,7 @@ export function AgentStateViewer({ projectId, agentId }: AgentStateViewerProps) 
                   color: 'var(--text-on-accent)', opacity: isReplaying || !replayInput.trim() ? 0.5 : 1,
                 }}
               >
-                {isReplaying ? `⏳ ${t('replaying')}` : `▶ ${t('replay')}`}
+                {isReplaying ? `${t('replaying')}` : `${t('replay')}`}
               </button>
             </div>
 

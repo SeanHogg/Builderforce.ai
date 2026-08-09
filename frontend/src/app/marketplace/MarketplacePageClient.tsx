@@ -930,7 +930,7 @@ export default function MarketplacePageClient() {
                         {stat.liked ? <Icon source="❤️" size="1em" /> : <Icon source="🤍" size="1em" />} {stat.likes}
                       </button>
                       <span style={{ marginLeft: 10 }} title={tm('action.installsTitle')}><Icon source="⬇️" size="1em" /> {stat.installs}</span>
-                      {isInstalled && <span style={{ marginLeft: 10 }}>✓</span>}
+                      {isInstalled && <span style={{ marginLeft: 10 }}><Icon source="✓" size="1em" /></span>}
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center' }}>
@@ -1079,7 +1079,7 @@ export default function MarketplacePageClient() {
                       {stat.liked ? <Icon source="❤️" size="1em" /> : <Icon source="🤍" size="1em" />} {stat.likes}
                     </button>
                     <span title={tm('action.installsTitle')}><Icon source="⬇️" size="1em" /> {stat.installs}</span>
-                    {isInstalled && <span>✓ {tm('installed')}</span>}
+                    {isInstalled && <span><Icon source="✓" size="1em" /> {tm('installed')}</span>}
                   </div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end', flex: '1 1 auto' }}>
                     {/* Add to Cart */}

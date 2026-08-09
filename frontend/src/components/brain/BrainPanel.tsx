@@ -1150,7 +1150,7 @@ export function BrainPanel({
         opacity: conv.hasTrace ? 1 : 0.5,
       }}
     >
-      {capture.state === 'copied' ? '✓' : capture.state === 'error' ? '✕' : '⧉'}
+      <Icon name={capture.state === 'copied' ? 'check' : capture.state === 'error' ? 'close' : 'document'} size={14} />
     </button>
   );
 

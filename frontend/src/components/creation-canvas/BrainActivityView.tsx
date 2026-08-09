@@ -148,7 +148,7 @@ export function BrainActivityBar({ state, variant = 'strip' }: { state: BrainAct
   if (!settled) return null;
   return (
     <div className={styles.brainActivity} data-variant={variant} data-state="settled" {...announce}>
-      <span className={styles.brainActivitySpark} aria-hidden>✓</span>
+      <span className={styles.brainActivitySpark} aria-hidden><Icon source="✓" size="1em" /></span>
       <b>{settled.label}</b>
       {settled.actions && <small>{settled.actions}</small>}
       {settled.tokens && <em>{settled.tokens}</em>}

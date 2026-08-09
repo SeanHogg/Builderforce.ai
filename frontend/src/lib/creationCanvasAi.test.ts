@@ -73,6 +73,58 @@ describe('runCreationCanvasAi', () => {
     expect(firstRequest.messages[1].content).toContain('A correction, complaint, question about a displayed value');
     expect(firstRequest.messages[1].content).toContain('Never create a replacement or duplicate');
     expect(firstRequest.messages[1].content).toContain('Never claim an object was updated unless canvas_update_object succeeded');
+    expect(firstRequest.messages[1].content).toContain('add an Agent with that role\'s perspective');
+    expect(firstRequest.messages[1].content).toContain('connect it to the Agent with canvas_connect_objects');
+    expect(firstRequest.messages[1].content).toContain('never ask the user what "this" means');
+  });
+
+  it('recovers an actionless C-suite teammate response and executes the canvas request', async () => {
+    const addObject = vi.fn()
+      .mockReturnValueOnce({ ok: true, proposed: true, object: { id: 'cto-1', kind: 'agent', title: 'CTO' } })
+      .mockReturnValueOnce({ ok: true, proposed: true, object: { id: 'review-1', kind: 'document', title: 'Production readiness review' } });
+    const connectObjects = vi.fn(() => ({ ok: true, proposed: true, connectionId: 'edge-1' }));
+    mocks.streamChatCompletion
+      .mockResolvedValueOnce({
+        text: 'What specific project or feature should the CTO review?',
+        toolCalls: [],
+      })
+      .mockResolvedValueOnce({
+        text: '',
+        toolCalls: [
+          { id: 'add-cto', name: 'canvas_add_object', args: JSON.stringify({ kind: 'agent', title: 'CTO', fields: { instructions: 'Review production readiness.' } }) },
+          { id: 'add-review', name: 'canvas_add_object', args: JSON.stringify({ kind: 'document', title: 'Production readiness review', fields: { content: 'Architecture, security, deployment, observability, rollback, and launch gates.' } }) },
+          { id: 'connect', name: 'canvas_connect_objects', args: JSON.stringify({ sourceId: 'cto-1', targetId: 'review-1', label: 'reviews' }) },
+        ],
+      })
+      .mockResolvedValueOnce({ text: 'I added the CTO and a connected production-readiness review.', toolCalls: [] });
+
+    const answer = await runCreationCanvasAi({
+      prompt: 'Bring the CTO in to review how this ships to production',
+      canvasSnapshot: '{"objects":[{"kind":"chat","title":"Brain"}]}',
+      persistence: 'local',
+      canvasActions: [
+        { name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: addObject },
+        { name: 'canvas_connect_objects', description: 'Connect', parameters: { type: 'object' }, mutates: true, run: connectObjects },
+      ],
+    });
+
+    expect(answer).toBe('I added the CTO and a connected production-readiness review.');
+    expect(addObject).toHaveBeenCalledTimes(2);
+    expect(connectObjects).toHaveBeenCalledWith({ sourceId: 'cto-1', targetId: 'review-1', label: 'reviews' });
+    const recoveryMessages = mocks.streamChatCompletion.mock.calls[1][0].messages;
+    expect(recoveryMessages.some((message: { content: string }) => message.content.includes('prior response did not execute'))).toBe(true);
+  });
+
+  it('does not force a canvas mutation for an informational executive-role question', async () => {
+    mocks.streamChatCompletion.mockResolvedValueOnce({ text: 'A CTO leads the technology strategy.', toolCalls: [] });
+
+    const answer = await runCreationCanvasAi({
+      prompt: 'What does a CTO do?', canvasSnapshot: '{"objects":[]}', persistence: 'local',
+      canvasActions: [{ name: 'canvas_add_object', description: 'Add', parameters: { type: 'object' }, mutates: true, run: vi.fn() }],
+    });
+
+    expect(answer).toBe('A CTO leads the technology strategy.');
+    expect(mocks.streamChatCompletion).toHaveBeenCalledOnce();
   });
 
   it('runs an invited Canvas agent under its own identity and instructions', async () => {
