@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { getRouteMarketing } from '@/lib/routeMarketing';
 import { PRODUCT_SECTIONS } from '@/lib/content';
 import { routeMarketingSchema } from '@/lib/structured-data';
+import { ButtonLink, Surface, surfaceClassName } from '@/components/ui';
 import JsonLd from './JsonLd';
 import RelatedArticles from './blog/RelatedArticles';
 import { signInHref } from '@/lib/auth';
@@ -52,30 +53,30 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
         })}
       />
 
-      <section className="rm-hero">
+      <section className={surfaceClassName({ tone: 'raised', padding: 'lg' }, 'rm-hero')}>
         <div className="rm-icon" aria-hidden="true">{m.icon}</div>
-        <h1 className="rm-title">{m.title}</h1>
+        <h1 className="ui-text-page-title rm-title">{m.title}</h1>
         <p className="rm-desc">{m.description}</p>
-        <p className="rm-sub">{t('subtitle', { surface: m.title })}</p>
+        <p className="ui-text-small rm-sub">{t('subtitle', { surface: m.title })}</p>
         <div className="rm-actions">
-          <Link href="/create/new" className="rm-btn-primary">
+          <ButtonLink href="/create/new" variant="primary" size="lg">
             <span aria-hidden="true">✦</span>
             {t('startFree')}
-          </Link>
-          <Link href={loginHref} className="rm-btn-secondary">{t('signIn')}</Link>
-          <Link href="/creation-canvas" className="rm-btn-ghost">{t('exploreCanvas')} →</Link>
+          </ButtonLink>
+          <ButtonLink href={loginHref} variant="secondary" size="lg">{t('signIn')}</ButtonLink>
+          <ButtonLink href="/creation-canvas" variant="ghost" size="lg">{t('exploreCanvas')} →</ButtonLink>
         </div>
       </section>
 
       {m.highlights && m.highlights.length > 0 && (
         <section className="rm-highlights">
-          <div className="rm-inside-head">{t('howItWorks', { surface: m.title })}</div>
+          <div className="ui-eyebrow rm-inside-head">{t('howItWorks', { surface: m.title })}</div>
           <div className="rm-hl-grid">
             {m.highlights.map((h) => (
-              <div key={h.title} className="rm-hl-card">
-                <div className="rm-hl-title">{h.title}</div>
-                <div className="rm-hl-desc">{h.desc}</div>
-              </div>
+              <Surface key={h.title} tone="raised" padding="md">
+                <div className="ui-text-card-title rm-hl-title">{h.title}</div>
+                <div className="ui-text-small rm-hl-desc">{h.desc}</div>
+              </Surface>
             ))}
           </div>
         </section>
@@ -83,25 +84,29 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
 
       {m.figures && m.figures.length > 0 && (
         <section className="rm-figures">
-          <div className="rm-inside-head">{t('seeHowItWorks')}</div>
+          <div className="ui-eyebrow rm-inside-head">{t('seeHowItWorks')}</div>
           {m.figures.map((f) => (
             <figure key={f.src} className="rm-figure">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img className="rm-figure-img" src={f.src} alt={f.alt} loading="lazy" width={1600} height={900} />
-              <figcaption className="rm-figure-cap">{f.caption}</figcaption>
+              <figcaption className="ui-text-small rm-figure-cap">{f.caption}</figcaption>
             </figure>
           ))}
         </section>
       )}
 
       <section className="rm-inside">
-        <div className="rm-inside-head">{t('whatYouGet')}</div>
+        <div className="ui-eyebrow rm-inside-head">{t('whatYouGet')}</div>
         <div className="rm-grid">
           {PRODUCT_SECTIONS.map((s) => (
-            <Link key={s.id} href={`/product#${s.id}`} className="rm-card">
+            <Link
+              key={s.id}
+              href={`/product#${s.id}`}
+              className={surfaceClassName({ tone: 'raised', interactive: true }, 'rm-card')}
+            >
               <div className="rm-card-icon" aria-hidden="true">{s.icon}</div>
-              <div className="rm-card-title">{s.title}</div>
-              <div className="rm-card-blurb">{s.blurb}</div>
+              <div className="ui-text-card-title">{s.title}</div>
+              <div className="ui-text-small rm-card-blurb">{s.blurb}</div>
             </Link>
           ))}
         </div>
@@ -109,12 +114,15 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
 
       {m.faq && m.faq.length > 0 && (
         <section className="rm-faq">
-          <div className="rm-inside-head">{t('faqHeading')}</div>
+          <div className="ui-eyebrow rm-inside-head">{t('faqHeading')}</div>
           <div className="rm-faq-list">
             {m.faq.map((q) => (
-              <details key={q.question} className="rm-faq-item">
-                <summary className="rm-faq-q">{q.question}</summary>
-                <p className="rm-faq-a">{q.answer}</p>
+              <details
+                key={q.question}
+                className={surfaceClassName({ tone: 'raised', padding: 'none' }, 'rm-faq-item')}
+              >
+                <summary className="ui-text-card-title rm-faq-q">{q.question}</summary>
+                <p className="ui-text-body rm-faq-a">{q.answer}</p>
               </details>
             ))}
           </div>

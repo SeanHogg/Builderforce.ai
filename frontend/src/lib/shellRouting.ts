@@ -41,9 +41,20 @@ const PUBLIC_SHELL_PREFIXES = ['/legal', '/product', '/blog', '/tutorials', '/ag
  * `/create/invitations/*` is here for a second reason: that page renders its own
  * "sign in with the invited email" branch, so as a default app route it was a
  * dead end — the teaser mounted in its place and the invitee never saw it.
+ *
+ * `/create/new` is here for the same reason, and it was the worst version of it:
+ * that route is not a page, it is the ONE prompt-led entry point — it opens a
+ * local session from `?prompt=` and replaces the URL with `/create/local-…`.
+ * Teasing it meant the page never mounted, so the session was never created and
+ * the prompt was DROPPED. Every prompt-carrying CTA in the product lands here
+ * (the tutorial catalog, the blog course links, Marketplace model comparison,
+ * `/brainstorm`), and the teaser's own "Start creating free" button points at
+ * `/create/new` too — so a signed-out visitor bounced back to the same teaser
+ * with their request thrown away.
  */
 const GUEST_APP_PATTERNS: RegExp[] = [
   /^\/create$/,
+  /^\/create\/new$/,
   /^\/create\/local-/,
   /^\/create\/invitations(?:\/|$)/,
 ];

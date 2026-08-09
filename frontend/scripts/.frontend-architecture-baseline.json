@@ -1,0 +1,33 @@
+{
+  "useClientFiles": 755,
+  "useClientPages": 68,
+  "presentationInfrastructureImports": [],
+  "directEngineConstruction": [
+    "components/AITrainingPanel.tsx",
+    "components/AgentPublishPanel.tsx",
+    "components/AgentStateViewer.tsx"
+  ],
+  "oversizedProductionFiles": [
+    "app/incidents/IncidentsPageClient.tsx",
+    "app/knowledge/[id]/KnowledgeDocClient.tsx",
+    "app/marketplace/MarketplacePageClient.tsx",
+    "components/agent/AgentExecutionPanel.tsx",
+    "components/AITrainingPanel.tsx",
+    "components/brain/BrainPanel.tsx",
+    "components/creation-canvas/CreationCanvas.tsx",
+    "components/creation-canvas/CreationNode.tsx",
+    "components/IDENew.tsx",
+    "components/manager/ManagerContent.tsx",
+    "components/ObservabilityContent.tsx",
+    "components/ProviderKeysSettings.tsx",
+    "components/reliability/MonitoringSections.tsx",
+    "components/TaskMgmtContent.tsx",
+    "components/workforce/WorkforceAgents.tsx",
+    "lib/adminApi.ts",
+    "lib/api.ts",
+    "lib/auth.ts",
+    "lib/builderforceApi.ts",
+    "lib/managerDiagnostics.ts",
+    "lib/model-provider.ts"
+  ]
+}

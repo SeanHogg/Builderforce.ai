@@ -243,11 +243,28 @@ const MUTABLE_FIELDS = {
 const COMMON_MUTABLE_FIELDS = ['title', 'subtitle', 'status', 'deliverables'] as const;
 const SENSITIVE_MUTATION_KEY = /(?:secret|token|password|credential|authorization|api.?key|cookie)/i;
 
+/**
+ * How deep an LLM-authored patch may nest before the rest is dropped.
+ *
+ * This was 4, which silently truncated the deepest object the registry actually
+ * advertises as authorable. A `course` payload nests
+ * `course → modules[] → module → lessons[] → lesson`, so the lesson objects sat
+ * at depth 4 and every one of them was discarded — a canvas Course arrived with
+ * titled modules and NO lessons, and its `assessment.choices` (also depth 4) came
+ * back answer-less. Nothing reported the loss: the object rendered, just empty,
+ * so a generated LMS looked like the model had refused to write the content.
+ *
+ * Breadth is what actually bounds the payload (500 array items, 100 object keys,
+ * 40k-character strings, all still enforced below); depth only has to clear the
+ * deepest legitimate shape, with headroom for the next one.
+ */
+const MAX_MUTATION_DEPTH = 8;
+
 function sanitizeMutationValue(value: unknown, depth = 0): unknown {
   if (value == null || typeof value === 'boolean') return value;
   if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
   if (typeof value === 'string') return value.slice(0, 40_000);
-  if (depth >= 4) return undefined;
+  if (depth >= MAX_MUTATION_DEPTH) return undefined;
   if (Array.isArray(value)) return value.slice(0, 500).map((item) => sanitizeMutationValue(item, depth + 1)).filter((item) => item !== undefined);
   if (typeof value === 'object') return Object.fromEntries(Object.entries(value as Record<string, unknown>).slice(0, 100).flatMap(([key, item]) => {
     if (SENSITIVE_MUTATION_KEY.test(key)) return [];

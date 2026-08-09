@@ -93,6 +93,17 @@ describe('rendersAppShell — one shell, signed in or not', () => {
     expect(rendersAppShell('/create', false)).toBe(true);
   });
 
+  it('mounts the prompt-led entry point so `?prompt=` is not thrown away', () => {
+    // Regression: /create/new is the ONE prompt-led entry point — it creates the
+    // local session from `?prompt=` and replaces the URL. Teasing it meant the
+    // page never mounted, the session was never created, and the prompt was lost.
+    // Every prompt-carrying CTA lands here (tutorials, blog courses, model
+    // comparison, /brainstorm), and the teaser's own primary button points back
+    // at /create/new — so a signed-out visitor looped on the teaser.
+    expect(rendersAppShell('/create/new', false)).toBe(true);
+    expect(rendersAppShell('/create/new', true)).toBe(true);
+  });
+
   it('mounts the invitation page for the signed-out recipient it was written for', () => {
     // It renders its own "sign in with the invited email" branch, so as a plain
     // app route the teaser mounted in its place and the invite dead-ended.

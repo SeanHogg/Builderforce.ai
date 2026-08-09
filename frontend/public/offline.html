@@ -19,9 +19,10 @@
   <body>
     <main>
       <img src="/icon-192.png" alt="" />
-      <h1>You’re offline</h1>
-      <p>Builderforce can’t reach the network right now. Your browser-held work remains on this device. Reconnect, then try again.</p>
-      <button type="button" onclick="location.reload()">Try again</button>
+      <h1 id="title">You’re offline</h1>
+      <p id="message">Builderforce can’t reach the network right now. Your browser-held work remains on this device. Reconnect, then try again.</p>
+      <button id="retry" type="button">Try again</button>
     </main>
+    <script src="/offline.js"></script>
   </body>
 </html>

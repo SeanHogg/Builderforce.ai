@@ -1,6 +1,8 @@
 # PRD 21 — The Unified Experience: one design system, one canvas shell, and the 549 destinations that never become pages
 
-> **Status:** BUILT (E0–E6) · 2026-08-08
+> **Status:** BUILT (E0–E6) · 2026-08-08 — **residuals closed 2026-08-09**: literal-hex files
+> 341 → **0** (the ratchet is now an allowlist, not a count) and the panel body is a named size
+> container. Nothing outstanding in the Gap Register's design-system block.
 > **Consolidates:** [PRD 19 — BurnRateOS consolidation](./19-prd-burnrateos-consolidation.md) ·
 > [PRD 20 — The Consolidated Data Model](./20-prd-consolidated-data-model.md)
 > **Supersedes for experience decisions:** the navigation architecture "The Session Is The Anchor"
@@ -78,7 +80,8 @@ continuous session" ships a shell that destroys the session on every click.
 | Token guard | `frontend/scripts/check-design-tokens.mjs` → `npm run check:design-tokens` |
 | Tailwind bridge | `frontend/tailwind.config.js` — the `gray-*` ramp is **remapped to theme tokens** |
 | Locale catalogs | `frontend/src/i18n/messages/{en,zh,es,fr,de}.json` |
-| Panel primitive | `frontend/src/components/SlideOutPanel.tsx` (`width: 'sheet' \| 'wide' \| 'full'`, `crumb`, `index`) |
+| Panel primitive | `frontend/src/components/SlideOutPanel.tsx` (`width: 'sheet' \| 'wide' \| 'full'`, `crumb`, `index`); its body is `.ui-panel-body`, the `panel` size container (§3.4) |
+| Board's own palette | `frontend/src/components/creation-canvas/CreationCanvas.module.css` (`--canvas-*`, both themes) · author-picked colour: `creation-canvas/authoredColors.ts` |
 | Panel host over the board | `frontend/src/components/shell/ShellPanel.tsx` |
 | THE index (replaced three tab bars) | `frontend/src/components/shell/DestinationIndex.tsx` · route-driven wrapper `shell/ShellIndex.tsx` |
 | The footer roster | `frontend/src/components/team/TeamBar.tsx` · client read `lib/team/useTeamRoster.ts` |
@@ -109,6 +112,25 @@ continuous session" ships a shell that destroys the session on every click.
 | `--bg-surface` | `#0a0f1a` | `#fdfcfa` | Panels, the board |
 | `--bg-elevated` | `#111827` | `#ffffff` | Cards, inputs, anything on a panel |
 | `--surface-sunken` | `rgba(0,0,0,.16)` | `rgba(60,48,36,.045)` | Wells, chrome bands, inset rows |
+
+**Translucent surfaces — the family the marketing pages actually paint with.** The three grounds
+above are opaque. Every card on `/`, `/product`, `/pricing`, `/soc2`, `/evermind`, `/compare` and
+the `RouteMarketing` teaser is instead `--surface-card`, and an agent building "from §2 alone"
+would have reached for `--bg-elevated` and produced a surface that does not match a single
+neighbour. Documented here because the omission, not the code, was the bug.
+
+| Token | Dark | Light | Use |
+|---|---|---|---|
+| `--surface-card` | `rgba(10,15,26,.65)` | `rgba(255,255,255,.9)` | **The default card.** Translucent over the page ground |
+| `--surface-card-strong` | `rgba(10,15,26,.85)` | `rgba(255,255,255,.97)` | A card that must stay readable over imagery |
+| `--surface-interactive` | `rgba(255,255,255,.08)` | `rgba(60,48,36,.07)` | Chips, ghost buttons, hoverable rows |
+| `--surface-interactive-hover` | `rgba(255,255,255,.14)` | `rgba(60,48,36,.13)` | Their hover state |
+| `--surface-overlay` | `rgba(0,0,0,.3)` | `rgba(60,48,36,.1)` | Scrims behind a panel |
+| `--surface-coral-soft` / `--surface-cyan-soft` | — | — | Tinted wells for the brand and secondary signals |
+
+`--surface-page`, `--surface-panel`, `--surface-raised` and `--surface` are **aliases** of
+`--bg-deep` / `--bg-surface` / `--bg-elevated` / `--bg-elevated`. Prefer the `--bg-*` name; the
+aliases exist so older call sites keep resolving.
 
 **Ink.**
 
@@ -189,6 +211,28 @@ One family. Mono is reserved, never decorative. **No serif anywhere.**
 **Mono is for:** eyebrows, field labels, IDs, paths, counts and anything in a numeric column
 (pair with `font-variant-numeric: tabular-nums`). **Mono is not for:** body copy, headings, buttons.
 
+> ⚠ **This table is the one part of §2 an agent cannot build from.** Measured 2026-08-09 across the
+> public surface: **the eight roles above have no implementation.** There is no `--font-size-*`
+> token in `globals.css`, and only one role — Eyebrow, as `.ui-eyebrow` — exists as a class. There
+> is nothing to import, so every author types a number, and the public pages carry **89 distinct
+> font-size literals** and **129 distinct `clamp()` ramps**. Contrast §2.4: radius has five values,
+> a class of tokens, and a ratchet — and comes in at 9 off-scale corners.
+>
+> Worse than absent, the three role-shaped classes that *do* exist each disagree with this table,
+> and §2's preamble says `globals.css` wins — so today it wins three different arguments:
+>
+> | Role | §2.3 says | `globals.css` declares |
+> |---|---|---|
+> | Hero | `clamp(2.6rem, 7.4vw, 5.1rem)` / 800 | *nothing* |
+> | Page title | `clamp(1.85rem, 4.4vw, 2.9rem)` / 700 / `-.033em` | `.ui-page-header__title` = `clamp(1.5rem, 2.5vw, 2rem)` / 700 / `-.025em`; **and** `.page-title` = flat `1.5rem` |
+> | Section | `clamp(1.25rem, 2.6vw, 1.62rem)` / 700 | `.section-title` = `clamp(1.4rem, 3vw, 1.8rem)` / 600 |
+> | Card title | `1rem` / 650 | `.card-title` = `15px` / 700 |
+> | Field label | `.62rem` mono | *nothing* |
+>
+> **Until the roles are declared as tokens and a ratchet counts off-scale sizes the way
+> `check-design-scale.mjs` counts corners, typography is the half of §2 that cannot be adopted.**
+> That work is the open item; see the Gap Register, group 14.
+
 ### 2.4 Metrics — fixed scales, no exceptions
 
 ```
@@ -262,6 +306,9 @@ The system existed on paper and was not adopted.
 | Files carrying a literal hex | **315** (405 on the ratchet's wider sweep) | **0** |
 | Distinct `border-radius` values across 26 CSS modules | **20+**, against a documented 5-step scale | **9**, each a live expression |
 | Design-token guard (`check-design-tokens.mjs`) | **Passes** — 245 declared | Passes — 287 declared |
+| Distinct `font-size` literals on the public surface | not measured | **89** (1,185 uses) — see §2.3 |
+| Distinct `clamp()` type ramps on the public surface | not measured | **129** |
+| Marketing files importing `@/components/ui` | not measured | **4** of 478 |
 
 The token guard is why *undeclared-token* bugs are gone. It could not see a literal hex or an
 off-scale radius, which is why every other row was still true.
@@ -388,6 +435,20 @@ One primitive (`SlideOutPanel`, which already exists and is the house convention
 | **Wide** (660) | Index + detail — Workforce's 14 sub-views, Projects' tickets |
 | **Full** (94%) | Dashboards that need the room; the board is one `Esc` away |
 
+**The panel body is a size container, and that is not a detail.** A route rendered here is the same
+route that used to own the screen — it renders unchanged, which is the only reason this shell
+survives the hundreds of surfaces PRD 18/19 bring. What it must not do is measure the *viewport*: a
+panel at 660px inside a 2560px window means `@media (max-width: 700px)` never fires and the
+destination lays itself out for a screen it does not have. `.ui-panel-body` carries
+`container-type: inline-size; container-name: panel`, so a destination asks the panel instead:
+
+```css
+@container panel (max-width: 640px) { .myGrid { grid-template-columns: 1fr } }
+```
+
+Wide content (a table, a Gantt) scrolls *inside* the panel rather than pushing the drawer past the
+viewport. Asserted in `unifiedExperience.test.tsx`.
+
 The nested menu becomes the panel's **index column**, grouped by the question a person is actually
 asking — *You* vs *Workspace* in Settings; *People / Working / Measure* in Workforce. Fourteen
 items fit vertically; a horizontal tab bar cannot hold them.
@@ -465,8 +526,8 @@ Each step is shippable and leaves the app working.
 | **E2** | Panel primitive at three widths + index column; port Settings and Profile | Settings opens over a mounted board; the board's agent turn survives it | ✅ the dock is deleted; every workbench route renders inside `ShellPanel`, and the board is now VISIBLE under it rather than merely mounted |
 | **E3** | Left panel becomes sessions; `listLocalCreationSessions()` lands | Sign-in returns you to your last board | ✅ `SessionList`; the helper already existed (see §3.2). `LastBoardBridge` closes §6.7 and §6.8 together |
 | **E4** | Delete `SectionTabs`, `PillTabs`, `AdminGroupNav`; migrate every group's tabs into panel indexes | Zero references to all three; no horizontal tab bar over 6 items | ✅ one `DestinationIndex` that picks its own orientation past six items — the rule is in the primitive, not in review |
-| **E5** | Primitive migration sweep + delete `freelance/formStyles.ts` | Literal-hex and off-scale-radius counts drop | ◑ the parallel vocabulary is deleted and its consumers moved onto `.ui-*`; the wider sweep across the remaining call sites is the ratchet's job now |
-| **E6** | Two guard ratchets wired into `npm test` | The build fails on a new literal hex or off-scale radius | ✅ `check:design-scale`, shrink-only in both directions |
+| **E5** | Primitive migration sweep + delete `freelance/formStyles.ts` | Literal-hex and off-scale-radius counts drop | ✅ the parallel vocabulary is deleted; literal-hex files 403 → **0** and off-scale radii 2,086 → **9** (2026-08-09). The inline-style/`<Surface>` sweep continues without a ratchet — see §2.7 |
+| **E6** | Two guard ratchets wired into `npm test` | The build fails on a new literal hex or off-scale radius | ✅ `check:design-scale` — radius shrink-only in both directions, colour now an allowlist at zero |
 
 **E6 is not optional and is not last-if-time-permits.** Without it, E5 is undone by the next
 feature and this PRD gets rewritten in a quarter.
@@ -542,3 +603,13 @@ Neither is an engineering call, and both block a specific step.
   §3.2 recorded E3 as blocked on a helper that already existed.
 - **A latent panel bug.** `SlideOutPanel` closed on the scrim but not on `Esc`, so a keyboard user
   could open a panel they had no way to dismiss. §2.5 had always said otherwise.
+- **The last two residuals, 2026-08-09.** The literal-hex sweep finished at zero and the panel
+  gained its size container. What the sweep cost was not the 1,483 mechanical replacements but the
+  nine shipped defects it walked into — six of them left by EARLIER passes of this same migration,
+  each one a token put somewhere a token cannot go: a self-referential CSS variable that stripped
+  the landing hero's ink, an xterm cursor that vanished, an unthemed light-mode address bar, a
+  React Native scaffold with `borderRadius: 'var(--radius-xl)'`, tokens written into a print sheet
+  and a downloadable proposal, and white ink on a white page. Three duplicated palettes (Evermind's
+  regions ×3, the Canvas object kinds ×2, the board's series colours inside a 5,000-line component)
+  became one declaration each. That is why §2.7 now ends with the four ways of "fixing" a literal
+  that are worse than leaving it, and why the colour ratchet asks for a REASON rather than a number.

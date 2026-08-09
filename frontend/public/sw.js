@@ -26,6 +26,7 @@ const STATIC_CACHE = CACHE_PREFIX + 'static-' + BUILD_VERSION;
 
 const PRECACHE_URLS = [
   '/offline.html',
+  '/offline.js',
   '/manifest.json',
   '/icon-192.png',
   '/agentHost.png',

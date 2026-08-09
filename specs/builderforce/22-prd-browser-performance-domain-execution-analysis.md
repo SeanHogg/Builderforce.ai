@@ -1491,14 +1491,16 @@ Status is factual and must be updated when evidence lands.
 | Presentation → infrastructure baseline | 🟡 IN PROGRESS | 144 → 127 known files; target 0 |
 | Cross-context schema imports | 🟡 RATCHEted | 38 known; target 0 or an explicit kernel/view contract |
 | Duplicate schema shapes | 🟡 RATCHEted | Eight known clusters; zero new |
-| Shape-lint gate | 🔴 CURRENTLY RED FROM CONCURRENT SCHEMA WORK | `agent_definition_versions` newly matches kernel `revision`; resolve or explicitly adjudicate before merge |
+| Shape-lint gate | ✅ GREEN | `agent_definition_versions` is explicitly adjudicated as an executable identity/release boundary; coordination contention uses the kernel `activity_log` |
 | Full API test suite | ⏳ NOT RUN BY THIS AUDIT | Focused tests and type checks passed; full suite remains a delivery gate |
 | Browser/runtime profiling | ⏳ NOT STARTED | Static evidence exists; no production measurements fabricated |
 | React render profiling | ⏳ NOT STARTED | Begin with Creation Canvas interactions in §5 Phase 0 |
-| Shared browser cache primitive | 🔴 ABSENT | §3.13; `apiClient.ts` has no cache/dedup; **13** independent module-level caches with 13 TTL policies and 3 hand-written invalidators |
+| Shared browser cache primitive | ✅ IMPLEMENTED | One bounded `infrastructure/http/readThrough.ts` primitive; all 13 inventoried caches migrated with their TTL/key/invalidation behavior; transport guard rejects new hand-rolled request caches; 12 focused cache/consumer tests and native typecheck pass |
 | Client→server component conversion | 🔴 NOT STARTED | §3.14; 68/137 pages and 755/1,228 files are `'use client'` |
-| Component-level code splitting | 🔴 NEAR-ZERO | §2.3; `next/dynamic` in 4 files, zero `React.lazy`. Library-level `await import()` (57 sites) is already established and is **not** a gap |
-| Frontend layering/complexity ratchet | 🔴 DOES NOT EXIST | §3.15; all layering ratchets are API-side; must land before Phase 3 |
+| Component-level code splitting | 🟡 FIRST ACTIVATION SLICE IMPLEMENTED | `CanvasStage` is dynamically loaded from the shell; Canvas dynamically loads training, voice, 3D and game panels; six files now own `next/dynamic` boundaries. Server-root conversion and measured bundle reports remain open |
+| Training resource cleanup | ✅ IMPLEMENTED | Adapter buffers and owned `GPUDevice` are released in `finally`, on stop and on panel unmount; Mamba now exposes deterministic GPU disposal; native typecheck passes |
+| PWA offline shell/storage policy | 🟡 FIRST SLICE IMPLEMENTED | Branded localized `/offline.html` + script are precached on install; shell/static caches are separated and activation deletes only Builderforce-owned cache names; model quota/version/eviction controls remain open |
+| Frontend layering/complexity ratchet | 🟡 BASELINE LANDED | `check-frontend-architecture.mjs` gates client-root counts, presentation→infrastructure imports, direct engine construction and new production files over 800 lines; cyclomatic-complexity analysis remains open |
 | Frontend bounded-context list + context map | 🔴 NOT DEFINED | §4.4c; §4.2 names domains ad hoc with no PRD 20 alignment |
 | Canvas aggregate root + invariants | 🔴 NOT DEFINED | §4.4a; §3.4 proposes modules, not a consistency boundary |
 | Shared UI/component adoption | 🔴 LOW / UNRATCHETED | §3.18; six primitive families, 12 importing `.tsx` files across 638 component files; repeated interaction patterns not inventoried |
@@ -1684,7 +1686,7 @@ Section 5 remains the detailed browser-execution sequence. Repository-wide deliv
 - Land complexity, file-size and sequential-I/O ratchets.
 - Record shared-component adoption and direct-construction baselines (§3.18).
 - Keep layering, domain, schema, migration and source checks green.
-- Resolve the current `agent_definition_versions` shape decision.
+- Keep the adjudicated `agent_definition_versions` boundary and kernel-backed coordination telemetry green under the shape lint.
 - Record full API/frontend test results from a stable working tree.
 
 ### Program phase 1 · Low-risk policy and delivery cleanup — 🟡 STARTED

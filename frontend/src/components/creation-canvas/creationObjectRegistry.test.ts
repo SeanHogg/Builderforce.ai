@@ -49,6 +49,37 @@ describe('creation object registry', () => {
     })).toEqual({ operation: 'summarize', arguments: { projectId: 42, nested: { safe: true } } });
   });
 
+  it('keeps an authored course all the way down to its lessons and answer choices', () => {
+    // Regression: the nesting cap was 4, and a course nests
+    // course → modules[] → module → lessons[] → lesson, putting every lesson
+    // object at exactly depth 4. They were all dropped, so a generated LMS
+    // arrived with titled modules, no lessons, and answer-less assessments —
+    // indistinguishable from the model having declined to write the content.
+    const patch = sanitizeCreationObjectPatch('course', {
+      course: {
+        schema: 'https://builderforce.ai/schemas/course/v1',
+        modules: [{
+          id: 'scorecards', title: '2. Job scorecards', description: 'Define the outcome before the interview.',
+          lessons: [{ id: 'scorecard-outcomes', title: 'Write the outcomes', objective: 'State what success looks like.', content: 'A scorecard names outcomes, not adjectives.', activity: 'Draft three outcomes for an open role.', durationMinutes: 20 }],
+          assessment: { question: 'What belongs on a scorecard?', choices: ['Adjectives', 'Measurable outcomes'], answer: 1, explanation: 'Outcomes are assessable; adjectives are not.' },
+        }],
+      },
+    });
+
+    const course = patch.course as { modules: Array<{ lessons: Array<{ title: string; activity: string }>; assessment: { choices: string[]; answer: number } }> };
+    expect(course.modules[0]!.lessons).toHaveLength(1);
+    expect(course.modules[0]!.lessons[0]).toMatchObject({ title: 'Write the outcomes', activity: 'Draft three outcomes for an open role.' });
+    expect(course.modules[0]!.assessment).toMatchObject({ choices: ['Adjectives', 'Measurable outcomes'], answer: 1 });
+  });
+
+  it('still refuses secrets no matter how deeply they are nested', () => {
+    const patch = sanitizeCreationObjectPatch('course', {
+      course: { modules: [{ lessons: [{ title: 'Sourcing', apiToken: 'do-not-store', nested: { password: 'nope', safe: true } }] }] },
+    });
+    const course = patch.course as { modules: Array<{ lessons: Array<Record<string, unknown>> }> };
+    expect(course.modules[0]!.lessons[0]).toEqual({ title: 'Sourcing', nested: { safe: true } });
+  });
+
   it('retains authored agent tests and evaluation results', () => {
     expect(sanitizeCreationObjectPatch('agent', { testPrompt: 'Where is my order?', testExpected: 'ask for order number' })).toMatchObject({ testPrompt: 'Where is my order?', testExpected: 'ask for order number' });
     expect(sanitizeCreationObjectPatch('evaluation', { passRate: 80, runCount: 5, testResults: [{ passed: true }] })).toMatchObject({ passRate: 80, runCount: 5, testResults: [{ passed: true }] });
