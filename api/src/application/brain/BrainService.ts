@@ -1010,7 +1010,7 @@ export class BrainService {
 
     // Persona + own-knowledge grounding for a workforce agent (ref = ide_agents.id).
     const lastUser = [...msgs].reverse().find((m) => m.role === 'user')?.content ?? '';
-    const resolved = await resolveWorkforceModel(env, WORKFORCE_MODEL_REF_PREFIX + input.agentRef, lastUser).catch(() => null);
+    const resolved = await resolveWorkforceModel(env, tenantId, WORKFORCE_MODEL_REF_PREFIX + input.agentRef, lastUser).catch(() => null);
     const agentName = input.agentName?.trim() || 'the agent';
     const persona = resolved?.directives
       ? `${resolved.directives}\n\n`

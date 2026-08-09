@@ -115,9 +115,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
+  // The browser chrome reads `theme-color` from the document HEAD before a
+  // stylesheet exists, so these two are literals by necessity — a `var()` here
+  // is simply dropped, which had left the light-mode address bar unthemed.
   themeColor: [
     { media: '(prefers-color-scheme: dark)', color: '#0f0f14' },
-    { media: '(prefers-color-scheme: light)', color: 'var(--text-on-accent)' },
+    { media: '(prefers-color-scheme: light)', color: '#ffffff' },
   ],
 };
 

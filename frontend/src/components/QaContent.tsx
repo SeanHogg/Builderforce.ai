@@ -63,12 +63,12 @@ const SELF_TEST_ROUTES = [
 ];
 
 const STATUS_COLOR: Record<string, string> = {
-  passed: '#3fb950', failed: 'var(--error)', error: 'var(--error)', skipped: '#8b949e',
-  running: 'var(--amber-bright)', queued: '#8b949e',
+  passed: 'var(--success)', failed: 'var(--error)', error: 'var(--error)', skipped: 'var(--text-muted)',
+  running: 'var(--amber-bright)', queued: 'var(--text-muted)',
 };
 
 const SEVERITY_COLOR: Record<string, string> = {
-  critical: 'var(--error)', high: 'var(--error)', medium: 'var(--amber-bright)', low: '#8b949e',
+  critical: 'var(--error)', high: 'var(--error)', medium: 'var(--amber-bright)', low: 'var(--text-muted)',
 };
 
 function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
@@ -421,7 +421,7 @@ function FindingsPanel({ explorationId, busy, onRun }: {
             <Td style={{ maxWidth: 360 }}><code style={{ fontSize: 11 }}>{f.message.slice(0, 200)}</code></Td>
             <Td>
               {f.taskId ? (
-                <span style={{ fontSize: 11, color: '#3fb950' }}>Task #{f.taskId}</span>
+                <span style={{ fontSize: 11, color: 'var(--success)' }}>Task #{f.taskId}</span>
               ) : f.projectId == null ? (
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>self-test</span>
               ) : (
@@ -611,7 +611,7 @@ function QualityTrendSection({ trend }: { trend: QaQualityTrend | null }) {
       {/* Headline metrics */}
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
         <Metric label="Quality score" value={trend.qualityScore != null ? pct(trend.qualityScore) : '—'}
-          hint="mean cloud-agent run outcome" color={trend.qualityScore != null && trend.qualityScore < 0.5 ? 'var(--error)' : '#3fb950'} />
+          hint="mean cloud-agent run outcome" color={trend.qualityScore != null && trend.qualityScore < 0.5 ? 'var(--error)' : 'var(--success)'} />
         <Metric label="Escaped defects" value={String(trend.findings.total)} hint={`${trend.findings.open} open`}
           color={trend.findings.open > 0 ? 'var(--amber-bright)' : 'var(--text-primary)'} />
         <Metric label="CI failure rate" value={trend.ci.builds > 0 ? pct(trend.ci.failureRate) : '—'}

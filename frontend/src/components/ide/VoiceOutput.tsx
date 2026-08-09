@@ -55,7 +55,7 @@ export function VoiceOutput({
         <div style={{
           maxWidth: 520, textAlign: 'center',
           background: 'rgba(234,179,8,0.1)', border: '1px solid var(--yellow-bright)',
-          color: '#fde68a', borderRadius: 'var(--radius-lg)', padding: '20px 24px',
+          color: 'var(--warning-text)', borderRadius: 'var(--radius-lg)', padding: '20px 24px',
         }}>
           <div style={{ fontSize: '1.8rem', marginBottom: 8 }}>⚠</div>
           <p style={{ fontWeight: 600, marginBottom: 4 }}>{t('synthUnavailable')}</p>

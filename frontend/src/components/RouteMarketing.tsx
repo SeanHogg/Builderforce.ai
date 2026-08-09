@@ -180,7 +180,7 @@ export default function RouteMarketing({ pathname }: { pathname: string }) {
         .rm-figure { margin: 0; }
         .rm-figure-img {
           width: 100%; height: auto; display: block; border-radius: var(--radius-xl);
-          border: 1px solid var(--border-subtle); background: #0e1525;
+          border: 1px solid var(--border-subtle); background: var(--bg-deep);
         }
         .rm-figure-cap { font-size: 0.84rem; color: var(--text-muted); line-height: 1.5; text-align: center; margin-top: 10px; }
 

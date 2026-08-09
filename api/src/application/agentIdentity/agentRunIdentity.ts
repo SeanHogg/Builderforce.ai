@@ -1,6 +1,6 @@
 /** Agent-run identity boundary: freezes mutable definitions and mints one expiring,
  * least-privilege machine principal per execution. */
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, sql } from 'drizzle-orm';
 import { sha256Hex } from '../../domain/shared/hash';
 import {
   agentCapabilityGrants,
@@ -16,6 +16,7 @@ import {
   agentRegistrations,
 } from '../../infrastructure/database/schema';
 import type { Db } from '../../infrastructure/database/connection';
+import { scopedToTenant } from '../../infrastructure/database/tenantScope';
 import { selectAgentRelease } from '../../domain/agentIdentity/releaseSelection';
 
 export interface FrozenAgentDefinition {
@@ -28,12 +29,25 @@ export interface FrozenAgentDefinition {
 
 async function appendDefinitionVersion(db: Db, tenantId: number, sourceKind: string, sourceRef: string, definition: Record<string, unknown>): Promise<FrozenAgentDefinition> {
   const fingerprint = await sha256Hex(canonical(definition));
-  const match = and(eq(agentDefinitionVersions.tenantId, tenantId), eq(agentDefinitionVersions.sourceKind, sourceKind), eq(agentDefinitionVersions.sourceRef, sourceRef));
-  const [existing] = await db.select().from(agentDefinitionVersions).where(and(match, eq(agentDefinitionVersions.fingerprint, fingerprint))).limit(1);
+  const [existing] = await db.select().from(agentDefinitionVersions).where(scopedToTenant(
+    agentDefinitionVersions, tenantId,
+    eq(agentDefinitionVersions.sourceKind, sourceKind),
+    eq(agentDefinitionVersions.sourceRef, sourceRef),
+    eq(agentDefinitionVersions.fingerprint, fingerprint),
+  )).limit(1);
   if (existing) return existing as FrozenAgentDefinition;
-  const [latest] = await db.select({ version: agentDefinitionVersions.version }).from(agentDefinitionVersions).where(match).orderBy(desc(agentDefinitionVersions.version)).limit(1);
+  const [latest] = await db.select({ version: agentDefinitionVersions.version }).from(agentDefinitionVersions).where(scopedToTenant(
+    agentDefinitionVersions, tenantId,
+    eq(agentDefinitionVersions.sourceKind, sourceKind),
+    eq(agentDefinitionVersions.sourceRef, sourceRef),
+  )).orderBy(desc(agentDefinitionVersions.version)).limit(1);
   await db.insert(agentDefinitionVersions).values({ tenantId, sourceKind, sourceRef, version: (latest?.version ?? 0) + 1, fingerprint, definition }).onConflictDoNothing();
-  const [created] = await db.select().from(agentDefinitionVersions).where(and(match, eq(agentDefinitionVersions.fingerprint, fingerprint))).limit(1);
+  const [created] = await db.select().from(agentDefinitionVersions).where(scopedToTenant(
+    agentDefinitionVersions, tenantId,
+    eq(agentDefinitionVersions.sourceKind, sourceKind),
+    eq(agentDefinitionVersions.sourceRef, sourceRef),
+    eq(agentDefinitionVersions.fingerprint, fingerprint),
+  )).limit(1);
   if (!created) throw new Error('could not freeze agent definition');
   return created as FrozenAgentDefinition;
 }
@@ -184,6 +198,28 @@ export async function revokeRunPrincipal(db: Db, tenantId: number, executionId: 
     eq(agentRunPrincipals.tenantId, tenantId), eq(agentRunPrincipals.executionId, executionId), eq(agentRunPrincipals.status, 'active'),
   )).returning({ id: agentRunPrincipals.id });
   return rows.length > 0;
+}
+
+/** Authenticate a callback against live database state, not just possession of the
+ * signed container token. This makes expiry, revocation, cancellation, and terminal
+ * completion effective immediately even when a container still holds its URL. */
+export async function authorizeExecutionPrincipal(db: Db, tenantId: number, executionId: number): Promise<boolean> {
+  const [row] = await db.select({ id: agentRunPrincipals.id })
+    .from(agentRunPrincipals)
+    .innerJoin(executions, and(
+      eq(executions.id, agentRunPrincipals.executionId),
+      eq(executions.tenantId, agentRunPrincipals.tenantId),
+    ))
+    .where(scopedToTenant(
+      agentRunPrincipals,
+      tenantId,
+      eq(agentRunPrincipals.executionId, executionId),
+      eq(agentRunPrincipals.status, 'active'),
+      gt(agentRunPrincipals.expiresAt, new Date()),
+      inArray(executions.status, ['pending', 'running']),
+    ))
+    .limit(1);
+  return Boolean(row);
 }
 
 /** Grant a principal permission to ask the owning adapter for one credential. The

@@ -122,7 +122,7 @@ function EngineBadge({ onDevice }: { onDevice: boolean | null }) {
   return (
     <span style={{
       fontSize: '0.68rem', fontWeight: 600, padding: '4px 10px', borderRadius: 'var(--radius-xl)',
-      border: '1px solid var(--border-subtle)', color: onDevice ? '#6ee7b7' : 'var(--text-secondary)',
+      border: '1px solid var(--border-subtle)', color: onDevice ? 'var(--emerald-bright)' : 'var(--text-secondary)',
       background: onDevice ? 'rgba(16,185,129,0.1)' : 'var(--bg-surface)',
     }}>{text}</span>
   );
@@ -193,7 +193,7 @@ function CreateCloneForm({ voice }: { voice: VoiceStudio }) {
             onClick={() => void toggleRecord()}
             style={{
               ...ghostBtn, marginTop: 8,
-              color: recording ? '#fca5a5' : 'var(--text-secondary)',
+              color: recording ? 'var(--error-text)' : 'var(--text-secondary)',
               borderColor: recording ? 'var(--error)' : 'var(--border-subtle)',
             }}
           >
@@ -201,7 +201,7 @@ function CreateCloneForm({ voice }: { voice: VoiceStudio }) {
           </button>
         )}
         {recordedPcm && (
-          <p style={{ fontSize: '0.72rem', color: '#6ee7b7', marginTop: 6 }}>
+          <p style={{ fontSize: '0.72rem', color: 'var(--emerald-bright)', marginTop: 6 }}>
             {t('recorded', { seconds: (recordedPcm.samples.length / recordedPcm.sampleRate).toFixed(1) })}
           </p>
         )}

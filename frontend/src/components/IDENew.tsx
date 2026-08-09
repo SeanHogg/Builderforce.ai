@@ -1390,7 +1390,7 @@ export function IDE({ project, initialFiles, onProjectUpdate, onOpenProjectDetai
               display: 'flex',
               flexDirection: 'column',
               flexShrink: 0,
-              background: '#1a1a2e',
+              background: 'var(--bg-deep)',
               transition: 'height 0.2s ease',
             }}
           >

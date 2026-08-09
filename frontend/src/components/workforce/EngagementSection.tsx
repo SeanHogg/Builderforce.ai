@@ -31,7 +31,7 @@ function ScoreBar({ m }: { m: MemberEngagement }) {
       {seg(m.breakdown.activityPts, 40, 'var(--emerald-bright)')}
       {seg(m.breakdown.platformPts, 25, 'var(--indigo-bright)')}
       {seg(m.breakdown.toolingPts, 20, 'var(--purple-bright)')}
-      {seg(m.breakdown.deliveryPts, 15, '#f5a623')}
+      {seg(m.breakdown.deliveryPts, 15, 'var(--amber-bright)')}
     </span>
   );
 }
@@ -55,7 +55,7 @@ export function EngagementSection({ days }: { days: number }) {
         <span><span style={{ color: 'var(--emerald-bright)' }}>■</span> dev activity</span>
         <span><span style={{ color: 'var(--indigo-bright)' }}>■</span> platform usage</span>
         <span><span style={{ color: 'var(--purple-bright)' }}>■</span> VS Code</span>
-        <span><span style={{ color: '#f5a623' }}>■</span> delivery</span>
+        <span><span style={{ color: 'var(--amber-bright)' }}>■</span> delivery</span>
       </div>
       {error && <div style={{ color: 'var(--danger)', fontSize: 12, marginBottom: 8 }}>{error}</div>}
       <div style={{ overflowX: 'auto' }}>

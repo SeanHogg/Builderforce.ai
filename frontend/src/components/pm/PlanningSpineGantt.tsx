@@ -269,7 +269,7 @@ export function PlanningSpineGantt() {
                         {node.title}
                       </span>
                       {node.anomaly && <span title={t('anomalyTip')} style={{ color: 'var(--coral-bright)', flexShrink: 0 }}>⚠</span>}
-                      {!node.anomaly && node.hasDescendantAnomaly && <span title={t('descendantAnomalyTip')} style={{ color: '#e0a93f', flexShrink: 0, fontSize: '0.7rem' }}>⚠</span>}
+                      {!node.anomaly && node.hasDescendantAnomaly && <span title={t('descendantAnomalyTip')} style={{ color: 'var(--warning)', flexShrink: 0, fontSize: '0.7rem' }}>⚠</span>}
                       {node.cost.totalUsd > 0 && (
                         <span style={{ marginLeft: 'auto', flexShrink: 0, fontSize: '0.7rem', color: 'var(--text-muted)', fontVariantNumeric: 'tabular-nums' }}>{formatUsd(node.cost.totalUsd)}</span>
                       )}

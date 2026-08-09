@@ -48,7 +48,7 @@
   border-radius: var(--radius-lg);
   background: var(--bg-elevated);
   color: var(--text-primary);
-  box-shadow: 0 10px 28px color-mix(in srgb, #0f172a 9%, transparent);
+  box-shadow: 0 10px 28px var(--shadow-color);
 }
 
 .node[data-tone='manager'] { width: 330px; border-color: color-mix(in srgb, var(--accent) 55%, var(--border-subtle)); box-shadow: 0 16px 38px color-mix(in srgb, var(--accent) 16%, transparent); }

@@ -250,13 +250,13 @@
   background: rgba(255, 255, 255, 0.01);
   -webkit-backdrop-filter: blur(7px);
   backdrop-filter: blur(7px);
-  -webkit-mask-image: linear-gradient(#000, #000);
-  mask-image: linear-gradient(#000, #000);
+  -webkit-mask-image: linear-gradient(black, black);
+  mask-image: linear-gradient(black, black);
   transition: opacity 180ms ease;
 }
 .blurVeilLens {
-  -webkit-mask-image: radial-gradient(circle 110px at var(--lens-x) var(--lens-y), transparent 0 68px, #000 108px);
-  mask-image: radial-gradient(circle 110px at var(--lens-x) var(--lens-y), transparent 0 68px, #000 108px);
+  -webkit-mask-image: radial-gradient(circle 110px at var(--lens-x) var(--lens-y), transparent 0 68px, black 108px);
+  mask-image: radial-gradient(circle 110px at var(--lens-x) var(--lens-y), transparent 0 68px, black 108px);
 }
 .boardRevealed .blurVeil {
   opacity: 0;
@@ -482,7 +482,12 @@
      which in the light theme is very nearly white. */
   padding-bottom: 88px;
 
-  --text-primary: var(--text-primary);
+  /* The scene is lit in BOTH themes, so it re-declares the ink it needs rather
+     than inheriting the shell's. These are overrides: `--text-primary:
+     var(--text-primary)` is a CYCLE, which makes the property invalid at
+     computed-value time and strips the token from every descendant — the whole
+     hero loses its ink. It has to be a value. */
+  --text-primary: #f0f4ff;
   --text-secondary: #b9c4de;
   --text-muted: var(--text-secondary);
   --border-subtle: rgba(136, 146, 176, 0.28);

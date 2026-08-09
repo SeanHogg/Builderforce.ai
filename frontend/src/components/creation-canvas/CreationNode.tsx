@@ -8,6 +8,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Avatar, evermindLearnedStatus, evermindNextAction } from '@seanhogg/builderforce-brain-ui';
 import type { CreationNodeData } from './types';
+import { AUTHORED_FRAME_BORDER, AUTHORED_FRAME_FILL } from './authoredColors';
 import styles from './CreationCanvas.module.css';
 import { creationObjectDefinition } from './creationObjectRegistry';
 import { BrainActivityBar, brainActivityLine, useBrainActivity } from './BrainActivityView';
@@ -515,7 +516,10 @@ function DashboardBody({ data }: { data: CreationNodeData }) {
   const dateRange = optionLabel(data.dateRange, { '30d': t('last30Days'), '7d': t('last7Days'), qtd: t('quarterToDate') }, t('last30Days'));
   const authoredKpis = Array.isArray(data.kpis) ? data.kpis.slice(0, 6) : [];
   const kpis = authoredKpis.length ? authoredKpis : data.kind === 'dashboard' ? [{ label: 'Reach', value: '212K', trend: '↑ 18.4%' }, { label: 'CTR', value: '3.6%', trend: '↑ 0.6pp' }, { label: 'Conversion', value: '2.1%', trend: '↑ 0.3pp' }] : [];
-  const palette = ['var(--coral-bright)', '#25b7a3', '#7657df', '#f4a126', '#e85d75', '#46a4d9', '#9b6ad6', '#68b36b'];
+  // The board's own series colours, declared with the rest of its palette in
+  // CreationCanvas.module.css (PRD 21 §2.6 rule 9). Eight, because that is where
+  // the funnel/status charts stop before they repeat.
+  const palette = ['var(--canvas-series-1)', 'var(--canvas-series-2)', 'var(--canvas-series-3)', 'var(--canvas-series-4)', 'var(--canvas-series-5)', 'var(--canvas-series-6)', 'var(--canvas-series-7)', 'var(--canvas-series-8)'];
   const positiveValues = values.map((value) => Number.isFinite(value) ? Math.max(0, value) : 0);
   const total = positiveValues.reduce((sum, value) => sum + value, 0);
   let cursor = 0;
@@ -531,7 +535,7 @@ function DashboardBody({ data }: { data: CreationNodeData }) {
       {kpis.length > 0 && <div className={styles.kpis}>{kpis.map((raw, index) => { const item = asRecord(raw, { label: t('metricIndex', { index: index + 1 }), value: raw }); return <div key={`${String(item.label)}-${index}`}><small>{String(item.label || t('metricIndex', { index: index + 1 }))}</small><strong>{String(item.value ?? '—')}</strong><em>{String(item.trend || '')}</em></div>; })}</div>}
       {typeof data.chartTitle === 'string' && data.chartTitle.trim() && <strong className={styles.chartTitle}>{data.chartTitle}</strong>}
       <div className={styles.charts}>
-        <div><small>{typeof data.yAxisLabel === 'string' && data.yAxisLabel.trim() ? data.yAxisLabel : labels.length ? t('taskCountByStatus') : t('funnel')}</small>{labels.length ? <><div style={{ display: 'grid', gap: 5, marginTop: 7 }}>{labels.map((label, index) => <div key={`${label}-${index}`} style={{ display: 'grid', gridTemplateColumns: '70px 1fr 38px', alignItems: 'center', gap: 5, fontSize: 9 }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span><i style={{ display: 'block', height: 7, borderRadius: 'var(--radius-sm)', background: '#08b59d', width: `${Math.max(4, (values[index] || 0) / max * 100)}%` }} /><b>{Number.isFinite(values[index]) ? values[index] : 0}</b></div>)}</div>{typeof data.xAxisLabel === 'string' && data.xAxisLabel.trim() && <small className={styles.axisLabel}>{data.xAxisLabel}</small>}</> : <div className={styles.funnel}><i /><i /><i /><i /></div>}</div>
+        <div><small>{typeof data.yAxisLabel === 'string' && data.yAxisLabel.trim() ? data.yAxisLabel : labels.length ? t('taskCountByStatus') : t('funnel')}</small>{labels.length ? <><div style={{ display: 'grid', gap: 5, marginTop: 7 }}>{labels.map((label, index) => <div key={`${label}-${index}`} style={{ display: 'grid', gridTemplateColumns: '70px 1fr 38px', alignItems: 'center', gap: 5, fontSize: 9 }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</span><i style={{ display: 'block', height: 7, borderRadius: 'var(--radius-sm)', background: 'var(--canvas-obj-dashboard)', width: `${Math.max(4, (values[index] || 0) / max * 100)}%` }} /><b>{Number.isFinite(values[index]) ? values[index] : 0}</b></div>)}</div>{typeof data.xAxisLabel === 'string' && data.xAxisLabel.trim() && <small className={styles.axisLabel}>{data.xAxisLabel}</small>}</> : <div className={styles.funnel}><i /><i /><i /><i /></div>}</div>
         <div><small>{labels.length ? t('distribution') : t('channelMix')}</small>{labels.length && total > 0 ? <div className={styles.donutChart}><div className={styles.donut} role="img" aria-label={labels.map((label, index) => `${label}: ${positiveValues[index] ?? 0}`).join(', ')} style={{ background: `conic-gradient(${donutStops})` }} /><div className={styles.donutLegend}>{labels.map((label, index) => <span key={`${label}-legend-${index}`} title={`${label}: ${positiveValues[index] ?? 0}`}><i style={{ background: palette[index % palette.length] }} /><b>{label}</b><em>{positiveValues[index] ?? 0}</em></span>)}</div></div> : <div className={styles.donut} />}</div>
       </div>
     </>
@@ -875,11 +879,11 @@ function SlidesBody({ data }: { data: CreationNodeData }) {
 /** Ink that stays readable on a fill the diagram file chose, in either theme. */
 function readableInk(fill: string | undefined): string {
   const hex = fill?.trim().replace('#', '');
-  if (!hex || (hex.length !== 3 && hex.length !== 6)) return 'var(--canvas-ink, #142234)';
+  if (!hex || (hex.length !== 3 && hex.length !== 6)) return 'var(--canvas-ink)';
   const expanded = hex.length === 3 ? hex.split('').map((character) => character + character).join('') : hex;
   const [red, green, blue] = [0, 2, 4].map((offset) => parseInt(expanded.slice(offset, offset + 2), 16) / 255);
   const luminance = 0.2126 * red! + 0.7152 * green! + 0.0722 * blue!;
-  return luminance > 0.55 ? '#10203a' : '#f7faff';
+  return luminance > 0.55 ? 'var(--canvas-ink-on-light)' : 'var(--canvas-ink-on-dark)';
 }
 
 function DrawioCanvas({ graph, title }: { graph: DrawioGraph; title: string }) {
@@ -896,7 +900,7 @@ function DrawioCanvas({ graph, title }: { graph: DrawioGraph; title: string }) {
         <path d="M0,0 L9,3.2 L0,6.4 z" fill="currentColor" />
       </marker>
     </defs>
-    {graph.edges.map((edge) => <g key={edge.id} style={{ color: edge.stroke ?? 'var(--canvas-muted, #5c6e88)' }}>
+    {graph.edges.map((edge) => <g key={edge.id} style={{ color: edge.stroke ?? 'var(--canvas-muted)' }}>
       <polyline
         points={edge.points.map((point) => `${point.x},${point.y}`).join(' ')}
         fill="none"
@@ -911,14 +915,14 @@ function DrawioCanvas({ graph, title }: { graph: DrawioGraph; title: string }) {
         y={(edge.points[0]!.y + edge.points[edge.points.length - 1]!.y) / 2 - 4}
         textAnchor="middle"
         fontSize={11}
-        fill="var(--canvas-muted, #5c6e88)"
+        fill="var(--canvas-muted)"
       >{edge.label}</text>}
     </g>)}
     {graph.vertices.map((vertex) => {
       const polygon = drawioShapePolygon(vertex);
       const fill = vertex.fill ?? 'var(--canvas-widget-surface)';
-      const stroke = vertex.stroke ?? 'var(--canvas-widget-border, #ccd8e7)';
-      const ink = vertex.fontColor ?? (vertex.fill ? readableInk(vertex.fill) : 'var(--canvas-ink, #142234)');
+      const stroke = vertex.stroke ?? 'var(--canvas-widget-border)';
+      const ink = vertex.fontColor ?? (vertex.fill ? readableInk(vertex.fill) : 'var(--canvas-ink)');
       const lines = drawioLabelLines(vertex.label, vertex.width, vertex.fontSize);
       const shapeProps = { fill: vertex.shape === 'text' ? 'none' : fill, stroke: vertex.shape === 'text' ? 'none' : stroke, strokeWidth: 1.4, ...(vertex.dashed ? { strokeDasharray: '6 4' } : {}) };
       return <g key={vertex.id}>
@@ -1775,7 +1779,7 @@ export function CreationNode({ id, data, selected, canRun = true, onRun, onOpenD
   // already lists them, so a new creative kind cannot reintroduce the same bug.
   const specialized = new Set(['workflow','website','build','prototype','dashboard','chart','map','report','evaluation','diagnostics','agent','staff','chat','dataset','table','spreadsheet','kpi','voice','note','project','roadmap','task','mockup','mockupSet','featureSummary','evermind','projectComparison','standup','drawing','frame','release','file','document','prd','knowledge','slides','diagram','pitch','pitchScorecard','pitchQa','pitchApplication','course','game', ...CREATIVE_STUDIO_KINDS, ...WEB_PAGE_KINDS]);
   const authoredSize = useAuthoredNodeSize(id);
-  const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || '#f8f6ff'), borderColor: String(data.frameBorder || '#9d8bea') } : undefined;
+  const frameStyle = data.kind === 'frame' ? { background: String(data.frameColor || AUTHORED_FRAME_FILL), borderColor: String(data.frameBorder || AUTHORED_FRAME_BORDER) } : undefined;
   const cardStyle = { ...frameStyle, ...authoredSize };
   return (
     <article style={cardStyle} data-viewport={data.viewport} className={`${styles.node} ${styles[`node_${data.kind}`]} ${selected ? styles.selected : ''} ${isWide ? styles.wideNode : ''}`}>

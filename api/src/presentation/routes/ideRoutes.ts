@@ -1090,7 +1090,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
     // keyed on the latest user message. '' when the agent has no knowledge or
     // nothing is relevant (read-through cached; invalidated on re-ingest).
     const latestUser = [...body.messages].reverse().find((m) => m.role === 'user')?.content ?? '';
-    const recalledContext = await recallAgentKnowledge(c.env, db, agentId, latestUser);
+    const recalledContext = await recallAgentKnowledge(c.env, db, c.get('tenantId') as number, agentId, latestUser);
     const descriptor: AgentDescriptor = {
       name: agent.name as string,
       title: agent.title as string,
@@ -1189,7 +1189,7 @@ export function createIdeRoutes(): Hono<HonoEnv> {
       ...((body.documents ?? []).filter((d): d is { name?: string; text: string } => Boolean(d?.text?.trim()))),
     ];
     if (docs.length === 0) return c.json({ error: 'text or documents required' }, 400);
-    const chunks = await ingestAgentKnowledge(c.env, db, agentId, docs);
+    const chunks = await ingestAgentKnowledge(c.env, db, tenantId, agentId, docs);
     return c.json({ chunks });
   });
 

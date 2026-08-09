@@ -563,29 +563,11 @@ const legendStyle: React.CSSProperties = {
   borderTop: '1px solid var(--border-subtle)', paddingTop: 10,
 };
 
-/* Region hues follow the app theme (dark is the app default; the light override
-   supplies the light-surface steps). All are validated categorical slots. Every
-   region carries a text label, so the sub-3:1 light steps are relieved. */
+/* Region hues come from globals.css, declared once for both themes beside the
+   rest of the categorical families. They used to be restated here, again in
+   EvermindStudioCenter and a third time in the Canvas module — three copies of
+   one identity list, only two of which had a light override. */
 const BRAINMAP_CSS = `
-.ev-brainmap {
-  --ev-neocortex: #3987e5;
-  --ev-hippocampus: #199e70;
-  --ev-amygdala: #e66767;
-  --ev-hypothalamus: #d95926;
-  --ev-thalamus: #c98500;
-  --ev-basal: #d55181;
-  --ev-personality: var(--violet-bright);
-  --ev-core: var(--coral-bright);
-}
-:root[data-theme='light'] .ev-brainmap {
-  --ev-neocortex: #2a78d6;
-  --ev-hippocampus: #1baf7a;
-  --ev-amygdala: #e34948;
-  --ev-hypothalamus: #eb6834;
-  --ev-thalamus: #eda100;
-  --ev-basal: #e87ba4;
-  --ev-personality: #4a3aa7;
-}
 .ev-brainmap .ev-region-label { fill: var(--text-primary); font-size: 13px; font-weight: 700; font-family: var(--font-display, system-ui); }
 .ev-brainmap .ev-region-label-sm { font-size: 11px; }
 .ev-brainmap .ev-region-badge { fill: var(--text-on-accent); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }

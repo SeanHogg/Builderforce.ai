@@ -8,26 +8,46 @@
  *
  *   - **A literal hex.** `#0a0f1a` renders identically in both themes, so a
  *     surface written that way is legible in the one the author had open and
- *     wrong in the other. 403 files carried one when this landed; 341 do now —
- *     the sweep replaced every literal that was EXACTLY a declared token's value
- *     in one of the two themes, which is the half that needs no judgement. What
- *     is left needs a reading of the element (is this `#fff` ink, or a surface?)
- *     and comes down per directory.
+ *     wrong in the other. 403 files carried one when this landed, then 341.
+ *     **It is zero now**, and the count is no longer the mechanism: every file
+ *     that still contains a hex is in `COLOUR_EXEMPT` below with a written
+ *     reason, and anything else fails. A NUMBER lets 341 sit there looking like
+ *     progress; a LIST forces the next person to say out loud why their literal
+ *     is one of the handful of cases where a token genuinely cannot reach.
  *   - **An off-scale radius.** §2.4 documents five values (6 / 8 / 12 / 16 /
  *     full). 2,086 corners were off it; 9 are now, and each of those is a live
  *     expression rather than a literal. Most of the debt turned out to be
  *     `borderRadius: 8` — the right SIZE typed as a number, so the scale was
  *     being followed and never named.
  *
- * SHRINK-ONLY, not zero. Both counts are far above zero today and a guard that
- * demands zero on the first run is a guard somebody deletes. This one fails when
- * a count goes UP, so every pass can only improve — and when a count comes in
- * BELOW its baseline it says so and tells you to lower the baseline, which is
- * what stops the ratchet from silently going slack.
+ * The radius ratchet stays SHRINK-ONLY: it fails when the count goes UP, and
+ * also when it comes in BELOW its baseline without the baseline following — which
+ * is what stops a ratchet from quietly going slack.
  *
  * §5 E6: "This is the item that makes the rest permanent. It lands with the
  * migration, not after it." Run via `npm run check:design-scale`; wired into
  * `npm test` beside the token guard.
+ *
+ * ## What the sweep taught, and what this guard now catches because of it
+ *
+ * Replacing a literal with a token is not always right, and four ways of getting
+ * it wrong were found IN THE TREE, each shipped by an earlier pass of this same
+ * migration. They are why `COLOUR_EXEMPT` is a list of reasons rather than a
+ * list of paths:
+ *
+ *   1. A consumer that never reads our CSS. `xterm` paints its own canvas from a
+ *      JS theme object; the cursor had been set to `var(--text-on-accent)` and
+ *      simply vanished. Same class: `<meta name="theme-color">`, read by the
+ *      browser chrome before a stylesheet exists.
+ *   2. A document opened somewhere else. A print sheet, a downloadable landing
+ *      page, a generated React Native scaffold — `borderRadius:
+ *      'var(--radius-xl)'` is not even a number to React Native.
+ *   3. A control whose VALUE must be a colour. `<input type="color">` accepts
+ *      `#rrggbb` and nothing else; given a `var()` it silently shows black and
+ *      writes black the moment it is touched.
+ *   4. A cycle. `--text-primary: var(--text-primary)` inside a scope that means
+ *      to OVERRIDE it is invalid at computed-value time, and takes the token away
+ *      from every descendant.
  */
 import { readdirSync, readFileSync } from 'node:fs';
 import { resolve, relative } from 'node:path';
@@ -41,7 +61,8 @@ const srcDir = resolve(here, '../src');
  * A number here is a debt, not a budget.
  */
 const BASELINE = {
-  literalHexFiles: 341,
+  /** Not a budget any more — see COLOUR_EXEMPT. Every literal outside it fails. */
+  literalHexFiles: 0,
   offScaleRadii: 9,
 };
 
@@ -61,6 +82,7 @@ const ALLOWED_RADII = new Set(['0', '6px', '8px', '12px', '16px', '9999px', '50%
  * fixed brand colours that must not flip with the viewer's theme.
  */
 const COLOUR_EXEMPT = [
+  // ---- Where the tokens themselves are declared -------------------------
   /^app\/globals\.css$/,
   /^app\/[^/]*\.css$/,
   /\.test\.(tsx?|css)$/,
@@ -72,6 +94,56 @@ const COLOUR_EXEMPT = [
   // grounds as `globals.css`: a token has to be declared somewhere, and this is
   // where the canvas's are.
   /^components\/creation-canvas\/CreationCanvas\.module\.css$/,
+  // The landing hero is a LIT SCENE in both themes, so it overrides the shell's
+  // ink inside itself. Same grounds as the board: a scope that declares its own
+  // palette has to state values, and an override written as `var()` of the thing
+  // it overrides is a cycle that strips the token from every descendant.
+  /^components\/home\/LandingCanvasHero\.module\.css$/,
+
+  // ---- Documents opened OUTSIDE this app --------------------------------
+  // Nothing here is rendered by our stylesheet, so `var(--x)` resolves to
+  // nothing: a print sheet composed in an isolated iframe, a downloadable
+  // landing page or SCORM package, a data-URL poster, a QR the scanner reads.
+  /^lib\/printDocument\.ts$/,
+  /^lib\/creationDeliverables\.ts$/,
+  /^lib\/courseLms\.ts$/,
+  /^lib\/renderedSvg\.ts$/,
+  /^lib\/gamePoster\.ts$/,
+  /^lib\/creativeGeometry\.ts$/,
+  /^lib\/qrCode\.ts$/,
+  /^components\/ide\/QrCode\.tsx$/,
+  // The RFP proposal is one of those documents; these two hold its palette and
+  // the iframe it previews in.
+  /^components\/rfp\/RfpContent\.tsx$/,
+  /^app\/projects\/rfp\/\[id\]\/RfpDetailClient\.tsx$/,
+  // Generated PROJECT source — the user's own app files, not our UI. React
+  // Native takes a number for `borderRadius`; a `var()` is not one.
+  /^lib\/vanillaDefaults\.ts$/,
+
+  // ---- Colour that is not ours to theme ---------------------------------
+  // Third-party BRAND marks. WhatsApp green is WhatsApp's; it does not flip
+  // because the viewer picked light mode.
+  /^app\/agents\/integrations\/page\.tsx$/,
+  // A deterministic brand cover, drawn as an SVG from the post's slug. Fixed
+  // brand colours, by design — it is an image, not a surface.
+  /^components\/blog\/BlogCover\.tsx$/,
+  // Physical devices: a phone's bezel and its dead screen are the phone's.
+  /^components\/ide\/DevicePreview\.tsx$/,
+
+  // ---- Colour the AUTHOR picks, persisted as data -----------------------
+  // The value is written into the object and rendered back as-is, and the
+  // control that picks it (`<input type="color">`) accepts only `#rrggbb`.
+  /^components\/creation-canvas\/authoredColors\.ts$/,
+  /^components\/canvas\/canvasModel\.ts$/,
+
+  // ---- Consumers that never read a stylesheet ---------------------------
+  // xterm renders to its own canvas from a plain JS theme object.
+  /^components\/Terminal\.tsx$/,
+  // `theme-color` is a meta tag the browser chrome reads before any CSS exists.
+  /^app\/layout\.tsx$/,
+  // The two candidate inks of a luminance test — arguments to arithmetic, not
+  // a styling choice.
+  /^lib\/contrastText\.ts$/,
 ];
 
 const BLOCK_COMMENT = /\/\*[\s\S]*?\*\//g;
@@ -103,6 +175,11 @@ const RADIUS_EXEMPT = [
   /^components\/ide\/DevicePreview\.tsx$/,
   /^lib\/creationDeliverables\.ts$/,
   /^lib\/courseLms\.ts$/,
+  // Generated PROJECT source. The mobile scaffold is React Native, where
+  // `borderRadius` is a NUMBER — `'var(--radius-xl)'` is not a value RN can use,
+  // and leaving it there had broken the scaffold's card and button corners.
+  /^lib\/vanillaDefaults\.ts$/,
+  /^lib\/printDocument\.ts$/,
 ];
 
 function collect(dir, out = []) {
@@ -179,6 +256,12 @@ if (failures.length > 0) {
     console.error('    A literal renders the SAME in both themes. Use a token — and if the');
     console.error('    name you want does not exist, declare it in globals.css under BOTH');
     console.error("    :root and html[data-theme='light'].");
+    console.error('');
+    console.error('    If a token genuinely cannot reach — the value is read by something');
+    console.error('    that never sees our CSS (an xterm canvas, a <meta>), it is written');
+    console.error('    into a document opened elsewhere, it is a vendor brand mark, or it');
+    console.error('    is a colour the AUTHOR picks and we persist — add the file to');
+    console.error('    COLOUR_EXEMPT above WITH ITS REASON. The list is the review.');
   }
   if (measured.offScaleRadii > BASELINE.offScaleRadii) {
     console.error('\n  Off-scale radii (sample):');

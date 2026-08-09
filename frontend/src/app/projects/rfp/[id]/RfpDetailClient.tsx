@@ -24,7 +24,7 @@ const h2: React.CSSProperties = { fontSize: 15, fontWeight: 800, color: 'var(--t
 const muted: React.CSSProperties = { color: 'var(--text-muted)', fontSize: 13 };
 
 // Chart series palette — saturated fills readable on both themes (white text on top).
-const PHASE_COLORS = ['var(--indigo-bright)', 'var(--sky-bright)', 'var(--teal-bright)', 'var(--warning)', 'var(--pink-bright)', '#84cc16'];
+const PHASE_COLORS = ['var(--indigo-bright)', 'var(--sky-bright)', 'var(--teal-bright)', 'var(--warning)', 'var(--pink-bright)', 'var(--yellow-bright)'];
 const COST_COLORS: Record<string, string> = {
   build: 'var(--indigo-bright)', agentic: 'var(--sky-bright)', marketing: 'var(--teal-bright)', contingency: 'var(--warning)', margin: 'var(--success)',
 };
@@ -290,9 +290,9 @@ function RisksSection({ body, t }: { body: RfpResponseBody; t: T }) {
           {body.risks.map((r, i) => (
             <div key={i}>
               <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                <span style={{ width: 8, height: 8, borderRadius: 'var(--radius-full)', background: sevColor[r.severity] ?? '#999' }} />
+                <span style={{ width: 8, height: 8, borderRadius: 'var(--radius-full)', background: sevColor[r.severity] ?? 'var(--text-muted)' }} />
                 <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>{r.title}</span>
-                <span style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 700, color: sevColor[r.severity] ?? '#999' }}>{t(`severity.${r.severity}`)}</span>
+                <span style={{ fontSize: 10, textTransform: 'uppercase', fontWeight: 700, color: sevColor[r.severity] ?? 'var(--text-muted)' }}>{t(`severity.${r.severity}`)}</span>
               </div>
               <p style={{ ...muted, margin: '2px 0 0 16px' }}>{r.mitigation}</p>
             </div>

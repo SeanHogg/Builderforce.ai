@@ -24,7 +24,7 @@ const cardStyle: React.CSSProperties = {
 const sectionTitle: React.CSSProperties = { fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' };
 
 const SEVERITY_COLOR: Record<string, string> = {
-  critical: 'var(--error)', high: '#f4726e', medium: 'var(--warning)', low: 'var(--coral-bright)', info: 'var(--text-muted)',
+  critical: 'var(--error)', high: 'var(--orange-bright)', medium: 'var(--warning)', low: 'var(--coral-bright)', info: 'var(--text-muted)',
 };
 const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'info'];
 
@@ -190,7 +190,7 @@ export function WebSecurityScanPanel() {
                 : deltaChip(result.baseline.scoreDelta)}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 {result.baseline.newFindings > 0 && (
-                  <span style={{ fontSize: 11, color: '#f4726e' }}>{t('webNewFindings', { count: result.baseline.newFindings })}</span>
+                  <span style={{ fontSize: 11, color: 'var(--orange-bright)' }}>{t('webNewFindings', { count: result.baseline.newFindings })}</span>
                 )}
                 {result.baseline.resolvedFindings > 0 && (
                   <span style={{ fontSize: 11, color: 'var(--success-text)' }}>{t('webResolved', { count: result.baseline.resolvedFindings })}</span>

@@ -11,9 +11,18 @@ import { useLocalizedModalities } from '@/lib/useModalityCopy';
 import { getModality } from '@/lib/modality';
 import styles from './DashboardCreationSessions.module.css';
 
+/**
+ * A session tile is coloured by the KIND of object it holds, and the board's
+ * minimap colours the same objects the same way — so this is the board's identity
+ * list, not a second one. It is read from the tokens rather than restated: this
+ * copy had already drifted (`website` was the brand blue here and its own hue
+ * there), which is what a duplicated palette does.
+ */
 const KIND_COLOR: Record<string, string> = {
-  workflow: '#7357ed', website: 'var(--coral-bright)', chat: '#e94b9b', dashboard: '#08b59d',
-  project: '#f09a3e', agent: '#8a5cf5', dataset: '#12a6c8', mockup: '#ef6d92',
+  workflow: 'var(--canvas-obj-workflow)', website: 'var(--canvas-obj-website)',
+  chat: 'var(--canvas-obj-chat)', dashboard: 'var(--canvas-obj-dashboard)',
+  project: 'var(--canvas-obj-staff)', agent: 'var(--canvas-obj-agent)',
+  dataset: 'var(--canvas-obj-dataset)', mockup: 'var(--canvas-obj-mockup)',
 };
 
 const CANVAS_STARTERS = [
@@ -210,7 +219,7 @@ export function DashboardCreationSessions() {
   ];
   const renderSessionItems = (items: typeof visible) => items.map((session) => { const target = `/create/${session.id}${session.matchingObjectId ? `?focus=${session.matchingObjectId}` : ''}`; const running = (session.preview?.objects ?? []).filter((object) => ['agent','task','workflow'].includes(object.kind) && ['running','in progress','in_progress','queued','assigned'].includes(String(object.status || '').toLowerCase())).length; return <article key={`session-${session.id}`} onClick={() => router.push(target)} onKeyDown={(event) => { if (event.key === 'Enter') router.push(target); }} tabIndex={0} style={{ display: libraryView === 'list' ? 'grid' : 'block', gridTemplateColumns: libraryView === 'list' ? '108px minmax(0, 1fr)' : undefined, alignItems: 'stretch', color: 'inherit', border: `1px solid ${session.unread ? 'var(--accent)' : 'var(--border-subtle)'}`, borderRadius: libraryView === 'list' ? 'var(--radius-lg)' : 'var(--radius-xl)', overflow: 'hidden', background: 'var(--surface-raised)', boxShadow: '0 4px 16px rgba(20,35,60,.05)', cursor: 'pointer' }}>
       <div style={{ height: libraryView === 'list' ? '100%' : 150, minHeight: libraryView === 'list' ? 82 : undefined, position: 'relative', overflow: 'hidden', borderRight: libraryView === 'list' ? '1px solid var(--border-subtle)' : undefined, background: 'radial-gradient(circle, rgba(116,137,165,.2) 1px, transparent 1px)', backgroundSize: '18px 18px' }}>
-        {(session.preview?.objects ?? []).slice(0, 8).map((object, index) => <span key={object.id} title={object.title} style={{ position: 'absolute', left: `${12 + ((Math.abs(object.x) + index * 31) % 68)}%`, top: `${14 + ((Math.abs(object.y) + index * 23) % 58)}%`, width: 42, height: 26, borderRadius: 'var(--radius-sm)', border: `2px solid ${KIND_COLOR[object.kind] ?? '#8291a8'}`, background: 'var(--surface-raised)', transform: 'translate(-50%, -50%)', boxShadow: '0 3px 9px #26364d22' }} />)}
+        {(session.preview?.objects ?? []).slice(0, 8).map((object, index) => <span key={object.id} title={object.title} style={{ position: 'absolute', left: `${12 + ((Math.abs(object.x) + index * 31) % 68)}%`, top: `${14 + ((Math.abs(object.y) + index * 23) % 58)}%`, width: 42, height: 26, borderRadius: 'var(--radius-sm)', border: `2px solid ${KIND_COLOR[object.kind] ?? 'var(--canvas-obj-unknown)'}`, background: 'var(--surface-raised)', transform: 'translate(-50%, -50%)', boxShadow: '0 3px 9px var(--shadow-color)' }} />)}
         {!session.preview?.objects?.length && <span style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: 'var(--text-muted)', fontSize: 12 }}>Blank canvas</span>}
       </div>
       <div style={{ padding: libraryView === 'list' ? '11px 14px' : 14 }}><strong style={{ display: 'block', overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{session.pinned ? '★ ' : ''}{session.title}{session.unread ? ' · New' : ''}</strong>

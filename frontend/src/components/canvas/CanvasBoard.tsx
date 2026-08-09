@@ -218,7 +218,7 @@ function BlockView({
     borderRadius: 'var(--radius-lg)',
     border: selected ? '2px solid var(--accent)' : '1px solid var(--border)',
     background: block.type === 'sticky' ? (block as { color: string }).color : 'var(--surface)',
-    color: block.type === 'sticky' ? '#1a1a1a' : 'inherit',
+    color: block.type === 'sticky' ? 'var(--ink-on-light)' : 'inherit',
     boxShadow: selected ? '0 6px 24px rgba(0,0,0,0.35)' : '0 1px 4px rgba(0,0,0,0.2)',
     display: 'flex',
     flexDirection: 'column',
@@ -244,7 +244,7 @@ function BlockView({
       >
         <span style={{ opacity: 0.8 }}>{t(`type_${block.type}`)}</span>
         {!readOnly && (
-          <button type="button" onClick={onRemove} title={t('remove')} style={{ ...iconBtn, color: block.type === 'sticky' ? '#1a1a1a' : 'inherit' }}>
+          <button type="button" onClick={onRemove} title={t('remove')} style={{ ...iconBtn, color: block.type === 'sticky' ? 'var(--ink-on-light)' : 'inherit' }}>
             ×
           </button>
         )}
@@ -316,7 +316,7 @@ function BlockBody({
                   type="button"
                   onClick={() => onUpdate({ color: c })}
                   title={t('color')}
-                  style={{ width: 14, height: 14, borderRadius: '50%', background: c, border: block.color === c ? '2px solid #1a1a1a' : '1px solid rgba(0,0,0,0.3)', cursor: 'pointer' }}
+                  style={{ width: 14, height: 14, borderRadius: '50%', background: c, border: block.color === c ? '2px solid var(--ink-on-light)' : '1px solid rgba(0,0,0,0.3)', cursor: 'pointer' }}
                 />
               ))}
             </div>

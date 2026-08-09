@@ -70,28 +70,12 @@ export function EvermindStudioCenter({ projectId }: { projectId: number }) {
   );
 }
 
-/* Region hues live here so the map AND the learnings swatches (a sibling of the map,
-   not inside `.ev-brainmap`) both resolve them. Validated categorical slots; dark is
-   the app default, the light override supplies the light-surface steps. */
+/* Region hues come from globals.css — one declaration for both themes, so the map
+   and the learnings swatches (a SIBLING of the map, not inside `.ev-brainmap`)
+   resolve the same identity without either surface restating the list. */
 const EV_STUDIO_CSS = `
 .ev-studio {
   display: flex; gap: 16px; height: 100%; min-height: 0;
-  --ev-neocortex: #3987e5;
-  --ev-hippocampus: #199e70;
-  --ev-amygdala: #e66767;
-  --ev-hypothalamus: #d95926;
-  --ev-thalamus: #c98500;
-  --ev-basal: #d55181;
-  --ev-personality: var(--violet-bright);
-}
-:root[data-theme='light'] .ev-studio {
-  --ev-neocortex: #2a78d6;
-  --ev-hippocampus: #1baf7a;
-  --ev-amygdala: #e34948;
-  --ev-hypothalamus: #eb6834;
-  --ev-thalamus: #eda100;
-  --ev-basal: #e87ba4;
-  --ev-personality: #4a3aa7;
 }
 .ev-studio-map { flex: 1.7 1 460px; min-width: 0; min-height: 0; display: flex; }
 .ev-studio-learn { flex: 1 1 300px; min-width: 0; min-height: 0; display: flex; }

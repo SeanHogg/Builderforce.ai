@@ -96,7 +96,7 @@ function BurnChart({ series, projection, targetDate }: { series: BurnPoint[]; pr
       <line x1={todayX} y1={PAD} x2={todayX} y2={H - PAD} stroke="var(--text-muted)" strokeWidth={1} opacity={0.5} />
       <text x={todayX} y={H - 18} fontSize={9} fill="var(--text-muted)" textAnchor="middle">{t('deliv.legendToday')}</text>
 
-      <path d={areaCompleted} fill="#2563eb22" stroke="none" />
+      <path d={areaCompleted} fill="color-mix(in srgb, var(--info) 13%, transparent)" stroke="none" />
       <path d={path(series, (p) => p.scope)} fill="none" stroke="var(--text-muted)" strokeWidth={1.5} strokeDasharray="4 3" />
       <path d={path(series, (p) => p.completed)} fill="none" stroke="var(--info)" strokeWidth={2} />
       {/* forward projection of completed → scope at current pace */}

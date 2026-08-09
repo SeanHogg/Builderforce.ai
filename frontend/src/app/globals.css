@@ -220,6 +220,40 @@
      cannot be told apart from the rung below it is not carrying information. */
   --error-strong: #fb7185;
 
+  /* Evermind's brain-region hues. One identity per region, used by the brain map,
+     the Studio's learning swatches, the run chip and the Canvas object — four
+     surfaces that had THREE copies of this list between them (two inline <style>
+     blocks and a Canvas module rule), of which only one carried a light override.
+     A region's colour is an identity, so it is declared once, here, like every
+     other categorical family. */
+  --ev-neocortex: #3987e5;
+  --ev-hippocampus: #199e70;
+  --ev-amygdala: #e66767;
+  --ev-hypothalamus: #d95926;
+  --ev-thalamus: #c98500;
+  --ev-basal: #d55181;
+  --ev-personality: var(--violet-bright);
+  --ev-core: var(--coral-bright);
+
+  /* Canvas OBJECT identities. They live here rather than with the board's own
+     surfaces because two surfaces read them — the board's minimap and the
+     dashboard's session tiles — and the dashboard is not inside the board, so a
+     `.canvasShell`-scoped declaration would resolve to nothing there. That is
+     exactly how the dashboard came to carry its own drifting copy of the list. */
+  --canvas-obj-workflow: #7357ed;
+  --canvas-obj-website: #3978f6;
+  --canvas-obj-dashboard: #08b59d;
+  --canvas-obj-agent: #8a5cf5;
+  --canvas-obj-staff: #f09a3e;
+  --canvas-obj-evaluation: #6941d7;
+  --canvas-obj-evermind: #df4fa5;
+  --canvas-obj-comparison: #0d8f82;
+  --canvas-obj-pitch: #e0653f;
+  --canvas-obj-chat: #e94b9b;
+  --canvas-obj-dataset: #12a6c8;
+  --canvas-obj-mockup: #ef6d92;
+  --canvas-obj-unknown: #6f8099;
+
   /* Ambient shadow colour, for the shadows composed at a call site (drawer, palette)
      rather than taken whole from --shadow-*. Flips warm on light like the scale. */
   --shadow-color: rgba(0, 0, 0, 0.5);
@@ -395,6 +429,20 @@ html[data-theme='light'] {
   --yellow-bright: #a16207;
   --orange-bright: #c2410c;
   --error-strong: #7f1d1d;
+
+  /* Brain regions on paper. Every region also carries a text label, which is what
+     relieves the two steps that land under 3:1 on white. */
+  --ev-neocortex: #2a78d6;
+  --ev-hippocampus: #1baf7a;
+  --ev-amygdala: #e34948;
+  --ev-hypothalamus: #eb6834;
+  --ev-thalamus: #eda100;
+  --ev-basal: #e87ba4;
+  --ev-personality: #4a3aa7;
+
+  /* Object identities on paper: the two neutrals lift/deepen, the saturated
+     identities carry unchanged so an object is the same colour on either board. */
+  --canvas-obj-unknown: #9aa8bd;
 
   --shadow-color: rgba(60, 48, 36, 0.16);
   --text-on-accent: #fff;

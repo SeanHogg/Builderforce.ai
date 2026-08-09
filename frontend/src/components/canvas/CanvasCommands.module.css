@@ -9,12 +9,12 @@
 .railToggle[aria-pressed='true'] {
   /* Deepened rather than the raw accent: the accent token is lighter in dark
      mode, where a white glyph on it falls under the 3:1 contrast floor. */
-  background: color-mix(in srgb, var(--accent) 88%, #000) !important;
+  background: color-mix(in srgb, var(--accent) 88%, black) !important;
   color: var(--text-on-accent) !important;
 }
 
 .railToggle[aria-pressed='true']:hover {
-  background: color-mix(in srgb, var(--accent) 74%, #000) !important;
+  background: color-mix(in srgb, var(--accent) 74%, black) !important;
 }
 
 /*

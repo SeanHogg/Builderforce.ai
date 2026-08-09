@@ -98,7 +98,7 @@ export function CanvasGamePanel({ open, onClose, projectId, game, onNotice }: Ca
 
   const published = stateFor.get('pwa')?.playUrl ?? null;
   const qr = useMemo(
-    () => (published ? qrSvg(published, { dark: '#0b0e1a', light: '#ffffff', size: 176 }) : null),
+    () => (published ? qrSvg(published, { size: 176 }) : null),
     [published],
   );
 

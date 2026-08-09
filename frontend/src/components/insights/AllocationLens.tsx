@@ -22,7 +22,7 @@ const ALL_CATEGORIES: AllocationCategory[] = ['innovation', 'ktlo', 'support', '
 const CAP_STATUSES: CapitalizationStatus[] = ['capitalized', 'not_capitalized', 'uncategorized'];
 
 const CATEGORY_TONE: Record<AllocationCategory, string> = {
-  innovation: 'var(--info)', ktlo: 'var(--success)', support: 'var(--warning)', tech_debt: '#9333ea', other: 'var(--text-muted)',
+  innovation: 'var(--info)', ktlo: 'var(--success)', support: 'var(--warning)', tech_debt: 'var(--purple-bright)', other: 'var(--text-muted)',
 };
 /** Capitalization slice tones — reuse the canonical CAPEX/OPEX tokens. */
 const STATUS_TONE: Record<CapitalizationStatus, string> = {

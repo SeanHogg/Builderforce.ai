@@ -32,7 +32,7 @@ function loadNotesOnce(): Promise<ReleaseNote[]> {
  *  color-mix so no literal light-only/dark-only surface color exists here. */
 const CATEGORY_ACCENT: Record<'new' | 'improvement' | 'fix', string> = {
   new: 'var(--indigo-bright)',
-  improvement: '#10b981',
+  improvement: 'var(--emerald-bright)',
   fix: 'var(--warning)',
 };
 

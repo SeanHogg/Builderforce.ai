@@ -21,8 +21,16 @@ const cardStyle: React.CSSProperties = {
 
 // GitHub-style intensity palettes. Humans = green, agents = purple, so the
 // activity calendar visibly distinguishes people from agentHosts.
-const GREEN = ['#0e4429', '#006d32', '#26a641', 'var(--emerald-bright)'];
-const PURPLE = ['#3a2063', '#5b2da6', 'var(--purple-bright)', 'var(--violet-bright)'];
+//
+// An intensity ramp is ONE hue at four strengths, so it is built by mixing that
+// hue's token toward the surface it sits on rather than by sampling four
+// literals — the two darkest of which were chosen against a near-black board and
+// disappeared entirely on paper.
+const ramp = (hue: string) => [22, 45, 72, 100].map(
+  (pct) => `color-mix(in srgb, ${hue} ${pct}%, var(--bg-surface))`,
+);
+const GREEN = ramp('var(--emerald-bright)');
+const PURPLE = ramp('var(--violet-bright)');
 const EMPTY = 'var(--border-subtle)';
 
 const CELL = 11;

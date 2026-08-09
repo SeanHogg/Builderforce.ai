@@ -117,7 +117,7 @@ export default function HealthPanel() {
               <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>
                 {t('health.activeEmulationSessions')}
                 {activeSessions.length > 0 && (
-                  <span style={{ marginLeft: 8, background: 'var(--warning)', color: '#000', borderRadius: 'var(--radius-lg)', padding: '1px 8px', fontSize: 12 }}>
+                  <span style={{ marginLeft: 8, background: 'var(--warning)', color: 'var(--ink-on-categorical)', borderRadius: 'var(--radius-lg)', padding: '1px 8px', fontSize: 12 }}>
                     {activeSessions.length}
                   </span>
                 )}

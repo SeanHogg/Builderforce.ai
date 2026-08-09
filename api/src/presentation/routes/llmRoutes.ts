@@ -2171,7 +2171,7 @@ export function createLlmRoutes(): Hono<HonoEnv> {
       const msgsForRecall = body.messages as Array<{ role?: string; content?: unknown }>;
       const latestUser = [...msgsForRecall].reverse().find((m) => m.role === 'user');
       const recallQuery = typeof latestUser?.content === 'string' ? latestUser.content : undefined;
-      const wf = await resolveWorkforceModel(c.env as Env, bodyAny.model, recallQuery);
+      const wf = await resolveWorkforceModel(c.env as Env, access.tenantId, bodyAny.model, recallQuery);
       bodyAny.model = wf?.baseModel ?? undefined;
       if (wf?.directives) {
         const msgs = body.messages as Array<{ role?: string; content?: unknown }>;

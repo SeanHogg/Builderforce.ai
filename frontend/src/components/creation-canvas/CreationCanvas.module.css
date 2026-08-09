@@ -79,20 +79,14 @@
 
      Declared once, on the light selector, so they carry into dark as well: a
      saturated identity hue reads on the paper board and on the slate one, and
-     the four that do NOT are overridden in the dark block near the end. What
+     the three that do NOT are overridden in the dark block near the end. What
      must never happen is a board hue inheriting the SHELL's tokens — that is
-     the flattening this file's header warns about. */
-  --canvas-obj-workflow: #7357ed;
-  --canvas-obj-website: #3978f6;
-  --canvas-obj-dashboard: #08b59d;
-  --canvas-obj-agent: #8a5cf5;
-  --canvas-obj-staff: #f09a3e;
-  --canvas-obj-evaluation: #6941d7;
-  --canvas-obj-evermind: #df4fa5;
-  --canvas-obj-comparison: #0d8f82;
-  --canvas-obj-pitch: #e0653f;
-  --canvas-obj-unknown: #9aa8bd;
+     the flattening this file's header warns about.
 
+     The OBJECT identities (`--canvas-obj-*`) are the exception and live in
+     globals.css: the dashboard's session tiles colour the same objects and are
+     not inside `.canvasShell`, so a board-scoped declaration would leave them
+     unresolved — which is how the dashboard came to keep a drifting copy. */
   /* Series colours for a chart drawn ON an object card. Eight, because that is
      where the funnel/status charts top out before they start repeating. */
   --canvas-series-1: #3978f6;
@@ -746,14 +740,14 @@
 .evermindMapHeading { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
 .evermindMapHeading b { color:#39273c; font-size:9px; }.evermindMapHeading > span { color:#8b778d; font-size:7px; font-weight:700; text-transform:uppercase; }
 .evermindMapHeading .evermindLearning { color:#13865f; }.evermindMapHeading .evermindFrozen { color:#8b778d; }
-.evermindBrain { display:block; width:100%; height:126px; overflow:visible; border-radius:var(--radius-md); background:var(--canvas-panel-muted); --ev-neocortex:#3987e5; --ev-hippocampus:#199e70; --ev-amygdala:#e66767; --ev-hypothalamus:#d95926; --ev-thalamus:#c98500; --ev-basal:#d55181; --ev-personality:#9085e9; --ev-core:#ff6b5e; }
+.evermindBrain { display:block; width:100%; height:126px; overflow:visible; border-radius:var(--radius-md); background:var(--canvas-panel-muted); }
 .evermindMapEdges line { stroke:var(--canvas-line); stroke-width:1; stroke-opacity:.33; }.evermindMapEdges line:nth-child(-n+2) { stroke-width:1.6; }.evermindSetpointEdge { stroke:var(--ev-personality)!important; stroke-dasharray:2 4; stroke-opacity:.25!important; }
 .evermindRegion > circle:first-child { fill:currentColor; opacity:.1; }.evermindRegion > circle:nth-child(2) { fill:currentColor; fill-opacity:.2; stroke:currentColor; stroke-width:1.5; }.evermindRegion > text { fill:var(--canvas-ink); font-size:6px; font-weight:800; }.regionNeocortex { color:var(--ev-neocortex); }.regionHippocampus { color:var(--ev-hippocampus); }.regionPersonality { color:var(--ev-personality); }.regionAmygdala { color:var(--ev-amygdala); }.regionHypothalamus { color:var(--ev-hypothalamus); }.regionThalamus { color:var(--ev-thalamus); }.regionBasal { color:var(--ev-basal); }.regionAmygdala > text,.regionHypothalamus > text,.regionThalamus > text,.regionBasal > text { font-size:4.8px; }
 .evermindRegionCount circle { fill:currentColor; }.evermindRegionCount text { fill:#fff; font-size:5px; font-weight:800; }
-.evermindCore circle:first-child { fill:var(--ev-core); opacity:.12; }.evermindCore circle:nth-child(2) { fill:var(--ev-core); opacity:.9; }.evermindCore text { fill:#fff; font-size:6px; font-weight:800; }.evermindCore text:nth-of-type(1) { font-size:11px; }
+.evermindCore circle:first-child { fill:var(--ev-core); opacity:.12; }.evermindCore circle:nth-child(2) { fill:var(--ev-core); opacity:.9; }.evermindCore text { fill:var(--text-on-accent); font-size:6px; font-weight:800; }.evermindCore text:nth-of-type(1) { font-size:11px; }
 .evermindKnowledgeNode { fill:var(--ev-neocortex); stroke:var(--canvas-panel); stroke-width:1; }.evermindMemoryNode { fill:var(--ev-hippocampus); fill-opacity:.6; stroke:var(--ev-hippocampus); stroke-width:1; }
 .evermindTeacherFlow rect { fill:color-mix(in srgb,var(--ev-hippocampus) 13%,var(--canvas-panel)); stroke:var(--ev-hippocampus); stroke-width:.7; }.evermindTeacherFlow text { fill:var(--ev-hippocampus); font-size:4.7px; font-weight:700; }.evermindTeacherFlow path { fill:none; stroke:var(--ev-hippocampus); stroke-width:1; stroke-dasharray:2 2; }.evermindDormantLabel { fill:var(--canvas-muted); font-size:5px; }
-.evermindLegend { display:flex; flex-wrap:wrap; gap:8px; margin-top:5px; color:#867489; font-size:5.7px; }.evermindLegend span { display:flex; align-items:center; gap:4px; }.evermindLegend i,.evermindRecent article > i { width:6px; height:6px; flex:none; border-radius:50%; background:var(--ev-hippocampus,#199e70); }.evermindLegend i[data-kind="delta"],.evermindRecent article > i[data-kind="delta"] { background:var(--ev-neocortex,#3987e5); }.evermindLegend i[data-kind="affect"] { background:var(--ev-amygdala,#e66767); }
+.evermindLegend { display:flex; flex-wrap:wrap; gap:8px; margin-top:5px; color:var(--canvas-muted); font-size:5.7px; }.evermindLegend span { display:flex; align-items:center; gap:4px; }.evermindLegend i,.evermindRecent article > i { width:6px; height:6px; flex:none; border-radius:50%; background:var(--ev-hippocampus); }.evermindLegend i[data-kind="delta"],.evermindRecent article > i[data-kind="delta"] { background:var(--ev-neocortex); }.evermindLegend i[data-kind="affect"] { background:var(--ev-amygdala); }
 .evermindRecent { display:grid; align-content:start; gap:5px; }.evermindRecent .evermindMapHeading { margin-bottom:1px; }
 .evermindRecent article { display:grid; grid-template-columns:7px minmax(0,1fr) auto; gap:6px; align-items:start; padding:6px; border:1px solid #eee3ee; border-radius:var(--radius-sm); background:#fff; }.evermindRecent article > i { margin-top:3px; }.evermindRecent article div { min-width:0; }.evermindRecent article b { display:block; overflow:hidden; color:#453347; font-size:7px; text-overflow:ellipsis; white-space:nowrap; }.evermindRecent article p { display:-webkit-box; overflow:hidden; margin:2px 0 0; color:#806f82; font-size:6px; line-height:1.35; -webkit-box-orient:vertical; -webkit-line-clamp:2; }.evermindRecent article small { display:grid; justify-items:end; gap:2px; color:#9a879b; font-size:5px; white-space:nowrap; }.evermindRecent article small strong { color:#199e70; font-size:5px; }.evermindRecent article[data-learning-state="fault"] { border-color:#d99a27; }.evermindRecent article[data-learning-state="fault"] small strong { color:#d99a27; }
 .evermindEmpty { display:grid; place-items:center; align-content:center; min-height:112px; padding:8px; color:#8c768c; text-align:center; }.evermindEmpty > span { color:#c654a0; font-size:17px; }.evermindEmpty b { margin-top:3px; color:#5c435a; font-size:8px; }.evermindEmpty p { max-width:150px; margin:4px 0 0; font-size:6px; line-height:1.45; }
@@ -1471,10 +1465,9 @@
   --canvas-brain-accent:#a991ff;
   --creation-dot:rgba(116,145,184,.24);
   --creation-minimap-mask:rgba(7,14,25,.76);
-  /* The four board hues that do NOT survive the move to slate: a frame's pale
-     tint and its border become a dark tint, and the two neutrals lift so an
-     unknown object and an edge stay visible against #09111f. */
-  --canvas-obj-unknown:#6f8099;
+  /* The three board hues that do NOT survive the move to slate: a frame's pale
+     tint and its border become a dark tint, and the edge lifts so it stays
+     visible against the board's near-black. */
   --canvas-frame-fill:#1b1a33;
   --canvas-frame-border:#6f5fc0;
   --canvas-edge:#5a6b83;

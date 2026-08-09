@@ -7,9 +7,14 @@ import { useMemo, type MouseEvent } from 'react';
  * Used to give each team member/agent a consistent avatar background.
  */
 export function avatarColor(name: string): string {
+  // Ten distinct categorical identities, all tokens: an avatar drawn from a
+  // fixed literal is the same hue on paper as on slate, so half the wheel used
+  // to wash out in light mode. The ORDER is the contract — a name must keep its
+  // colour — so entries are replaced in place, never reordered.
   const colors = [
-    '#f4726e', '#fb923c', 'var(--amber-bright)', '#a3e635', 'var(--emerald-bright)',
-    '#22d3ee', 'var(--info)', '#818cf8', 'var(--violet-bright)', '#e879f9',
+    'var(--red-bright)', 'var(--orange-bright)', 'var(--amber-bright)', 'var(--yellow-bright)',
+    'var(--emerald-bright)', 'var(--teal-bright)', 'var(--cyan-bright)', 'var(--indigo-bright)',
+    'var(--violet-bright)', 'var(--pink-bright)',
   ];
   let hash = 0;
   for (let i = 0; i < name.length; i++) {

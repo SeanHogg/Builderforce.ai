@@ -506,7 +506,7 @@ export default function QuickStart() {
         }
         .cc-cmd-text {
           flex: 1;
-          color: #e0e6f5;
+          color: var(--text-primary);
           word-break: break-all;
         }
         .cc-copy-btn {

@@ -52,6 +52,7 @@ import { executionTokenGate } from './executionTokenGate';
 import { authorizeManagedTaskExecution } from '../../application/kanban/managedExecutionGuard';
 import { getTicketCoordination } from '../../application/coordination/coordinationCapability';
 import { executeGitProxy } from '../../application/repos/gitProxy';
+import { authorizeExecutionPrincipal } from '../../application/agentIdentity/agentRunIdentity';
 
 /**
  * Runtime routes – task execution lifecycle.
@@ -1070,6 +1071,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     if (!ok) return c.json({ error: 'invalid run token' }, 403);
     const ctx = await loadContainerRunContext(c.env as Env, db, body.executionId);
     if (!ctx) return c.json({ error: 'execution not found' }, 404);
+    if (!(await authorizeExecutionPrincipal(db, ctx.tenantId, body.executionId))) return c.json({ error: 'run credential expired or revoked' }, 403);
     const res = await handleContainerOp(c.env as Env, db, runtimeService, ctx, body.executionId, body.op, body.args ?? {});
     return c.json(res.body as Record<string, unknown>, res.status as 200);
   });
@@ -1084,6 +1086,7 @@ export function createRuntimeRoutes(runtimeService: RuntimeService, db: Db): Hon
     if (!Number.isFinite(executionId) || !token || !(await verifyContainerRunToken(c.env.JWT_SECRET, executionId, token))) return c.json({ error: 'invalid run credential' }, 403);
     const run = await loadContainerRunContext(c.env as Env, db, executionId);
     if (!run) return c.json({ error: 'execution not found' }, 404);
+    if (!(await authorizeExecutionPrincipal(db, run.tenantId, executionId))) return c.json({ error: 'run credential expired or revoked' }, 403);
     const resolved = await resolveTicketRepoContext(db, gitSecret(c.env as Env), run.tenantId, run.taskId);
     if (!resolved.ok) return c.json({ error: resolved.reason }, 400);
     const proxied = await executeGitProxy({

@@ -140,7 +140,7 @@ export default async function EvermindPage() {
         .ev-cta-title { font-family: var(--font-display); font-weight: 700; font-size: clamp(1.5rem, 3.4vw, 2.1rem); color: var(--text-primary); margin: 0 0 12px; }
         .ev-cta-desc { font-size: 0.97rem; color: var(--text-secondary); max-width: 480px; margin: 0 auto 28px; line-height: 1.65; }
 
-        .ev-figure { width: 100%; height: auto; display: block; border-radius: var(--radius-xl); border: 1px solid var(--border-subtle); margin: 18px 0 6px; background: #0e1525; }
+        .ev-figure { width: 100%; height: auto; display: block; border-radius: var(--radius-xl); border: 1px solid var(--border-subtle); margin: 18px 0 6px; background: var(--bg-deep); }
         .ev-figcap { font-size: 0.8rem; color: var(--text-muted); margin: 0 0 4px; text-align: center; }
         .ev-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 14px; counter-reset: ev-step; }
         @media (max-width: 760px) { .ev-steps { grid-template-columns: 1fr 1fr; } }

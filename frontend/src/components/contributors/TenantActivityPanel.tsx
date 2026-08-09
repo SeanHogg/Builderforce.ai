@@ -73,7 +73,7 @@ export function TenantActivityPanel() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 12 }}>
             <Stat label={t('tenant.events', { days: data.windowDays })} value={data.totalEvents.toLocaleString()} />
             <Stat label={t('tenant.activeContributors')} value={data.activeContributors.toLocaleString()} />
-            <Stat label={t('tenant.linesAdded')} value={data.totals.linesAdded.toLocaleString()} accent="#30a46c" />
+            <Stat label={t('tenant.linesAdded')} value={data.totals.linesAdded.toLocaleString()} accent="var(--success)" />
             <Stat label={t('tenant.linesRemoved')} value={data.totals.linesRemoved.toLocaleString()} accent="var(--error)" />
           </div>
 

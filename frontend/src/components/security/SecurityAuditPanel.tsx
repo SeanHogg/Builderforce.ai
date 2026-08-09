@@ -22,7 +22,7 @@ const cardStyle: React.CSSProperties = {
 const sectionTitle: React.CSSProperties = { fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' };
 
 const SEVERITY_COLOR: Record<string, string> = {
-  critical: 'var(--error)', high: '#f4726e', medium: 'var(--warning)', low: 'var(--coral-bright)', info: 'var(--text-muted)',
+  critical: 'var(--error)', high: 'var(--orange-bright)', medium: 'var(--warning)', low: 'var(--coral-bright)', info: 'var(--text-muted)',
 };
 
 function SeverityChip({ severity, count }: { severity: string; count: number }) {

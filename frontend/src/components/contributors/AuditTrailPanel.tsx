@@ -26,7 +26,7 @@ const ACTOR_STYLE: Record<ActivityActorType, { color: string; glyph: string }> =
   hire:       { color: 'var(--amber-bright)', glyph: '🤝' },
   cloud_agent:{ color: 'var(--violet-bright)', glyph: '🤖' },
   host_agent: { color: 'var(--purple-bright)', glyph: '🖥️' },
-  system:     { color: '#8b98a5', glyph: '⚙️' },
+  system:     { color: 'var(--text-muted)', glyph: '⚙️' },
 };
 const ACTOR_ORDER: ActivityActorType[] = ['human', 'hire', 'cloud_agent', 'host_agent', 'system'];
 
@@ -38,8 +38,8 @@ const VERB_COLOR: Record<string, string> = {
   'task.assigned': 'var(--purple-bright)',
   'task.moved': 'var(--indigo-bright)',
   'task.deleted': 'var(--error)',
-  'code.changed': '#26a641',
-  'deploy.recorded': '#30a46c',
+  'code.changed': 'var(--success)',
+  'deploy.recorded': 'var(--teal-bright)',
   'deploy.failed': 'var(--error)',
   'role.assigned': 'var(--purple-bright)',
   'engagement.created': 'var(--amber-bright)',

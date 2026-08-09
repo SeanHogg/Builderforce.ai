@@ -121,7 +121,7 @@ export async function runAgentTurn(
   prompt?: string,
 ): Promise<{ text: string; atMs: number }> {
   const segments = await loadTranscript(db, meeting.id, AGENT_CONTEXT_LINES);
-  const resolved = await resolveWorkforceModel(env, WORKFORCE_MODEL_REF_PREFIX + agent.ref, prompt ?? '').catch(() => null);
+  const resolved = await resolveWorkforceModel(env, meeting.tenantId, WORKFORCE_MODEL_REF_PREFIX + agent.ref, prompt ?? '').catch(() => null);
   const persona = resolved?.directives?.trim() || `You are ${agent.name}, an AI teammate on this team.`;
   const system = `${persona}
 

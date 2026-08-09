@@ -114,8 +114,8 @@ function CodeBlock({ code, label }: { code: string; label: string }) {
       </button>
       <pre style={{
         margin: 0, padding: '16px 18px', borderRadius: 'var(--radius-lg)', overflowX: 'auto',
-        background: '#0e1525', border: '1px solid var(--border-subtle)',
-        fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 13, lineHeight: 1.6, color: '#dce6f7',
+        background: 'var(--bg-deep)', border: '1px solid var(--border-subtle)',
+        fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 13, lineHeight: 1.6, color: 'var(--text-primary)',
       }}>
         <code aria-label={label}>{code}</code>
       </pre>
