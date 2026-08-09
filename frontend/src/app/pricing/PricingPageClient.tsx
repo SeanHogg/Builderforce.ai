@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useLocale, useTranslations } from 'next-intl';
 import { useConfirm } from '@/components/ConfirmProvider';
 import { useSearchParams } from 'next/navigation';
@@ -16,6 +17,8 @@ import { pricingSchema } from '@/lib/structured-data';
 import { getRetainedDiscountCode, retainDiscountCode } from '@/lib/discountCode';
 import styles from './pricing.module.css';
 import { fetchPublicPricing, type PublicPricingContract, type PublicPricingPlan } from '@/lib/publicPricing';
+import { NAV_GROUPS } from '@/lib/navGroups';
+import { isNavigationFeatureId } from '@/lib/navigationFeatures';
 
 type Plan = 'free' | 'pro' | 'teams';
 
@@ -91,10 +94,18 @@ export default function PricingPageClient() {
   const t = useTranslations('pricing');
   const locale = useLocale();
   const tierT = useTranslations('planBadge.tier');
+  const navT = useTranslations('nav');
   const confirm = useConfirm();
   const { tenant } = useAuth();
   const searchParams = useSearchParams();
   const tenantId = tenant?.id != null ? Number(tenant.id) : null;
+  const selectedModuleIds = Array.from(new Set(
+    (searchParams?.get('features') ?? '').split(',').filter(isNavigationFeatureId),
+  ));
+  const selectedModuleLabels = selectedModuleIds.map((id) => {
+    const group = NAV_GROUPS.find((candidate) => candidate.id === id);
+    return group ? navT(group.labelKey) : id;
+  });
 
   const [sub, setSub] = useState<Subscription | null>(null);
   const [publicPricing, setPublicPricing] = useState<PublicPricingContract | null>(null);
@@ -294,6 +305,20 @@ export default function PricingPageClient() {
         <div className={styles.content}>
           {!isAnon && (
           <>
+          {selectedModuleLabels.length > 0 && (
+            <div className={styles.accountCard}>
+              <div className={styles.accountCardBody}>
+                <div className={styles.accountCardTitle}>{t('enabledModulesTitle', { count: selectedModuleLabels.length })}</div>
+                <p style={{ margin: '6px 0 0', fontSize: 13, color: 'var(--text-muted)' }}>{t('enabledModulesDescription')}</p>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
+                  {selectedModuleLabels.map((label) => (
+                    <span key={label} style={{ padding: '4px 8px', borderRadius: 'var(--radius-full)', background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)', fontSize: 11 }}>{label}</span>
+                  ))}
+                </div>
+              </div>
+              <Link href="/settings?sub=features" className={styles.secondaryButton}>{t('manageEnabledModules')}</Link>
+            </div>
+          )}
           {/* Current plan */}
           <div className={styles.accountCard}>
             <div className={styles.accountCardBody}>

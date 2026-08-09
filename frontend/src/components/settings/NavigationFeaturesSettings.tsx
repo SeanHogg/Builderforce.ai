@@ -2,11 +2,14 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import Link from 'next/link';
 import { NAV_GROUPS } from '@/lib/navGroups';
 import { NAVIGATION_FEATURE_IDS, type NavigationFeatureId } from '@/lib/navigationFeatures';
 import { useNavigationFeatures } from '@/lib/NavigationFeaturesContext';
 import { Button } from '@/components/ui';
 import { NavIcon } from '@/components/navigation/NavIcon';
+import { useConsumption } from '@/lib/useConsumption';
+import { ConsumptionMeterCard } from '@/components/UsageMeter';
 
 const RECOMMENDED: readonly NavigationFeatureId[] = [
   'seat', 'projects', 'workforce', 'insights', 'knowledge',
@@ -15,7 +18,9 @@ const RECOMMENDED: readonly NavigationFeatureId[] = [
 export default function NavigationFeaturesSettings() {
   const t = useTranslations('settings.navigationFeatures');
   const tn = useTranslations('nav');
+  const tp = useTranslations('planBadge.tier');
   const { enabledIds, loading, save } = useNavigationFeatures();
+  const consumption = useConsumption();
   const [selected, setSelected] = useState<NavigationFeatureId[]>(enabledIds);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState('');
@@ -90,6 +95,30 @@ export default function NavigationFeaturesSettings() {
         })}
       </div>
       {notice && <p role="status" style={{ margin: '14px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>{notice}</p>}
+
+      {consumption && (
+        <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--border-subtle)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', marginBottom: 14 }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: 14, color: 'var(--text-primary)' }}>{t('usageTitle')}</h3>
+              <p style={{ margin: '5px 0 0', fontSize: 12, color: 'var(--text-muted)' }}>
+                {t('usageDescription', { plan: tp(consumption.plan.effective) })}
+              </p>
+            </div>
+            <Link
+              href={`/pricing?features=${selected.join(',')}`}
+              style={{ fontSize: 12, fontWeight: 700, color: 'var(--coral-bright)', textDecoration: 'none' }}
+            >
+              {t('comparePlans')} →
+            </Link>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 10 }}>
+            {consumption.meters.map((meter) => (
+              <ConsumptionMeterCard key={meter.key} meter={meter} isFree={consumption.plan.effective === 'free'} />
+            ))}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

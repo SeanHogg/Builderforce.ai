@@ -465,6 +465,7 @@
       "sales": "Vertriebs-Hub",
       "challenges": "Challenges",
       "growth": "Wachstum",
+      "embedded": "Eingebettet",
       "seat": "Team"
     },
     "tab": {
@@ -1426,6 +1427,9 @@
       "save": "Speichern",
       "saved": "Navigationsfunktionen gespeichert.",
       "saveFailed": "Navigationsfunktionen konnten nicht gespeichert werden.",
+      "usageTitle": "Nutzung und Preise",
+      "usageDescription": "Monatliche Nutzung der obigen Funktionen. Ihr aktueller Tarif ist {plan}; seine Kontingente gelten gemeinsam für aktivierte Module.",
+      "comparePlans": "Tarife vergleichen",
       "descriptions": {
         "seat": "Rollenübersicht durchsuchen und operative Sitze öffnen.",
         "challenges": "Ein Briefing oder eine geschäftliche Herausforderung in ein funktionierendes System verwandeln.",
@@ -6270,6 +6274,9 @@
     }
   },
   "pricing": {
+    "enabledModulesTitle": "Ihre aktivierten Module ({count})",
+    "enabledModulesDescription": "Tarifpreise und gemeinsame Nutzungskontingente gelten für diese Funktionsauswahl.",
+    "manageEnabledModules": "Funktionen verwalten",
     "seo": {
       "title": "Preise — Free-, Pro- & Teams-Tarife",
       "description": "Vergleichen Sie die Free-, Pro- und Teams-Tarife von Builderforce.ai für WebGPU-LoRA-Training, Datensatzgenerierung, KI-Evaluierung und Workforce Registry.",
@@ -12827,6 +12834,63 @@
     "selectForTimeline": "Wähle oben einen oder mehrere Agenten aus, um die Ausführungs-Zeitleiste zu sehen.",
     "errLoadAgents": "Agenten konnten nicht geladen werden",
     "errLoadDiagnostics": "Diagnose konnte nicht geladen werden"
+  },
+  "embedded": {
+    "eyebrow": "From idea to real",
+    "title": "Embedded capabilities",
+    "subtitle": "Put the experiences you create in BuilderForce directly inside your product, website, or customer portal with one script and independently governed capabilities.",
+    "activeCapabilities": "capabilities active",
+    "tabsLabel": "Embedded capability sections",
+    "tabs": { "features": "Features", "install": "Install", "consent": "Consent log", "surfaces": "BuilderForce surfaces" },
+    "categories": { "all": "All", "engage": "Engage", "measure": "Measure", "govern": "Govern", "operate": "Operate" },
+    "search": "Search embedded capabilities…",
+    "examples": "{count, plural, one {# example} other {# examples}}",
+    "toggleLabel": "Toggle {feature}",
+    "loadError": "Could not load embedded capability settings.",
+    "saveError": "Could not save the embedded capability.",
+    "copySnippet": "Copy install snippet",
+    "copied": "Copied",
+    "cancel": "Cancel",
+    "openCanvas": "Im Canvas erstellen",
+    "surfaces": {
+      "title": "BuilderForce app surfaces",
+      "description": "Surface Product, Agile, and Security areas as authenticated, sandboxed experiences inside another application.",
+      "loading": "Loading…",
+      "enable": "Enable embedded app surfaces",
+      "capabilities": "Capabilities",
+      "capability": { "product": "Product", "agile": "Agile", "security": "Security" },
+      "saving": "Saving…",
+      "reviewEnable": "Review and enable…",
+      "save": "Save",
+      "saved": "Saved",
+      "loadError": "Could not load app-surface settings.",
+      "saveError": "Could not save app-surface settings."
+    },
+    "install": { "title": "One script, every capability", "description": "Install this once on the customer site. Feature changes apply on the next page load without redeploying the host." },
+    "consent": {
+      "title": "Consent log",
+      "description": "An immutable workspace history of every capability opt-in and opt-out.",
+      "empty": "No consent events have been recorded yet.",
+      "enableTitle": "Enable {feature}?",
+      "auditNotice": "Your account, timestamp, and consent text version {version} are recorded for audit. You can revoke access at any time.",
+      "agree": "I consent, enable feature",
+      "actions": { "OPT_IN": "Enabled", "OPT_OUT": "Disabled" }
+    },
+    "features": {
+      "usage_tracking": { "name": "Usage tracking", "description": "Track page views, custom events, identities, and feature engagement from customer sites.", "consent": "Sends page views, events, and identified-user traits to BuilderForce for product analytics and adoption signals." },
+      "support_widget": { "name": "Support widget", "description": "Embed an AI help experience that answers from your knowledge and escalates to people.", "consent": "Sends visitor questions, matched knowledge references, and the originating page to BuilderForce support." },
+      "feedback_widget": { "name": "Feedback widget", "description": "Capture ideas, bugs, feature requests, and contextual customer feedback.", "consent": "Sends what the visitor types, optional contact details, and the originating page to BuilderForce." },
+      "heatmaps": { "name": "Heatmaps", "description": "Measure click locations and scroll depth to understand real customer behavior.", "consent": "Captures click coordinates and scroll depth and aggregates them into interaction heatmaps." },
+      "feature_management": { "name": "Feature management", "description": "Evaluate remotely managed flags and variants for identified users.", "consent": "Sends flag keys and the targeting attributes configured by your workspace for evaluation." },
+      "terms_gate": { "name": "Terms gate", "description": "Require acceptance of a versioned agreement before a visitor can continue.", "consent": "Displays a blocking terms experience and records acceptance or decline against the active version." },
+      "sourcing": { "name": "Contact sourcing", "description": "Add governed contact lookup and enrichment to forms and internal tools.", "consent": "Runs customer-triggered contact lookups and charges them to this workspace's enrichment allowance." },
+      "lead_forms": { "name": "Lead forms", "description": "Publish lead-capture forms inline, in a drawer, or as a standalone frame.", "consent": "Stores submitted form data in this workspace and attributes it to the originating site." },
+      "push_notifications": { "name": "Push notifications", "description": "Ask for browser permission and deliver targeted web and PWA notifications.", "consent": "Stores browser push subscription details and delivers workspace-authored notification campaigns." },
+      "onboarding": { "name": "Onboarding", "description": "Turn Canvas-authored guided tours into live, target-aware product onboarding.", "consent": "Displays the published onboarding flow and records visitor progress and completion." },
+      "cookie_consent": { "name": "Cookie consent", "description": "Gate optional analytics with a configurable, auditable consent banner.", "consent": "Stores the visitor's consent choice and prevents optional tracking until it is accepted." },
+      "hr_widget": { "name": "HR widget", "description": "Embed personnel cards, leave requests, and document actions in a host portal.", "consent": "Displays authorized HR actions and sends submitted HR requests to this workspace." },
+      "status_page": { "name": "Public status page", "description": "Publish live service health as an inline component or standalone status page.", "consent": "Publishes the workspace's selected monitor status and incident updates to the customer site." }
+    }
   },
   "embedInstall": {
     "heading": "In deiner Host-App installieren",

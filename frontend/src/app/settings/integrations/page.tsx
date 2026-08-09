@@ -7,12 +7,11 @@ import { ViewToggle, type ViewMode } from '@/components/ViewToggle';
 import { ProviderKeysSettings } from '@/components/ProviderKeysSettings';
 import { IntegrationsGallery } from '@/components/integrations/IntegrationsGallery';
 import { ConnectorsGallery } from '@/components/connectors/ConnectorsGallery';
-import { EmbedIntegrationSettings } from '@/components/settings/EmbedIntegrationSettings';
 import { ApiKeysContent } from '@/components/settings/ApiKeysContent';
 import { getStoredTenant } from '@/lib/auth';
 import { Icon } from '@/components/ui/Icon';
 
-type Category = 'all' | 'models' | 'connectors' | 'apps' | 'developer' | 'embed';
+type Category = 'all' | 'models' | 'connectors' | 'apps' | 'developer';
 const CATEGORIES: Array<{ id: Category; icon: string }> = [
   { id: 'all', icon: '' },
   { id: 'models', icon: '🧠' },
@@ -23,7 +22,6 @@ const CATEGORIES: Array<{ id: Category; icon: string }> = [
   { id: 'connectors', icon: '🔗' },
   { id: 'apps', icon: '🔌' },
   { id: 'developer', icon: '🔑' },
-  { id: 'embed', icon: '⌗' },
 ];
 
 const sectionHeading: React.CSSProperties = { fontSize: 15, fontWeight: 700, color: 'var(--text-primary)', margin: '0 0 12px' };
@@ -72,7 +70,6 @@ export default function SettingsIntegrationsPage() {
       {show('connectors') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.connectors')}</h2><ConnectorsGallery search={search} viewMode={viewMode} /></section>}
       {show('apps') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.apps')}</h2><IntegrationsGallery search={search} viewMode={viewMode} /></section>}
       {isOwner && show('developer') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('category.developer')}</h2><ApiKeysContent embedded showProviderKeys={false} search={search} externalViewMode={viewMode} /></section>}
-      {show('embed') && <section style={{ marginBottom: 30 }}><h2 style={sectionHeading}>{t('embedHeading')}</h2><EmbedIntegrationSettings /></section>}
     </PageContainer>
   );
 }

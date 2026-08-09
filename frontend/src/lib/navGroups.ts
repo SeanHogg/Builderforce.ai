@@ -168,6 +168,12 @@ export const NAV_GROUPS: NavGroup[] = [
     match: ['/growth'],
   },
   {
+    // The bridge from a Canvas idea to a live customer-facing experience:
+    // one install rail, independently consented capabilities, and host surfaces.
+    id: 'embedded', labelKey: 'group.embedded', icon: '⌗', href: '/embedded',
+    match: ['/embedded', '/embed'],
+  },
+  {
     id: 'quality', labelKey: 'group.quality', icon: '🐞', href: '/quality',
     match: ['/quality'],
     tabKind: 'query', basePath: '/quality',

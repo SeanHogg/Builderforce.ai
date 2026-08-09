@@ -11,7 +11,6 @@ import { signInHref } from '@/lib/auth';
 import { ButtonLink } from '@/components/ui';
 import SidebarLegalMenu from './legal/SidebarLegalMenu';
 import SessionList from './SessionList';
-import UsageMeter from './UsageMeter';
 import { NavIcon } from './navigation/NavIcon';
 import { isStageRoute } from '@/lib/workbenchPolicy';
 import { BURNRATE_PRODUCT_DOMAINS } from '@/lib/burnrateCatalog';
@@ -207,7 +206,6 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
                 {ts('signInToKeep')}
               </ButtonLink>
             )}
-            <UsageMeter />
             <SidebarLegalMenu collapsed={collapsed} />
           </div>
         )}

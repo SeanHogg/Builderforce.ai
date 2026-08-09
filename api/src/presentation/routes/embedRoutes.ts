@@ -263,7 +263,10 @@ export function createEmbedRoutes(db: Db): Hono<HonoEnv> {
       }
     }
 
-    settings.embed = { enabled, capabilities, consentVersion, consentedAt, consentedBy };
+    const existingEmbed = settings.embed && typeof settings.embed === 'object'
+      ? settings.embed as Record<string, unknown>
+      : {};
+    settings.embed = { ...existingEmbed, enabled, capabilities, consentVersion, consentedAt, consentedBy };
 
     await db
       .update(tenants)
