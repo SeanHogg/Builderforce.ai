@@ -5,10 +5,6 @@ import { BURNRATE_FOUNDATIONS } from '@/lib/burnrateCatalog';
 
 export const runtime = 'edge';
 
-export function generateStaticParams() {
-  return BURNRATE_FOUNDATIONS.filter((domain) => domain.marketingHref.startsWith('/features/')).map((domain) => ({ burnrateFeature: domain.marketingHref.split('/').at(-1) }));
-}
-
 export default async function ConsolidatedFeatureRoute({ params }: { params: Promise<{ burnrateFeature: string }> }) {
   const { burnrateFeature } = await params;
   const domain = BURNRATE_FOUNDATIONS.find((entry) => entry.marketingHref === `/features/${burnrateFeature}`);
