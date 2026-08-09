@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -84,6 +85,19 @@ function MegaLink({ entry, onNavigate }: { entry: PublicDestination; onNavigate?
  * Idea → Make → Run vocabulary the signed-in rail uses. Somebody who reads the
  * marketing menu and then signs up finds the shape they were shown.
  */
+/**
+ * How many grid tracks a column takes.
+ *
+ * The registry is not balanced and should not be forced to be: Run owns eight
+ * business seats while Idea owns two, because that is the truth about the
+ * product. Rendering that truth as one 8-deep column beside two 2-deep ones
+ * gave a menu with a long ragged leg. A column wider than five rows takes two
+ * tracks and flows its rows down them instead — the shape follows the content
+ * rather than the content being trimmed to fit the shape.
+ */
+const MAX_ROWS_PER_TRACK = 5;
+const tracksFor = (rows: number) => Math.min(2, Math.max(1, Math.ceil(rows / MAX_ROWS_PER_TRACK)));
+
 function MegaMenu({
   columns,
   footNoteKey,
@@ -95,17 +109,29 @@ function MegaMenu({
 }) {
   const t = useTranslations();
   const tm = useTranslations('marketingNav');
+  const grouped = columns.map((column) => ({ column, rows: columnOf(column) }));
+  const tracks = grouped.reduce((total, { rows }) => total + tracksFor(rows.length), 0);
+
   return (
-    <div className="mh-mega">
-      {columns.map((column) => (
-        <div key={column} className="mh-mega-col">
-          <h4 className="mh-mega-head" style={{ '--stage': `var(--stage-${column})` } as React.CSSProperties}>
+    <div className="mh-mega" style={{ '--mega-tracks': tracks } as React.CSSProperties}>
+      {grouped.map(({ column, rows }) => (
+        <div
+          key={column}
+          className="mh-mega-col"
+          style={{
+            '--stage': `var(--stage-${column})`,
+            '--track-span': tracksFor(rows.length),
+          } as React.CSSProperties}
+        >
+          <h4 className="mh-mega-head">
             <i aria-hidden="true" />
             {tm(`column.${column}`)}
           </h4>
-          {columnOf(column).map((entry) => (
-            <MegaLink key={entry.id} entry={entry} onNavigate={onNavigate} />
-          ))}
+          <div className="mh-mega-rows">
+            {rows.map((entry) => (
+              <MegaLink key={entry.id} entry={entry} onNavigate={onNavigate} />
+            ))}
+          </div>
         </div>
       ))}
       {/* The promise the whole IA rests on, said once where a reader can check
@@ -116,9 +142,81 @@ function MegaMenu({
   );
 }
 
+type MenuId = 'product' | 'learn';
+
+/**
+ * A top-level menu and the panel it opens.
+ *
+ * The menu used to be CSS-only — `:hover` / `:focus-within` on the wrapper, with
+ * the panel offset `6px` below the trigger. Two things were wrong with that, and
+ * both were reported from the running app:
+ *
+ *  1. **The gap ate the pointer.** Six pixels of nothing sat between the trigger
+ *     and the panel, and `:hover` is false in a gap — so moving down towards an
+ *     item closed the menu before the pointer reached it. The panel is flush now
+ *     and its breathing room is padding INSIDE it, which is hoverable.
+ *  2. **Clicking did nothing, and neither did a keyboard or a touchscreen.** A
+ *     hover-only menu has no open state to speak of: the button carried
+ *     `aria-haspopup` and no `aria-expanded`, because there was nothing to
+ *     expand. It is a real disclosure now — click to toggle, Escape to close,
+ *     click-outside to close — and hover still opens it for a pointer, so the
+ *     fast path is unchanged for the people who had one.
+ */
+function MegaTrigger({
+  id, label, open, onToggle, active, children,
+}: {
+  id: MenuId;
+  label: string;
+  open: boolean;
+  onToggle: (id: MenuId) => void;
+  active?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="mh-item has-menu" data-open={open || undefined}>
+      <button
+        type="button"
+        className={`mh-link mh-trigger${active ? ' active' : ''}`}
+        aria-haspopup="true"
+        aria-expanded={open}
+        onClick={() => onToggle(id)}
+      >
+        {label}
+        <svg className="mh-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+      </button>
+      <div className="mh-panel mh-panel-wide">{children}</div>
+    </div>
+  );
+}
+
 export default function MarketingHeader() {
   const pathname = usePathname() || '';
   const { open, openNav, closeNav } = useMobileNav();
+  const [menu, setMenu] = useState<MenuId | null>(null);
+  const navRef = useRef<HTMLElement | null>(null);
+
+  const closeMenu = useCallback(() => setMenu(null), []);
+  const toggleMenu = useCallback((id: MenuId) => setMenu((current) => (current === id ? null : id)), []);
+
+  // A menu that only closes on its own trigger is a menu that follows you around
+  // the page. Escape and a click outside are the two exits every disclosure owes.
+  useEffect(() => {
+    if (!menu) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') closeMenu(); };
+    const onPointer = (event: MouseEvent) => {
+      if (!navRef.current?.contains(event.target as Node)) closeMenu();
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('mousedown', onPointer);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('mousedown', onPointer);
+    };
+  }, [menu, closeMenu]);
+
+  // Following a link inside the panel must leave it shut behind you.
+  useEffect(() => { setMenu(null); }, [pathname]);
+
   const t = useTranslations('marketingNav');
   // Destination titles resolve by FULL path, because a row's copy lives either
   // under `burnrateMarketing.domains.*` (the nine translated domain explainers)
@@ -148,26 +246,20 @@ export default function MarketingHeader() {
         </Link>
 
         {/* Desktop nav */}
-        <nav className="mh-nav" aria-label={t('primaryNav')}>
-          <div className="mh-item has-menu">
-            <button type="button" className={`mh-link mh-trigger${pathname.startsWith('/product') ? ' active' : ''}`} aria-haspopup="true">
-              {t('product')}
-              <svg className="mh-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
-            </button>
-            <div className="mh-panel mh-panel-wide">
-              <MegaMenu columns={PRODUCT_COLUMNS} footNoteKey="marketingNav.megaFoot" />
-            </div>
-          </div>
+        <nav className="mh-nav" aria-label={t('primaryNav')} ref={navRef}>
+          <MegaTrigger
+            id="product"
+            label={t('product')}
+            open={menu === 'product'}
+            onToggle={toggleMenu}
+            active={pathname.startsWith('/product')}
+          >
+            <MegaMenu columns={PRODUCT_COLUMNS} footNoteKey="marketingNav.megaFoot" onNavigate={closeMenu} />
+          </MegaTrigger>
 
-          <div className="mh-item has-menu">
-            <button type="button" className="mh-link mh-trigger" aria-haspopup="true">
-              {t('learn')}
-              <svg className="mh-caret" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
-            </button>
-            <div className="mh-panel mh-panel-wide">
-              <MegaMenu columns={LEARN_COLUMNS} footNoteKey="marketingNav.megaFootLearn" />
-            </div>
-          </div>
+          <MegaTrigger id="learn" label={t('learn')} open={menu === 'learn'} onToggle={toggleMenu}>
+            <MegaMenu columns={LEARN_COLUMNS} footNoteKey="marketingNav.megaFootLearn" onNavigate={closeMenu} />
+          </MegaTrigger>
 
           {PUBLIC_NAV.map((l) => (
             <Link key={l.id} href={l.marketingHref} className={`mh-link${isActive(pathname, l.marketingHref) ? ' active' : ''}`}>

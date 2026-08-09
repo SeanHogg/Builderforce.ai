@@ -963,7 +963,7 @@
    starting points at the far right. The catalog opens upward as an overlay, so
    neither control displaces the composer or changes the canvas geometry. */
 .composerUtilities { display:flex; width:100%; min-width:0; align-items:flex-end; gap:12px; margin-bottom:8px; }
-.promptStarter { z-index:1; min-width:0; flex:1; display:flex; justify-content:flex-end; --prompt-panel-bg:var(--canvas-brain-surface); --prompt-panel-border:var(--canvas-brain-border); }
+.promptStarter { z-index:1; min-width:0; flex:1; display:flex; justify-content:flex-end; transform:translate(-5px,8px); --prompt-panel-bg:var(--canvas-brain-surface); --prompt-panel-border:var(--canvas-brain-border); }
 
 /* The prompt is a page fixture, not part of the Brain surface:centred on the board
    and bottom-aligned, which is where every chat product people already use puts it.

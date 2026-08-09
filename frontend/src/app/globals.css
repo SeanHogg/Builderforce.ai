@@ -3773,10 +3773,15 @@ select.input option {
 /* Dropdown panels */
 .mh-panel {
   position: absolute;
-  top: calc(100% + 6px);
+  /* FLUSH with the trigger. It used to sit at `calc(100% + 6px)`, and those six
+     pixels were not hoverable — moving the pointer down towards an item left the
+     hover area and shut the menu before it could be clicked. The breathing room
+     is `margin` on the inner content now, which is inside the hover target. */
+  top: 100%;
   left: 0;
   min-width: 220px;
-  padding: 8px;
+  padding: var(--space-2);
+  margin-top: var(--space-2);
   background: var(--chrome-strong);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -3787,34 +3792,62 @@ select.input option {
   transition: opacity 0.18s ease, transform 0.18s ease, visibility 0.18s;
   z-index: 60;
 }
+/* The bridge across that margin. Without it the gap is still dead space, and a
+   diagonal path from the trigger to the first item still crosses it. */
+.mh-item.has-menu::after {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 100%;
+  height: var(--space-3);
+  display: none;
+}
+.mh-item.has-menu:hover::after,
+.mh-item.has-menu[data-open]::after { display: block; }
+
 .mh-panel-wide {
   left: 50%;
   transform: translateX(-50%) translateY(8px);
-  width: min(900px, 92vw);
+  width: min(1040px, 94vw);
 }
+/* Three ways in, one open state: hover for a pointer, focus for a keyboard, and
+   `data-open` for the click that a touchscreen has and hover does not. */
 .mh-item.has-menu:hover .mh-panel:not(.mh-panel-wide),
-.mh-item.has-menu:focus-within .mh-panel:not(.mh-panel-wide) {
+.mh-item.has-menu:focus-within .mh-panel:not(.mh-panel-wide),
+.mh-item.has-menu[data-open] .mh-panel:not(.mh-panel-wide) {
   opacity: 1;
   visibility: visible;
   transform: translateY(0);
 }
 .mh-item.has-menu:hover .mh-panel-wide,
-.mh-item.has-menu:focus-within .mh-panel-wide {
+.mh-item.has-menu:focus-within .mh-panel-wide,
+.mh-item.has-menu[data-open] .mh-panel-wide {
   opacity: 1;
   visibility: visible;
   transform: translateX(-50%) translateY(0);
 }
+.mh-trigger[aria-expanded='true'] .mh-caret { transform: rotate(180deg); }
 /* ── The mega-menus (PRD 21 §11.4.6) ──────────────────────────────────────
    ONE layout for Product ▾ and Learn ▾. `.mh-panel-link` — the flat row the
    Learn dropdown used to be — is gone with it: two menus rendered two ways is
    how they came to say different things. */
 .mh-mega {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-2) var(--space-4);
+  /* Tracks, not columns. A group with more than five rows claims two of them and
+     flows down both, so Run's eight business seats read as a block rather than
+     as a long leg beside two short ones. The count is computed from the registry
+     and handed in as `--mega-tracks`. */
+  grid-template-columns: repeat(var(--mega-tracks, 3), minmax(0, 1fr));
+  gap: var(--space-4);
   padding: var(--space-3);
+  align-items: start;
 }
-.mh-mega-col { display: flex; flex-direction: column; min-width: 0; }
+.mh-mega-col { grid-column: span var(--track-span, 1); min-width: 0; }
+.mh-mega-rows {
+  display: grid;
+  grid-template-columns: repeat(var(--track-span, 1), minmax(0, 1fr));
+  gap: 2px var(--space-4);
+}
 .mh-mega-head {
   display: flex;
   align-items: center;
@@ -3881,8 +3914,10 @@ select.input option {
   font-size: var(--font-size-eyebrow);
   line-height: 1.6;
 }
-@media (max-width: 900px) {
+@media (max-width: 1080px) {
   .mh-mega { grid-template-columns: minmax(0, 1fr); }
+  .mh-mega-col { grid-column: auto; }
+  .mh-mega-rows { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* ── A reference page opened as a panel (PRD 21 §11.4.5) ──────────────────
