@@ -4,8 +4,6 @@ import { useEffect, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import JsonLd from '@/components/JsonLd';
 import { homepageSchema } from '@/lib/structured-data';
-import { STATS } from '@/lib/content';
-import QuickStart from '@/components/QuickStart';
 import { DemoShowcase } from '@/components/demo/DemoShowcase';
 import { fetchPublicPricing, type PublicPricingPlan } from '@/lib/publicPricing';
 import { LandingCanvasHero } from '@/components/home/LandingCanvasHero';
@@ -23,7 +21,6 @@ import {
   homePatternStyles as styles,
 } from '@/components/home/HomePatterns';
 
-type StatLabel = { label: string };
 type FaqItem = { question: string; answer: string };
 /**
  * The homepage is one argument, told in order.
@@ -36,14 +33,14 @@ type FaqItem = { question: string; answer: string };
  * the reader no sense of moving through anything.
  *
  * The order below is a narrative: start on the canvas → name the problem and
- * resolve it into a workflow → see what it is → watch it work → see the evidence
- * → price → objections → act. Product discovery and comparison now live on the
+ * resolve it into a workflow → see what it is → watch it work → price →
+ * objections → act. Product discovery and comparison now live on the
  * dedicated product page, where visitors are asking for that depth.
  * Numbering survives in exactly one place, "How it works", because those three
  * steps genuinely are a sequence.
  *
- * Treatment varies with the job: evidence is a stat band, pricing is a plan
- * comparison, and objections are a disclosure list. Secondary material sits
+ * Treatment varies with the job: pricing is a plan comparison, and objections
+ * are a disclosure list. Secondary material sits
  * below the primary call to action rather than between the reader and it.
  */
 export default function LandingPage() {
@@ -75,24 +72,10 @@ export default function LandingPage() {
         {/* 3 · WHAT IT IS — the rotating Create → Evermind → governed-delivery story. */}
         <MeetCarousel />
 
-        <QuickStart />
-
-        {/* 5 · SEE IT RUN */}
+        {/* 4 · SEE IT RUN */}
         <DemoShowcase />
 
-        {/* 6 · EVIDENCE — the live showcase, then the numbers. The stat band used to
-            open the page, before the reader had any reason to care what the
-            numbers counted; it lands here instead, as the payoff of the proof. */}
-        <div className={styles.statBand}>
-          {(t.raw('home.stats') as StatLabel[]).map((stat, index) => (
-            <div key={stat.label} className={styles.stat}>
-              <div className={styles.statValue}>{STATS.marketing[index]?.value}</div>
-              <div className={styles.statLabel} style={{ whiteSpace: 'pre-line' }}>{stat.label}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* 7 · WHAT IT COSTS */}
+        {/* 5 · WHAT IT COSTS */}
         <HomeSection id="pricing">
           <HomeSectionHeader eyebrow={t('home.pricingHeading')} title={t('home.pricingTitle')} />
           <div className={styles.pricingPlans}>
@@ -115,7 +98,7 @@ export default function LandingPage() {
           </div>
         </HomeSection>
 
-        {/* 8 · OBJECTIONS — answered immediately before the ask, which is where
+        {/* 6 · OBJECTIONS — answered immediately before the ask, which is where
             they actually surface. */}
         <HomeSection>
           <HomeSectionHeader eyebrow={t('home.beat.questions')} title={t('home.faqHeading')} />
@@ -129,7 +112,7 @@ export default function LandingPage() {
           </div>
         </HomeSection>
 
-        {/* 9 · THE ASK */}
+        {/* 7 · THE ASK */}
         <CreationCtaSection />
 
         {/* Secondary. Below the ask on purpose — these used to sit between the
