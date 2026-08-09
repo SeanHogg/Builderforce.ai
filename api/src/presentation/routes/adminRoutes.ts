@@ -106,6 +106,7 @@ import { llmFailoverLog, llmHealthProbes, llmTraces } from '../../infrastructure
 import { probeVendor, tryAcquireProbeSlot, type VendorProbeResult } from '../../application/llm/vendorHealthProbe';
 import { invalidateCapabilityCache } from '../../application/artifact/capabilityContext';
 import { invalidateJwtMembershipCache } from '../../infrastructure/auth/keyResolutionCache';
+import { invalidateTeamCaches } from '../../application/kernel/TeamRoster';
 import {
   mintTenantApiKey,
   listTenantApiKeys,
@@ -3495,6 +3496,11 @@ export function createAdminRoutes(): Hono<HonoEnv> {
     const [row] = await db.select({ id: tenantMembers.id }).from(tenantMembers).where(and(eq(tenantMembers.tenantId, tenantId), eq(tenantMembers.userId, userId))).limit(1);
     if (!row) return c.json({ error: 'Member not found in tenant' }, 404);
     await db.update(tenantMembers).set({ role: body.role as 'viewer' | 'developer' | 'manager' | 'owner' }).where(eq(tenantMembers.id, row.id));
+    // The role is the label the footer roster renders beside the person (PRD 21
+    // §4.1), so a role change stales it exactly as it stales the gateway cache.
+    await invalidateTeamCaches(c.env as Env, tenantId).catch((error) => {
+      reportCaughtError(error, { source: "presentation/routes/adminRoutes.ts", operation: "createAdminRoutes" });
+    });
     // Bust the gateway's JWT→membership cache so the new role takes effect at once
     // (otherwise a demote keeps elevated gateway access until the 60s TTL lapses).
     await invalidateJwtMembershipCache(c.env as Env, tenantId, userId).catch((error) => {

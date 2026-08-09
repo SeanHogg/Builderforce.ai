@@ -1,11 +1,11 @@
 {
   "name": "builderforce-frontend",
-  "version": "2026.7.201",
+  "version": "2026.7.203",
   "private": true,
   "scripts": {
     "postinstall": "node ../scripts/ensure-linked-deps.mjs",
     "clean": "node -e \"const fs=require('fs');const p='.next';if(fs.existsSync(p)){fs.rmSync(p,{recursive:true});console.log('Removed .next');}else{console.log('.next not found');}\"",
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
     "prebuild": "node scripts/copy-ort-runtime.mjs",
     "build": "next build",
     "cf-build": "npm run build && npx @cloudflare/next-on-pages && echo '_worker.js' > .vercel/output/static/.assetsignore && node scripts/strip-worker-assets.js && node scripts/stamp-sw-version.js && sed -i 's/\\br\\.fetch\\b/(r||self).fetch/g' .vercel/output/static/_worker.js/index.js",
@@ -14,10 +14,11 @@
     "lint": "eslint .",
     "check:api-transport": "node scripts/check-api-transport.mjs",
     "check:design-tokens": "node scripts/check-design-tokens.mjs",
-    "test": "npm run check:api-transport && npm run check:design-tokens && node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs run",
+    "test": "npm run check:api-transport && npm run check:design-tokens && npm run check:design-scale && node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs run",
     "test:watch": "node --max-old-space-size=8192 ./node_modules/vitest/vitest.mjs",
     "typecheck:native": "tsgo --noEmit",
-    "type-check": "tsgo --noEmit && tsc --noEmit"
+    "type-check": "tsgo --noEmit && tsc --noEmit",
+    "check:design-scale": "node scripts/check-design-scale.mjs"
   },
   "dependencies": {
     "@cloudflare/next-on-pages": "^1.13.16",

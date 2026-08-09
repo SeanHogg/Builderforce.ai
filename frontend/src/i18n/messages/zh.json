@@ -554,7 +554,8 @@
     "destination": {
       "canvasLibrary": "画布",
       "newCanvas": "新建画布"
-    }
+    },
+    "workspaceLabel": "工作区"
   },
   "alerts": {
     "title": "告警",
@@ -1478,7 +1479,12 @@
     "managerDefaultsSubtitle": "AI 经理在本工作区所有项目中的默认行为。各项目可在自己的“经理”标签页中进一步调整，但绝不能自行获得你在此处保留的权限。",
     "managerDefaultsError": "无法加载工作区 AI 经理默认设置。",
     "managerDefaultsProjectHint": "若只想更改某一个项目：",
-    "managerDefaultsProjectLink": "打开该项目的经理设置"
+    "managerDefaultsProjectLink": "打开该项目的经理设置",
+    "groupYou": "个人",
+    "groupWorkspace": "工作区",
+    "logsRuntimeTab": "运行时与时间线",
+    "logsAuditTab": "审计日志",
+    "logSectionsLabel": "日志分区"
   },
   "pmo": {
     "title": "项目组合（PMO）",
@@ -5511,19 +5517,214 @@
   "promptUseCases": {
     "tabLabel": "选择起点",
     "heading": "想要创建什么？",
+    "searchPlaceholder": "搜索用例…",
+    "searchLabel": "搜索创作用例",
+    "noResults": "没有符合搜索条件的受支持用例。",
+    "categories": {
+      "start": "开始",
+      "apps": "应用与自动化",
+      "business": "业务",
+      "learning": "学习与职业",
+      "documents": "文档与数据",
+      "ai": "AI 与智能体",
+      "creative": "创意与沉浸体验"
+    },
     "items": [
-      { "label": "空白画布", "prompt": "从空白画布开始，帮助我完善想法。" },
-      { "label": "移动应用设计", "prompt": "设计一款移动应用，包括关键页面和用户流程。" },
-      { "label": "演示文稿", "prompt": "创建一份叙事清晰、视觉方向明确的精美演示文稿。" },
-      { "label": "文档", "prompt": "起草一份结构清晰、可供审阅和分享的文档。" },
-      { "label": "线框图", "prompt": "创建展示主要布局和交互方式的线框图。" },
-      { "label": "动画", "prompt": "创建包含故事板、节奏和视觉风格的动画方案。" },
-      { "label": "UI 模型", "prompt": "为核心产品体验创建高保真 UI 模型。" },
-      { "label": "简历", "prompt": "创建一份层次清晰、突出重要成就的专业简历。" },
-      { "label": "3D 对象", "prompt": "创建包含形态、材质和展示视图的 3D 对象方案。" },
-      { "label": "研究", "prompt": "研究该主题并将结果整理为可执行的洞察。" },
-      { "label": "HTML 邮件", "prompt": "设计一封内容和行动号召清晰的响应式 HTML 邮件。" },
-      { "label": "配色 + 字体", "prompt": "创建符合无障碍要求的配色和字体组合，并提供使用指南。" }
+      {
+        "category": "start",
+        "label": "空白画布",
+        "prompt": "从空白画布开始，帮助我完善想法。"
+      },
+      {
+        "category": "apps",
+        "label": "网站",
+        "prompt": "设计并构建包含完整内容、导航和可发布实现的响应式网站。"
+      },
+      {
+        "category": "apps",
+        "label": "Web 应用",
+        "prompt": "构建包含核心流程、界面、数据模型和可运行项目的 Web 应用。"
+      },
+      {
+        "category": "apps",
+        "label": "移动应用",
+        "prompt": "构建包含关键页面、用户流程和可运行移动项目的移动应用。"
+      },
+      {
+        "category": "apps",
+        "label": "UI 模型",
+        "prompt": "为核心产品体验创建高保真 UI 模型。"
+      },
+      {
+        "category": "apps",
+        "label": "线框图",
+        "prompt": "创建展示主要布局和交互方式的线框图。"
+      },
+      {
+        "category": "apps",
+        "label": "工作流自动化",
+        "prompt": "构建包含已配置步骤、输入、审批和集成的可执行工作流。"
+      },
+      {
+        "category": "apps",
+        "label": "Twilio 工作流",
+        "prompt": "使用真实连接器操作和必需输入，构建并验证用于短信或语音的 Twilio 工作流。"
+      },
+      {
+        "category": "apps",
+        "label": "语音智能体",
+        "prompt": "创建并配置包含脚本、声音、工具、通话流程和评估标准的语音智能体。"
+      },
+      {
+        "category": "business",
+        "label": "销售指挥中心",
+        "prompt": "创建包含目标市场、联系人、营销活动、销售管道、目标、会议和销售教练智能体的销售中心。"
+      },
+      {
+        "category": "business",
+        "label": "招聘工作区",
+        "prompt": "创建包含岗位评分卡、候选人管道、人才搜寻、结构化面试、评估和招聘智能体的工作区。"
+      },
+      {
+        "category": "business",
+        "label": "邮件营销活动",
+        "prompt": "创建包含受众、可复用模板、主题、响应式内容、发送工作流和成功指标的邮件活动。"
+      },
+      {
+        "category": "business",
+        "label": "产品探索",
+        "prompt": "创建汇总客户证据、确定机会优先级并将最佳概念扩展为模型的产品探索工作区。"
+      },
+      {
+        "category": "business",
+        "label": "路演竞赛",
+        "prompt": "创建包含申请、计时路演、评委评分卡、问答演练、演示文稿和教练智能体的竞赛工作区。"
+      },
+      {
+        "category": "business",
+        "label": "项目路线图",
+        "prompt": "创建产品需求文档及关联的交付路线图，包含里程碑、发布和优先任务。"
+      },
+      {
+        "category": "business",
+        "label": "团队站会",
+        "prompt": "创建包含成员、智能体、当前工作、阻碍、决策和后续任务的协作站会。"
+      },
+      {
+        "category": "learning",
+        "label": "互动式 LMS",
+        "prompt": "创建包含模块、课程、练习、评估、进度跟踪、综合项目和专业 AI 教师的完整 LMS 课程。"
+      },
+      {
+        "category": "learning",
+        "label": "简历",
+        "prompt": "创建层次清晰、突出成就且可导出的专业简历。"
+      },
+      {
+        "category": "learning",
+        "label": "视频简历",
+        "prompt": "创建专业简历、简洁的视频简历脚本和故事板，以及关联的视频展示。"
+      },
+      {
+        "category": "documents",
+        "label": "演示文稿",
+        "prompt": "创建叙事清晰、视觉方向明确的精美演示文稿。"
+      },
+      {
+        "category": "documents",
+        "label": "文档",
+        "prompt": "起草一份结构清晰、可供审阅、导出和分享的文档。"
+      },
+      {
+        "category": "documents",
+        "label": "研究",
+        "prompt": "从引用来源研究该主题，创建支持数据集，并将结果整理为可执行洞察。"
+      },
+      {
+        "category": "documents",
+        "label": "数据仪表板",
+        "prompt": "创建包含有来源数据、计算 KPI、图表和高管摘要的决策仪表板。"
+      },
+      {
+        "category": "documents",
+        "label": "数据故事",
+        "prompt": "将数据集转化为经过验证的图表、仪表板和关联的高管演示文稿。"
+      },
+      {
+        "category": "documents",
+        "label": "图表",
+        "prompt": "创建清楚说明系统、流程或关系的可编辑图表。"
+      },
+      {
+        "category": "documents",
+        "label": "HTML 邮件",
+        "prompt": "设计一封内容和行动号召清晰的响应式 HTML 邮件。"
+      },
+      {
+        "category": "documents",
+        "label": "配色 + 字体",
+        "prompt": "创建符合无障碍要求的配色和字体组合，并提供使用指南。"
+      },
+      {
+        "category": "ai",
+        "label": "AI 智能体",
+        "prompt": "构建包含指令、个性、工具、编写知识和评分评估的可运行 AI 智能体。"
+      },
+      {
+        "category": "ai",
+        "label": "Evermind 模型",
+        "prompt": "创建包含知识、教学与调优阶段、评估和可发布智能体的 Evermind 模型实验室。"
+      },
+      {
+        "category": "ai",
+        "label": "LLM 评估",
+        "prompt": "创建包含代表性提示、预期信号、质量标准、安全检查和发布评分卡的 LLM 评估套件。"
+      },
+      {
+        "category": "creative",
+        "label": "视频",
+        "prompt": "创建包含概念、脚本、故事板、视觉方向和生成预览的视频。"
+      },
+      {
+        "category": "creative",
+        "label": "动画",
+        "prompt": "创建包含故事板、节奏、视觉风格和生成预览的动画。"
+      },
+      {
+        "category": "creative",
+        "label": "图像",
+        "prompt": "根据艺术指导创建精美图像并准备导出。"
+      },
+      {
+        "category": "creative",
+        "label": "播客",
+        "prompt": "创建包含概念、结构化脚本、声音指导、文字记录和音频输出的播客节目。"
+      },
+      {
+        "category": "creative",
+        "label": "漫画",
+        "prompt": "创建包含故事、分镜计划、对白、视觉风格和可导出画稿的漫画。"
+      },
+      {
+        "category": "creative",
+        "label": "浏览器游戏",
+        "prompt": "设计并构建包含机制、控制、视觉效果和评估的可玩浏览器游戏。"
+      },
+      {
+        "category": "creative",
+        "label": "Roblox 游戏",
+        "prompt": "设计包含机制、世界方向、控制、评估和 Roblox 发布目标的可玩 Roblox 体验。"
+      },
+      {
+        "category": "creative",
+        "label": "CAD 图纸",
+        "prompt": "创建包含尺寸、单位、几何图形和可导出输出的可编辑 CAD 图纸。"
+      },
+      {
+        "category": "creative",
+        "label": "3D 模型",
+        "prompt": "创建包含形态、材质、尺寸、展示视图和可导出几何体的 3D 模型。"
+      }
     ]
   },
   "home": {
@@ -5540,13 +5741,29 @@
       "agentPresence": "在线 · 可指派",
       "sessionTitle": "启动营销活动 · 实时会话",
       "presenceAria": "三人正在此会话中",
-      "presenceInitials": ["SH", "JR", "TK"],
+      "presenceInitials": [
+        "SH",
+        "JR",
+        "TK"
+      ],
       "alwaysOn": "随时在线",
       "teammateAction": "邀请 {name} 加入此画布",
       "team": [
-        { "short": "CM", "name": "CMO", "prefill": "邀请 CMO 来规划这次营销活动及其落地页" },
-        { "short": "CF", "name": "CFO", "prefill": "邀请 CFO 来预测这次营销活动的预算" },
-        { "short": "CT", "name": "CTO", "prefill": "邀请 CTO 来评审如何将其发布到生产环境" }
+        {
+          "short": "CM",
+          "name": "CMO",
+          "prefill": "邀请 CMO 来规划这次营销活动及其落地页"
+        },
+        {
+          "short": "CF",
+          "name": "CFO",
+          "prefill": "邀请 CFO 来预测这次营销活动的预算"
+        },
+        {
+          "short": "CT",
+          "name": "CTO",
+          "prefill": "邀请 CTO 来评审如何将其发布到生产环境"
+        }
       ],
       "guestNote": "这是一块真实的画布。在你登录之前，内容不会离开本设备。",
       "narrowNote": "在更大的屏幕上打开可使用完整画布。",
@@ -7951,7 +8168,13 @@
       "button": "比较",
       "maxTitle": "最多可比较 {max} 个模型",
       "addTitle": "加入比较",
-      "compareAria": "比较 {name}", "promptLabel": "在每个所选模型上运行同一提示词", "promptPlaceholder": "输入要比较的确切提示词…", "needPromptTitle": "请输入要执行的提示词", "executeTitle": "在 Canvas 中使用每个所选模型执行提示词", "executeButton": "在 Canvas 中比较执行结果", "specsButton": "比较规格"
+      "compareAria": "比较 {name}",
+      "promptLabel": "在每个所选模型上运行同一提示词",
+      "promptPlaceholder": "输入要比较的确切提示词…",
+      "needPromptTitle": "请输入要执行的提示词",
+      "executeTitle": "在 Canvas 中使用每个所选模型执行提示词",
+      "executeButton": "在 Canvas 中比较执行结果",
+      "specsButton": "比较规格"
     }
   },
   "talent": {
@@ -9409,7 +9632,8 @@
         "registered": "注册用户",
         "paid": "付费客户"
       }
-    }
+    },
+    "subnavLabel": "管理子视图"
   },
   "providerKeys": {
     "title": "使用您自己的模型",
@@ -12027,15 +12251,28 @@
     "switchToDark": "切换到深色模式"
   },
   "tutorials": {
-    "seo": { "title": "AI 引导的教程与互动课程", "description": "在 Creation Canvas 的自适应 LMS 中学习创业、招聘、产品、营销、领导力、财务、软件、AI 等任何主题。", "ogTitle": "在 Creation Canvas 上跟随 AI 老师学习" },
+    "seo": {
+      "title": "AI 引导的教程与互动课程",
+      "description": "在 Creation Canvas 的自适应 LMS 中学习创业、招聘、产品、营销、领导力、财务、软件、AI 等任何主题。",
+      "ogTitle": "在 Creation Canvas 上跟随 AI 老师学习"
+    },
     "eyebrow": "围绕你打造的学习体验",
     "title": "选择主题，创建课程，认识你的 AI 老师。",
     "lead": "每个教程都会打开私密的 Creation Canvas，创建互动式 LMS 课程，并邀请专业 AI 老师加入聊天，指导练习并调整每节课。",
     "howItWorks": "互动教程的工作方式",
     "steps": [
-      { "title": "选择方向", "description": "从实用主题开始，或带来你自己的任何学习目标。" },
-      { "title": "Canvas 创建 LMS", "description": "Brain 会创建模块、课程、练习、测评、进度跟踪和综合项目。" },
-      { "title": "跟随专家学习", "description": "匹配主题的 AI 老师加入聊天，检查理解程度并调整学习路径。" }
+      {
+        "title": "选择方向",
+        "description": "从实用主题开始，或带来你自己的任何学习目标。"
+      },
+      {
+        "title": "Canvas 创建 LMS",
+        "description": "Brain 会创建模块、课程、练习、测评、进度跟踪和综合项目。"
+      },
+      {
+        "title": "跟随专家学习",
+        "description": "匹配主题的 AI 老师加入聊天，检查理解程度并调整学习路径。"
+      }
     ],
     "catalogTitle": "你想学什么？",
     "catalogLead": "选择一个起点。课程会根据你的目标和经验生成，每条学习路径都可以不同。",
@@ -12047,14 +12284,94 @@
     "customPrompt": "我想学习一个自选主题。请先询问我想学什么、它为什么重要、我目前的经验、偏好的节奏和期望结果。然后在 Canvas 上创建完整的互动式 LMS 课程对象，包含模块、课程、练习、测评、进度跟踪和实践型综合项目。创建合适的专业 AI 教师智能体，将其连接到课程和 Brain 聊天，让老师加入对话。逐步开始教学，根据我的回答调整并检查理解程度。不要只描述课程；请在 Canvas 上实际创建课程和教师智能体。",
     "coursePrompt": "请在 Canvas 上创建一门教我 {topic} 的完整互动式 LMS 课程。课程重点是 {focus}。包含结构化模块、课程、动手练习、测评、进度跟踪和实践型综合项目。创建名为 {agent} 的专业 AI 教师智能体，为其设置该主题的专家教学指令，并将其同时连接到课程和 Brain 聊天，让老师加入我们的对话。先询问我的经验水平和目标，然后逐步教学，根据回答调整、提供有用的反馈并检查理解程度。不要只描述课程大纲；请在 Canvas 上实际创建课程对象和教师智能体。",
     "topics": {
-      "entrepreneurship": { "title": "创业", "summary": "通过客户发现、定位、商业模式和可信的发布计划，将想法变成经过验证的业务。", "agent": "创业教练", "focus": "发现真实客户问题、验证需求、选择商业模式、定价、市场进入、融资基础和可执行的发布计划", "outcomes": ["验证想法", "构建商业模式", "规划发布"] },
-      "recruiting": { "title": "招聘与录用", "summary": "学会定义岗位、寻找优秀候选人、进行公平面试并自信地录用正确的人。", "agent": "人才顾问", "focus": "人力规划、岗位评分卡、包容性寻访、结构化面试、基于证据的选择、候选人体验和录用", "outcomes": ["编写评分卡", "一致地面试", "依据证据决策"] },
-      "product": { "title": "产品管理", "summary": "从用户问题走向产品战略、发现证据、优先级路线图和可衡量的成果。", "agent": "产品导师", "focus": "客户发现、产品战略、机会映射、优先级、路线图、实验、指标和利益相关者对齐", "outcomes": ["发现需求", "优先考虑成果", "制定路线图"] },
-      "marketing": { "title": "营销与增长", "summary": "构建清晰的受众、信息、渠道策略、实验和能够累积学习的衡量系统。", "agent": "增长策略师", "focus": "受众研究、定位、信息、内容、获客渠道、转化、留存、实验和增长指标", "outcomes": ["明确定位", "设计活动", "衡量增长"] },
-      "leadership": { "title": "领导力与管理", "summary": "练习设定方向、辅导人员、处理冲突、有效授权并打造负责任的团队。", "agent": "领导力教练", "focus": "领导风格、目标、授权、反馈、辅导、困难对话、决策、团队健康和责任", "outcomes": ["清晰领导", "有效辅导", "应对冲突"] },
-      "finance": { "title": "决策者财务", "summary": "理解财务报表、现金流、预算、单位经济、预测和投资权衡。", "agent": "财务导师", "focus": "财务报表、现金流、预算、预测、单位经济、情景分析、估值基础和资本配置", "outcomes": ["读懂数字", "构建预测", "评估权衡"] },
-      "softwareAi": { "title": "软件与 AI", "summary": "学习如何设计、构建、评估、保护并负责任地发布现代软件和 AI 系统。", "agent": "AI 工程讲师", "focus": "软件架构、API、数据、测试、安全、LLM 应用、提示、检索、智能体、评估和负责任的部署", "outcomes": ["设计系统", "使用 AI 构建", "评估质量"] },
-      "career": { "title": "职业成长", "summary": "将优势与方向匹配，弥补技能差距，表达价值并执行实际的成长计划。", "agent": "职业教练", "focus": "优势、职业选择、技能差距分析、作品集证据、人脉、面试、谈判和 90 天发展计划", "outcomes": ["选择方向", "展示价值", "规划未来 90 天"] }
+      "entrepreneurship": {
+        "title": "创业",
+        "summary": "通过客户发现、定位、商业模式和可信的发布计划，将想法变成经过验证的业务。",
+        "agent": "创业教练",
+        "focus": "发现真实客户问题、验证需求、选择商业模式、定价、市场进入、融资基础和可执行的发布计划",
+        "outcomes": [
+          "验证想法",
+          "构建商业模式",
+          "规划发布"
+        ]
+      },
+      "recruiting": {
+        "title": "招聘与录用",
+        "summary": "学会定义岗位、寻找优秀候选人、进行公平面试并自信地录用正确的人。",
+        "agent": "人才顾问",
+        "focus": "人力规划、岗位评分卡、包容性寻访、结构化面试、基于证据的选择、候选人体验和录用",
+        "outcomes": [
+          "编写评分卡",
+          "一致地面试",
+          "依据证据决策"
+        ]
+      },
+      "product": {
+        "title": "产品管理",
+        "summary": "从用户问题走向产品战略、发现证据、优先级路线图和可衡量的成果。",
+        "agent": "产品导师",
+        "focus": "客户发现、产品战略、机会映射、优先级、路线图、实验、指标和利益相关者对齐",
+        "outcomes": [
+          "发现需求",
+          "优先考虑成果",
+          "制定路线图"
+        ]
+      },
+      "marketing": {
+        "title": "营销与增长",
+        "summary": "构建清晰的受众、信息、渠道策略、实验和能够累积学习的衡量系统。",
+        "agent": "增长策略师",
+        "focus": "受众研究、定位、信息、内容、获客渠道、转化、留存、实验和增长指标",
+        "outcomes": [
+          "明确定位",
+          "设计活动",
+          "衡量增长"
+        ]
+      },
+      "leadership": {
+        "title": "领导力与管理",
+        "summary": "练习设定方向、辅导人员、处理冲突、有效授权并打造负责任的团队。",
+        "agent": "领导力教练",
+        "focus": "领导风格、目标、授权、反馈、辅导、困难对话、决策、团队健康和责任",
+        "outcomes": [
+          "清晰领导",
+          "有效辅导",
+          "应对冲突"
+        ]
+      },
+      "finance": {
+        "title": "决策者财务",
+        "summary": "理解财务报表、现金流、预算、单位经济、预测和投资权衡。",
+        "agent": "财务导师",
+        "focus": "财务报表、现金流、预算、预测、单位经济、情景分析、估值基础和资本配置",
+        "outcomes": [
+          "读懂数字",
+          "构建预测",
+          "评估权衡"
+        ]
+      },
+      "softwareAi": {
+        "title": "软件与 AI",
+        "summary": "学习如何设计、构建、评估、保护并负责任地发布现代软件和 AI 系统。",
+        "agent": "AI 工程讲师",
+        "focus": "软件架构、API、数据、测试、安全、LLM 应用、提示、检索、智能体、评估和负责任的部署",
+        "outcomes": [
+          "设计系统",
+          "使用 AI 构建",
+          "评估质量"
+        ]
+      },
+      "career": {
+        "title": "职业成长",
+        "summary": "将优势与方向匹配，弥补技能差距，表达价值并执行实际的成长计划。",
+        "agent": "职业教练",
+        "focus": "优势、职业选择、技能差距分析、作品集证据、人脉、面试、谈判和 90 天发展计划",
+        "outcomes": [
+          "选择方向",
+          "展示价值",
+          "规划未来 90 天"
+        ]
+      }
     }
   },
   "media": {
@@ -12521,7 +12838,21 @@
     "note": "选择安装方式，复制命令，然后在终端中运行。"
   },
   "creationCanvas": {
-    "comparison": { "promptTitle": "共享比较提示词", "sharedPrompt": "在每个所选模型上原样运行", "responseFrom": "由 {model} 生成的回答", "executing": "正在执行", "executingWith": "正在使用 {model} 执行此提示词…", "executesWith": "使用 {model} 执行", "runningCount": "正在运行 {count} 个所选模型…", "completed": "已完成", "failed": "执行失败", "emptyOutput": "模型未返回任何输出。", "finished": "模型比较已完成。", "modelLayer": "模型 · {model}", "promptLayer": "共享提示词" },
+    "comparison": {
+      "promptTitle": "共享比较提示词",
+      "sharedPrompt": "在每个所选模型上原样运行",
+      "responseFrom": "由 {model} 生成的回答",
+      "executing": "正在执行",
+      "executingWith": "正在使用 {model} 执行此提示词…",
+      "executesWith": "使用 {model} 执行",
+      "runningCount": "正在运行 {count} 个所选模型…",
+      "completed": "已完成",
+      "failed": "执行失败",
+      "emptyOutput": "模型未返回任何输出。",
+      "finished": "模型比较已完成。",
+      "modelLayer": "模型 · {model}",
+      "promptLayer": "共享提示词"
+    },
     "group": {
       "Build": "构建",
       "Data": "数据",
@@ -14108,7 +14439,8 @@
       "robloxIdsHint": "这两个数字都在你已从 Studio 发布的体验的 Creator Dashboard 网址中。",
       "publishRoblox": "发布到 Roblox",
       "robloxPublished": "已发布到 Roblox，版本 {version}"
-    }
+    },
+    "teammateSeated": "已加入此画布"
   },
   "canvasCommands": {
     "cleanLayout": "整理画布布局",
@@ -14845,12 +15177,6 @@
       "failed": "屏幕共享失败"
     }
   },
-  "workbench": {
-    "region": "工作台",
-    "title": "工作台",
-    "close": "关闭工作台",
-    "resize": "调整工作台宽度"
-  },
   "canvasStage": {
     "outsideCurrentProject": "正在查看当前项目之外的画布"
   },
@@ -14863,5 +15189,37 @@
     "leaveTitle": "离开实时会话",
     "onThisCanvas": "此画布",
     "liveWithCount": "{count, plural, other {进行中 · # 人}}"
+  },
+  "team": {
+    "barLabel": "你的团队",
+    "alwaysOn": "常驻",
+    "team": "团队",
+    "invite": "+ 邀请",
+    "roleTeammate": "队友",
+    "chipJoin": "把 {name}（{role}）加入此画布 —— 拖入或按 Enter",
+    "chipLocked": "{name} 尚未在此工作区中配置"
+  },
+  "sessions": {
+    "newCanvas": "+ 新建画布",
+    "active": "进行中",
+    "recents": "最近",
+    "untitled": "未命名画布",
+    "draft": "草稿",
+    "draftHint": "仅保存在此浏览器中 —— 登录后才会保留"
+  },
+  "shellPanel": {
+    "crumb": "工作区",
+    "title": "面板"
+  },
+  "profile": {
+    "displayName": "显示名称",
+    "displayNamePlaceholder": "你的名字在团队中的显示方式",
+    "avatarUpload": "上传照片",
+    "avatarChange": "更换照片",
+    "avatarUploading": "上传中…",
+    "avatarFailed": "无法上传该图片",
+    "save": "保存",
+    "saved": "已保存",
+    "saveFailed": "保存失败"
   }
 }

@@ -554,7 +554,8 @@
     "destination": {
       "canvasLibrary": "Lienzos",
       "newCanvas": "Nuevo lienzo"
-    }
+    },
+    "workspaceLabel": "Espacio de trabajo"
   },
   "alerts": {
     "title": "Alertas",
@@ -1478,7 +1479,12 @@
     "managerDefaultsSubtitle": "Cómo se comporta el Manager IA en todos los proyectos de este espacio de trabajo. Un proyecto puede ajustarlos en su propia pestaña Manager, pero nunca puede concederse un permiso que tú retengas aquí.",
     "managerDefaultsError": "No se pudieron cargar los valores predeterminados del Manager IA.",
     "managerDefaultsProjectHint": "Para cambiar solo un proyecto:",
-    "managerDefaultsProjectLink": "abre sus ajustes de Manager"
+    "managerDefaultsProjectLink": "abre sus ajustes de Manager",
+    "groupYou": "Tú",
+    "groupWorkspace": "Espacio de trabajo",
+    "logsRuntimeTab": "Ejecución y cronología",
+    "logsAuditTab": "Registro de auditoría",
+    "logSectionsLabel": "Secciones de registros"
   },
   "pmo": {
     "title": "Portafolio (PMO)",
@@ -5511,19 +5517,214 @@
   "promptUseCases": {
     "tabLabel": "Elegir un punto de partida",
     "heading": "¿Qué quieres crear?",
+    "searchPlaceholder": "Buscar casos de uso…",
+    "searchLabel": "Buscar casos de uso de creación",
+    "noResults": "Ningún caso de uso compatible coincide con la búsqueda.",
+    "categories": {
+      "start": "Inicio",
+      "apps": "Apps y automatización",
+      "business": "Negocio",
+      "learning": "Aprendizaje y carrera",
+      "documents": "Documentos y datos",
+      "ai": "IA y agentes",
+      "creative": "Creativo e inmersivo"
+    },
     "items": [
-      { "label": "En blanco", "prompt": "Empieza con un lienzo en blanco y ayúdame a dar forma a mi idea." },
-      { "label": "Diseño de app móvil", "prompt": "Diseña una aplicación móvil con sus pantallas clave y el flujo de usuario." },
-      { "label": "Presentación", "prompt": "Crea una presentación pulida con una narrativa clara y una dirección visual." },
-      { "label": "Documento", "prompt": "Redacta un documento estructurado que esté listo para revisar y compartir." },
-      { "label": "Wireframe", "prompt": "Crea un wireframe que muestre el diseño y las interacciones principales." },
-      { "label": "Animación", "prompt": "Crea un concepto de animación con guion gráfico, ritmo y estilo visual." },
-      { "label": "Maquetas de UI", "prompt": "Crea maquetas de UI de alta fidelidad para la experiencia principal del producto." },
-      { "label": "Currículum", "prompt": "Crea un currículum profesional con una jerarquía clara y logros sólidos." },
-      { "label": "Objeto 3D", "prompt": "Crea un concepto de objeto 3D con forma, materiales y vistas de presentación." },
-      { "label": "Investigación", "prompt": "Investiga este tema y sintetiza los hallazgos en conclusiones prácticas." },
-      { "label": "Correo HTML", "prompt": "Diseña un correo HTML adaptable con contenido y llamadas a la acción claros." },
-      { "label": "Color + tipografía", "prompt": "Crea una paleta accesible y una combinación tipográfica con pautas de uso." }
+      {
+        "category": "start",
+        "label": "Lienzo en blanco",
+        "prompt": "Empieza con un lienzo en blanco y ayúdame a dar forma a mi idea."
+      },
+      {
+        "category": "apps",
+        "label": "Sitio web",
+        "prompt": "Diseña y desarrolla un sitio web adaptable con contenido, navegación e implementación publicable."
+      },
+      {
+        "category": "apps",
+        "label": "Aplicación web",
+        "prompt": "Crea una aplicación web funcional con sus flujos, interfaz, modelo de datos y proyecto ejecutable."
+      },
+      {
+        "category": "apps",
+        "label": "Aplicación móvil",
+        "prompt": "Crea una aplicación móvil con sus pantallas clave, flujo de usuario y proyecto móvil ejecutable."
+      },
+      {
+        "category": "apps",
+        "label": "Maquetas de UI",
+        "prompt": "Crea maquetas de UI de alta fidelidad para la experiencia principal del producto."
+      },
+      {
+        "category": "apps",
+        "label": "Wireframe",
+        "prompt": "Crea un wireframe que muestre el diseño y las interacciones principales."
+      },
+      {
+        "category": "apps",
+        "label": "Automatización",
+        "prompt": "Crea un flujo ejecutable con pasos, entradas, aprobaciones e integraciones configuradas."
+      },
+      {
+        "category": "apps",
+        "label": "Flujo de Twilio",
+        "prompt": "Crea y valida un flujo ejecutable de Twilio para SMS o voz con acciones y entradas reales del conector."
+      },
+      {
+        "category": "apps",
+        "label": "Agente de voz",
+        "prompt": "Crea y configura un agente de voz con guion, voz, herramientas, flujo de llamadas y criterios de evaluación."
+      },
+      {
+        "category": "business",
+        "label": "Centro de ventas",
+        "prompt": "Crea un centro de ventas con mercado objetivo, contactos, campaña, pipeline, objetivos, reuniones y agente asesor."
+      },
+      {
+        "category": "business",
+        "label": "Espacio de reclutamiento",
+        "prompt": "Crea un espacio de reclutamiento con perfil del puesto, pipeline de candidatos, búsqueda, entrevistas, evaluación y agente reclutador."
+      },
+      {
+        "category": "business",
+        "label": "Campaña de correo",
+        "prompt": "Crea una campaña con audiencia, plantilla reutilizable, asunto, contenido adaptable, flujo de envío y métricas."
+      },
+      {
+        "category": "business",
+        "label": "Descubrimiento de producto",
+        "prompt": "Crea un espacio que sintetice evidencia de clientes, priorice oportunidades y convierta los mejores conceptos en maquetas."
+      },
+      {
+        "category": "business",
+        "label": "Concurso de pitch",
+        "prompt": "Crea un espacio con solicitud, pitch cronometrado, rúbrica, práctica de preguntas, presentación y agente asesor."
+      },
+      {
+        "category": "business",
+        "label": "Hoja de ruta",
+        "prompt": "Crea un documento de requisitos y una hoja de ruta conectada con hitos, versiones y tareas prioritarias."
+      },
+      {
+        "category": "business",
+        "label": "Reunión de equipo",
+        "prompt": "Crea una reunión diaria con personas, agentes, trabajo actual, bloqueos, decisiones y tareas de seguimiento."
+      },
+      {
+        "category": "learning",
+        "label": "LMS interactivo",
+        "prompt": "Crea un curso LMS completo con módulos, lecciones, ejercicios, evaluaciones, progreso, proyecto final y profesor de IA."
+      },
+      {
+        "category": "learning",
+        "label": "Currículum",
+        "prompt": "Crea un currículum profesional con jerarquía clara, logros sólidos y formato listo para exportar."
+      },
+      {
+        "category": "learning",
+        "label": "Currículum en vídeo",
+        "prompt": "Crea un currículum, un guion y storyboard concisos para vídeo, y la presentación en vídeo conectada."
+      },
+      {
+        "category": "documents",
+        "label": "Presentación",
+        "prompt": "Crea una presentación pulida con una narrativa clara y una dirección visual."
+      },
+      {
+        "category": "documents",
+        "label": "Documento",
+        "prompt": "Redacta un documento estructurado listo para revisar, exportar y compartir."
+      },
+      {
+        "category": "documents",
+        "label": "Investigación",
+        "prompt": "Investiga con fuentes citadas, crea un conjunto de datos y sintetiza conclusiones prácticas."
+      },
+      {
+        "category": "documents",
+        "label": "Panel de datos",
+        "prompt": "Crea un panel de decisión con datos documentados, KPI calculados, gráficos y resumen ejecutivo."
+      },
+      {
+        "category": "documents",
+        "label": "Historia de datos",
+        "prompt": "Convierte un conjunto de datos en gráficos verificados, un panel y una presentación ejecutiva conectada."
+      },
+      {
+        "category": "documents",
+        "label": "Diagrama",
+        "prompt": "Crea un diagrama editable que explique claramente el sistema, proceso o relación."
+      },
+      {
+        "category": "documents",
+        "label": "Correo HTML",
+        "prompt": "Diseña un correo HTML adaptable con contenido y llamadas a la acción claros."
+      },
+      {
+        "category": "documents",
+        "label": "Color + tipografía",
+        "prompt": "Crea una paleta accesible y una combinación tipográfica con pautas de uso."
+      },
+      {
+        "category": "ai",
+        "label": "Agente de IA",
+        "prompt": "Crea un agente de IA operativo con instrucciones, personalidad, herramientas, conocimiento y evaluación puntuada."
+      },
+      {
+        "category": "ai",
+        "label": "Modelo Evermind",
+        "prompt": "Crea un laboratorio Evermind con conocimiento, etapas de enseñanza y ajuste, evaluación y agente publicable."
+      },
+      {
+        "category": "ai",
+        "label": "Evaluación de LLM",
+        "prompt": "Crea una suite de evaluación de LLM con prompts, señales esperadas, criterios, seguridad y rúbrica de lanzamiento."
+      },
+      {
+        "category": "creative",
+        "label": "Vídeo",
+        "prompt": "Crea un vídeo con concepto, guion, storyboard, dirección visual y vista previa generada."
+      },
+      {
+        "category": "creative",
+        "label": "Animación",
+        "prompt": "Crea una animación con storyboard, ritmo, estilo visual y vista previa generada."
+      },
+      {
+        "category": "creative",
+        "label": "Imagen",
+        "prompt": "Crea una imagen pulida a partir de una dirección artística y prepárala para exportar."
+      },
+      {
+        "category": "creative",
+        "label": "Podcast",
+        "prompt": "Crea un episodio con concepto, guion estructurado, dirección de voz, transcripción y audio."
+      },
+      {
+        "category": "creative",
+        "label": "Cómic",
+        "prompt": "Crea un cómic con historia, plan de viñetas, diálogos, estilo visual y arte exportable."
+      },
+      {
+        "category": "creative",
+        "label": "Juego de navegador",
+        "prompt": "Diseña y desarrolla un juego de navegador jugable con mecánicas, controles, gráficos y evaluación."
+      },
+      {
+        "category": "creative",
+        "label": "Juego de Roblox",
+        "prompt": "Diseña una experiencia jugable de Roblox con mecánicas, mundo, controles, evaluación y destino de publicación."
+      },
+      {
+        "category": "creative",
+        "label": "Dibujo CAD",
+        "prompt": "Crea un dibujo CAD editable con dimensiones, unidades, geometría y salida lista para exportar."
+      },
+      {
+        "category": "creative",
+        "label": "Modelo 3D",
+        "prompt": "Crea un modelo 3D con forma, materiales, dimensiones, vistas y geometría lista para exportar."
+      }
     ]
   },
   "home": {
@@ -5540,13 +5741,29 @@
       "agentPresence": "En vivo · asignable",
       "sessionTitle": "Lanzar campaña · sesión en vivo",
       "presenceAria": "Tres personas en esta sesión",
-      "presenceInitials": ["SH", "JR", "TK"],
+      "presenceInitials": [
+        "SH",
+        "JR",
+        "TK"
+      ],
       "alwaysOn": "Siempre activos",
       "teammateAction": "Traer a {name} a este lienzo",
       "team": [
-        { "short": "CM", "name": "CMO", "prefill": "Trae al CMO para planificar esta campaña y su página de destino" },
-        { "short": "CF", "name": "CFO", "prefill": "Trae al CFO para prever el presupuesto de esta campaña" },
-        { "short": "CT", "name": "CTO", "prefill": "Trae al CTO para revisar cómo esto llega a producción" }
+        {
+          "short": "CM",
+          "name": "CMO",
+          "prefill": "Trae al CMO para planificar esta campaña y su página de destino"
+        },
+        {
+          "short": "CF",
+          "name": "CFO",
+          "prefill": "Trae al CFO para prever el presupuesto de esta campaña"
+        },
+        {
+          "short": "CT",
+          "name": "CTO",
+          "prefill": "Trae al CTO para revisar cómo esto llega a producción"
+        }
       ],
       "guestNote": "Un lienzo real. Nada sale de este dispositivo hasta que inicies sesión.",
       "narrowNote": "Ábrelo en una pantalla más grande para ver el lienzo completo.",
@@ -7951,7 +8168,13 @@
       "button": "Comparar",
       "maxTitle": "Se pueden comparar hasta {max} modelos",
       "addTitle": "Añadir a la comparación",
-      "compareAria": "Comparar {name}", "promptLabel": "Ejecutar un prompt en cada modelo seleccionado", "promptPlaceholder": "Introduce el prompt exacto que quieres comparar…", "needPromptTitle": "Introduce un prompt para ejecutar", "executeTitle": "Ejecutar el prompt con cada modelo seleccionado en Canvas", "executeButton": "Comparar ejecución en Canvas", "specsButton": "Comparar especificaciones"
+      "compareAria": "Comparar {name}",
+      "promptLabel": "Ejecutar un prompt en cada modelo seleccionado",
+      "promptPlaceholder": "Introduce el prompt exacto que quieres comparar…",
+      "needPromptTitle": "Introduce un prompt para ejecutar",
+      "executeTitle": "Ejecutar el prompt con cada modelo seleccionado en Canvas",
+      "executeButton": "Comparar ejecución en Canvas",
+      "specsButton": "Comparar especificaciones"
     }
   },
   "talent": {
@@ -9409,7 +9632,8 @@
         "registered": "Usuarios registrados",
         "paid": "Clientes de pago"
       }
-    }
+    },
+    "subnavLabel": "Subvistas de administración"
   },
   "providerKeys": {
     "title": "Usa tus propios modelos",
@@ -12027,15 +12251,28 @@
     "switchToDark": "Cambiar al modo oscuro"
   },
   "tutorials": {
-    "seo": { "title": "Tutoriales guiados por IA y cursos interactivos", "description": "Aprende emprendimiento, reclutamiento, producto, marketing, liderazgo, finanzas, software, IA y más en un LMS adaptativo sobre Creation Canvas.", "ogTitle": "Aprende con un profesor de IA en Creation Canvas" },
+    "seo": {
+      "title": "Tutoriales guiados por IA y cursos interactivos",
+      "description": "Aprende emprendimiento, reclutamiento, producto, marketing, liderazgo, finanzas, software, IA y más en un LMS adaptativo sobre Creation Canvas.",
+      "ogTitle": "Aprende con un profesor de IA en Creation Canvas"
+    },
     "eyebrow": "Aprendizaje hecho para ti",
     "title": "Elige un tema. Crea tu curso. Conoce a tu profesor de IA.",
     "lead": "Cada tutorial abre un Creation Canvas privado, crea un curso LMS interactivo e incorpora al chat un profesor de IA especialista que guía tu práctica y adapta cada lección.",
     "howItWorks": "Cómo funcionan los tutoriales interactivos",
     "steps": [
-      { "title": "Elige una dirección", "description": "Empieza con un tema práctico o trae cualquier objetivo de aprendizaje propio." },
-      { "title": "Canvas crea el LMS", "description": "Brain crea módulos, lecciones, ejercicios, evaluaciones, progreso y un proyecto final." },
-      { "title": "Aprende con un especialista", "description": "Un profesor de IA adecuado al tema entra en tu chat, comprueba tu comprensión y adapta el camino." }
+      {
+        "title": "Elige una dirección",
+        "description": "Empieza con un tema práctico o trae cualquier objetivo de aprendizaje propio."
+      },
+      {
+        "title": "Canvas crea el LMS",
+        "description": "Brain crea módulos, lecciones, ejercicios, evaluaciones, progreso y un proyecto final."
+      },
+      {
+        "title": "Aprende con un especialista",
+        "description": "Un profesor de IA adecuado al tema entra en tu chat, comprueba tu comprensión y adapta el camino."
+      }
     ],
     "catalogTitle": "¿Qué quieres aprender?",
     "catalogLead": "Elige un punto de partida. Tu curso se genera según tus objetivos y experiencia, por lo que cada ruta de aprendizaje puede ser distinta.",
@@ -12047,14 +12284,94 @@
     "customPrompt": "Quiero aprender un tema de mi elección. Primero pregúntame qué quiero aprender, por qué me importa, mi experiencia actual, el ritmo que prefiero y el resultado que deseo. Después crea en el Canvas un curso LMS interactivo completo con módulos, lecciones, ejercicios, evaluaciones, seguimiento del progreso y un proyecto final práctico. Crea un agente profesor de IA especialista apropiado y conéctalo al curso y al chat de Brain para que se una a la conversación. Empieza a enseñar paso a paso, adáptate a mis respuestas y comprueba mi comprensión. No te limites a describir el curso; crea el curso y el agente profesor en el Canvas.",
     "coursePrompt": "Crea en el Canvas un curso LMS interactivo completo que me enseñe {topic}. Centra el curso en {focus}. Incluye módulos estructurados, lecciones, ejercicios prácticos, evaluaciones, seguimiento del progreso y un proyecto final práctico. Crea un agente profesor de IA especialista llamado {agent}, dale instrucciones docentes expertas para este tema y conéctalo tanto al curso como al chat de Brain para que se una a nuestra conversación. Empieza preguntando por mi nivel de experiencia y mi objetivo; luego enseña paso a paso, adáptate a mis respuestas, ofrece comentarios útiles y comprueba mi comprensión. No te limites a describir un plan de estudios; crea el objeto de curso y el agente profesor en el Canvas.",
     "topics": {
-      "entrepreneurship": { "title": "Emprendimiento", "summary": "Convierte una idea en un negocio probado mediante descubrimiento de clientes, posicionamiento, modelo de negocio y un plan de lanzamiento creíble.", "agent": "Coach de Emprendimiento", "focus": "encontrar un problema real del cliente, validar demanda, elegir un modelo de negocio, precios, salida al mercado, fundamentos de financiación y un plan de lanzamiento viable", "outcomes": ["Validar una idea", "Crear un modelo", "Planear el lanzamiento"] },
-      "recruiting": { "title": "Reclutamiento y Contratación", "summary": "Aprende a definir puestos, encontrar buenos candidatos, hacer entrevistas justas y cerrar la contratación correcta.", "agent": "Socio de Talento", "focus": "planificación de plantilla, perfiles de puesto, búsqueda inclusiva, entrevistas estructuradas, selección basada en evidencia, experiencia del candidato y cierre", "outcomes": ["Crear un perfil", "Entrevistar con rigor", "Decidir con evidencia"] },
-      "product": { "title": "Gestión de Producto", "summary": "Pasa del problema del usuario a la estrategia, evidencia de descubrimiento, hoja de ruta priorizada y resultados medibles.", "agent": "Mentor de Producto", "focus": "descubrimiento de clientes, estrategia de producto, mapa de oportunidades, priorización, hojas de ruta, experimentos, métricas y alineación", "outcomes": ["Descubrir necesidades", "Priorizar resultados", "Crear una hoja de ruta"] },
-      "marketing": { "title": "Marketing y Crecimiento", "summary": "Define audiencia, mensaje, canales, experimentos y un sistema de medición que acumule aprendizaje.", "agent": "Estratega de Crecimiento", "focus": "investigación de audiencia, posicionamiento, mensajes, contenido, canales de adquisición, conversión, retención, experimentos y métricas", "outcomes": ["Aclarar posición", "Diseñar campañas", "Medir crecimiento"] },
-      "leadership": { "title": "Liderazgo y Gestión", "summary": "Practica cómo marcar dirección, desarrollar personas, manejar conflictos, delegar y crear equipos responsables.", "agent": "Coach de Liderazgo", "focus": "estilos de liderazgo, objetivos, delegación, feedback, coaching, conversaciones difíciles, decisiones, salud del equipo y responsabilidad", "outcomes": ["Liderar con claridad", "Desarrollar personas", "Resolver conflictos"] },
-      "finance": { "title": "Finanzas para Decidir", "summary": "Comprende estados financieros, flujo de caja, presupuestos, economía unitaria, previsiones y decisiones de inversión.", "agent": "Tutor de Finanzas", "focus": "estados financieros, flujo de caja, presupuestos, previsiones, economía unitaria, escenarios, fundamentos de valoración y asignación de capital", "outcomes": ["Leer los números", "Crear una previsión", "Evaluar alternativas"] },
-      "softwareAi": { "title": "Software e IA", "summary": "Aprende cómo diseñar, construir, evaluar, proteger y lanzar de forma responsable sistemas modernos de software e IA.", "agent": "Instructor de Ingeniería de IA", "focus": "arquitectura, APIs, datos, pruebas, seguridad, aplicaciones LLM, prompting, recuperación, agentes, evaluaciones y despliegue responsable", "outcomes": ["Diseñar un sistema", "Construir con IA", "Evaluar calidad"] },
-      "career": { "title": "Crecimiento Profesional", "summary": "Conecta tus fortalezas con una dirección, cierra brechas, comunica tu valor y ejecuta un plan práctico.", "agent": "Coach Profesional", "focus": "fortalezas, opciones profesionales, brechas de habilidades, evidencia de portafolio, networking, entrevistas, negociación y un plan de desarrollo de 90 días", "outcomes": ["Elegir dirección", "Mostrar tu valor", "Planear 90 días"] }
+      "entrepreneurship": {
+        "title": "Emprendimiento",
+        "summary": "Convierte una idea en un negocio probado mediante descubrimiento de clientes, posicionamiento, modelo de negocio y un plan de lanzamiento creíble.",
+        "agent": "Coach de Emprendimiento",
+        "focus": "encontrar un problema real del cliente, validar demanda, elegir un modelo de negocio, precios, salida al mercado, fundamentos de financiación y un plan de lanzamiento viable",
+        "outcomes": [
+          "Validar una idea",
+          "Crear un modelo",
+          "Planear el lanzamiento"
+        ]
+      },
+      "recruiting": {
+        "title": "Reclutamiento y Contratación",
+        "summary": "Aprende a definir puestos, encontrar buenos candidatos, hacer entrevistas justas y cerrar la contratación correcta.",
+        "agent": "Socio de Talento",
+        "focus": "planificación de plantilla, perfiles de puesto, búsqueda inclusiva, entrevistas estructuradas, selección basada en evidencia, experiencia del candidato y cierre",
+        "outcomes": [
+          "Crear un perfil",
+          "Entrevistar con rigor",
+          "Decidir con evidencia"
+        ]
+      },
+      "product": {
+        "title": "Gestión de Producto",
+        "summary": "Pasa del problema del usuario a la estrategia, evidencia de descubrimiento, hoja de ruta priorizada y resultados medibles.",
+        "agent": "Mentor de Producto",
+        "focus": "descubrimiento de clientes, estrategia de producto, mapa de oportunidades, priorización, hojas de ruta, experimentos, métricas y alineación",
+        "outcomes": [
+          "Descubrir necesidades",
+          "Priorizar resultados",
+          "Crear una hoja de ruta"
+        ]
+      },
+      "marketing": {
+        "title": "Marketing y Crecimiento",
+        "summary": "Define audiencia, mensaje, canales, experimentos y un sistema de medición que acumule aprendizaje.",
+        "agent": "Estratega de Crecimiento",
+        "focus": "investigación de audiencia, posicionamiento, mensajes, contenido, canales de adquisición, conversión, retención, experimentos y métricas",
+        "outcomes": [
+          "Aclarar posición",
+          "Diseñar campañas",
+          "Medir crecimiento"
+        ]
+      },
+      "leadership": {
+        "title": "Liderazgo y Gestión",
+        "summary": "Practica cómo marcar dirección, desarrollar personas, manejar conflictos, delegar y crear equipos responsables.",
+        "agent": "Coach de Liderazgo",
+        "focus": "estilos de liderazgo, objetivos, delegación, feedback, coaching, conversaciones difíciles, decisiones, salud del equipo y responsabilidad",
+        "outcomes": [
+          "Liderar con claridad",
+          "Desarrollar personas",
+          "Resolver conflictos"
+        ]
+      },
+      "finance": {
+        "title": "Finanzas para Decidir",
+        "summary": "Comprende estados financieros, flujo de caja, presupuestos, economía unitaria, previsiones y decisiones de inversión.",
+        "agent": "Tutor de Finanzas",
+        "focus": "estados financieros, flujo de caja, presupuestos, previsiones, economía unitaria, escenarios, fundamentos de valoración y asignación de capital",
+        "outcomes": [
+          "Leer los números",
+          "Crear una previsión",
+          "Evaluar alternativas"
+        ]
+      },
+      "softwareAi": {
+        "title": "Software e IA",
+        "summary": "Aprende cómo diseñar, construir, evaluar, proteger y lanzar de forma responsable sistemas modernos de software e IA.",
+        "agent": "Instructor de Ingeniería de IA",
+        "focus": "arquitectura, APIs, datos, pruebas, seguridad, aplicaciones LLM, prompting, recuperación, agentes, evaluaciones y despliegue responsable",
+        "outcomes": [
+          "Diseñar un sistema",
+          "Construir con IA",
+          "Evaluar calidad"
+        ]
+      },
+      "career": {
+        "title": "Crecimiento Profesional",
+        "summary": "Conecta tus fortalezas con una dirección, cierra brechas, comunica tu valor y ejecuta un plan práctico.",
+        "agent": "Coach Profesional",
+        "focus": "fortalezas, opciones profesionales, brechas de habilidades, evidencia de portafolio, networking, entrevistas, negociación y un plan de desarrollo de 90 días",
+        "outcomes": [
+          "Elegir dirección",
+          "Mostrar tu valor",
+          "Planear 90 días"
+        ]
+      }
     }
   },
   "media": {
@@ -12521,7 +12838,21 @@
     "note": "Elige un método de instalación, copia el comando y ejecútalo en tu terminal."
   },
   "creationCanvas": {
-    "comparison": { "promptTitle": "Prompt compartido de comparación", "sharedPrompt": "Se ejecuta sin cambios en cada modelo seleccionado", "responseFrom": "Respuesta generada por {model}", "executing": "Ejecutando", "executingWith": "Ejecutando este prompt con {model}…", "executesWith": "se ejecuta con {model}", "runningCount": "Ejecutando {count} modelos seleccionados…", "completed": "Completado", "failed": "La ejecución falló", "emptyOutput": "El modelo no devolvió ningún resultado.", "finished": "Comparación de modelos finalizada.", "modelLayer": "Modelo · {model}", "promptLayer": "Prompt compartido" },
+    "comparison": {
+      "promptTitle": "Prompt compartido de comparación",
+      "sharedPrompt": "Se ejecuta sin cambios en cada modelo seleccionado",
+      "responseFrom": "Respuesta generada por {model}",
+      "executing": "Ejecutando",
+      "executingWith": "Ejecutando este prompt con {model}…",
+      "executesWith": "se ejecuta con {model}",
+      "runningCount": "Ejecutando {count} modelos seleccionados…",
+      "completed": "Completado",
+      "failed": "La ejecución falló",
+      "emptyOutput": "El modelo no devolvió ningún resultado.",
+      "finished": "Comparación de modelos finalizada.",
+      "modelLayer": "Modelo · {model}",
+      "promptLayer": "Prompt compartido"
+    },
     "group": {
       "Build": "Construcción",
       "Data": "Datos",
@@ -14108,7 +14439,8 @@
       "robloxIdsHint": "Ambos números están en la URL del Creator Dashboard de una experiencia que ya publicaste desde Studio.",
       "publishRoblox": "Publicar en Roblox",
       "robloxPublished": "Publicado en Roblox como versión {version}"
-    }
+    },
+    "teammateSeated": "En este lienzo"
   },
   "canvasCommands": {
     "cleanLayout": "Ordenar el diseño del lienzo",
@@ -14845,12 +15177,6 @@
       "failed": "No se pudo compartir la pantalla"
     }
   },
-  "workbench": {
-    "region": "Mesa de trabajo",
-    "title": "Mesa de trabajo",
-    "close": "Cerrar la mesa de trabajo",
-    "resize": "Redimensionar la mesa de trabajo"
-  },
   "canvasStage": {
     "outsideCurrentProject": "Viendo un lienzo fuera del proyecto actual"
   },
@@ -14863,5 +15189,37 @@
     "leaveTitle": "Salir de la sesión en vivo",
     "onThisCanvas": "Este lienzo",
     "liveWithCount": "{count, plural, one {En vivo · # aquí} other {En vivo · # aquí}}"
+  },
+  "team": {
+    "barLabel": "Tu equipo",
+    "alwaysOn": "Siempre activos",
+    "team": "Equipo",
+    "invite": "+ Invitar",
+    "roleTeammate": "compañero",
+    "chipJoin": "Añade a {name} ({role}) a este lienzo: arrástralo o pulsa Intro",
+    "chipLocked": "{name} aún no está configurado en este espacio de trabajo"
+  },
+  "sessions": {
+    "newCanvas": "+ Nuevo lienzo",
+    "active": "Activo",
+    "recents": "Recientes",
+    "untitled": "Lienzo sin título",
+    "draft": "Borrador",
+    "draftHint": "Guardado solo en este navegador: inicia sesión para conservarlo"
+  },
+  "shellPanel": {
+    "crumb": "Espacio de trabajo",
+    "title": "Panel"
+  },
+  "profile": {
+    "displayName": "Nombre visible",
+    "displayNamePlaceholder": "Cómo aparece tu nombre ante tu equipo",
+    "avatarUpload": "Subir foto",
+    "avatarChange": "Cambiar foto",
+    "avatarUploading": "Subiendo…",
+    "avatarFailed": "No se pudo subir esa imagen",
+    "save": "Guardar",
+    "saved": "Guardado",
+    "saveFailed": "No se pudo guardar"
   }
 }

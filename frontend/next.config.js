@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const createNextIntlPlugin = require('next-intl/plugin');
+const path = require('path');
 const { version } = require('./package.json');
 
 // next-intl: points the plugin at the per-request locale/message resolver.
@@ -9,12 +10,45 @@ const nextConfig = {
   env: {
     NEXT_PUBLIC_APP_VERSION: version,
   },
-  outputFileTracingRoot: __dirname,
+  // Both production output tracing and Turbopack must see the linked packages
+  // beside frontend/ in this monorepo.
+  outputFileTracingRoot: path.join(__dirname, '..'),
   // Cloudflare Pages (next-on-pages) does not run Next's default image
   // optimizer endpoint (/_next/image), so optimized <Image> requests 404 and
   // render broken. Serve images unoptimized — they emit plain <img src> tags.
   images: { unoptimized: true },
   transpilePackages: ['@monaco-editor/react', 'monaco-editor', '@seanhogg/builderforce-studio', '@seanhogg/builderforce-studio-embedded', '@seanhogg/builderforce-sdk', '@seanhogg/builderforce-brain-ui'],
+  // Turbopack powers local development. Keep its behavior aligned with the
+  // webpack production build below: resolve linked workspace packages from the
+  // monorepo root, load blog Markdown as source text, and prevent browser
+  // bundles from following Transformers.js into Node-only native bindings.
+  turbopack: {
+    root: path.join(__dirname, '..'),
+    rules: {
+      '*.md': {
+        loaders: [path.join(__dirname, 'scripts/rawContentLoader.cjs')],
+        as: '*.js',
+      },
+    },
+    resolveAlias: {
+      // Turbopack resolves linked packages from their physical workspace paths,
+      // where pnpm's host-created dependency symlinks are not valid inside the
+      // Linux container. Route their runtime imports back through the canonical
+      // frontend dependency graph (the same behavior webpack's symlinks:false
+      // provides below).
+      '@huggingface/transformers': './node_modules/@huggingface/transformers/dist/transformers.web.js',
+      '@seanhogg/builderforce-brain-embedded': '../brain-embedded/dist/index.mjs',
+      '@seanhogg/builderforce-sdk': '../sdk/dist/index.mjs',
+      '@seanhogg/builderforce-studio': '../studio/dist/index.mjs',
+      '@seanhogg/builderforce-studio-embedded': '../studio-embedded/dist/index.mjs',
+      'mp4-muxer': './node_modules/mp4-muxer/build/mp4-muxer.mjs',
+      'onnxruntime-node': './src/lib/turbopackEmptyModule.ts',
+      'onnxruntime-web': './node_modules/onnxruntime-web/dist/ort.bundle.min.mjs',
+      'react-markdown': './node_modules/react-markdown/index.js',
+      'remark-gfm': './node_modules/remark-gfm/index.js',
+      sharp: './src/lib/turbopackEmptyModule.ts',
+    },
+  },
   webpack(config) {
     config.module.rules.push({
       test: /\.md$/,

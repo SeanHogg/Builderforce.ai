@@ -6,6 +6,13 @@
 C-suite: hired.video contributes the **Recruiter** and **HR** agents; BurnRateOS contributes
 **CEO, CFO, CRO, CMO, CPO, CISO** and the eight product domains they own.
 
+> **The experience half of every track is decided by
+> [PRD 21 — The Unified Experience](./21-prd-unified-experience.md), not here.** A track may land
+> its schema, its migrations and its API at any time. What it may **not** do is ship a surface as a
+> page: every track's UI arrives as a **panel over the mounted canvas**, and the C-suite seats this
+> PRD completes appear as **teammates in the footer**, never as a navigation rail. PRD 21 §5.1 is
+> the gate; its E0–E2 block frontend work on B1–B9.
+
 > **Read §2 before scheduling any track in this PRD or in PRD 18.** The two consolidations
 > collide *with each other* on at least twelve capabilities. Run independently, they will each
 > add a second affiliate system, a second bookings system, a second phone product, a third

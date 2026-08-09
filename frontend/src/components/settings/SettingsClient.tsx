@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * Account & workspace settings, split into focused sub-views via a <PillTabs> bar
- * (?sub=) so no single view is an endless scroll:
+ * Account & workspace settings, split into focused sub-views (?sub=) via the one
+ * shared <DestinationIndex>, so no single view is an endless scroll:
  *   - Account (default): profile, language, connected accounts, get-hired opt-in
  *   - Personality: the user's own psychometric profile
  *   - Sessions: personal account security (moved here from /security)
@@ -18,7 +18,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import PageContainer from '@/components/PageContainer';
-import PillTabs, { type PillTab } from '@/components/PillTabs';
+import { DestinationIndex, type IndexItem } from '@/components/shell/DestinationIndex';
 import { Button } from '@/components/ui';
 import { RoleGate } from '@/components/RoleGate';
 import {
@@ -31,6 +31,7 @@ import {
   getMe,
   updateMyPersonality,
 } from '@/lib/auth';
+import ProfileIdentityCard from '@/components/profile/ProfileIdentityCard';
 import PsychometricEditor from '@/components/PsychometricEditor';
 import PersonalitySummary from '@/components/PersonalitySummary';
 import ForHireCard from '@/components/account/ForHireCard';
@@ -164,33 +165,39 @@ export default function SettingsClient() {
     }
   };
 
-  const subTabs: PillTab[] = [
-    { id: '', label: t('accountTab'), icon: '👤', href: '/settings' },
-    { id: 'personality', label: t('personality'), icon: '🧠', href: '/settings?sub=personality' },
-    { id: 'sessions', label: t('sessionsTab'), icon: '🔒', href: '/settings?sub=sessions' },
-    { id: 'email', label: t('emailTab'), icon: '✉️', href: '/settings?sub=email' },
+  // Grouped by the question a person is actually asking — *You* vs *Workspace*
+  // (PRD 21 §3.4). Eight sub-views is past the six a horizontal bar can carry, so
+  // `DestinationIndex` renders this as a vertical index column on its own.
+  const subTabs: IndexItem[] = [
+    { id: '', label: t('accountTab'), icon: '👤', href: '/settings', group: t('groupYou') },
+    { id: 'personality', label: t('personality'), icon: '🧠', href: '/settings?sub=personality', group: t('groupYou') },
+    { id: 'sessions', label: t('sessionsTab'), icon: '🔒', href: '/settings?sub=sessions', group: t('groupYou') },
+    { id: 'email', label: t('emailTab'), icon: '✉️', href: '/settings?sub=email', group: t('groupYou') },
     ...(tenant ? [
-      { id: 'workspace', label: t('workspace'), icon: '🏢', href: '/settings?sub=workspace' },
+      { id: 'workspace', label: t('workspace'), icon: '🏢', href: '/settings?sub=workspace', group: t('groupWorkspace') },
       // Workspace-scoped like the two around it: the AI Manager autonomy defaults every
-      // project inherits (0363). Role-gated inside the panel, not hidden from the bar.
-      { id: 'manager', label: t('managerDefaults'), icon: '🧭', href: '/settings?sub=manager' },
-      { id: 'spend', label: t('spendLimits'), icon: '💳', href: '/settings?sub=spend' },
-      { id: 'logs', label: t('logsTab'), icon: '📜', href: '/settings?sub=logs' },
+      // project inherits (0363). Role-gated inside the panel, not hidden from the index.
+      { id: 'manager', label: t('managerDefaults'), icon: '🧭', href: '/settings?sub=manager', group: t('groupWorkspace') },
+      { id: 'spend', label: t('spendLimits'), icon: '💳', href: '/settings?sub=spend', group: t('groupWorkspace') },
+      { id: 'logs', label: t('logsTab'), icon: '📜', href: '/settings?sub=logs', group: t('groupWorkspace') },
     ] : []),
   ];
 
   const renderAccount = () => (
     <>
-      {/* Profile */}
+      {/* Profile — the SAME identity card `/freelancer/profile` renders above its
+          gig-specific fields, so a builder edits their name and avatar here
+          instead of being sent to a page styled like a different product. The
+          two read-only facts that remain are exactly the two nobody can edit. */}
       <div style={{ ...cardStyle, marginBottom: 20 }}>
         <div style={sectionTitle}>{t('profile')}</div>
-        <div style={{ display: 'grid', gap: 10 }}>
+        <ProfileIdentityCard />
+        <div style={{ display: 'grid', gap: 10, marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border-subtle)' }}>
           {[
             { label: t('email'), value: user?.email },
-            { label: t('displayName'), value: user?.name },
             { label: t('userId'), value: user?.id, mono: true },
           ].filter((r) => r.value).map(({ label, value, mono }) => (
-            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
+            <div key={label} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 13 }}>
               <span style={{ color: 'var(--text-muted)' }}>{label}</span>
               <span style={mono ? { fontFamily: 'var(--font-mono)', fontSize: 11 } : {}}>{value}</span>
             </div>
@@ -364,7 +371,7 @@ export default function SettingsClient() {
     <PageContainer width={sub === 'logs' ? 'full' : 'readable'} style={{ padding: '32px 40px' }}>
       <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 20 }}>{t('title')}</h1>
 
-      <PillTabs tabs={subTabs} activeId={sub} ariaLabel={t('subnavLabel')} />
+      <DestinationIndex items={subTabs} activeId={sub} ariaLabel={t('subnavLabel')} />
 
       {sub === 'personality'
         ? renderPersonality()

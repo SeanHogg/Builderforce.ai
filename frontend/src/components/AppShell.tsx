@@ -2,7 +2,6 @@
 
 import { usePathname } from 'next/navigation';
 import Sidebar from './Sidebar';
-import SectionTabs from './SectionTabs';
 import TopBar from './TopBar';
 import MobileBottomNav from './MobileBottomNav';
 import EmulationBar from './EmulationBar';
@@ -13,9 +12,11 @@ import { useSidebarCollapse } from '@/lib/useSidebarCollapse';
 import { useMobileNav } from '@/lib/useMobileNav';
 import { NavCountsProvider } from '@/lib/navCounts';
 import { CanvasStage } from './canvas/CanvasStage';
-import { Workbench } from './workspace/Workbench';
+import { ShellIndex } from './shell/ShellIndex';
+import { ShellPanel } from './shell/ShellPanel';
+import { TeamBar } from './team/TeamBar';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
-import { dockOpen, isStageRoute } from '@/lib/workbenchPolicy';
+import { isStageRoute, panelOpen } from '@/lib/workbenchPolicy';
 
 function isProjectIdPage(pathname: string | null): boolean {
   return pathname != null && /^\/projects\/[^/]+$/.test(pathname);
@@ -32,7 +33,7 @@ function isCreationPage(pathname: string | null): boolean {
 }
 
 /** Deep full-screen routes (the IDE editor + a single project) render edge-to-edge
- *  with no section tab bar. The IDE launcher + Voice Studio still show tabs. */
+ *  with no index. The IDE launcher + Voice Studio still show theirs. */
 function isFullScreenRoute(pathname: string | null): boolean {
   if (pathname == null) return false;
   if (isProjectIdPage(pathname)) return true;
@@ -40,13 +41,22 @@ function isFullScreenRoute(pathname: string | null): boolean {
   return /^\/ide\/(?!dashboard$|voice$)[^/]+/.test(pathname);
 }
 
+/**
+ * The shell (PRD 21 §3.1).
+ *
+ * Left panel: the person's SESSIONS. Centre: the board, mounted once and kept.
+ * Footer: the TEAM — the always-on seats beside the humans you invited. Every
+ * other destination arrives as a panel OVER the board rather than as a page that
+ * replaces it, which is the one corollary the rest of the PRD is downstream of:
+ * a route may change what is on screen, it may never unmount the stage.
+ */
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { emulation } = useEmulation();
 
   // IDE/project pages force icon-only mode; otherwise the user's stored choice.
-  // Creation defaults to the user's preference: the compact rail keeps the canvas
-  // spacious, but expanding it reveals recent Creation Sessions and search.
+  // The collapsed rail keeps the canvas spacious, which §3.2 calls the default
+  // posture for real work; expanding it reveals the session list and search.
   const routeCollapsed = isProjectIdPage(pathname) || isIdePage(pathname);
   const { collapsed: navCollapsed, toggle: toggleNav } = useSidebarCollapse(routeCollapsed);
   const { open: navOpen, openNav, closeNav } = useMobileNav();
@@ -57,7 +67,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // is exactly what it always was.
   const canvas = useOptionalActiveCanvas();
   const stageActive = canvas?.active != null && canvas.stageHosted;
-  const dockedPage = stageActive && dockOpen(pathname ?? '', true);
+  const panelHosted = stageActive && panelOpen(pathname ?? '', true);
   const onStage = isStageRoute(pathname ?? '');
 
   return (
@@ -78,36 +88,38 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             style={{ width: '100%', paddingLeft: 0 }}
           >
             {stageActive ? (
-              // Stage + dock. The board keeps its place in the tree in BOTH
+              // Stage + panel. The board keeps its place in the tree in BOTH
               // states, which is the entire mechanism: React only preserves a
               // component that stays mounted at the same position, so the stage
               // must never be moved between branches to make room for a page.
-              <div className="stage-split" data-dock={dockedPage ? 'open' : 'closed'}>
+              <div className="stage-split" data-panel={panelHosted ? 'open' : 'closed'}>
                 <CanvasStage />
-                {dockedPage ? (
-                  <Workbench>
+                {panelHosted ? (
+                  <ShellPanel>
                     {children}
-                  </Workbench>
+                  </ShellPanel>
                 ) : (
                   // Either a stage route — whose page component renders nothing,
                   // it only registers the board — or a route that keeps the whole
                   // screen (the IDE, a project). Both want the page in flow beside
-                  // the hidden stage; neither is allowed to drop it.
+                  // the stage; neither is allowed to drop it.
                   <div className={onStage ? 'stage-split__registrar' : 'stage-split__full'}>
-                    {!onStage && !isFullScreenRoute(pathname) && <SectionTabs />}
+                    {!onStage && !isFullScreenRoute(pathname) && <ShellIndex />}
                     {children}
                   </div>
                 )}
               </div>
             ) : (
               <>
-                {!isFullScreenRoute(pathname) && <SectionTabs />}
+                {!isFullScreenRoute(pathname) && <ShellIndex />}
                 {children}
               </>
             )}
           </main>
         </NavCountsProvider>
       </div>
+      {/* The team, always on the footer — §3.3. It decides its own visibility. */}
+      <TeamBar />
       <MobileBottomNav />
     </div>
   );

@@ -3,7 +3,7 @@
 /**
  * Workspace security governance (owner/admin). Personal account security (your
  * own sessions + admin-access log) has moved to Settings → Sessions; this page is
- * now purely workspace-scoped and split into focused sub-views via a <PillTabs>
+ * now purely workspace-scoped and split into focused sub-views via the shared <DestinationIndex>
  * bar (?sub=): Members · Agents · SOC 2.
  */
 
@@ -21,7 +21,7 @@ import { SecurityTicketAccessCard } from '@/components/security/SecurityTicketAc
 import { SecurityAuditPanel } from '@/components/security/SecurityAuditPanel';
 import { WebSecurityScanPanel } from '@/components/security/WebSecurityScanPanel';
 import PolicyPacksPanel from '@/components/security/PolicyPacksPanel';
-import PillTabs, { type PillTab } from '@/components/PillTabs';
+import { DestinationIndex, type IndexItem } from '@/components/shell/DestinationIndex';
 import PageContainer from '@/components/PageContainer';
 
 const cardStyle: React.CSSProperties = {
@@ -97,7 +97,7 @@ export default function SecurityClient() {
     }
   };
 
-  const subTabs: PillTab[] = [
+  const subTabs: IndexItem[] = [
     { id: '', label: t('membersTab'), icon: '👥', href: '/security' },
     { id: 'agents', label: t('agentsTab'), icon: '🛡', href: '/security?sub=agents' },
     { id: 'webscan', label: t('webTab'), icon: '🌐', href: '/security?sub=webscan' },
@@ -240,7 +240,7 @@ export default function SecurityClient() {
         </div>
       ) : (
         <>
-          <PillTabs tabs={subTabs} activeId={sub} ariaLabel={t('subnavLabel')} />
+          <DestinationIndex items={subTabs} activeId={sub} ariaLabel={t('subnavLabel')} />
           {sub === 'agents' ? renderAgents()
             : sub === 'webscan' ? <WebSecurityScanPanel />
               : sub === 'soc2' ? renderSoc2()

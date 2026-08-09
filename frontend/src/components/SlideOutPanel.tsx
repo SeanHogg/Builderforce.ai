@@ -21,11 +21,44 @@ export interface SlideOutPanelTab {
   label: string;
 }
 
+/**
+ * The three widths, and only three (PRD 21 §2.4 / §3.4).
+ *
+ *   sheet (440) — settings, profile, ⌘K, short forms
+ *   wide  (660) — index + detail, e.g. Workforce's fourteen sub-views
+ *   full  (94%) — dashboards that need the room; the board is one Esc away
+ *
+ * A bespoke `min(560px, 96vw)` at a call site is what produced twenty distinct
+ * panel widths, so the named widths resolve to tokens and a raw CSS length is
+ * accepted only for the surfaces that predate this and have not been ported.
+ */
+export type PanelWidth = 'sheet' | 'wide' | 'full';
+
+const PANEL_WIDTH: Record<PanelWidth, string> = {
+  sheet: 'var(--panel-width-sheet)',
+  wide: 'var(--panel-width-wide)',
+  full: 'var(--panel-width-full)',
+};
+
+const resolveWidth = (width: PanelWidth | string): string =>
+  (width in PANEL_WIDTH ? PANEL_WIDTH[width as PanelWidth] : width);
+
 export interface SlideOutPanelProps {
   open: boolean;
   onClose: () => void;
   /** Panel title (optional). */
   title?: React.ReactNode;
+  /**
+   * Where this panel sits — rendered above the title in mono, small, muted.
+   * A panel over a board has no page breadcrumb of its own, so it carries one.
+   */
+  crumb?: React.ReactNode;
+  /**
+   * The panel's INDEX COLUMN (§3.4). A destination's sub-views become a vertical
+   * list down the panel's left edge rather than a horizontal tab bar — fourteen
+   * items fit vertically and a tab bar cannot hold them.
+   */
+  index?: React.ReactNode;
   /** Optional tabs; when provided, activeTabId and onTabChange control which tab is active. */
   tabs?: SlideOutPanelTab[];
   activeTabId?: string;
@@ -34,8 +67,8 @@ export interface SlideOutPanelProps {
   headerActions?: React.ReactNode;
   /** Main content. */
   children: React.ReactNode;
-  /** Drawer width. Default min(560px, 96vw). */
-  width?: string;
+  /** One of the three named widths, or a raw CSS length for an unported surface. */
+  width?: PanelWidth | string;
   /** Which edge the drawer docks to. Default 'right'. Use 'left' when the Brain
    *  (which is right-docked) needs a companion work panel on the opposite side. */
   side?: 'left' | 'right';
@@ -57,12 +90,14 @@ export function SlideOutPanel({
   open,
   onClose,
   title,
+  crumb,
+  index,
   tabs,
   activeTabId,
   onTabChange,
   headerActions,
   children,
-  width = 'min(560px, 96vw)',
+  width = 'sheet',
   side = 'right',
   zIndex = 9998,
 }: SlideOutPanelProps) {
@@ -74,6 +109,15 @@ export function SlideOutPanel({
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // §2.5: "Closes on `Esc` and on scrim click." The scrim was always here; Esc
+  // was not, so a keyboard user could open a panel they could not dismiss.
+  useEffect(() => {
+    if (!open) return undefined;
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, open]);
 
   if (!open || !mounted) return null;
 
@@ -96,7 +140,7 @@ export function SlideOutPanel({
           top: 0,
           ...(side === 'left' ? { left: 0 } : { right: 0 }),
           bottom: 0,
-          width,
+          width: resolveWidth(width),
           maxWidth: '100%',
           ...(side === 'left'
             ? { borderRight: '1px solid var(--border-subtle)', boxShadow: '8px 0 24px rgba(0,0,0,0.2)' }
@@ -141,9 +185,14 @@ export function SlideOutPanel({
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
-            {title != null && (
-              <div style={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>
-                {title}
+            {(title != null || crumb != null) && (
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {crumb != null && (
+                  <div className="ui-eyebrow" style={{ color: 'var(--text-muted)' }}>{crumb}</div>
+                )}
+                {title != null && (
+                  <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--text-primary)' }}>{title}</div>
+                )}
               </div>
             )}
             {headerActions}
@@ -170,8 +219,8 @@ export function SlideOutPanel({
                   background: 'none',
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
-                  borderBottom: `2px solid ${activeTabId === t.id ? 'var(--coral-bright, #f4726e)' : 'transparent'}`,
-                  color: activeTabId === t.id ? 'var(--coral-bright, #f4726e)' : 'var(--text-muted)',
+                  borderBottom: `2px solid ${activeTabId === t.id ? 'var(--coral-bright)' : 'transparent'}`,
+                  color: activeTabId === t.id ? 'var(--coral-bright)' : 'var(--text-muted)',
                   fontWeight: activeTabId === t.id ? 600 : 400,
                 }}
               >
@@ -180,8 +229,25 @@ export function SlideOutPanel({
             ))}
           </div>
         )}
-        <div style={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
-          {children}
+        {/* Index column beside the body, not above it — §3.4. Fourteen sub-views
+            fit down the left edge; a horizontal bar cannot hold them. */}
+        <div style={{ flex: 1, display: 'flex', minHeight: 0, alignItems: 'stretch' }}>
+          {index != null && (
+            <div
+              style={{
+                flexShrink: 0,
+                overflowY: 'auto',
+                borderRight: '1px solid var(--border-subtle)',
+                background: 'var(--surface-sunken)',
+                padding: 'var(--space-3)',
+              }}
+            >
+              {index}
+            </div>
+          )}
+          <div style={{ flex: 1, overflow: 'auto', minWidth: 0, minHeight: 0 }}>
+            {children}
+          </div>
         </div>
       </div>
     </>,

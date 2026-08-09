@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Select } from '@/components/Select';
 import { RoleGate } from '@/components/RoleGate';
-import PillTabs, { type PillTab } from '@/components/PillTabs';
+import { DestinationIndex, type IndexItem } from '@/components/shell/DestinationIndex';
 import { usePermission } from '@/lib/rbac';
 import {
   ManagerAutonomyControls, ManagerEffectiveSummary, ManagerKillSwitch,
@@ -57,7 +57,7 @@ import {
  * the same control set /settings?sub=manager uses for the workspace tier — and displays
  * the SERVER-resolved effective policy rather than folding the tiers itself.
  *
- * The surface is split into sub-views by the shared <PillTabs> bar (the same
+ * The surface is split into sub-views by the shared <DestinationIndex> (the same
  * secondary nav Settings / Security use), driven by `?sub=` so each view is
  * deep-linkable: Overview ('') · Backlog · Activity · Policy. The header and the
  * data/polling effects live above the switch so a run keeps streaming whichever
@@ -364,7 +364,7 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
   // `manager.manage`-gated anyway, and the server is the real authority — a
   // deep link to ?sub=policy still renders RoleGate's block notice).
   const href = (id: string) => (id ? `/projects?tab=manager&sub=${id}` : '/projects?tab=manager');
-  const subTabs: PillTab[] = [
+  const subTabs: IndexItem[] = [
     { id: '', label: t('subnav.overview'), icon: '📊', href: href('') },
     { id: 'backlog', label: t('subnav.backlog'), icon: '📋', href: href('backlog') },
     { id: 'stuck', label: t('subnav.stuck'), icon: '🚧', href: href('stuck') },
@@ -473,8 +473,8 @@ export function ManagerContent({ projectId }: ManagerContentProps) {
         </div>
       )}
 
-      {/* ── Secondary nav (shared pill bar, same as /settings) ── */}
-      <PillTabs tabs={subTabs} activeId={activeSub} ariaLabel={t('subnav.label')} style={{ marginBottom: 0 }} />
+      {/* ── Secondary nav (the ONE shared index, same as /settings) ── */}
+      <DestinationIndex items={subTabs} activeId={activeSub} ariaLabel={t('subnav.label')} style={{ marginBottom: 0 }} />
 
       {activeSub === '' && (
       <>

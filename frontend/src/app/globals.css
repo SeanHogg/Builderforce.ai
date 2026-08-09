@@ -117,6 +117,13 @@
   --control-lg: 44px;
   --content-readable: 1100px;
   --content-narrow: 720px;
+  /* The three panel widths (PRD 21 §2.4 / §3.4) — sheet, wide, full, and no
+     fourth. A bespoke `min(560px, 96vw)` at a call site is how twenty distinct
+     panel widths arrived; `<SlideOutPanel width="sheet|wide|full">` resolves to
+     these, so the scale is enforced by the primitive rather than by review. */
+  --panel-width-sheet: min(440px, 96vw);
+  --panel-width-wide: min(660px, 96vw);
+  --panel-width-full: 94vw;
   --surface-page: var(--bg-deep);
   --surface-panel: var(--bg-surface);
   --surface-raised: var(--bg-elevated);
@@ -1430,6 +1437,58 @@ html[data-theme='light'] .nebula {
   margin-bottom: 16px;
 }
 
+/* The left panel's sessions (PRD 21 §3.2) — the person's own work, above the
+   destinations. Chrome, so every value is a token and it reads in both themes. */
+.nav-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: 0 var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.nav-sessions__label,
+.nav-section__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-2) var(--space-1);
+}
+
+/* The live dot §3.2 asks for on Active — a state, so it does not animate for
+   anyone who asked for less motion. */
+.nav-sessions__live {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--success);
+  box-shadow: 0 0 0 3px var(--surface-cyan-soft);
+}
+
+.nav-sessions__item {
+  font-weight: 500;
+}
+
+.nav-sessions__item .nav-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* An account-less board lives in this browser only. Saying so is the difference
+   between "I'll get back to it" and losing it. */
+.nav-sessions__draft {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--warning);
+}
+
 .nav-section-label {
   font-size: 10px;
   font-weight: 600;
@@ -1556,59 +1615,36 @@ html[data-theme='light'] .nebula {
   background: transparent;
 }
 
-/* The one section tab bar (SectionTabs.tsx). Breaks out of .content's padding so
-   it sits flush against the top bar and spans the full content width; the inline
-   scrollbar is hidden (it stays scrollable on narrow screens via touch/trackpad). */
-.section-tabs {
-  display: flex;
-  gap: 2px;
-  margin: calc(var(--content-pad-y) * -1) calc(var(--content-pad-x) * -1) 0;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--bg-base);
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none; /* Firefox */
-}
-.section-tabs::-webkit-scrollbar { display: none; } /* Chrome/Safari/Edge */
-.section-tabs__inner {
-  display: flex;
-  gap: 2px;
-  width: 100%;
-}
-
-.section-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: var(--control-lg);
-  padding: 0 14px;
-  margin-bottom: -1px;
-  color: var(--text-secondary);
-  border-bottom: 2px solid transparent;
-  font-size: 13px;
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-  transition: color var(--duration-fast) ease, border-color var(--duration-fast) ease;
-}
-.section-tab:hover { color: var(--text-primary); }
-.section-tab.is-active { color: var(--text-strong); border-bottom-color: var(--accent); }
-.section-tab:focus-visible { outline: none; border-radius: var(--radius-sm); box-shadow: inset var(--focus-ring); }
-
-.pill-tabs {
+/* THE index (DestinationIndex.tsx) — PRD 21 §3.4.
+   One component replaced three (`SectionTabs`, `PillTabs`, `AdminGroupNav`) and
+   one style block replaces theirs. It decides its own orientation: at or under
+   six items it is a compact row; above six it becomes a vertical index column,
+   because "no horizontal tab bar renders more than 6 items anywhere" (§6.3) and
+   Workforce's fourteen sub-views never fit in a bar. */
+.ui-index {
   display: flex;
   gap: var(--space-2);
+  min-width: 0;
+}
+
+.ui-index[data-orientation='horizontal'] {
   flex-wrap: wrap;
   margin-bottom: var(--space-6);
   padding-bottom: var(--space-1);
   overflow-x: auto;
 }
-.pill-tab {
+
+.ui-index[data-orientation='vertical'] {
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 168px;
+}
+
+.ui-index__item {
   display: inline-flex;
   min-height: var(--control-md);
   align-items: center;
-  gap: 7px;
+  gap: var(--space-2);
   padding: 0 var(--space-3);
   color: var(--text-secondary);
   background: var(--surface-raised);
@@ -1620,9 +1656,55 @@ html[data-theme='light'] .nebula {
   white-space: nowrap;
   transition: color var(--duration-fast) ease, background var(--duration-fast) ease, border-color var(--duration-fast) ease;
 }
-.pill-tab:hover { color: var(--text-primary); border-color: var(--border-strong); }
-.pill-tab.is-active { color: var(--text-strong); background: var(--accent-subtle); border-color: var(--border-accent); }
-.pill-tab:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* A vertical index reads as a list, not as a row of chips wrapped onto lines. */
+.ui-index[data-orientation='vertical'] .ui-index__item {
+  justify-content: flex-start;
+  background: transparent;
+  border-color: transparent;
+  white-space: normal;
+}
+
+.ui-index__item:hover { color: var(--text-primary); border-color: var(--border-strong); }
+.ui-index__item[aria-current='page'] {
+  color: var(--text-strong);
+  background: var(--accent-subtle);
+  border-color: var(--border-accent);
+}
+.ui-index__item:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+
+/* A locked destination stays visible and disabled with a reason (§2.6 rule 7).
+   Hiding it turns "you need Pro" into "this product cannot do that". */
+.ui-index__item[aria-disabled='true'] {
+  opacity: .5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.ui-index__group {
+  font-family: var(--font-mono);
+  font-size: .62rem;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: var(--space-3) var(--space-3) var(--space-1);
+}
+
+/* Eyebrow — mono, small, tracked (§2.3). One declaration, so a panel crumb and a
+   footer group label cannot drift into two different eyebrows. */
+.ui-eyebrow {
+  font-family: var(--font-mono);
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-index__item { transition: none; }
+}
 
 /* Canonical authenticated-page padding (set by PageContainer). Generous on
    desktop; trimmed on mobile so data/card pages run closer to full width
@@ -3655,12 +3737,12 @@ select.input option {
 }
 
 /* ---------------------------------------------------------------------------
-   Stage + workbench dock
+   Stage + panel (PRD 21 §3.1)
    ---------------------------------------------------------------------------
-   The board is mounted once and kept; a docked page opens BESIDE it rather than
-   replacing it. Layout only — the stage declares its own palette (the board is
-   palette-independent by convention) and the dock is shell-themed, so neither
-   sets a colour here.
+   The board is mounted once and kept; a destination opens as a panel OVER it
+   rather than replacing it. Layout only — the stage declares its own palette
+   (the board is palette-independent by convention) and the panel is shell-themed
+   by `SlideOutPanel`, so neither sets a colour here.
    --------------------------------------------------------------------------- */
 .stage-split {
   position: relative;
@@ -3685,11 +3767,7 @@ select.input option {
   padding: var(--content-pad-y) var(--content-pad-x);
 }
 
-/* Under the dock breakpoint a side-by-side split gives each half too little to
-   be usable, so the dock takes the screen and the board waits behind it — the
-   board is still mounted, which is what the person is actually keeping. */
-@media (max-width: 900px) {
-  .stage-split[data-dock='open'] .stage-split__stage {
-    display: none;
-  }
-}
+/* The panel portals to <body>, so it claims no row here — the stage keeps the
+   whole split and the panel floats over it. On a narrow screen the panel is
+   full-bleed by its own `max-width: 100%`, so the board is simply behind it;
+   it is still mounted, which is what the person is actually keeping. */

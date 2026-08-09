@@ -1,36 +1,146 @@
-## 2026-07-19 — ✅ RESOLVED: Residual burndown — provider parity, CI correlation, Actions reconcile, deploy-resolver drift
+## ✅ RESOLVED 2026-08-08 — One profile, every account type (PRD 21 E2's other half)
 
-A pass dedicated to closing the open residuals rather than shipping a new feature. Every item below was an entry in the Consolidated Gap Register and is now deleted from it.
+*Closes the Gap Register's "There is no 'my profile' surface for a builder account". E2's gate said
+"port Settings **and Profile**"; the first pass ported only Settings and reported the step complete.*
 
-**Bitbucket Server is a real provider now.** `buildGitApiBaseUrl` gained a flavor resolver (`github | gitlab | bitbucket-cloud | bitbucket-server`) and the Server 1.0 base, behind an **opt-in** `{ allowBitbucketServer }` flag. The opt-in is the point: Server's `/rest/api/1.0/projects/:key/repos/:slug` is not path-compatible with Cloud's `/2.0/repositories/...`, so the ~8 callers that only know Cloud shapes keep throwing and keep their typed `unsupported` refusal instead of silently aiming Cloud paths at an API that never had them. Branch delete goes to the **branch-utils** plugin API — a delete aimed at `/rest/api/1.0` returns 404, which would have read as "already gone" and let teardown report success on a branch it never removed. PR create/decline/merge came along for free, since they were unsupported for the same root cause.
+The Settings Account view showed three read-only facts — email, display name, user id — with no
+avatar and nothing editable, while a real identity editor existed only at `/freelancer/profile`. So
+a builder who opted in to being hired was sent to a page styled like a different product to change
+their own name. The fork was never a product decision: `POST /api/freelancers/me/avatar` has always
+written `users.avatar_url`, which is to say it was the USER's avatar behind a freelancer-shaped
+route, and `PATCH /api/auth/me` has always accepted `displayName` with nothing in the product
+calling it.
 
-**Teardown can verify long branches.** `listBranchCommits` paginates on all four dialects, preferring each provider's own end signal (`isLastPage`, `next`, `total_commits`) over a short-page guess, and de-duplicates by SHA so a branch gaining a commit mid-listing isn't double-counted. GitLab moved off the unpageable `/repository/compare` to `/repository/commits?ref_name=base..branch`. A new `MAX_TOTAL_BRANCH_COMMITS = 1000` absolute bound still yields `truncated: true` → `commits_unverifiable` → **branch kept**: the refuse-on-partial-evidence bias is preserved exactly, it just triggers 10× later.
+`ProfileIdentityCard` is the identity half, owned once. `/settings` renders it uncontrolled (it owns
+its draft and saves itself); `/freelancer/profile` renders the SAME component controlled, above its
+gig-specific fields — headline, rate, alias, skills — so those **extend** the profile instead of
+forking it, which is exactly what the register asked for. The freelancer page's own name input,
+avatar upload handler and `avatarUploading` state are deleted rather than left beside it.
 
-**A merged PR can be undone.** New `revertMergedPullRequest.ts`. GitHub restores the merged files to their pre-merge blobs (modes preserved, merge-added files deleted) on a commit parented to the *current* base head, on a new branch, then opens a PR; GitLab uses the native commit-revert API. `runRollback` escalates `pull_request_merged` into this instead of dead-ending, and the rollback row moves to `status: 'revert_pr'` — **not** `reverted`, because nothing is actually undone until a human merges it. Never pushes to base (asserted, not assumed), never force-pushes, refuses `conflict` if anything touched those files after the merge, and refuses rather than guesses on a truncated tree.
+`TalentAvatar` went the same way: it and the new card were two avatars for one person, so it is
+folded into the exported `ProfileAvatar` and `TalentProfileView` renders that. Its private
+`initials()` helper went with it.
 
-**Pre-merge auto-fix works on Bitbucket.** Bitbucket's `repo:commit_status_*` payload only carries `refname` for branch-scoped builds, so a status posted against a bare commit hash normalized to `branch: null` and fell through to post-merge sha correlation — a red PR-branch build never triggered a pre-merge fix. New `bitbucketBranchForCommit.ts` resolves the branch from the commit via the refs API (cached), matching prefix-tolerantly in both directions because statuses sometimes carry short hashes while the server-side filter only matches full ones.
+Two supporting primitives, each extracted rather than inlined:
+- **`patchStoredUser()`** — the persisted user is what the top bar, the sidebar and the footer roster
+  read, so an identity write has to land there or the shell shows a stale name until the next
+  sign-in. One helper, and `USER_KEY` stays private to `lib/auth.ts`.
+- **`updateMyDisplayName()`** — the `PATCH /api/auth/me` call the endpoint was already built for.
 
-**Auto-fix context is no longer GitHub-only.** `fetchBuildError` grew GitLab (`/pipelines/:id/jobs` — failed jobs plus **stage**, GitLab's localizing unit since it has no per-step conclusions) and Bitbucket (`/pipelines/:n/steps/`, recovering the build number from the status URL since commit statuses carry no run id) branches behind the same `getOrSetCached` port. The eligibility gate widened from `evt.runId` to `evt.runId != null || evt.targetUrl` — without that Bitbucket never reached the fetch at all.
+Nine keys under `profile.*` in all five catalogs with real translations. Both themes, tokens only,
+fluid at 360px (the card wraps at `1 1 220px`).
 
-**The attempt budget counts builds, not status posters.** A Bitbucket repo with multiple commit-status keys had each key treated as authoritative, so two red keys on one commit burned two of `MAX_AUTOFIX_ATTEMPTS`. `autofixAttemptsSoFar` became `priorAutofixDispatches`, returning the set of shas already dispatched for; because the audit row is written in `waitUntil` and a sibling key can arrive first, `applyBuildOutcome` also takes a synchronous claim via `peekCached`/`setCached`. A genuine second attempt follows a fix commit — a new sha — which the tests pin.
+**Verified:** `tsgo --noEmit` clean · `check:design-tokens` (247 tokens) · `check:design-scale` at
+baseline · frontend suite green.
 
-**Bug found in passing:** `ingestPreMergeEvent` built its return value by hand and dropped `buildResult.reason`, so *no* pre-merge skip reason ever reached `handleCiEventOutcome` — "auto-fix disabled", "not eligible" and the new dedupe reason were all silently lost, and `build.autofix_skipped` only ever fired post-merge.
+## ✅ RESOLVED 2026-08-08 — PRD 21 E0–E6: the canvas is the product, and everything else is a panel over it
 
-**Runs GitHub never scheduled now fail precisely.** `workflow_dispatch` returns 204 with no run id and the runs list doesn't echo `inputs`, so correlation was impossible — fixed by embedding the execution id in the workflow's `run-name`. `githubActionsReconcile.ts` polls on the existing `*/5` cron for executions still pending past a 6-minute grace and inside the 15-minute deadline (never racing the generic reaper), one GitHub call per **repo**. The verdict is a pure exported `classifyActionsDispatch()`: terminal-on-GitHub-but-never-started → fail with the conclusion and log link; no run at all → fail; unattributable runs (repo on the pre-`run-name` workflow) → **wait rather than guess**; 403/404 → fail (Actions disabled); rate-limit/5xx/network → wait, because a user's run must never die on our flakiness.
+*[PRD 21](./specs/builderforce/21-prd-unified-experience.md) §5, the whole sequence. Outstanding
+follow-ups are in the Gap Register under "PRD 21 · Unified experience".*
 
-**Enabling the Actions surface has a UI.** New `GET /api/repos/projects/:projectId/github-actions` (served through the existing read-through-cached `githubActionsAvailable`, already invalidated on write — no new cache). `githubActionsSurface.tsx` provides a self-gating notice that resolves its own readiness and stays silent on loading/failure/no-project, rendered under the cloud-agent surface picker and in Source Control as per-repo enable/backfill buttons. Re-enabling an already-enabled repo goes through `useConfirm()` — it overwrites a workflow file users are invited to edit.
+**E0 — one roster.** `AgentCard` read `ide_agents`, `MemberCard` read the members path, and nothing
+could consume both. `api/src/application/kernel/TeamRoster.ts` is the read model: `kind: 'human' |
+'agent'` in one row shape, served at `GET /api/roster/team` through `getOrSetCached`. It is a read
+model over the owners that already exist, not a third table — the always-on seats come from
+`DOMAIN_MANIFEST` (PRD 20 §3), so a domain owned by `Platform` has no teammate and never appears,
+and that test comes from the data rather than from taste. `invalidateTeamCaches` is now THE
+membership invalidation and every prior `assignableWorkforceCacheKey` call site was migrated onto
+it, so the footer and the assignee pickers cannot disagree about who is on the team.
 
-**The deploy pipeline now builds the tree CI gated.** This one was recorded backwards: the register said "npm lockfiles are stale, delete them", but `release.yml`, `publish-vscode.yml` and `publish-npm-package.yml` were actually *resolving with `npm install`* while `ci.yml` gated with `pnpm install --frozen-lockfile`. The API worker, the published packages and the `.vsix` shipped from a dependency tree **no gate had ever type-checked or tested** — and `npm install` (not `ci`) re-resolves, so it wasn't even reproducible. All three now install frozen from each package's own `pnpm-lock.yaml`; npm remains only where it must (`npm publish` for OIDC Trusted Publishing, and `docs-site`, the one deployed package with no pnpm lock — moved to `npm ci`). The ten redundant `package-lock.json` files were deleted and `.gitignore`d, with `docs-site`/`webdit` exempted since theirs are load-bearing.
+**E1 — a teammate joins by drag AND by keyboard.** `TeamBar` renders the seats beside the invited
+team in one chip shape. What makes parity real is that both routes carry the same payload through
+`lib/team/teammate.ts` into one `seatTeammate()` on the board — a drag serialises it onto the
+`DataTransfer`, `Enter` puts it on a `CustomEvent`, and the board has one handler. Only the board
+actually on the stage answers; hidden cached instances hear the event and ignore it. A locked seat
+stays visible and disabled.
 
-**Hire → assign has no wait.** The two marketplace hire handlers hand-rolled their own cache invalidation, which had drifted from the agent create/delete list: neither cleared `kanban:assignable:t:<tenant>`, so a freshly-hired agent was missing from the role picker for up to 60s. Both now share `invalidateHireCaches`, which also clears the assignee hovercard profiles the picker reads. The public-listing bust stays conditional on a real `hire_count` transition so a redundant re-hire can't bust a cache every tenant shares.
+**E2 — the dock is deleted.** A destination opens as a `ShellPanel` over the board, at one of three
+widths chosen by `panelWidth(pathname)` rather than at a call site, with the destination's sub-views
+as a vertical index column. The board is now *visible* under the panel, not merely mounted — the
+previous dock hid it, which made "the panel slides over it" false in the one way that mattered.
+`SlideOutPanel` grew `crumb`, `index` and the named widths, and finally closes on `Esc`.
 
-**The last dispatch control that couldn't disable, disables.** `ChatTicketsPanel`'s Run button lives in the surface-agnostic `@seanhogg/builderforce-brain-ui`, which also renders in the VS Code webview where no tenant role exists — so it couldn't be wrapped in `<RoleGate>` and refused at *click* time instead. The adapter gained an optional `canRunTicket()` capability probe: the package asks the host the one thing it genuinely cannot compute. `resolveRunGate` pins the subtle part — a host that omits the probe is treated as **permitted**, since defaulting to denied would disable the button in a surface that cannot answer. The web host's `runTicket` throw stays as the enforcement backstop.
+**E3 — the left panel is the person's work.** `SessionList` leads with New canvas, Active (live dot)
+and Recents, over `listLocalCreationSessions()` — which the PRD recorded E3 as blocked on and which
+already existed. `LastBoardBridge` puts the last board back on the stage, which closes §6.7 and §6.8
+together: `/settings` resolves to a board plus a panel, and sign-in lands on the board. It costs
+nothing for anyone who has never opened a canvas.
 
-**`PermissionDebuggerPanel` is localized and works in light mode.** ~14 hardcoded English strings moved to a `permissionDebugger.*` namespace across all five catalogs; the panel's hardcoded `#18181b`/`#e4e4e7`/white-alpha borders moved to theme variables (it was dark-only), status colours moved from literal hex to `--success`/`--warning`/`--error`, the table scrolls in its own container, and the panel goes full-width under 480px.
+**E4 — three tab bars became one.** `SectionTabs`, `PillTabs` and `AdminGroupNav` are deleted;
+`DestinationIndex` decides its own orientation, turning vertical past six items, so §6.3's "no
+horizontal tab bar over 6 items" is enforced by the primitive instead of by review. Settings' index
+is grouped *You* vs *Workspace*. Two hardcoded English log-tab labels were localized on the way past.
 
-**Verified:** API typecheck clean; `src/application/repos` + `runtime` + `ci` → 51 files / 506 tests green. Frontend typecheck clean. brain-ui typecheck clean, `runGate` 4 tests. New coverage: ~35 tests on branch pagination and Bitbucket Server request shapes, 11 on the Actions classifier, 11 on the surface notice (including a catalog-parity test asserting no locale is an English copy), 6 on Bitbucket branch resolution, 6 on the new `fetchBuildError` branches, 4 on the dedupe claim, 3 on hire invalidation.
+**E5/E6 — the scale is held by a ratchet, not by review.** `freelance/formStyles.ts` — a parallel
+vocabulary for card, label, input and button — is deleted and its consumers moved onto `.ui-*`.
+`check-design-scale.mjs` is wired into `npm test` and fails when the literal-hex file count (405) or
+the off-scale-radius count (2,087) goes UP — *and* when either comes in below its baseline, with the
+instruction to lower it, which is what stops a shrink-only ratchet from going slack.
 
-Open follow-ups in the roadmap: Bitbucket Server's remaining callers, Bitbucket merge-revert, the untested `revertRun` escalation seam, pre-`run-name` repos, and the surface picker warning vs. hard-disable.
+Three PRD corrections went with it: §2.8's control sizes contradicted `globals.css` (which §2 says
+wins), §3.2's blocker was stale, and `SlideOutPanel` had never honoured the `Esc` §2.5 promised.
+
+**Verified:** `tsgo --noEmit` clean in both `frontend` and `api` · `check:design-tokens` (247 tokens)
+· `check:design-scale` at baseline · `check:api-transport` · **1,529 frontend tests green (153
+files)** and **5,301 api tests green** · new tests assert §6.1 (one board instance across a
+navigation), §6.2, §6.3, §6.5 and §6.6 · all new copy in all five catalogs with real translations.
+
+## ✅ RESOLVED 2026-08-08 — The landing canvas carries the shell it is selling
+
+*[PRD 21](./specs/builderforce/21-prd-unified-experience.md) §9. The hero itself is unchanged — the operator settled it. What changed is the BOARD behind it.*
+
+The seeded preview now reads as a live room rather than an illustration of one. A **session bar**
+carries a live dot, what the board is, and a presence pile; the **always-on roster** runs along the
+bottom — CMO, CFO, CTO — where the product puts its agent teammates. Both bands sit *under* the blur
+veil, so the silhouette says "session" before anything is legible, which is the whole job of a
+blurred board. The one agent object is now **tinted** rather than merely labelled, because at blur a
+tint is the only thing still saying "this is a different kind of object".
+
+**The blur and click-to-seed are untouched.** The roster seeds the composer exactly as the objects
+do — clicking CFO fills the prompt with what the CFO would be brought in to do. Objects and
+teammates share ONE selection (`Seeded = { group, index }`) rather than two parallel `selectedX`
+states, so the board can never claim two things seeded the same composer. A test asserts that
+pressing a teammate releases whichever object was pressed.
+
+Two off-scale radii went with it: the board's `20px` and the node's `13px` are now `--radius-xl` and
+`--radius-lg`, against the documented five-step scale. The chrome band heights are declared once on
+`.board` and consumed by `.field` and `.promptWrap`, so the composer can never drift into the roster
+at any board height — the board grew to `clamp(420px, 56vh, 560px)` to pay for the two new bands.
+
+Six new keys under `home.canvas` in all five catalogs with real translations. Role acronyms
+(CMO/CFO/CTO) stay literal because that is the convention `home.roles` already set in every locale —
+`CEO`, `CTO / 工程`, `CFO / Finanzas` — so this follows the catalog rather than inventing a second
+rule.
+
+**Verified:** `tsc --noEmit` clean · `check:design-tokens` passes (245 tokens declared, every
+reference resolves) · 9/9 `LandingCanvasHero` tests green, including two new ones covering the
+roster and the shared selection.
+
+---
+
+## ✅ RESOLVED 2026-08-08 — Settings stops shipping an English-only tab and an off-brand accent
+
+*Found while reviewing the post-login surfaces for [PRD 21](./specs/builderforce/21-prd-unified-experience.md). Both were independent of the design decision itself, so they were closed in the same pass rather than parked behind it.*
+
+**The Logs sub-tab was hardcoded English.** `SettingsClient.tsx:177` built its `PillTabs` entry with
+a literal `label: 'Logs'` while every sibling tab went through `t(...)`. The tab therefore rendered
+"Logs" in all five locales — a visible English word inside an otherwise translated Chinese, Spanish,
+French or German settings bar. `settings.logsTab` now exists in all five catalogs
+(`日志` / `Registros` / `Journaux` / `Protokolle`) and the tab reads from it.
+
+**The Save Personality button painted an indigo that is the brand accent in neither theme.**
+`SettingsClient.tsx:313` styled the button with `background: 'var(--accent, #6366f1)'`. `--accent` is
+declared, so the literal was not reached in practice — but it encoded the wrong intent, and the
+button was a hand-rolled `<button>` carrying its own padding, radius, font-weight and disabled
+opacity rather than the primitive that already owns those. It now renders `<Button variant="primary"
+loading={personalitySaving}>`, which also gives it the spinner and `aria-busy` the inline version
+never had.
+
+This makes `SettingsClient.tsx` the third file in the frontend to import `@/components/ui` — the
+adoption problem itself stays open in the Gap Register (Group 14, "Unified design system").
+
+**Verified:** `tsc --noEmit` clean; `check:design-tokens` passes; all five catalogs parse and diff to
+a single added key each.
 
 ---
 

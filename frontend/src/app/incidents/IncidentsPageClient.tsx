@@ -2,7 +2,7 @@
 
 /**
  * IncidentsPageClient — the Incident Management surface. Four sub-views selected
- * via the shared <PillTabs> (?tab=): live Incident war rooms, On-call rotations,
+ * via the shared <DestinationIndex> (?tab=): live Incident war rooms, On-call rotations,
  * Escalation policies, and a Business-contact directory. Detail / create flows use
  * the canonical <SlideOutPanel> (never a modal) and destructive removals go through
  * useConfirm(). Writes are gated to manager+ (mirrors the API requireRole(MANAGER)).

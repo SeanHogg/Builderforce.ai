@@ -1,6 +1,6 @@
 {
   "name": "builderforce-api",
-  "version": "2026.7.232",
+  "version": "2026.7.233",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",

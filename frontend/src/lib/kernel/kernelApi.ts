@@ -200,6 +200,37 @@ export const getRoster = () => apiRequest<DomainSummary[]>('/api/roster');
 
 export const getRosterManifest = () => apiRequest<DomainManifestEntry[]>('/api/roster/manifest');
 
+// ── the roster, as people ──────────────────────────────────────────────────
+
+export type TeamMemberKind = 'human' | 'agent';
+export type TeamAvailability = 'available' | 'busy' | 'unprovisioned';
+
+/**
+ * ONE row shape for a person and for an agent (PRD 21 §4.1). `AgentCard` read
+ * `ide_agents` and `MemberCard` read the members path, so there was no single
+ * list a footer, a presence pile or a drop target could consume. Both are
+ * renderers of this row now.
+ */
+export interface TeamRosterMember {
+  kind: TeamMemberKind;
+  id: string;
+  name: string;
+  role: string | null;
+  availability: TeamAvailability;
+  avatarUrl: string | null;
+  /** The seat this row owns ('CFO', 'Manager', …), or null for the invited team. */
+  seat: string | null;
+  domain: Domain | null;
+  alwaysOn: boolean;
+  /** Rendered visible and disabled — nothing is provisioned behind the seat yet. */
+  locked: boolean;
+}
+
+/** The team in one read. A per-chip call would be the fan-out the platform
+ *  rejects; the api serves this through `getOrSetCached`. */
+export const getTeamRoster = () =>
+  apiRequest<{ members: TeamRosterMember[] }>('/api/roster/team').then((r) => r.members);
+
 export const getDomainSummary = (domain: Domain) => apiRequest<DomainSummary>(`/api/${domain}/summary`);
 
 export const getDomainItems = (domain: Domain, opts: { kind?: string; limit?: number } = {}) =>

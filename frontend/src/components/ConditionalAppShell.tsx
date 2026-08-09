@@ -41,6 +41,7 @@ import { claimGuestRoomIntoAccount } from '@/lib/guestRoomApi';
 import { useOptionalBrainContext } from '@seanhogg/builderforce-brain-embedded';
 import { startGuestCreationSession } from '@/lib/guestPromptCapture';
 import { ResumeWorkBridge } from './workspace/ResumeWorkBridge';
+import { LastBoardBridge } from './workspace/LastBoardBridge';
 import { PlatformAnnouncements } from './announcements/PlatformAnnouncements';
 import { LiveSessionProvider } from '@/lib/live/LiveSessionContext';
 import { ActiveCanvasProvider, shellHostsCanvasStage } from '@/lib/canvas/ActiveCanvasContext';
@@ -344,6 +345,11 @@ function AppBrainShell({ children }: { children: React.ReactNode }) {
                   trip or the workspace picker is no longer data loss. Self-gating:
                   renders nothing unless it actually rescued something. */}
               <ResumeWorkBridge />
+              {/* Puts the board you last worked on back on the stage, so
+                  `/settings` resolves to a board plus a panel and sign-in lands
+                  on your work rather than a dashboard (PRD 21 §6.7 / §6.8).
+                  Free for anyone who has never opened a canvas. */}
+              <LastBoardBridge />
               <FreelancerRouteGuard />
               <SalesRouteGuard />
               {/* Audited "click sense" capture — navigations + explicit signals

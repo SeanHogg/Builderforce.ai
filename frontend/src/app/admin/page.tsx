@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/AuthContext';
 import PageContainer from '@/components/PageContainer';
 import { EmulationLauncherProvider } from '@/components/admin/EmulationLauncher';
-import AdminGroupNav from '@/components/admin/AdminGroupNav';
-import { resolveAdminRoute } from '@/lib/adminGroups';
+import { DestinationIndex } from '@/components/shell/DestinationIndex';
+import { adminSubHref, resolveAdminRoute } from '@/lib/adminGroups';
 import { TenantApiKeysAdminTab } from '@/components/admin/TenantApiKeysAdminTab';
 import { LlmTracesPanel } from './LlmTracesPanel';
 import HealthPanel from '@/components/admin/panels/HealthPanel';
@@ -42,8 +43,8 @@ import EmailDeliveriesPanel from '@/components/admin/panels/EmailDeliveriesPanel
  * Platform Admin shell — a THIN router.
  *
  * The 19 admin capabilities are consolidated into 10 top-level GROUPS (see
- * `ADMIN_GROUP_META`); each group's sub-views are the shared shell <SectionTabs>
- * bar's tabs, and within a group an inner <AdminGroupNav> switches sub-views via
+ * `ADMIN_GROUP_META`); each group's sub-views are the shared shell <ShellIndex>
+ * bar's tabs, and within a group the shared <DestinationIndex> switches sub-views via
  * `?sub=`. This page owns no state: it resolves `?tab=`/`?sub=` to a group + sub
  * and renders the matching self-fetching panel (`components/admin/panels/*`).
  */
@@ -84,6 +85,7 @@ const ADMIN_PANELS: Record<string, () => React.JSX.Element> = {
 };
 
 export default function AdminPage() {
+  const tAdmin = useTranslations('admin');
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, isAuthenticated } = useAuth();
@@ -113,7 +115,19 @@ export default function AdminPage() {
         {/* One provider owns the emulate flow so Users / Tenants / the user drawer
             can launch it without prop-drilling a callback + modal state. */}
         <EmulationLauncherProvider>
-          <AdminGroupNav group={group} activeSubId={sub.id} />
+          {/* The group's sub-views through the ONE index (PRD 21 §3.4) — the
+              thin adapter it used to go through is deleted. */}
+          <DestinationIndex
+            items={group.subs.map((entry) => ({
+              id: entry.id,
+              label: tAdmin(`sub.${entry.subKey}`),
+              icon: entry.icon,
+              href: adminSubHref(group.id, entry.id),
+            }))}
+            activeId={sub.id}
+            ariaLabel={tAdmin('subnavLabel')}
+            style={{ marginBottom: 20 }}
+          />
           <Panel />
         </EmulationLauncherProvider>
       </div>

@@ -15,7 +15,10 @@ function buttonClassName({ variant = 'secondary', size = 'md', block = false }: 
   return [
     'ui-button',
     `ui-button--${variant}`,
-    `ui-button--${size}`,
+    // `md` is the default size and is carried by the base `.ui-button` rule
+    // (min-height: var(--control-md)) — there is no `.ui-button--md`. Emitting
+    // one would ship a class with no rule and invite hand-written copies of it.
+    size === 'md' ? '' : `ui-button--${size}`,
     block ? 'ui-button--block' : '',
     className ?? '',
   ].filter(Boolean).join(' ');

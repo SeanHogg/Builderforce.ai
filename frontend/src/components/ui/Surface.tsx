@@ -14,7 +14,10 @@ export function Surface({ tone = 'panel', padding = 'md', interactive = false, c
       {...props}
       className={[
         'ui-surface',
-        `ui-surface--${tone}`,
+        // `panel` is the default tone and is carried by the base `.ui-surface`
+        // rule (background: var(--surface-panel)) — there is no
+        // `.ui-surface--panel`, so emitting one would ship a dead class.
+        tone === 'panel' ? '' : `ui-surface--${tone}`,
         `ui-surface--pad-${padding}`,
         interactive ? 'ui-surface--interactive' : '',
         className ?? '',

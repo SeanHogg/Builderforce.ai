@@ -1,5 +1,13 @@
 # PRD 20 — The Consolidated Data Model, the API on it, and the Experience on that
 
+> **The "Experience on that" is now owned by
+> [PRD 21 — The Unified Experience](./21-prd-unified-experience.md).** This PRD keeps the data
+> model, the kernel and the fifteen domains; PRD 21 decides where any of it appears and to whom.
+> The bridge is §3's **owner** column: each domain's owner becomes a **teammate in the canvas
+> footer**, and each domain becomes a **panel over the mounted board** — never a page. A domain
+> owned by `platform` has no teammate, which is the test for who belongs in the footer, taken from
+> the data rather than from taste. See PRD 21 §4.
+
 > **Status:** Steps 0–3, step 5's access layer, and the kernel halves of 6–7 are built and green.
 > The target schema exists — `check-model-coverage.mjs` reports **362 / 362 (100%)** — the kernel is
 > exposed once at `/api/objects`, the fifteen domain route groups are live at `/api/<domain>`, and

@@ -4,7 +4,7 @@
  * Shared primitives for the Platform Admin panels.
  *
  * The admin area is one nav destination whose sub-views are TABS in the shell's
- * <SectionTabs> bar (see navGroups `admin`). Each tab body lives in its own
+ * <ShellIndex> (see navGroups `admin`). Each tab body lives in its own
  * self-fetching panel under `components/admin/panels/` — this module is the
  * single source of truth for the chrome + data-loading pattern they all share,
  * so no panel re-invents (and drifts on) the loading / error / header shell.

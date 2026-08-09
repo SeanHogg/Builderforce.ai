@@ -14,10 +14,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Select } from '@/components/Select';
+import { Button } from '@/components/ui';
 import { TALENT_DISCIPLINES, TALENT_AVAILABILITIES } from '@/components/freelance/talentFields';
-import {
-  talentLabel as label, talentInput as input, talentSoftBtn as softBtn, talentPrimaryBtn as primaryBtn,
-} from '@/components/freelance/formStyles';
 import { useMyTalentProfile, invalidateMyTalentProfile } from '@/components/freelance/useMyTalentProfile';
 import { uploadMyResume, getResumeSuggestions } from '@/lib/freelancerApi';
 
@@ -64,46 +62,45 @@ export function WizardTalentProfileStep() {
       <p style={intro}>{t('talentProfile.intro')}</p>
       <div style={{ display: 'grid', gap: 14 }}>
         <div>
-          <label style={label}>{tf('profile.name')}</label>
-          <input style={input} value={profile.displayName ?? ''} maxLength={255}
+          <label className="ui-field__label">{tf('profile.name')}</label>
+          <input className="ui-input" value={profile.displayName ?? ''} maxLength={255}
             onChange={(e) => patch({ displayName: e.target.value })} placeholder={tf('profile.namePlaceholder')} />
         </div>
         <div>
-          <label style={label}>{tf('profile.headline')}</label>
-          <input style={input} value={profile.headline ?? ''} maxLength={200}
+          <label className="ui-field__label">{tf('profile.headline')}</label>
+          <input className="ui-input" value={profile.headline ?? ''} maxLength={200}
             onChange={(e) => patch({ headline: e.target.value })} placeholder={tf('profile.headlinePlaceholder')} />
         </div>
         <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))' }}>
           <div>
-            <label style={label}>{tf('profile.discipline')}</label>
-            <Select style={input} value={profile.discipline ?? ''} onChange={(e) => patch({ discipline: e.target.value })}>
+            <label className="ui-field__label">{tf('profile.discipline')}</label>
+            <Select className="ui-input" value={profile.discipline ?? ''} onChange={(e) => patch({ discipline: e.target.value })}>
               <option value="">—</option>
               {TALENT_DISCIPLINES.map((d) => <option key={d} value={d}>{tf(`discipline.${d}`)}</option>)}
             </Select>
           </div>
           <div>
-            <label style={label}>{tf('profile.availability')}</label>
-            <Select style={input} value={profile.availability}
+            <label className="ui-field__label">{tf('profile.availability')}</label>
+            <Select className="ui-input" value={profile.availability}
               onChange={(e) => patch({ availability: e.target.value as typeof profile.availability })}>
               {TALENT_AVAILABILITIES.map((a) => <option key={a} value={a}>{tf(`availability.${a}`)}</option>)}
             </Select>
           </div>
           <div>
-            <label style={label}>{tf('profile.rate')}</label>
-            <input style={input} type="number" min={0} step="1" value={rate}
+            <label className="ui-field__label">{tf('profile.rate')}</label>
+            <input className="ui-input" type="number" min={0} step="1" value={rate}
               onChange={(e) => setRateText(e.target.value)} placeholder="150" />
           </div>
         </div>
         <div>
-          <label style={label}>{tf('profile.skills')}</label>
-          <input style={input} value={skills} onChange={(e) => setSkillsText(e.target.value)}
+          <label className="ui-field__label">{tf('profile.skills')}</label>
+          <input className="ui-input" value={skills} onChange={(e) => setSkillsText(e.target.value)}
             placeholder={tf('profile.skillsPlaceholder')} />
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <button type="button" onClick={onSave} disabled={saving}
-            style={{ ...primaryBtn, cursor: saving ? 'wait' : 'pointer' }}>
+          <Button type="button" variant="primary" onClick={onSave} loading={saving}>
             {saving ? tf('saving') : tf('save')}
-          </button>
+          </Button>
           <StatusLine saving={false} saved={saved} error={error} />
         </div>
       </div>
@@ -167,12 +164,12 @@ export function WizardResumeStep() {
     <div>
       <p style={intro}>{t('resumeStep.intro')}</p>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
-        <label style={softBtn}>
+        <label className="ui-button ui-button--secondary ui-button--sm">
           {uploading ? tf('resume.uploading') : (currentFile ? tf('resume.replace') : tf('resume.upload'))}
           <input type="file" accept=".pdf,.doc,.docx,.txt,.md" onChange={onUpload} style={{ display: 'none' }} />
         </label>
         {(profile?.canAutofill || currentFile) && (
-          <button type="button" onClick={applyResume} disabled={autofilling} style={softBtn}>
+          <button type="button" onClick={applyResume} disabled={autofilling} className="ui-button ui-button--secondary ui-button--sm">
             {autofilling ? tf('profile.filling') : `✨ ${tf('profile.fillFromResume')}`}
           </button>
         )}
@@ -202,7 +199,7 @@ export function WizardPublishStep() {
       <p style={intro}>{t('publishStep.intro')}</p>
 
       <div style={{ marginBottom: 14 }}>
-        <label style={label}>{tf('profile.visibility')}</label>
+        <label className="ui-field__label">{tf('profile.visibility')}</label>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           {(['public', 'private'] as const).map((v) => (
             <button key={v} type="button" onClick={() => patch({ visibility: v })}
@@ -226,10 +223,10 @@ export function WizardPublishStep() {
       </label>
 
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        <button type="button" onClick={() => save({ visibility: profile.visibility, published: !!profile.published })}
-          disabled={saving} style={{ ...primaryBtn, cursor: saving ? 'wait' : 'pointer' }}>
+        <Button type="button" variant="primary" loading={saving}
+          onClick={() => save({ visibility: profile.visibility, published: !!profile.published })}>
           {saving ? tf('saving') : tf('save')}
-        </button>
+        </Button>
         <StatusLine saving={false} saved={saved} error={error} />
       </div>
 

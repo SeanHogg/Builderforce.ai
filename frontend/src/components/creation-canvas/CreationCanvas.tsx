@@ -36,6 +36,7 @@ import type { CreationNodeData, CreationObjectKind } from './types';
 import styles from './CreationCanvas.module.css';
 import { agileMetricsApi, ceremonySessionsApi, creationSessionsApi, runtimeApi, specsApi, tasksApi, taskSpecsApi, toolsApi, workflowDefinitions, type CreationOutcomeMetrics, type CreationSessionActivity, type CreationSessionComment, type CreationSessionDetail, type CreationSessionInvitation, type CreationSessionSummary, type CreationSnapshotSummary, type CreationTemplate as ServerCreationTemplate, type CreationTimelineMessage } from '@/lib/builderforceApi';
 import { creationGraphFromSnapshot, creationStorageKey, localCreationSnapshot, readLocalCreationSession, writeLocalCreationSession, type LocalCreationSnapshot } from '@/lib/creationSessions';
+import { TEAMMATE_JOIN_EVENT, teammateFromDrag, type TeammatePayload } from '@/lib/team/teammate';
 import { useGuestRoom } from '@/lib/useGuestRoom';
 import { GuestInviteLink } from '@/components/guest/GuestInviteLink';
 import {
@@ -434,7 +435,7 @@ export function projectEvermindNodePatch(head: ProjectEvermindHead, activity: Pr
   };
 }
 
-function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialPresent = false, initialModelComparisonIds = [] }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialPresent?: boolean; initialModelComparisonIds?: readonly string[] }) {
+function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen = false, initialPresent = false, initialModelComparisonIds = [], stageActive = true }: { sessionId: string; persistence: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
   const t = useTranslations('creationCanvas');
   /**
    * A shipped pack's name and blurb are product copy, so they come from the
@@ -1825,6 +1826,53 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     return () => window.removeEventListener('builderforce:media-recording-saved', onSaved);
   }, [addAtCenter, sessionId, t]);
 
+  /**
+   * Seat a teammate on this board (PRD 21 §3.3).
+   *
+   * "Drag a teammate onto the board → it joins the session, takes a seat,
+   * appears in presence, and can be addressed in the composer." All three
+   * happen here rather than at each entry point, which is what lets the drag and
+   * the keyboard route be genuinely the same action instead of two code paths
+   * that agree today.
+   *
+   * `point` is where a drag landed; the keyboard route has no pointer, so it
+   * seats at the viewport centre exactly as the object palette's click does.
+   */
+  const seatTeammate = useCallback((teammate: TeammatePayload, point?: { x: number; y: number }) => {
+    if (!canEdit) { setNotice(t('roleCannotEdit')); return; }
+    const data: Partial<CreationNodeData> = {
+      title: teammate.name,
+      status: t('teammateSeated'),
+      subtitle: teammate.role ?? undefined,
+      agentName: teammate.name,
+      agentRef: teammate.ref,
+    };
+    if (!point) { addAtCenter('agent', data); }
+    else {
+      const node = newNode('agent', point);
+      node.data = { ...node.data, ...data };
+      setNodes((current) => [...current, node]);
+      setSelectedId(node.id); setSelectedIds([node.id]);
+      setNotice(t('objectAdded', { title: teammate.name }));
+    }
+    // Addressable immediately: the composer is seeded with the mention rather
+    // than leaving the person to retype a name they just dragged in.
+    setPrompt((current) => (current.includes(`@${teammate.name}`) ? current : `${current ? `${current.trimEnd()} ` : ''}@${teammate.name} `));
+  }, [addAtCenter, canEdit, setNodes, t]);
+
+  // The keyboard half of §3.3. Only the board actually on the stage answers —
+  // hidden cached boards hear the same event and must not quietly seat someone
+  // on a canvas nobody is looking at.
+  useEffect(() => {
+    if (!stageActive) return undefined;
+    const onJoin = (event: Event) => {
+      const detail = (event as CustomEvent<TeammatePayload>).detail;
+      if (detail) seatTeammate(detail);
+    };
+    window.addEventListener(TEAMMATE_JOIN_EVENT, onJoin);
+    return () => window.removeEventListener(TEAMMATE_JOIN_EVENT, onJoin);
+  }, [seatTeammate, stageActive]);
+
   /** Place an object the EDITOR captured (active file, selection, problems, …). */
   const addHostCapture = useCallback((capture: CanvasHostCapture) => {
     addAtCenter(capture.kind, { title: capture.title, ...capture.content } as Partial<CreationNodeData>);
@@ -2410,6 +2458,11 @@ function CanvasInner({ sessionId, persistence, initialFocusId, initialShareOpen 
     // a real object; a palette drag still carries only an object kind.
     const files = Array.from(event.dataTransfer.files ?? []);
     if (files.length) { void addFilesToCanvas(files, point); return; }
+    // A teammate dragged off the footer roster joins the session HERE (PRD 21
+    // §3.3). Same payload the keyboard route carries, same seating helper — a
+    // drag is one way in, never the only one.
+    const teammate = teammateFromDrag(event.dataTransfer);
+    if (teammate) { seatTeammate(teammate, point); return; }
     const kind = event.dataTransfer.getData(DND_MIME) as CreationObjectKind;
     // A link dragged from a browser tab or another app carries no object kind —
     // it lands as a live Web page panel, which is what a dropped URL means.
@@ -5651,8 +5704,8 @@ function ActivityInspector({ sessionId, objectId, persistence, role, members }: 
   </div>;
 }
 
-export function CreationCanvas({ sessionId, persistence = 'server', initialFocusId, initialShareOpen, initialPresent, initialModelComparisonIds }: { sessionId: string; persistence?: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialPresent?: boolean; initialModelComparisonIds?: readonly string[] }) {
+export function CreationCanvas({ sessionId, persistence = 'server', initialFocusId, initialShareOpen, initialPresent, initialModelComparisonIds, stageActive = true }: { sessionId: string; persistence?: 'local' | 'server'; initialFocusId?: string | null; initialShareOpen?: boolean; initialPresent?: boolean; initialModelComparisonIds?: readonly string[]; stageActive?: boolean }) {
   // The 3D scene publishes its view commands to the canvas rail rather than
   // carrying a toolbar of its own, so both live under one provider.
-  return <ReactFlowProvider><Canvas3DControlsProvider><CanvasInner sessionId={sessionId} persistence={persistence} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialPresent={initialPresent} initialModelComparisonIds={initialModelComparisonIds} /></Canvas3DControlsProvider></ReactFlowProvider>;
+  return <ReactFlowProvider><Canvas3DControlsProvider><CanvasInner sessionId={sessionId} persistence={persistence} initialFocusId={initialFocusId} initialShareOpen={initialShareOpen} initialPresent={initialPresent} initialModelComparisonIds={initialModelComparisonIds} stageActive={stageActive} /></Canvas3DControlsProvider></ReactFlowProvider>;
 }

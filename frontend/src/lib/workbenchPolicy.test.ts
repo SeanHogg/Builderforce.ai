@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyRoute, dockOpen, isStageRoute } from './workbenchPolicy';
+import { classifyRoute, isStageRoute, panelOpen, panelWidth } from './workbenchPolicy';
 
 describe('classifyRoute', () => {
   it('puts the canvas surfaces on the stage', () => {
@@ -37,14 +37,38 @@ describe('classifyRoute', () => {
   });
 });
 
-describe('dockOpen', () => {
+describe('panelOpen', () => {
   it('opens only when there is a board worth keeping', () => {
-    expect(dockOpen('/settings', true)).toBe(true);
-    expect(dockOpen('/settings', false)).toBe(false);
+    expect(panelOpen('/settings', true)).toBe(true);
+    expect(panelOpen('/settings', false)).toBe(false);
   });
 
   it('stays closed on the stage itself and on standalone routes', () => {
-    expect(dockOpen('/create/c_8fa2', true)).toBe(false);
-    expect(dockOpen('/ide/42', true)).toBe(false);
+    expect(panelOpen('/create/c_8fa2', true)).toBe(false);
+    expect(panelOpen('/ide/42', true)).toBe(false);
+  });
+});
+
+describe('panelWidth', () => {
+  it('gives your own account the sheet', () => {
+    expect(panelWidth('/settings')).toBe('sheet');
+    expect(panelWidth('/settings/integrations')).toBe('sheet');
+    expect(panelWidth('/security')).toBe('sheet');
+  });
+
+  it('gives a dashboard the room it needs', () => {
+    expect(panelWidth('/insights/delivery')).toBe('full');
+    expect(panelWidth('/admin')).toBe('full');
+  });
+
+  it('defaults to index-plus-detail', () => {
+    expect(panelWidth('/workforce')).toBe('wide');
+    expect(panelWidth('/projects')).toBe('wide');
+  });
+
+  it('never returns a fourth width', () => {
+    for (const route of ['/settings', '/insights', '/workforce', '/quality', '/knowledge']) {
+      expect(['sheet', 'wide', 'full']).toContain(panelWidth(route));
+    }
   });
 });

@@ -31,7 +31,7 @@ import { runtimeHiredAgentsCacheKey } from './runtimeRoutes';
 import { tenantHasFeature } from '../middleware/featureGate';
 import { sanitizePsychometricProfile } from '../../application/persona/psychometricCatalog';
 import { assigneeProfilesCacheKey } from '../../application/kanban/assigneeProfiles';
-import { assignableWorkforceCacheKey } from '../../application/kanban/assignableWorkforce';
+import { invalidateTeamCaches } from '../../application/kernel/TeamRoster';
 import { parseJsonArray } from '../../domain/shared/json';
 import { CLOUD_SURFACES } from '../../application/runtime/cloudDispatch';
 import type { Env, HonoEnv } from '../../env';
@@ -47,13 +47,15 @@ export const PUBLIC_LIST_CACHE_KEY = 'wf:public:agents';
 const PUBLIC_LIST_CACHE_TTL_SECONDS = 120;
 
 /** Every cached read an agent create/update/delete can stale: the public listing,
- *  this tenant's assignee-hovercard profiles, and the assignable-workforce union the
- *  role/ticket pickers read (so a just-created agent is pickable immediately). */
+ *  this tenant's assignee-hovercard profiles, and — through `invalidateTeamCaches`
+ *  — both projections of "who is on this team" (the footer roster and the
+ *  assignable-workforce union the role/ticket pickers read), so a just-created
+ *  agent is on the roster and pickable immediately. */
 async function invalidateAgentCaches(env: Env, tenantId: number): Promise<void> {
   await Promise.all([
     invalidateCached(env, PUBLIC_LIST_CACHE_KEY),
     invalidateCached(env, assigneeProfilesCacheKey(tenantId)),
-    invalidateCached(env, assignableWorkforceCacheKey(tenantId)),
+    invalidateTeamCaches(env, tenantId),
   ]);
 }
 
@@ -78,7 +80,7 @@ export async function invalidateHireCaches(env: Env, tenantId: number, opts: { p
   await Promise.all([
     invalidateCached(env, purchasedCacheKey(tenantId)),
     invalidateCached(env, runtimeHiredAgentsCacheKey(tenantId)),
-    invalidateCached(env, assignableWorkforceCacheKey(tenantId)),
+    invalidateTeamCaches(env, tenantId),
     invalidateCached(env, assigneeProfilesCacheKey(tenantId)),
     opts.publicListing ? invalidateCached(env, PUBLIC_LIST_CACHE_KEY) : Promise.resolve(),
   ]);

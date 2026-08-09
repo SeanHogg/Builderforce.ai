@@ -554,7 +554,8 @@
     "destination": {
       "canvasLibrary": "Canvases",
       "newCanvas": "New canvas"
-    }
+    },
+    "workspaceLabel": "Workspace"
   },
   "alerts": {
     "title": "Alerts",
@@ -1478,7 +1479,12 @@
     "managerDefaultsSubtitle": "How the AI Manager behaves across every project in this workspace. A project can refine these on its own Manager tab — but it can never grant itself a permission you withhold here.",
     "managerDefaultsError": "Could not load the workspace AI Manager defaults.",
     "managerDefaultsProjectHint": "To change just one project:",
-    "managerDefaultsProjectLink": "open its Manager settings"
+    "managerDefaultsProjectLink": "open its Manager settings",
+    "groupYou": "You",
+    "groupWorkspace": "Workspace",
+    "logsRuntimeTab": "Runtime & timeline",
+    "logsAuditTab": "Audit log",
+    "logSectionsLabel": "Log sections"
   },
   "pmo": {
     "title": "Portfolio (PMO)",
@@ -5525,45 +5531,201 @@
       "creative": "Creative & immersive"
     },
     "items": [
-      { "category": "start", "label": "Blank canvas", "prompt": "Start with a blank canvas and help me shape my idea." },
-      { "category": "apps", "label": "Website", "prompt": "Design and build a responsive website with complete content, navigation, and a publishable implementation." },
-      { "category": "apps", "label": "Web app", "prompt": "Build a working web application with its core flows, interface, data model, and runnable project." },
-      { "category": "apps", "label": "Mobile app", "prompt": "Build a mobile app with its key screens, user flow, and runnable mobile project." },
-      { "category": "apps", "label": "UI mockups", "prompt": "Create high-fidelity UI mockups for the core product experience." },
-      { "category": "apps", "label": "Wireframe", "prompt": "Create a wireframe that maps the main layout and interactions." },
-      { "category": "apps", "label": "Workflow automation", "prompt": "Build an executable workflow with configured steps, inputs, approvals, and integrations." },
-      { "category": "apps", "label": "Twilio workflow", "prompt": "Build and validate an executable Twilio workflow for SMS or voice, using the real connector actions and required inputs." },
-      { "category": "apps", "label": "Voice agent", "prompt": "Create and configure a voice agent with its script, voice, tools, call flow, and evaluation criteria." },
-      { "category": "business", "label": "Sales command center", "prompt": "Create a sales command center with target market, contacts, outreach campaign, pipeline, goals, meetings, and a sales coach agent." },
-      { "category": "business", "label": "Recruiting workspace", "prompt": "Create a recruiting workspace with a role scorecard, candidate pipeline, sourcing workflow, structured interview plan, evaluation, and recruiter agent." },
-      { "category": "business", "label": "Email campaign", "prompt": "Create an email campaign with audience, reusable template, subject, responsive content, delivery workflow, and success metrics." },
-      { "category": "business", "label": "Product discovery", "prompt": "Create a product discovery workspace that synthesizes customer evidence, prioritizes opportunities, and expands the best concepts into mockups." },
-      { "category": "business", "label": "Pitch competition", "prompt": "Create a pitch competition war room with the application, timed pitch, judging scorecard, judge Q&A drill, pitch deck, and coach agent." },
-      { "category": "business", "label": "Project roadmap", "prompt": "Create a product requirements document and connected delivery roadmap with milestones, releases, and prioritized tasks." },
-      { "category": "business", "label": "Team stand-up", "prompt": "Create a collaborative stand-up with people, agents, current work, blockers, decisions, and follow-up tasks." },
-      { "category": "learning", "label": "Interactive LMS", "prompt": "Create a complete interactive LMS course with modules, lessons, exercises, assessments, progress tracking, a capstone, and a specialist AI teacher." },
-      { "category": "learning", "label": "Résumé", "prompt": "Create a professional résumé with a clear hierarchy, strong accomplishments, and export-ready formatting." },
-      { "category": "learning", "label": "Video résumé", "prompt": "Create a professional résumé, a concise video résumé script and storyboard, and the connected video presentation." },
-      { "category": "documents", "label": "Slides", "prompt": "Create a polished slide deck with a clear narrative and visual direction." },
-      { "category": "documents", "label": "Document", "prompt": "Draft a structured document that is ready to review, export, and share." },
-      { "category": "documents", "label": "Research", "prompt": "Research this topic from cited sources, create a supporting dataset, and synthesize the findings into actionable insights." },
-      { "category": "documents", "label": "Data dashboard", "prompt": "Create a decision dashboard with sourced data, calculated KPIs, charts, and an executive summary." },
-      { "category": "documents", "label": "Data story", "prompt": "Turn a dataset into verified charts, a dashboard, and a connected executive presentation." },
-      { "category": "documents", "label": "Diagram", "prompt": "Create an editable diagram that clearly explains the system, process, or relationship." },
-      { "category": "documents", "label": "HTML email", "prompt": "Design a responsive HTML email with clear content and calls to action." },
-      { "category": "documents", "label": "Color + type pairing", "prompt": "Create an accessible color palette and typography pairing with usage guidance." },
-      { "category": "ai", "label": "AI agent", "prompt": "Build an operable AI agent with instructions, personality, tools, authored knowledge, and a scored evaluation." },
-      { "category": "ai", "label": "Evermind model", "prompt": "Create an Evermind model lab with training knowledge, teaching and tuning stages, evaluation, and a publishable agent." },
-      { "category": "ai", "label": "LLM evaluation", "prompt": "Create an LLM evaluation suite with representative prompts, expected signals, quality criteria, safety checks, and a release scorecard." },
-      { "category": "creative", "label": "Video", "prompt": "Create a video with a concept, script, storyboard, visual direction, and generated preview." },
-      { "category": "creative", "label": "Animation", "prompt": "Create an animation concept with a storyboard, timing, visual style, and generated preview." },
-      { "category": "creative", "label": "Image", "prompt": "Create a polished image from an art direction brief and prepare it for export." },
-      { "category": "creative", "label": "Podcast", "prompt": "Create a podcast episode with its concept, structured script, voice direction, transcript, and audio output." },
-      { "category": "creative", "label": "Comic", "prompt": "Create a comic with its story, panel plan, dialogue, visual style, and exportable artwork." },
-      { "category": "creative", "label": "Browser game", "prompt": "Design and build a playable browser game with its mechanics, controls, visuals, and evaluation." },
-      { "category": "creative", "label": "Roblox game", "prompt": "Design and build a playable Roblox experience, including mechanics, world direction, controls, evaluation, and a Roblox publishing target." },
-      { "category": "creative", "label": "CAD drawing", "prompt": "Create an editable CAD drawing with dimensions, units, geometry, and export-ready output." },
-      { "category": "creative", "label": "3D model", "prompt": "Create a 3D model concept with form, materials, dimensions, presentation views, and export-ready geometry." }
+      {
+        "category": "start",
+        "label": "Blank canvas",
+        "prompt": "Start with a blank canvas and help me shape my idea."
+      },
+      {
+        "category": "apps",
+        "label": "Website",
+        "prompt": "Design and build a responsive website with complete content, navigation, and a publishable implementation."
+      },
+      {
+        "category": "apps",
+        "label": "Web app",
+        "prompt": "Build a working web application with its core flows, interface, data model, and runnable project."
+      },
+      {
+        "category": "apps",
+        "label": "Mobile app",
+        "prompt": "Build a mobile app with its key screens, user flow, and runnable mobile project."
+      },
+      {
+        "category": "apps",
+        "label": "UI mockups",
+        "prompt": "Create high-fidelity UI mockups for the core product experience."
+      },
+      {
+        "category": "apps",
+        "label": "Wireframe",
+        "prompt": "Create a wireframe that maps the main layout and interactions."
+      },
+      {
+        "category": "apps",
+        "label": "Workflow automation",
+        "prompt": "Build an executable workflow with configured steps, inputs, approvals, and integrations."
+      },
+      {
+        "category": "apps",
+        "label": "Twilio workflow",
+        "prompt": "Build and validate an executable Twilio workflow for SMS or voice, using the real connector actions and required inputs."
+      },
+      {
+        "category": "apps",
+        "label": "Voice agent",
+        "prompt": "Create and configure a voice agent with its script, voice, tools, call flow, and evaluation criteria."
+      },
+      {
+        "category": "business",
+        "label": "Sales command center",
+        "prompt": "Create a sales command center with target market, contacts, outreach campaign, pipeline, goals, meetings, and a sales coach agent."
+      },
+      {
+        "category": "business",
+        "label": "Recruiting workspace",
+        "prompt": "Create a recruiting workspace with a role scorecard, candidate pipeline, sourcing workflow, structured interview plan, evaluation, and recruiter agent."
+      },
+      {
+        "category": "business",
+        "label": "Email campaign",
+        "prompt": "Create an email campaign with audience, reusable template, subject, responsive content, delivery workflow, and success metrics."
+      },
+      {
+        "category": "business",
+        "label": "Product discovery",
+        "prompt": "Create a product discovery workspace that synthesizes customer evidence, prioritizes opportunities, and expands the best concepts into mockups."
+      },
+      {
+        "category": "business",
+        "label": "Pitch competition",
+        "prompt": "Create a pitch competition war room with the application, timed pitch, judging scorecard, judge Q&A drill, pitch deck, and coach agent."
+      },
+      {
+        "category": "business",
+        "label": "Project roadmap",
+        "prompt": "Create a product requirements document and connected delivery roadmap with milestones, releases, and prioritized tasks."
+      },
+      {
+        "category": "business",
+        "label": "Team stand-up",
+        "prompt": "Create a collaborative stand-up with people, agents, current work, blockers, decisions, and follow-up tasks."
+      },
+      {
+        "category": "learning",
+        "label": "Interactive LMS",
+        "prompt": "Create a complete interactive LMS course with modules, lessons, exercises, assessments, progress tracking, a capstone, and a specialist AI teacher."
+      },
+      {
+        "category": "learning",
+        "label": "Résumé",
+        "prompt": "Create a professional résumé with a clear hierarchy, strong accomplishments, and export-ready formatting."
+      },
+      {
+        "category": "learning",
+        "label": "Video résumé",
+        "prompt": "Create a professional résumé, a concise video résumé script and storyboard, and the connected video presentation."
+      },
+      {
+        "category": "documents",
+        "label": "Slides",
+        "prompt": "Create a polished slide deck with a clear narrative and visual direction."
+      },
+      {
+        "category": "documents",
+        "label": "Document",
+        "prompt": "Draft a structured document that is ready to review, export, and share."
+      },
+      {
+        "category": "documents",
+        "label": "Research",
+        "prompt": "Research this topic from cited sources, create a supporting dataset, and synthesize the findings into actionable insights."
+      },
+      {
+        "category": "documents",
+        "label": "Data dashboard",
+        "prompt": "Create a decision dashboard with sourced data, calculated KPIs, charts, and an executive summary."
+      },
+      {
+        "category": "documents",
+        "label": "Data story",
+        "prompt": "Turn a dataset into verified charts, a dashboard, and a connected executive presentation."
+      },
+      {
+        "category": "documents",
+        "label": "Diagram",
+        "prompt": "Create an editable diagram that clearly explains the system, process, or relationship."
+      },
+      {
+        "category": "documents",
+        "label": "HTML email",
+        "prompt": "Design a responsive HTML email with clear content and calls to action."
+      },
+      {
+        "category": "documents",
+        "label": "Color + type pairing",
+        "prompt": "Create an accessible color palette and typography pairing with usage guidance."
+      },
+      {
+        "category": "ai",
+        "label": "AI agent",
+        "prompt": "Build an operable AI agent with instructions, personality, tools, authored knowledge, and a scored evaluation."
+      },
+      {
+        "category": "ai",
+        "label": "Evermind model",
+        "prompt": "Create an Evermind model lab with training knowledge, teaching and tuning stages, evaluation, and a publishable agent."
+      },
+      {
+        "category": "ai",
+        "label": "LLM evaluation",
+        "prompt": "Create an LLM evaluation suite with representative prompts, expected signals, quality criteria, safety checks, and a release scorecard."
+      },
+      {
+        "category": "creative",
+        "label": "Video",
+        "prompt": "Create a video with a concept, script, storyboard, visual direction, and generated preview."
+      },
+      {
+        "category": "creative",
+        "label": "Animation",
+        "prompt": "Create an animation concept with a storyboard, timing, visual style, and generated preview."
+      },
+      {
+        "category": "creative",
+        "label": "Image",
+        "prompt": "Create a polished image from an art direction brief and prepare it for export."
+      },
+      {
+        "category": "creative",
+        "label": "Podcast",
+        "prompt": "Create a podcast episode with its concept, structured script, voice direction, transcript, and audio output."
+      },
+      {
+        "category": "creative",
+        "label": "Comic",
+        "prompt": "Create a comic with its story, panel plan, dialogue, visual style, and exportable artwork."
+      },
+      {
+        "category": "creative",
+        "label": "Browser game",
+        "prompt": "Design and build a playable browser game with its mechanics, controls, visuals, and evaluation."
+      },
+      {
+        "category": "creative",
+        "label": "Roblox game",
+        "prompt": "Design and build a playable Roblox experience, including mechanics, world direction, controls, evaluation, and a Roblox publishing target."
+      },
+      {
+        "category": "creative",
+        "label": "CAD drawing",
+        "prompt": "Create an editable CAD drawing with dimensions, units, geometry, and export-ready output."
+      },
+      {
+        "category": "creative",
+        "label": "3D model",
+        "prompt": "Create a 3D model concept with form, materials, dimensions, presentation views, and export-ready geometry."
+      }
     ]
   },
   "home": {
@@ -5580,13 +5742,29 @@
       "agentPresence": "Live · assignable",
       "sessionTitle": "Launch campaign · live session",
       "presenceAria": "Three people in this session",
-      "presenceInitials": ["SH", "JR", "TK"],
+      "presenceInitials": [
+        "SH",
+        "JR",
+        "TK"
+      ],
       "alwaysOn": "Always on",
       "teammateAction": "Bring {name} into this canvas",
       "team": [
-        { "short": "CM", "name": "CMO", "prefill": "Bring the CMO in to plan this campaign and its landing page" },
-        { "short": "CF", "name": "CFO", "prefill": "Bring the CFO in to forecast the budget for this campaign" },
-        { "short": "CT", "name": "CTO", "prefill": "Bring the CTO in to review how this ships to production" }
+        {
+          "short": "CM",
+          "name": "CMO",
+          "prefill": "Bring the CMO in to plan this campaign and its landing page"
+        },
+        {
+          "short": "CF",
+          "name": "CFO",
+          "prefill": "Bring the CFO in to forecast the budget for this campaign"
+        },
+        {
+          "short": "CT",
+          "name": "CTO",
+          "prefill": "Bring the CTO in to review how this ships to production"
+        }
       ],
       "guestNote": "A real canvas. Nothing leaves this device until you sign in.",
       "narrowNote": "Open on a larger screen for the full board.",
@@ -9455,7 +9633,8 @@
         "registered": "Registered users",
         "paid": "Paying customers"
       }
-    }
+    },
+    "subnavLabel": "Admin sub-views"
   },
   "providerKeys": {
     "title": "Bring your own models",
@@ -12083,9 +12262,18 @@
     "lead": "Every tutorial opens a private Creation Canvas, builds an interactive LMS course, and brings a specialist AI teacher into the chat to guide your practice and adapt each lesson.",
     "howItWorks": "How interactive tutorials work",
     "steps": [
-      { "title": "Choose a direction", "description": "Start with a practical subject or bring any learning goal of your own." },
-      { "title": "Canvas builds the LMS", "description": "Brain creates modules, lessons, exercises, assessments, progress, and a capstone." },
-      { "title": "Learn with a specialist", "description": "A topic-matched AI teacher joins your chat, checks understanding, and adapts the path." }
+      {
+        "title": "Choose a direction",
+        "description": "Start with a practical subject or bring any learning goal of your own."
+      },
+      {
+        "title": "Canvas builds the LMS",
+        "description": "Brain creates modules, lessons, exercises, assessments, progress, and a capstone."
+      },
+      {
+        "title": "Learn with a specialist",
+        "description": "A topic-matched AI teacher joins your chat, checks understanding, and adapts the path."
+      }
     ],
     "catalogTitle": "What do you want to learn?",
     "catalogLead": "Choose a starting point. Your course is generated for your goals and experience, so no two learning paths need to be the same.",
@@ -12097,14 +12285,94 @@
     "customPrompt": "I want to learn a subject of my choice. First ask what I want to learn, why it matters to me, my current experience, preferred pace, and desired outcome. Then create a complete interactive LMS course object on the Canvas with modules, lessons, exercises, assessments, progress tracking, and a practical capstone. Create an appropriate specialist AI teacher agent, connect that agent to the course and Brain chat so the teacher joins the conversation, and begin teaching one step at a time. Adapt based on my answers and check my understanding. Do not only describe the course; create the course and teacher agent on the Canvas.",
     "coursePrompt": "Create a complete interactive LMS course on the Canvas that teaches me {topic}. Focus the course on {focus}. Include structured modules, lessons, hands-on exercises, assessments, progress tracking, and a practical capstone. Create a specialist AI teacher agent named {agent}, give the agent expert teaching instructions for this subject, and connect the agent to both the course and Brain chat so the teacher joins our conversation. Begin by asking about my experience level and goal, then teach one step at a time, adapt to my answers, give useful feedback, and check my understanding. Do not only describe a curriculum; create the course object and teacher agent on the Canvas.",
     "topics": {
-      "entrepreneurship": { "title": "Entrepreneurship", "summary": "Turn an idea into a tested business with customer discovery, positioning, a business model, and a credible launch plan.", "agent": "Venture Coach", "focus": "finding a real customer problem, validating demand, choosing a business model, pricing, go-to-market, fundraising fundamentals, and an actionable launch plan", "outcomes": ["Validate an idea", "Build a business model", "Plan a launch"] },
-      "recruiting": { "title": "Recruiting and Hiring", "summary": "Learn to define roles, source strong candidates, run fair interviews, and close the right hire with confidence.", "agent": "Talent Partner", "focus": "workforce planning, job scorecards, inclusive sourcing, structured interviews, evidence-based selection, candidate experience, and closing", "outcomes": ["Write a scorecard", "Interview consistently", "Choose with evidence"] },
-      "product": { "title": "Product Management", "summary": "Move from user problem to product strategy, discovery evidence, prioritized roadmap, and measurable outcomes.", "agent": "Product Mentor", "focus": "customer discovery, product strategy, opportunity mapping, prioritization, roadmaps, experimentation, metrics, and stakeholder alignment", "outcomes": ["Discover needs", "Prioritize outcomes", "Shape a roadmap"] },
-      "marketing": { "title": "Marketing and Growth", "summary": "Build a clear audience, message, channel strategy, experiments, and a measurement system that compounds learning.", "agent": "Growth Strategist", "focus": "audience research, positioning, messaging, content, acquisition channels, conversion, retention, experiments, and growth metrics", "outcomes": ["Clarify positioning", "Design campaigns", "Measure growth"] },
-      "leadership": { "title": "Leadership and Management", "summary": "Practice setting direction, coaching people, handling conflict, delegating well, and creating accountable teams.", "agent": "Leadership Coach", "focus": "leadership styles, goals, delegation, feedback, coaching, difficult conversations, decision-making, team health, and accountability", "outcomes": ["Lead with clarity", "Coach effectively", "Navigate conflict"] },
-      "finance": { "title": "Finance for Decision-Makers", "summary": "Understand financial statements, cash flow, budgets, unit economics, forecasts, and investment tradeoffs.", "agent": "Finance Tutor", "focus": "financial statements, cash flow, budgeting, forecasting, unit economics, scenario analysis, valuation basics, and capital allocation", "outcomes": ["Read the numbers", "Build a forecast", "Evaluate tradeoffs"] },
-      "softwareAi": { "title": "Software and AI", "summary": "Learn how modern software and AI systems are designed, built, evaluated, secured, and shipped responsibly.", "agent": "AI Engineering Instructor", "focus": "software architecture, APIs, data, testing, security, LLM applications, prompting, retrieval, agents, evaluations, and responsible deployment", "outcomes": ["Design a system", "Build with AI", "Evaluate quality"] },
-      "career": { "title": "Career Growth", "summary": "Map your strengths to a direction, close skill gaps, communicate your value, and execute a practical growth plan.", "agent": "Career Coach", "focus": "strengths, career options, skill-gap analysis, portfolio evidence, networking, interviewing, negotiation, and a 90-day development plan", "outcomes": ["Choose a direction", "Show your value", "Plan the next 90 days"] }
+      "entrepreneurship": {
+        "title": "Entrepreneurship",
+        "summary": "Turn an idea into a tested business with customer discovery, positioning, a business model, and a credible launch plan.",
+        "agent": "Venture Coach",
+        "focus": "finding a real customer problem, validating demand, choosing a business model, pricing, go-to-market, fundraising fundamentals, and an actionable launch plan",
+        "outcomes": [
+          "Validate an idea",
+          "Build a business model",
+          "Plan a launch"
+        ]
+      },
+      "recruiting": {
+        "title": "Recruiting and Hiring",
+        "summary": "Learn to define roles, source strong candidates, run fair interviews, and close the right hire with confidence.",
+        "agent": "Talent Partner",
+        "focus": "workforce planning, job scorecards, inclusive sourcing, structured interviews, evidence-based selection, candidate experience, and closing",
+        "outcomes": [
+          "Write a scorecard",
+          "Interview consistently",
+          "Choose with evidence"
+        ]
+      },
+      "product": {
+        "title": "Product Management",
+        "summary": "Move from user problem to product strategy, discovery evidence, prioritized roadmap, and measurable outcomes.",
+        "agent": "Product Mentor",
+        "focus": "customer discovery, product strategy, opportunity mapping, prioritization, roadmaps, experimentation, metrics, and stakeholder alignment",
+        "outcomes": [
+          "Discover needs",
+          "Prioritize outcomes",
+          "Shape a roadmap"
+        ]
+      },
+      "marketing": {
+        "title": "Marketing and Growth",
+        "summary": "Build a clear audience, message, channel strategy, experiments, and a measurement system that compounds learning.",
+        "agent": "Growth Strategist",
+        "focus": "audience research, positioning, messaging, content, acquisition channels, conversion, retention, experiments, and growth metrics",
+        "outcomes": [
+          "Clarify positioning",
+          "Design campaigns",
+          "Measure growth"
+        ]
+      },
+      "leadership": {
+        "title": "Leadership and Management",
+        "summary": "Practice setting direction, coaching people, handling conflict, delegating well, and creating accountable teams.",
+        "agent": "Leadership Coach",
+        "focus": "leadership styles, goals, delegation, feedback, coaching, difficult conversations, decision-making, team health, and accountability",
+        "outcomes": [
+          "Lead with clarity",
+          "Coach effectively",
+          "Navigate conflict"
+        ]
+      },
+      "finance": {
+        "title": "Finance for Decision-Makers",
+        "summary": "Understand financial statements, cash flow, budgets, unit economics, forecasts, and investment tradeoffs.",
+        "agent": "Finance Tutor",
+        "focus": "financial statements, cash flow, budgeting, forecasting, unit economics, scenario analysis, valuation basics, and capital allocation",
+        "outcomes": [
+          "Read the numbers",
+          "Build a forecast",
+          "Evaluate tradeoffs"
+        ]
+      },
+      "softwareAi": {
+        "title": "Software and AI",
+        "summary": "Learn how modern software and AI systems are designed, built, evaluated, secured, and shipped responsibly.",
+        "agent": "AI Engineering Instructor",
+        "focus": "software architecture, APIs, data, testing, security, LLM applications, prompting, retrieval, agents, evaluations, and responsible deployment",
+        "outcomes": [
+          "Design a system",
+          "Build with AI",
+          "Evaluate quality"
+        ]
+      },
+      "career": {
+        "title": "Career Growth",
+        "summary": "Map your strengths to a direction, close skill gaps, communicate your value, and execute a practical growth plan.",
+        "agent": "Career Coach",
+        "focus": "strengths, career options, skill-gap analysis, portfolio evidence, networking, interviewing, negotiation, and a 90-day development plan",
+        "outcomes": [
+          "Choose a direction",
+          "Show your value",
+          "Plan the next 90 days"
+        ]
+      }
     }
   },
   "media": {
@@ -12571,7 +12839,21 @@
     "note": "Choose an install method, copy the command, and run it in your terminal."
   },
   "creationCanvas": {
-    "comparison": { "promptTitle": "Shared comparison prompt", "sharedPrompt": "Runs unchanged on every selected model", "responseFrom": "Response generated by {model}", "executing": "Executing", "executingWith": "Executing this prompt with {model}…", "executesWith": "executes with {model}", "runningCount": "Running {count} selected models…", "completed": "Completed", "failed": "Execution failed", "emptyOutput": "The model returned no output.", "finished": "Model comparison finished.", "modelLayer": "Model · {model}", "promptLayer": "Shared prompt" },
+    "comparison": {
+      "promptTitle": "Shared comparison prompt",
+      "sharedPrompt": "Runs unchanged on every selected model",
+      "responseFrom": "Response generated by {model}",
+      "executing": "Executing",
+      "executingWith": "Executing this prompt with {model}…",
+      "executesWith": "executes with {model}",
+      "runningCount": "Running {count} selected models…",
+      "completed": "Completed",
+      "failed": "Execution failed",
+      "emptyOutput": "The model returned no output.",
+      "finished": "Model comparison finished.",
+      "modelLayer": "Model · {model}",
+      "promptLayer": "Shared prompt"
+    },
     "group": {
       "Build": "Build",
       "Data": "Data",
@@ -14158,7 +14440,8 @@
       "robloxIdsHint": "Both numbers are in the Creator Dashboard URL for an experience you have already published from Studio.",
       "publishRoblox": "Publish to Roblox",
       "robloxPublished": "Published to Roblox as version {version}"
-    }
+    },
+    "teammateSeated": "On this board"
   },
   "canvasCommands": {
     "cleanLayout": "Clean up canvas layout",
@@ -14895,12 +15178,6 @@
       "failed": "Screen sharing failed"
     }
   },
-  "workbench": {
-    "region": "Workbench",
-    "title": "Workbench",
-    "close": "Close workbench",
-    "resize": "Resize the workbench"
-  },
   "canvasStage": {
     "outsideCurrentProject": "Viewing a canvas outside the current project"
   },
@@ -14913,5 +15190,37 @@
     "leaveTitle": "Leave the live session",
     "onThisCanvas": "This canvas",
     "liveWithCount": "{count, plural, one {Live · # here} other {Live · # here}}"
+  },
+  "team": {
+    "barLabel": "Your team",
+    "alwaysOn": "Always on",
+    "team": "Team",
+    "invite": "+ Invite",
+    "roleTeammate": "teammate",
+    "chipJoin": "Add {name} ({role}) to this board — drag it on, or press Enter",
+    "chipLocked": "{name} is not set up in this workspace yet"
+  },
+  "sessions": {
+    "newCanvas": "+ New canvas",
+    "active": "Active",
+    "recents": "Recents",
+    "untitled": "Untitled canvas",
+    "draft": "Draft",
+    "draftHint": "Saved in this browser only — sign in to keep it"
+  },
+  "shellPanel": {
+    "crumb": "Workspace",
+    "title": "Panel"
+  },
+  "profile": {
+    "displayName": "Display name",
+    "displayNamePlaceholder": "How your name appears to your team",
+    "avatarUpload": "Upload photo",
+    "avatarChange": "Change photo",
+    "avatarUploading": "Uploading…",
+    "avatarFailed": "Could not upload that image",
+    "save": "Save",
+    "saved": "Saved",
+    "saveFailed": "Could not save"
   }
 }

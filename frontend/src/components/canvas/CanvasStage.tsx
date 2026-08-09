@@ -7,7 +7,7 @@ import { CreationCanvas } from '@/components/creation-canvas/CreationCanvas';
 import { useOptionalActiveCanvas } from '@/lib/canvas/ActiveCanvasContext';
 import { useOptionalProjectScope } from '@/lib/ProjectScopeContext';
 import { useOptionalLiveSession } from '@/lib/live/LiveSessionContext';
-import { isStageRoute } from '@/lib/workbenchPolicy';
+import { isStageRoute, panelOpen } from '@/lib/workbenchPolicy';
 import styles from './CanvasStage.module.css';
 
 /**
@@ -34,6 +34,11 @@ export function CanvasStage() {
 
   const active = canvas?.active ?? null;
   const onStage = isStageRoute(pathname);
+  // The board is on screen for a stage route AND behind an open panel — "the
+  // panel slides OVER a board that stays mounted" (PRD 21 §0) only reads as true
+  // if the board is actually visible under it. A route that keeps the whole
+  // screen (the IDE, a single project) still takes it; the board waits, mounted.
+  const shown = onStage || panelOpen(pathname, active != null);
 
   // Presentation mode is shell state now, so leaving the board no longer ends the
   // presentation — but arriving at a board via `?present=1` still has to arm it.
@@ -56,9 +61,11 @@ export function CanvasStage() {
   return (
     <div
       className={`stage-split__stage ${styles.stage}`}
-      data-visible={onStage ? 'true' : 'false'}
-      // Hidden means hidden: a board behind a docked page must be out of the tab
-      // order and out of the accessibility tree, not merely invisible.
+      data-visible={shown ? 'true' : 'false'}
+      // Visible is not the same as reachable: a board under an open panel is
+      // seen but must be out of the tab order and out of the accessibility tree
+      // while the panel owns the interaction, and a board behind a full-screen
+      // route is neither seen nor reachable.
       aria-hidden={onStage ? undefined : 'true'}
       inert={onStage ? undefined : true}
     >
@@ -82,6 +89,10 @@ export function CanvasStage() {
               initialShareOpen={board.shareOpen}
               initialPresent={board.present}
               initialModelComparisonIds={board.modelComparisonIds}
+              // Only the selected board answers a shell-level request — a
+              // teammate joined from the footer must land on the board being
+              // looked at, not on every cached instance behind it.
+              stageActive={selected}
             />
           </div>
         );

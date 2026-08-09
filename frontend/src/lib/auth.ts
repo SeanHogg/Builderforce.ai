@@ -72,6 +72,29 @@ export function getStoredUser(): AuthUser | null {
   }
 }
 
+/**
+ * Patch the stored user in place.
+ *
+ * The persisted copy is what the top bar, the sidebar and the footer roster
+ * read, so a write that changes an identity field has to land here too or the
+ * shell keeps showing the old value until the next sign-in. One helper rather
+ * than a `localStorage.setItem(USER_KEY, …)` at each writer — the key is private
+ * to this module for exactly that reason.
+ */
+export function patchStoredUser(patch: Partial<AuthUser>): AuthUser | null {
+  if (!isBrowser()) return null;
+  const current = getStoredUser();
+  if (!current) return null;
+  const next = { ...current, ...patch };
+  try {
+    localStorage.setItem(USER_KEY, JSON.stringify(next));
+  } catch {
+    // Quota / private mode — the server copy is authoritative and the next
+    // /api/auth/me read restores it.
+  }
+  return next;
+}
+
 export function getStoredTenant(): Tenant | null {
   if (!isBrowser()) return null;
   try {
@@ -523,6 +546,32 @@ export async function selectAccountType(
   }
   const data = (await res.json()) as { user: AuthUser };
   return data.user;
+}
+
+/**
+ * Update the signed-in user's display name.
+ *
+ * Same `PATCH /api/auth/me` the personality write uses — the endpoint already
+ * accepted `displayName` and nothing in the product called it, which is why the
+ * Settings Account view rendered a name it could not change. The stored user is
+ * refreshed in place so the top bar and the footer roster show the new name
+ * without a reload.
+ */
+export async function updateMyDisplayName(webToken: string, displayName: string): Promise<string | null> {
+  const res = await fetch(`${AUTH_API_URL}/api/auth/me`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${webToken}` },
+    body: JSON.stringify({ displayName }),
+  });
+  checkUnauthorizedAndRedirect(res, !!webToken);
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error || `Request failed (${res.status})`);
+  }
+  const data = (await res.json()) as { user?: { displayName?: string | null } };
+  const next = data.user?.displayName ?? null;
+  patchStoredUser({ name: next ?? undefined });
+  return next;
 }
 
 /** Update the signed-in user's OWN personality (psychometric profile). Pass null to

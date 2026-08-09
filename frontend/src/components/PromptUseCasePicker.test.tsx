@@ -6,8 +6,8 @@ vi.mock('next-intl', () => ({
   useTranslations: () => Object.assign(
     (key: string) => ({ tabLabel: 'Choose a starting point', heading: 'What should we create?' })[key] ?? key,
     { raw: () => [
-      { label: 'Wireframe', prompt: 'Create a product wireframe.' },
-      { label: 'Animation', prompt: 'Create an animation concept.' },
+      { category: 'apps', label: 'Wireframe', prompt: 'Create a product wireframe.' },
+      { category: 'creative', label: 'Animation', prompt: 'Create an animation concept.' },
     ] },
   ),
 }));
@@ -35,5 +35,13 @@ describe('PromptUseCasePicker', () => {
     fireEvent.click(tab);
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(tab).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('searches across the larger supported catalog', () => {
+    render(<PromptUseCasePicker placement="bottom" onSelect={vi.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Choose a starting point' }));
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'animation' } });
+    expect(screen.getByRole('button', { name: 'Animation' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Wireframe' })).not.toBeInTheDocument();
   });
 });

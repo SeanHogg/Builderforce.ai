@@ -109,6 +109,7 @@ import { createObjectRoutes } from './presentation/routes/objectRoutes';
 import { createDomainRoutes } from './presentation/routes/domainRoutes';
 import { createObjectRegistry } from './application/kernel/ObjectRegistry';
 import { createDomainService } from './application/kernel/DomainService';
+import { createTeamRosterService } from './application/kernel/TeamRoster';
 import { createEntityService } from './application/domains/EntityService';
 import { createJobRoutes, createNotificationRoutes } from './presentation/routes/jobRoutes';
 import { createEmailPreferenceRoutes } from './presentation/routes/emailPreferenceRoutes';
@@ -490,7 +491,7 @@ export function buildApp(env: Env): Hono<HonoEnv> {
   // outside the presentation layer, so this is where the connection is bound to
   // the use cases and the route files stay free of `src/infrastructure`.
   app.route('/api/objects', createObjectRoutes(createObjectRegistry(db, env)));
-  app.route('/api', createDomainRoutes(createDomainService(db, env), createEntityService(db, env)));
+  app.route('/api', createDomainRoutes(createDomainService(db, env), createEntityService(db, env), createTeamRosterService(db, env)));
   app.route('/api/timecards', createTimecardRoutes());
   // Two-sided marketplace: job postings + proposals (bidding) and the in-app feed.
   app.route('/api/jobs', createJobRoutes());

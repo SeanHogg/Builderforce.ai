@@ -2,6 +2,8 @@
  * The fifteen domain route groups — `/api/<domain>/…` (PRD 20 §6.3).
  *
  *   GET /api/roster                    every seat's summary, in one read
+ *   GET /api/roster/team               the same roster as PEOPLE — humans and
+ *                                      agents in one row shape (PRD 21 §4.1)
  *   GET /api/:domain/summary
  *   GET /api/:domain/items
  *   GET /api/:domain/activity
@@ -26,6 +28,7 @@ import { authMiddleware } from '../middleware/authMiddleware';
 import { scope } from './segmentTrackerRoutes';
 import { isDomain, type Domain } from '../../application/kernel/ObjectRegistry';
 import type { DomainService } from '../../application/kernel/DomainService';
+import type { TeamRosterService } from '../../application/kernel/TeamRoster';
 import { EntityError, type EntityService } from '../../application/domains/EntityService';
 import { isEntityScope, type EntityScope } from '../../application/domains/entityDefinition';
 import type { HonoEnv } from '../../env';
@@ -40,7 +43,11 @@ function parseOffset(raw: string | undefined): number | undefined {
   return Number.isFinite(n) && n >= 0 ? Math.floor(n) : undefined;
 }
 
-export function createDomainRoutes(domains: DomainService, entities: EntityService): Hono<HonoEnv> {
+export function createDomainRoutes(
+  domains: DomainService,
+  entities: EntityService,
+  team: TeamRosterService,
+): Hono<HonoEnv> {
   const router = new Hono<HonoEnv>();
   router.use('*', authMiddleware);
 
@@ -91,6 +98,20 @@ export function createDomainRoutes(domains: DomainService, entities: EntityServi
   /** The roster's static shape, for a surface that has no tenant yet — the
    *  logged-out public catalogue is the same list read through another shell. */
   router.get('/roster/manifest', (c) => c.json(domains.manifest()));
+
+  /**
+   * The roster in its PEOPLE form — the ONE endpoint the footer, the presence
+   * pile and the canvas drop target read (PRD 21 §4.1).
+   *
+   * Humans and agents come back in one row shape with a `kind` discriminator, so
+   * both cards become renderers of one row rather than two lists a consumer has
+   * to merge (and get subtly different). A seat with nothing provisioned behind
+   * it is returned `locked` rather than omitted — disable, never hide.
+   */
+  router.get('/roster/team', async (c) => {
+    const { tenantId } = scope(c);
+    return c.json({ members: await team.list(tenantId) });
+  });
 
   /** Resolve and validate `:domain` once, rather than in each handler. */
   const resolve = (raw: string): Domain | null => (isDomain(raw) ? raw : null);

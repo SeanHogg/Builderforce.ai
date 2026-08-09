@@ -47,8 +47,8 @@ const raw: Record<string, unknown> = {
   'canvas.team': TEAM,
   'canvas.presenceInitials': ['SH', 'JR', 'TK'],
   items: [
-    { label: 'Mobile app design', prompt: 'Design a mobile app with its key screens and user flow.' },
-    { label: 'Slides', prompt: 'Create a polished slide deck.' },
+    { category: 'apps', label: 'Mobile app design', prompt: 'Design a mobile app with its key screens and user flow.' },
+    { category: 'documents', label: 'Slides', prompt: 'Create a polished slide deck.' },
   ],
 };
 

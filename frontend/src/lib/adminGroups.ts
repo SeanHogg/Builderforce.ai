@@ -4,7 +4,7 @@
  * each with its own inner sub-views.
  *
  * Pure data (no React) so both the shell nav (`navGroups.ts`, which renders the
- * top <SectionTabs> from `ADMIN_GROUP_META`) and the admin page (which renders
+ * top <ShellIndex> from `ADMIN_GROUP_META`) and the admin page (which renders
  * the inner sub-tab bar + resolves `?tab=`/`?sub=` to a panel) consume the same
  * config and can never drift.
  *
@@ -24,7 +24,7 @@ export interface AdminSubMeta {
 export interface AdminGroupMeta {
   /** `?tab=` value; '' is the default group (Overview). */
   id: string;
-  /** i18n key under the `nav` namespace (shared with <SectionTabs>). */
+  /** i18n key under the `nav` namespace (shared with <ShellIndex>). */
   labelKey: string;
   icon: string;
   subs: AdminSubMeta[];

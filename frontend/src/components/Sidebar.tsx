@@ -7,14 +7,26 @@ import { useAuth } from '@/lib/AuthContext';
 import { findActiveGroup, navGroupsForAccountType, type NavGroup } from '@/lib/navGroups';
 import { useAvailableForHire, useIsFreelancer, useIsSalesAssociate } from '@/lib/rbac';
 import SidebarLegalMenu from './legal/SidebarLegalMenu';
+import SessionList from './SessionList';
 import UsageMeter from './UsageMeter';
 
 /**
- * The authenticated workspace navigation — a slim list of PRIMARY DESTINATIONS
- * (see lib/navGroups). Sub-views are NOT listed here; they are tabs inside their
- * destination, rendered by the shared <SectionTabs> bar in AppShell. The Platform
- * Admin destination self-gates to superadmins. Visibility is decided here — no
- * prop-drilled flags.
+ * The left panel (PRD 21 §3.2).
+ *
+ * It used to be a SITE MAP: `NAV_GROUPS` and nothing else, so the persistent
+ * surface listed the product's departments and the person's own work appeared
+ * nowhere. It now leads with **sessions** — New canvas, Active, Recents — and the
+ * primary destinations follow underneath.
+ *
+ * The destinations stay because §3.2's "short object index" is only short if
+ * everything it omits is reachable another way, and today the ⌘K palette is the
+ * only other way in. Removing them would strand Insights, Growth, Reliability and
+ * the rest behind a keystroke, which is not "the canvas is the front door" — it is
+ * a product with hidden rooms. They are secondary here, not absent.
+ *
+ * Sub-views are NOT listed: they are their destination's index, rendered by the
+ * shared <ShellIndex>. The Platform Admin destination self-gates to superadmins;
+ * visibility is decided here — no prop-drilled flags.
  *
  * Desktop: a docked rail (collapsible via the footer chevron). Mobile: an
  * off-canvas drawer opened from the TopBar hamburger.
@@ -99,7 +111,12 @@ export default function Sidebar({ collapsed, onToggleCollapsed, mobileOpen = fal
         </div>
 
         <div className="nav-main">
+          {/* The person's own work leads. Collapsed to the icon rail there is no
+              room for titles, so the sessions fold away and the destinations
+              stay — the rail is a way back to a place, not to a board. */}
+          {!collapsed && <SessionList onNavigate={onMobileClose} />}
           <div className="nav-section">
+            {!collapsed && <div className="ui-eyebrow nav-section__label">{t('workspaceLabel')}</div>}
             {groups.map((g) => <GroupLink key={g.id} group={g} active={activeGroupId === g.id} onNavigate={onMobileClose} t={t} />)}
           </div>
         </div>

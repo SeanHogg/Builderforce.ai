@@ -3,6 +3,7 @@
 import { useTranslations } from 'next-intl';
 import { RatingStars } from '@/components/freelance/RatingStars';
 import { TrustBadge } from '@/components/freelance/TrustBadge';
+import { ProfileAvatar } from '@/components/profile/ProfileIdentityCard';
 import type { FreelancerProfile, FreelancerStats } from '@/lib/freelancerApi';
 
 /**
@@ -17,28 +18,6 @@ const card: React.CSSProperties = {
   background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 12, padding: 20,
 };
 
-function initials(name: string | null): string {
-  return (name ?? '?').trim().split(/\s+/).slice(0, 2).map((s) => s[0]?.toUpperCase() ?? '').join('') || '?';
-}
-
-export function TalentAvatar({ profile, size = 64 }: { profile: Pick<FreelancerProfile, 'displayName' | 'avatarUrl'>; size?: number }) {
-  const common: React.CSSProperties = {
-    width: size, height: size, borderRadius: '50%', flexShrink: 0, objectFit: 'cover',
-    border: '1px solid var(--border-subtle)',
-  };
-  if (profile.avatarUrl) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={profile.avatarUrl} alt="" style={common} />;
-  }
-  return (
-    <div style={{
-      ...common, background: 'var(--surface-interactive)', display: 'flex', alignItems: 'center',
-      justifyContent: 'center', fontWeight: 700, fontSize: size * 0.36, color: 'var(--text-primary)',
-    }}>
-      {initials(profile.displayName)}
-    </div>
-  );
-}
 
 /** Compact reputation stat row: how much this worker leans on AI, how active they've
  *  been, work won vs. bids in flight, and lifetime earnings. Rendered on the public
@@ -89,7 +68,7 @@ export function TalentProfileView({ profile, actions, resumeEmptyNote }: TalentP
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', minWidth: 0 }}>
-          <TalentAvatar profile={profile} size={64} />
+          <ProfileAvatar displayName={profile.displayName} avatarUrl={profile.avatarUrl} size={64} />
           <div style={{ minWidth: 0 }}>
             <h1 style={{ fontSize: 24, fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>{profile.displayName ?? '—'}</h1>
             <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '4px 0 0' }}>{profile.headline ?? profile.discipline ?? ''}</p>

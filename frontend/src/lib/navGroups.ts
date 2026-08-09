@@ -3,12 +3,12 @@
  *
  * The menu is organized as a small set of PRIMARY DESTINATIONS (the sidebar
  * links). Sub-views are NOT separate menu items — they are TABS inside their
- * destination, rendered by one shared <SectionTabs> bar in the app shell. So
+ * destination, rendered by one shared <ShellIndex> in the app shell. So
  * e.g. Portfolio/PMO and Ceremonies are tabs of Projects, not top-level items;
  * every analytics/measurement lens (incl. Surveys, custom Dashboards and
  * DevFinOps) is a tab of the one "Insights" item, not its own sidebar entry.
  *
- * Two tab flavors, unified here so the Sidebar + SectionTabs never drift:
+ * Two tab flavors, unified here so the shell's index and the panel never drift:
  *   - kind:'route'  — each tab is its own route (e.g. /insights/dora). The tab
  *                     bar links between routes; each page renders its own body.
  *   - kind:'query'  — one page with a `?tab=` param (e.g. /projects?tab=pm). The
@@ -21,7 +21,7 @@ import { isNavItemActive } from './nav';
 import { ADMIN_GROUP_META } from './adminGroups';
 
 /** Count-badge key for the Projects tab (published by the Projects page, read by
- *  <SectionTabs>). Lives here so the config + publisher share one constant. */
+ *  <ShellIndex>). Lives here so the config + publisher share one constant. */
 export const PROJECTS_COUNT_KEY = 'projects';
 
 export interface NavTab {
@@ -231,8 +231,8 @@ export const NAV_GROUPS: NavGroup[] = [
   {
     // Platform Admin: superadmin-only. The 19 capabilities are consolidated into
     // 10 top-level GROUPS (ADMIN_GROUP_META — the single source of truth, shared
-    // with the admin page). Each group is a TAB in the shared <SectionTabs> bar
-    // (query kind, ?tab=…); a group's sub-views are an inner <AdminGroupNav>
+    // with the admin page). Each group is an entry in the shared <ShellIndex>
+    // (query kind, ?tab=…); a group's sub-views are an inner <DestinationIndex>
     // (?sub=…) on the page. The default group (Overview) uses id '' so a bare
     // /admin highlights it.
     id: 'admin', labelKey: 'group.admin', icon: '⚙', href: '/admin', match: ['/admin'], superadminOnly: true,
@@ -297,7 +297,7 @@ export const SALES_NAV_GROUPS: NavGroup[] = [
 ];
 
 /** The nav destinations for the current account type — the ONE place the
- *  freelancer-vs-builder nav split is decided, so the Sidebar + SectionTabs and
+ *  freelancer-vs-builder nav split is decided, so the Sidebar + ShellIndex and
  *  the route guard never drift. A dedicated freelancer gets the restricted shell; a
  *  builder who opted in to being hired (`availableForHire`) keeps the full builder
  *  nav PLUS the for-hire worker destinations. */

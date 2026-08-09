@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 /**
- * Design-token guard.
+ * Design-system contract guard — two checks, one failure mode.
+ *
+ * Both catch a reference to something the design system does not actually
+ * define, which the browser resolves by silently doing nothing.
+ *
+ *   1. TOKENS  — every `var(--x)` must name a DECLARED custom property.
+ *   2. CLASSES — every static `ui-*` class in a `className` must name a
+ *      DECLARED `.ui-*` rule.
  *
  * Every `var(--x)` in the app must name a custom property that is actually
  * DECLARED. An undeclared one fails in two ways, and both are invisible in the
@@ -24,6 +31,14 @@
  *
  * Fixing those is cheap. Finding them is not, because nothing fails — so the
  * ratchet lives here.
+ *
+ * The CLASS check exists for the same reason. `<Surface>` shipped
+ * `ui-surface--panel` and `<Button>` shipped `ui-button--md` on every render;
+ * neither rule exists, because the DEFAULT tone/size is carried by the base
+ * `.ui-surface` / `.ui-button` rule. Nothing broke visually — which is the
+ * problem: a later hand-migration copied those emitted class strings verbatim
+ * into two files, believing them to be the contract. A dead class is invisible
+ * until someone trusts it.
  *
  * Run via `npm run check:design-tokens`; wired into `npm test`.
  */
@@ -92,8 +107,50 @@ for (const file of files) {
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * Check 2: every static `ui-*` class must name a declared `.ui-*` rule.
+ *
+ * Only STATIC class strings are checkable — the primitives build their own
+ * names (`ui-button--${variant}`), so any string carrying an interpolation is
+ * skipped rather than guessed at. That is the right split: the primitives are
+ * the source of truth, and this check polices everyone who hand-writes what the
+ * primitives emit.
+ * ------------------------------------------------------------------------- */
+
+/** A `.ui-x` selector in CSS. Declares the class. */
+const UI_CLASS_RULE = /\.(ui-[a-zA-Z0-9_-]+)/g;
+/** `className="…"`, `className={'…'}` and the backtick form. */
+const CLASS_ATTR =
+  /className\s*=\s*(?:"([^"]*)"|'([^']*)'|\{\s*(?:"([^"]*)"|'([^']*)'|`([^`]*)`)\s*\})/g;
+
+const declaredClasses = new Set();
+for (const file of files) {
+  if (!file.endsWith('.css')) continue;
+  for (const match of readFileSync(file, 'utf8').matchAll(UI_CLASS_RULE)) {
+    declaredClasses.add(match[1]);
+  }
+}
+
+for (const file of files) {
+  if (file.endsWith('.css')) continue;
+  const rel = relative(srcDir, file).split('\\').join('/');
+  const text = readFileSync(file, 'utf8').replace(BLOCK_COMMENT, '').replace(JSDOC_LINE, '');
+
+  for (const match of text.matchAll(CLASS_ATTR)) {
+    const raw = match[1] ?? match[2] ?? match[3] ?? match[4] ?? match[5];
+    // A template with an interpolation cannot be resolved statically.
+    if (raw === undefined || raw.includes('${')) continue;
+
+    for (const cls of raw.split(/\s+/).filter(Boolean)) {
+      if (!cls.startsWith('ui-') || declaredClasses.has(cls)) continue;
+      const line = text.slice(0, match.index).split('\n').length;
+      violations.push(`${rel}:${line}  .${cls} — class has no CSS rule, so it does nothing`);
+    }
+  }
+}
+
 if (violations.length > 0) {
-  console.error(`❌  Undeclared design tokens (${violations.length} reference(s)):\n`);
+  console.error(`❌  Undeclared design-system references (${violations.length}):\n`);
   for (const v of violations) console.error('  - ' + v);
   console.error(
     '\n   Each name must resolve to a token declared in BOTH themes.' +
@@ -104,9 +161,15 @@ if (violations.length > 0) {
       '\n       under BOTH :root and html[data-theme=\'light\'];' +
       '\n     • the host supplies it → add its prefix to EXTERNAL_PREFIXES in' +
       '\n       scripts/check-design-tokens.mjs WITH a reason.' +
-      '\n   A literal fallback does NOT make it safe — it paints in both themes.\n',
+      '\n   A literal fallback does NOT make it safe — it paints in both themes.' +
+      '\n   For a `.ui-*` class: use the primitive in components/ui rather than' +
+      '\n   hand-writing the class string, or declare the rule in globals.css.' +
+      '\n   A DEFAULT variant has no modifier — the base rule already carries it.\n',
   );
   process.exit(1);
 }
 
-console.log(`✅  Design-token check passed — ${declared.size} tokens declared, every reference resolves.`);
+console.log(
+  `✅  Design-system check passed — ${declared.size} tokens and ` +
+    `${declaredClasses.size} ui-* classes declared, every reference resolves.`,
+);

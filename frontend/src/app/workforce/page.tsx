@@ -20,7 +20,7 @@ import PageContainer from '@/components/PageContainer';
 import { AgentOpsContent, type AgentOpsTab } from '@/components/agent-ops/AgentOpsClient';
 
 // Workforce sub-views are declared as query tabs in navGroups; the shell
-// <SectionTabs> bar renders the tab bar. Here we just read `?tab=` to pick the
+// <ShellIndex> renders the sub-view index. Here we just read `?tab=` to pick the
 // body and the per-tab sub-label, mirroring the /quality surface.
 type WorkforceTab = 'workforce' | 'roles' | 'teams' | 'meetings' | 'calendar' | 'talent' | 'performance' | 'plan' | 'chats' | 'approvals' | 'qa' | AgentOpsTab;
 
